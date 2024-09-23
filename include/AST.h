@@ -114,7 +114,7 @@ public:
 
 class BinaryOpNode : public ExpressionNode {
 public:
-    enum OpType { OP_PLUS, OP_MINUS, OP_MULTIPLY, OP_DIVIDE };
+    enum OpType { OP_PLUS, OP_MINUS, OP_MULTIPLY, OP_DIVIDE, OP_LT, OP_GT, OP_LE, OP_GE, OP_EQ, OP_NE };
     OpType op;
     ExpressionNode* left;
     ExpressionNode* right;
@@ -129,6 +129,18 @@ public:
     std::vector<ExpressionNode*> arguments;
 
     FunctionCallNode(const std::string& n) : name(n) {}
+    std::string toString() const override;
+};
+
+class IfNode : public StatementNode {
+public:
+    ExpressionNode* condition;
+    StatementListNode* thenBranch;
+    IfNode* elseBranch;  // This can be either another if (for else if) or nullptr
+
+    IfNode(ExpressionNode* cond, StatementListNode* then, IfNode* else_branch)
+        : condition(cond), thenBranch(then), elseBranch(else_branch) {}
+
     std::string toString() const override;
 };
 
@@ -150,5 +162,6 @@ ASTNode* create_float_literal(float value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
+ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_branch);
 
 #endif // AST_H

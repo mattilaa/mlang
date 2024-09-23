@@ -4,11 +4,17 @@ fn calculate(int a, float b) -> int {
     return result;
 }
 
+fn max(int a, int b) -> int {
+    if a > b: { return 0; }
+    if a > b: { return a; } else if b > a: { return b; } else { return a; }
+}
+
 fn main() -> void {
     int x;
     float y;
     x = 5;
     y = 3.14;
     calculate(x, y);
+    max(x, y);
     return;
 }

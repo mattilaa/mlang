@@ -78,15 +78,57 @@ ASTNode* create_identifier(char* name) {
 }
 
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right) {
+    if (!left || !right) {
+        fprintf(stderr, "Error: Null operand in binary operation\n");
+        return nullptr;
+    }
+
     BinaryOpNode::OpType opType;
     switch (op) {
-        case PLUS: opType = BinaryOpNode::OP_PLUS; break;
-        case MINUS: opType = BinaryOpNode::OP_MINUS; break;
-        case MULTIPLY: opType = BinaryOpNode::OP_MULTIPLY; break;
-        case DIVIDE: opType = BinaryOpNode::OP_DIVIDE; break;
-        default: throw std::runtime_error("Unknown binary operator");
+        case PLUS:
+            opType = BinaryOpNode::OpType::OP_PLUS;
+            break;
+        case MINUS:
+            opType = BinaryOpNode::OpType::OP_MINUS;
+            break;
+        case MULTIPLY:
+            opType = BinaryOpNode::OpType::OP_MULTIPLY;
+            break;
+        case DIVIDE:
+            opType = BinaryOpNode::OpType::OP_DIVIDE;
+            break;
+        case LT:
+            opType = BinaryOpNode::OpType::OP_LT;
+            break;
+        case GT:
+            opType = BinaryOpNode::OpType::OP_GT;
+            break;
+        case LE:
+            opType = BinaryOpNode::OpType::OP_LE;
+            break;
+        case GE:
+            opType = BinaryOpNode::OpType::OP_GE;
+            break;
+        case EQ:
+            opType = BinaryOpNode::OpType::OP_EQ;
+            break;
+        case NE:
+            opType = BinaryOpNode::OpType::OP_NE;
+            break;
+        default:
+            fprintf(stderr, "Error: Unknown binary operator: %d\n", op);
+            return nullptr;
     }
-    return new BinaryOpNode(opType, static_cast<ExpressionNode*>(left), static_cast<ExpressionNode*>(right));
+
+    ExpressionNode* leftExpr = dynamic_cast<ExpressionNode*>(left);
+    ExpressionNode* rightExpr = dynamic_cast<ExpressionNode*>(right);
+
+    if (!leftExpr || !rightExpr) {
+        fprintf(stderr, "Error: Invalid operand types for binary operation\n");
+        return nullptr;
+    }
+
+    return new BinaryOpNode(opType, leftExpr, rightExpr);
 }
 
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2) {
@@ -94,6 +136,14 @@ ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2) {
     if (arg1) call->arguments.push_back(static_cast<ExpressionNode*>(arg1));
     if (arg2) call->arguments.push_back(static_cast<ExpressionNode*>(arg2));
     return call;
+}
+
+ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_branch) {
+    return new IfNode(
+        static_cast<ExpressionNode*>(condition),
+        static_cast<StatementListNode*>(then_branch),
+        static_cast<IfNode*>(else_branch)
+    );
 }
 
 // Implement toString() methods for each node type
@@ -171,6 +221,12 @@ std::string BinaryOpNode::toString() const {
         case OP_MINUS: op_str = "-"; break;
         case OP_MULTIPLY: op_str = "*"; break;
         case OP_DIVIDE: op_str = "/"; break;
+        case OP_LT: op_str = "<"; break;
+        case OP_GT: op_str = ">"; break;
+        case OP_LE: op_str = "<="; break;
+        case OP_GE: op_str = ">="; break;
+        case OP_EQ: op_str = "=="; break;
+        case OP_NE: op_str = "!="; break;
     }
     return "(" + left->toString() + " " + op_str + " " + right->toString() + ")";
 }
@@ -184,3 +240,18 @@ std::string FunctionCallNode::toString() const {
     result += ")";
     return result;
 }
+
+std::string IfNode::toString() const {
+    std::string result = "if " + condition->toString() + ": {\n";
+    result += thenBranch->toString();
+    result += "}\n";
+    if (elseBranch) {
+        if (elseBranch->condition) {
+            result += "else " + elseBranch->toString();
+        } else {
+            result += "else {\n" + elseBranch->thenBranch->toString() + "}\n";
+        }
+    }
+    return result;
+}
+
