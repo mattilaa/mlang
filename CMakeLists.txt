@@ -4,6 +4,9 @@ project(MyLanguage)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Create compile_commands.json in build directory
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Find LLVM package
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -71,6 +74,7 @@ add_custom_target(
 # Add main.cpp and the generated files to the list of source files
 set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )

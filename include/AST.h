@@ -11,26 +11,144 @@ public:
     virtual std::string toString() const = 0;
 };
 
-class Expression : public ASTNode {
-    // Add expression-specific methods
+class TypeNode : public ASTNode {
+public:
+    enum TypeKind { TYPE_VOID, TYPE_BOOL, TYPE_INT, TYPE_FLOAT };
+    TypeKind kind;
+
+    TypeNode(TypeKind k) : kind(k) {}
+    std::string toString() const override;
 };
 
-class Statement : public ASTNode {
-    // Add statement-specific methods
+class ExpressionNode : public ASTNode {};
+
+class StatementNode : public ASTNode {};
+
+class ParameterListNode : public ASTNode {
+public:
+    std::vector<std::pair<TypeNode*, std::string>> parameters;
+    std::string toString() const override;
 };
 
-class FunctionDefinition : public ASTNode {
+class FunctionDefNode : public ASTNode {
+public:
+    TypeNode* returnType;
+    std::string name;
+    ParameterListNode* parameters;
+    class StatementListNode* body;
+
+    FunctionDefNode(TypeNode* type, const std::string& n, ParameterListNode* params, StatementListNode* b)
+        : returnType(type), name(n), parameters(params), body(b) {}
+    std::string toString() const override;
+};
+
+class FunctionListNode : public ASTNode {
+public:
+    std::vector<FunctionDefNode*> functions;
+    std::string toString() const override;
+};
+
+class ProgramNode : public ASTNode {
+public:
+    FunctionListNode* functionList;
+
+    ProgramNode(FunctionListNode* list) : functionList(list) {}
+    std::string toString() const override;
+};
+
+class StatementListNode : public ASTNode {
+public:
+    std::vector<StatementNode*> statements;
+    std::string toString() const override;
+};
+
+class VarDeclNode : public StatementNode {
+public:
+    TypeNode* type;
+    std::string name;
+
+    VarDeclNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
+    std::string toString() const override;
+};
+
+class AssignmentNode : public StatementNode {
 public:
     std::string name;
-    std::string returnType;
-    std::vector<std::pair<std::string, std::string>> parameters;
-    std::vector<std::unique_ptr<Statement>> body;
+    ExpressionNode* expression;
 
-    std::string toString() const override {
-        return "Function: " + name;
-    }
+    AssignmentNode(const std::string& n, ExpressionNode* expr) : name(n), expression(expr) {}
+    std::string toString() const override;
 };
 
-// Add more AST node types as needed
+class ReturnNode : public StatementNode {
+public:
+    ExpressionNode* expression;
+
+    ReturnNode(ExpressionNode* expr) : expression(expr) {}
+    std::string toString() const override;
+};
+
+class IntLiteralNode : public ExpressionNode {
+public:
+    int value;
+
+    IntLiteralNode(int v) : value(v) {}
+    std::string toString() const override;
+};
+
+class FloatLiteralNode : public ExpressionNode {
+public:
+    float value;
+
+    FloatLiteralNode(float v) : value(v) {}
+    std::string toString() const override;
+};
+
+class IdentifierNode : public ExpressionNode {
+public:
+    std::string name;
+
+    IdentifierNode(const std::string& n) : name(n) {}
+    std::string toString() const override;
+};
+
+class BinaryOpNode : public ExpressionNode {
+public:
+    enum OpType { OP_PLUS, OP_MINUS, OP_MULTIPLY, OP_DIVIDE };
+    OpType op;
+    ExpressionNode* left;
+    ExpressionNode* right;
+
+    BinaryOpNode(OpType o, ExpressionNode* l, ExpressionNode* r) : op(o), left(l), right(r) {}
+    std::string toString() const override;
+};
+
+class FunctionCallNode : public ExpressionNode {
+public:
+    std::string name;
+    std::vector<ExpressionNode*> arguments;
+
+    FunctionCallNode(const std::string& n) : name(n) {}
+    std::string toString() const override;
+};
+
+// Function declarations for AST node creation
+ASTNode* create_program(ASTNode* function_list);
+ASTNode* create_function_list(ASTNode* function);
+ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
+ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
+ASTNode* create_type_node(TypeNode::TypeKind type);
+ASTNode* create_parameter_list();
+ASTNode* add_parameter(ASTNode* list, ASTNode* type, char* name);
+ASTNode* create_statement_list(ASTNode* stmt);
+ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
+ASTNode* create_var_decl(ASTNode* type, char* name);
+ASTNode* create_assignment(char* name, ASTNode* expr);
+ASTNode* create_return_stmt(ASTNode* expr);
+ASTNode* create_int_literal(int value);
+ASTNode* create_float_literal(float value);
+ASTNode* create_identifier(char* name);
+ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
 
 #endif // AST_H
