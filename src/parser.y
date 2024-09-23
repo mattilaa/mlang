@@ -30,6 +30,10 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
+ASTNode* create_struct_member_list(ASTNode* member);
+ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
+ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
 %}
 
 %union {
@@ -42,7 +46,7 @@ ASTNode* create_cast_expression(int type, ASTNode* expr);
 %token <sval> IDENTIFIER
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT STRUCT
 %token LET VAR
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
@@ -52,6 +56,7 @@ ASTNode* create_cast_expression(int type, ASTNode* expr);
 %type <ast> program function_def_list function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression cast_expression
 %type <ast> if_statement else_if_list else_if optional_else block_or_statement
+%type <ast> struct_def struct_member_list struct_member
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -63,6 +68,26 @@ ASTNode* create_cast_expression(int type, ASTNode* expr);
 
 program
     : function_def_list { $$ = create_program($1); }
+    | struct_def function_def_list { $$ = create_program($2); /* TODO: Add struct to program */ }
+    ;
+
+struct_def
+    : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($2, NULL, $4); }
+    | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($2, $4, $6); }
+    ;
+
+struct_member_list
+    : struct_member { $$ = create_struct_member_list($1); }
+    | struct_member_list struct_member { $$ = add_struct_member($1, $2); }
+    ;
+
+struct_member
+    : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = create_struct_member(0, $4, $2, $6); }
+    | VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = create_struct_member(1, $4, $2, NULL); }
     ;
 
 function_def_list

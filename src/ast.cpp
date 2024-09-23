@@ -184,6 +184,32 @@ ASTNode* create_cast_expression(int type, ASTNode* expr) {
     return new CastExpressionNode(targetType, static_cast<ExpressionNode*>(expr));
 }
 
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members) {
+    auto memberList = static_cast<StructMemberListNode*>(members);
+    return new StructDefNode(std::string(name),
+                             base_name ? std::string(base_name) : "",
+                             memberList);
+}
+
+ASTNode* create_struct_member_list(ASTNode* member) {
+    auto list = new StructMemberListNode();
+    list->addMember(static_cast<StructMemberNode*>(member));
+    return list;
+}
+
+ASTNode* add_struct_member(ASTNode* list, ASTNode* member) {
+    auto memberList = static_cast<StructMemberListNode*>(list);
+    memberList->addMember(static_cast<StructMemberNode*>(member));
+    return memberList;
+}
+
+ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr) {
+    return new StructMemberNode(is_var != 0,
+                                static_cast<TypeNode*>(type),
+                                std::string(name),
+                                static_cast<ExpressionNode*>(init_expr));
+}
+
 // Implement toString() methods for each node type
 std::string TypeNode::toString() const {
     switch(kind) {
@@ -320,3 +346,27 @@ std::string CastExpressionNode::toString() const {
     return typeName + "(" + expression->toString() + ")";
 }
 
+std::string StructMemberNode::toString() const {
+    std::string result = (isVar ? "var " : "let ") + name + ": " + type->toString();
+    if (initExpr) {
+        result += " = " + initExpr->toString();
+    }
+    return result + ";";
+}
+
+std::string StructMemberListNode::toString() const {
+    std::string result;
+    for (const auto& member : members) {
+        result += member->toString() + "\n";
+    }
+    return result;
+}
+
+std::string StructDefNode::toString() const {
+    std::string result = "struct " + name;
+    if (!baseName.empty()) {
+        result += " : " + baseName;
+    }
+    result += " {\n" + members->toString() + "};";
+    return result;
+}

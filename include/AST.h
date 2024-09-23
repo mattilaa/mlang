@@ -71,16 +71,39 @@ public:
     std::string toString() const override;
 };
 
-/*
-class VarDeclNode : public StatementNode {
+class StructMemberNode : public ASTNode {
 public:
+    bool isVar;
     TypeNode* type;
     std::string name;
+    ExpressionNode* initExpr;
 
-    VarDeclNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
+    StructMemberNode(bool isVar, TypeNode* type, const std::string& name, ExpressionNode* initExpr)
+        : isVar(isVar), type(type), name(name), initExpr(initExpr) {}
     std::string toString() const override;
 };
-*/
+
+class StructMemberListNode : public ASTNode {
+public:
+    std::vector<StructMemberNode*> members;
+
+    void addMember(StructMemberNode* member) {
+        members.push_back(member);
+    }
+
+    std::string toString() const override;
+};
+
+class StructDefNode : public ASTNode {
+public:
+    std::string name;
+    std::string baseName;
+    StructMemberListNode* members;
+
+    StructDefNode(const std::string& name, const std::string& baseName, StructMemberListNode* members)
+        : name(name), baseName(baseName), members(members) {}
+    std::string toString() const override;
+};
 
 class AssignmentNode : public StatementNode {
 public:
@@ -199,7 +222,6 @@ ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-//ASTNode* create_var_decl(ASTNode* type, char* name);
 ASTNode* create_assignment(char* name, ASTNode* expr);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
@@ -211,5 +233,11 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
+ASTNode* create_struct_member_list(ASTNode* member);
+ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
+ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+
+
 
 #endif // AST_H

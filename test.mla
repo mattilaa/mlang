@@ -1,3 +1,13 @@
+struct SomeStr : BaseStr {
+    let a: int = 1;
+    var b: float;
+};
+
+struct OtherStr {
+    let a: int = 1;
+    var b: float;
+};
+
 fn calculate(a: int, b: float) -> int {
     let result: int = 1;
     result = a + int(b);
@@ -6,6 +16,7 @@ fn calculate(a: int, b: float) -> int {
 
 fn max(a: int, b: int) -> int {
     if a > b: {
+        a = b;
         return a;
     }
     if a > b: return a;
