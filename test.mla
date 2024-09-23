@@ -1,17 +1,34 @@
-struct SomeStr : BaseStr {
+struct SomeStruct : BaseStruct {
     let a: int = 1;
+
+    /*
+      Ignore this member
     var b: float;
+    */
+
+    var c: int;
 };
 
-struct OtherStr {
-    let a: int = 1;
-    var b: float;
+// Comments work here
+
+struct OtherStruct {
+    let a: int = 1; // Just some variable
+    var b: float; // No need to init mutable variables
 };
 
 fn calculate(a: int, b: float) -> int {
-    let result: int = 1;
+    var result: int = 1;
     result = a + int(b);
     return result;
+}
+
+fn main() -> void {
+    let x: int = 1;
+    var y: float = 0.0;
+    x = 5;
+    y = 3.14;
+    let y: int = calculate(x, y);
+    return;
 }
 
 fn max(a: int, b: int) -> int {
@@ -24,11 +41,3 @@ fn max(a: int, b: int) -> int {
     else: return a;
 }
 
-fn main() -> void {
-    let x: int = 1;
-    var y: float = 0.0;
-    x = 5;
-    y = 3.14;
-    let y: int = calculate(x, y);
-    return;
-}

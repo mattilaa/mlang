@@ -6,8 +6,18 @@
 %option noyywrap
 %option yylineno
 
+%x COMMENT
+
 %%
 [ \t\n]+        { /* Ignore whitespace */ }
+"//".*          { /* Ignore single-line comments */ }
+"/*"            { BEGIN(COMMENT); }
+<COMMENT>{
+    "*/"        { BEGIN(INITIAL); }
+    [^*\n]+     { /* Ignore anything that's not a '*' */ }
+    "*"         { /* Ignore '*'s that aren't followed by '/' */ }
+    \n          { /* Ignore newlines */ }
+}
 "fn"            { return FUNCTION; }
 "return"        { return RETURN; }
 "if"            { return IF; }
