@@ -1,7 +1,7 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
-#include "AST.h"
+#include "ast.h"
 
 extern int yylex();
 extern int yylineno;

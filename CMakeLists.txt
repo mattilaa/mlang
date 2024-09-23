@@ -23,7 +23,7 @@ find_package(BISON REQUIRED)
 add_subdirectory(src)
 
 set(HEADER_FILES
-    ${CMAKE_SOURCE_DIR}/include/AST.h
+    ${CMAKE_SOURCE_DIR}/include/ast.h
 )
 
 # Specify the full path to the lexer and parser files
