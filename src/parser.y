@@ -36,6 +36,7 @@ ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* create_struct_init(char* type_name, char* var_name);
 %}
 
 %union {
@@ -59,7 +60,7 @@ ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* in
 %type <ast> struct_def function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression cast_expression
 %type <ast> if_statement else_if_list else_if optional_else block_or_statement
-%type <ast> struct_member_list struct_member
+%type <ast> struct_member_list struct_member struct_init
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -140,6 +141,8 @@ statement
         { $$ = create_let_declaration($4, $2, $6); }
     | VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_var_declaration($4, $2, $6); }
+    | VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = create_var_declaration($4, $2, NULL); }
     | IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_assignment($1, $3); }
     | expression SEMICOLON
@@ -152,6 +155,13 @@ statement
         { $$ = $1; }
     | LBRACE statement_list RBRACE
         { $$ = $2; }
+    | struct_init
+        { $$ = $1; }
+    ;
+
+struct_init
+    : IDENTIFIER IDENTIFIER SEMICOLON
+        { $$ = create_struct_init($1, $2); }
     ;
 
 if_statement

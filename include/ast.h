@@ -136,6 +136,16 @@ public:
     std::string toString() const override;
 };
 
+class StructInitNode : public StatementNode {
+public:
+    std::string typeName;
+    std::string varName;
+
+    StructInitNode(const std::string& type, const std::string& var)
+        : typeName(type), varName(var) {}
+    std::string toString() const override;
+};
+
 class IntLiteralNode : public ExpressionNode {
 public:
     int value;
@@ -218,10 +228,10 @@ class VarDeclNode : public StatementNode {
 public:
     TypeNode* type;
     std::string name;
-    ExpressionNode* expression;
+    ExpressionNode* initExpr;
 
-    VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* expr)
-        : type(t), name(n), expression(expr) {}
+    VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* expr = nullptr)
+        : type(t), name(n), initExpr(expr) {}
     std::string toString() const override;
 };
 
@@ -253,8 +263,6 @@ ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
-
-
-
+ASTNode* create_struct_init(char* type_name, char* var_name);
 
 #endif // AST_H

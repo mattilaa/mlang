@@ -74,6 +74,10 @@ ASTNode* create_return_stmt(ASTNode* expr) {
     return new ReturnNode(static_cast<ExpressionNode*>(expr));
 }
 
+ASTNode* create_struct_init(char* type_name, char* var_name) {
+    return new StructInitNode(std::string(type_name), std::string(var_name));
+}
+
 ASTNode* create_int_literal(int value) {
     return new IntLiteralNode(value);
 }
@@ -342,7 +346,11 @@ std::string LetDeclNode::toString() const {
 }
 
 std::string VarDeclNode::toString() const {
-    return "var " + name + ": " + type->toString() + " = " + expression->toString() + ";";
+    std::string result = "var " + name + ": " + type->toString();
+    if (initExpr) {
+        result += " = " + initExpr->toString();
+    }
+    return result + ";";
 }
 
 std::string CastExpressionNode::toString() const {
@@ -391,6 +399,10 @@ std::string StructListNode::toString() const {
         result += structDef->toString() + "\n";
     }
     return result;
+}
+
+std::string StructInitNode::toString() const {
+    return typeName + " " + varName + ";";
 }
 
 std::string ProgramNode::toString() const {
