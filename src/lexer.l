@@ -1,6 +1,6 @@
 %{
-#include "parser.h"
-#include <string>
+#include "parser.hpp"
+#include <string.h>
 %}
 
 %option noyywrap
@@ -13,8 +13,6 @@
 "bool"          { return BOOL; }
 "int"           { return INT; }
 "float"         { return FLOAT; }
-"true"          { yylval.bval = true; return BOOL_LITERAL; }
-"false"         { yylval.bval = false; return BOOL_LITERAL; }
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }
 [0-9]+\.[0-9]+  { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+          { yylval.ival = atoi(yytext); return INT_LITERAL; }

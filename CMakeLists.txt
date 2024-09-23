@@ -1,11 +1,8 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 project(MyLanguage)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Create compile_commands.json in build directory
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find LLVM package
 find_package(LLVM REQUIRED CONFIG)
@@ -19,28 +16,88 @@ add_definitions(${LLVM_DEFINITIONS})
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 
+# Add the src directory
 add_subdirectory(src)
 
-# src/CMakeLists.txt
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/AST.h
 )
 
-BISON_TARGET(MyParser parser.y ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp
-             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.h)
-FLEX_TARGET(MyScanner lexer.l  ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
-ADD_FLEX_BISON_DEPENDENCY(MyScanner MyParser)
+# Specify the full path to the lexer and parser files
+set(LEXER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/lexer.l)
+set(PARSER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/parser.y)
 
-add_executable(mylang
-    main.cpp
-    ${BISON_MyParser_OUTPUTS}
-    ${FLEX_MyScanner_OUTPUTS}
-    ${HEADER_FILES}
+# Set output file names
+set(LEXER_OUT ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
+set(PARSER_OUT ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp)
+set(PARSER_HEADER_OUT ${CMAKE_CURRENT_BINARY_DIR}/parser.h)
+
+# Print Flex and Bison information
+message(STATUS "Flex executable: ${FLEX_EXECUTABLE}")
+message(STATUS "Bison executable: ${BISON_EXECUTABLE}")
+
+# Add custom command and target for Bison
+add_custom_command(
+    OUTPUT ${PARSER_OUT} ${PARSER_HEADER_OUT}
+    COMMAND ${CMAKE_COMMAND} -E echo "Running Bison on ${PARSER_SOURCE}"
+    COMMAND ${BISON_EXECUTABLE}
+    ARGS -d -o ${PARSER_OUT} ${PARSER_SOURCE}
+    DEPENDS ${PARSER_SOURCE}
+    COMMENT "Generating parser.cpp and parser.h"
+    VERBATIM
 )
+
+add_custom_target(
+    ParserTarget ALL
+    DEPENDS ${PARSER_OUT} ${PARSER_HEADER_OUT}
+)
+
+# Add custom command and target for Flex
+add_custom_command(
+    OUTPUT ${LEXER_OUT}
+    COMMAND ${CMAKE_COMMAND} -E echo "Running Flex on ${LEXER_SOURCE}"
+    COMMAND ${FLEX_EXECUTABLE}
+    ARGS -o ${LEXER_OUT} ${LEXER_SOURCE}
+    DEPENDS ${LEXER_SOURCE} ${PARSER_HEADER_OUT}
+    COMMENT "Generating lexer.cpp"
+    VERBATIM
+)
+
+add_custom_target(
+    LexerTarget ALL
+    DEPENDS ${LEXER_OUT}
+)
+
+# Add main.cpp and the generated files to the list of source files
+set(SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+    ${LEXER_OUT}
+    ${PARSER_OUT}
+)
+
+add_executable(mylang ${SOURCE_FILES} ${HEADER_FILES})
+
+# Add dependencies to ensure Flex and Bison run before building the executable
+add_dependencies(mylang ParserTarget LexerTarget)
 
 target_include_directories(mylang PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mylang PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mylang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Link against LLVM libraries
 llvm_map_components_to_libnames(llvm_libs support core irreader)
 target_link_libraries(mylang ${llvm_libs})
+
+# Print debug information
+message(STATUS "LEXER_OUT: ${LEXER_OUT}")
+message(STATUS "PARSER_OUT: ${PARSER_OUT}")
+message(STATUS "PARSER_HEADER_OUT: ${PARSER_HEADER_OUT}")
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+# Force generation at CMake time (use with caution)
+execute_process(
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}
+    COMMAND ${BISON_EXECUTABLE} -d -o ${PARSER_OUT} ${PARSER_SOURCE}
+    COMMAND ${FLEX_EXECUTABLE} -o ${LEXER_OUT} ${LEXER_SOURCE}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
