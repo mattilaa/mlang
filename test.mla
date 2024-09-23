@@ -1,21 +1,23 @@
-fn calculate(int a, float b) -> int {
-    int result;
+fn calculate(a: int, b: float) -> int {
+    let result: int = 1;
     result = a + b;
     return result;
 }
 
-fn max(int a, int b) -> int {
-    if a > b: { return 0; }
+fn max(a: int, b: int) -> int {
+    if a > b: {
+        return a;
+    }
     if a > b: return a;
-    else if b > a: return b; else: return a;
+    else if b > a: return b;
+    else: return a;
 }
 
 fn main() -> void {
-    int x;
-    float y;
+    let x: int = 1;
+    var y: float = 0.0;
     x = 5;
     y = 3.14;
-    calculate(x, y);
-    max(x, y);
+    let y: int = calculate(x, y);
     return;
 }

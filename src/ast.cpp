@@ -35,9 +35,13 @@ ASTNode* create_parameter_list() {
     return new ParameterListNode();
 }
 
-ASTNode* add_parameter(ASTNode* list, ASTNode* type, char* name) {
+ASTNode* create_parameter(ASTNode* type, char* name) {
+    return new ParameterNode(static_cast<TypeNode*>(type), std::string(name));
+}
+
+ASTNode* add_parameter(ASTNode* list, ASTNode* param) {
     auto param_list = static_cast<ParameterListNode*>(list);
-    param_list->parameters.emplace_back(static_cast<TypeNode*>(type), std::string(name));
+    param_list->parameters.push_back(static_cast<ParameterNode*>(param));
     return param_list;
 }
 
@@ -53,9 +57,11 @@ ASTNode* add_statement(ASTNode* list, ASTNode* stmt) {
     return stmt_list;
 }
 
+/*
 ASTNode* create_var_decl(ASTNode* type, char* name) {
     return new VarDeclNode(static_cast<TypeNode*>(type), std::string(name));
 }
+*/
 
 ASTNode* create_assignment(char* name, ASTNode* expr) {
     return new AssignmentNode(std::string(name), static_cast<ExpressionNode*>(expr));
@@ -147,6 +153,21 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
     );
 }
 
+ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr) {
+    return new LetDeclNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(expr)
+    );
+}
+
+ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr) {
+    return new VarDeclNode(
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(expr)
+    );
+}
 // Implement toString() methods for each node type
 std::string TypeNode::toString() const {
     switch(kind) {
@@ -174,11 +195,15 @@ std::string FunctionDefNode::toString() const {
     return "fn " + name + "(" + parameters->toString() + ") -> " + returnType->toString() + " {\n" + body->toString() + "\n}";
 }
 
+std::string ParameterNode::toString() const {
+    return name + ": " + type->toString();
+}
+
 std::string ParameterListNode::toString() const {
     std::string result;
-    for (const auto& param : parameters) {
-        if (!result.empty()) result += ", ";
-        result += param.first->toString() + " " + param.second;
+    for (size_t i = 0; i < parameters.size(); ++i) {
+        if (i > 0) result += ", ";
+        result += parameters[i]->toString();
     }
     return result;
 }
@@ -191,9 +216,11 @@ std::string StatementListNode::toString() const {
     return result;
 }
 
+/*
 std::string VarDeclNode::toString() const {
     return type->toString() + " " + name + ";";
 }
+*/
 
 std::string AssignmentNode::toString() const {
     return name + " = " + expression->toString() + ";";
@@ -252,5 +279,14 @@ std::string IfNode::toString() const {
         result += "else:\n" + elseBranch->toString();
     }
     return result;
+}
+
+// Add toString() methods for new node types
+std::string LetDeclNode::toString() const {
+    return "let " + name + ": " + type->toString() + " = " + expression->toString() + ";";
+}
+
+std::string VarDeclNode::toString() const {
+    return "var " + name + ": " + type->toString() + " = " + expression->toString() + ";";
 }
 

@@ -24,9 +24,18 @@ class ExpressionNode : public ASTNode {};
 
 class StatementNode : public ASTNode {};
 
+class ParameterNode : public ASTNode {
+public:
+    TypeNode* type;
+    std::string name;
+
+    ParameterNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
+    std::string toString() const override;
+};
+
 class ParameterListNode : public ASTNode {
 public:
-    std::vector<std::pair<TypeNode*, std::string>> parameters;
+    std::vector<ParameterNode*> parameters;
     std::string toString() const override;
 };
 
@@ -62,6 +71,7 @@ public:
     std::string toString() const override;
 };
 
+/*
 class VarDeclNode : public StatementNode {
 public:
     TypeNode* type;
@@ -70,6 +80,7 @@ public:
     VarDeclNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
     std::string toString() const override;
 };
+*/
 
 class AssignmentNode : public StatementNode {
 public:
@@ -145,6 +156,28 @@ public:
     std::string toString() const override;
 };
 
+class LetDeclNode : public StatementNode {
+public:
+    TypeNode* type;
+    std::string name;
+    ExpressionNode* expression;
+
+    LetDeclNode(TypeNode* t, const std::string& n, ExpressionNode* expr)
+        : type(t), name(n), expression(expr) {}
+    std::string toString() const override;
+};
+
+class VarDeclNode : public StatementNode {
+public:
+    TypeNode* type;
+    std::string name;
+    ExpressionNode* expression;
+
+    VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* expr)
+        : type(t), name(n), expression(expr) {}
+    std::string toString() const override;
+};
+
 // Function declarations for AST node creation
 ASTNode* create_program(ASTNode* function_list);
 ASTNode* create_function_list(ASTNode* function);
@@ -152,10 +185,11 @@ ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_parameter_list();
-ASTNode* add_parameter(ASTNode* list, ASTNode* type, char* name);
+ASTNode* create_parameter(ASTNode* type, char* name);
+ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* create_var_decl(ASTNode* type, char* name);
+//ASTNode* create_var_decl(ASTNode* type, char* name);
 ASTNode* create_assignment(char* name, ASTNode* expr);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
@@ -164,6 +198,8 @@ ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
+ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
+ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 
 
 #endif // AST_H

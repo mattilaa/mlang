@@ -12,6 +12,8 @@
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }
+"let"           { return LET; }
+"var"           { return VAR; }
 "void"          { return VOID; }
 "bool"          { return BOOL; }
 "int"           { return INT; }
