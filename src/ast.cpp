@@ -2,8 +2,11 @@
 #include "parser.hpp"
 #include <stdexcept>
 
-ASTNode* create_program(ASTNode* function_list) {
-    return new ProgramNode(static_cast<FunctionListNode*>(function_list));
+ASTNode* create_program(ASTNode* struct_list, ASTNode* function_list) {
+    return new ProgramNode(
+        static_cast<StructListNode*>(struct_list),
+        static_cast<FunctionListNode*>(function_list)
+    );
 }
 
 ASTNode* create_function_list(ASTNode* function) {
@@ -184,11 +187,24 @@ ASTNode* create_cast_expression(int type, ASTNode* expr) {
     return new CastExpressionNode(targetType, static_cast<ExpressionNode*>(expr));
 }
 
+ASTNode* create_struct_list(ASTNode* struct_def) {
+    auto list = new StructListNode();
+    list->addStruct(static_cast<StructDefNode*>(struct_def));
+    return list;
+}
+
+ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def) {
+    auto structList = static_cast<StructListNode*>(list);
+    structList->addStruct(static_cast<StructDefNode*>(struct_def));
+    return structList;
+}
+
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members) {
-    auto memberList = static_cast<StructMemberListNode*>(members);
-    return new StructDefNode(std::string(name),
-                             base_name ? std::string(base_name) : "",
-                             memberList);
+    return new StructDefNode(
+        std::string(name),
+        base_name ? std::string(base_name) : "",
+        static_cast<StructMemberListNode*>(members)
+    );
 }
 
 ASTNode* create_struct_member_list(ASTNode* member) {
@@ -204,10 +220,12 @@ ASTNode* add_struct_member(ASTNode* list, ASTNode* member) {
 }
 
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr) {
-    return new StructMemberNode(is_var != 0,
-                                static_cast<TypeNode*>(type),
-                                std::string(name),
-                                static_cast<ExpressionNode*>(init_expr));
+    return new StructMemberNode(
+        is_var != 0,
+        static_cast<TypeNode*>(type),
+        std::string(name),
+        static_cast<ExpressionNode*>(init_expr)
+    );
 }
 
 // Implement toString() methods for each node type
@@ -219,10 +237,6 @@ std::string TypeNode::toString() const {
         case TYPE_FLOAT: return "float";
         default: return "unknown";
     }
-}
-
-std::string ProgramNode::toString() const {
-    return "Program:\n" + functionList->toString();
 }
 
 std::string FunctionListNode::toString() const {
@@ -357,7 +371,7 @@ std::string StructMemberNode::toString() const {
 std::string StructMemberListNode::toString() const {
     std::string result;
     for (const auto& member : members) {
-        result += member->toString() + "\n";
+        result += "    " + member->toString() + "\n";
     }
     return result;
 }
@@ -367,6 +381,25 @@ std::string StructDefNode::toString() const {
     if (!baseName.empty()) {
         result += " : " + baseName;
     }
-    result += " {\n" + members->toString() + "};";
+    result += " {\n" + members->toString() + "};\n";
+    return result;
+}
+
+std::string StructListNode::toString() const {
+    std::string result;
+    for (const auto& structDef : structs) {
+        result += structDef->toString() + "\n";
+    }
+    return result;
+}
+
+std::string ProgramNode::toString() const {
+    std::string result;
+    if (structList) {
+        result += structList->toString();
+    }
+    if (functionList) {
+        result += functionList->toString();
+    }
     return result;
 }

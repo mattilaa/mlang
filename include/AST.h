@@ -57,13 +57,6 @@ public:
     std::string toString() const override;
 };
 
-class ProgramNode : public ASTNode {
-public:
-    FunctionListNode* functionList;
-
-    ProgramNode(FunctionListNode* list) : functionList(list) {}
-    std::string toString() const override;
-};
 
 class StatementListNode : public ASTNode {
 public:
@@ -102,6 +95,27 @@ public:
 
     StructDefNode(const std::string& name, const std::string& baseName, StructMemberListNode* members)
         : name(name), baseName(baseName), members(members) {}
+    std::string toString() const override;
+};
+
+class StructListNode : public ASTNode {
+public:
+    std::vector<StructDefNode*> structs;
+
+    void addStruct(StructDefNode* structDef) {
+        structs.push_back(structDef);
+    }
+
+    std::string toString() const override;
+};
+
+class ProgramNode : public ASTNode {
+public:
+    StructListNode* structList;
+    FunctionListNode* functionList;
+
+    ProgramNode(StructListNode* structs, FunctionListNode* functions)
+        : structList(structs), functionList(functions) {}
     std::string toString() const override;
 };
 
@@ -212,7 +226,7 @@ public:
 };
 
 // Function declarations for AST node creation
-ASTNode* create_program(ASTNode* function_list);
+ASTNode* create_program(ASTNode* struct_list, ASTNode* function_list);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
@@ -233,10 +247,13 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
+ASTNode* create_struct_list(ASTNode* struct_def);
+ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+
 
 
 

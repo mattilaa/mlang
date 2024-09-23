@@ -9,14 +9,16 @@ extern char* yytext;
 void yyerror(const char* s);
 
 // Function prototypes for AST node creation
-ASTNode* create_program(ASTNode* function_list);
+ASTNode* create_program(ASTNode* struct_list, ASTNode* function_list);
+ASTNode* create_struct_list(ASTNode* struct_def);
+ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
 ASTNode* create_type_node(int type);
 ASTNode* create_parameter_list();
 ASTNode* create_parameter(ASTNode* type, char* name);
-ASTNode* add_parameter(ASTNode* list, ASTNode* type, char* name);
+ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr);
@@ -53,10 +55,11 @@ ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* in
 %token LBRACE RBRACE LPAREN RPAREN SEMICOLON COMMA ARROW COLON
 %token CAST_INT CAST_FLOAT
 
-%type <ast> program function_def_list function_def type parameter_list parameters parameter
+%type <ast> program struct_list function_list
+%type <ast> struct_def function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression cast_expression
 %type <ast> if_statement else_if_list else_if optional_else block_or_statement
-%type <ast> struct_def struct_member_list struct_member
+%type <ast> struct_member_list struct_member
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -67,8 +70,19 @@ ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* in
 %%
 
 program
-    : function_def_list { $$ = create_program($1); }
-    | struct_def function_def_list { $$ = create_program($2); /* TODO: Add struct to program */ }
+    : struct_list function_list { $$ = create_program($1, $2); }
+    | struct_list { $$ = create_program($1, NULL); }
+    | function_list { $$ = create_program(NULL, $1); }
+    ;
+
+struct_list
+    : struct_def { $$ = create_struct_list($1); }
+    | struct_list struct_def { $$ = add_struct_to_list($1, $2); }
+    ;
+
+function_list
+    : function_def { $$ = create_function_list($1); }
+    | function_list function_def { $$ = add_function_to_list($1, $2); }
     ;
 
 struct_def
@@ -90,14 +104,9 @@ struct_member
         { $$ = create_struct_member(1, $4, $2, NULL); }
     ;
 
-function_def_list
-    : function_def { $$ = create_function_list($1); }
-    | function_def_list function_def { $$ = add_function_to_list($1, $2); }
-    ;
-
 function_def
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-    { $$ = create_function_def($7, $2, $4, $9); }
+        { $$ = create_function_def($7, $2, $4, $9); }
     ;
 
 parameter_list
