@@ -136,10 +136,11 @@ class IfNode : public StatementNode {
 public:
     ExpressionNode* condition;
     StatementListNode* thenBranch;
-    IfNode* elseBranch;  // This can be either another if (for else if) or nullptr
+    IfNode* elseIfBranch;  // For else if
+    StatementListNode* elseBranch;  // For final else
 
-    IfNode(ExpressionNode* cond, StatementListNode* then, IfNode* else_branch)
-        : condition(cond), thenBranch(then), elseBranch(else_branch) {}
+    IfNode(ExpressionNode* cond, StatementListNode* then, IfNode* elseIf, StatementListNode* else_)
+        : condition(cond), thenBranch(then), elseIfBranch(elseIf), elseBranch(else_) {}
 
     std::string toString() const override;
 };
@@ -162,6 +163,7 @@ ASTNode* create_float_literal(float value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
-ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_branch);
+ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
+
 
 #endif // AST_H

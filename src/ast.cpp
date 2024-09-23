@@ -138,11 +138,12 @@ ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2) {
     return call;
 }
 
-ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_branch) {
+ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch) {
     return new IfNode(
         static_cast<ExpressionNode*>(condition),
         static_cast<StatementListNode*>(then_branch),
-        static_cast<IfNode*>(else_branch)
+        static_cast<IfNode*>(else_if_branch),
+        static_cast<StatementListNode*>(else_branch)
     );
 }
 
@@ -242,15 +243,13 @@ std::string FunctionCallNode::toString() const {
 }
 
 std::string IfNode::toString() const {
-    std::string result = "if " + condition->toString() + ": {\n";
+    std::string result = "if " + condition->toString() + ":\n";
     result += thenBranch->toString();
-    result += "}\n";
+    if (elseIfBranch) {
+        result += "else " + elseIfBranch->toString();
+    }
     if (elseBranch) {
-        if (elseBranch->condition) {
-            result += "else " + elseBranch->toString();
-        } else {
-            result += "else {\n" + elseBranch->thenBranch->toString() + "}\n";
-        }
+        result += "else:\n" + elseBranch->toString();
     }
     return result;
 }

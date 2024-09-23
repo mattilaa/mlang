@@ -46,7 +46,7 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
 
 %type <ast> program function_def_list function_def type parameter_list parameters
 %type <ast> statement_list statement expression if_statement else_if_list else_if
-%type <ast> optional_else
+%type <ast> optional_else block_or_statement
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -97,28 +97,34 @@ statement
     | IDENTIFIER ASSIGN expression SEMICOLON { $$ = create_assignment($1, $3); }
     | expression SEMICOLON { $$ = $1; }
     | RETURN expression SEMICOLON { $$ = create_return_stmt($2); }
+    | RETURN expression { $$ = create_return_stmt($2); }
     | RETURN SEMICOLON { $$ = create_return_stmt(NULL); }
     | LBRACE statement_list RBRACE { $$ = $2; }
     | if_statement { $$ = $1; }
     ;
 
 if_statement
-    : IF expression COLON LBRACE statement_list RBRACE else_if_list optional_else
-    { $$ = create_if_statement($2, $5, create_if_statement($7, $8, NULL)); }
+    : IF expression COLON block_or_statement else_if_list optional_else
+    { $$ = create_if_statement($2, $4, $5, $6); }
     ;
 
 else_if_list
     : /* empty */ { $$ = NULL; }
-    | else_if_list else_if { $$ = create_if_statement($2, NULL, $1); }
+    | else_if_list else_if { $$ = create_if_statement($2, NULL, $1, NULL); }
     ;
 
 else_if
-    : ELSE IF expression COLON LBRACE statement_list RBRACE { $$ = create_if_statement($3, $6, NULL); }
+    : ELSE IF expression COLON block_or_statement { $$ = create_if_statement($3, $5, NULL, NULL); }
     ;
 
 optional_else
     : /* empty */ { $$ = NULL; }
-    | ELSE LBRACE statement_list RBRACE { $$ = $3; }
+    | ELSE COLON block_or_statement { $$ = $3; }
+    ;
+
+block_or_statement
+    : LBRACE statement_list RBRACE { $$ = $2; }
+    | statement { $$ = create_statement_list($1); }
     ;
 
 expression
