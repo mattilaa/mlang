@@ -18,6 +18,8 @@
 "bool"          { return BOOL; }
 "int"           { return INT; }
 "float"         { return FLOAT; }
+"int("          { return CAST_INT; }
+"float("        { return CAST_FLOAT; }
 "->"            { return ARROW; }
 "<"             { return LT; }
 ">"             { return GT; }

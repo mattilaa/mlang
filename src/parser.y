@@ -29,6 +29,7 @@ ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
+ASTNode* create_cast_expression(int type, ASTNode* expr);
 %}
 
 %union {
@@ -46,10 +47,11 @@ ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN SEMICOLON COMMA ARROW COLON
+%token CAST_INT CAST_FLOAT
 
 %type <ast> program function_def_list function_def type parameter_list parameters parameter
-%type <ast> statement_list statement expression if_statement else_if_list else_if
-%type <ast> optional_else block_or_statement
+%type <ast> statement_list statement expression cast_expression
+%type <ast> if_statement else_if_list else_if optional_else block_or_statement
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -157,9 +159,15 @@ expression
     | expression EQ expression { $$ = create_binary_op(EQ, $1, $3); }
     | expression NE expression { $$ = create_binary_op(NE, $1, $3); }
     | LPAREN expression RPAREN { $$ = $2; }
+    | cast_expression { $$ = $1; }
     | IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL); }
     | IDENTIFIER LPAREN expression RPAREN { $$ = create_function_call($1, $3, NULL); }
     | IDENTIFIER LPAREN expression COMMA expression RPAREN { $$ = create_function_call($1, $3, $5); }
+    ;
+
+cast_expression
+    : CAST_INT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_INT, $2); }
+    | CAST_FLOAT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_FLOAT, $2); }
     ;
 
 %%

@@ -143,6 +143,16 @@ public:
     std::string toString() const override;
 };
 
+class CastExpressionNode : public ExpressionNode {
+public:
+    TypeNode::TypeKind targetType;
+    ExpressionNode* expression;
+
+    CastExpressionNode(TypeNode::TypeKind type, ExpressionNode* expr)
+        : targetType(type), expression(expr) {}
+    std::string toString() const override;
+};
+
 class IfNode : public StatementNode {
 public:
     ExpressionNode* condition;
@@ -200,6 +210,6 @@ ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
-
+ASTNode* create_cast_expression(int type, ASTNode* expr);
 
 #endif // AST_H

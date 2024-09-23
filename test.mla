@@ -1,6 +1,6 @@
 fn calculate(a: int, b: float) -> int {
     let result: int = 1;
-    result = a + b;
+    result = a + int(b);
     return result;
 }
 

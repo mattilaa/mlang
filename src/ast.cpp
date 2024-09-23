@@ -168,6 +168,22 @@ ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr) {
         static_cast<ExpressionNode*>(expr)
     );
 }
+
+ASTNode* create_cast_expression(int type, ASTNode* expr) {
+    TypeNode::TypeKind targetType;
+    switch (type) {
+        case TypeNode::TYPE_INT:
+            targetType = TypeNode::TYPE_INT;
+            break;
+        case TypeNode::TYPE_FLOAT:
+            targetType = TypeNode::TYPE_FLOAT;
+            break;
+        default:
+            throw std::runtime_error("Unsupported cast type");
+    }
+    return new CastExpressionNode(targetType, static_cast<ExpressionNode*>(expr));
+}
+
 // Implement toString() methods for each node type
 std::string TypeNode::toString() const {
     switch(kind) {
@@ -281,12 +297,26 @@ std::string IfNode::toString() const {
     return result;
 }
 
-// Add toString() methods for new node types
 std::string LetDeclNode::toString() const {
     return "let " + name + ": " + type->toString() + " = " + expression->toString() + ";";
 }
 
 std::string VarDeclNode::toString() const {
     return "var " + name + ": " + type->toString() + " = " + expression->toString() + ";";
+}
+
+std::string CastExpressionNode::toString() const {
+    std::string typeName;
+    switch (targetType) {
+        case TypeNode::TYPE_INT:
+            typeName = "int";
+            break;
+        case TypeNode::TYPE_FLOAT:
+            typeName = "float";
+            break;
+        default:
+            typeName = "unknown";
+    }
+    return typeName + "(" + expression->toString() + ")";
 }
 
