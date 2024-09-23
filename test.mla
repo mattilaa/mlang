@@ -1,0 +1,14 @@
+fn calculate(int a, float b) -> int {
+    int result;
+    result = a + b;
+    return result;
+}
+
+fn main() -> void {
+    int x;
+    float y;
+    x = 5;
+    y = 3.14;
+    calculate(x, y);
+    return;
+}

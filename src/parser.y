@@ -9,23 +9,7 @@ extern char* yytext;
 void yyerror(const char* s);
 
 // Function prototypes for AST node creation
-ASTNode* create_program(ASTNode* function_list);
-ASTNode* create_function_list(ASTNode* function);
-ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
-ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
-ASTNode* create_type_node(int type);
-ASTNode* create_parameter_list();
-ASTNode* add_parameter(ASTNode* list, ASTNode* type, char* name);
-ASTNode* create_statement_list(ASTNode* stmt);
-ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* create_var_decl(ASTNode* type, char* name);
-ASTNode* create_assignment(char* name, ASTNode* expr);
-ASTNode* create_return_stmt(ASTNode* expr);
-ASTNode* create_int_literal(int value);
-ASTNode* create_float_literal(float value);
-ASTNode* create_identifier(char* name);
-ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
-ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
+// ... (keep existing prototypes)
 %}
 
 %union {
@@ -40,7 +24,7 @@ ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
 %token <fval> FLOAT_LITERAL
 %token FUNCTION RETURN VOID BOOL INT FLOAT
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
-%token LBRACE RBRACE LPAREN RPAREN SEMICOLON COMMA
+%token LBRACE RBRACE LPAREN RPAREN SEMICOLON COMMA ARROW
 
 %type <ast> program function_def_list function_def type parameter_list parameters
 %type <ast> statement_list statement expression
@@ -62,8 +46,8 @@ function_def_list
     ;
 
 function_def
-    : FUNCTION type IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
-    { $$ = create_function_def($2, $3, $5, $8); }
+    : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+    { $$ = create_function_def($7, $2, $4, $9); }
     ;
 
 type
@@ -115,6 +99,6 @@ expression
 
 void yyerror(const char* s) {
     fprintf(stderr, "Parse error at line %d: %s\n", yylineno, s);
-    //fprintf(stderr, "Near token: %s\n", yytext);
+    fprintf(stderr, "Near token: %s\n", yytext);
     exit(1);
 }
