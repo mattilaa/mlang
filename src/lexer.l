@@ -7,6 +7,7 @@
 %option yylineno
 
 %x COMMENT
+%x STRING_
 
 %%
 [ \t\n]+        { /* Ignore whitespace */ }
@@ -17,6 +18,19 @@
     [^*\n]+     { /* Ignore anything that's not a '*' */ }
     "*"         { /* Ignore '*'s that aren't followed by '/' */ }
     \n          { /* Ignore newlines */ }
+}
+<STRING_>{
+    \"          { BEGIN(INITIAL); return STRING_LITERAL; }
+    \\n         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\n"); }
+    \\t         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\t"); }
+    \\\"        { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\""); }
+    \\\\        { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\\"); }
+    [^\\\n\"]+  { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + strlen(yytext) + 1);
+                  strcat(yylval.sval, yytext); }
 }
 "fn"            { return FUNCTION; }
 "return"        { return RETURN; }
@@ -29,6 +43,7 @@
 "int"           { return INT; }
 "float"         { return FLOAT; }
 "double"        { return DOUBLE; }
+"string"        { return STRING; }
 "list"          { return LIST; }
 "struct"        { return STRUCT; }
 "int("          { return CAST_INT; }

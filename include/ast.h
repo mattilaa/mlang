@@ -21,6 +21,7 @@ public:
         TYPE_INT,
         TYPE_FLOAT,
         TYPE_DOUBLE,
+        TYPE_STRING,
         TYPE_LIST
     };
     TypeKind kind;
@@ -211,6 +212,15 @@ public:
     std::string toString() const override;
 };
 
+class StringLiteralNode : public ExpressionNode
+{
+public:
+    std::string value;
+
+    StringLiteralNode(const std::string& v) : value(v) {}
+    std::string toString() const override;
+};
+
 class IdentifierNode : public ExpressionNode
 {
 public:
@@ -390,6 +400,7 @@ ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_int_literal(int value);
 ASTNode* create_float_literal(float value);
+ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);

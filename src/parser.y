@@ -28,6 +28,7 @@ ASTNode* create_assignment(char* name, ASTNode* expr);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
 ASTNode* create_float_literal(float value);
+ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
@@ -53,10 +54,10 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
     struct ASTNode* ast;
 }
 
-%token <sval> IDENTIFIER
+%token <sval> IDENTIFIER STRING_LITERAL
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE LIST STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST STRUCT
 %token LET VAR
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
@@ -139,6 +140,7 @@ type
     | INT    { $$ = create_type_node(TypeNode::TYPE_INT); }
     | FLOAT  { $$ = create_type_node(TypeNode::TYPE_FLOAT); }
     | DOUBLE { $$ = create_type_node(TypeNode::TYPE_DOUBLE); }
+    | STRING { $$ = create_type_node(TypeNode::TYPE_STRING); }
     | LIST   { $$ = create_list_type(); }
     ;
 
@@ -227,6 +229,7 @@ expression
 primary_expression
     : INT_LITERAL { $$ = create_int_literal($1); }
     | FLOAT_LITERAL { $$ = create_float_literal($1); }
+    | STRING_LITERAL { $$ = create_string_literal($1); }
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }
     ;

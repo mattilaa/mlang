@@ -138,6 +138,11 @@ ASTNode* create_float_literal(float value)
     return new FloatLiteralNode(value);
 }
 
+ASTNode* create_string_literal(char* value)
+{
+    return new StringLiteralNode(std::string(value));
+}
+
 ASTNode* create_identifier(char* name)
 {
     return new IdentifierNode(std::string(name));
@@ -351,6 +356,8 @@ std::string TypeNode::toString() const
         return "float";
     case TYPE_DOUBLE:
         return "double";
+    case TYPE_STRING:
+        return "string";
     case TYPE_LIST:
         return "list";
     default:
@@ -419,6 +426,11 @@ std::string IntLiteralNode::toString() const
 std::string FloatLiteralNode::toString() const
 {
     return std::to_string(value);
+}
+
+std::string StringLiteralNode::toString() const
+{
+    return "\"" + value + "\"";
 }
 
 std::string IdentifierNode::toString() const
