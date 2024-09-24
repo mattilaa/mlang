@@ -28,6 +28,7 @@
 "bool"          { return BOOL; }
 "int"           { return INT; }
 "float"         { return FLOAT; }
+"list"          { return LIST; }
 "struct"        { return STRUCT; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
@@ -44,6 +45,8 @@
 "}"             { return RBRACE; }
 "("             { return LPAREN; }
 ")"             { return RPAREN; }
+"["             { return LBRACKET; }
+"]"             { return RBRACKET; }
 "="             { return ASSIGN; }
 ","             { return COMMA; }
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }

@@ -2,11 +2,37 @@
 #include "parser.hpp"
 #include <stdexcept>
 
-ASTNode* create_program(ASTNode* struct_list, ASTNode* function_list) {
-    return new ProgramNode(
-        static_cast<StructListNode*>(struct_list),
-        static_cast<FunctionListNode*>(function_list)
-    );
+ASTNode* create_program(ASTNode* top_level_list) {
+    auto program = new ProgramNode();
+    auto* list = static_cast<TopLevelListNode*>(top_level_list);
+
+    for (auto* item : list->items) {
+        if (auto* structDef = dynamic_cast<StructDefNode*>(item)) {
+            if (!program->structList) {
+                program->structList = new StructListNode();
+            }
+            program->structList->addStruct(structDef);
+        } else if (auto* funcDef = dynamic_cast<FunctionDefNode*>(item)) {
+            if (!program->functionList) {
+                program->functionList = new FunctionListNode();
+            }
+            program->functionList->functions.push_back(funcDef);
+        }
+    }
+
+    return program;
+}
+
+ASTNode* create_top_level_list(ASTNode* item) {
+    auto list = new TopLevelListNode();
+    list->items.push_back(item);
+    return list;
+}
+
+ASTNode* add_to_top_level_list(ASTNode* list, ASTNode* item) {
+    auto topLevelList = static_cast<TopLevelListNode*>(list);
+    topLevelList->items.push_back(item);
+    return topLevelList;
 }
 
 ASTNode* create_function_list(ASTNode* function) {
@@ -34,8 +60,16 @@ ASTNode* create_type_node(TypeNode::TypeKind type) {
     return new TypeNode(type);
 }
 
-ASTNode* create_parameter_list() {
+ASTNode* create_empty_parameter_list() {
     return new ParameterListNode();
+}
+
+ASTNode* create_parameter_list(ASTNode* param) {
+    auto list = new ParameterListNode();
+    if (param) {
+        list->parameters.push_back(static_cast<ParameterNode*>(param));
+    }
+    return list;
 }
 
 ASTNode* create_parameter(ASTNode* type, char* name) {
@@ -59,12 +93,6 @@ ASTNode* add_statement(ASTNode* list, ASTNode* stmt) {
     stmt_list->statements.push_back(static_cast<StatementNode*>(stmt));
     return stmt_list;
 }
-
-/*
-ASTNode* create_var_decl(ASTNode* type, char* name) {
-    return new VarDeclNode(static_cast<TypeNode*>(type), std::string(name));
-}
-*/
 
 ASTNode* create_assignment(char* name, ASTNode* expr) {
     return new AssignmentNode(std::string(name), static_cast<ExpressionNode*>(expr));
@@ -91,57 +119,21 @@ ASTNode* create_identifier(char* name) {
 }
 
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right) {
-    if (!left || !right) {
-        fprintf(stderr, "Error: Null operand in binary operation\n");
-        return nullptr;
-    }
-
     BinaryOpNode::OpType opType;
     switch (op) {
-        case PLUS:
-            opType = BinaryOpNode::OpType::OP_PLUS;
-            break;
-        case MINUS:
-            opType = BinaryOpNode::OpType::OP_MINUS;
-            break;
-        case MULTIPLY:
-            opType = BinaryOpNode::OpType::OP_MULTIPLY;
-            break;
-        case DIVIDE:
-            opType = BinaryOpNode::OpType::OP_DIVIDE;
-            break;
-        case LT:
-            opType = BinaryOpNode::OpType::OP_LT;
-            break;
-        case GT:
-            opType = BinaryOpNode::OpType::OP_GT;
-            break;
-        case LE:
-            opType = BinaryOpNode::OpType::OP_LE;
-            break;
-        case GE:
-            opType = BinaryOpNode::OpType::OP_GE;
-            break;
-        case EQ:
-            opType = BinaryOpNode::OpType::OP_EQ;
-            break;
-        case NE:
-            opType = BinaryOpNode::OpType::OP_NE;
-            break;
-        default:
-            fprintf(stderr, "Error: Unknown binary operator: %d\n", op);
-            return nullptr;
+        case PLUS: opType = BinaryOpNode::OP_PLUS; break;
+        case MINUS: opType = BinaryOpNode::OP_MINUS; break;
+        case MULTIPLY: opType = BinaryOpNode::OP_MULTIPLY; break;
+        case DIVIDE: opType = BinaryOpNode::OP_DIVIDE; break;
+        case LT: opType = BinaryOpNode::OP_LT; break;
+        case GT: opType = BinaryOpNode::OP_GT; break;
+        case LE: opType = BinaryOpNode::OP_LE; break;
+        case GE: opType = BinaryOpNode::OP_GE; break;
+        case EQ: opType = BinaryOpNode::OP_EQ; break;
+        case NE: opType = BinaryOpNode::OP_NE; break;
+        default: throw std::runtime_error("Unknown binary operator");
     }
-
-    ExpressionNode* leftExpr = dynamic_cast<ExpressionNode*>(left);
-    ExpressionNode* rightExpr = dynamic_cast<ExpressionNode*>(right);
-
-    if (!leftExpr || !rightExpr) {
-        fprintf(stderr, "Error: Invalid operand types for binary operation\n");
-        return nullptr;
-    }
-
-    return new BinaryOpNode(opType, leftExpr, rightExpr);
+    return new BinaryOpNode(opType, static_cast<ExpressionNode*>(left), static_cast<ExpressionNode*>(right));
 }
 
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2) {
@@ -179,14 +171,9 @@ ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr) {
 ASTNode* create_cast_expression(int type, ASTNode* expr) {
     TypeNode::TypeKind targetType;
     switch (type) {
-        case TypeNode::TYPE_INT:
-            targetType = TypeNode::TYPE_INT;
-            break;
-        case TypeNode::TYPE_FLOAT:
-            targetType = TypeNode::TYPE_FLOAT;
-            break;
-        default:
-            throw std::runtime_error("Unsupported cast type");
+        case TypeNode::TYPE_INT: targetType = TypeNode::TYPE_INT; break;
+        case TypeNode::TYPE_FLOAT: targetType = TypeNode::TYPE_FLOAT; break;
+        default: throw std::runtime_error("Unsupported cast type");
     }
     return new CastExpressionNode(targetType, static_cast<ExpressionNode*>(expr));
 }
@@ -232,6 +219,52 @@ ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* in
     );
 }
 
+ASTNode* create_list_type() {
+    return new ListTypeNode();
+}
+
+ASTNode* create_list_literal(ASTNode* elements) {
+    return new ListLiteralNode(static_cast<ListElementsNode*>(elements));
+}
+
+ASTNode* create_list_element_list(ASTNode* element) {
+    auto list = new ListElementsNode();
+    list->addElement(static_cast<ExpressionNode*>(element));
+    return list;
+}
+
+ASTNode* add_list_element(ASTNode* list, ASTNode* element) {
+    auto elemList = static_cast<ListElementsNode*>(list);
+    elemList->addElement(static_cast<ExpressionNode*>(element));
+    return elemList;
+}
+
+ASTNode* create_expression_statement(ASTNode* expr) {
+    return new ExpressionStatementNode(static_cast<ExpressionNode*>(expr));
+}
+
+ASTNode* create_block_statement(ASTNode* stmt_list) {
+    return new BlockStatementNode(static_cast<StatementListNode*>(stmt_list));
+}
+
+ASTNode* create_else_if(ASTNode* condition, ASTNode* body) {
+    return new IfNode(
+        static_cast<ExpressionNode*>(condition),
+        static_cast<StatementListNode*>(body),
+        nullptr,
+        nullptr
+    );
+}
+
+ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if) {
+    auto current = static_cast<IfNode*>(else_if_list);
+    while (current->elseIfBranch) {
+        current = current->elseIfBranch;
+    }
+    current->elseIfBranch = static_cast<IfNode*>(else_if);
+    return else_if_list;
+}
+
 // Implement toString() methods for each node type
 std::string TypeNode::toString() const {
     switch(kind) {
@@ -239,6 +272,7 @@ std::string TypeNode::toString() const {
         case TYPE_BOOL: return "bool";
         case TYPE_INT: return "int";
         case TYPE_FLOAT: return "float";
+        case TYPE_LIST: return "list";
         default: return "unknown";
     }
 }
@@ -275,12 +309,6 @@ std::string StatementListNode::toString() const {
     }
     return result;
 }
-
-/*
-std::string VarDeclNode::toString() const {
-    return type->toString() + " " + name + ";";
-}
-*/
 
 std::string AssignmentNode::toString() const {
     return name + " = " + expression->toString() + ";";
@@ -330,13 +358,12 @@ std::string FunctionCallNode::toString() const {
 }
 
 std::string IfNode::toString() const {
-    std::string result = "if " + condition->toString() + ":\n";
-    result += thenBranch->toString();
+    std::string result = "if " + condition->toString() + " {\n" + thenBranch->toString() + "\n}";
     if (elseIfBranch) {
-        result += "else " + elseIfBranch->toString();
+        result += " else " + elseIfBranch->toString();
     }
     if (elseBranch) {
-        result += "else:\n" + elseBranch->toString();
+        result += " else {\n" + elseBranch->toString() + "\n}";
     }
     return result;
 }
@@ -356,14 +383,9 @@ std::string VarDeclNode::toString() const {
 std::string CastExpressionNode::toString() const {
     std::string typeName;
     switch (targetType) {
-        case TypeNode::TYPE_INT:
-            typeName = "int";
-            break;
-        case TypeNode::TYPE_FLOAT:
-            typeName = "float";
-            break;
-        default:
-            typeName = "unknown";
+        case TypeNode::TYPE_INT: typeName = "int"; break;
+        case TypeNode::TYPE_FLOAT: typeName = "float"; break;
+        default: typeName = "unknown";
     }
     return typeName + "(" + expression->toString() + ")";
 }
@@ -415,3 +437,38 @@ std::string ProgramNode::toString() const {
     }
     return result;
 }
+
+std::string TopLevelListNode::toString() const {
+    std::string result;
+    for (const auto& item : items) {
+        result += item->toString() + "\n";
+    }
+    return result;
+}
+
+std::string ListElementsNode::toString() const {
+    std::string result;
+    for (size_t i = 0; i < elements.size(); ++i) {
+        if (i > 0) result += ", ";
+        result += elements[i]->toString();
+    }
+    return result;
+}
+
+std::string ListLiteralNode::toString() const {
+    return "[" + (elements ? elements->toString() : "") + "]";
+}
+
+std::string BlockStatementNode::toString() const {
+    std::string result = "{\n";
+    if (statements) {
+        result += statements->toString();
+    }
+    result += "}\n";
+    return result;
+}
+
+std::string ExpressionStatementNode::toString() const {
+    return expression->toString() + ";";
+}
+

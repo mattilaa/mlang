@@ -19,6 +19,7 @@ struct OtherStruct {
 fn calculate(a: int, b: float) -> int {
     var result: int = 1;
     SomeStruct st;
+    let l: list = [1,2,3,4];
     result = a + int(b);
     return result;
 }
@@ -37,8 +38,11 @@ fn max(a: int, b: int) -> int {
         a = b;
         return a;
     }
+    /*
     if a > b: return a;
     else if b > a: return b;
     else: return a;
+    */
+    return a;
 }
 

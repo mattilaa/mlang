@@ -9,7 +9,9 @@ extern char* yytext;
 void yyerror(const char* s);
 
 // Function prototypes for AST node creation
-ASTNode* create_program(ASTNode* struct_list, ASTNode* function_list);
+ASTNode* create_program(ASTNode* top_level_list);
+ASTNode* create_top_level_list(ASTNode* item);
+ASTNode* add_to_top_level_list(ASTNode* list, ASTNode* item);
 ASTNode* create_struct_list(ASTNode* struct_def);
 ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
@@ -17,6 +19,7 @@ ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
 ASTNode* create_type_node(int type);
 ASTNode* create_parameter_list();
+ASTNode* create_empty_parameter_list();
 ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
@@ -37,6 +40,10 @@ ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
 ASTNode* create_struct_init(char* type_name, char* var_name);
+ASTNode* create_list_type();
+ASTNode* create_list_literal(ASTNode* elements);
+ASTNode* create_list_element_list(ASTNode* element);
+ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %}
 
 %union {
@@ -49,18 +56,22 @@ ASTNode* create_struct_init(char* type_name, char* var_name);
 %token <sval> IDENTIFIER
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT LIST STRUCT
 %token LET VAR
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
-%token LBRACE RBRACE LPAREN RPAREN SEMICOLON COMMA ARROW COLON
+%token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON
 %token CAST_INT CAST_FLOAT
 
-%type <ast> program struct_list function_list
+%type <ast> program top_level_list top_level_item
 %type <ast> struct_def function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression cast_expression
-%type <ast> if_statement else_if_list else_if optional_else block_or_statement
+%type <ast> if_statement else_if_list else_if optional_else
 %type <ast> struct_member_list struct_member struct_init
+%type <ast> list_literal list_elements
+%type <ast> let_statement var_statement assignment_statement expression_statement
+%type <ast> return_statement block_statement
+%type <ast> primary_expression binary_expression function_call
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -71,19 +82,17 @@ ASTNode* create_struct_init(char* type_name, char* var_name);
 %%
 
 program
-    : struct_list function_list { $$ = create_program($1, $2); }
-    | struct_list { $$ = create_program($1, NULL); }
-    | function_list { $$ = create_program(NULL, $1); }
+    : top_level_list { $$ = create_program($1); }
     ;
 
-struct_list
-    : struct_def { $$ = create_struct_list($1); }
-    | struct_list struct_def { $$ = add_struct_to_list($1, $2); }
+top_level_list
+    : top_level_item { $$ = create_top_level_list($1); }
+    | top_level_list top_level_item { $$ = add_to_top_level_list($1, $2); }
     ;
 
-function_list
-    : function_def { $$ = create_function_list($1); }
-    | function_list function_def { $$ = add_function_to_list($1, $2); }
+top_level_item
+    : struct_def
+    | function_def
     ;
 
 struct_def
@@ -111,12 +120,12 @@ function_def
     ;
 
 parameter_list
-    : parameters { $$ = $1; }
-    | /* empty */ { $$ = create_parameter_list(); }
+    : /* empty */ { $$ = create_empty_parameter_list(); }
+    | parameters
     ;
 
 parameters
-    : parameter { $$ = add_parameter(create_parameter_list(), $1); }
+    : parameter { $$ = create_parameter_list($1); }
     | parameters COMMA parameter { $$ = add_parameter($1, $3); }
     ;
 
@@ -129,6 +138,7 @@ type
     | BOOL   { $$ = create_type_node(TypeNode::TYPE_BOOL); }
     | INT    { $$ = create_type_node(TypeNode::TYPE_INT); }
     | FLOAT  { $$ = create_type_node(TypeNode::TYPE_FLOAT); }
+    | LIST   { $$ = create_list_type(); }
     ;
 
 statement_list
@@ -137,26 +147,44 @@ statement_list
     ;
 
 statement
+    : let_statement
+    | var_statement
+    | assignment_statement
+    | expression_statement
+    | return_statement
+    | if_statement
+    | block_statement
+    | struct_init
+    ;
+
+let_statement
     : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_let_declaration($4, $2, $6); }
-    | VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+    ;
+
+var_statement
+    : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_var_declaration($4, $2, $6); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = create_var_declaration($4, $2, NULL); }
-    | IDENTIFIER ASSIGN expression SEMICOLON
+    ;
+
+assignment_statement
+    : IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_assignment($1, $3); }
-    | expression SEMICOLON
-        { $$ = $1; }
-    | RETURN expression SEMICOLON
-        { $$ = create_return_stmt($2); }
-    | RETURN SEMICOLON
-        { $$ = create_return_stmt(NULL); }
-    | if_statement
-        { $$ = $1; }
-    | LBRACE statement_list RBRACE
-        { $$ = $2; }
-    | struct_init
-        { $$ = $1; }
+    ;
+
+expression_statement
+    : expression SEMICOLON { $$ = create_expression_statement($1); }
+    ;
+
+return_statement
+    : RETURN expression SEMICOLON { $$ = create_return_stmt($2); }
+    | RETURN SEMICOLON { $$ = create_return_stmt(NULL); }
+    ;
+
+block_statement
+    : LBRACE statement_list RBRACE { $$ = create_block_statement($2); }
     ;
 
 struct_init
@@ -165,34 +193,41 @@ struct_init
     ;
 
 if_statement
-    : IF expression COLON block_or_statement else_if_list optional_else
-    { $$ = create_if_statement($2, $4, $5, $6); }
+    : IF expression COLON block_statement else_if_list optional_else
+        { $$ = create_if_statement($2, $4, $5, $6); }
     ;
 
 else_if_list
     : /* empty */ { $$ = NULL; }
-    | else_if_list else_if { $$ = create_if_statement($2, NULL, $1, NULL); }
+    | else_if_list else_if { $$ = add_else_if($1, $2); }
     ;
 
 else_if
-    : ELSE IF expression COLON block_or_statement { $$ = create_if_statement($3, $5, NULL, NULL); }
+    : ELSE IF expression COLON block_statement { $$ = create_else_if($3, $5); }
     ;
 
 optional_else
     : /* empty */ { $$ = NULL; }
-    | ELSE COLON block_or_statement { $$ = $3; }
-    ;
-
-block_or_statement
-    : LBRACE statement_list RBRACE { $$ = $2; }
-    | statement { $$ = create_statement_list($1); }
+    | ELSE COLON block_statement { $$ = $3; }
     ;
 
 expression
+    : primary_expression
+    | binary_expression
+    | function_call
+    | cast_expression
+    | list_literal
+    ;
+
+primary_expression
     : INT_LITERAL { $$ = create_int_literal($1); }
     | FLOAT_LITERAL { $$ = create_float_literal($1); }
     | IDENTIFIER { $$ = create_identifier($1); }
-    | expression PLUS expression { $$ = create_binary_op(PLUS, $1, $3); }
+    | LPAREN expression RPAREN { $$ = $2; }
+    ;
+
+binary_expression
+    : expression PLUS expression { $$ = create_binary_op(PLUS, $1, $3); }
     | expression MINUS expression { $$ = create_binary_op(MINUS, $1, $3); }
     | expression MULTIPLY expression { $$ = create_binary_op(MULTIPLY, $1, $3); }
     | expression DIVIDE expression { $$ = create_binary_op(DIVIDE, $1, $3); }
@@ -202,9 +237,10 @@ expression
     | expression GE expression { $$ = create_binary_op(GE, $1, $3); }
     | expression EQ expression { $$ = create_binary_op(EQ, $1, $3); }
     | expression NE expression { $$ = create_binary_op(NE, $1, $3); }
-    | LPAREN expression RPAREN { $$ = $2; }
-    | cast_expression { $$ = $1; }
-    | IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL); }
+    ;
+
+function_call
+    : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL); }
     | IDENTIFIER LPAREN expression RPAREN { $$ = create_function_call($1, $3, NULL); }
     | IDENTIFIER LPAREN expression COMMA expression RPAREN { $$ = create_function_call($1, $3, $5); }
     ;
@@ -212,6 +248,16 @@ expression
 cast_expression
     : CAST_INT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_INT, $2); }
     | CAST_FLOAT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_FLOAT, $2); }
+    ;
+
+list_literal
+    : LBRACKET list_elements RBRACKET { $$ = create_list_literal($2); }
+    | LBRACKET RBRACKET { $$ = create_list_literal(NULL); }
+    ;
+
+list_elements
+    : expression { $$ = create_list_element_list($1); }
+    | list_elements COMMA expression { $$ = add_list_element($1, $3); }
     ;
 
 %%
