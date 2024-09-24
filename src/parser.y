@@ -195,6 +195,8 @@ struct_init
 if_statement
     : IF expression COLON block_statement else_if_list optional_else
         { $$ = create_if_statement($2, $4, $5, $6); }
+    | IF expression COLON statement else_if_list optional_else
+        { $$ = create_if_statement($2, create_statement_list($4), $5, $6); }
     ;
 
 else_if_list
@@ -204,11 +206,13 @@ else_if_list
 
 else_if
     : ELSE IF expression COLON block_statement { $$ = create_else_if($3, $5); }
+    | ELSE IF expression COLON statement { $$ = create_else_if($3, create_statement_list($5)); }
     ;
 
 optional_else
     : /* empty */ { $$ = NULL; }
     | ELSE COLON block_statement { $$ = $3; }
+    | ELSE COLON statement { $$ = create_statement_list($3); }
     ;
 
 expression

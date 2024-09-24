@@ -250,14 +250,16 @@ ASTNode* create_block_statement(ASTNode* stmt_list) {
 ASTNode* create_else_if(ASTNode* condition, ASTNode* body) {
     return new IfNode(
         static_cast<ExpressionNode*>(condition),
-        static_cast<StatementListNode*>(body),
-        nullptr,
-        nullptr
+        static_cast<StatementListNode*>(body)
     );
 }
 
 ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if) {
-    auto current = static_cast<IfNode*>(else_if_list);
+    if (!else_if_list) {
+        return else_if;
+    }
+
+    IfNode* current = static_cast<IfNode*>(else_if_list);
     while (current->elseIfBranch) {
         current = current->elseIfBranch;
     }
@@ -358,13 +360,17 @@ std::string FunctionCallNode::toString() const {
 }
 
 std::string IfNode::toString() const {
-    std::string result = "if " + condition->toString() + " {\n" + thenBranch->toString() + "\n}";
+    std::string result = "if " + condition->toString() + ": ";
+    result += thenBranch->toString();
+
     if (elseIfBranch) {
-        result += " else " + elseIfBranch->toString();
+        result += "else " + elseIfBranch->toString();
     }
+
     if (elseBranch) {
-        result += " else {\n" + elseBranch->toString() + "\n}";
+        result += "else: " + elseBranch->toString();
     }
+
     return result;
 }
 

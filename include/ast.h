@@ -236,7 +236,7 @@ public:
     IfNode* elseIfBranch;  // For else if
     StatementListNode* elseBranch;  // For final else
 
-    IfNode(ExpressionNode* cond, StatementListNode* then, IfNode* elseIf, StatementListNode* else_)
+    IfNode(ExpressionNode* cond, StatementListNode* then, IfNode* elseIf = nullptr, StatementListNode* else_ = nullptr)
         : condition(cond), thenBranch(then), elseIfBranch(elseIf), elseBranch(else_) {}
 
     std::string toString() const override;
