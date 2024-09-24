@@ -20,6 +20,7 @@ public:
         TYPE_BOOL,
         TYPE_INT,
         TYPE_FLOAT,
+        TYPE_DOUBLE,
         TYPE_LIST
     };
     TypeKind kind;

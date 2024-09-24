@@ -19,6 +19,7 @@ struct OtherStruct {
 fn calculate(a: int, b: float) -> int {
     var result: int = 1;
     SomeStruct st;
+    let d: double = 2.0;
     let l: list = [1,2,3,4];
     result = a + int(b);
     return result;

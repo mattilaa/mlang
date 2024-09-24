@@ -227,6 +227,9 @@ ASTNode* create_cast_expression(int type, ASTNode* expr)
     case TypeNode::TYPE_FLOAT:
         targetType = TypeNode::TYPE_FLOAT;
         break;
+    case TypeNode::TYPE_DOUBLE:
+        targetType = TypeNode::TYPE_DOUBLE;
+        break;
     default:
         throw std::runtime_error("Unsupported cast type");
     }
@@ -346,6 +349,8 @@ std::string TypeNode::toString() const
         return "int";
     case TYPE_FLOAT:
         return "float";
+    case TYPE_DOUBLE:
+        return "double";
     case TYPE_LIST:
         return "list";
     default:

@@ -28,10 +28,12 @@
 "bool"          { return BOOL; }
 "int"           { return INT; }
 "float"         { return FLOAT; }
+"double"        { return DOUBLE; }
 "list"          { return LIST; }
 "struct"        { return STRUCT; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
+"double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
 "<"             { return LT; }
 ">"             { return GT; }

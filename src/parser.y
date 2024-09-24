@@ -56,12 +56,12 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %token <sval> IDENTIFIER
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT LIST STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE LIST STRUCT
 %token LET VAR
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON
-%token CAST_INT CAST_FLOAT
+%token CAST_INT CAST_FLOAT CAST_DOUBLE
 
 %type <ast> program top_level_list top_level_item
 %type <ast> struct_def function_def type parameter_list parameters parameter
@@ -138,6 +138,7 @@ type
     | BOOL   { $$ = create_type_node(TypeNode::TYPE_BOOL); }
     | INT    { $$ = create_type_node(TypeNode::TYPE_INT); }
     | FLOAT  { $$ = create_type_node(TypeNode::TYPE_FLOAT); }
+    | DOUBLE { $$ = create_type_node(TypeNode::TYPE_DOUBLE); }
     | LIST   { $$ = create_list_type(); }
     ;
 
@@ -252,6 +253,7 @@ function_call
 cast_expression
     : CAST_INT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_INT, $2); }
     | CAST_FLOAT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_FLOAT, $2); }
+    | CAST_DOUBLE expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_DOUBLE, $2); }
     ;
 
 list_literal
