@@ -75,6 +75,8 @@ add_custom_target(
 set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ir.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )

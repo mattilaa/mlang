@@ -14,13 +14,14 @@ struct SomeStruct : BaseStruct {
 struct OtherStruct {
     let a: int = 1; // Just some variable
     var b: float; // No need to init mutable variables
+    var c: double;
 };
 
 fn calculate(a: int, b: float) -> int {
     var result: int = 1;
     SomeStruct st;
     let d: double = 2.0;
-    let str: string = "foo";
+    //let str: string = "foo";
     let l: list = [1,2,3,4];
     result = a + int(b);
     return result;

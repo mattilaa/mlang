@@ -138,6 +138,11 @@ ASTNode* create_float_literal(float value)
     return new FloatLiteralNode(value);
 }
 
+ASTNode* create_double_literal(double value)
+{
+    return new DoubleLiteralNode(value);
+}
+
 ASTNode* create_string_literal(char* value)
 {
     return new StringLiteralNode(std::string(value));
@@ -428,6 +433,11 @@ std::string FloatLiteralNode::toString() const
     return std::to_string(value);
 }
 
+std::string DoubleLiteralNode::toString() const
+{
+    return std::to_string(value);
+}
+
 std::string StringLiteralNode::toString() const
 {
     return "\"" + value + "\"";
@@ -535,6 +545,9 @@ std::string CastExpressionNode::toString() const
         break;
     case TypeNode::TYPE_FLOAT:
         typeName = "float";
+        break;
+    case TypeNode::TYPE_DOUBLE:
+        typeName = "double";
         break;
     default:
         typeName = "unknown";

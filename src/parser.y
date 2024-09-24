@@ -28,6 +28,7 @@ ASTNode* create_assignment(char* name, ASTNode* expr);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
 ASTNode* create_float_literal(float value);
+ASTNode* create_double_literal(float value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
@@ -50,6 +51,7 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %union {
     int ival;
     float fval;
+    double dval;
     char* sval;
     struct ASTNode* ast;
 }
@@ -57,6 +59,7 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %token <sval> IDENTIFIER STRING_LITERAL
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
+%token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST STRUCT
 %token LET VAR
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
@@ -229,6 +232,7 @@ expression
 primary_expression
     : INT_LITERAL { $$ = create_int_literal($1); }
     | FLOAT_LITERAL { $$ = create_float_literal($1); }
+    | DOUBLE_LITERAL { $$ = create_double_literal($1); }
     | STRING_LITERAL { $$ = create_string_literal($1); }
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }

@@ -68,6 +68,7 @@
 ","             { return COMMA; }
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }
 [0-9]+\.[0-9]+  { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
+[0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
 [0-9]+          { yylval.ival = atoi(yytext); return INT_LITERAL; }
 "+"             { return PLUS; }
 "-"             { return MINUS; }

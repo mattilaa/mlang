@@ -212,6 +212,15 @@ public:
     std::string toString() const override;
 };
 
+class DoubleLiteralNode : public ExpressionNode
+{
+public:
+    double value;
+
+    DoubleLiteralNode(double v) : value(v) {}
+    std::string toString() const override;
+};
+
 class StringLiteralNode : public ExpressionNode
 {
 public:
@@ -400,6 +409,7 @@ ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_int_literal(int value);
 ASTNode* create_float_literal(float value);
+ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
