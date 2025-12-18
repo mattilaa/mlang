@@ -188,6 +188,8 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
     case NE:
         opType = BinaryOpNode::OP_NE;
         break;
+    case COLON:
+        return nullptr;
     default:
         throw std::runtime_error("Unknown binary operator");
     }

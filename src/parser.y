@@ -276,7 +276,5 @@ list_elements
 %%
 
 void yyerror(const char* s) {
-    fprintf(stderr, "Parse error at line %d: %s\n", yylineno, s);
-    fprintf(stderr, "Near token: %s\n", yytext);
-    exit(1);
+    fprintf(stderr, "Error: %s\n", s);
 }
