@@ -1,0 +1,33 @@
+// math.mla - Math utility functions
+
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+fn subtract(a: int, b: int) -> int {
+    return a - b;
+}
+
+fn multiply(a: int, b: int) -> int {
+    return a * b;
+}
+
+fn square(x: int) -> int {
+    return x * x;
+}
+
+fn sum_range(start: int, end: int) -> int {
+    var total: int = 0;
+    for i in start..end {
+        total = total + i;
+    }
+    return total;
+}
+
+fn factorial(n: int) -> int {
+    var result: int = 1;
+    for i in 1..n + 1 {
+        result = result * i;
+    }
+    return result;
+}
