@@ -1,0 +1,21 @@
+fn sum_range(start: int, end: int) -> int {
+    var total: int = 0;
+    for i in start..end {
+        total = total + i;
+    }
+    return total;
+}
+
+fn factorial(n: int) -> int {
+    var result: int = 1;
+    for i in 1..n + 1 {
+        result = result * i;
+    }
+    return result;
+}
+
+fn main() -> int {
+    let sum: int = sum_range(0, 10);  // 45
+    let fact: int = factorial(5);      // 120
+    return sum + fact;                 // 165
+}
