@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include "ast.h"
 
+extern "C" {
+    extern ASTNode* programRoot;
+}
 extern int yylex();
 extern int yylineno;
 extern char* yytext;
@@ -86,7 +89,10 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %%
 
 program
-    : top_level_list { $$ = create_program($1); }
+    : top_level_list {
+        $$ = create_program($1);
+        programRoot = $$;
+    }
     ;
 
 top_level_list

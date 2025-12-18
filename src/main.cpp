@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "ir.h"
+#include <cstring>
 #include <iostream>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -15,18 +16,119 @@ extern "C"
     extern ASTNode* programRoot;
 }
 
+void printUsage(const char* programName)
+{
+    std::cerr << "Usage: " << programName << " [options] <input_file>\n"
+              << "\nOptions:\n"
+              << "  -o <file>     Output file name (default: a.out)\n"
+              << "  -c            Compile to object file only (don't link)\n"
+              << "  -S            Emit assembly file\n"
+              << "  -emit-llvm    Emit LLVM IR file (.ll)\n"
+              << "  -emit-bc      Emit LLVM bitcode file (.bc)\n"
+              << "  -O0           No optimization\n"
+              << "  -O1           Basic optimization\n"
+              << "  -O2           Standard optimization (default)\n"
+              << "  -O3           Aggressive optimization\n"
+              << "  -v            Verbose output\n"
+              << "  -h, --help    Show this help message\n"
+              << "\nExamples:\n"
+              << "  " << programName << " test.mla              # Compile to a.out\n"
+              << "  " << programName << " -o myprogram test.mla # Compile to myprogram\n"
+              << "  " << programName << " -S test.mla           # Emit assembly\n"
+              << "  " << programName << " -emit-llvm test.mla   # Emit LLVM IR\n"
+              << std::endl;
+}
+
 int main(int argc, char** argv)
 {
-    if(argc != 2)
+    if (argc < 2)
     {
-        std::cerr << "Usage: " << argv[0] << " <input_file>" << std::endl;
+        printUsage(argv[0]);
         return 1;
     }
 
-    FILE* input_file = fopen(argv[1], "r");
-    if(!input_file)
+    // Parse command line arguments
+    std::string inputFile;
+    std::string outputFile = "a.out";
+    bool emitObjectOnly = false;
+    bool emitAssembly = false;
+    bool emitLLVMIR = false;
+    bool emitBitcode = false;
+    int optimizationLevel = 2;
+    bool verbose = false;
+
+    for (int i = 1; i < argc; ++i)
     {
-        std::cerr << "Error opening file: " << argv[1] << std::endl;
+        std::string arg = argv[i];
+
+        if (arg == "-h" || arg == "--help")
+        {
+            printUsage(argv[0]);
+            return 0;
+        }
+        else if (arg == "-o" && i + 1 < argc)
+        {
+            outputFile = argv[++i];
+        }
+        else if (arg == "-c")
+        {
+            emitObjectOnly = true;
+        }
+        else if (arg == "-S")
+        {
+            emitAssembly = true;
+        }
+        else if (arg == "-emit-llvm")
+        {
+            emitLLVMIR = true;
+        }
+        else if (arg == "-emit-bc")
+        {
+            emitBitcode = true;
+        }
+        else if (arg == "-O0")
+        {
+            optimizationLevel = 0;
+        }
+        else if (arg == "-O1")
+        {
+            optimizationLevel = 1;
+        }
+        else if (arg == "-O2")
+        {
+            optimizationLevel = 2;
+        }
+        else if (arg == "-O3")
+        {
+            optimizationLevel = 3;
+        }
+        else if (arg == "-v")
+        {
+            verbose = true;
+        }
+        else if (arg[0] != '-')
+        {
+            inputFile = arg;
+        }
+        else
+        {
+            std::cerr << "Unknown option: " << arg << std::endl;
+            printUsage(argv[0]);
+            return 1;
+        }
+    }
+
+    if (inputFile.empty())
+    {
+        std::cerr << "Error: No input file specified" << std::endl;
+        printUsage(argv[0]);
+        return 1;
+    }
+
+    FILE* input_file = fopen(inputFile.c_str(), "r");
+    if (!input_file)
+    {
+        std::cerr << "Error opening file: " << inputFile << std::endl;
         return 1;
     }
 
@@ -41,17 +143,27 @@ int main(int argc, char** argv)
     try
     {
         // Parse the input
-        if(yyparse() != 0)
+        if (verbose)
+        {
+            std::cout << "Parsing " << inputFile << "..." << std::endl;
+        }
+
+        if (yyparse() != 0)
         {
             std::cerr << "Parsing failed." << std::endl;
+            fclose(input_file);
             return 1;
         }
 
-        std::cout << "Parsing completed successfully." << std::endl;
+        if (verbose)
+        {
+            std::cout << "Parsing completed successfully." << std::endl;
+        }
 
-        if(!programRoot)
+        if (!programRoot)
         {
             std::cerr << "Error: No program root node created" << std::endl;
+            fclose(input_file);
             return 1;
         }
 
@@ -59,34 +171,116 @@ int main(int argc, char** argv)
         CodeGenerator generator(context, builder, module);
 
         // Generate LLVM IR
-        if(auto* program = dynamic_cast<ProgramNode*>(programRoot))
+        if (auto* program = dynamic_cast<ProgramNode*>(programRoot))
         {
+            if (verbose)
+            {
+                std::cout << "Generating LLVM IR..." << std::endl;
+            }
+
             generator.generateCode(program);
 
-            // Print the generated LLVM IR to console
-            module->print(llvm::outs(), nullptr);
-
-            // Write LLVM IR to a file
-            std::error_code EC;
-            llvm::raw_fd_ostream irFile("output.ll", EC,
-                                        llvm::sys::fs::OF_None);
-            if(EC)
+            // Print the AST if verbose
+            if (verbose)
             {
-                std::cerr << "Could not open file: " << EC.message()
-                          << std::endl;
+                std::cout << "\n=== AST ===" << std::endl;
+                std::cout << program->toString() << std::endl;
+            }
+
+            // Initialize backend
+            Backend backend(module);
+
+            if (verbose)
+            {
+                std::cout << "Target: " << backend.getTargetTriple() << std::endl;
+            }
+
+            // Apply optimizations
+            if (optimizationLevel > 0)
+            {
+                if (verbose)
+                {
+                    std::cout << "Applying optimizations (O" << optimizationLevel
+                              << ")..." << std::endl;
+                }
+                backend.optimize(optimizationLevel);
+            }
+
+            // Determine output based on flags
+            bool success = false;
+
+            if (emitLLVMIR)
+            {
+                // Emit LLVM IR
+                std::string llFile = outputFile;
+                if (llFile == "a.out")
+                {
+                    llFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".ll";
+                }
+                success = backend.emitLLVMIR(llFile);
+
+                // Also print to stdout if verbose
+                if (verbose)
+                {
+                    std::cout << "\n=== LLVM IR ===" << std::endl;
+                    module->print(llvm::outs(), nullptr);
+                }
+            }
+            else if (emitBitcode)
+            {
+                // Emit LLVM bitcode
+                std::string bcFile = outputFile;
+                if (bcFile == "a.out")
+                {
+                    bcFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".bc";
+                }
+                success = backend.emitBitcode(bcFile);
+            }
+            else if (emitAssembly)
+            {
+                // Emit assembly
+                std::string asmFile = outputFile;
+                if (asmFile == "a.out")
+                {
+                    asmFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".s";
+                }
+                success = backend.emitAssemblyFile(asmFile);
+            }
+            else if (emitObjectOnly)
+            {
+                // Emit object file only
+                std::string objFile = outputFile;
+                if (objFile == "a.out")
+                {
+                    objFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".o";
+                }
+                success = backend.emitObjectFile(objFile);
+            }
+            else
+            {
+                // Compile to executable
+                success = backend.compileToExecutable(outputFile);
+            }
+
+            if (!success)
+            {
+                std::cerr << "Compilation failed." << std::endl;
+                fclose(input_file);
+                delete programRoot;
                 return 1;
             }
-            module->print(irFile, nullptr);
         }
         else
         {
             std::cerr << "Error: Invalid program root node type" << std::endl;
+            fclose(input_file);
             return 1;
         }
     }
-    catch(const std::exception& e)
+    catch (const std::exception& e)
     {
         std::cerr << "Error during compilation: " << e.what() << std::endl;
+        fclose(input_file);
         return 1;
     }
 
@@ -94,6 +288,10 @@ int main(int argc, char** argv)
     fclose(input_file);
     delete programRoot;
 
-    std::cout << "Compilation completed successfully." << std::endl;
+    if (verbose)
+    {
+        std::cout << "Compilation completed successfully." << std::endl;
+    }
+
     return 0;
 }

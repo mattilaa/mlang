@@ -1,6 +1,22 @@
 #include "ir.h"
-#include <llvm/IR/Verifier.h>
+#include <cstdlib>
+#include <iostream>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/Triple.h>
+
+// ==================== CodeGenerator Implementation ====================
 
 llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
 {
@@ -17,8 +33,12 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
     case TypeNode::TYPE_DOUBLE:
         return llvm::Type::getDoubleTy(context);
     case TypeNode::TYPE_STRING:
-        // Create a pointer to i8 (char*)
+        // Create a pointer type (opaque pointer for LLVM 15+)
+#if LLVM_VERSION_MAJOR >= 15
+        return llvm::PointerType::get(context, 0);
+#else
         return llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
     default:
         return nullptr;
     }
@@ -74,13 +94,27 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     namedValues.clear();
     for(auto& arg : function->args())
     {
-        namedValues[std::string(arg.getName())] = &arg;
+        // Allocate space for parameters so they can be modified
+        llvm::AllocaInst* alloca = builder.CreateAlloca(
+            arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
+        builder.CreateStore(&arg, alloca);
+        namedValues[std::string(arg.getName())] = alloca;
     }
 
     // Generate the function body
     for(auto stmt : node->body->statements)
     {
         generateStatement(stmt);
+    }
+
+    // If the function is void and doesn't have a return, add one
+    if(returnType->isVoidTy())
+    {
+        llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
+        if(!currentBlock->getTerminator())
+        {
+            builder.CreateRetVoid();
+        }
     }
 
     // Verify the function
@@ -109,6 +143,17 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto ifNode = dynamic_cast<IfNode*>(node))
     {
         generateIfStatement(ifNode);
+    }
+    else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
+    {
+        for(auto stmt : blockNode->statements->statements)
+        {
+            generateStatement(stmt);
+        }
+    }
+    else if(auto exprStmt = dynamic_cast<ExpressionStatementNode*>(node))
+    {
+        generateExpression(exprStmt->expression);
     }
 }
 
@@ -157,28 +202,42 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     if(!L || !R)
         return nullptr;
 
+    // Check if we're dealing with floating point or integer types
+    bool isFloat =
+        L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy();
+
     switch(node->op)
     {
     case BinaryOpNode::OP_PLUS:
-        return builder.CreateAdd(L, R, "addtmp");
+        return isFloat ? builder.CreateFAdd(L, R, "addtmp")
+                       : builder.CreateAdd(L, R, "addtmp");
     case BinaryOpNode::OP_MINUS:
-        return builder.CreateSub(L, R, "subtmp");
+        return isFloat ? builder.CreateFSub(L, R, "subtmp")
+                       : builder.CreateSub(L, R, "subtmp");
     case BinaryOpNode::OP_MULTIPLY:
-        return builder.CreateMul(L, R, "multmp");
+        return isFloat ? builder.CreateFMul(L, R, "multmp")
+                       : builder.CreateMul(L, R, "multmp");
     case BinaryOpNode::OP_DIVIDE:
-        return builder.CreateSDiv(L, R, "divtmp");
+        return isFloat ? builder.CreateFDiv(L, R, "divtmp")
+                       : builder.CreateSDiv(L, R, "divtmp");
     case BinaryOpNode::OP_LT:
-        return builder.CreateICmpSLT(L, R, "cmptmp");
+        return isFloat ? builder.CreateFCmpOLT(L, R, "cmptmp")
+                       : builder.CreateICmpSLT(L, R, "cmptmp");
     case BinaryOpNode::OP_GT:
-        return builder.CreateICmpSGT(L, R, "cmptmp");
+        return isFloat ? builder.CreateFCmpOGT(L, R, "cmptmp")
+                       : builder.CreateICmpSGT(L, R, "cmptmp");
     case BinaryOpNode::OP_LE:
-        return builder.CreateICmpSLE(L, R, "cmptmp");
+        return isFloat ? builder.CreateFCmpOLE(L, R, "cmptmp")
+                       : builder.CreateICmpSLE(L, R, "cmptmp");
     case BinaryOpNode::OP_GE:
-        return builder.CreateICmpSGE(L, R, "cmptmp");
+        return isFloat ? builder.CreateFCmpOGE(L, R, "cmptmp")
+                       : builder.CreateICmpSGE(L, R, "cmptmp");
     case BinaryOpNode::OP_EQ:
-        return builder.CreateICmpEQ(L, R, "cmptmp");
+        return isFloat ? builder.CreateFCmpOEQ(L, R, "cmptmp")
+                       : builder.CreateICmpEQ(L, R, "cmptmp");
     case BinaryOpNode::OP_NE:
-        return builder.CreateICmpNE(L, R, "cmptmp");
+        return isFloat ? builder.CreateFCmpONE(L, R, "cmptmp")
+                       : builder.CreateICmpNE(L, R, "cmptmp");
     }
     return nullptr;
 }
@@ -188,6 +247,14 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
         return;
+
+    // Convert condition to a bool by comparing non-equal to 0
+    if(!condValue->getType()->isIntegerTy(1))
+    {
+        condValue = builder.CreateICmpNE(
+            condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+            "ifcond");
+    }
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
 
@@ -204,24 +271,36 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     {
         generateStatement(stmt);
     }
-    builder.CreateBr(mergeBB);
+    // Only add branch if block doesn't already have a terminator
+    if(!builder.GetInsertBlock()->getTerminator())
+    {
+        builder.CreateBr(mergeBB);
+    }
 
     // Generate 'else' block
-    // Instead of using getBasicBlockList directly, insert the block into the
-    // function
     elseBB->insertInto(function);
     builder.SetInsertPoint(elseBB);
-    if(node->elseBranch)
+
+    if(node->elseIfBranch)
+    {
+        // Handle else-if chain
+        generateIfStatement(node->elseIfBranch);
+    }
+    else if(node->elseBranch)
     {
         for(auto stmt : node->elseBranch->statements)
         {
             generateStatement(stmt);
         }
     }
-    builder.CreateBr(mergeBB);
+
+    // Only add branch if block doesn't already have a terminator
+    if(!builder.GetInsertBlock()->getTerminator())
+    {
+        builder.CreateBr(mergeBB);
+    }
 
     // Generate merge block
-    // Insert the merge block into the function
     mergeBB->insertInto(function);
     builder.SetInsertPoint(mergeBB);
 }
@@ -256,7 +335,11 @@ llvm::Value* CodeGenerator::generateDoubleLiteral(DoubleLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateStringLiteral(StringLiteralNode* node)
 {
+#if LLVM_VERSION_MAJOR >= 21
+    return builder.CreateGlobalString(node->value);
+#else
     return builder.CreateGlobalStringPtr(node->value);
+#endif
 }
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
@@ -266,7 +349,22 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
     {
         // Check if it's a global variable
         value = module->getGlobalVariable(node->name);
+        if(value)
+        {
+            return builder.CreateLoad(
+                llvm::cast<llvm::GlobalVariable>(value)->getValueType(), value,
+                node->name);
+        }
+        return nullptr;
     }
+
+    // If it's an alloca, load the value
+    if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
+    {
+        return builder.CreateLoad(alloca->getAllocatedType(), alloca,
+                                  node->name);
+    }
+
     return value;
 }
 
@@ -296,6 +394,9 @@ llvm::StructType* CodeGenerator::getStructType(const std::string& name)
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
     llvm::Value* initValue = generateExpression(node->expression);
+    if(!initValue)
+        return;
+
     llvm::AllocaInst* alloca = builder.CreateAlloca(
         getLLVMType(node->type->kind), nullptr, node->name);
     builder.CreateStore(initValue, alloca);
@@ -318,6 +419,9 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 {
     llvm::Value* value = generateExpression(node->expression);
     llvm::Value* variable = namedValues[node->name];
+    if(!variable || !value)
+        return;
+
     if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(variable))
     {
         builder.CreateStore(value, alloca);
@@ -328,14 +432,25 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
     llvm::Function* callee = module->getFunction(node->name);
     if(!callee)
+    {
+        std::cerr << "Unknown function: " << node->name << std::endl;
         return nullptr;
+    }
 
     std::vector<llvm::Value*> args;
     for(auto arg : node->arguments)
     {
-        args.push_back(generateExpression(arg));
+        llvm::Value* argVal = generateExpression(arg);
+        if(!argVal)
+            return nullptr;
+        args.push_back(argVal);
     }
 
+    // Don't create a call with a name if return type is void
+    if(callee->getReturnType()->isVoidTy())
+    {
+        return builder.CreateCall(callee, args);
+    }
     return builder.CreateCall(callee, args, "calltmp");
 }
 
@@ -367,4 +482,281 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     }
 
     return nullptr;
+}
+
+// ==================== Backend Implementation ====================
+
+Backend::Backend(std::unique_ptr<llvm::Module>& m)
+    : module(m), targetMachine(nullptr)
+{
+    initializeTarget();
+}
+
+bool Backend::initializeTarget()
+{
+    // Initialize all targets for cross-compilation support
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+
+    // Get the target triple for the host machine
+    targetTriple = llvm::sys::getDefaultTargetTriple();
+#if LLVM_VERSION_MAJOR >= 21
+    module->setTargetTriple(llvm::Triple(targetTriple));
+#else
+    module->setTargetTriple(targetTriple);
+#endif
+
+    std::string error;
+    const llvm::Target* target =
+        llvm::TargetRegistry::lookupTarget(targetTriple, error);
+
+    if(!target)
+    {
+        std::cerr << "Error: " << error << std::endl;
+        return false;
+    }
+
+    // Create the target machine with default options
+    std::string cpu = "generic";
+    std::string features = "";
+    llvm::TargetOptions opt;
+    auto relocModel = llvm::Reloc::PIC_;
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Triple triple(targetTriple);
+    targetMachine =
+        target->createTargetMachine(triple, cpu, features, opt, relocModel);
+#else
+    targetMachine = target->createTargetMachine(targetTriple, cpu, features,
+                                                opt, relocModel);
+#endif
+
+    if(!targetMachine)
+    {
+        std::cerr << "Error: Could not create target machine" << std::endl;
+        return false;
+    }
+
+    module->setDataLayout(targetMachine->createDataLayout());
+    return true;
+}
+
+bool Backend::emitObjectFile(const std::string& filename)
+{
+    if(!targetMachine)
+    {
+        std::cerr << "Error: Target machine not initialized" << std::endl;
+        return false;
+    }
+
+    std::error_code ec;
+    llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+
+    if(ec)
+    {
+        std::cerr << "Could not open file: " << ec.message() << std::endl;
+        return false;
+    }
+
+    llvm::legacy::PassManager pass;
+    auto fileType = llvm::CodeGenFileType::ObjectFile;
+
+    if(targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType))
+    {
+        std::cerr << "Target machine can't emit object file" << std::endl;
+        return false;
+    }
+
+    pass.run(*module);
+    dest.flush();
+
+    std::cout << "Object file written to: " << filename << std::endl;
+    return true;
+}
+
+bool Backend::emitAssemblyFile(const std::string& filename)
+{
+    if(!targetMachine)
+    {
+        std::cerr << "Error: Target machine not initialized" << std::endl;
+        return false;
+    }
+
+    std::error_code ec;
+    llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+
+    if(ec)
+    {
+        std::cerr << "Could not open file: " << ec.message() << std::endl;
+        return false;
+    }
+
+    llvm::legacy::PassManager pass;
+    auto fileType = llvm::CodeGenFileType::AssemblyFile;
+
+    if(targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType))
+    {
+        std::cerr << "Target machine can't emit assembly file" << std::endl;
+        return false;
+    }
+
+    pass.run(*module);
+    dest.flush();
+
+    std::cout << "Assembly file written to: " << filename << std::endl;
+    return true;
+}
+
+bool Backend::emitLLVMIR(const std::string& filename)
+{
+    std::error_code ec;
+    llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+
+    if(ec)
+    {
+        std::cerr << "Could not open file: " << ec.message() << std::endl;
+        return false;
+    }
+
+    module->print(dest, nullptr);
+    dest.flush();
+
+    std::cout << "LLVM IR written to: " << filename << std::endl;
+    return true;
+}
+
+bool Backend::emitBitcode(const std::string& filename)
+{
+    std::error_code ec;
+    llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+
+    if(ec)
+    {
+        std::cerr << "Could not open file: " << ec.message() << std::endl;
+        return false;
+    }
+
+    llvm::WriteBitcodeToFile(*module, dest);
+    dest.flush();
+
+    std::cout << "Bitcode written to: " << filename << std::endl;
+    return true;
+}
+
+bool Backend::linkExecutable(const std::string& objectFile,
+                             const std::string& outputFile)
+{
+    // Use the system's C compiler to link
+    // This handles finding the C runtime and standard libraries
+    std::string command = "cc -o " + outputFile + " " + objectFile + " 2>&1";
+
+    std::cout << "Linking: " << command << std::endl;
+
+    int result = std::system(command.c_str());
+
+    if(result != 0)
+    {
+        // Try with clang if cc fails
+        command = "clang -o " + outputFile + " " + objectFile + " 2>&1";
+        std::cout << "Trying clang: " << command << std::endl;
+        result = std::system(command.c_str());
+
+        if(result != 0)
+        {
+            // Try with gcc
+            command = "gcc -o " + outputFile + " " + objectFile + " 2>&1";
+            std::cout << "Trying gcc: " << command << std::endl;
+            result = std::system(command.c_str());
+        }
+    }
+
+    if(result == 0)
+    {
+        std::cout << "Executable created: " << outputFile << std::endl;
+        return true;
+    }
+
+    std::cerr << "Linking failed" << std::endl;
+    return false;
+}
+
+bool Backend::compileToExecutable(const std::string& outputFile)
+{
+    // First emit object file
+    std::string objectFile = outputFile + ".o";
+
+    if(!emitObjectFile(objectFile))
+    {
+        return false;
+    }
+
+    // Then link to create executable
+    if(!linkExecutable(objectFile, outputFile))
+    {
+        return false;
+    }
+
+    // Optionally remove the object file
+    std::remove(objectFile.c_str());
+
+    return true;
+}
+
+void Backend::optimize(int level)
+{
+    // Create the analysis managers
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::CGSCCAnalysisManager CGAM;
+    llvm::ModuleAnalysisManager MAM;
+
+    // Create the pass builder
+    llvm::PassBuilder PB(targetMachine);
+
+    // Register all the basic analyses with the managers
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    // Choose optimization level
+    llvm::OptimizationLevel optLevel;
+    switch(level)
+    {
+    case 0:
+        optLevel = llvm::OptimizationLevel::O0;
+        break;
+    case 1:
+        optLevel = llvm::OptimizationLevel::O1;
+        break;
+    case 2:
+        optLevel = llvm::OptimizationLevel::O2;
+        break;
+    case 3:
+        optLevel = llvm::OptimizationLevel::O3;
+        break;
+    default:
+        optLevel = llvm::OptimizationLevel::O2;
+        break;
+    }
+
+    // Create and run the optimization pipeline
+    if(optLevel == llvm::OptimizationLevel::O0)
+    {
+        // For O0, just run the always-inline pass
+        llvm::ModulePassManager MPM;
+        MPM.run(*module, MAM);
+    }
+    else
+    {
+        llvm::ModulePassManager MPM =
+            PB.buildPerModuleDefaultPipeline(optLevel);
+        MPM.run(*module, MAM);
+    }
+
+    std::cout << "Optimization level O" << level << " applied" << std::endl;
 }

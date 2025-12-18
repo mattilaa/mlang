@@ -1,12 +1,14 @@
 #pragma once
 
 #include "ast.h"
-#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Value.h>
+#include <llvm/Target/TargetMachine.h>
 #include <map>
 #include <memory>
+#include <string>
 
 class CodeGenerator
 {
@@ -55,4 +57,47 @@ public:
     // Struct related methods
     void generateStructDefinition(StructDefNode* node);
     llvm::StructType* getStructType(const std::string& name);
+};
+
+// Backend compilation class
+class Backend
+{
+private:
+    std::unique_ptr<llvm::Module>& module;
+    llvm::TargetMachine* targetMachine;
+    std::string targetTriple;
+
+    bool initializeTarget();
+
+public:
+    explicit Backend(std::unique_ptr<llvm::Module>& m);
+    ~Backend() = default;
+
+    // Emit object file (.o)
+    bool emitObjectFile(const std::string& filename);
+
+    // Emit assembly file (.s)
+    bool emitAssemblyFile(const std::string& filename);
+
+    // Emit LLVM IR to file (.ll)
+    bool emitLLVMIR(const std::string& filename);
+
+    // Emit LLVM bitcode (.bc)
+    bool emitBitcode(const std::string& filename);
+
+    // Link object file to executable using system linker
+    static bool linkExecutable(const std::string& objectFile,
+                               const std::string& outputFile);
+
+    // Convenience method: compile and link to executable
+    bool compileToExecutable(const std::string& outputFile);
+
+    // Run optimization passes on the module
+    void optimize(int level = 2);
+
+    // Get the target triple
+    const std::string& getTargetTriple() const
+    {
+        return targetTriple;
+    }
 };
