@@ -36,6 +36,10 @@
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }
+"for"           { return FOR; }
+"in"            { return IN; }
+"mod"           { return MOD; }
+"use"           { return USE; }
 "let"           { return LET; }
 "var"           { return VAR; }
 "void"          { return VOID; }
@@ -50,6 +54,8 @@
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
+".."            { return DOTDOT; }
+"::"            { return COLONCOLON; }
 "<"             { return LT; }
 ">"             { return GT; }
 "<="            { return LE; }

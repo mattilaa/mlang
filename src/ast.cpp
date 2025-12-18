@@ -662,3 +662,51 @@ std::string ExpressionStatementNode::toString() const
 {
     return expression->toString() + ";";
 }
+
+std::string RangeExpressionNode::toString() const
+{
+    return start->toString() + ".." + end->toString();
+}
+
+std::string ForNode::toString() const
+{
+    std::string result =
+        "for " + varName + " in " + iterable->toString() + " {\n";
+    if(body)
+    {
+        result += body->toString();
+    }
+    result += "}\n";
+    return result;
+}
+
+ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
+                          int line)
+{
+    auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
+    StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
+
+    auto* node = new ForNode(std::string(var_name),
+                             static_cast<ExpressionNode*>(range), stmtList);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
+                             int line)
+{
+    auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
+    StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
+
+    auto* node = new ForNode(std::string(var_name),
+                             static_cast<ExpressionNode*>(iterable), stmtList);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive)
+{
+    return new RangeExpressionNode(static_cast<ExpressionNode*>(start),
+                                   static_cast<ExpressionNode*>(end),
+                                   inclusive != 0);
+}

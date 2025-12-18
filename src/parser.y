@@ -51,6 +51,12 @@ ASTNode* create_list_type();
 ASTNode* create_list_literal(ASTNode* elements);
 ASTNode* create_list_element_list(ASTNode* element);
 ASTNode* add_list_element(ASTNode* list, ASTNode* element);
+ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
+ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
+ASTNode* create_mod_declaration(char* name, int line);
+ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
+ASTNode* create_use_all_declaration(char* module_name, int line);
 %}
 
 %union {
@@ -67,6 +73,8 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST STRUCT
 %token LET VAR
+%token FOR IN DOTDOT
+%token MOD USE COLONCOLON
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON
@@ -79,8 +87,9 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %type <ast> struct_member_list struct_member struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement
-%type <ast> return_statement block_statement
+%type <ast> return_statement block_statement for_statement range_expression
 %type <ast> primary_expression binary_expression function_call
+%type <ast> mod_declaration use_declaration
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -91,8 +100,8 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 %%
 
 program
-    : top_level_list {
-        $$ = create_program($1);
+    : top_level_list { 
+        $$ = create_program($1); 
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
@@ -105,6 +114,20 @@ top_level_list
 top_level_item
     : struct_def
     | function_def
+    | mod_declaration
+    | use_declaration
+    ;
+
+mod_declaration
+    : MOD IDENTIFIER SEMICOLON
+        { $$ = create_mod_declaration($2, yylineno); }
+    ;
+
+use_declaration
+    : USE IDENTIFIER COLONCOLON IDENTIFIER SEMICOLON
+        { $$ = create_use_declaration($2, $4, yylineno); }
+    | USE IDENTIFIER COLONCOLON MULTIPLY SEMICOLON
+        { $$ = create_use_all_declaration($2, yylineno); }
     ;
 
 struct_def
@@ -167,6 +190,7 @@ statement
     | expression_statement
     | return_statement
     | if_statement
+    | for_statement
     | block_statement
     | struct_init
     ;
@@ -199,6 +223,18 @@ return_statement
 
 block_statement
     : LBRACE statement_list RBRACE { $$ = create_block_statement($2); }
+    ;
+
+for_statement
+    : FOR IDENTIFIER IN range_expression block_statement
+        { $$ = create_for_range($2, $4, $5, yylineno); }
+    | FOR IDENTIFIER IN expression block_statement
+        { $$ = create_for_iterator($2, $4, $5, yylineno); }
+    ;
+
+range_expression
+    : expression DOTDOT expression
+        { $$ = create_range_expression($1, $3, 0); }
     ;
 
 struct_init

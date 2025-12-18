@@ -1,13 +1,18 @@
-#pragma once
+#ifndef AST_H
+#define AST_H
 
 #include <string>
 #include <vector>
+
+// Forward declarations
+class ModDeclNode;
+class UseDeclNode;
 
 class ASTNode
 {
 public:
     int line = 0;  // Line number where this node appears in source
-
+    
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };
@@ -155,6 +160,8 @@ class ProgramNode : public ASTNode
 public:
     StructListNode* structList;
     FunctionListNode* functionList;
+    std::vector<ModDeclNode*> modules;
+    std::vector<UseDeclNode*> imports;
 
     ProgramNode() : structList(nullptr), functionList(nullptr) {}
     std::string toString() const override;
@@ -417,6 +424,32 @@ public:
     std::string toString() const override;
 };
 
+// Module declaration: mod module_name;
+class ModDeclNode : public ASTNode
+{
+public:
+    std::string moduleName;
+    std::string filePath;  // Resolved file path
+
+    ModDeclNode(const std::string& name) : moduleName(name) {}
+    virtual ~ModDeclNode() = default;
+    std::string toString() const override;
+};
+
+// Use declaration: use module_name::item; or use module_name::*;
+class UseDeclNode : public ASTNode
+{
+public:
+    std::string moduleName;
+    std::string itemName;  // Empty or "*" means import all
+    bool importAll;
+
+    UseDeclNode(const std::string& mod, const std::string& item, bool all = false)
+        : moduleName(mod), itemName(item), importAll(all) {}
+    virtual ~UseDeclNode() = default;
+    std::string toString() const override;
+};
+
 // Function declarations for AST node creation
 ASTNode* create_program(ASTNode* top_level_list);
 ASTNode* create_top_level_list(ASTNode* item);
@@ -464,3 +497,8 @@ ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if);
 ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
 ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
+ASTNode* create_mod_declaration(char* name, int line);
+ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
+ASTNode* create_use_all_declaration(char* module_name, int line);
+
+#endif // AST_H

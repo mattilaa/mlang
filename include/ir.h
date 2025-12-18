@@ -60,6 +60,7 @@ public:
 
     // Statement generation methods
     void generateIfStatement(IfNode* node);
+    void generateForStatement(ForNode* node);
     void generateReturnStatement(ReturnNode* node);
     void generateLetDeclaration(LetDeclNode* node);
     void generateVarDeclaration(VarDeclNode* node);
