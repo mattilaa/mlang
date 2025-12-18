@@ -112,10 +112,12 @@ ASTNode* add_statement(ASTNode* list, ASTNode* stmt)
     return stmt_list;
 }
 
-ASTNode* create_assignment(char* name, ASTNode* expr)
+ASTNode* create_assignment(char* name, ASTNode* expr, int line)
 {
-    return new AssignmentNode(std::string(name),
-                              static_cast<ExpressionNode*>(expr));
+    auto* node = new AssignmentNode(std::string(name),
+                                    static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
 }
 
 ASTNode* create_return_stmt(ASTNode* expr)

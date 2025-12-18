@@ -7,6 +7,8 @@
 class ASTNode
 {
 public:
+    int line = 0;  // Line number where this node appears in source
+
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };
@@ -404,7 +406,7 @@ ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* create_assignment(char* name, ASTNode* expr);
+ASTNode* create_assignment(char* name, ASTNode* expr, int line = 0);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_int_literal(int value);

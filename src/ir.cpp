@@ -90,8 +90,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
 
-    // Clear the named values map and add the parameters
+    // Clear the named values map and constant tracking for new function scope
     namedValues.clear();
+    constantVariables.clear();
     for(auto& arg : function->args())
     {
         // Allocate space for parameters so they can be modified
@@ -401,6 +402,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         getLLVMType(node->type->kind), nullptr, node->name);
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
+
+    // Mark this variable as constant (declared with 'let')
+    constantVariables.insert(node->name);
 }
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
@@ -417,6 +421,14 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
 void CodeGenerator::generateAssignment(AssignmentNode* node)
 {
+    // Check if trying to assign to a constant (let) variable
+    if(constantVariables.find(node->name) != constantVariables.end())
+    {
+        reportError(node->line, "cannot assign to constant variable '" +
+                                    node->name + "' (declared with 'let')");
+        return;
+    }
+
     llvm::Value* value = generateExpression(node->expression);
     llvm::Value* variable = namedValues[node->name];
     if(!variable || !value)
@@ -426,6 +438,19 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     {
         builder.CreateStore(value, alloca);
     }
+}
+
+void CodeGenerator::reportError(int line, const std::string& message)
+{
+    if(line > 0)
+    {
+        std::cerr << "Error (line " << line << "): " << message << std::endl;
+    }
+    else
+    {
+        std::cerr << "Error: " << message << std::endl;
+    }
+    hasError = true;
 }
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)

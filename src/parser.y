@@ -3,13 +3,15 @@
 #include <stdlib.h>
 #include "ast.h"
 
-extern "C" {
-    extern ASTNode* programRoot;
-}
 extern int yylex();
 extern int yylineno;
 extern char* yytext;
 void yyerror(const char* s);
+
+// External reference to programRoot defined in globals.cpp
+extern "C" {
+    extern ASTNode* programRoot;
+}
 
 // Function prototypes for AST node creation
 ASTNode* create_program(ASTNode* top_level_list);
@@ -27,7 +29,7 @@ ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* create_assignment(char* name, ASTNode* expr);
+ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
 ASTNode* create_float_literal(float value);
@@ -91,7 +93,7 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 program
     : top_level_list {
         $$ = create_program($1);
-        programRoot = $$;
+        programRoot = $$;  /* Store the result in the global variable */
     }
     ;
 
@@ -183,7 +185,7 @@ var_statement
 
 assignment_statement
     : IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = create_assignment($1, $3); }
+        { $$ = create_assignment($1, $3, yylineno); }
     ;
 
 expression_statement
@@ -282,5 +284,5 @@ list_elements
 %%
 
 void yyerror(const char* s) {
-    fprintf(stderr, "Error: %s\n", s);
+    fprintf(stderr, "Error at line %d: %s\n", yylineno, s);
 }

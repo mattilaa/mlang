@@ -8,6 +8,7 @@
 #include <llvm/Target/TargetMachine.h>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 
 class CodeGenerator
@@ -18,17 +19,27 @@ private:
     std::unique_ptr<llvm::Module>& module;
     std::map<std::string, llvm::Value*> namedValues;
     std::map<std::string, llvm::Type*> structTypes;
+    std::set<std::string>
+        constantVariables; // Track variables declared with 'let'
+    bool hasError = false; // Track if any errors occurred
 
     // Helper methods
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);
     llvm::Value* getNamedValue(const std::string& name);
     void setNamedValue(const std::string& name, llvm::Value* value);
+    void reportError(int line, const std::string& message);
 
 public:
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
                   std::unique_ptr<llvm::Module>& m)
         : context(ctx), builder(b), module(m)
     {
+    }
+
+    // Check if compilation had errors
+    bool hadError() const
+    {
+        return hasError;
     }
 
     // Main generation methods
