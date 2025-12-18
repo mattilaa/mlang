@@ -1,4 +1,5 @@
-#pragma once
+#ifndef IR_H
+#define IR_H
 
 #include "ast.h"
 #include <llvm/IR/IRBuilder.h>
@@ -44,6 +45,7 @@ public:
 
     // Main generation methods
     void generateCode(ProgramNode* program);
+    llvm::Function* generateFunctionDeclaration(FunctionDefNode* node);
     llvm::Function* generateFunctionDefinition(FunctionDefNode* node);
     llvm::Value* generateExpression(ExpressionNode* node);
     void generateStatement(StatementNode* node);
@@ -113,3 +115,5 @@ public:
         return targetTriple;
     }
 };
+
+#endif

@@ -25,6 +25,14 @@ ASTNode* create_program(ASTNode* top_level_list)
             }
             program->functionList->functions.push_back(funcDef);
         }
+        else if(auto* modDecl = dynamic_cast<ModDeclNode*>(item))
+        {
+            program->modules.push_back(modDecl);
+        }
+        else if(auto* useDecl = dynamic_cast<UseDeclNode*>(item))
+        {
+            program->imports.push_back(useDecl);
+        }
     }
 
     return program;
@@ -609,6 +617,14 @@ std::string StructInitNode::toString() const
 std::string ProgramNode::toString() const
 {
     std::string result;
+    for(const auto& mod : modules)
+    {
+        result += mod->toString() + "\n";
+    }
+    for(const auto& use : imports)
+    {
+        result += use->toString() + "\n";
+    }
     if(structList)
     {
         result += structList->toString();
@@ -709,4 +725,40 @@ ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive)
     return new RangeExpressionNode(static_cast<ExpressionNode*>(start),
                                    static_cast<ExpressionNode*>(end),
                                    inclusive != 0);
+}
+
+ASTNode* create_mod_declaration(char* name, int line)
+{
+    auto* node = new ModDeclNode(std::string(name));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_use_declaration(char* module_name, char* item_name, int line)
+{
+    auto* node = new UseDeclNode(std::string(module_name),
+                                 std::string(item_name), false);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_use_all_declaration(char* module_name, int line)
+{
+    auto* node = new UseDeclNode(std::string(module_name), "*", true);
+    node->line = line;
+    return node;
+}
+
+std::string ModDeclNode::toString() const
+{
+    return "mod " + moduleName + ";";
+}
+
+std::string UseDeclNode::toString() const
+{
+    if(importAll)
+    {
+        return "use " + moduleName + "::*;";
+    }
+    return "use " + moduleName + "::" + itemName + ";";
 }
