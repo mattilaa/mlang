@@ -32,16 +32,20 @@ void printUsage(const char* programName)
               << "  -v            Verbose output\n"
               << "  -h, --help    Show this help message\n"
               << "\nExamples:\n"
-              << "  " << programName << " test.mla              # Compile to a.out\n"
-              << "  " << programName << " -o myprogram test.mla # Compile to myprogram\n"
-              << "  " << programName << " -S test.mla           # Emit assembly\n"
-              << "  " << programName << " -emit-llvm test.mla   # Emit LLVM IR\n"
+              << "  " << programName
+              << " test.mla              # Compile to a.out\n"
+              << "  " << programName
+              << " -o myprogram test.mla # Compile to myprogram\n"
+              << "  " << programName
+              << " -S test.mla           # Emit assembly\n"
+              << "  " << programName
+              << " -emit-llvm test.mla   # Emit LLVM IR\n"
               << std::endl;
 }
 
 int main(int argc, char** argv)
 {
-    if (argc < 2)
+    if(argc < 2)
     {
         printUsage(argv[0]);
         return 1;
@@ -57,56 +61,56 @@ int main(int argc, char** argv)
     int optimizationLevel = 2;
     bool verbose = false;
 
-    for (int i = 1; i < argc; ++i)
+    for(int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
 
-        if (arg == "-h" || arg == "--help")
+        if(arg == "-h" || arg == "--help")
         {
             printUsage(argv[0]);
             return 0;
         }
-        else if (arg == "-o" && i + 1 < argc)
+        else if(arg == "-o" && i + 1 < argc)
         {
             outputFile = argv[++i];
         }
-        else if (arg == "-c")
+        else if(arg == "-c")
         {
             emitObjectOnly = true;
         }
-        else if (arg == "-S")
+        else if(arg == "-S")
         {
             emitAssembly = true;
         }
-        else if (arg == "-emit-llvm")
+        else if(arg == "-emit-llvm")
         {
             emitLLVMIR = true;
         }
-        else if (arg == "-emit-bc")
+        else if(arg == "-emit-bc")
         {
             emitBitcode = true;
         }
-        else if (arg == "-O0")
+        else if(arg == "-O0")
         {
             optimizationLevel = 0;
         }
-        else if (arg == "-O1")
+        else if(arg == "-O1")
         {
             optimizationLevel = 1;
         }
-        else if (arg == "-O2")
+        else if(arg == "-O2")
         {
             optimizationLevel = 2;
         }
-        else if (arg == "-O3")
+        else if(arg == "-O3")
         {
             optimizationLevel = 3;
         }
-        else if (arg == "-v")
+        else if(arg == "-v")
         {
             verbose = true;
         }
-        else if (arg[0] != '-')
+        else if(arg[0] != '-')
         {
             inputFile = arg;
         }
@@ -118,7 +122,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if (inputFile.empty())
+    if(inputFile.empty())
     {
         std::cerr << "Error: No input file specified" << std::endl;
         printUsage(argv[0]);
@@ -126,7 +130,7 @@ int main(int argc, char** argv)
     }
 
     FILE* input_file = fopen(inputFile.c_str(), "r");
-    if (!input_file)
+    if(!input_file)
     {
         std::cerr << "Error opening file: " << inputFile << std::endl;
         return 1;
@@ -143,24 +147,24 @@ int main(int argc, char** argv)
     try
     {
         // Parse the input
-        if (verbose)
+        if(verbose)
         {
             std::cout << "Parsing " << inputFile << "..." << std::endl;
         }
 
-        if (yyparse() != 0)
+        if(yyparse() != 0)
         {
             std::cerr << "Parsing failed." << std::endl;
             fclose(input_file);
             return 1;
         }
 
-        if (verbose)
+        if(verbose)
         {
             std::cout << "Parsing completed successfully." << std::endl;
         }
 
-        if (!programRoot)
+        if(!programRoot)
         {
             std::cerr << "Error: No program root node created" << std::endl;
             fclose(input_file);
@@ -171,17 +175,26 @@ int main(int argc, char** argv)
         CodeGenerator generator(context, builder, module);
 
         // Generate LLVM IR
-        if (auto* program = dynamic_cast<ProgramNode*>(programRoot))
+        if(auto* program = dynamic_cast<ProgramNode*>(programRoot))
         {
-            if (verbose)
+            if(verbose)
             {
                 std::cout << "Generating LLVM IR..." << std::endl;
             }
 
             generator.generateCode(program);
 
+            // Check for semantic errors
+            if(generator.hadError())
+            {
+                std::cerr << "Compilation failed due to errors." << std::endl;
+                fclose(input_file);
+                delete programRoot;
+                return 1;
+            }
+
             // Print the AST if verbose
-            if (verbose)
+            if(verbose)
             {
                 std::cout << "\n=== AST ===" << std::endl;
                 std::cout << program->toString() << std::endl;
@@ -190,18 +203,19 @@ int main(int argc, char** argv)
             // Initialize backend
             Backend backend(module);
 
-            if (verbose)
+            if(verbose)
             {
-                std::cout << "Target: " << backend.getTargetTriple() << std::endl;
+                std::cout << "Target: " << backend.getTargetTriple()
+                          << std::endl;
             }
 
             // Apply optimizations
-            if (optimizationLevel > 0)
+            if(optimizationLevel > 0)
             {
-                if (verbose)
+                if(verbose)
                 {
-                    std::cout << "Applying optimizations (O" << optimizationLevel
-                              << ")..." << std::endl;
+                    std::cout << "Applying optimizations (O"
+                              << optimizationLevel << ")..." << std::endl;
                 }
                 backend.optimize(optimizationLevel);
             }
@@ -209,50 +223,54 @@ int main(int argc, char** argv)
             // Determine output based on flags
             bool success = false;
 
-            if (emitLLVMIR)
+            if(emitLLVMIR)
             {
                 // Emit LLVM IR
                 std::string llFile = outputFile;
-                if (llFile == "a.out")
+                if(llFile == "a.out")
                 {
-                    llFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".ll";
+                    llFile = inputFile.substr(0, inputFile.find_last_of('.')) +
+                             ".ll";
                 }
                 success = backend.emitLLVMIR(llFile);
 
                 // Also print to stdout if verbose
-                if (verbose)
+                if(verbose)
                 {
                     std::cout << "\n=== LLVM IR ===" << std::endl;
                     module->print(llvm::outs(), nullptr);
                 }
             }
-            else if (emitBitcode)
+            else if(emitBitcode)
             {
                 // Emit LLVM bitcode
                 std::string bcFile = outputFile;
-                if (bcFile == "a.out")
+                if(bcFile == "a.out")
                 {
-                    bcFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".bc";
+                    bcFile = inputFile.substr(0, inputFile.find_last_of('.')) +
+                             ".bc";
                 }
                 success = backend.emitBitcode(bcFile);
             }
-            else if (emitAssembly)
+            else if(emitAssembly)
             {
                 // Emit assembly
                 std::string asmFile = outputFile;
-                if (asmFile == "a.out")
+                if(asmFile == "a.out")
                 {
-                    asmFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".s";
+                    asmFile =
+                        inputFile.substr(0, inputFile.find_last_of('.')) + ".s";
                 }
                 success = backend.emitAssemblyFile(asmFile);
             }
-            else if (emitObjectOnly)
+            else if(emitObjectOnly)
             {
                 // Emit object file only
                 std::string objFile = outputFile;
-                if (objFile == "a.out")
+                if(objFile == "a.out")
                 {
-                    objFile = inputFile.substr(0, inputFile.find_last_of('.')) + ".o";
+                    objFile =
+                        inputFile.substr(0, inputFile.find_last_of('.')) + ".o";
                 }
                 success = backend.emitObjectFile(objFile);
             }
@@ -262,7 +280,7 @@ int main(int argc, char** argv)
                 success = backend.compileToExecutable(outputFile);
             }
 
-            if (!success)
+            if(!success)
             {
                 std::cerr << "Compilation failed." << std::endl;
                 fclose(input_file);
@@ -277,7 +295,7 @@ int main(int argc, char** argv)
             return 1;
         }
     }
-    catch (const std::exception& e)
+    catch(const std::exception& e)
     {
         std::cerr << "Error during compilation: " << e.what() << std::endl;
         fclose(input_file);
@@ -288,7 +306,7 @@ int main(int argc, char** argv)
     fclose(input_file);
     delete programRoot;
 
-    if (verbose)
+    if(verbose)
     {
         std::cout << "Compilation completed successfully." << std::endl;
     }
