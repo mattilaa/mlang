@@ -13,17 +13,19 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 include_directories(${LLVM_INCLUDE_DIRS})
-add_definitions(${LLVM_DEFINITIONS})
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS_LIST})
 
 # Find Flex and Bison
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 
-# Add the src directory
-add_subdirectory(src)
+# Add the src directory (empty CMakeLists.txt, just for structure)
+# add_subdirectory(src)
 
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h
+    ${CMAKE_SOURCE_DIR}/include/ir.h
 )
 
 # Specify the full path to the lexer and parser files
@@ -33,7 +35,7 @@ set(PARSER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/parser.y)
 # Set output file names
 set(LEXER_OUT ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
 set(PARSER_OUT ${CMAKE_CURRENT_BINARY_DIR}/parser.cpp)
-set(PARSER_HEADER_OUT ${CMAKE_CURRENT_BINARY_DIR}/parser.h)
+set(PARSER_HEADER_OUT ${CMAKE_CURRENT_BINARY_DIR}/parser.hpp)
 
 # Print Flex and Bison information
 message(STATUS "Flex executable: ${FLEX_EXECUTABLE}")
@@ -44,9 +46,9 @@ add_custom_command(
     OUTPUT ${PARSER_OUT} ${PARSER_HEADER_OUT}
     COMMAND ${CMAKE_COMMAND} -E echo "Running Bison on ${PARSER_SOURCE}"
     COMMAND ${BISON_EXECUTABLE}
-    ARGS -d -o ${PARSER_OUT} ${PARSER_SOURCE}
+    ARGS -d -o ${PARSER_OUT} --defines=${PARSER_HEADER_OUT} ${PARSER_SOURCE}
     DEPENDS ${PARSER_SOURCE}
-    COMMENT "Generating parser.cpp and parser.h"
+    COMMENT "Generating parser.cpp and parser.hpp"
     VERBATIM
 )
 
@@ -90,8 +92,25 @@ target_include_directories(mylang PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mylang PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mylang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Link against LLVM libraries
-llvm_map_components_to_libnames(llvm_libs support core irreader)
+# Link against LLVM libraries - include all components needed for backend
+# Core components for IR generation
+# Target components for machine code generation
+llvm_map_components_to_libnames(llvm_libs
+    support
+    core
+    irreader
+    bitwriter
+    passes
+    # Native target support
+    native
+    nativecodegen
+    # All targets (for cross-compilation support)
+    AllTargetsAsmParsers
+    AllTargetsCodeGens
+    AllTargetsDescs
+    AllTargetsInfos
+)
+
 target_link_libraries(mylang ${llvm_libs})
 
 # Print debug information
@@ -100,10 +119,12 @@ message(STATUS "PARSER_OUT: ${PARSER_OUT}")
 message(STATUS "PARSER_HEADER_OUT: ${PARSER_HEADER_OUT}")
 message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+message(STATUS "LLVM Libraries: ${llvm_libs}")
+
 # Force generation at CMake time (use with caution)
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND ${BISON_EXECUTABLE} -d -o ${PARSER_OUT} ${PARSER_SOURCE}
+    COMMAND ${BISON_EXECUTABLE} -d -o ${PARSER_OUT} --defines=${PARSER_HEADER_OUT} ${PARSER_SOURCE}
     COMMAND ${FLEX_EXECUTABLE} -o ${LEXER_OUT} ${LEXER_SOURCE}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
