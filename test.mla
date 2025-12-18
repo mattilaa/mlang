@@ -33,7 +33,7 @@ fn main() -> void {
     x = 5;
     y = 3.14;
     let y: int = calculate(x, y);
-    return;
+    return y;
 }
 
 fn max(a: int, b: int) -> int {
