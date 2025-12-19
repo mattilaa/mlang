@@ -1,0 +1,71 @@
+// Test file demonstrating Rust-like print macros in MLA
+// println! - print to stdout with newline
+// print!   - print to stdout without newline
+// eprintln! - print to stderr with newline
+// eprint!  - print to stderr without newline
+
+fn main() -> int {
+    // Basic string printing
+    println!("Hello, MLA!");
+
+    // Printing with integer interpolation
+    let x: int = 42;
+    println!("The answer is: {}", x);
+
+    // Multiple arguments
+    let a: int = 10;
+    let b: int = 20;
+    println!("{} + {} = {}", a, b, a + b);
+
+    // Floating point numbers
+    let pi: double = 3.14159;
+    println!("Pi is approximately: {}", pi);
+
+    // String interpolation
+    let name: string = "World";
+    println!("Hello, {}!", name);
+
+    // Print without newline
+    print!("Loading");
+    print!("...");
+    println!(" Done!");
+
+    // Error output
+    eprintln!("This goes to stderr");
+
+    // Loop with print
+    println!("Counting from 0 to 4:");
+    for i in 0..5 {
+        println!("Hello from Mlang!");
+        println!("  i = {}", i);
+    }
+
+    // Expression in print argument
+    println!("5 * 7 = {}", 5 * 7);
+
+    // Different integer types
+    println!("--- Integer Types ---");
+
+    let small: i8 = 127;
+    let medium: i16 = 32767;
+    let regular: i32 = 2147483647;
+    let big: i64 = 9223372036854775807;
+
+    println!("i8 max: {}", small);
+    println!("i16 max: {}", medium);
+    println!("i32 max: {}", regular);
+    println!("i64 max: {}", big);
+
+    // Unsigned types
+    let u_small: u8 = 255;
+    let u_medium: u16 = 65535;
+    let u_regular: u32 = 100;
+    let u_big: u64 = 1000000000000;
+
+    println!("u8 value: {}", u_small);
+    println!("u16 value: {}", u_medium);
+    println!("u32 value: {}", u_regular);
+    println!("u64 value: {}", u_big);
+
+    return 0;
+}
