@@ -19,18 +19,22 @@ private:
     llvm::IRBuilder<>& builder;
     std::unique_ptr<llvm::Module>& module;
     std::map<std::string, llvm::Value*> namedValues;
+    std::map<std::string, TypeNode::TypeKind>
+        variableTypes; // Track original MLA types
     std::map<std::string, llvm::Type*> structTypes;
     std::set<std::string>
         constantVariables; // Track variables declared with 'let'
     bool hasError = false; // Track if any errors occurred
 
     // Cached printf/fprintf functions
+    bool stdioInitialized = false;
     llvm::FunctionCallee printfFunc;
     llvm::FunctionCallee fprintfFunc;
     llvm::Value* stderrPtr;
 
     // Helper methods
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);
+    bool isUnsignedType(TypeNode::TypeKind kind);
     llvm::Value* getNamedValue(const std::string& name);
     void setNamedValue(const std::string& name, llvm::Value* value);
     void reportError(int line, const std::string& message);
@@ -46,8 +50,8 @@ private:
 public:
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
                   std::unique_ptr<llvm::Module>& m)
-        : context(ctx), builder(b), module(m), printfFunc(nullptr),
-          fprintfFunc(nullptr), stderrPtr(nullptr)
+        : context(ctx), builder(b), module(m), stdioInitialized(false),
+          printfFunc(nullptr), fprintfFunc(nullptr), stderrPtr(nullptr)
     {
     }
 

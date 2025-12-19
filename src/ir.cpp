@@ -27,6 +27,7 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
     case TypeNode::TYPE_BOOL:
         return llvm::Type::getInt1Ty(context);
     case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I32:
         return llvm::Type::getInt32Ty(context);
     case TypeNode::TYPE_FLOAT:
         return llvm::Type::getFloatTy(context);
@@ -38,13 +39,44 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
 #else
         return llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
+    case TypeNode::TYPE_I8:
+        return llvm::Type::getInt8Ty(context);
+    case TypeNode::TYPE_I16:
+        return llvm::Type::getInt16Ty(context);
+    case TypeNode::TYPE_I64:
+        return llvm::Type::getInt64Ty(context);
+    case TypeNode::TYPE_U8:
+        return llvm::Type::getInt8Ty(context);
+    case TypeNode::TYPE_U16:
+        return llvm::Type::getInt16Ty(context);
+    case TypeNode::TYPE_U32:
+        return llvm::Type::getInt32Ty(context);
+    case TypeNode::TYPE_U64:
+        return llvm::Type::getInt64Ty(context);
     default:
         return nullptr;
     }
 }
 
+bool CodeGenerator::isUnsignedType(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void CodeGenerator::initializeStdioFunctions()
 {
+    if(stdioInitialized)
+        return;
+
     // Get pointer type for strings
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
@@ -81,6 +113,25 @@ void CodeGenerator::initializeStdioFunctions()
     {
         gv->setExternallyInitialized(true);
     }
+
+    stdioInitialized = true;
+}
+
+// Helper to get the TypeKind from an expression (for identifiers)
+TypeNode::TypeKind getExpressionTypeKind(
+    ExpressionNode* expr,
+    const std::map<std::string, TypeNode::TypeKind>& variableTypes)
+{
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = variableTypes.find(id->name);
+        if(it != variableTypes.end())
+        {
+            return it->second;
+        }
+    }
+    // Default to signed int for literals and unknown expressions
+    return TypeNode::TYPE_INT;
 }
 
 std::string
@@ -99,18 +150,17 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
             // Found a {} placeholder
             if(argIndex < args.size())
             {
-                llvm::Value* argVal = generateExpression(args[argIndex]);
+                ExpressionNode* argExpr = args[argIndex];
+                llvm::Value* argVal = generateExpression(argExpr);
                 if(argVal)
                 {
                     llvm::Type* argType = argVal->getType();
+                    TypeNode::TypeKind typeKind =
+                        getExpressionTypeKind(argExpr, variableTypes);
+                    bool isUnsigned = isUnsignedType(typeKind);
 
                     // Determine format specifier based on type
-                    if(argType->isIntegerTy(32))
-                    {
-                        cFormat += "%d";
-                        argValues.push_back(argVal);
-                    }
-                    else if(argType->isIntegerTy(1))
+                    if(argType->isIntegerTy(1))
                     {
                         // Bool: convert to int for printing
                         cFormat += "%d";
@@ -118,6 +168,68 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
                             argVal, llvm::Type::getInt32Ty(context),
                             "booltoInt");
                         argValues.push_back(intVal);
+                    }
+                    else if(argType->isIntegerTy(8))
+                    {
+                        if(isUnsigned)
+                        {
+                            cFormat += "%u";
+                            llvm::Value* intVal = builder.CreateZExt(
+                                argVal, llvm::Type::getInt32Ty(context),
+                                "u8toInt");
+                            argValues.push_back(intVal);
+                        }
+                        else
+                        {
+                            cFormat += "%d";
+                            llvm::Value* intVal = builder.CreateSExt(
+                                argVal, llvm::Type::getInt32Ty(context),
+                                "i8toInt");
+                            argValues.push_back(intVal);
+                        }
+                    }
+                    else if(argType->isIntegerTy(16))
+                    {
+                        if(isUnsigned)
+                        {
+                            cFormat += "%u";
+                            llvm::Value* intVal = builder.CreateZExt(
+                                argVal, llvm::Type::getInt32Ty(context),
+                                "u16toInt");
+                            argValues.push_back(intVal);
+                        }
+                        else
+                        {
+                            cFormat += "%d";
+                            llvm::Value* intVal = builder.CreateSExt(
+                                argVal, llvm::Type::getInt32Ty(context),
+                                "i16toInt");
+                            argValues.push_back(intVal);
+                        }
+                    }
+                    else if(argType->isIntegerTy(32))
+                    {
+                        if(isUnsigned)
+                        {
+                            cFormat += "%u";
+                        }
+                        else
+                        {
+                            cFormat += "%d";
+                        }
+                        argValues.push_back(argVal);
+                    }
+                    else if(argType->isIntegerTy(64))
+                    {
+                        if(isUnsigned)
+                        {
+                            cFormat += "%llu";
+                        }
+                        else
+                        {
+                            cFormat += "%lld";
+                        }
+                        argValues.push_back(argVal);
                     }
                     else if(argType->isFloatTy())
                     {
@@ -181,7 +293,7 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
 void CodeGenerator::generatePrintStatement(PrintNode* node)
 {
     // Initialize stdio functions if not already done
-    if(!printfFunc.getCallee())
+    if(!stdioInitialized)
     {
         initializeStdioFunctions();
     }
@@ -315,6 +427,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Clear the named values map and constant tracking for new function scope
     namedValues.clear();
     constantVariables.clear();
+    variableTypes.clear();
 
     for(auto& arg : function->args())
     {
@@ -719,6 +832,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         getLLVMType(node->type->kind), nullptr, node->name);
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
+    variableTypes[node->name] = node->type->kind;
 
     // Mark this variable as constant (declared with 'let')
     constantVariables.insert(node->name);
@@ -739,6 +853,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     namedValues[node->name] = alloca;
+    variableTypes[node->name] = node->type->kind;
 }
 
 void CodeGenerator::generateAssignment(AssignmentNode* node)

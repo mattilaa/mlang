@@ -76,6 +76,7 @@ ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST STRUCT
+%token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR IN DOTDOT
 %token MOD USE COLONCOLON
@@ -182,6 +183,14 @@ type
     | DOUBLE { $$ = create_type_node(TypeNode::TYPE_DOUBLE); }
     | STRING { $$ = create_type_node(TypeNode::TYPE_STRING); }
     | LIST   { $$ = create_list_type(); }
+    | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
+    | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
+    | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
+    | I64    { $$ = create_type_node(TypeNode::TYPE_I64); }
+    | U8     { $$ = create_type_node(TypeNode::TYPE_U8); }
+    | U16    { $$ = create_type_node(TypeNode::TYPE_U16); }
+    | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
+    | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
     ;
 
 statement_list

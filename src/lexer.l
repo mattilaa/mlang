@@ -55,6 +55,14 @@
 "string"        { return STRING; }
 "list"          { return LIST; }
 "struct"        { return STRUCT; }
+"i8"            { return I8; }
+"i16"           { return I16; }
+"i32"           { return I32; }
+"i64"           { return I64; }
+"u8"            { return U8; }
+"u16"           { return U16; }
+"u32"           { return U32; }
+"u64"           { return U64; }
 "println!"      { return PRINTLN; }
 "print!"        { return PRINT; }
 "eprintln!"     { return EPRINTLN; }

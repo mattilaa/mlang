@@ -461,6 +461,22 @@ std::string TypeNode::toString() const
         return "string";
     case TYPE_LIST:
         return "list";
+    case TYPE_I8:
+        return "i8";
+    case TYPE_I16:
+        return "i16";
+    case TYPE_I32:
+        return "i32";
+    case TYPE_I64:
+        return "i64";
+    case TYPE_U8:
+        return "u8";
+    case TYPE_U16:
+        return "u16";
+    case TYPE_U32:
+        return "u32";
+    case TYPE_U64:
+        return "u64";
     default:
         return "unknown";
     }
