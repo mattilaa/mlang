@@ -1,33 +1,21 @@
-// main.mla - Example using modules
-// 
-// Modules are declared with 'mod' and imported with 'use'
-// Similar to Rust's module system
-
-// Declare modules (looks for math.mla and utils.mla in same directory)
 mod math;
 mod utils;
 
-// Import specific functions from modules
 use math::factorial;
 use math::sum_range;
 use math::square;
 
-// Import all functions from utils
 use utils::*;
 
 fn main() -> int {
-    // Using imported functions from math module
-    let fact5: int = factorial(5);      // 120
-    let sum: int = sum_range(1, 5);     // 1+2+3+4 = 10
-    let sq: int = square(3);            // 9
+    let fact5: int = factorial(5);
+    let sum: int = sum_range(1, 5);
+    let sq: int = square(3);
     
-    // Using imported functions from utils module  
-    let maximum: int = max(10, 20);     // 20
-    let minimum: int = min(10, 20);     // 10
-    let absolute: int = abs(0 - 15);    // 15
+    let maximum: int = max(10, 20);
+    let minimum: int = min(10, 20);
+    let absolute: int = abs(0 - 15);
     
-    // Calculate result: 120 + 10 + 9 + 20 + 10 + 15 = 184
-    // (Keeping under 256 for exit code)
     var result: int = fact5 + sum + sq;
     result = result + maximum + minimum;
     result = result + absolute;
