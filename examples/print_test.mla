@@ -4,17 +4,17 @@
 // eprintln! - print to stderr with newline
 // eprint!  - print to stderr without newline
 
-fn main() -> int {
+fn main() -> i32 {
     // Basic string printing
     println!("Hello, MLA!");
 
     // Printing with integer interpolation
-    let x: int = 42;
+    let x: i32 = 42;
     println!("The answer is: {}", x);
 
     // Multiple arguments
-    let a: int = 10;
-    let b: int = 20;
+    let a: i32 = 10;
+    let b: i32 = 20;
     println!("{} + {} = {}", a, b, a + b);
 
     // Floating point numbers
