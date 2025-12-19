@@ -7,119 +7,119 @@
 extern int yyparse();
 extern FILE* yyin;
 extern int yylineno;
-extern "C" {
+extern "C"
+{
     extern ASTNode* programRoot;
 }
 
 // Reset lexer state for new file
 extern void yyrestart(FILE* input_file);
 
-ModuleLoader::ModuleLoader(const std::string& basePath)
-    : basePath(basePath)
-{
-}
+ModuleLoader::ModuleLoader(const std::string& basePath) : basePath(basePath) {}
 
 std::string ModuleLoader::resolveModulePath(const std::string& moduleName)
 {
     namespace fs = std::filesystem;
-    
+
     // Try moduleName.mla in the base path
     fs::path modulePath = fs::path(basePath) / (moduleName + ".mla");
-    
-    if (fs::exists(modulePath))
+
+    if(fs::exists(modulePath))
     {
         return modulePath.string();
     }
-    
+
     // Try moduleName/mod.mla (directory module)
     fs::path dirModulePath = fs::path(basePath) / moduleName / "mod.mla";
-    if (fs::exists(dirModulePath))
+    if(fs::exists(dirModulePath))
     {
         return dirModulePath.string();
     }
-    
+
     return "";
 }
 
 ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
 {
     FILE* file = fopen(filePath.c_str(), "r");
-    if (!file)
+    if(!file)
     {
-        std::cerr << "Error: Cannot open module file: " << filePath << std::endl;
+        std::cerr << "Error: Cannot open module file: " << filePath
+                  << std::endl;
         return nullptr;
     }
-    
+
     // Save current parser state
     ASTNode* savedRoot = programRoot;
     programRoot = nullptr;
-    
+
     // Reset lexer line number
     yylineno = 1;
-    
+
     // Set up parser for new file
     yyrestart(file);
     yyin = file;
-    
+
     // Parse the file
     int result = yyparse();
     fclose(file);
-    
+
     ProgramNode* parsedProgram = nullptr;
-    if (result == 0 && programRoot)
+    if(result == 0 && programRoot)
     {
         parsedProgram = dynamic_cast<ProgramNode*>(programRoot);
     }
-    
+
     // Restore previous parser state
     programRoot = savedRoot;
-    
+
     return parsedProgram;
 }
 
-bool ModuleLoader::loadModule(const std::string& moduleName, std::string& errorMsg)
+bool ModuleLoader::loadModule(const std::string& moduleName,
+                              std::string& errorMsg)
 {
     // Check if already loaded
-    if (modules.find(moduleName) != modules.end() && modules[moduleName].loaded)
+    if(modules.find(moduleName) != modules.end() && modules[moduleName].loaded)
     {
         return true;
     }
-    
+
     // Check for circular imports
-    if (loadingStack.find(moduleName) != loadingStack.end())
+    if(loadingStack.find(moduleName) != loadingStack.end())
     {
         errorMsg = "Circular import detected: " + moduleName;
         return false;
     }
-    
+
     // Resolve the module path
     std::string modulePath = resolveModulePath(moduleName);
-    if (modulePath.empty())
+    if(modulePath.empty())
     {
-        errorMsg = "Cannot find module '" + moduleName + "' (looked for " + 
+        errorMsg = "Cannot find module '" + moduleName + "' (looked for " +
                    moduleName + ".mla in " + basePath + ")";
         return false;
     }
-    
+
     // Add to loading stack
     loadingStack.insert(moduleName);
-    
+
     // Parse the module file
     ProgramNode* moduleAst = parseFile(modulePath);
-    if (!moduleAst)
+    if(!moduleAst)
     {
         errorMsg = "Failed to parse module: " + moduleName;
         loadingStack.erase(moduleName);
         return false;
     }
-    
+
     // Process any mod declarations in this module (recursive loading)
-    if (!processModDeclarations(moduleAst, errorMsg))
+    if(!processModDeclarations(moduleAst, errorMsg))
     {
         loadingStack.erase(moduleName);
         return false;
     }
-    
+
     // Store the module
     ModuleInfo info;
     info.name = moduleName;
@@ -127,72 +127,76 @@ bool ModuleLoader::loadModule(const std::string& moduleName, std::string& errorM
     info.ast = moduleAst;
     info.loaded = true;
     modules[moduleName] = info;
-    
+
     // Remove from loading stack
     loadingStack.erase(moduleName);
-    
+
     return true;
 }
 
 ProgramNode* ModuleLoader::getModule(const std::string& moduleName)
 {
     auto it = modules.find(moduleName);
-    if (it != modules.end() && it->second.loaded)
+    if(it != modules.end() && it->second.loaded)
     {
         return it->second.ast;
     }
     return nullptr;
 }
 
-std::vector<FunctionDefNode*> ModuleLoader::getModuleFunctions(const std::string& moduleName)
+std::vector<FunctionDefNode*>
+ModuleLoader::getModuleFunctions(const std::string& moduleName)
 {
     std::vector<FunctionDefNode*> functions;
     ProgramNode* module = getModule(moduleName);
-    
-    if (module && module->functionList)
+
+    if(module && module->functionList)
     {
         functions = module->functionList->functions;
     }
-    
+
     return functions;
 }
 
-FunctionDefNode* ModuleLoader::getFunction(const std::string& moduleName, const std::string& funcName)
+FunctionDefNode* ModuleLoader::getFunction(const std::string& moduleName,
+                                           const std::string& funcName)
 {
     ProgramNode* module = getModule(moduleName);
-    
-    if (module && module->functionList)
+
+    if(module && module->functionList)
     {
-        for (auto* func : module->functionList->functions)
+        for(auto* func : module->functionList->functions)
         {
-            if (func->name == funcName)
+            if(func->name == funcName)
             {
                 return func;
             }
         }
     }
-    
+
     return nullptr;
 }
 
-std::vector<StructDefNode*> ModuleLoader::getModuleStructs(const std::string& moduleName)
+std::vector<StructDefNode*>
+ModuleLoader::getModuleStructs(const std::string& moduleName)
 {
     std::vector<StructDefNode*> structs;
     ProgramNode* module = getModule(moduleName);
-    
-    if (module && module->structList)
+
+    if(module && module->structList)
     {
         structs = module->structList->structs;
     }
-    
+
     return structs;
 }
 
-bool ModuleLoader::processModDeclarations(ProgramNode* program, std::string& errorMsg)
+bool ModuleLoader::processModDeclarations(ProgramNode* program,
+                                          std::string& errorMsg)
 {
-    for (auto* modDecl : program->modules)
+    for(auto* modDecl : program->modules)
     {
-        if (!loadModule(modDecl->moduleName, errorMsg))
+        if(!loadModule(modDecl->moduleName, errorMsg))
         {
             return false;
         }
@@ -202,42 +206,44 @@ bool ModuleLoader::processModDeclarations(ProgramNode* program, std::string& err
     return true;
 }
 
-bool ModuleLoader::processUseDeclarations(ProgramNode* program, std::string& errorMsg)
+bool ModuleLoader::processUseDeclarations(ProgramNode* program,
+                                          std::string& errorMsg)
 {
-    for (auto* useDecl : program->imports)
+    for(auto* useDecl : program->imports)
     {
         // Check if the module is loaded
         ProgramNode* module = getModule(useDecl->moduleName);
-        if (!module)
+        if(!module)
         {
-            errorMsg = "Module '" + useDecl->moduleName + "' not loaded. Add 'mod " + 
-                       useDecl->moduleName + ";' before using it.";
+            errorMsg = "Module '" + useDecl->moduleName +
+                       "' not loaded. Add 'mod " + useDecl->moduleName +
+                       ";' before using it.";
             return false;
         }
-        
-        if (useDecl->importAll)
+
+        if(useDecl->importAll)
         {
             // Import all functions
-            if (module->functionList)
+            if(module->functionList)
             {
-                if (!program->functionList)
+                if(!program->functionList)
                 {
                     program->functionList = new FunctionListNode();
                 }
-                for (auto* func : module->functionList->functions)
+                for(auto* func : module->functionList->functions)
                 {
                     program->functionList->functions.push_back(func);
                 }
             }
-            
+
             // Import all structs
-            if (module->structList)
+            if(module->structList)
             {
-                if (!program->structList)
+                if(!program->structList)
                 {
                     program->structList = new StructListNode();
                 }
-                for (auto* structDef : module->structList->structs)
+                for(auto* structDef : module->structList->structs)
                 {
                     program->structList->addStruct(structDef);
                 }
@@ -247,27 +253,28 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program, std::string& err
         {
             // Import specific item
             bool found = false;
-            
+
             // Try to find as function
-            FunctionDefNode* func = getFunction(useDecl->moduleName, useDecl->itemName);
-            if (func)
+            FunctionDefNode* func =
+                getFunction(useDecl->moduleName, useDecl->itemName);
+            if(func)
             {
-                if (!program->functionList)
+                if(!program->functionList)
                 {
                     program->functionList = new FunctionListNode();
                 }
                 program->functionList->functions.push_back(func);
                 found = true;
             }
-            
+
             // Try to find as struct
-            if (!found && module->structList)
+            if(!found && module->structList)
             {
-                for (auto* structDef : module->structList->structs)
+                for(auto* structDef : module->structList->structs)
                 {
-                    if (structDef->name == useDecl->itemName)
+                    if(structDef->name == useDecl->itemName)
                     {
-                        if (!program->structList)
+                        if(!program->structList)
                         {
                             program->structList = new StructListNode();
                         }
@@ -277,10 +284,10 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program, std::string& err
                     }
                 }
             }
-            
-            if (!found)
+
+            if(!found)
             {
-                errorMsg = "'" + useDecl->itemName + "' not found in module '" + 
+                errorMsg = "'" + useDecl->itemName + "' not found in module '" +
                            useDecl->moduleName + "'";
                 return false;
             }
@@ -292,9 +299,9 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program, std::string& err
 std::vector<std::string> ModuleLoader::getLoadedModules() const
 {
     std::vector<std::string> names;
-    for (const auto& pair : modules)
+    for(const auto& pair : modules)
     {
-        if (pair.second.loaded)
+        if(pair.second.loaded)
         {
             names.push_back(pair.first);
         }

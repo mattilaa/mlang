@@ -217,6 +217,48 @@ ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2)
     return call;
 }
 
+// Helper class to store argument list temporarily
+class ArgumentListNode : public ASTNode
+{
+public:
+    std::vector<ExpressionNode*> args;
+    std::string toString() const override
+    {
+        return "ArgumentList";
+    }
+};
+
+ASTNode* create_argument_list(ASTNode* arg)
+{
+    auto list = new ArgumentListNode();
+    if(arg)
+    {
+        list->args.push_back(static_cast<ExpressionNode*>(arg));
+    }
+    return list;
+}
+
+ASTNode* add_argument(ASTNode* list, ASTNode* arg)
+{
+    auto argList = static_cast<ArgumentListNode*>(list);
+    if(arg)
+    {
+        argList->args.push_back(static_cast<ExpressionNode*>(arg));
+    }
+    return argList;
+}
+
+ASTNode* create_function_call_multi(char* name, ASTNode* args)
+{
+    auto call = new FunctionCallNode(std::string(name));
+    if(args)
+    {
+        auto argList = static_cast<ArgumentListNode*>(args);
+        call->arguments = argList->args;
+    }
+    return call;
+}
+
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch)
 {
@@ -338,8 +380,10 @@ ASTNode* create_block_statement(ASTNode* stmt_list)
 
 ASTNode* create_else_if(ASTNode* condition, ASTNode* body)
 {
-    return new IfNode(static_cast<ExpressionNode*>(condition),
-                      static_cast<StatementListNode*>(body));
+    auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
+    StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
+
+    return new IfNode(static_cast<ExpressionNode*>(condition), stmtList);
 }
 
 ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if)
@@ -349,16 +393,56 @@ ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if)
         return else_if;
     }
 
+    // Chain else-if nodes
     IfNode* current = static_cast<IfNode*>(else_if_list);
     while(current->elseIfBranch)
     {
         current = current->elseIfBranch;
     }
     current->elseIfBranch = static_cast<IfNode*>(else_if);
+
     return else_if_list;
 }
 
-// Implement toString() methods for each node type
+// Print statement creation
+ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line)
+{
+    PrintNode::PrintKind printKind;
+    switch(kind)
+    {
+    case 0:
+        printKind = PrintNode::PRINT_STDOUT;
+        break;
+    case 1:
+        printKind = PrintNode::PRINTLN_STDOUT;
+        break;
+    case 2:
+        printKind = PrintNode::PRINT_STDERR;
+        break;
+    case 3:
+        printKind = PrintNode::EPRINTLN_STDERR;
+        break;
+    default:
+        printKind = PrintNode::PRINTLN_STDOUT;
+    }
+
+    auto* node = new PrintNode(printKind, std::string(format_str));
+    node->line = line;
+
+    if(args)
+    {
+        auto* argList = static_cast<ArgumentListNode*>(args);
+        for(auto* arg : argList->args)
+        {
+            node->addArgument(arg);
+        }
+    }
+
+    return node;
+}
+
+// toString() implementations
+
 std::string TypeNode::toString() const
 {
     switch(kind)
@@ -382,22 +466,6 @@ std::string TypeNode::toString() const
     }
 }
 
-std::string FunctionListNode::toString() const
-{
-    std::string result = "Functions:\n";
-    for(const auto& func : functions)
-    {
-        result += func->toString() + "\n";
-    }
-    return result;
-}
-
-std::string FunctionDefNode::toString() const
-{
-    return "fn " + name + "(" + parameters->toString() + ") -> " +
-           returnType->toString() + " {\n" + body->toString() + "\n}";
-}
-
 std::string ParameterNode::toString() const
 {
     return name + ": " + type->toString();
@@ -415,12 +483,31 @@ std::string ParameterListNode::toString() const
     return result;
 }
 
+std::string FunctionDefNode::toString() const
+{
+    std::string result = "fn " + name + "(" + parameters->toString() + ") -> ";
+    result += returnType->toString() + " {\n";
+    result += body->toString();
+    result += "}\n";
+    return result;
+}
+
+std::string FunctionListNode::toString() const
+{
+    std::string result;
+    for(const auto& func : functions)
+    {
+        result += func->toString() + "\n";
+    }
+    return result;
+}
+
 std::string StatementListNode::toString() const
 {
     std::string result;
     for(const auto& stmt : statements)
     {
-        result += stmt->toString() + "\n";
+        result += "    " + stmt->toString() + "\n";
     }
     return result;
 }
@@ -432,7 +519,9 @@ std::string AssignmentNode::toString() const
 
 std::string ReturnNode::toString() const
 {
-    return "return " + (expression ? expression->toString() : "") + ";";
+    if(expression)
+        return "return " + expression->toString() + ";";
+    return "return;";
 }
 
 std::string IntLiteralNode::toString() const
@@ -761,4 +850,31 @@ std::string UseDeclNode::toString() const
         return "use " + moduleName + "::*;";
     }
     return "use " + moduleName + "::" + itemName + ";";
+}
+
+std::string PrintNode::toString() const
+{
+    std::string result;
+    switch(kind)
+    {
+    case PRINT_STDOUT:
+        result = "print!(\"";
+        break;
+    case PRINTLN_STDOUT:
+        result = "println!(\"";
+        break;
+    case PRINT_STDERR:
+        result = "eprint!(\"";
+        break;
+    case EPRINTLN_STDERR:
+        result = "eprintln!(\"";
+        break;
+    }
+    result += formatString + "\"";
+    for(const auto& arg : arguments)
+    {
+        result += ", " + arg->toString();
+    }
+    result += ");";
+    return result;
 }

@@ -38,6 +38,7 @@ ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
+ASTNode* create_function_call_multi(char* name, ASTNode* args);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -57,6 +58,9 @@ ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
+ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
+ASTNode* create_argument_list(ASTNode* arg);
+ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 %}
 
 %union {
@@ -75,6 +79,7 @@ ASTNode* create_use_all_declaration(char* module_name, int line);
 %token LET VAR
 %token FOR IN DOTDOT
 %token MOD USE COLONCOLON
+%token PRINTLN PRINT EPRINTLN EPRINT
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON
@@ -90,6 +95,7 @@ ASTNode* create_use_all_declaration(char* module_name, int line);
 %type <ast> return_statement block_statement for_statement range_expression
 %type <ast> primary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
+%type <ast> print_statement argument_list
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -193,6 +199,7 @@ statement
     | for_statement
     | block_statement
     | struct_init
+    | print_statement
     ;
 
 let_statement
@@ -240,6 +247,30 @@ range_expression
 struct_init
     : IDENTIFIER IDENTIFIER SEMICOLON
         { $$ = create_struct_init($1, $2); }
+    ;
+
+print_statement
+    : PRINTLN LPAREN STRING_LITERAL RPAREN SEMICOLON
+        { $$ = create_print_stmt(1, $3, NULL, yylineno); }
+    | PRINTLN LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+        { $$ = create_print_stmt(1, $3, $5, yylineno); }
+    | PRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
+        { $$ = create_print_stmt(0, $3, NULL, yylineno); }
+    | PRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+        { $$ = create_print_stmt(0, $3, $5, yylineno); }
+    | EPRINTLN LPAREN STRING_LITERAL RPAREN SEMICOLON
+        { $$ = create_print_stmt(3, $3, NULL, yylineno); }
+    | EPRINTLN LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+        { $$ = create_print_stmt(3, $3, $5, yylineno); }
+    | EPRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
+        { $$ = create_print_stmt(2, $3, NULL, yylineno); }
+    | EPRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+        { $$ = create_print_stmt(2, $3, $5, yylineno); }
+    ;
+
+argument_list
+    : expression { $$ = create_argument_list($1); }
+    | argument_list COMMA expression { $$ = add_argument($1, $3); }
     ;
 
 if_statement
@@ -297,8 +328,7 @@ binary_expression
 
 function_call
     : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL); }
-    | IDENTIFIER LPAREN expression RPAREN { $$ = create_function_call($1, $3, NULL); }
-    | IDENTIFIER LPAREN expression COMMA expression RPAREN { $$ = create_function_call($1, $3, $5); }
+    | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3); }
     ;
 
 cast_expression

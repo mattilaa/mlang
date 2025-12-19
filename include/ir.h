@@ -24,16 +24,30 @@ private:
         constantVariables; // Track variables declared with 'let'
     bool hasError = false; // Track if any errors occurred
 
+    // Cached printf/fprintf functions
+    llvm::FunctionCallee printfFunc;
+    llvm::FunctionCallee fprintfFunc;
+    llvm::Value* stderrPtr;
+
     // Helper methods
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);
     llvm::Value* getNamedValue(const std::string& name);
     void setNamedValue(const std::string& name, llvm::Value* value);
     void reportError(int line, const std::string& message);
 
+    // Initialize stdio functions (printf, fprintf, stderr)
+    void initializeStdioFunctions();
+
+    // Convert MLA format string ({}) to C format string (%d, %s, etc.)
+    std::string convertFormatString(const std::string& mlaFormat,
+                                    const std::vector<ExpressionNode*>& args,
+                                    std::vector<llvm::Value*>& argValues);
+
 public:
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
                   std::unique_ptr<llvm::Module>& m)
-        : context(ctx), builder(b), module(m)
+        : context(ctx), builder(b), module(m), printfFunc(nullptr),
+          fprintfFunc(nullptr), stderrPtr(nullptr)
     {
     }
 
@@ -67,6 +81,7 @@ public:
     void generateLetDeclaration(LetDeclNode* node);
     void generateVarDeclaration(VarDeclNode* node);
     void generateAssignment(AssignmentNode* node);
+    void generatePrintStatement(PrintNode* node);
 
     // Struct related methods
     void generateStructDefinition(StructDefNode* node);

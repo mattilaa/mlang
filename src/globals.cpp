@@ -1,5 +1,6 @@
 #include "ast.h"
 
-extern "C" {
+extern "C"
+{
     ASTNode* programRoot = nullptr;
 }

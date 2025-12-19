@@ -19,16 +19,21 @@
     "*"         { /* Ignore '*'s that aren't followed by '/' */ }
     \n          { /* Ignore newlines */ }
 }
+\"              { yylval.sval = strdup(""); BEGIN(STRING_); }
 <STRING_>{
     \"          { BEGIN(INITIAL); return STRING_LITERAL; }
     \\n         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\n"); }
     \\t         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\t"); }
+    \\r         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\r"); }
     \\\"        { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\""); }
     \\\\        { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\\"); }
+    \\0         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\0"); }
     [^\\\n\"]+  { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + strlen(yytext) + 1);
                   strcat(yylval.sval, yytext); }
 }
@@ -50,6 +55,10 @@
 "string"        { return STRING; }
 "list"          { return LIST; }
 "struct"        { return STRUCT; }
+"println!"      { return PRINTLN; }
+"print!"        { return PRINT; }
+"eprintln!"     { return EPRINTLN; }
+"eprint!"       { return EPRINT; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }
@@ -73,7 +82,7 @@
 "="             { return ASSIGN; }
 ","             { return COMMA; }
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }
-[0-9]+\.[0-9]+  { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
+[0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
 [0-9]+          { yylval.ival = atoi(yytext); return INT_LITERAL; }
 "+"             { return PLUS; }

@@ -11,8 +11,8 @@ class UseDeclNode;
 class ASTNode
 {
 public:
-    int line = 0;  // Line number where this node appears in source
-    
+    int line = 0; // Line number where this node appears in source
+
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };
@@ -402,10 +402,12 @@ class RangeExpressionNode : public ExpressionNode
 public:
     ExpressionNode* start;
     ExpressionNode* end;
-    bool inclusive;  // false for .., true for ..= (future)
+    bool inclusive; // false for .., true for ..= (future)
 
     RangeExpressionNode(ExpressionNode* s, ExpressionNode* e, bool incl = false)
-        : start(s), end(e), inclusive(incl) {}
+        : start(s), end(e), inclusive(incl)
+    {
+    }
     virtual ~RangeExpressionNode() = default;
     std::string toString() const override;
 };
@@ -415,11 +417,13 @@ class ForNode : public StatementNode
 {
 public:
     std::string varName;
-    ExpressionNode* iterable;  // Can be RangeExpressionNode or other iterable
+    ExpressionNode* iterable; // Can be RangeExpressionNode or other iterable
     StatementListNode* body;
 
     ForNode(const std::string& var, ExpressionNode* iter, StatementListNode* b)
-        : varName(var), iterable(iter), body(b) {}
+        : varName(var), iterable(iter), body(b)
+    {
+    }
     virtual ~ForNode() = default;
     std::string toString() const override;
 };
@@ -429,7 +433,7 @@ class ModDeclNode : public ASTNode
 {
 public:
     std::string moduleName;
-    std::string filePath;  // Resolved file path
+    std::string filePath; // Resolved file path
 
     ModDeclNode(const std::string& name) : moduleName(name) {}
     virtual ~ModDeclNode() = default;
@@ -441,12 +445,45 @@ class UseDeclNode : public ASTNode
 {
 public:
     std::string moduleName;
-    std::string itemName;  // Empty or "*" means import all
+    std::string itemName; // Empty or "*" means import all
     bool importAll;
 
-    UseDeclNode(const std::string& mod, const std::string& item, bool all = false)
-        : moduleName(mod), itemName(item), importAll(all) {}
+    UseDeclNode(const std::string& mod, const std::string& item,
+                bool all = false)
+        : moduleName(mod), itemName(item), importAll(all)
+    {
+    }
     virtual ~UseDeclNode() = default;
+    std::string toString() const override;
+};
+
+// Print statement: println!("format", args...) or eprintln!("format", args...)
+// Rust-like print macros for stdout and stderr
+class PrintNode : public StatementNode
+{
+public:
+    enum PrintKind
+    {
+        PRINT_STDOUT,   // print! - no newline
+        PRINTLN_STDOUT, // println! - with newline
+        PRINT_STDERR,   // eprint! - no newline
+        EPRINTLN_STDERR // eprintln! - with newline
+    };
+
+    PrintKind kind;
+    std::string formatString;
+    std::vector<ExpressionNode*> arguments;
+
+    PrintNode(PrintKind k, const std::string& fmt) : kind(k), formatString(fmt)
+    {
+    }
+
+    void addArgument(ExpressionNode* arg)
+    {
+        arguments.push_back(arg);
+    }
+
+    virtual ~PrintNode() = default;
     std::string toString() const override;
 };
 
@@ -476,6 +513,7 @@ ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
+ASTNode* create_function_call_multi(char* name, ASTNode* args);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -494,11 +532,18 @@ ASTNode* create_expression_statement(ASTNode* expr);
 ASTNode* create_block_statement(ASTNode* stmt_list);
 ASTNode* create_else_if(ASTNode* condition, ASTNode* body);
 ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if);
-ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
-ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
+                          int line);
+ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
+                             int line);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
+
+// Print macro AST node creators
+ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
+ASTNode* create_argument_list(ASTNode* arg);
+ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 
 #endif // AST_H

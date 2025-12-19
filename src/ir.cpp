@@ -43,6 +43,200 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
     }
 }
 
+void CodeGenerator::initializeStdioFunctions()
+{
+    // Get pointer type for strings
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+
+    // Declare printf: int printf(const char* format, ...)
+    llvm::FunctionType* printfType =
+        llvm::FunctionType::get(llvm::Type::getInt32Ty(context), {ptrType},
+                                true // variadic
+        );
+    printfFunc = module->getOrInsertFunction("printf", printfType);
+
+    // Declare fprintf: int fprintf(FILE* stream, const char* format, ...)
+    llvm::FunctionType* fprintfType = llvm::FunctionType::get(
+        llvm::Type::getInt32Ty(context), {ptrType, ptrType},
+        true // variadic
+    );
+    fprintfFunc = module->getOrInsertFunction("fprintf", fprintfType);
+
+    // Get stderr - platform specific
+    // On macOS/Darwin, stderr is accessed via __stderrp
+    // On Linux/other platforms, it's just stderr
+#if defined(__APPLE__) || defined(__MACH__)
+    const char* stderrName = "__stderrp";
+#else
+    const char* stderrName = "stderr";
+#endif
+
+    stderrPtr = module->getOrInsertGlobal(stderrName, ptrType);
+    if(auto* gv = llvm::dyn_cast<llvm::GlobalVariable>(stderrPtr))
+    {
+        gv->setExternallyInitialized(true);
+    }
+}
+
+std::string
+CodeGenerator::convertFormatString(const std::string& mlaFormat,
+                                   const std::vector<ExpressionNode*>& args,
+                                   std::vector<llvm::Value*>& argValues)
+{
+    std::string cFormat;
+    size_t argIndex = 0;
+
+    for(size_t i = 0; i < mlaFormat.size(); ++i)
+    {
+        if(mlaFormat[i] == '{' && i + 1 < mlaFormat.size() &&
+           mlaFormat[i + 1] == '}')
+        {
+            // Found a {} placeholder
+            if(argIndex < args.size())
+            {
+                llvm::Value* argVal = generateExpression(args[argIndex]);
+                if(argVal)
+                {
+                    llvm::Type* argType = argVal->getType();
+
+                    // Determine format specifier based on type
+                    if(argType->isIntegerTy(32))
+                    {
+                        cFormat += "%d";
+                        argValues.push_back(argVal);
+                    }
+                    else if(argType->isIntegerTy(1))
+                    {
+                        // Bool: convert to int for printing
+                        cFormat += "%d";
+                        llvm::Value* intVal = builder.CreateZExt(
+                            argVal, llvm::Type::getInt32Ty(context),
+                            "booltoInt");
+                        argValues.push_back(intVal);
+                    }
+                    else if(argType->isFloatTy())
+                    {
+                        // Float needs to be promoted to double for printf
+                        cFormat += "%f";
+                        llvm::Value* doubleVal = builder.CreateFPExt(
+                            argVal, llvm::Type::getDoubleTy(context),
+                            "floatToDouble");
+                        argValues.push_back(doubleVal);
+                    }
+                    else if(argType->isDoubleTy())
+                    {
+                        cFormat += "%f";
+                        argValues.push_back(argVal);
+                    }
+                    else if(argType->isPointerTy())
+                    {
+                        // Assume it's a string pointer
+                        cFormat += "%s";
+                        argValues.push_back(argVal);
+                    }
+                    else
+                    {
+                        // Unknown type, try as int
+                        cFormat += "%d";
+                        argValues.push_back(argVal);
+                    }
+                }
+                argIndex++;
+            }
+            else
+            {
+                // More placeholders than arguments, keep literal {}
+                cFormat += "{}";
+            }
+            i++; // Skip the '}'
+        }
+        else if(mlaFormat[i] == '{' && i + 1 < mlaFormat.size() &&
+                mlaFormat[i + 1] == '{')
+        {
+            // Escaped {{ -> {
+            cFormat += '{';
+            i++; // Skip the second {
+        }
+        else if(mlaFormat[i] == '}' && i + 1 < mlaFormat.size() &&
+                mlaFormat[i + 1] == '}')
+        {
+            // Escaped }} -> }
+            cFormat += '}';
+            i++; // Skip the second }
+        }
+        else
+        {
+            cFormat += mlaFormat[i];
+        }
+    }
+
+    return cFormat;
+}
+
+void CodeGenerator::generatePrintStatement(PrintNode* node)
+{
+    // Initialize stdio functions if not already done
+    if(!printfFunc.getCallee())
+    {
+        initializeStdioFunctions();
+    }
+
+    // Convert MLA format string to C format string and collect argument values
+    std::vector<llvm::Value*> argValues;
+    std::string cFormat =
+        convertFormatString(node->formatString, node->arguments, argValues);
+
+    // Add newline for println!/eprintln!
+    if(node->kind == PrintNode::PRINTLN_STDOUT ||
+       node->kind == PrintNode::EPRINTLN_STDERR)
+    {
+        cFormat += "\n";
+    }
+
+    // Create the format string as a global constant
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "printfmt");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(cFormat, "printfmt");
+#endif
+
+    // Build the argument list
+    std::vector<llvm::Value*> printArgs;
+
+    if(node->kind == PrintNode::PRINT_STDERR ||
+       node->kind == PrintNode::EPRINTLN_STDERR)
+    {
+        // For stderr, use fprintf(stderr, format, ...)
+        // Load the stderr pointer
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* stderrVal =
+            builder.CreateLoad(ptrType, stderrPtr, "stderr");
+        printArgs.push_back(stderrVal);
+        printArgs.push_back(formatStr);
+        printArgs.insert(printArgs.end(), argValues.begin(), argValues.end());
+
+        builder.CreateCall(fprintfFunc, printArgs);
+    }
+    else
+    {
+        // For stdout, use printf(format, ...)
+        printArgs.push_back(formatStr);
+        printArgs.insert(printArgs.end(), argValues.begin(), argValues.end());
+
+        builder.CreateCall(printfFunc, printArgs);
+    }
+}
+
 void CodeGenerator::generateCode(ProgramNode* program)
 {
     // First generate all struct definitions
@@ -185,6 +379,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
         {
             generateStatement(stmt);
         }
+    }
+    else if(auto printNode = dynamic_cast<PrintNode*>(node))
+    {
+        generatePrintStatement(printNode);
     }
     else if(auto exprStmt = dynamic_cast<ExpressionStatementNode*>(node))
     {
