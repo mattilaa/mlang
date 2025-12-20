@@ -43,6 +43,8 @@
 "else"          { return ELSE; }
 "for"           { return FOR; }
 "in"            { return IN; }
+"break"         { return BREAK; }
+"continue"      { return CONTINUE; }
 "mod"           { return MOD; }
 "use"           { return USE; }
 "let"           { return LET; }

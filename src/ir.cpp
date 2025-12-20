@@ -497,6 +497,14 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         generatePrintStatement(printNode);
     }
+    else if(auto breakNode = dynamic_cast<BreakNode*>(node))
+    {
+        generateBreakStatement(breakNode);
+    }
+    else if(auto continueNode = dynamic_cast<ContinueNode*>(node))
+    {
+        generateContinueStatement(continueNode);
+    }
     else if(auto exprStmt = dynamic_cast<ExpressionStatementNode*>(node))
     {
         generateExpression(exprStmt->expression);
@@ -695,7 +703,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
     }
 
     namedValues[node->varName] = loopVar;
-    variableTypes[node->varName] = TypeNode::TYPE_I64; // Loop variable is i32
+    variableTypes[node->varName] = TypeNode::TYPE_I64; // Loop variable is i64
 
     // Create basic blocks for loop structure
     llvm::BasicBlock* condBB =
@@ -703,6 +711,10 @@ void CodeGenerator::generateForStatement(ForNode* node)
     llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(context, "for.body");
     llvm::BasicBlock* incBB = llvm::BasicBlock::Create(context, "for.inc");
     llvm::BasicBlock* endBB = llvm::BasicBlock::Create(context, "for.end");
+
+    // Push loop blocks for break/continue support
+    loopBreakBlocks.push_back(endBB);
+    loopContinueBlocks.push_back(incBB);
 
     // Branch to condition check
     builder.CreateBr(condBB);
@@ -723,7 +735,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
-            // Stop if we hit a terminator (e.g., return)
+            // Stop if we hit a terminator (e.g., return, break, continue)
             if(builder.GetInsertBlock()->getTerminator())
                 break;
         }
@@ -740,13 +752,17 @@ void CodeGenerator::generateForStatement(ForNode* node)
     builder.SetInsertPoint(incBB);
     llvm::Value* nextVal = builder.CreateAdd(
         builder.CreateLoad(loopType, loopVar, ""),
-        llvm::ConstantInt::get(context, llvm::APInt(32, 1)), "nextval");
+        llvm::ConstantInt::get(context, llvm::APInt(64, 1)), "nextval");
     builder.CreateStore(nextVal, loopVar);
     builder.CreateBr(condBB);
 
     // End block
     endBB->insertInto(function);
     builder.SetInsertPoint(endBB);
+
+    // Pop loop blocks
+    loopBreakBlocks.pop_back();
+    loopContinueBlocks.pop_back();
 
     // Restore old value if there was one
     if(oldVal)
@@ -772,6 +788,26 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
     {
         builder.CreateRetVoid();
     }
+}
+
+void CodeGenerator::generateBreakStatement(BreakNode* node)
+{
+    if(loopBreakBlocks.empty())
+    {
+        reportError(node->line, "'break' statement not within a loop");
+        return;
+    }
+    builder.CreateBr(loopBreakBlocks.back());
+}
+
+void CodeGenerator::generateContinueStatement(ContinueNode* node)
+{
+    if(loopContinueBlocks.empty())
+    {
+        reportError(node->line, "'continue' statement not within a loop");
+        return;
+    }
+    builder.CreateBr(loopContinueBlocks.back());
 }
 
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)

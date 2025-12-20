@@ -1,23 +1,34 @@
 #ifndef AST_H
 #define AST_H
 
-#include <cstdint>
 #include <string>
 #include <vector>
 
 // Forward declarations
-class ModDeclNode;
-class UseDeclNode;
+class ASTNode;
+class ExpressionNode;
+class StatementNode;
+class TypeNode;
+class ParameterNode;
+class ParameterListNode;
+class FunctionDefNode;
+class FunctionListNode;
+class StatementListNode;
+class ProgramNode;
+class StructDefNode;
+class StructListNode;
+class TopLevelListNode;
 
+// Base AST node
 class ASTNode
 {
 public:
-    int line = 0; // Line number where this node appears in source
-
+    int line = 0;
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };
 
+// Type node
 class TypeNode : public ASTNode
 {
 public:
@@ -25,12 +36,11 @@ public:
     {
         TYPE_VOID,
         TYPE_BOOL,
-        TYPE_INT, // Legacy int (i32)
+        TYPE_INT,
         TYPE_FLOAT,
         TYPE_DOUBLE,
         TYPE_STRING,
         TYPE_LIST,
-        // Rust-like integer types
         TYPE_I8,
         TYPE_I16,
         TYPE_I32,
@@ -40,183 +50,29 @@ public:
         TYPE_U32,
         TYPE_U64
     };
+
     TypeKind kind;
 
     TypeNode(TypeKind k) : kind(k) {}
     std::string toString() const override;
 };
 
+// List type node
+class ListTypeNode : public TypeNode
+{
+public:
+    ListTypeNode() : TypeNode(TYPE_LIST) {}
+};
+
+// Expression nodes
 class ExpressionNode : public ASTNode
 {
-};
-
-class StatementNode : public ASTNode
-{
-};
-
-class ParameterNode : public ASTNode
-{
-public:
-    TypeNode* type;
-    std::string name;
-
-    ParameterNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
-    std::string toString() const override;
-};
-
-class ParameterListNode : public ASTNode
-{
-public:
-    std::vector<ParameterNode*> parameters;
-    std::string toString() const override;
-};
-
-class FunctionDefNode : public ASTNode
-{
-public:
-    TypeNode* returnType;
-    std::string name;
-    ParameterListNode* parameters;
-    class StatementListNode* body;
-
-    FunctionDefNode(TypeNode* type, const std::string& n,
-                    ParameterListNode* params, StatementListNode* b)
-        : returnType(type), name(n), parameters(params), body(b)
-    {
-    }
-    std::string toString() const override;
-};
-
-class FunctionListNode : public ASTNode
-{
-public:
-    std::vector<FunctionDefNode*> functions;
-    std::string toString() const override;
-};
-
-class StatementListNode : public ASTNode
-{
-public:
-    std::vector<StatementNode*> statements;
-    std::string toString() const override;
-};
-
-class StructMemberNode : public ASTNode
-{
-public:
-    bool isVar;
-    TypeNode* type;
-    std::string name;
-    ExpressionNode* initExpr;
-
-    StructMemberNode(bool isVar, TypeNode* type, const std::string& name,
-                     ExpressionNode* initExpr)
-        : isVar(isVar), type(type), name(name), initExpr(initExpr)
-    {
-    }
-    std::string toString() const override;
-};
-
-class StructMemberListNode : public ASTNode
-{
-public:
-    std::vector<StructMemberNode*> members;
-
-    void addMember(StructMemberNode* member)
-    {
-        members.push_back(member);
-    }
-
-    std::string toString() const override;
-};
-
-class StructDefNode : public ASTNode
-{
-public:
-    std::string name;
-    std::string baseName;
-    StructMemberListNode* members;
-
-    StructDefNode(const std::string& name, const std::string& baseName,
-                  StructMemberListNode* members)
-        : name(name), baseName(baseName), members(members)
-    {
-    }
-    std::string toString() const override;
-};
-
-class StructListNode : public ASTNode
-{
-public:
-    std::vector<StructDefNode*> structs;
-
-    void addStruct(StructDefNode* structDef)
-    {
-        structs.push_back(structDef);
-    }
-
-    std::string toString() const override;
-};
-
-class TopLevelListNode : public ASTNode
-{
-public:
-    std::vector<ASTNode*> items;
-    std::string toString() const override;
-};
-
-class ProgramNode : public ASTNode
-{
-public:
-    StructListNode* structList;
-    FunctionListNode* functionList;
-    std::vector<ModDeclNode*> modules;
-    std::vector<UseDeclNode*> imports;
-
-    ProgramNode() : structList(nullptr), functionList(nullptr) {}
-    std::string toString() const override;
-};
-
-class AssignmentNode : public StatementNode
-{
-public:
-    std::string name;
-    ExpressionNode* expression;
-
-    AssignmentNode(const std::string& n, ExpressionNode* expr)
-        : name(n), expression(expr)
-    {
-    }
-    std::string toString() const override;
-};
-
-class ReturnNode : public StatementNode
-{
-public:
-    ExpressionNode* expression;
-
-    ReturnNode(ExpressionNode* expr) : expression(expr) {}
-    std::string toString() const override;
-};
-
-class StructInitNode : public StatementNode
-{
-public:
-    std::string typeName;
-    std::string varName;
-
-    StructInitNode(const std::string& type, const std::string& var)
-        : typeName(type), varName(var)
-    {
-    }
-    std::string toString() const override;
 };
 
 class IntLiteralNode : public ExpressionNode
 {
 public:
     int64_t value;
-
     IntLiteralNode(int64_t v) : value(v) {}
     std::string toString() const override;
 };
@@ -225,7 +81,6 @@ class FloatLiteralNode : public ExpressionNode
 {
 public:
     float value;
-
     FloatLiteralNode(float v) : value(v) {}
     std::string toString() const override;
 };
@@ -234,7 +89,6 @@ class DoubleLiteralNode : public ExpressionNode
 {
 public:
     double value;
-
     DoubleLiteralNode(double v) : value(v) {}
     std::string toString() const override;
 };
@@ -243,7 +97,6 @@ class StringLiteralNode : public ExpressionNode
 {
 public:
     std::string value;
-
     StringLiteralNode(const std::string& v) : value(v) {}
     std::string toString() const override;
 };
@@ -252,7 +105,6 @@ class IdentifierNode : public ExpressionNode
 {
 public:
     std::string name;
-
     IdentifierNode(const std::string& n) : name(n) {}
     std::string toString() const override;
 };
@@ -273,6 +125,7 @@ public:
         OP_EQ,
         OP_NE
     };
+
     OpType op;
     ExpressionNode* left;
     ExpressionNode* right;
@@ -300,33 +153,35 @@ public:
     TypeNode::TypeKind targetType;
     ExpressionNode* expression;
 
-    CastExpressionNode(TypeNode::TypeKind type, ExpressionNode* expr)
-        : targetType(type), expression(expr)
+    CastExpressionNode(TypeNode::TypeKind t, ExpressionNode* e)
+        : targetType(t), expression(e)
     {
     }
     std::string toString() const override;
 };
 
-class ListTypeNode : public TypeNode
+class RangeExpressionNode : public ExpressionNode
 {
 public:
-    ListTypeNode() : TypeNode(TypeNode::TYPE_LIST) {}
-    std::string toString() const override
+    ExpressionNode* start;
+    ExpressionNode* end;
+    bool inclusive;
+
+    RangeExpressionNode(ExpressionNode* s, ExpressionNode* e, bool incl)
+        : start(s), end(e), inclusive(incl)
     {
-        return "list";
     }
+    std::string toString() const override;
 };
 
 class ListElementsNode : public ASTNode
 {
 public:
     std::vector<ExpressionNode*> elements;
-
-    void addElement(ExpressionNode* element)
+    void addElement(ExpressionNode* e)
     {
-        elements.push_back(element);
+        elements.push_back(e);
     }
-
     std::string toString() const override;
 };
 
@@ -334,26 +189,57 @@ class ListLiteralNode : public ExpressionNode
 {
 public:
     ListElementsNode* elements;
-
-    explicit ListLiteralNode(ListElementsNode* elems) : elements(elems) {}
+    ListLiteralNode(ListElementsNode* e) : elements(e) {}
     std::string toString() const override;
 };
 
-class IfNode : public StatementNode
+// Statement nodes
+class StatementNode : public ASTNode
+{
+};
+
+class StatementListNode : public ASTNode
 {
 public:
-    ExpressionNode* condition;
-    StatementListNode* thenBranch;
-    IfNode* elseIfBranch;          // For else if
-    StatementListNode* elseBranch; // For final else
+    std::vector<StatementNode*> statements;
+    std::string toString() const override;
+};
 
-    IfNode(ExpressionNode* cond, StatementListNode* then,
-           IfNode* elseIf = nullptr, StatementListNode* else_ = nullptr)
-        : condition(cond), thenBranch(then), elseIfBranch(elseIf),
-          elseBranch(else_)
-    {
-    }
+class BlockStatementNode : public StatementNode
+{
+public:
+    StatementListNode* statements;
+    BlockStatementNode(StatementListNode* s) : statements(s) {}
+    std::string toString() const override;
+};
 
+class ExpressionStatementNode : public StatementNode
+{
+public:
+    ExpressionNode* expression;
+    ExpressionStatementNode(ExpressionNode* e) : expression(e) {}
+    std::string toString() const override;
+};
+
+class ReturnNode : public StatementNode
+{
+public:
+    ExpressionNode* expression;
+    ReturnNode(ExpressionNode* e) : expression(e) {}
+    std::string toString() const override;
+};
+
+class BreakNode : public StatementNode
+{
+public:
+    BreakNode() = default;
+    std::string toString() const override;
+};
+
+class ContinueNode : public StatementNode
+{
+public:
+    ContinueNode() = default;
     std::string toString() const override;
 };
 
@@ -364,8 +250,8 @@ public:
     std::string name;
     ExpressionNode* expression;
 
-    LetDeclNode(TypeNode* t, const std::string& n, ExpressionNode* expr)
-        : type(t), name(n), expression(expr)
+    LetDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
+        : type(t), name(n), expression(e)
     {
     }
     std::string toString() const override;
@@ -378,106 +264,65 @@ public:
     std::string name;
     ExpressionNode* initExpr;
 
-    VarDeclNode(TypeNode* t, const std::string& n,
-                ExpressionNode* expr = nullptr)
-        : type(t), name(n), initExpr(expr)
+    VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
+        : type(t), name(n), initExpr(e)
     {
     }
     std::string toString() const override;
 };
 
-class ExpressionStatementNode : public StatementNode
+class AssignmentNode : public StatementNode
 {
 public:
+    std::string name;
     ExpressionNode* expression;
 
-    ExpressionStatementNode(ExpressionNode* expr) : expression(expr) {}
-    virtual ~ExpressionStatementNode() = default;
-    std::string toString() const override;
-};
-
-class BlockStatementNode : public StatementNode
-{
-public:
-    StatementListNode* statements;
-
-    BlockStatementNode(StatementListNode* stmts) : statements(stmts) {}
-    virtual ~BlockStatementNode() = default;
-    std::string toString() const override;
-};
-
-// Range expression: start..end
-class RangeExpressionNode : public ExpressionNode
-{
-public:
-    ExpressionNode* start;
-    ExpressionNode* end;
-    bool inclusive; // false for .., true for ..= (future)
-
-    RangeExpressionNode(ExpressionNode* s, ExpressionNode* e, bool incl = false)
-        : start(s), end(e), inclusive(incl)
+    AssignmentNode(const std::string& n, ExpressionNode* e)
+        : name(n), expression(e)
     {
     }
-    virtual ~RangeExpressionNode() = default;
     std::string toString() const override;
 };
 
-// For loop: for var in range/iterable { body }
+class IfNode : public StatementNode
+{
+public:
+    ExpressionNode* condition;
+    StatementListNode* thenBranch;
+    IfNode* elseIfBranch;
+    StatementListNode* elseBranch;
+
+    IfNode(ExpressionNode* c, StatementListNode* t, IfNode* ei = nullptr,
+           StatementListNode* e = nullptr)
+        : condition(c), thenBranch(t), elseIfBranch(ei), elseBranch(e)
+    {
+    }
+    std::string toString() const override;
+};
+
 class ForNode : public StatementNode
 {
 public:
     std::string varName;
-    ExpressionNode* iterable; // Can be RangeExpressionNode or other iterable
+    ExpressionNode* iterable;
     StatementListNode* body;
 
-    ForNode(const std::string& var, ExpressionNode* iter, StatementListNode* b)
-        : varName(var), iterable(iter), body(b)
+    ForNode(const std::string& v, ExpressionNode* it, StatementListNode* b)
+        : varName(v), iterable(it), body(b)
     {
     }
-    virtual ~ForNode() = default;
     std::string toString() const override;
 };
 
-// Module declaration: mod module_name;
-class ModDeclNode : public ASTNode
-{
-public:
-    std::string moduleName;
-    std::string filePath; // Resolved file path
-
-    ModDeclNode(const std::string& name) : moduleName(name) {}
-    virtual ~ModDeclNode() = default;
-    std::string toString() const override;
-};
-
-// Use declaration: use module_name::item; or use module_name::*;
-class UseDeclNode : public ASTNode
-{
-public:
-    std::string moduleName;
-    std::string itemName; // Empty or "*" means import all
-    bool importAll;
-
-    UseDeclNode(const std::string& mod, const std::string& item,
-                bool all = false)
-        : moduleName(mod), itemName(item), importAll(all)
-    {
-    }
-    virtual ~UseDeclNode() = default;
-    std::string toString() const override;
-};
-
-// Print statement: println!("format", args...) or eprintln!("format", args...)
-// Rust-like print macros for stdout and stderr
 class PrintNode : public StatementNode
 {
 public:
     enum PrintKind
     {
-        PRINT_STDOUT,   // print! - no newline
-        PRINTLN_STDOUT, // println! - with newline
-        PRINT_STDERR,   // eprint! - no newline
-        EPRINTLN_STDERR // eprintln! - with newline
+        PRINT_STDOUT,
+        PRINTLN_STDOUT,
+        PRINT_STDERR,
+        EPRINTLN_STDERR
     };
 
     PrintKind kind;
@@ -487,17 +332,166 @@ public:
     PrintNode(PrintKind k, const std::string& fmt) : kind(k), formatString(fmt)
     {
     }
-
     void addArgument(ExpressionNode* arg)
     {
         arguments.push_back(arg);
     }
-
-    virtual ~PrintNode() = default;
     std::string toString() const override;
 };
 
-// Function declarations for AST node creation
+// Struct-related nodes
+class StructMemberNode : public ASTNode
+{
+public:
+    bool isVar;
+    TypeNode* type;
+    std::string name;
+    ExpressionNode* initExpr;
+
+    StructMemberNode(bool v, TypeNode* t, const std::string& n,
+                     ExpressionNode* e)
+        : isVar(v), type(t), name(n), initExpr(e)
+    {
+    }
+    std::string toString() const override;
+};
+
+class StructMemberListNode : public ASTNode
+{
+public:
+    std::vector<StructMemberNode*> members;
+    void addMember(StructMemberNode* m)
+    {
+        members.push_back(m);
+    }
+    std::string toString() const override;
+};
+
+class StructDefNode : public ASTNode
+{
+public:
+    std::string name;
+    std::string baseName;
+    StructMemberListNode* members;
+
+    StructDefNode(const std::string& n, const std::string& b,
+                  StructMemberListNode* m)
+        : name(n), baseName(b), members(m)
+    {
+    }
+    std::string toString() const override;
+};
+
+class StructListNode : public ASTNode
+{
+public:
+    std::vector<StructDefNode*> structs;
+    void addStruct(StructDefNode* s)
+    {
+        structs.push_back(s);
+    }
+    std::string toString() const override;
+};
+
+class StructInitNode : public StatementNode
+{
+public:
+    std::string typeName;
+    std::string varName;
+
+    StructInitNode(const std::string& t, const std::string& v)
+        : typeName(t), varName(v)
+    {
+    }
+    std::string toString() const override;
+};
+
+// Function-related nodes
+class ParameterNode : public ASTNode
+{
+public:
+    TypeNode* type;
+    std::string name;
+
+    ParameterNode(TypeNode* t, const std::string& n) : type(t), name(n) {}
+    std::string toString() const override;
+};
+
+class ParameterListNode : public ASTNode
+{
+public:
+    std::vector<ParameterNode*> parameters;
+    std::string toString() const override;
+};
+
+class FunctionDefNode : public ASTNode
+{
+public:
+    TypeNode* returnType;
+    std::string name;
+    ParameterListNode* parameters;
+    StatementListNode* body;
+
+    FunctionDefNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
+                    StatementListNode* b)
+        : returnType(rt), name(n), parameters(p), body(b)
+    {
+    }
+    std::string toString() const override;
+};
+
+class FunctionListNode : public ASTNode
+{
+public:
+    std::vector<FunctionDefNode*> functions;
+    std::string toString() const override;
+};
+
+// Module-related nodes
+class ModDeclNode : public ASTNode
+{
+public:
+    std::string moduleName;
+    std::string filePath;
+
+    ModDeclNode(const std::string& n) : moduleName(n) {}
+    std::string toString() const override;
+};
+
+class UseDeclNode : public ASTNode
+{
+public:
+    std::string moduleName;
+    std::string itemName;
+    bool importAll;
+
+    UseDeclNode(const std::string& m, const std::string& i, bool all)
+        : moduleName(m), itemName(i), importAll(all)
+    {
+    }
+    std::string toString() const override;
+};
+
+// Top-level nodes
+class TopLevelListNode : public ASTNode
+{
+public:
+    std::vector<ASTNode*> items;
+    std::string toString() const override;
+};
+
+class ProgramNode : public ASTNode
+{
+public:
+    StructListNode* structList = nullptr;
+    FunctionListNode* functionList = nullptr;
+    std::vector<ModDeclNode*> modules;
+    std::vector<UseDeclNode*> imports;
+
+    std::string toString() const override;
+};
+
+// Helper function declarations for parser
 ASTNode* create_program(ASTNode* top_level_list);
 ASTNode* create_top_level_list(ASTNode* item);
 ASTNode* add_to_top_level_list(ASTNode* list, ASTNode* item);
@@ -508,14 +502,16 @@ ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
                              ASTNode* body);
 ASTNode* create_type_node(TypeNode::TypeKind type);
-ASTNode* create_parameter_list(ASTNode* param = nullptr);
+ASTNode* create_parameter_list(ASTNode* param);
+ASTNode* create_empty_parameter_list();
 ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* create_assignment(char* name, ASTNode* expr, int line = 0);
+ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_return_stmt(ASTNode* expr);
-ASTNode* create_struct_init(char* type_name, char* var_name);
+ASTNode* create_break_stmt(int line);
+ASTNode* create_continue_stmt(int line);
 ASTNode* create_int_literal(int64_t value);
 ASTNode* create_float_literal(float value);
 ASTNode* create_double_literal(double value);
@@ -534,6 +530,7 @@ ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
                               ASTNode* init_expr);
+ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_list_type();
 ASTNode* create_list_literal(ASTNode* elements);
 ASTNode* create_list_element_list(ASTNode* element);
@@ -550,8 +547,6 @@ ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
-
-// Print macro AST node creators
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);

@@ -61,6 +61,8 @@ ASTNode* create_use_all_declaration(char* module_name, int line);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
+ASTNode* create_break_stmt(int line);
+ASTNode* create_continue_stmt(int line);
 %}
 
 %union {
@@ -78,7 +80,7 @@ ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST STRUCT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
-%token FOR IN DOTDOT
+%token FOR IN DOTDOT BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
@@ -94,6 +96,7 @@ ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement
 %type <ast> return_statement block_statement for_statement range_expression
+%type <ast> break_statement continue_statement
 %type <ast> primary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
 %type <ast> print_statement argument_list
@@ -107,8 +110,8 @@ ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 %%
 
 program
-    : top_level_list { 
-        $$ = create_program($1); 
+    : top_level_list {
+        $$ = create_program($1);
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
@@ -209,6 +212,8 @@ statement
     | block_statement
     | struct_init
     | print_statement
+    | break_statement
+    | continue_statement
     ;
 
 let_statement
@@ -235,6 +240,14 @@ expression_statement
 return_statement
     : RETURN expression SEMICOLON { $$ = create_return_stmt($2); }
     | RETURN SEMICOLON { $$ = create_return_stmt(NULL); }
+    ;
+
+break_statement
+    : BREAK SEMICOLON { $$ = create_break_stmt(yylineno); }
+    ;
+
+continue_statement
+    : CONTINUE SEMICOLON { $$ = create_continue_stmt(yylineno); }
     ;
 
 block_statement

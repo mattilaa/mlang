@@ -868,6 +868,31 @@ std::string UseDeclNode::toString() const
     return "use " + moduleName + "::" + itemName + ";";
 }
 
+// Break and Continue statement creation
+ASTNode* create_break_stmt(int line)
+{
+    auto* node = new BreakNode();
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_continue_stmt(int line)
+{
+    auto* node = new ContinueNode();
+    node->line = line;
+    return node;
+}
+
+std::string BreakNode::toString() const
+{
+    return "break;";
+}
+
+std::string ContinueNode::toString() const
+{
+    return "continue;";
+}
+
 std::string PrintNode::toString() const
 {
     std::string result;
