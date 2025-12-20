@@ -32,6 +32,7 @@ ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
+ASTNode* create_bool_literal(int value);
 ASTNode* create_float_literal(float value);
 ASTNode* create_double_literal(float value);
 ASTNode* create_string_literal(char* value);
@@ -78,6 +79,7 @@ ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
 ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
+ASTNode* create_struct_type_ref(char* name);
 ASTNode* create_len_expression(ASTNode* expr, int line);
 ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 %}
@@ -95,6 +97,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP TUPLE STRUCT
+%token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR IN DOTDOT BREAK CONTINUE
@@ -218,6 +221,7 @@ type
     | U16    { $$ = create_type_node(TypeNode::TYPE_U16); }
     | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
+    | IDENTIFIER { $$ = create_struct_type_ref($1); }
     ;
 
 tuple_type
@@ -369,6 +373,8 @@ primary_expression
     | FLOAT_LITERAL { $$ = create_float_literal($1); }
     | DOUBLE_LITERAL { $$ = create_double_literal($1); }
     | STRING_LITERAL { $$ = create_string_literal($1); }
+    | TRUE_LIT { $$ = create_bool_literal(1); }
+    | FALSE_LIT { $$ = create_bool_literal(0); }
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }
     ;

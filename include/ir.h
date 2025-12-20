@@ -23,10 +23,7 @@ public:
     }
 
     void generateCode(ProgramNode* program);
-    bool hadError() const
-    {
-        return hasError;
-    }
+    bool hadError() const { return hasError; }
 
 private:
     llvm::LLVMContext& context;
@@ -55,6 +52,7 @@ private:
 
     // Type helpers
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);
+    llvm::Type* getLLVMTypeFromNode(TypeNode* typeNode);
     bool isUnsignedType(TypeNode::TypeKind kind);
     llvm::StructType* getStructType(const std::string& name);
 
@@ -83,6 +81,7 @@ private:
     llvm::Value* generateExpression(ExpressionNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateIntLiteral(IntLiteralNode* node);
+    llvm::Value* generateBoolLiteral(BoolLiteralNode* node);
     llvm::Value* generateFloatLiteral(FloatLiteralNode* node);
     llvm::Value* generateDoubleLiteral(DoubleLiteralNode* node);
     llvm::Value* generateStringLiteral(StringLiteralNode* node);
@@ -96,10 +95,8 @@ private:
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
 
     // List/Map iteration helpers
-    void generateForListLiteralIteration(ForNode* node,
-                                         ListLiteralNode* listLit);
-    void generateForListVariableIteration(ForNode* node,
-                                          IdentifierNode* listId);
+    void generateForListLiteralIteration(ForNode* node, ListLiteralNode* listLit);
+    void generateForListVariableIteration(ForNode* node, IdentifierNode* listId);
     void generateForMapIteration(ForNode* node, MapIteratorNode* mapIter);
 
     // Collection type helpers
@@ -121,10 +118,7 @@ public:
     bool emitBitcode(const std::string& filename);
     bool compileToExecutable(const std::string& outputFile);
     void optimize(int level);
-    std::string getTargetTriple() const
-    {
-        return targetTriple;
-    }
+    std::string getTargetTriple() const { return targetTriple; }
 
 private:
     std::unique_ptr<llvm::Module>& module;

@@ -51,6 +51,8 @@
 "var"           { return VAR; }
 "void"          { return VOID; }
 "bool"          { return BOOL; }
+"true"          { return TRUE_LIT; }
+"false"         { return FALSE_LIT; }
 "int"           { return INT; }
 "float"         { return FLOAT; }
 "double"        { return DOUBLE; }

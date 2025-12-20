@@ -143,6 +143,11 @@ ASTNode* create_int_literal(int64_t value)
     return new IntLiteralNode(value);
 }
 
+ASTNode* create_bool_literal(int value)
+{
+    return new BoolLiteralNode(value != 0);
+}
+
 ASTNode* create_float_literal(float value)
 {
     return new FloatLiteralNode(value);
@@ -465,6 +470,8 @@ std::string TypeNode::toString() const
         return "map";
     case TYPE_TUPLE:
         return "tuple";
+    case TYPE_STRUCT:
+        return "struct";
     case TYPE_I8:
         return "i8";
     case TYPE_I16:
@@ -547,6 +554,11 @@ std::string ReturnNode::toString() const
 std::string IntLiteralNode::toString() const
 {
     return std::to_string(value);
+}
+
+std::string BoolLiteralNode::toString() const
+{
+    return value ? "true" : "false";
 }
 
 std::string FloatLiteralNode::toString() const
@@ -1047,6 +1059,17 @@ ASTNode* create_tuple_type(ASTNode* type_list)
 std::string TupleTypeNode::toString() const
 {
     return "tuple<" + elementTypes->toString() + ">";
+}
+
+// Struct type reference
+ASTNode* create_struct_type_ref(char* name)
+{
+    return new StructTypeRefNode(std::string(name));
+}
+
+std::string StructTypeRefNode::toString() const
+{
+    return structName;
 }
 
 // Tuple literal

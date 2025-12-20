@@ -72,6 +72,70 @@ bool CodeGenerator::isUnsignedType(TypeNode::TypeKind kind)
     }
 }
 
+llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
+{
+    if(!typeNode)
+        return nullptr;
+
+    // Handle struct type reference
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeNode))
+    {
+        auto it = structTypes.find(structRef->structName);
+        if(it != structTypes.end())
+        {
+            return it->second;
+        }
+        std::cerr << "Unknown struct type: " << structRef->structName
+                  << std::endl;
+        return nullptr;
+    }
+
+    // Handle tuple type
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(typeNode))
+    {
+        std::vector<llvm::Type*> elemTypes;
+        for(auto* t : tupleType->elementTypes->types)
+        {
+            llvm::Type* elemType = getLLVMTypeFromNode(t);
+            if(!elemType)
+                return nullptr;
+            elemTypes.push_back(elemType);
+        }
+        return llvm::StructType::get(context, elemTypes);
+    }
+
+    // Handle generic list type
+    if(auto* listType = dynamic_cast<GenericListTypeNode*>(typeNode))
+    {
+        llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* elemType = getLLVMTypeFromNode(listType->elementType);
+        llvm::Type* ptrType = llvm::PointerType::get(elemType, 0);
+#endif
+        std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
+        return llvm::StructType::get(context, listStructTypes);
+    }
+
+    // Handle map type
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(typeNode))
+    {
+        llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType, ptrType};
+        return llvm::StructType::get(context, mapStructTypes);
+    }
+
+    // Fall back to basic type kind
+    return getLLVMType(typeNode->kind);
+}
+
 void CodeGenerator::initializeStdioFunctions()
 {
     if(stdioInitialized)
@@ -516,6 +580,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     if(auto intLit = dynamic_cast<IntLiteralNode*>(node))
     {
         return generateIntLiteral(intLit);
+    }
+    else if(auto boolLit = dynamic_cast<BoolLiteralNode*>(node))
+    {
+        return generateBoolLiteral(boolLit);
     }
     else if(auto floatLit = dynamic_cast<FloatLiteralNode*>(node))
     {
@@ -1352,6 +1420,11 @@ llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
     return llvm::ConstantInt::get(context, llvm::APInt(64, node->value, true));
 }
 
+llvm::Value* CodeGenerator::generateBoolLiteral(BoolLiteralNode* node)
+{
+    return llvm::ConstantInt::get(context, llvm::APInt(1, node->value ? 1 : 0));
+}
+
 llvm::Value* CodeGenerator::generateFloatLiteral(FloatLiteralNode* node)
 {
     return llvm::ConstantFP::get(context, llvm::APFloat(node->value));
@@ -1489,7 +1562,13 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         std::vector<llvm::Type*> tupleTypes;
         for(auto* t : tupleType->elementTypes->types)
         {
-            tupleTypes.push_back(getLLVMType(t->kind));
+            llvm::Type* elemType = getLLVMTypeFromNode(t);
+            if(!elemType)
+            {
+                reportError(node->line, "invalid type in tuple");
+                return;
+            }
+            tupleTypes.push_back(elemType);
         }
         llvm::StructType* tupleStructType =
             llvm::StructType::get(context, tupleTypes);
@@ -1515,7 +1594,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 llvm::Type* targetElemType = tupleTypes[i];
                 llvm::Type* sourceElemType = elemVal->getType();
 
-                // Convert if needed
+                // Convert if needed (only for primitive types)
                 if(sourceElemType != targetElemType)
                 {
                     if(sourceElemType->isIntegerTy() &&
@@ -1552,6 +1631,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                         elemVal = builder.CreateFPCast(elemVal, targetElemType,
                                                        "fpcast");
                     }
+                    // For struct types and other complex types, no conversion
+                    // needed if types match
                 }
 
                 tupleVal = builder.CreateInsertValue(
@@ -1711,7 +1792,13 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         std::vector<llvm::Type*> tupleTypes;
         for(auto* t : tupleType->elementTypes->types)
         {
-            tupleTypes.push_back(getLLVMType(t->kind));
+            llvm::Type* elemType = getLLVMTypeFromNode(t);
+            if(!elemType)
+            {
+                reportError(node->line, "invalid type in tuple");
+                return;
+            }
+            tupleTypes.push_back(elemType);
         }
         llvm::StructType* tupleStructType =
             llvm::StructType::get(context, tupleTypes);
@@ -1739,7 +1826,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     llvm::Type* targetElemType = tupleTypes[i];
                     llvm::Type* sourceElemType = elemVal->getType();
 
-                    // Convert if needed
+                    // Convert if needed (only for primitive types)
                     if(sourceElemType != targetElemType)
                     {
                         if(sourceElemType->isIntegerTy() &&
@@ -1778,6 +1865,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                             elemVal = builder.CreateFPCast(
                                 elemVal, targetElemType, "fpcast");
                         }
+                        // For struct types and other complex types, no
+                        // conversion needed
                     }
 
                     tupleVal = builder.CreateInsertValue(
@@ -2367,11 +2456,18 @@ llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
         return nullptr;
     }
 
-    // Build the tuple struct type
+    // Build the tuple struct type using getLLVMTypeFromNode for proper struct
+    // support
     std::vector<llvm::Type*> tupleTypes;
     for(auto* t : elemTypes)
     {
-        tupleTypes.push_back(getLLVMType(t->kind));
+        llvm::Type* elemType = getLLVMTypeFromNode(t);
+        if(!elemType)
+        {
+            reportError(node->line, "invalid type in tuple");
+            return nullptr;
+        }
+        tupleTypes.push_back(elemType);
     }
     llvm::StructType* tupleStructType =
         llvm::StructType::get(context, tupleTypes);

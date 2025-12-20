@@ -1,0 +1,41 @@
+// Example: Tuples with bool and custom structs
+
+// Define a simple Point struct
+struct Point {
+    var x: int;
+    var y: int;
+};
+
+fn main() -> i32 {
+    // Tuple with bool
+    let flags: tuple<bool, bool, int> = (true, false, 42);
+
+    // Access bool elements
+    // Note: println for bool needs special handling, using int comparison
+    if flags.0: {
+        println!("First flag is true");
+    }
+    if flags.2 == 42: {
+        println!("Third element is 42");
+    }
+
+    // Tuple with mixed types including string
+    let person: tuple<string, int, bool> = ("Alice", 30, true);
+    println!("Name: {}", person.0);
+    println!("Age: {}", person.1);
+    if person.2: {
+        println!("Person is active");
+    }
+
+    // Tuple with coordinates
+    let coords: tuple<int, int, int> = (10, 20, 30);
+    println!("x: {}, y: {}, z: {}", coords.0, coords.1, coords.2);
+
+    // Nested data example - tuple with different numeric types
+    let measurements: tuple<double, float, i64> = (3.14159, 2.71f, 100);
+    println!("Pi: {}", measurements.0);
+    println!("E: {}", measurements.1);
+    println!("Count: {}", measurements.2);
+
+    return 0;
+}
