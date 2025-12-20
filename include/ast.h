@@ -42,6 +42,7 @@ public:
         TYPE_STRING,
         TYPE_LIST,
         TYPE_MAP,
+        TYPE_TUPLE,
         TYPE_I8,
         TYPE_I16,
         TYPE_I32,
@@ -85,6 +86,26 @@ public:
     TypeNode* valueType;
     MapTypeNode(TypeNode* kt, TypeNode* vt)
         : TypeNode(TYPE_MAP), keyType(kt), valueType(vt)
+    {
+    }
+    std::string toString() const override;
+};
+
+// Type list node (for tuple types)
+class TypeListNode : public ASTNode
+{
+public:
+    std::vector<TypeNode*> types;
+    void addType(TypeNode* t) { types.push_back(t); }
+    std::string toString() const override;
+};
+
+// Tuple type node: tuple<T1, T2, ...>
+class TupleTypeNode : public TypeNode
+{
+public:
+    TypeListNode* elementTypes;
+    TupleTypeNode(TypeListNode* types) : TypeNode(TYPE_TUPLE), elementTypes(types)
     {
     }
     std::string toString() const override;
@@ -253,6 +274,25 @@ public:
     IndexExpressionNode(ExpressionNode* b, ExpressionNode* i) : base(b), index(i)
     {
     }
+    std::string toString() const override;
+};
+
+// Tuple literal node: (expr1, expr2, ...)
+class TupleLiteralNode : public ExpressionNode
+{
+public:
+    ListElementsNode* elements;
+    TupleLiteralNode(ListElementsNode* e) : elements(e) {}
+    std::string toString() const override;
+};
+
+// Tuple access node: tuple.0, tuple.1, etc.
+class TupleAccessNode : public ExpressionNode
+{
+public:
+    ExpressionNode* tuple;
+    int index;
+    TupleAccessNode(ExpressionNode* t, int i) : tuple(t), index(i) {}
     std::string toString() const override;
 };
 
@@ -611,5 +651,10 @@ ASTNode* create_map_entry_list(ASTNode* entry);
 ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
 ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
 ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
+ASTNode* create_tuple_type(ASTNode* type_list);
+ASTNode* create_type_list(ASTNode* type);
+ASTNode* add_type_to_list(ASTNode* list, ASTNode* type);
+ASTNode* create_tuple_literal(ASTNode* elements);
+ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
 
 #endif // AST_H

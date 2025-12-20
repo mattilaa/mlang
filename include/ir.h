@@ -36,6 +36,8 @@ private:
     // Track element types for generic lists and maps
     std::map<std::string, TypeNode*> listElementTypes;
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
+    // Track tuple element types
+    std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
     bool hasError;
 
     // Stdio function support
@@ -87,6 +89,8 @@ private:
     llvm::Value* generateListLiteral(ListLiteralNode* node);
     llvm::Value* generateMapLiteral(MapLiteralNode* node);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
+    llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
+    llvm::Value* generateTupleAccess(TupleAccessNode* node);
 
     // List/Map iteration helpers
     void generateForListLiteralIteration(ForNode* node, ListLiteralNode* listLit);

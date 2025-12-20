@@ -57,6 +57,7 @@
 "string"        { return STRING; }
 "list"          { return LIST; }
 "map"           { return MAP; }
+"tuple"         { return TUPLE; }
 "struct"        { return STRUCT; }
 "i8"            { return I8; }
 "i16"           { return I16; }
@@ -76,6 +77,7 @@
 "->"            { return ARROW; }
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }
+"."             { return DOT; }
 "<"             { return LT; }
 ">"             { return GT; }
 "<="            { return LE; }

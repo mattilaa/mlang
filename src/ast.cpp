@@ -463,6 +463,8 @@ std::string TypeNode::toString() const
         return "list";
     case TYPE_MAP:
         return "map";
+    case TYPE_TUPLE:
+        return "tuple";
     case TYPE_I8:
         return "i8";
     case TYPE_I16:
@@ -1007,4 +1009,67 @@ ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line)
 std::string IndexExpressionNode::toString() const
 {
     return base->toString() + "[" + index->toString() + "]";
+}
+
+// Type list
+ASTNode* create_type_list(ASTNode* type)
+{
+    auto* list = new TypeListNode();
+    list->addType(static_cast<TypeNode*>(type));
+    return list;
+}
+
+ASTNode* add_type_to_list(ASTNode* list, ASTNode* type)
+{
+    auto* typeList = static_cast<TypeListNode*>(list);
+    typeList->addType(static_cast<TypeNode*>(type));
+    return typeList;
+}
+
+std::string TypeListNode::toString() const
+{
+    std::string result;
+    for(size_t i = 0; i < types.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += types[i]->toString();
+    }
+    return result;
+}
+
+// Tuple type
+ASTNode* create_tuple_type(ASTNode* type_list)
+{
+    return new TupleTypeNode(static_cast<TypeListNode*>(type_list));
+}
+
+std::string TupleTypeNode::toString() const
+{
+    return "tuple<" + elementTypes->toString() + ">";
+}
+
+// Tuple literal
+ASTNode* create_tuple_literal(ASTNode* elements)
+{
+    return new TupleLiteralNode(static_cast<ListElementsNode*>(elements));
+}
+
+std::string TupleLiteralNode::toString() const
+{
+    return "(" + (elements ? elements->toString() : "") + ")";
+}
+
+// Tuple access
+ASTNode* create_tuple_access(ASTNode* tuple, int index, int line)
+{
+    auto* node =
+        new TupleAccessNode(static_cast<ExpressionNode*>(tuple), index);
+    node->line = line;
+    return node;
+}
+
+std::string TupleAccessNode::toString() const
+{
+    return tuple->toString() + "." + std::to_string(index);
 }

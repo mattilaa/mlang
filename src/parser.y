@@ -70,6 +70,11 @@ ASTNode* create_map_entry_list(ASTNode* entry);
 ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
 ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
 ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
+ASTNode* create_tuple_type(ASTNode* type_list);
+ASTNode* create_type_list(ASTNode* type);
+ASTNode* add_type_to_list(ASTNode* list, ASTNode* type);
+ASTNode* create_tuple_literal(ASTNode* elements);
+ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
 ASTNode* create_len_expression(ASTNode* expr, int line);
 ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 %}
@@ -86,7 +91,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP TUPLE STRUCT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR IN DOTDOT BREAK CONTINUE
@@ -94,7 +99,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %token PRINTLN PRINT EPRINTLN EPRINT
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
-%token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON
+%token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
 
 %type <ast> program top_level_list top_level_item
@@ -110,6 +115,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %type <ast> mod_declaration use_declaration
 %type <ast> print_statement argument_list
 %type <ast> map_literal map_entries map_entry index_expression
+%type <ast> tuple_type type_list tuple_literal tuple_access tuple_elements
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -120,8 +126,8 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %%
 
 program
-    : top_level_list { 
-        $$ = create_program($1); 
+    : top_level_list {
+        $$ = create_program($1);
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
@@ -198,6 +204,7 @@ type
     | LIST   { $$ = create_list_type(); }
     | LIST LT type GT { $$ = create_generic_list_type($3); }
     | MAP LT type COMMA type GT { $$ = create_map_type($3, $5); }
+    | tuple_type
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
     | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
@@ -206,6 +213,15 @@ type
     | U16    { $$ = create_type_node(TypeNode::TYPE_U16); }
     | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
+    ;
+
+tuple_type
+    : TUPLE LT type_list GT { $$ = create_tuple_type($3); }
+    ;
+
+type_list
+    : type { $$ = create_type_list($1); }
+    | type_list COMMA type { $$ = add_type_to_list($1, $3); }
     ;
 
 statement_list
@@ -338,6 +354,8 @@ expression
     | list_literal
     | map_literal
     | index_expression
+    | tuple_literal
+    | tuple_access
     ;
 
 primary_expression
@@ -399,6 +417,22 @@ map_entry
 
 index_expression
     : primary_expression LBRACKET expression RBRACKET { $$ = create_index_expression($1, $3, yylineno); }
+    ;
+
+tuple_literal
+    : LPAREN tuple_elements RPAREN { $$ = create_tuple_literal($2); }
+    ;
+
+tuple_elements
+    : expression COMMA expression {
+        ASTNode* list = create_list_element_list($1);
+        $$ = add_list_element(list, $3);
+    }
+    | tuple_elements COMMA expression { $$ = add_list_element($1, $3); }
+    ;
+
+tuple_access
+    : primary_expression DOT INT_LITERAL { $$ = create_tuple_access($1, $3, yylineno); }
     ;
 
 %%

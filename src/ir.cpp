@@ -557,6 +557,14 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateIndexExpression(indexExpr);
     }
+    else if(auto tupleLit = dynamic_cast<TupleLiteralNode*>(node))
+    {
+        return generateTupleLiteral(tupleLit);
+    }
+    else if(auto tupleAcc = dynamic_cast<TupleAccessNode*>(node))
+    {
+        return generateTupleAccess(tupleAcc);
+    }
     return nullptr;
 }
 
@@ -714,7 +722,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         // Create basic blocks for loop structure
         llvm::BasicBlock* condBB =
             llvm::BasicBlock::Create(context, "for.cond", function);
-        llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(context, "for.body");
+        llvm::BasicBlock* bodyBB =
+            llvm::BasicBlock::Create(context, "for.body");
         llvm::BasicBlock* incBB = llvm::BasicBlock::Create(context, "for.inc");
         llvm::BasicBlock* endBB = llvm::BasicBlock::Create(context, "for.end");
 
@@ -729,7 +738,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         builder.SetInsertPoint(condBB);
         llvm::Value* currentVal =
             builder.CreateLoad(loopType, loopVar, node->varName);
-        llvm::Value* cond = builder.CreateICmpSLT(currentVal, endVal, "loopcond");
+        llvm::Value* cond =
+            builder.CreateICmpSLT(currentVal, endVal, "loopcond");
         builder.CreateCondBr(cond, bodyBB, endBB);
 
         // Body block
@@ -798,7 +808,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
 }
 
 void CodeGenerator::generateForListLiteralIteration(ForNode* node,
-                                                     ListLiteralNode* listLit)
+                                                    ListLiteralNode* listLit)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
 
@@ -879,7 +889,8 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     for(size_t i = 0; i < elementValues.size(); ++i)
     {
         llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
-        llvm::Value* isThis = builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
+        llvm::Value* isThis =
+            builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
         elemVal = builder.CreateSelect(isThis, elementValues[i], elemVal,
                                        "selectelem");
     }
@@ -903,9 +914,9 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     // Increment
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
-    llvm::Value* nextIdx = builder.CreateAdd(
-        builder.CreateLoad(indexType, indexVar, ""),
-        llvm::ConstantInt::get(indexType, 1), "nextidx");
+    llvm::Value* nextIdx =
+        builder.CreateAdd(builder.CreateLoad(indexType, indexVar, ""),
+                          llvm::ConstantInt::get(indexType, 1), "nextidx");
     builder.CreateStore(nextIdx, indexVar);
     builder.CreateBr(condBB);
 
@@ -929,7 +940,7 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
 }
 
 void CodeGenerator::generateForListVariableIteration(ForNode* node,
-                                                      IdentifierNode* listId)
+                                                     IdentifierNode* listId)
 {
     // For iterating over a list variable, we need the list structure
     // Lists are stored as: { i64 size, ptr data }
@@ -969,15 +980,15 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         llvm::StructType::get(context, listStructTypes);
 
     // Load the list struct
-    llvm::Value* listStruct = builder.CreateLoad(listStructType, listPtr, "list");
+    llvm::Value* listStruct =
+        builder.CreateLoad(listStructType, listPtr, "list");
 
     // Extract size and data pointer
     llvm::Value* listSize = builder.CreateExtractValue(listStruct, 0, "size");
     llvm::Value* dataPtr = builder.CreateExtractValue(listStruct, 1, "data");
 
     // Create index variable
-    llvm::AllocaInst* indexVar =
-        builder.CreateAlloca(i64Type, nullptr, "idx");
+    llvm::AllocaInst* indexVar = builder.CreateAlloca(i64Type, nullptr, "idx");
     builder.CreateStore(llvm::ConstantInt::get(i64Type, 0), indexVar);
 
     // Create loop variable
@@ -1040,9 +1051,9 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     // Increment
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
-    llvm::Value* nextIdx = builder.CreateAdd(
-        builder.CreateLoad(i64Type, indexVar, ""),
-        llvm::ConstantInt::get(i64Type, 1), "nextidx");
+    llvm::Value* nextIdx =
+        builder.CreateAdd(builder.CreateLoad(i64Type, indexVar, ""),
+                          llvm::ConstantInt::get(i64Type, 1), "nextidx");
     builder.CreateStore(nextIdx, indexVar);
     builder.CreateBr(condBB);
 
@@ -1183,8 +1194,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
-        llvm::Type* ptrType =
-            llvm::PointerType::get(getLLVMType(genListType->elementType->kind), 0);
+        llvm::Type* ptrType = llvm::PointerType::get(
+            getLLVMType(genListType->elementType->kind), 0);
 #endif
         std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
         llvm::StructType* listStructType =
@@ -1223,6 +1234,104 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_MAP;
+        constantVariables.insert(node->name);
+        return;
+    }
+
+    // Handle tuple type
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(node->type))
+    {
+        // Store element types for tuple access
+        std::vector<TypeNode*> elemTypes;
+        for(auto* t : tupleType->elementTypes->types)
+        {
+            elemTypes.push_back(t);
+        }
+        tupleElementTypes[node->name] = elemTypes;
+
+        // Create LLVM struct type for tuple based on declared types
+        std::vector<llvm::Type*> tupleTypes;
+        for(auto* t : tupleType->elementTypes->types)
+        {
+            tupleTypes.push_back(getLLVMType(t->kind));
+        }
+        llvm::StructType* tupleStructType =
+            llvm::StructType::get(context, tupleTypes);
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(tupleStructType, nullptr, node->name);
+
+        // Convert tuple literal elements to match declared types
+        if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->expression))
+        {
+            // Build tuple with proper type conversions
+            llvm::Value* tupleVal = llvm::UndefValue::get(tupleStructType);
+
+            for(size_t i = 0; i < tupleLit->elements->elements.size() &&
+                              i < tupleType->elementTypes->types.size();
+                ++i)
+            {
+                llvm::Value* elemVal =
+                    generateExpression(tupleLit->elements->elements[i]);
+                if(!elemVal)
+                    return;
+
+                llvm::Type* targetElemType = tupleTypes[i];
+                llvm::Type* sourceElemType = elemVal->getType();
+
+                // Convert if needed
+                if(sourceElemType != targetElemType)
+                {
+                    if(sourceElemType->isIntegerTy() &&
+                       targetElemType->isIntegerTy())
+                    {
+                        unsigned srcBits = sourceElemType->getIntegerBitWidth();
+                        unsigned dstBits = targetElemType->getIntegerBitWidth();
+                        if(srcBits > dstBits)
+                        {
+                            elemVal = builder.CreateTrunc(
+                                elemVal, targetElemType, "trunc");
+                        }
+                        else if(srcBits < dstBits)
+                        {
+                            elemVal = builder.CreateSExt(
+                                elemVal, targetElemType, "sext");
+                        }
+                    }
+                    else if(sourceElemType->isIntegerTy() &&
+                            targetElemType->isFloatingPointTy())
+                    {
+                        elemVal = builder.CreateSIToFP(elemVal, targetElemType,
+                                                       "sitofp");
+                    }
+                    else if(sourceElemType->isFloatingPointTy() &&
+                            targetElemType->isIntegerTy())
+                    {
+                        elemVal = builder.CreateFPToSI(elemVal, targetElemType,
+                                                       "fptosi");
+                    }
+                    else if(sourceElemType->isFloatingPointTy() &&
+                            targetElemType->isFloatingPointTy())
+                    {
+                        elemVal = builder.CreateFPCast(elemVal, targetElemType,
+                                                       "fpcast");
+                    }
+                }
+
+                tupleVal = builder.CreateInsertValue(
+                    tupleVal, elemVal, static_cast<unsigned>(i), "tuple.elem");
+            }
+
+            builder.CreateStore(tupleVal, alloca);
+        }
+        else
+        {
+            // Not a literal, just store (may fail if types mismatch)
+            builder.CreateStore(initValue, alloca);
+        }
+
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_TUPLE;
         constantVariables.insert(node->name);
         return;
     }
@@ -1293,8 +1402,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
-        llvm::Type* ptrType =
-            llvm::PointerType::get(getLLVMType(genListType->elementType->kind), 0);
+        llvm::Type* ptrType = llvm::PointerType::get(
+            getLLVMType(genListType->elementType->kind), 0);
 #endif
         std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
         llvm::StructType* listStructType =
@@ -1348,6 +1457,113 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_MAP;
+        return;
+    }
+
+    // Handle tuple type
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(node->type))
+    {
+        // Store element types for tuple access
+        std::vector<TypeNode*> elemTypes;
+        for(auto* t : tupleType->elementTypes->types)
+        {
+            elemTypes.push_back(t);
+        }
+        tupleElementTypes[node->name] = elemTypes;
+
+        // Create LLVM struct type for tuple based on declared types
+        std::vector<llvm::Type*> tupleTypes;
+        for(auto* t : tupleType->elementTypes->types)
+        {
+            tupleTypes.push_back(getLLVMType(t->kind));
+        }
+        llvm::StructType* tupleStructType =
+            llvm::StructType::get(context, tupleTypes);
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(tupleStructType, nullptr, node->name);
+
+        if(node->initExpr)
+        {
+            // Convert tuple literal elements to match declared types
+            if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->initExpr))
+            {
+                // Build tuple with proper type conversions
+                llvm::Value* tupleVal = llvm::UndefValue::get(tupleStructType);
+
+                for(size_t i = 0; i < tupleLit->elements->elements.size() &&
+                                  i < tupleType->elementTypes->types.size();
+                    ++i)
+                {
+                    llvm::Value* elemVal =
+                        generateExpression(tupleLit->elements->elements[i]);
+                    if(!elemVal)
+                        return;
+
+                    llvm::Type* targetElemType = tupleTypes[i];
+                    llvm::Type* sourceElemType = elemVal->getType();
+
+                    // Convert if needed
+                    if(sourceElemType != targetElemType)
+                    {
+                        if(sourceElemType->isIntegerTy() &&
+                           targetElemType->isIntegerTy())
+                        {
+                            unsigned srcBits =
+                                sourceElemType->getIntegerBitWidth();
+                            unsigned dstBits =
+                                targetElemType->getIntegerBitWidth();
+                            if(srcBits > dstBits)
+                            {
+                                elemVal = builder.CreateTrunc(
+                                    elemVal, targetElemType, "trunc");
+                            }
+                            else if(srcBits < dstBits)
+                            {
+                                elemVal = builder.CreateSExt(
+                                    elemVal, targetElemType, "sext");
+                            }
+                        }
+                        else if(sourceElemType->isIntegerTy() &&
+                                targetElemType->isFloatingPointTy())
+                        {
+                            elemVal = builder.CreateSIToFP(
+                                elemVal, targetElemType, "sitofp");
+                        }
+                        else if(sourceElemType->isFloatingPointTy() &&
+                                targetElemType->isIntegerTy())
+                        {
+                            elemVal = builder.CreateFPToSI(
+                                elemVal, targetElemType, "fptosi");
+                        }
+                        else if(sourceElemType->isFloatingPointTy() &&
+                                targetElemType->isFloatingPointTy())
+                        {
+                            elemVal = builder.CreateFPCast(
+                                elemVal, targetElemType, "fpcast");
+                        }
+                    }
+
+                    tupleVal = builder.CreateInsertValue(
+                        tupleVal, elemVal, static_cast<unsigned>(i),
+                        "tuple.elem");
+                }
+
+                builder.CreateStore(tupleVal, alloca);
+            }
+            else
+            {
+                // Not a literal, just store
+                llvm::Value* initValue = generateExpression(node->initExpr);
+                if(initValue)
+                {
+                    builder.CreateStore(initValue, alloca);
+                }
+            }
+        }
+
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_TUPLE;
         return;
     }
 
@@ -1521,7 +1737,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node)
 #if LLVM_VERSION_MAJOR >= 15
     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
-    llvm::Type* ptrType = llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
 
     if(!node->elements || node->elements->elements.empty())
@@ -1535,8 +1752,9 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node)
         listStruct = builder.CreateInsertValue(
             listStruct, llvm::ConstantInt::get(i64Type, 0), 0);
         listStruct = builder.CreateInsertValue(
-            listStruct, llvm::ConstantPointerNull::get(
-                            llvm::cast<llvm::PointerType>(ptrType)),
+            listStruct,
+            llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptrType)),
             1);
         return listStruct;
     }
@@ -1609,11 +1827,13 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
             mapStruct, llvm::ConstantInt::get(i64Type, 0), 0);
         mapStruct = builder.CreateInsertValue(
             mapStruct,
-            llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType)),
+            llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptrType)),
             1);
         mapStruct = builder.CreateInsertValue(
             mapStruct,
-            llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType)),
+            llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptrType)),
             2);
         return mapStruct;
     }
@@ -1646,7 +1866,8 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
     // Allocate arrays for keys and values
     llvm::Value* sizeVal = llvm::ConstantInt::get(i64Type, mapSize);
     llvm::Value* keysAlloc = builder.CreateAlloca(keyType, sizeVal, "mapkeys");
-    llvm::Value* valsAlloc = builder.CreateAlloca(valueType, sizeVal, "mapvals");
+    llvm::Value* valsAlloc =
+        builder.CreateAlloca(valueType, sizeVal, "mapvals");
 
     // Store each key-value pair
     for(size_t i = 0; i < keyValues.size(); ++i)
@@ -1813,15 +2034,16 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         builder.SetInsertPoint(foundBB);
         llvm::Value* valPtr =
             builder.CreateGEP(valueType, valsPtr, currentIdx, "valptr");
-        llvm::Value* foundVal = builder.CreateLoad(valueType, valPtr, "foundval");
+        llvm::Value* foundVal =
+            builder.CreateLoad(valueType, valPtr, "foundval");
         builder.CreateStore(foundVal, resultVar);
         builder.CreateBr(endBB);
 
         incBB->insertInto(function);
         builder.SetInsertPoint(incBB);
-        llvm::Value* nextIdx = builder.CreateAdd(
-            builder.CreateLoad(i64Type, idxVar, ""),
-            llvm::ConstantInt::get(i64Type, 1), "nextidx");
+        llvm::Value* nextIdx =
+            builder.CreateAdd(builder.CreateLoad(i64Type, idxVar, ""),
+                              llvm::ConstantInt::get(i64Type, 1), "nextidx");
         builder.CreateStore(nextIdx, idxVar);
         builder.CreateBr(condBB);
 
@@ -1834,6 +2056,97 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     reportError(node->line,
                 "cannot index non-list/non-map variable: " + baseId->name);
     return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateTupleLiteral(TupleLiteralNode* node)
+{
+    if(!node->elements || node->elements->elements.empty())
+    {
+        reportError(node->line, "tuple must have at least one element");
+        return nullptr;
+    }
+
+    // Generate all elements and determine their types
+    std::vector<llvm::Value*> elementValues;
+    std::vector<llvm::Type*> elementTypes;
+
+    for(auto* elem : node->elements->elements)
+    {
+        llvm::Value* val = generateExpression(elem);
+        if(!val)
+            return nullptr;
+        elementValues.push_back(val);
+        elementTypes.push_back(val->getType());
+    }
+
+    // Create the tuple struct type
+    llvm::StructType* tupleType = llvm::StructType::get(context, elementTypes);
+
+    // Create the tuple value
+    llvm::Value* tupleVal = llvm::UndefValue::get(tupleType);
+    for(size_t i = 0; i < elementValues.size(); ++i)
+    {
+        tupleVal = builder.CreateInsertValue(
+            tupleVal, elementValues[i], static_cast<unsigned>(i), "tuple.elem");
+    }
+
+    return tupleVal;
+}
+
+llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
+{
+    // Get the tuple variable
+    auto* baseId = dynamic_cast<IdentifierNode*>(node->tuple);
+    if(!baseId)
+    {
+        reportError(node->line, "tuple access requires an identifier");
+        return nullptr;
+    }
+
+    llvm::Value* tuplePtr = namedValues[baseId->name];
+    if(!tuplePtr)
+    {
+        reportError(node->line, "unknown variable: " + baseId->name);
+        return nullptr;
+    }
+
+    // Check if it's a tuple
+    auto it = tupleElementTypes.find(baseId->name);
+    if(it == tupleElementTypes.end())
+    {
+        reportError(node->line, "cannot access tuple element: '" +
+                                    baseId->name + "' is not a tuple");
+        return nullptr;
+    }
+
+    const std::vector<TypeNode*>& elemTypes = it->second;
+
+    // Bounds check
+    if(node->index < 0 || static_cast<size_t>(node->index) >= elemTypes.size())
+    {
+        reportError(node->line, "tuple index " + std::to_string(node->index) +
+                                    " out of bounds (tuple has " +
+                                    std::to_string(elemTypes.size()) +
+                                    " elements)");
+        return nullptr;
+    }
+
+    // Build the tuple struct type
+    std::vector<llvm::Type*> tupleTypes;
+    for(auto* t : elemTypes)
+    {
+        tupleTypes.push_back(getLLVMType(t->kind));
+    }
+    llvm::StructType* tupleStructType =
+        llvm::StructType::get(context, tupleTypes);
+
+    // Load the tuple struct
+    llvm::Value* tupleVal =
+        builder.CreateLoad(tupleStructType, tuplePtr, "tuple");
+
+    // Extract the element
+    return builder.CreateExtractValue(
+        tupleVal, static_cast<unsigned>(node->index), "tuple.elem");
 }
 
 // Backend implementation
