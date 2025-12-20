@@ -796,14 +796,33 @@ void CodeGenerator::generateForStatement(ForNode* node)
     }
     else if(auto* identifier = dynamic_cast<IdentifierNode*>(node->iterable))
     {
-        // Iterating over a list variable: for x in myList { ... }
-        generateForListVariableIteration(node, identifier);
+        // Check if it's a map variable (iterate over entries by default)
+        auto mapIt = mapKeyValueTypes.find(identifier->name);
+        if(mapIt != mapKeyValueTypes.end())
+        {
+            // Create a map entries iterator for direct map iteration
+            auto* entriesIter =
+                new MapIteratorNode(identifier, MapIteratorNode::ITER_ENTRIES);
+            generateForMapIteration(node, entriesIter);
+            delete entriesIter;
+        }
+        else
+        {
+            // Iterating over a list variable: for x in myList { ... }
+            generateForListVariableIteration(node, identifier);
+        }
+    }
+    else if(auto* mapIter = dynamic_cast<MapIteratorNode*>(node->iterable))
+    {
+        // Iterating over map.keys(), map.values(), or map.entries()
+        generateForMapIteration(node, mapIter);
     }
     else
     {
-        reportError(node->line,
-                    "for loops support range expressions (start..end) and list "
-                    "iteration");
+        reportError(
+            node->line,
+            "for loops support range expressions (start..end), list "
+            "iteration, and map iteration (.keys(), .values(), .entries())");
     }
 }
 
@@ -1074,6 +1093,223 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+}
+
+void CodeGenerator::generateForMapIteration(ForNode* node,
+                                            MapIteratorNode* mapIter)
+{
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+
+    // Get the map variable
+    auto* mapId = dynamic_cast<IdentifierNode*>(mapIter->mapExpr);
+    if(!mapId)
+    {
+        reportError(node->line, "map iteration requires a map variable");
+        return;
+    }
+
+    llvm::Value* mapPtr = namedValues[mapId->name];
+    if(!mapPtr)
+    {
+        reportError(node->line, "unknown map variable: " + mapId->name);
+        return;
+    }
+
+    // Get map key/value types
+    auto it = mapKeyValueTypes.find(mapId->name);
+    if(it == mapKeyValueTypes.end())
+    {
+        reportError(node->line,
+                    "cannot iterate: '" + mapId->name + "' is not a map");
+        return;
+    }
+
+    TypeNode* keyTypeNode = it->second.first;
+    TypeNode* valTypeNode = it->second.second;
+    llvm::Type* keyType = getLLVMType(keyTypeNode->kind);
+    llvm::Type* valueType = getLLVMType(valTypeNode->kind);
+
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType = llvm::PointerType::get(keyType, 0);
+#endif
+
+    // Map struct: { i64 size, ptr keys, ptr values }
+    std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType, ptrType};
+    llvm::StructType* mapStructType =
+        llvm::StructType::get(context, mapStructTypes);
+
+    // Load map struct
+    llvm::Value* mapStruct = builder.CreateLoad(mapStructType, mapPtr, "map");
+    llvm::Value* mapSize = builder.CreateExtractValue(mapStruct, 0, "size");
+    llvm::Value* keysPtr = builder.CreateExtractValue(mapStruct, 1, "keys");
+    llvm::Value* valsPtr = builder.CreateExtractValue(mapStruct, 2, "vals");
+
+    // Create index variable
+    llvm::AllocaInst* indexVar = builder.CreateAlloca(i64Type, nullptr, "idx");
+    builder.CreateStore(llvm::ConstantInt::get(i64Type, 0), indexVar);
+
+    // Determine loop variable type based on iterator kind
+    llvm::Type* loopVarType = nullptr;
+    llvm::AllocaInst* loopVar = nullptr;
+    llvm::AllocaInst* loopVar2 = nullptr; // For entries (key, value pair)
+
+    // Save old values
+    llvm::Value* oldVal = namedValues[node->varName];
+    TypeNode::TypeKind oldType = TypeNode::TYPE_VOID;
+    bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
+    if(hadOldType)
+        oldType = variableTypes[node->varName];
+
+    switch(mapIter->kind)
+    {
+    case MapIteratorNode::ITER_KEYS:
+        loopVarType = keyType;
+        loopVar = builder.CreateAlloca(keyType, nullptr, node->varName);
+        namedValues[node->varName] = loopVar;
+        variableTypes[node->varName] = keyTypeNode->kind;
+        break;
+
+    case MapIteratorNode::ITER_VALUES:
+        loopVarType = valueType;
+        loopVar = builder.CreateAlloca(valueType, nullptr, node->varName);
+        namedValues[node->varName] = loopVar;
+        variableTypes[node->varName] = valTypeNode->kind;
+        break;
+
+    case MapIteratorNode::ITER_ENTRIES:
+        // For entries, we create a tuple (key, value)
+        {
+            std::vector<llvm::Type*> entryTypes = {keyType, valueType};
+            llvm::StructType* entryStructType =
+                llvm::StructType::get(context, entryTypes);
+            loopVar =
+                builder.CreateAlloca(entryStructType, nullptr, node->varName);
+            namedValues[node->varName] = loopVar;
+            variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
+
+            // Store element types for tuple access
+            std::vector<TypeNode*> elemTypes = {keyTypeNode, valTypeNode};
+            tupleElementTypes[node->varName] = elemTypes;
+        }
+        break;
+    }
+
+    // Create basic blocks
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "for.cond", function);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(context, "for.body");
+    llvm::BasicBlock* incBB = llvm::BasicBlock::Create(context, "for.inc");
+    llvm::BasicBlock* endBB = llvm::BasicBlock::Create(context, "for.end");
+
+    loopBreakBlocks.push_back(endBB);
+    loopContinueBlocks.push_back(incBB);
+
+    builder.CreateBr(condBB);
+
+    // Condition
+    builder.SetInsertPoint(condBB);
+    llvm::Value* currentIdx = builder.CreateLoad(i64Type, indexVar, "idx");
+    llvm::Value* cond = builder.CreateICmpSLT(currentIdx, mapSize, "loopcond");
+    builder.CreateCondBr(cond, bodyBB, endBB);
+
+    // Body
+    bodyBB->insertInto(function);
+    builder.SetInsertPoint(bodyBB);
+
+    // Load the appropriate value(s) based on iterator kind
+    switch(mapIter->kind)
+    {
+    case MapIteratorNode::ITER_KEYS:
+    {
+        llvm::Value* keyPtr =
+            builder.CreateGEP(keyType, keysPtr, currentIdx, "keyptr");
+        llvm::Value* keyVal = builder.CreateLoad(keyType, keyPtr, "key");
+        builder.CreateStore(keyVal, loopVar);
+    }
+    break;
+
+    case MapIteratorNode::ITER_VALUES:
+    {
+        llvm::Value* valPtr =
+            builder.CreateGEP(valueType, valsPtr, currentIdx, "valptr");
+        llvm::Value* valVal = builder.CreateLoad(valueType, valPtr, "val");
+        builder.CreateStore(valVal, loopVar);
+    }
+    break;
+
+    case MapIteratorNode::ITER_ENTRIES:
+    {
+        // Load both key and value, create tuple
+        llvm::Value* keyPtr =
+            builder.CreateGEP(keyType, keysPtr, currentIdx, "keyptr");
+        llvm::Value* keyVal = builder.CreateLoad(keyType, keyPtr, "key");
+
+        llvm::Value* valPtr =
+            builder.CreateGEP(valueType, valsPtr, currentIdx, "valptr");
+        llvm::Value* valVal = builder.CreateLoad(valueType, valPtr, "val");
+
+        std::vector<llvm::Type*> entryTypes = {keyType, valueType};
+        llvm::StructType* entryStructType =
+            llvm::StructType::get(context, entryTypes);
+
+        llvm::Value* entryVal = llvm::UndefValue::get(entryStructType);
+        entryVal = builder.CreateInsertValue(entryVal, keyVal, 0, "entry.key");
+        entryVal = builder.CreateInsertValue(entryVal, valVal, 1, "entry.val");
+        builder.CreateStore(entryVal, loopVar);
+    }
+    break;
+    }
+
+    if(node->body)
+    {
+        for(auto stmt : node->body->statements)
+        {
+            generateStatement(stmt);
+            if(builder.GetInsertBlock()->getTerminator())
+                break;
+        }
+    }
+
+    if(!builder.GetInsertBlock()->getTerminator())
+    {
+        builder.CreateBr(incBB);
+    }
+
+    // Increment
+    incBB->insertInto(function);
+    builder.SetInsertPoint(incBB);
+    llvm::Value* nextIdx =
+        builder.CreateAdd(builder.CreateLoad(i64Type, indexVar, ""),
+                          llvm::ConstantInt::get(i64Type, 1), "nextidx");
+    builder.CreateStore(nextIdx, indexVar);
+    builder.CreateBr(condBB);
+
+    // End
+    endBB->insertInto(function);
+    builder.SetInsertPoint(endBB);
+
+    loopBreakBlocks.pop_back();
+    loopContinueBlocks.pop_back();
+
+    // Restore
+    if(oldVal)
+        namedValues[node->varName] = oldVal;
+    else
+        namedValues.erase(node->varName);
+
+    if(hadOldType)
+        variableTypes[node->varName] = oldType;
+    else
+        variableTypes.erase(node->varName);
+
+    // Clean up tuple element types if we added them
+    if(mapIter->kind == MapIteratorNode::ITER_ENTRIES)
+    {
+        tupleElementTypes.erase(node->varName);
+    }
 }
 
 void CodeGenerator::generateReturnStatement(ReturnNode* node)

@@ -1,0 +1,25 @@
+fn main() -> i32 {
+    let scores: map<string, int> = {"Alice": 95, "Bob": 87, "Charlie": 92};
+
+    // Iterate over keys only
+    for name in scores.keys() {
+        println!("Name: {}", name);
+    }
+
+    // Iterate over values only
+    for score in scores.values() {
+        println!("Score: {}", score);
+    }
+
+    // Iterate over key-value pairs (returns tuple)
+    for entry in scores.entries() {
+        println!("{} scored {}", entry.0, entry.1);
+    }
+
+    // Direct map iteration (same as .entries())
+    for entry in scores {
+        println!("{}: {}", entry.0, entry.1);
+    }
+
+    return 0;
+}

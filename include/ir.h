@@ -23,7 +23,10 @@ public:
     }
 
     void generateCode(ProgramNode* program);
-    bool hadError() const { return hasError; }
+    bool hadError() const
+    {
+        return hasError;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -93,9 +96,11 @@ private:
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
 
     // List/Map iteration helpers
-    void generateForListLiteralIteration(ForNode* node, ListLiteralNode* listLit);
-    void generateForListVariableIteration(ForNode* node, IdentifierNode* listId);
-    void generateForMapIteration(ForNode* node, llvm::Value* mapPtr);
+    void generateForListLiteralIteration(ForNode* node,
+                                         ListLiteralNode* listLit);
+    void generateForListVariableIteration(ForNode* node,
+                                          IdentifierNode* listId);
+    void generateForMapIteration(ForNode* node, MapIteratorNode* mapIter);
 
     // Collection type helpers
     llvm::StructType* getListStructType(llvm::Type* elementType);
@@ -116,7 +121,10 @@ public:
     bool emitBitcode(const std::string& filename);
     bool compileToExecutable(const std::string& outputFile);
     void optimize(int level);
-    std::string getTargetTriple() const { return targetTriple; }
+    std::string getTargetTriple() const
+    {
+        return targetTriple;
+    }
 
 private:
     std::unique_ptr<llvm::Module>& module;

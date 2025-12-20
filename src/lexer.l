@@ -78,6 +78,9 @@
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }
 "."             { return DOT; }
+".keys()"       { return KEYS_METHOD; }
+".values()"     { return VALUES_METHOD; }
+".entries()"    { return ENTRIES_METHOD; }
 "<"             { return LT; }
 ">"             { return GT; }
 "<="            { return LE; }

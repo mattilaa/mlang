@@ -1073,3 +1073,46 @@ std::string TupleAccessNode::toString() const
 {
     return tuple->toString() + "." + std::to_string(index);
 }
+
+// Map iterator
+ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line)
+{
+    auto* node = new MapIteratorNode(static_cast<ExpressionNode*>(map_expr),
+                                     MapIteratorNode::ITER_KEYS);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_map_values_iterator(ASTNode* map_expr, int line)
+{
+    auto* node = new MapIteratorNode(static_cast<ExpressionNode*>(map_expr),
+                                     MapIteratorNode::ITER_VALUES);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line)
+{
+    auto* node = new MapIteratorNode(static_cast<ExpressionNode*>(map_expr),
+                                     MapIteratorNode::ITER_ENTRIES);
+    node->line = line;
+    return node;
+}
+
+std::string MapIteratorNode::toString() const
+{
+    std::string method;
+    switch(kind)
+    {
+    case ITER_KEYS:
+        method = ".keys()";
+        break;
+    case ITER_VALUES:
+        method = ".values()";
+        break;
+    case ITER_ENTRIES:
+        method = ".entries()";
+        break;
+    }
+    return mapExpr->toString() + method;
+}
