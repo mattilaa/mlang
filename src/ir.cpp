@@ -676,14 +676,26 @@ void CodeGenerator::generateForStatement(ForNode* node)
         return;
     }
 
+    llvm::Type* loopType = llvm::Type::getInt64Ty(context);
+
     // Create alloca for loop variable
-    llvm::AllocaInst* loopVar = builder.CreateAlloca(
-        llvm::Type::getInt32Ty(context), nullptr, node->varName);
+    llvm::AllocaInst* loopVar =
+        builder.CreateAlloca(loopType, nullptr, node->varName);
     builder.CreateStore(startVal, loopVar);
 
     // Add loop variable to named values (it's mutable within the loop)
     llvm::Value* oldVal = namedValues[node->varName];
+    TypeNode::TypeKind oldType = TypeNode::TYPE_VOID;
+    bool hadOldType = false;
+    auto typeIt = variableTypes.find(node->varName);
+    if(typeIt != variableTypes.end())
+    {
+        oldType = typeIt->second;
+        hadOldType = true;
+    }
+
     namedValues[node->varName] = loopVar;
+    variableTypes[node->varName] = TypeNode::TYPE_I64; // Loop variable is i32
 
     // Create basic blocks for loop structure
     llvm::BasicBlock* condBB =
@@ -697,8 +709,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
 
     // Condition block: check if loop variable < end
     builder.SetInsertPoint(condBB);
-    llvm::Value* currentVal = builder.CreateLoad(
-        llvm::Type::getInt32Ty(context), loopVar, node->varName);
+    llvm::Value* currentVal =
+        builder.CreateLoad(loopType, loopVar, node->varName);
     llvm::Value* cond = builder.CreateICmpSLT(currentVal, endVal, "loopcond");
     builder.CreateCondBr(cond, bodyBB, endBB);
 
@@ -727,7 +739,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
     incBB->insertInto(function);
     builder.SetInsertPoint(incBB);
     llvm::Value* nextVal = builder.CreateAdd(
-        builder.CreateLoad(llvm::Type::getInt32Ty(context), loopVar, ""),
+        builder.CreateLoad(loopType, loopVar, ""),
         llvm::ConstantInt::get(context, llvm::APInt(32, 1)), "nextval");
     builder.CreateStore(nextVal, loopVar);
     builder.CreateBr(condBB);
@@ -741,6 +753,12 @@ void CodeGenerator::generateForStatement(ForNode* node)
         namedValues[node->varName] = oldVal;
     else
         namedValues.erase(node->varName);
+
+    // Restore old type if there was one
+    if(hadOldType)
+        variableTypes[node->varName] = oldType;
+    else
+        variableTypes.erase(node->varName);
 }
 
 void CodeGenerator::generateReturnStatement(ReturnNode* node)
@@ -758,7 +776,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
 
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
 {
-    return llvm::ConstantInt::get(context, llvm::APInt(32, node->value, true));
+    // Use 64-bit for literals to support large values; truncation happens at
+    // assignment
+    return llvm::ConstantInt::get(context, llvm::APInt(64, node->value, true));
 }
 
 llvm::Value* CodeGenerator::generateFloatLiteral(FloatLiteralNode* node)
@@ -828,8 +848,53 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(!initValue)
         return;
 
-    llvm::AllocaInst* alloca = builder.CreateAlloca(
-        getLLVMType(node->type->kind), nullptr, node->name);
+    llvm::Type* targetType = getLLVMType(node->type->kind);
+    llvm::AllocaInst* alloca =
+        builder.CreateAlloca(targetType, nullptr, node->name);
+
+    // Convert init value to target type if necessary
+    llvm::Type* initType = initValue->getType();
+    if(initType != targetType)
+    {
+        if(initType->isIntegerTy() && targetType->isIntegerTy())
+        {
+            unsigned initBits = initType->getIntegerBitWidth();
+            unsigned targetBits = targetType->getIntegerBitWidth();
+            if(initBits > targetBits)
+            {
+                // Truncate (e.g., i64 -> i8)
+                initValue = builder.CreateTrunc(initValue, targetType, "trunc");
+            }
+            else if(initBits < targetBits)
+            {
+                // Extend - use ZExt for unsigned target, SExt for signed
+                if(isUnsignedType(node->type->kind))
+                {
+                    initValue =
+                        builder.CreateZExt(initValue, targetType, "zext");
+                }
+                else
+                {
+                    initValue =
+                        builder.CreateSExt(initValue, targetType, "sext");
+                }
+            }
+        }
+        else if(initType->isIntegerTy() && targetType->isFloatingPointTy())
+        {
+            initValue = builder.CreateSIToFP(initValue, targetType, "sitofp");
+        }
+        else if(initType->isFloatingPointTy() && targetType->isIntegerTy())
+        {
+            initValue = builder.CreateFPToSI(initValue, targetType, "fptosi");
+        }
+        else if(initType->isFloatingPointTy() &&
+                targetType->isFloatingPointTy())
+        {
+            initValue = builder.CreateFPCast(initValue, targetType, "fpcast");
+        }
+    }
+
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
     variableTypes[node->name] = node->type->kind;
@@ -840,14 +905,64 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
-    llvm::AllocaInst* alloca = builder.CreateAlloca(
-        getLLVMType(node->type->kind), nullptr, node->name);
+    llvm::Type* targetType = getLLVMType(node->type->kind);
+    llvm::AllocaInst* alloca =
+        builder.CreateAlloca(targetType, nullptr, node->name);
 
     if(node->initExpr)
     {
         llvm::Value* initValue = generateExpression(node->initExpr);
         if(initValue)
         {
+            // Convert init value to target type if necessary
+            llvm::Type* initType = initValue->getType();
+            if(initType != targetType)
+            {
+                if(initType->isIntegerTy() && targetType->isIntegerTy())
+                {
+                    unsigned initBits = initType->getIntegerBitWidth();
+                    unsigned targetBits = targetType->getIntegerBitWidth();
+                    if(initBits > targetBits)
+                    {
+                        // Truncate (e.g., i64 -> i8)
+                        initValue =
+                            builder.CreateTrunc(initValue, targetType, "trunc");
+                    }
+                    else if(initBits < targetBits)
+                    {
+                        // Extend - use ZExt for unsigned target, SExt for
+                        // signed
+                        if(isUnsignedType(node->type->kind))
+                        {
+                            initValue = builder.CreateZExt(initValue,
+                                                           targetType, "zext");
+                        }
+                        else
+                        {
+                            initValue = builder.CreateSExt(initValue,
+                                                           targetType, "sext");
+                        }
+                    }
+                }
+                else if(initType->isIntegerTy() &&
+                        targetType->isFloatingPointTy())
+                {
+                    initValue =
+                        builder.CreateSIToFP(initValue, targetType, "sitofp");
+                }
+                else if(initType->isFloatingPointTy() &&
+                        targetType->isIntegerTy())
+                {
+                    initValue =
+                        builder.CreateFPToSI(initValue, targetType, "fptosi");
+                }
+                else if(initType->isFloatingPointTy() &&
+                        targetType->isFloatingPointTy())
+                {
+                    initValue =
+                        builder.CreateFPCast(initValue, targetType, "fpcast");
+                }
+            }
             builder.CreateStore(initValue, alloca);
         }
     }
@@ -974,13 +1089,14 @@ bool Backend::initializeTarget()
     // The default triple may contain a newer macOS version than the linker
     // expects
 #if defined(__APPLE__)
-    llvm::Triple triple(targetTriple);
-    if(triple.isMacOSX())
     {
-        // Reset to a base macOS version to avoid version mismatch warnings
-        // The actual minimum deployment target will be determined by the linker
-        triple.setOSName("macosx10.15.0");
-        targetTriple = triple.str();
+        llvm::Triple triple(targetTriple);
+        if(triple.isMacOSX())
+        {
+            // Reset to a base macOS version to avoid version mismatch warnings
+            triple.setOSName("macosx10.15.0");
+            targetTriple = triple.str();
+        }
     }
 #endif
 
