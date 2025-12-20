@@ -461,6 +461,8 @@ std::string TypeNode::toString() const
         return "string";
     case TYPE_LIST:
         return "list";
+    case TYPE_MAP:
+        return "map";
     case TYPE_I8:
         return "i8";
     case TYPE_I16:
@@ -918,4 +920,91 @@ std::string PrintNode::toString() const
     }
     result += ");";
     return result;
+}
+
+// Generic list type
+ASTNode* create_generic_list_type(ASTNode* element_type)
+{
+    return new GenericListTypeNode(static_cast<TypeNode*>(element_type));
+}
+
+std::string GenericListTypeNode::toString() const
+{
+    return "list<" + elementType->toString() + ">";
+}
+
+// Map type
+ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type)
+{
+    return new MapTypeNode(static_cast<TypeNode*>(key_type),
+                           static_cast<TypeNode*>(value_type));
+}
+
+std::string MapTypeNode::toString() const
+{
+    return "map<" + keyType->toString() + ", " + valueType->toString() + ">";
+}
+
+// Map entry
+ASTNode* create_map_entry(ASTNode* key, ASTNode* value)
+{
+    return new MapEntryNode(static_cast<ExpressionNode*>(key),
+                            static_cast<ExpressionNode*>(value));
+}
+
+std::string MapEntryNode::toString() const
+{
+    return key->toString() + ": " + value->toString();
+}
+
+// Map entries list
+ASTNode* create_map_entry_list(ASTNode* entry)
+{
+    auto* list = new MapEntriesNode();
+    list->addEntry(static_cast<MapEntryNode*>(entry));
+    return list;
+}
+
+ASTNode* add_map_entry(ASTNode* list, ASTNode* entry)
+{
+    auto* entriesList = static_cast<MapEntriesNode*>(list);
+    entriesList->addEntry(static_cast<MapEntryNode*>(entry));
+    return entriesList;
+}
+
+std::string MapEntriesNode::toString() const
+{
+    std::string result;
+    for(size_t i = 0; i < entries.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += entries[i]->toString();
+    }
+    return result;
+}
+
+// Map literal
+ASTNode* create_map_literal(ASTNode* entries)
+{
+    return new MapLiteralNode(static_cast<MapEntriesNode*>(entries));
+}
+
+std::string MapLiteralNode::toString() const
+{
+    return "{" + (entries ? entries->toString() : "") + "}";
+}
+
+// Index expression
+ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line)
+{
+    auto* node = new IndexExpressionNode(static_cast<ExpressionNode*>(base),
+                                         static_cast<ExpressionNode*>(index));
+    node->line = line;
+    return node;
+}
+
+std::string IndexExpressionNode::toString() const
+{
+    return base->toString() + "[" + index->toString() + "]";
 }

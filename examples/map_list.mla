@@ -1,0 +1,19 @@
+fn main() -> i32 {
+    // Test list
+    let numbers: list<int> = [1, 2, 3, 4, 5];
+    let names: list<string> = ["Alice", "Bob", "Charlie"];
+
+    for x in numbers {
+        println!("Num: {}", x);
+    }
+
+    for x in names {
+        println!("Name: {}", x);
+    }
+
+    // Iterate over list literal
+    for x in [1, 2, 3, 4, 5] {
+        println!("{}", x);
+    }
+    return 0;
+}

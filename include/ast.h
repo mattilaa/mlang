@@ -41,6 +41,7 @@ public:
         TYPE_DOUBLE,
         TYPE_STRING,
         TYPE_LIST,
+        TYPE_MAP,
         TYPE_I8,
         TYPE_I16,
         TYPE_I32,
@@ -62,6 +63,31 @@ class ListTypeNode : public TypeNode
 {
 public:
     ListTypeNode() : TypeNode(TYPE_LIST) {}
+};
+
+// Generic list type node with element type: list<T>
+class GenericListTypeNode : public TypeNode
+{
+public:
+    TypeNode* elementType;
+    GenericListTypeNode(TypeNode* elemType)
+        : TypeNode(TYPE_LIST), elementType(elemType)
+    {
+    }
+    std::string toString() const override;
+};
+
+// Map type node: map<K, V>
+class MapTypeNode : public TypeNode
+{
+public:
+    TypeNode* keyType;
+    TypeNode* valueType;
+    MapTypeNode(TypeNode* kt, TypeNode* vt)
+        : TypeNode(TYPE_MAP), keyType(kt), valueType(vt)
+    {
+    }
+    std::string toString() const override;
 };
 
 // Expression nodes
@@ -178,10 +204,7 @@ class ListElementsNode : public ASTNode
 {
 public:
     std::vector<ExpressionNode*> elements;
-    void addElement(ExpressionNode* e)
-    {
-        elements.push_back(e);
-    }
+    void addElement(ExpressionNode* e) { elements.push_back(e); }
     std::string toString() const override;
 };
 
@@ -190,6 +213,46 @@ class ListLiteralNode : public ExpressionNode
 public:
     ListElementsNode* elements;
     ListLiteralNode(ListElementsNode* e) : elements(e) {}
+    std::string toString() const override;
+};
+
+// Map entry node (key: value pair)
+class MapEntryNode : public ASTNode
+{
+public:
+    ExpressionNode* key;
+    ExpressionNode* value;
+    MapEntryNode(ExpressionNode* k, ExpressionNode* v) : key(k), value(v) {}
+    std::string toString() const override;
+};
+
+// Map entries list node
+class MapEntriesNode : public ASTNode
+{
+public:
+    std::vector<MapEntryNode*> entries;
+    void addEntry(MapEntryNode* e) { entries.push_back(e); }
+    std::string toString() const override;
+};
+
+// Map literal node: {k1: v1, k2: v2, ...}
+class MapLiteralNode : public ExpressionNode
+{
+public:
+    MapEntriesNode* entries;
+    MapLiteralNode(MapEntriesNode* e) : entries(e) {}
+    std::string toString() const override;
+};
+
+// Index expression node: arr[index] or map[key]
+class IndexExpressionNode : public ExpressionNode
+{
+public:
+    ExpressionNode* base;
+    ExpressionNode* index;
+    IndexExpressionNode(ExpressionNode* b, ExpressionNode* i) : base(b), index(i)
+    {
+    }
     std::string toString() const override;
 };
 
@@ -332,10 +395,7 @@ public:
     PrintNode(PrintKind k, const std::string& fmt) : kind(k), formatString(fmt)
     {
     }
-    void addArgument(ExpressionNode* arg)
-    {
-        arguments.push_back(arg);
-    }
+    void addArgument(ExpressionNode* arg) { arguments.push_back(arg); }
     std::string toString() const override;
 };
 
@@ -360,10 +420,7 @@ class StructMemberListNode : public ASTNode
 {
 public:
     std::vector<StructMemberNode*> members;
-    void addMember(StructMemberNode* m)
-    {
-        members.push_back(m);
-    }
+    void addMember(StructMemberNode* m) { members.push_back(m); }
     std::string toString() const override;
 };
 
@@ -386,10 +443,7 @@ class StructListNode : public ASTNode
 {
 public:
     std::vector<StructDefNode*> structs;
-    void addStruct(StructDefNode* s)
-    {
-        structs.push_back(s);
-    }
+    void addStruct(StructDefNode* s) { structs.push_back(s); }
     std::string toString() const override;
 };
 
@@ -550,5 +604,12 @@ ASTNode* create_use_all_declaration(char* module_name, int line);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
+ASTNode* create_generic_list_type(ASTNode* element_type);
+ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
+ASTNode* create_map_literal(ASTNode* entries);
+ASTNode* create_map_entry_list(ASTNode* entry);
+ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
+ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
+ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
 
 #endif // AST_H

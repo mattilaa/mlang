@@ -63,6 +63,15 @@ ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);
+ASTNode* create_generic_list_type(ASTNode* element_type);
+ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
+ASTNode* create_map_literal(ASTNode* entries);
+ASTNode* create_map_entry_list(ASTNode* entry);
+ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
+ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
+ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
+ASTNode* create_len_expression(ASTNode* expr, int line);
+ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 %}
 
 %union {
@@ -77,7 +86,7 @@ ASTNode* create_continue_stmt(int line);
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP STRUCT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR IN DOTDOT BREAK CONTINUE
@@ -100,6 +109,7 @@ ASTNode* create_continue_stmt(int line);
 %type <ast> primary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
 %type <ast> print_statement argument_list
+%type <ast> map_literal map_entries map_entry index_expression
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -110,8 +120,8 @@ ASTNode* create_continue_stmt(int line);
 %%
 
 program
-    : top_level_list {
-        $$ = create_program($1);
+    : top_level_list { 
+        $$ = create_program($1); 
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
@@ -186,6 +196,8 @@ type
     | DOUBLE { $$ = create_type_node(TypeNode::TYPE_DOUBLE); }
     | STRING { $$ = create_type_node(TypeNode::TYPE_STRING); }
     | LIST   { $$ = create_list_type(); }
+    | LIST LT type GT { $$ = create_generic_list_type($3); }
+    | MAP LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
     | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
@@ -324,6 +336,8 @@ expression
     | function_call
     | cast_expression
     | list_literal
+    | map_literal
+    | index_expression
     ;
 
 primary_expression
@@ -367,6 +381,24 @@ list_literal
 list_elements
     : expression { $$ = create_list_element_list($1); }
     | list_elements COMMA expression { $$ = add_list_element($1, $3); }
+    ;
+
+map_literal
+    : LBRACE map_entries RBRACE { $$ = create_map_literal($2); }
+    | LBRACE RBRACE { $$ = create_map_literal(NULL); }
+    ;
+
+map_entries
+    : map_entry { $$ = create_map_entry_list($1); }
+    | map_entries COMMA map_entry { $$ = add_map_entry($1, $3); }
+    ;
+
+map_entry
+    : expression COLON expression { $$ = create_map_entry($1, $3); }
+    ;
+
+index_expression
+    : primary_expression LBRACKET expression RBRACKET { $$ = create_index_expression($1, $3, yylineno); }
     ;
 
 %%

@@ -23,10 +23,7 @@ public:
     }
 
     void generateCode(ProgramNode* program);
-    bool hadError() const
-    {
-        return hasError;
-    }
+    bool hadError() const { return hasError; }
 
 private:
     llvm::LLVMContext& context;
@@ -36,6 +33,9 @@ private:
     std::map<std::string, llvm::Type*> structTypes;
     std::set<std::string> constantVariables;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
+    // Track element types for generic lists and maps
+    std::map<std::string, TypeNode*> listElementTypes;
+    std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
     bool hasError;
 
     // Stdio function support
@@ -84,6 +84,19 @@ private:
     llvm::Value* generateIdentifier(IdentifierNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
+    llvm::Value* generateListLiteral(ListLiteralNode* node);
+    llvm::Value* generateMapLiteral(MapLiteralNode* node);
+    llvm::Value* generateIndexExpression(IndexExpressionNode* node);
+
+    // List/Map iteration helpers
+    void generateForListLiteralIteration(ForNode* node, ListLiteralNode* listLit);
+    void generateForListVariableIteration(ForNode* node, IdentifierNode* listId);
+    void generateForMapIteration(ForNode* node, llvm::Value* mapPtr);
+
+    // Collection type helpers
+    llvm::StructType* getListStructType(llvm::Type* elementType);
+    llvm::StructType* getMapStructType(llvm::Type* keyType,
+                                       llvm::Type* valueType);
 
     void reportError(int line, const std::string& message);
 };
@@ -99,10 +112,7 @@ public:
     bool emitBitcode(const std::string& filename);
     bool compileToExecutable(const std::string& outputFile);
     void optimize(int level);
-    std::string getTargetTriple() const
-    {
-        return targetTriple;
-    }
+    std::string getTargetTriple() const { return targetTriple; }
 
 private:
     std::unique_ptr<llvm::Module>& module;

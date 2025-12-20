@@ -56,6 +56,7 @@
 "double"        { return DOUBLE; }
 "string"        { return STRING; }
 "list"          { return LIST; }
+"map"           { return MAP; }
 "struct"        { return STRUCT; }
 "i8"            { return I8; }
 "i16"           { return I16; }
