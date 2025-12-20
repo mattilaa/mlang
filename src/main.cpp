@@ -142,7 +142,7 @@ int main(int argc, char** argv)
     llvm::LLVMContext context;
     llvm::IRBuilder<> builder(context);
     std::unique_ptr<llvm::Module> module =
-        std::make_unique<llvm::Module>("MyLanguage", context);
+        std::make_unique<llvm::Module>("MLang", context);
 
     try
     {

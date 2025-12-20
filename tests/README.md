@@ -201,9 +201,9 @@ ctest --output-on-failure      # Show output only for failed tests
 Ensure you have internet connectivity for the first build. Google Test is cached after the first download.
 
 ### Tests fail to find compiler
-The tests automatically find the `mylang` compiler from the build. If running manually, set the `MLA_COMPILER` environment variable:
+The tests automatically find the `mlang` compiler from the build. If running manually, set the `MLA_COMPILER` environment variable:
 ```bash
-MLA_COMPILER=/path/to/mylang ./mla_tests
+MLA_COMPILER=/path/to/mlang ./mla_tests
 ```
 
 ### Tests timing out

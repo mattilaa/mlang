@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(MyLanguage)
+project(MLang)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -129,14 +129,14 @@ set(SOURCE_FILES
     ${PARSER_OUT}
 )
 
-add_executable(mylang ${SOURCE_FILES} ${HEADER_FILES})
+add_executable(mlang ${SOURCE_FILES} ${HEADER_FILES})
 
 # Add dependencies to ensure Flex and Bison run before building the executable
-add_dependencies(mylang ParserTarget LexerTarget)
+add_dependencies(mlang ParserTarget LexerTarget)
 
-target_include_directories(mylang PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(mylang PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(mylang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(mlang PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mlang PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mlang PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Link against LLVM libraries - include all components needed for backend
 # Core components for IR generation
@@ -157,7 +157,7 @@ llvm_map_components_to_libnames(llvm_libs
     AllTargetsInfos
 )
 
-target_link_libraries(mylang ${llvm_libs})
+target_link_libraries(mlang ${llvm_libs})
 
 # Print debug information
 message(STATUS "LEXER_OUT: ${LEXER_OUT}")

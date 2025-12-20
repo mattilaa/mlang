@@ -151,7 +151,7 @@ protected:
     }
 };
 
-std::string MLATest::compilerPath = "./mylang";
+std::string MLATest::compilerPath = "./mlang";
 
 // ============================================================================
 // Basic Program Tests

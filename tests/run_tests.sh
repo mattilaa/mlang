@@ -2,9 +2,9 @@
 
 # MLA Test Runner Script
 #
-# Usage: 
+# Usage:
 #   ./run_tests.sh                      # Auto-detect compiler
-#   ./run_tests.sh /path/to/mylang      # Specify compiler path
+#   ./run_tests.sh /path/to/mlang      # Specify compiler path
 
 set -e
 
@@ -14,20 +14,20 @@ COMPILER_PATH="${1:-}"
 # Try to find compiler if not specified
 if [ -z "$COMPILER_PATH" ]; then
     # Check common locations
-    if [ -f "$SCRIPT_DIR/../build/mylang" ]; then
-        COMPILER_PATH="$SCRIPT_DIR/../build/mylang"
-    elif [ -f "$SCRIPT_DIR/../mylang" ]; then
-        COMPILER_PATH="$SCRIPT_DIR/../mylang"
-    elif command -v mylang &> /dev/null; then
-        COMPILER_PATH=$(command -v mylang)
+    if [ -f "$SCRIPT_DIR/../build/mlang" ]; then
+        COMPILER_PATH="$SCRIPT_DIR/../build/mlang"
+    elif [ -f "$SCRIPT_DIR/../mlang" ]; then
+        COMPILER_PATH="$SCRIPT_DIR/../mlang"
+    elif command -v mlang &> /dev/null; then
+        COMPILER_PATH=$(command -v mlang)
     else
-        echo "Error: Could not find mylang compiler."
+        echo "Error: Could not find mlang compiler."
         echo ""
-        echo "Usage: $0 [path_to_mylang]"
+        echo "Usage: $0 [path_to_mlang]"
         echo ""
         echo "Please either:"
         echo "  1. Build the compiler first: cd .. && mkdir build && cd build && cmake .. && make"
-        echo "  2. Specify the compiler path: $0 /path/to/mylang"
+        echo "  2. Specify the compiler path: $0 /path/to/mlang"
         exit 1
     fi
 fi

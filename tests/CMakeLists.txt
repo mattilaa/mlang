@@ -2,12 +2,12 @@
 #
 # This can be used in two ways:
 # 1. As part of the main build: included via add_subdirectory(tests) from parent
-# 2. Standalone: cmake -DMLA_COMPILER=/path/to/mylang .
+# 2. Standalone: cmake -DMLA_COMPILER=/path/to/mlang .
 #
 cmake_minimum_required(VERSION 3.14)
 
 # Check if we're being included from parent or built standalone
-if(NOT TARGET mylang)
+if(NOT TARGET mlang)
     # Standalone build
     project(MLATests)
 
@@ -15,11 +15,11 @@ if(NOT TARGET mylang)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
     # User must provide compiler path
-    set(MLA_COMPILER "" CACHE FILEPATH "Path to the mylang compiler executable")
+    set(MLA_COMPILER "" CACHE FILEPATH "Path to the mlang compiler executable")
 
     if(NOT MLA_COMPILER)
         # Try to find it in common locations
-        find_program(MLA_COMPILER_FOUND mylang
+        find_program(MLA_COMPILER_FOUND mlang
             PATHS
                 ${CMAKE_CURRENT_SOURCE_DIR}/../build
                 ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -30,7 +30,7 @@ if(NOT TARGET mylang)
             set(MLA_COMPILER ${MLA_COMPILER_FOUND})
         else()
             message(FATAL_ERROR
-                "Could not find mylang compiler. Please specify with -DMLA_COMPILER=/path/to/mylang\n"
+                "Could not find mlang compiler. Please specify with -DMLA_COMPILER=/path/to/mlang\n"
                 "Or build from the project root with: cmake -DBUILD_TESTS=ON .."
             )
         endif()
@@ -82,12 +82,12 @@ if(STANDALONE_BUILD)
         DEFAULT_COMPILER_PATH="${MLA_COMPILER}"
     )
 else()
-    # When built as part of main project, use the built mylang
+    # When built as part of main project, use the built mlang
     target_compile_definitions(mla_tests PRIVATE
-        DEFAULT_COMPILER_PATH="$<TARGET_FILE:mylang>"
+        DEFAULT_COMPILER_PATH="$<TARGET_FILE:mlang>"
     )
-    # Make sure mylang is built before tests
-    add_dependencies(mla_tests mylang)
+    # Make sure mlang is built before tests
+    add_dependencies(mla_tests mlang)
 endif()
 
 # Add test discovery
@@ -101,7 +101,7 @@ if(STANDALONE_BUILD)
 else()
     gtest_discover_tests(mla_tests
         PROPERTIES
-            ENVIRONMENT "MLA_COMPILER=$<TARGET_FILE:mylang>"
+            ENVIRONMENT "MLA_COMPILER=$<TARGET_FILE:mlang>"
     )
 endif()
 
