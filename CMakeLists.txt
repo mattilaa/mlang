@@ -7,7 +7,49 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Create compile_commands.json in build directory
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Find LLVM package
+# ============================================================================
+# Find LLVM
+# ============================================================================
+# Try to find LLVM, with hints for common installation paths
+
+# Allow user to specify LLVM_DIR
+if(NOT DEFINED LLVM_DIR)
+    # Try to find llvm-config and use it to get the cmake dir
+    find_program(LLVM_CONFIG_EXE NAMES llvm-config llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15
+        PATHS
+            /opt/homebrew/opt/llvm/bin
+            /usr/local/opt/llvm/bin
+            /usr/lib/llvm-18/bin
+            /usr/lib/llvm-17/bin
+            /usr/lib/llvm-16/bin
+            /usr/lib/llvm-15/bin
+            /usr/bin
+            /usr/local/bin
+    )
+
+    if(LLVM_CONFIG_EXE)
+        execute_process(
+            COMMAND ${LLVM_CONFIG_EXE} --cmakedir
+            OUTPUT_VARIABLE LLVM_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        message(STATUS "Found llvm-config: ${LLVM_CONFIG_EXE}")
+        message(STATUS "LLVM CMake dir: ${LLVM_DIR}")
+    endif()
+endif()
+
+# Common LLVM installation paths to search
+list(APPEND CMAKE_PREFIX_PATH
+    /opt/homebrew/opt/llvm          # macOS Homebrew (Apple Silicon)
+    /usr/local/opt/llvm             # macOS Homebrew (Intel)
+    /usr/lib/llvm-18                # Ubuntu/Debian LLVM 18
+    /usr/lib/llvm-17                # Ubuntu/Debian LLVM 17
+    /usr/lib/llvm-16                # Ubuntu/Debian LLVM 16
+    /usr/lib/llvm-15                # Ubuntu/Debian LLVM 15
+    /usr/local                      # Manual installation
+    "C:/Program Files/LLVM"         # Windows
+)
+
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -16,12 +58,11 @@ include_directories(${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
+# ============================================================================
 # Find Flex and Bison
+# ============================================================================
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
-
-# Add the src directory (empty CMakeLists.txt, just for structure)
-# add_subdirectory(src)
 
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h
