@@ -170,3 +170,13 @@ execute_process(
     COMMAND ${FLEX_EXECUTABLE} -o ${LEXER_OUT} ${LEXER_SOURCE}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# ============================================================================
+# Testing
+# ============================================================================
+option(BUILD_TESTS "Build the test suite" ON)
+
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
