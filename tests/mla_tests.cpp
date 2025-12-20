@@ -1,4 +1,4 @@
- /**
+/**
  * MLA Language Test Suite
  *
  * This test suite uses Google Test to verify the functionality of the MLA
@@ -34,7 +34,7 @@ protected:
     {
         // Try environment variable first, then compile-time default
         const char* envPath = std::getenv("MLA_COMPILER");
-        if (envPath && std::strlen(envPath) > 0)
+        if(envPath && std::strlen(envPath) > 0)
         {
             compilerPath = envPath;
         }
@@ -49,7 +49,8 @@ protected:
     void SetUp() override
     {
         // Create a temporary directory for test files
-        testDir = fs::temp_directory_path() / ("mla_test_" + std::to_string(rand()));
+        testDir =
+            fs::temp_directory_path() / ("mla_test_" + std::to_string(rand()));
         fs::create_directories(testDir);
         sourceFile = testDir + "/test.mla";
         outputExe = testDir + "/test_exe";
@@ -73,9 +74,10 @@ protected:
     // Returns true if compilation succeeded
     bool compile(bool expectSuccess = true)
     {
-        std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile + " 2>&1";
+        std::string cmd =
+            compilerPath + " -o " + outputExe + " " + sourceFile + " 2>&1";
         int result = system(cmd.c_str());
-        if (expectSuccess)
+        if(expectSuccess)
         {
             return result == 0;
         }
@@ -87,12 +89,12 @@ protected:
     {
         std::string cmd = outputExe + " 2>/dev/null";
         FILE* pipe = popen(cmd.c_str(), "r");
-        if (!pipe)
+        if(!pipe)
             return "";
 
         std::string result;
         char buffer[256];
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        while(fgets(buffer, sizeof(buffer), pipe) != nullptr)
         {
             result += buffer;
         }
@@ -105,12 +107,12 @@ protected:
     {
         std::string cmd = outputExe + " 2>&1 1>/dev/null";
         FILE* pipe = popen(cmd.c_str(), "r");
-        if (!pipe)
+        if(!pipe)
             return "";
 
         std::string result;
         char buffer[256];
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        while(fgets(buffer, sizeof(buffer), pipe) != nullptr)
         {
             result += buffer;
         }
@@ -130,7 +132,7 @@ protected:
     std::string compileAndRun(const std::string& code)
     {
         writeSource(code);
-        if (!compile())
+        if(!compile())
         {
             return "COMPILE_ERROR";
         }
@@ -141,7 +143,7 @@ protected:
     int compileAndRunExitCode(const std::string& code)
     {
         writeSource(code);
-        if (!compile())
+        if(!compile())
         {
             return -1;
         }
@@ -1028,8 +1030,8 @@ TEST_F(MLATest, FizzBuzz)
             return 0;
         }
     )";
-    std::string expected =
-        "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n";
+    std::string expected = "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFi"
+                           "zz\n13\n14\nFizzBuzz\n";
     EXPECT_EQ(compileAndRun(code), expected);
 }
 
@@ -1091,7 +1093,7 @@ int main(int argc, char** argv)
     ::testing::InitGoogleTest(&argc, argv);
 
     // Allow setting compiler path via command line
-    if (argc > 1)
+    if(argc > 1)
     {
         MLATest::compilerPath = argv[1];
     }

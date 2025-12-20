@@ -1,45 +1,59 @@
 #!/bin/bash
 
 # MLA Test Runner Script
-# This script builds the project with tests and runs them
 #
 # Usage: 
-#   ./tests/run_tests.sh          # Run from project root
-#   ./run_tests.sh                # Run from tests directory
+#   ./run_tests.sh                      # Auto-detect compiler
+#   ./run_tests.sh /path/to/mylang      # Specify compiler path
 
 set -e
 
-# Find project root (where main CMakeLists.txt is)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPILER_PATH="${1:-}"
 
-# Check if we're in the tests directory or project root
-if [ -f "$SCRIPT_DIR/CMakeLists.txt" ] && grep -q "add_subdirectory(tests)" "$SCRIPT_DIR/CMakeLists.txt" 2>/dev/null; then
-    PROJECT_ROOT="$SCRIPT_DIR"
-elif [ -f "$SCRIPT_DIR/../CMakeLists.txt" ]; then
-    PROJECT_ROOT="$SCRIPT_DIR/.."
-else
-    echo "Error: Cannot find project root. Run this script from the project root or tests directory."
+# Try to find compiler if not specified
+if [ -z "$COMPILER_PATH" ]; then
+    # Check common locations
+    if [ -f "$SCRIPT_DIR/../build/mylang" ]; then
+        COMPILER_PATH="$SCRIPT_DIR/../build/mylang"
+    elif [ -f "$SCRIPT_DIR/../mylang" ]; then
+        COMPILER_PATH="$SCRIPT_DIR/../mylang"
+    elif command -v mylang &> /dev/null; then
+        COMPILER_PATH=$(command -v mylang)
+    else
+        echo "Error: Could not find mylang compiler."
+        echo ""
+        echo "Usage: $0 [path_to_mylang]"
+        echo ""
+        echo "Please either:"
+        echo "  1. Build the compiler first: cd .. && mkdir build && cd build && cmake .. && make"
+        echo "  2. Specify the compiler path: $0 /path/to/mylang"
+        exit 1
+    fi
+fi
+
+COMPILER_PATH=$(realpath "$COMPILER_PATH")
+
+if [ ! -f "$COMPILER_PATH" ]; then
+    echo "Error: Compiler not found at $COMPILER_PATH"
     exit 1
 fi
 
-PROJECT_ROOT=$(realpath "$PROJECT_ROOT")
-BUILD_DIR="$PROJECT_ROOT/build"
+echo "Using compiler: $COMPILER_PATH"
 
-echo "Project root: $PROJECT_ROOT"
-echo "Build directory: $BUILD_DIR"
-
-# Create build directory
+# Create build directory for tests
+BUILD_DIR="$SCRIPT_DIR/build"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-# Configure with CMake (enable tests)
+# Configure with CMake
 echo ""
-echo "Configuring project..."
-cmake -DBUILD_TESTS=ON ..
+echo "Configuring tests..."
+cmake -DMLA_COMPILER="$COMPILER_PATH" ..
 
-# Build everything (compiler + tests)
+# Build tests
 echo ""
-echo "Building project and tests..."
+echo "Building tests..."
 cmake --build . --parallel
 
 # Run tests
@@ -48,6 +62,3 @@ echo "=========================================="
 echo "Running MLA tests..."
 echo "=========================================="
 ctest --output-on-failure
-
-# Or run directly with more verbose output:
-# ./tests/mla_tests

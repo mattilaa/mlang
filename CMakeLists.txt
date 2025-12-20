@@ -15,10 +15,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Allow user to specify LLVM_DIR
 if(NOT DEFINED LLVM_DIR)
     # Try to find llvm-config and use it to get the cmake dir
-    find_program(LLVM_CONFIG_EXE NAMES llvm-config llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15
+    find_program(LLVM_CONFIG_EXE NAMES llvm-config llvm-config-20 llvm-config-29 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15
         PATHS
             /opt/homebrew/opt/llvm/bin
             /usr/local/opt/llvm/bin
+            /usr/lib/llvm-20/bin
+            /usr/lib/llvm-19/bin
             /usr/lib/llvm-18/bin
             /usr/lib/llvm-17/bin
             /usr/lib/llvm-16/bin
@@ -42,6 +44,8 @@ endif()
 list(APPEND CMAKE_PREFIX_PATH
     /opt/homebrew/opt/llvm          # macOS Homebrew (Apple Silicon)
     /usr/local/opt/llvm             # macOS Homebrew (Intel)
+    /usr/lib/llvm-20                # Ubuntu/Debian LLVM 18
+    /usr/lib/llvm-19                # Ubuntu/Debian LLVM 18
     /usr/lib/llvm-18                # Ubuntu/Debian LLVM 18
     /usr/lib/llvm-17                # Ubuntu/Debian LLVM 17
     /usr/lib/llvm-16                # Ubuntu/Debian LLVM 16
