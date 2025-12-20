@@ -758,7 +758,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
 
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
 {
-    return llvm::ConstantInt::get(context, llvm::APInt(32, node->value, true));
+    // Use 64-bit for literals to support large values; truncation happens at
+    // assignment
+    return llvm::ConstantInt::get(context, llvm::APInt(64, node->value, true));
 }
 
 llvm::Value* CodeGenerator::generateFloatLiteral(FloatLiteralNode* node)
@@ -828,8 +830,53 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(!initValue)
         return;
 
-    llvm::AllocaInst* alloca = builder.CreateAlloca(
-        getLLVMType(node->type->kind), nullptr, node->name);
+    llvm::Type* targetType = getLLVMType(node->type->kind);
+    llvm::AllocaInst* alloca =
+        builder.CreateAlloca(targetType, nullptr, node->name);
+
+    // Convert init value to target type if necessary
+    llvm::Type* initType = initValue->getType();
+    if(initType != targetType)
+    {
+        if(initType->isIntegerTy() && targetType->isIntegerTy())
+        {
+            unsigned initBits = initType->getIntegerBitWidth();
+            unsigned targetBits = targetType->getIntegerBitWidth();
+            if(initBits > targetBits)
+            {
+                // Truncate (e.g., i32 -> i8)
+                initValue = builder.CreateTrunc(initValue, targetType, "trunc");
+            }
+            else if(initBits < targetBits)
+            {
+                // Extend - use ZExt for unsigned target, SExt for signed
+                if(isUnsignedType(node->type->kind))
+                {
+                    initValue =
+                        builder.CreateZExt(initValue, targetType, "zext");
+                }
+                else
+                {
+                    initValue =
+                        builder.CreateSExt(initValue, targetType, "sext");
+                }
+            }
+        }
+        else if(initType->isIntegerTy() && targetType->isFloatingPointTy())
+        {
+            initValue = builder.CreateSIToFP(initValue, targetType, "sitofp");
+        }
+        else if(initType->isFloatingPointTy() && targetType->isIntegerTy())
+        {
+            initValue = builder.CreateFPToSI(initValue, targetType, "fptosi");
+        }
+        else if(initType->isFloatingPointTy() &&
+                targetType->isFloatingPointTy())
+        {
+            initValue = builder.CreateFPCast(initValue, targetType, "fpcast");
+        }
+    }
+
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
     variableTypes[node->name] = node->type->kind;
@@ -840,14 +887,64 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
-    llvm::AllocaInst* alloca = builder.CreateAlloca(
-        getLLVMType(node->type->kind), nullptr, node->name);
+    llvm::Type* targetType = getLLVMType(node->type->kind);
+    llvm::AllocaInst* alloca =
+        builder.CreateAlloca(targetType, nullptr, node->name);
 
     if(node->initExpr)
     {
         llvm::Value* initValue = generateExpression(node->initExpr);
         if(initValue)
         {
+            // Convert init value to target type if necessary
+            llvm::Type* initType = initValue->getType();
+            if(initType != targetType)
+            {
+                if(initType->isIntegerTy() && targetType->isIntegerTy())
+                {
+                    unsigned initBits = initType->getIntegerBitWidth();
+                    unsigned targetBits = targetType->getIntegerBitWidth();
+                    if(initBits > targetBits)
+                    {
+                        // Truncate (e.g., i32 -> i8)
+                        initValue =
+                            builder.CreateTrunc(initValue, targetType, "trunc");
+                    }
+                    else if(initBits < targetBits)
+                    {
+                        // Extend - use ZExt for unsigned target, SExt for
+                        // signed
+                        if(isUnsignedType(node->type->kind))
+                        {
+                            initValue = builder.CreateZExt(initValue,
+                                                           targetType, "zext");
+                        }
+                        else
+                        {
+                            initValue = builder.CreateSExt(initValue,
+                                                           targetType, "sext");
+                        }
+                    }
+                }
+                else if(initType->isIntegerTy() &&
+                        targetType->isFloatingPointTy())
+                {
+                    initValue =
+                        builder.CreateSIToFP(initValue, targetType, "sitofp");
+                }
+                else if(initType->isFloatingPointTy() &&
+                        targetType->isIntegerTy())
+                {
+                    initValue =
+                        builder.CreateFPToSI(initValue, targetType, "fptosi");
+                }
+                else if(initType->isFloatingPointTy() &&
+                        targetType->isFloatingPointTy())
+                {
+                    initValue =
+                        builder.CreateFPCast(initValue, targetType, "fpcast");
+                }
+            }
             builder.CreateStore(initValue, alloca);
         }
     }

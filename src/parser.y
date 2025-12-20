@@ -64,7 +64,7 @@ ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 %}
 
 %union {
-    int ival;
+    long long ival;
     float fval;
     double dval;
     char* sval;

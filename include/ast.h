@@ -1,6 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -214,9 +215,9 @@ public:
 class IntLiteralNode : public ExpressionNode
 {
 public:
-    int value;
+    int64_t value;
 
-    IntLiteralNode(int v) : value(v) {}
+    IntLiteralNode(int64_t v) : value(v) {}
     std::string toString() const override;
 };
 
@@ -515,7 +516,7 @@ ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line = 0);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_struct_init(char* type_name, char* var_name);
-ASTNode* create_int_literal(int value);
+ASTNode* create_int_literal(int64_t value);
 ASTNode* create_float_literal(float value);
 ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);

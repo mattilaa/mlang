@@ -138,7 +138,7 @@ ASTNode* create_struct_init(char* type_name, char* var_name)
     return new StructInitNode(std::string(type_name), std::string(var_name));
 }
 
-ASTNode* create_int_literal(int value)
+ASTNode* create_int_literal(int64_t value)
 {
     return new IntLiteralNode(value);
 }
