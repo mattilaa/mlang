@@ -141,6 +141,10 @@ private:
     llvm::StructType* getMapStructType(llvm::Type* keyType,
                                        llvm::Type* valueType);
 
+    // Field access helper for chained access (a.b.c)
+    std::pair<llvm::Value*, std::string>
+    getStructPtrAndType(ExpressionNode* expr, int line);
+
     void reportError(int line, const std::string& message);
 };
 

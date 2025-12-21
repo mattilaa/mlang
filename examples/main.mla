@@ -36,6 +36,15 @@ pub struct Derived : Base {
     }
 };
 
+struct Inner {
+    var value: int;
+    pub fn get_value() -> int { return self.value; }
+};
+
+struct Outer {
+    var inner: Inner;
+};
+
 fn main() -> int {
     let fact5: int = factorial(5);
     let sum: int = sum_range(1, 5);
@@ -63,6 +72,11 @@ fn main() -> int {
     println!("v: {} {}", v, derived.get_value());
     println!("derived: {} base: {}", derived.extra, derived.value);
 
+    var outer: Outer;
+    outer.inner.value = 42;           // Chained field access
+    let v: int = outer.inner.value;   // Chained field read
+    let x: int = outer.inner.get_value();  // Chained method call
+    println!("outer.inner.value: {} v: {} inner.get_value: {}", outer.inner.value, v, outer.inner.get_value());
 
     return 0;
 }

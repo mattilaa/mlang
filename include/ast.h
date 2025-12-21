@@ -456,13 +456,22 @@ public:
 class FieldAccessNode : public ExpressionNode
 {
 public:
-    std::string structName;
+    std::string
+        structName; // Used when object is nullptr (simple case: var.field)
     std::string fieldName;
+    ExpressionNode*
+        object; // For chained access (a.b.c), nullptr for simple case
 
     FieldAccessNode(const std::string& s, const std::string& f)
-        : structName(s), fieldName(f)
+        : structName(s), fieldName(f), object(nullptr)
     {
     }
+
+    FieldAccessNode(ExpressionNode* obj, const std::string& f)
+        : structName(""), fieldName(f), object(obj)
+    {
+    }
+
     std::string toString() const override;
 };
 
@@ -470,15 +479,24 @@ public:
 class FieldAssignmentNode : public StatementNode
 {
 public:
-    std::string structName;
+    std::string structName; // Used when target is nullptr (simple case)
     std::string fieldName;
     ExpressionNode* expression;
+    ExpressionNode*
+        target; // For chained assignment (a.b.c = x), nullptr for simple case
 
     FieldAssignmentNode(const std::string& s, const std::string& f,
                         ExpressionNode* e)
-        : structName(s), fieldName(f), expression(e)
+        : structName(s), fieldName(f), expression(e), target(nullptr)
     {
     }
+
+    // Constructor for chained assignment
+    FieldAssignmentNode(ExpressionNode* t, ExpressionNode* e)
+        : structName(""), fieldName(""), expression(e), target(t)
+    {
+    }
+
     std::string toString() const override;
 };
 
@@ -814,5 +832,7 @@ ASTNode* create_field_access(char* struct_name, char* field_name, int line);
 ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
 ASTNode* create_field_assignment(char* struct_name, char* field_name,
                                  ASTNode* expr, int line);
+ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr,
+                                         int line);
 
 #endif // AST_H

@@ -2275,24 +2275,99 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 {
-    // Get the struct variable
-    llvm::Value* structPtr = namedValues[node->structName];
-    if(!structPtr)
-    {
-        reportError(node->line, "unknown variable: " + node->structName);
-        return;
-    }
+    llvm::Value* structPtr;
+    std::string structTypeName;
+    std::string fieldName;
 
-    // Get the struct type name
-    auto typeIt = structVariableTypes.find(node->structName);
-    if(typeIt == structVariableTypes.end())
+    // Handle chained assignment (a.b.c = x) vs simple assignment (a.b = x)
+    if(node->target)
     {
-        reportError(node->line,
-                    "variable '" + node->structName + "' is not a struct");
-        return;
-    }
+        // Chained assignment: target is a FieldAccessNode representing the full
+        // path
+        auto* fieldAccess = dynamic_cast<FieldAccessNode*>(node->target);
+        if(!fieldAccess)
+        {
+            reportError(node->line, "invalid assignment target");
+            return;
+        }
 
-    std::string structTypeName = typeIt->second;
+        fieldName = fieldAccess->fieldName;
+
+        // Get the struct pointer for the object part (everything except the
+        // last field)
+        if(fieldAccess->object)
+        {
+            auto [ptr, typeName] =
+                getStructPtrAndType(fieldAccess->object, node->line);
+            if(!ptr)
+                return;
+            structPtr = ptr;
+            structTypeName = typeName;
+        }
+        else
+        {
+            // Simple case within chained: the target is like "a.b", so get "a"
+            structPtr = namedValues[fieldAccess->structName];
+            if(!structPtr)
+            {
+                reportError(node->line,
+                            "unknown variable: " + fieldAccess->structName);
+                return;
+            }
+
+            auto typeIt = structVariableTypes.find(fieldAccess->structName);
+            if(typeIt == structVariableTypes.end())
+            {
+                reportError(node->line, "variable '" + fieldAccess->structName +
+                                            "' is not a struct");
+                return;
+            }
+            structTypeName = typeIt->second;
+
+            // Handle self pointer
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+            {
+                llvm::Type* allocaType = alloca->getAllocatedType();
+                if(allocaType->isPointerTy())
+                {
+                    structPtr = builder.CreateLoad(
+                        allocaType, alloca, fieldAccess->structName + ".ptr");
+                }
+            }
+        }
+    }
+    else
+    {
+        // Simple assignment: a.b = x
+        fieldName = node->fieldName;
+
+        structPtr = namedValues[node->structName];
+        if(!structPtr)
+        {
+            reportError(node->line, "unknown variable: " + node->structName);
+            return;
+        }
+
+        auto typeIt = structVariableTypes.find(node->structName);
+        if(typeIt == structVariableTypes.end())
+        {
+            reportError(node->line,
+                        "variable '" + node->structName + "' is not a struct");
+            return;
+        }
+        structTypeName = typeIt->second;
+
+        // Handle self pointer
+        if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+        {
+            llvm::Type* allocaType = alloca->getAllocatedType();
+            if(allocaType->isPointerTy())
+            {
+                structPtr = builder.CreateLoad(allocaType, alloca,
+                                               node->structName + ".ptr");
+            }
+        }
+    }
 
     // Get struct member info
     auto memberIt = structMembers.find(structTypeName);
@@ -2308,7 +2383,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     const auto& members = memberIt->second;
     for(size_t i = 0; i < members.size(); ++i)
     {
-        if(members[i].first == node->fieldName)
+        if(members[i].first == fieldName)
         {
             fieldIndex = static_cast<int>(i);
             fieldType = members[i].second;
@@ -2319,8 +2394,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     if(fieldIndex < 0)
     {
         reportError(node->line, "struct '" + structTypeName +
-                                    "' has no field named '" + node->fieldName +
-                                    "'");
+                                    "' has no field named '" + fieldName + "'");
         return;
     }
 
@@ -2353,47 +2427,215 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
     }
 
-    // Check if structPtr is an alloca containing a pointer (like 'self' in
-    // methods) In that case, we need to load the pointer first
-    llvm::Value* actualStructPtr = structPtr;
-    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+    // Create GEP to field and store
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, static_cast<unsigned>(fieldIndex),
+        fieldName + "_ptr");
+    builder.CreateStore(value, fieldPtr);
+}
+
+// Helper to get struct pointer and type name from an expression
+// Returns {pointer, typeName} or {nullptr, ""} on error
+std::pair<llvm::Value*, std::string>
+CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
+{
+    // Case 1: Simple identifier (e.g., "myStruct")
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
-        llvm::Type* allocaType = alloca->getAllocatedType();
-        // If the alloca holds a pointer type, load it first
-        if(allocaType->isPointerTy())
+        std::cerr << "DEBUG getStructPtrAndType: identifier '" << id->name
+                  << "'" << std::endl;
+        llvm::Value* ptr = namedValues[id->name];
+        if(!ptr)
         {
-            actualStructPtr = builder.CreateLoad(allocaType, alloca,
-                                                 node->structName + ".ptr");
+            reportError(line, "unknown variable: " + id->name);
+            return {nullptr, ""};
+        }
+
+        auto typeIt = structVariableTypes.find(id->name);
+        if(typeIt == structVariableTypes.end())
+        {
+            reportError(line, "variable '" + id->name + "' is not a struct");
+            return {nullptr, ""};
+        }
+
+        // Handle self pointer (alloca containing pointer)
+        llvm::Value* actualPtr = ptr;
+        if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr))
+        {
+            llvm::Type* allocaType = alloca->getAllocatedType();
+            if(allocaType->isPointerTy())
+            {
+                actualPtr =
+                    builder.CreateLoad(allocaType, alloca, id->name + ".ptr");
+            }
+        }
+
+        return {actualPtr, typeIt->second};
+    }
+
+    // Case 2: Field access (e.g., "a.b" in "a.b.c")
+    if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
+    {
+        std::cerr << "DEBUG getStructPtrAndType: field access structName='"
+                  << fieldAccess->structName << "' fieldName='"
+                  << fieldAccess->fieldName
+                  << "' object=" << (fieldAccess->object ? "set" : "null")
+                  << std::endl;
+
+        // Recursively get the struct pointer for the object
+        llvm::Value* objPtr;
+        std::string objTypeName;
+
+        if(fieldAccess->object)
+        {
+            // Chained: get pointer from the object expression
+            auto [ptr, typeName] =
+                getStructPtrAndType(fieldAccess->object, line);
+            if(!ptr)
+                return {nullptr, ""};
+            objPtr = ptr;
+            objTypeName = typeName;
+        }
+        else
+        {
+            // Simple: get pointer from structName
+            objPtr = namedValues[fieldAccess->structName];
+            if(!objPtr)
+            {
+                reportError(line,
+                            "unknown variable: " + fieldAccess->structName);
+                return {nullptr, ""};
+            }
+
+            auto typeIt = structVariableTypes.find(fieldAccess->structName);
+            if(typeIt == structVariableTypes.end())
+            {
+                reportError(line, "variable '" + fieldAccess->structName +
+                                      "' is not a struct");
+                return {nullptr, ""};
+            }
+            objTypeName = typeIt->second;
+
+            // Handle self pointer
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(objPtr))
+            {
+                llvm::Type* allocaType = alloca->getAllocatedType();
+                if(allocaType->isPointerTy())
+                {
+                    objPtr = builder.CreateLoad(
+                        allocaType, alloca, fieldAccess->structName + ".ptr");
+                }
+            }
+        }
+
+        // Now access the field
+        auto memberIt = structMembers.find(objTypeName);
+        if(memberIt == structMembers.end())
+        {
+            reportError(line, "unknown struct type: " + objTypeName);
+            return {nullptr, ""};
+        }
+
+        // Find field index and type
+        int fieldIndex = -1;
+        TypeNode* fieldType = nullptr;
+        const auto& members = memberIt->second;
+        for(size_t i = 0; i < members.size(); ++i)
+        {
+            if(members[i].first == fieldAccess->fieldName)
+            {
+                fieldIndex = static_cast<int>(i);
+                fieldType = members[i].second;
+                break;
+            }
+        }
+
+        if(fieldIndex < 0)
+        {
+            reportError(line, "struct '" + objTypeName +
+                                  "' has no field named '" +
+                                  fieldAccess->fieldName + "'");
+            return {nullptr, ""};
+        }
+
+        // Check if the field is a struct type
+        if(fieldType->kind == TypeNode::TYPE_STRUCT)
+        {
+            auto* structTypeRef = dynamic_cast<StructTypeRefNode*>(fieldType);
+            if(!structTypeRef)
+            {
+                reportError(line, "internal error: expected StructTypeRefNode");
+                return {nullptr, ""};
+            }
+
+            llvm::StructType* structType = getStructType(objTypeName);
+            if(!structType)
+                return {nullptr, ""};
+
+            // Get pointer to the nested struct field
+            llvm::Value* fieldPtr = builder.CreateStructGEP(
+                structType, objPtr, static_cast<unsigned>(fieldIndex),
+                fieldAccess->fieldName + "_ptr");
+
+            return {fieldPtr, structTypeRef->structName};
+        }
+        else
+        {
+            reportError(line, "field '" + fieldAccess->fieldName +
+                                  "' is not a struct type");
+            return {nullptr, ""};
         }
     }
 
-    // Create GEP to field and store
-    llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, actualStructPtr, static_cast<unsigned>(fieldIndex),
-        node->fieldName + "_ptr");
-    builder.CreateStore(value, fieldPtr);
+    reportError(line, "invalid expression for field access");
+    return {nullptr, ""};
 }
 
 llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 {
-    // Get the struct variable
-    llvm::Value* structPtr = namedValues[node->structName];
-    if(!structPtr)
-    {
-        reportError(node->line, "unknown variable: " + node->structName);
-        return nullptr;
-    }
+    llvm::Value* structPtr;
+    std::string structTypeName;
 
-    // Get the struct type name
-    auto typeIt = structVariableTypes.find(node->structName);
-    if(typeIt == structVariableTypes.end())
+    // Handle chained access (a.b.c) vs simple access (a.b)
+    if(node->object)
     {
-        reportError(node->line,
-                    "variable '" + node->structName + "' is not a struct");
-        return nullptr;
+        // Chained access: evaluate the object expression first
+        auto [ptr, typeName] = getStructPtrAndType(node->object, node->line);
+        if(!ptr)
+            return nullptr;
+        structPtr = ptr;
+        structTypeName = typeName;
     }
+    else
+    {
+        // Simple access: get from structName
+        structPtr = namedValues[node->structName];
+        if(!structPtr)
+        {
+            reportError(node->line, "unknown variable: " + node->structName);
+            return nullptr;
+        }
 
-    std::string structTypeName = typeIt->second;
+        auto typeIt = structVariableTypes.find(node->structName);
+        if(typeIt == structVariableTypes.end())
+        {
+            reportError(node->line,
+                        "variable '" + node->structName + "' is not a struct");
+            return nullptr;
+        }
+        structTypeName = typeIt->second;
+
+        // Handle self pointer (alloca containing pointer)
+        if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+        {
+            llvm::Type* allocaType = alloca->getAllocatedType();
+            if(allocaType->isPointerTy())
+            {
+                structPtr = builder.CreateLoad(allocaType, alloca,
+                                               node->structName + ".ptr");
+            }
+        }
+    }
 
     // Get struct member info
     auto memberIt = structMembers.find(structTypeName);
@@ -2433,23 +2675,9 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
     // Get field type
     llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
 
-    // Check if structPtr is an alloca containing a pointer (like 'self' in
-    // methods) In that case, we need to load the pointer first
-    llvm::Value* actualStructPtr = structPtr;
-    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
-    {
-        llvm::Type* allocaType = alloca->getAllocatedType();
-        // If the alloca holds a pointer type, load it first
-        if(allocaType->isPointerTy())
-        {
-            actualStructPtr = builder.CreateLoad(allocaType, alloca,
-                                                 node->structName + ".ptr");
-        }
-    }
-
     // Create GEP to field and load
     llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, actualStructPtr, static_cast<unsigned>(fieldIndex),
+        structType, structPtr, static_cast<unsigned>(fieldIndex),
         node->fieldName + "_ptr");
     return builder.CreateLoad(llvmFieldType, fieldPtr, node->fieldName);
 }
@@ -2718,24 +2946,53 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
-    // Get the object (should be an identifier referring to a struct variable)
+    // Get the object struct pointer and type
+    // This supports both simple (p.method()) and chained (a.b.method()) access
+    llvm::Value* objPtr;
+    std::string structTypeName;
+
     auto* objId = dynamic_cast<IdentifierNode*>(node->object);
-    if(!objId)
+    if(objId)
     {
-        reportError(node->line, "method call requires a struct variable");
-        return nullptr;
-    }
+        // Simple case: identifier.method()
+        auto typeIt = structVariableTypes.find(objId->name);
+        if(typeIt == structVariableTypes.end())
+        {
+            reportError(node->line,
+                        "'" + objId->name + "' is not a struct variable");
+            return nullptr;
+        }
+        structTypeName = typeIt->second;
 
-    // Get struct type
-    auto typeIt = structVariableTypes.find(objId->name);
-    if(typeIt == structVariableTypes.end())
+        objPtr = namedValues[objId->name];
+        if(!objPtr)
+        {
+            reportError(node->line, "unknown variable: " + objId->name);
+            return nullptr;
+        }
+
+        // Handle self pointer (alloca containing pointer)
+        if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(objPtr))
+        {
+            llvm::Type* allocaType = alloca->getAllocatedType();
+            if(allocaType->isPointerTy())
+            {
+                objPtr = builder.CreateLoad(allocaType, alloca,
+                                            objId->name + ".ptr");
+            }
+        }
+    }
+    else
     {
-        reportError(node->line,
-                    "'" + objId->name + "' is not a struct variable");
-        return nullptr;
+        // Chained case: a.b.method() - use helper to get struct pointer
+        auto [ptr, typeName] = getStructPtrAndType(node->object, node->line);
+        if(!ptr)
+        {
+            return nullptr;
+        }
+        objPtr = ptr;
+        structTypeName = typeName;
     }
-
-    std::string structTypeName = typeIt->second;
 
     // Check if method exists on this struct (including inherited methods)
     auto structIt = structMethods.find(structTypeName);
@@ -2797,28 +3054,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     // Build arguments - first is pointer to struct
     std::vector<llvm::Value*> args;
-
-    llvm::Value* objPtr = namedValues[objId->name];
-    if(!objPtr)
-    {
-        reportError(node->line, "unknown variable: " + objId->name);
-        return nullptr;
-    }
-
-    // Check if objPtr is an alloca containing a pointer (like 'self' in
-    // methods) In that case, we need to load the pointer first
-    llvm::Value* actualObjPtr = objPtr;
-    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(objPtr))
-    {
-        llvm::Type* allocaType = alloca->getAllocatedType();
-        // If the alloca holds a pointer type, load it first
-        if(allocaType->isPointerTy())
-        {
-            actualObjPtr =
-                builder.CreateLoad(allocaType, alloca, objId->name + ".ptr");
-        }
-    }
-    args.push_back(actualObjPtr);
+    args.push_back(objPtr);
 
     // Add other arguments
     for(auto arg : node->arguments)

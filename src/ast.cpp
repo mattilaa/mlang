@@ -607,11 +607,19 @@ std::string AssignmentNode::toString() const
 
 std::string FieldAccessNode::toString() const
 {
+    if(object)
+    {
+        return object->toString() + "." + fieldName;
+    }
     return structName + "." + fieldName;
 }
 
 std::string FieldAssignmentNode::toString() const
 {
+    if(target)
+    {
+        return target->toString() + " = " + expression->toString() + ";";
+    }
     return structName + "." + fieldName + " = " + expression->toString() + ";";
 }
 
@@ -625,16 +633,20 @@ ASTNode* create_field_access(char* struct_name, char* field_name, int line)
 
 ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line)
 {
-    // Extract the struct name from the object expression
-    // For now, only support simple identifiers
+    // For simple identifier, use the string-based constructor for backwards
+    // compatibility
     if(auto* id = dynamic_cast<IdentifierNode*>(object))
     {
         auto* node = new FieldAccessNode(id->name, std::string(field_name));
         node->line = line;
         return node;
     }
-    // TODO: Support chained field access like a.b.c
-    return nullptr;
+
+    // For chained access (e.g., a.b.c), use the expression-based constructor
+    auto* node = new FieldAccessNode(static_cast<ExpressionNode*>(object),
+                                     std::string(field_name));
+    node->line = line;
+    return node;
 }
 
 ASTNode* create_field_assignment(char* struct_name, char* field_name,
@@ -642,6 +654,31 @@ ASTNode* create_field_assignment(char* struct_name, char* field_name,
 {
     auto* node = new FieldAssignmentNode(std::string(struct_name),
                                          std::string(field_name),
+                                         static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr,
+                                         int line)
+{
+    // Check if target is a simple field access (a.b)
+    if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(target))
+    {
+        // If it's a simple field access (no chaining), use the string-based
+        // version
+        if(!fieldAccess->object && !fieldAccess->structName.empty())
+        {
+            auto* node = new FieldAssignmentNode(
+                fieldAccess->structName, fieldAccess->fieldName,
+                static_cast<ExpressionNode*>(expr));
+            node->line = line;
+            return node;
+        }
+    }
+
+    // For chained access or other expressions, use the expression-based version
+    auto* node = new FieldAssignmentNode(static_cast<ExpressionNode*>(target),
                                          static_cast<ExpressionNode*>(expr));
     node->line = line;
     return node;

@@ -32,6 +32,7 @@ ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_field_access(char* struct_name, char* field_name, int line);
 ASTNode* create_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
+ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr, int line);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
 ASTNode* create_bool_literal(int value);
@@ -127,7 +128,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
-%type <ast> print_statement argument_list
+%type <ast> print_statement argument_list field_target
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
@@ -290,8 +291,15 @@ var_statement
 assignment_statement
     : IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_assignment($1, $3, yylineno); }
-    | IDENTIFIER DOT IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = create_field_assignment($1, $3, $5, yylineno); }
+    | field_target ASSIGN expression SEMICOLON
+        { $$ = create_chained_field_assignment($1, $3, yylineno); }
+    ;
+
+field_target
+    : IDENTIFIER DOT IDENTIFIER
+        { $$ = create_field_access_expr(create_identifier($1), $3, yylineno); }
+    | field_target DOT IDENTIFIER
+        { $$ = create_field_access_expr($1, $3, yylineno); }
     ;
 
 expression_statement
