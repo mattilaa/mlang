@@ -33,6 +33,14 @@ ASTNode* create_program(ASTNode* top_level_list)
         {
             program->imports.push_back(useDecl);
         }
+        else if(auto* implBlock = dynamic_cast<ImplBlockNode*>(item))
+        {
+            if(!program->implList)
+            {
+                program->implList = new ImplListNode();
+            }
+            program->implList->addImpl(implBlock);
+        }
     }
 
     return program;
@@ -1247,6 +1255,86 @@ std::string StructTypeRefNode::toString() const
     return structName;
 }
 
+std::string GenericStructTypeRefNode::getMangledName() const
+{
+    std::string mangled = structName;
+    for(auto* typeArg : typeArgs)
+    {
+        mangled += "_";
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeArg))
+        {
+            mangled += structRef->structName;
+        }
+        else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(typeArg))
+        {
+            mangled += genRef->getMangledName();
+        }
+        else
+        {
+            // Basic type
+            switch(typeArg->kind)
+            {
+            case TypeNode::TYPE_BOOL:
+                mangled += "bool";
+                break;
+            case TypeNode::TYPE_INT:
+                mangled += "int";
+                break;
+            case TypeNode::TYPE_I8:
+                mangled += "i8";
+                break;
+            case TypeNode::TYPE_I16:
+                mangled += "i16";
+                break;
+            case TypeNode::TYPE_I32:
+                mangled += "i32";
+                break;
+            case TypeNode::TYPE_I64:
+                mangled += "i64";
+                break;
+            case TypeNode::TYPE_U8:
+                mangled += "u8";
+                break;
+            case TypeNode::TYPE_U16:
+                mangled += "u16";
+                break;
+            case TypeNode::TYPE_U32:
+                mangled += "u32";
+                break;
+            case TypeNode::TYPE_U64:
+                mangled += "u64";
+                break;
+            case TypeNode::TYPE_FLOAT:
+                mangled += "float";
+                break;
+            case TypeNode::TYPE_DOUBLE:
+                mangled += "double";
+                break;
+            case TypeNode::TYPE_STRING:
+                mangled += "string";
+                break;
+            default:
+                mangled += "unknown";
+                break;
+            }
+        }
+    }
+    return mangled;
+}
+
+std::string GenericStructTypeRefNode::toString() const
+{
+    std::string result = structName + "<";
+    for(size_t i = 0; i < typeArgs.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += typeArgs[i]->toString();
+    }
+    result += ">";
+    return result;
+}
+
 // Tuple literal
 ASTNode* create_tuple_literal(ASTNode* elements)
 {
@@ -1313,4 +1401,205 @@ std::string MapIteratorNode::toString() const
         break;
     }
     return mapExpr->toString() + method;
+}
+
+// TypeParamListNode toString
+std::string TypeParamListNode::toString() const
+{
+    std::string result = "<";
+    for(size_t i = 0; i < params.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += params[i];
+    }
+    result += ">";
+    return result;
+}
+
+// ImplBlockNode toString
+std::string ImplBlockNode::toString() const
+{
+    std::string result = "impl";
+    if(!typeParams.empty())
+    {
+        result += "<";
+        for(size_t i = 0; i < typeParams.size(); ++i)
+        {
+            if(i > 0)
+                result += ", ";
+            result += typeParams[i];
+        }
+        result += ">";
+    }
+    result += " " + structName + " {\n";
+    for(auto method : methods)
+    {
+        result += "    " + method->toString() + "\n";
+    }
+    result += "}";
+    return result;
+}
+
+// ImplListNode toString
+std::string ImplListNode::toString() const
+{
+    std::string result;
+    for(auto impl : impls)
+    {
+        result += impl->toString() + "\n";
+    }
+    return result;
+}
+
+// StructLiteralNode toString
+std::string StructLiteralNode::toString() const
+{
+    std::string result = structName;
+    if(!typeArgs.empty())
+    {
+        result += "<";
+        for(size_t i = 0; i < typeArgs.size(); ++i)
+        {
+            if(i > 0)
+                result += ", ";
+            result += typeArgs[i];
+        }
+        result += ">";
+    }
+    result += " { ";
+    for(size_t i = 0; i < fields.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += fields[i].first + ": " + fields[i].second->toString();
+    }
+    result += " }";
+    return result;
+}
+
+// Helper functions for generic structs and impl blocks
+
+ASTNode* create_type_param_list(char* param)
+{
+    auto* node = new TypeParamListNode();
+    node->params.push_back(std::string(param));
+    return node;
+}
+
+ASTNode* add_type_param(ASTNode* list, char* param)
+{
+    auto* paramList = static_cast<TypeParamListNode*>(list);
+    paramList->params.push_back(std::string(param));
+    return paramList;
+}
+
+ASTNode* create_generic_struct_def(char* name, char* base_name,
+                                   ASTNode* type_params, ASTNode* members,
+                                   int is_public)
+{
+    std::string baseName = base_name ? std::string(base_name) : "";
+    auto* node = new StructDefNode(std::string(name), baseName,
+                                   static_cast<StructMemberListNode*>(members),
+                                   is_public != 0);
+
+    if(type_params)
+    {
+        auto* paramList = static_cast<TypeParamListNode*>(type_params);
+        node->typeParams = paramList->params;
+    }
+
+    return node;
+}
+
+ASTNode* create_impl_block(char* struct_name, ASTNode* type_params)
+{
+    auto* node = new ImplBlockNode(std::string(struct_name));
+
+    if(type_params)
+    {
+        auto* paramList = static_cast<TypeParamListNode*>(type_params);
+        node->typeParams = paramList->params;
+    }
+
+    return node;
+}
+
+ASTNode* add_impl_method(ASTNode* impl, ASTNode* method)
+{
+    auto* implBlock = static_cast<ImplBlockNode*>(impl);
+    implBlock->methods.push_back(static_cast<StructMethodNode*>(method));
+    return implBlock;
+}
+
+ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args,
+                               ASTNode* fields, int line)
+{
+    auto* node = new StructLiteralNode(std::string(struct_name));
+    node->line = line;
+
+    // type_args would be a TypeListNode if present
+    if(type_args)
+    {
+        auto* typeList = dynamic_cast<TypeListNode*>(type_args);
+        if(typeList)
+        {
+            for(auto t : typeList->types)
+            {
+                if(auto* structRef = dynamic_cast<StructTypeRefNode*>(t))
+                {
+                    node->typeArgs.push_back(structRef->structName);
+                }
+                else
+                {
+                    // Convert TypeNode to string representation
+                    node->typeArgs.push_back(t->toString());
+                }
+            }
+        }
+    }
+
+    // fields is the StructLiteralNode with fields already added
+    if(fields)
+    {
+        auto* existingLit = dynamic_cast<StructLiteralNode*>(fields);
+        if(existingLit)
+        {
+            node->fields = existingLit->fields;
+        }
+    }
+
+    return node;
+}
+
+ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value)
+{
+    auto* node = new StructLiteralNode("");
+    node->fields.push_back(
+        {std::string(field_name), static_cast<ExpressionNode*>(value)});
+    return node;
+}
+
+ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value)
+{
+    auto* lit = static_cast<StructLiteralNode*>(list);
+    lit->fields.push_back(
+        {std::string(field_name), static_cast<ExpressionNode*>(value)});
+    return lit;
+}
+
+ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args)
+{
+    auto* node = new GenericStructTypeRefNode(std::string(name));
+
+    // Copy type arguments from TypeListNode
+    if(auto* typeList = dynamic_cast<TypeListNode*>(type_args))
+    {
+        for(auto* t : typeList->types)
+        {
+            node->typeArgs.push_back(t);
+        }
+    }
+
+    return node;
 }

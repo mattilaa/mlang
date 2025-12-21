@@ -39,6 +39,7 @@
 }
 "pub"           { return PUB; }
 "fn"            { return FUNCTION; }
+"impl"          { return IMPL; }
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }

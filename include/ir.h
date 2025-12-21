@@ -69,6 +69,31 @@ private:
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
     std::vector<llvm::BasicBlock*> loopContinueBlocks;
 
+    // === GENERICS SUPPORT ===
+    // Store generic struct templates: name -> StructDefNode*
+    std::map<std::string, StructDefNode*> genericStructTemplates;
+    // Store generic impl blocks: struct name -> vector of ImplBlockNode*
+    std::map<std::string, std::vector<ImplBlockNode*>> genericImplBlocks;
+    // Track which monomorphized types have been generated: mangled name -> true
+    std::set<std::string> monomorphizedTypes;
+    // Map mangled name back to original generic struct name
+    std::map<std::string, std::string> mangledToGenericName;
+
+    // Generics helper methods
+    TypeNode* substituteTypeParams(TypeNode* type,
+                                   const std::vector<std::string>& typeParams,
+                                   const std::vector<TypeNode*>& typeArgs);
+    void monomorphizeStruct(const std::string& genericName,
+                            const std::vector<TypeNode*>& typeArgs,
+                            const std::string& mangledName);
+    void monomorphizeImplBlock(ImplBlockNode* impl,
+                               const std::vector<std::string>& typeParams,
+                               const std::vector<TypeNode*>& typeArgs,
+                               const std::string& mangledStructName);
+    std::string
+    getOrCreateMonomorphizedStruct(const std::string& genericName,
+                                   const std::vector<TypeNode*>& typeArgs);
+
     // Type helpers
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);
     llvm::Type* getLLVMTypeFromNode(TypeNode* typeNode);
@@ -115,6 +140,7 @@ private:
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
+    llvm::Value* generateStructLiteral(StructLiteralNode* node);
 
     // Struct method helpers
     void generateStructMethods(StructDefNode* node);

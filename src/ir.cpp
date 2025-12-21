@@ -78,6 +78,25 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
     if(!typeNode)
         return nullptr;
 
+    // Handle generic struct type reference (e.g., Pair<i32, i64>)
+    // Must check this BEFORE StructTypeRefNode since GenericStructTypeRefNode
+    // is a more specific case
+    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(typeNode))
+    {
+        // Get or create the monomorphized struct type
+        std::string mangledName = getOrCreateMonomorphizedStruct(
+            genStructRef->structName, genStructRef->typeArgs);
+
+        auto it = structTypes.find(mangledName);
+        if(it != structTypes.end())
+        {
+            return it->second;
+        }
+        std::cerr << "Failed to monomorphize struct: "
+                  << genStructRef->structName << std::endl;
+        return nullptr;
+    }
+
     // Handle struct type reference
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeNode))
     {
@@ -86,6 +105,9 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         {
             return it->second;
         }
+
+        // Check if this is a type parameter (like T, U) - should not reach here
+        // in properly monomorphized code
         std::cerr << "Unknown struct type: " << structRef->structName
                   << std::endl;
         return nullptr;
@@ -416,7 +438,34 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 
 void CodeGenerator::generateCode(ProgramNode* program)
 {
-    // First generate all struct definitions and track their visibility
+    // First, collect generic struct templates and impl blocks
+    // These are NOT generated immediately - they're instantiated on demand
+    if(program->structList)
+    {
+        for(auto structDef : program->structList->structs)
+        {
+            if(structDef->isGeneric())
+            {
+                // Store as template for later instantiation
+                genericStructTemplates[structDef->name] = structDef;
+            }
+        }
+    }
+
+    // Collect generic impl blocks
+    if(program->implList)
+    {
+        for(auto impl : program->implList->impls)
+        {
+            if(!impl->typeParams.empty())
+            {
+                // This is a generic impl block
+                genericImplBlocks[impl->structName].push_back(impl);
+            }
+        }
+    }
+
+    // Generate all NON-GENERIC struct definitions
     // We need to process base structs before derived structs
     if(program->structList)
     {
@@ -434,6 +483,13 @@ void CodeGenerator::generateCode(ProgramNode* program)
         {
             if(processed.count(structDef->name))
                 return;
+
+            // Skip generic structs - they're instantiated on demand
+            if(structDef->isGeneric())
+            {
+                processed.insert(structDef->name);
+                return;
+            }
 
             // Process base first if it exists
             if(!structDef->baseName.empty())
@@ -478,12 +534,36 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    // Generate struct method declarations and track visibility
+    // Generate NON-GENERIC struct method declarations and track visibility
     if(program->structList)
     {
         for(auto structDef : program->structList->structs)
         {
-            generateStructMethods(structDef);
+            if(!structDef->isGeneric())
+            {
+                generateStructMethods(structDef);
+            }
+        }
+    }
+
+    // Process non-generic impl blocks (add methods to existing structs)
+    if(program->implList)
+    {
+        for(auto impl : program->implList->impls)
+        {
+            if(impl->typeParams.empty())
+            {
+                // Non-generic impl block - process immediately
+                for(auto method : impl->methods)
+                {
+                    // Register the method with the struct
+                    structMethods[impl->structName][method->name] =
+                        std::make_pair(method->isPublic, method);
+
+                    // Generate method declaration
+                    generateMethodDeclaration(impl->structName, method);
+                }
+            }
         }
     }
 
@@ -496,16 +576,31 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    // Generate struct method bodies
+    // Generate NON-GENERIC struct method bodies
     if(program->structList)
     {
         for(auto structDef : program->structList->structs)
         {
-            if(structDef->members)
+            if(!structDef->isGeneric() && structDef->members)
             {
                 for(auto method : structDef->members->methods)
                 {
                     generateMethodDefinition(structDef->name, method);
+                }
+            }
+        }
+    }
+
+    // Generate non-generic impl block method bodies
+    if(program->implList)
+    {
+        for(auto impl : program->implList->impls)
+        {
+            if(impl->typeParams.empty())
+            {
+                for(auto method : impl->methods)
+                {
+                    generateMethodDefinition(impl->structName, method);
                 }
             }
         }
@@ -768,6 +863,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto tupleAcc = dynamic_cast<TupleAccessNode*>(node))
     {
         return generateTupleAccess(tupleAcc);
+    }
+    else if(auto structLit = dynamic_cast<StructLiteralNode*>(node))
+    {
+        return generateStructLiteral(structLit);
     }
     return nullptr;
 }
@@ -1702,6 +1801,31 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(!initValue)
         return;
 
+    // Handle generic struct type reference (e.g., Pair<i32, i64>)
+    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(node->type))
+    {
+        // Get or create the monomorphized struct type
+        std::string mangledName = getOrCreateMonomorphizedStruct(
+            genStructRef->structName, genStructRef->typeArgs);
+
+        llvm::Type* structType = getStructType(mangledName);
+        if(!structType)
+        {
+            reportError(node->line, "failed to monomorphize struct: " +
+                                        genStructRef->structName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(structType, nullptr, node->name);
+        builder.CreateStore(initValue, alloca);
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->name] = mangledName;
+        constantVariables.insert(node->name);
+        return;
+    }
+
     // Handle generic list type
     if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
     {
@@ -1941,6 +2065,39 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    // Handle generic struct type reference (e.g., Pair<i32, i64>)
+    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(node->type))
+    {
+        // Get or create the monomorphized struct type
+        std::string mangledName = getOrCreateMonomorphizedStruct(
+            genStructRef->structName, genStructRef->typeArgs);
+
+        llvm::Type* structType = getStructType(mangledName);
+        if(!structType)
+        {
+            reportError(node->line, "failed to monomorphize struct: " +
+                                        genStructRef->structName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(structType, nullptr, node->name);
+
+        if(node->initExpr)
+        {
+            llvm::Value* initValue = generateExpression(node->initExpr);
+            if(initValue)
+            {
+                builder.CreateStore(initValue, alloca);
+            }
+        }
+
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->name] = mangledName;
+        return;
+    }
+
     // Handle generic list type
     if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
     {
@@ -2810,9 +2967,13 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         }
     }
 
-    // Add other parameters
+    // Add other parameters (skip 'self' if it's explicitly declared)
     for(auto param : method->parameters->parameters)
     {
+        // Skip 'self' parameter - it's handled separately above
+        if(param->name == "self")
+            continue;
+
         llvm::Type* paramType = getLLVMTypeFromNode(param->type);
         if(!paramType)
         {
@@ -2838,6 +2999,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
 
     // Set parameter names
     unsigned idx = 0;
+    unsigned paramIdx = 0;
     for(auto& arg : function->args())
     {
         if(idx == 0 && !method->isStatic)
@@ -2846,10 +3008,16 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         }
         else
         {
-            unsigned paramIdx = method->isStatic ? idx : idx - 1;
+            // Find the next non-self parameter
+            while(paramIdx < method->parameters->parameters.size() &&
+                  method->parameters->parameters[paramIdx]->name == "self")
+            {
+                paramIdx++;
+            }
             if(paramIdx < method->parameters->parameters.size())
             {
                 arg.setName(method->parameters->parameters[paramIdx]->name);
+                paramIdx++;
             }
         }
         idx++;
@@ -2892,7 +3060,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     variableTypes.clear();
 
     // Set up self parameter and other parameters
-    unsigned paramIdx = 0;
+    unsigned argIdx = 0;
+    unsigned methodParamIdx = 0;
     for(auto& arg : function->args())
     {
         llvm::AllocaInst* alloca = builder.CreateAlloca(
@@ -2900,7 +3069,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         builder.CreateStore(&arg, alloca);
         namedValues[std::string(arg.getName())] = alloca;
 
-        if(paramIdx == 0 && !method->isStatic)
+        if(argIdx == 0 && !method->isStatic)
         {
             // 'self' is a pointer to the struct
             structVariableTypes["self"] = structName;
@@ -2908,15 +3077,21 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         }
         else
         {
-            unsigned methodParamIdx =
-                method->isStatic ? paramIdx : paramIdx - 1;
+            // Find next non-self parameter
+            while(methodParamIdx < method->parameters->parameters.size() &&
+                  method->parameters->parameters[methodParamIdx]->name ==
+                      "self")
+            {
+                methodParamIdx++;
+            }
             if(methodParamIdx < method->parameters->parameters.size())
             {
                 variableTypes[std::string(arg.getName())] =
                     method->parameters->parameters[methodParamIdx]->type->kind;
+                methodParamIdx++;
             }
         }
-        paramIdx++;
+        argIdx++;
     }
 
     // Generate body
@@ -3050,6 +3225,52 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     {
         reportError(node->line, "unknown method: " + node->methodName);
         return nullptr;
+    }
+
+    // Check if this is a monomorphized struct method that needs body generation
+    // If the function is declared but has no body (empty), generate it now
+    if(callee->empty() && monomorphizedTypes.count(definingStruct))
+    {
+        // Find the method node
+        auto structIt = structMethods.find(definingStruct);
+        if(structIt != structMethods.end())
+        {
+            auto methodIt = structIt->second.find(node->methodName);
+            if(methodIt != structIt->second.end())
+            {
+                StructMethodNode* methodDef = methodIt->second.second;
+                if(methodDef && methodDef->body)
+                {
+                    // Save current state - generateMethodDefinition will clear
+                    // these
+                    llvm::BasicBlock* savedBlock = builder.GetInsertBlock();
+                    auto savedNamedValues = namedValues;
+                    auto savedConstantVariables = constantVariables;
+                    auto savedVariableTypes = variableTypes;
+                    auto savedStructVariableTypes = structVariableTypes;
+                    auto savedListElementTypes = listElementTypes;
+                    auto savedMapKeyValueTypes = mapKeyValueTypes;
+                    auto savedTupleElementTypes = tupleElementTypes;
+
+                    // Generate the method body
+                    generateMethodDefinition(definingStruct, methodDef);
+
+                    // Restore all state
+                    namedValues = savedNamedValues;
+                    constantVariables = savedConstantVariables;
+                    variableTypes = savedVariableTypes;
+                    structVariableTypes = savedStructVariableTypes;
+                    listElementTypes = savedListElementTypes;
+                    mapKeyValueTypes = savedMapKeyValueTypes;
+                    tupleElementTypes = savedTupleElementTypes;
+
+                    if(savedBlock)
+                    {
+                        builder.SetInsertPoint(savedBlock);
+                    }
+                }
+            }
+        }
     }
 
     // Build arguments - first is pointer to struct
@@ -3534,6 +3755,520 @@ llvm::Value* CodeGenerator::generateTupleAccess(TupleAccessNode* node)
     // Extract the element
     return builder.CreateExtractValue(
         tupleVal, static_cast<unsigned>(node->index), "tuple.elem");
+}
+
+llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
+{
+    std::string structTypeName = node->structName;
+
+    // Check if this is a generic struct instantiation (has type arguments)
+    if(!node->typeArgs.empty())
+        if(!node->typeArgs.empty())
+        {
+            // Convert typeArgs from strings to TypeNodes
+            // The typeArgs in StructLiteralNode are stored as strings from the
+            // parser We need to look them up and create proper TypeNode
+            // references
+            std::vector<TypeNode*> typeArgNodes;
+            for(const auto& typeArgStr : node->typeArgs)
+            {
+                // Try to create a TypeNode from the type argument string
+                TypeNode* typeArg = nullptr;
+
+                // Check if it's a basic type
+                if(typeArgStr == "i8")
+                    typeArg = new TypeNode(TypeNode::TYPE_I8);
+                else if(typeArgStr == "i16")
+                    typeArg = new TypeNode(TypeNode::TYPE_I16);
+                else if(typeArgStr == "i32")
+                    typeArg = new TypeNode(TypeNode::TYPE_I32);
+                else if(typeArgStr == "i64")
+                    typeArg = new TypeNode(TypeNode::TYPE_I64);
+                else if(typeArgStr == "u8")
+                    typeArg = new TypeNode(TypeNode::TYPE_U8);
+                else if(typeArgStr == "u16")
+                    typeArg = new TypeNode(TypeNode::TYPE_U16);
+                else if(typeArgStr == "u32")
+                    typeArg = new TypeNode(TypeNode::TYPE_U32);
+                else if(typeArgStr == "u64")
+                    typeArg = new TypeNode(TypeNode::TYPE_U64);
+                else if(typeArgStr == "int")
+                    typeArg = new TypeNode(TypeNode::TYPE_INT);
+                else if(typeArgStr == "float")
+                    typeArg = new TypeNode(TypeNode::TYPE_FLOAT);
+                else if(typeArgStr == "double")
+                    typeArg = new TypeNode(TypeNode::TYPE_DOUBLE);
+                else if(typeArgStr == "bool")
+                    typeArg = new TypeNode(TypeNode::TYPE_BOOL);
+                else if(typeArgStr == "string")
+                    typeArg = new TypeNode(TypeNode::TYPE_STRING);
+                else
+                {
+                    // Assume it's a struct type reference
+                    typeArg = new StructTypeRefNode(typeArgStr);
+                }
+
+                typeArgNodes.push_back(typeArg);
+            }
+
+            // Get or create the monomorphized struct type
+            structTypeName =
+                getOrCreateMonomorphizedStruct(node->structName, typeArgNodes);
+        }
+
+    // Get the struct type
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+    {
+        reportError(node->line, "unknown struct type: " + structTypeName);
+        return nullptr;
+    }
+
+    // Get struct member info
+    auto memberIt = structMembers.find(structTypeName);
+    if(memberIt == structMembers.end())
+    {
+        reportError(node->line, "no member info for struct: " + structTypeName);
+        return nullptr;
+    }
+    const auto& members = memberIt->second;
+
+    // Build the struct value
+    llvm::Value* structVal = llvm::UndefValue::get(structType);
+
+    // Process each field initialization
+    for(const auto& fieldInit : node->fields)
+    {
+        const std::string& fieldName = fieldInit.first;
+        ExpressionNode* valueExpr = fieldInit.second;
+
+        // Find the member index
+        int memberIndex = -1;
+        for(size_t i = 0; i < members.size(); ++i)
+        {
+            if(members[i].first == fieldName)
+            {
+                memberIndex = static_cast<int>(i);
+                break;
+            }
+        }
+
+        if(memberIndex < 0)
+        {
+            reportError(node->line, "unknown field '" + fieldName +
+                                        "' in struct '" + structTypeName + "'");
+            return nullptr;
+        }
+
+        // Generate the field value
+        llvm::Value* fieldValue = generateExpression(valueExpr);
+        if(!fieldValue)
+        {
+            reportError(node->line, "failed to generate value for field '" +
+                                        fieldName + "'");
+            return nullptr;
+        }
+
+        // Get the expected field type from the struct
+        llvm::Type* expectedType = structType->getElementType(memberIndex);
+        llvm::Type* actualType = fieldValue->getType();
+
+        // Convert value to expected type if needed
+        if(actualType != expectedType)
+        {
+            if(actualType->isIntegerTy() && expectedType->isIntegerTy())
+            {
+                unsigned actualBits = actualType->getIntegerBitWidth();
+                unsigned expectedBits = expectedType->getIntegerBitWidth();
+                if(actualBits > expectedBits)
+                {
+                    fieldValue =
+                        builder.CreateTrunc(fieldValue, expectedType, "trunc");
+                }
+                else if(actualBits < expectedBits)
+                {
+                    fieldValue =
+                        builder.CreateSExt(fieldValue, expectedType, "sext");
+                }
+            }
+            else if(actualType->isFloatingPointTy() &&
+                    expectedType->isFloatingPointTy())
+            {
+                fieldValue =
+                    builder.CreateFPCast(fieldValue, expectedType, "fpcast");
+            }
+            else if(actualType->isIntegerTy() &&
+                    expectedType->isFloatingPointTy())
+            {
+                fieldValue =
+                    builder.CreateSIToFP(fieldValue, expectedType, "sitofp");
+            }
+            else if(actualType->isFloatingPointTy() &&
+                    expectedType->isIntegerTy())
+            {
+                fieldValue =
+                    builder.CreateFPToSI(fieldValue, expectedType, "fptosi");
+            }
+        }
+
+        // Insert the value into the struct
+        structVal = builder.CreateInsertValue(
+            structVal, fieldValue, static_cast<unsigned>(memberIndex),
+            structTypeName + "." + fieldName);
+    }
+
+    return structVal;
+}
+
+// ============================================================================
+// GENERICS MONOMORPHIZATION IMPLEMENTATION
+// ============================================================================
+
+// Substitute type parameters with concrete types
+// e.g., if typeParams = ["T", "U"] and typeArgs = [i32, i64],
+// then a StructTypeRefNode("T") becomes a TypeNode(TYPE_I32)
+TypeNode*
+CodeGenerator::substituteTypeParams(TypeNode* type,
+                                    const std::vector<std::string>& typeParams,
+                                    const std::vector<TypeNode*>& typeArgs)
+{
+    if(!type)
+        return nullptr;
+
+    // Check if this is a struct type reference that matches a type parameter
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+    {
+        // Look for matching type parameter
+        for(size_t i = 0; i < typeParams.size() && i < typeArgs.size(); ++i)
+        {
+            if(structRef->structName == typeParams[i])
+            {
+                // Return a copy of the concrete type
+                return typeArgs[i];
+            }
+        }
+        // Not a type parameter - return as-is (it's a concrete struct type)
+        return type;
+    }
+
+    // Check if this is a generic struct type reference
+    if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+    {
+        // Recursively substitute type arguments
+        auto* newRef = new GenericStructTypeRefNode(genRef->structName);
+        for(auto* arg : genRef->typeArgs)
+        {
+            newRef->typeArgs.push_back(
+                substituteTypeParams(arg, typeParams, typeArgs));
+        }
+        return newRef;
+    }
+
+    // Handle generic list type
+    if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
+    {
+        TypeNode* newElemType =
+            substituteTypeParams(listType->elementType, typeParams, typeArgs);
+        return new GenericListTypeNode(newElemType);
+    }
+
+    // Handle map type
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+    {
+        TypeNode* newKeyType =
+            substituteTypeParams(mapType->keyType, typeParams, typeArgs);
+        TypeNode* newValType =
+            substituteTypeParams(mapType->valueType, typeParams, typeArgs);
+        return new MapTypeNode(newKeyType, newValType);
+    }
+
+    // Handle tuple type
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+    {
+        auto* newTypeList = new TypeListNode();
+        for(auto* elemType : tupleType->elementTypes->types)
+        {
+            newTypeList->addType(
+                substituteTypeParams(elemType, typeParams, typeArgs));
+        }
+        return new TupleTypeNode(newTypeList);
+    }
+
+    // Basic types don't need substitution
+    return type;
+}
+
+// Generate a mangled name for a monomorphized struct
+static std::string generateMangledName(const std::string& baseName,
+                                       const std::vector<TypeNode*>& typeArgs)
+{
+    std::string mangled = baseName;
+    for(auto* typeArg : typeArgs)
+    {
+        mangled += "_";
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeArg))
+        {
+            mangled += structRef->structName;
+        }
+        else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(typeArg))
+        {
+            mangled += genRef->getMangledName();
+        }
+        else
+        {
+            switch(typeArg->kind)
+            {
+            case TypeNode::TYPE_BOOL:
+                mangled += "bool";
+                break;
+            case TypeNode::TYPE_INT:
+                mangled += "int";
+                break;
+            case TypeNode::TYPE_I8:
+                mangled += "i8";
+                break;
+            case TypeNode::TYPE_I16:
+                mangled += "i16";
+                break;
+            case TypeNode::TYPE_I32:
+                mangled += "i32";
+                break;
+            case TypeNode::TYPE_I64:
+                mangled += "i64";
+                break;
+            case TypeNode::TYPE_U8:
+                mangled += "u8";
+                break;
+            case TypeNode::TYPE_U16:
+                mangled += "u16";
+                break;
+            case TypeNode::TYPE_U32:
+                mangled += "u32";
+                break;
+            case TypeNode::TYPE_U64:
+                mangled += "u64";
+                break;
+            case TypeNode::TYPE_FLOAT:
+                mangled += "float";
+                break;
+            case TypeNode::TYPE_DOUBLE:
+                mangled += "double";
+                break;
+            case TypeNode::TYPE_STRING:
+                mangled += "string";
+                break;
+            default:
+                mangled += "unknown";
+                break;
+            }
+        }
+    }
+    return mangled;
+}
+
+// Monomorphize a generic struct with concrete type arguments
+void CodeGenerator::monomorphizeStruct(const std::string& genericName,
+                                       const std::vector<TypeNode*>& typeArgs,
+                                       const std::string& mangledName)
+{
+    // Find the generic template
+    auto templateIt = genericStructTemplates.find(genericName);
+    if(templateIt == genericStructTemplates.end())
+    {
+        std::cerr << "Error: Generic struct template '" << genericName
+                  << "' not found" << std::endl;
+        hasError = true;
+        return;
+    }
+
+    StructDefNode* templateStruct = templateIt->second;
+    const std::vector<std::string>& typeParams = templateStruct->typeParams;
+
+    if(typeParams.size() != typeArgs.size())
+    {
+        std::cerr << "Error: Type argument count mismatch for '" << genericName
+                  << "': expected " << typeParams.size() << ", got "
+                  << typeArgs.size() << std::endl;
+        hasError = true;
+        return;
+    }
+
+    // Generate the monomorphized struct type
+    std::vector<llvm::Type*> memberTypes;
+    std::vector<std::pair<std::string, TypeNode*>> members;
+
+    // Process each member, substituting type parameters
+    if(templateStruct->members)
+    {
+        for(auto* member : templateStruct->members->members)
+        {
+            TypeNode* substitutedType =
+                substituteTypeParams(member->type, typeParams, typeArgs);
+
+            llvm::Type* llvmType = getLLVMTypeFromNode(substitutedType);
+            if(!llvmType)
+            {
+                std::cerr << "Error: Failed to get LLVM type for member '"
+                          << member->name << "' in " << mangledName
+                          << std::endl;
+                hasError = true;
+                return;
+            }
+
+            memberTypes.push_back(llvmType);
+            members.push_back({member->name, substitutedType});
+        }
+    }
+
+    // Create the LLVM struct type
+    llvm::StructType* structType =
+        llvm::StructType::create(context, memberTypes, mangledName);
+
+    // Register the monomorphized type
+    structTypes[mangledName] = structType;
+    structMembers[mangledName] = members;
+    monomorphizedTypes.insert(mangledName);
+    mangledToGenericName[mangledName] = genericName;
+
+    // Copy visibility from template
+    structVisibility[mangledName] =
+        std::make_pair(templateStruct->isPublic, templateStruct->sourceModule);
+
+    // Store the type params and args for later method generation
+    // We'll generate methods lazily when they're called
+
+    // Process impl blocks - just register methods, don't generate bodies yet
+    auto implIt = genericImplBlocks.find(genericName);
+    if(implIt != genericImplBlocks.end())
+    {
+        for(auto* impl : implIt->second)
+        {
+            for(auto* method : impl->methods)
+            {
+                // Substitute types in return type
+                TypeNode* newReturnType = substituteTypeParams(
+                    method->returnType, typeParams, typeArgs);
+
+                // Substitute types in parameters
+                auto* newParams = new ParameterListNode();
+                for(auto* param : method->parameters->parameters)
+                {
+                    TypeNode* newParamType =
+                        substituteTypeParams(param->type, typeParams, typeArgs);
+                    newParams->parameters.push_back(
+                        new ParameterNode(newParamType, param->name));
+                }
+
+                // Create monomorphized method node
+                auto* newMethod = new StructMethodNode(
+                    newReturnType, method->name, newParams, method->body,
+                    method->isPublic, method->isStatic);
+
+                // Register the method (but don't generate code yet)
+                structMethods[mangledName][method->name] =
+                    std::make_pair(method->isPublic, newMethod);
+
+                // Generate only the declaration (forward declaration)
+                generateMethodDeclaration(mangledName, newMethod);
+            }
+        }
+    }
+
+    // Process methods defined inside the struct template
+    if(templateStruct->members)
+    {
+        for(auto* method : templateStruct->members->methods)
+        {
+            // Substitute types in return type and parameters
+            TypeNode* newReturnType =
+                substituteTypeParams(method->returnType, typeParams, typeArgs);
+
+            auto* newParams = new ParameterListNode();
+            for(auto* param : method->parameters->parameters)
+            {
+                TypeNode* newParamType =
+                    substituteTypeParams(param->type, typeParams, typeArgs);
+                newParams->parameters.push_back(
+                    new ParameterNode(newParamType, param->name));
+            }
+
+            // Create a new method node with substituted types
+            auto* newMethod = new StructMethodNode(
+                newReturnType, method->name, newParams, method->body,
+                method->isPublic, method->isStatic);
+
+            // Register the method
+            structMethods[mangledName][method->name] =
+                std::make_pair(method->isPublic, newMethod);
+
+            // Generate only the declaration
+            generateMethodDeclaration(mangledName, newMethod);
+        }
+    }
+}
+
+// Monomorphize an impl block (Note: this is no longer called from
+// monomorphizeStruct but kept for potential future use)
+void CodeGenerator::monomorphizeImplBlock(
+    ImplBlockNode* impl, const std::vector<std::string>& typeParams,
+    const std::vector<TypeNode*>& typeArgs,
+    const std::string& mangledStructName)
+{
+    for(auto* method : impl->methods)
+    {
+        // Substitute types in return type
+        TypeNode* newReturnType =
+            substituteTypeParams(method->returnType, typeParams, typeArgs);
+
+        // Substitute types in parameters
+        auto* newParams = new ParameterListNode();
+        for(auto* param : method->parameters->parameters)
+        {
+            TypeNode* newParamType =
+                substituteTypeParams(param->type, typeParams, typeArgs);
+            newParams->parameters.push_back(
+                new ParameterNode(newParamType, param->name));
+        }
+
+        // Create monomorphized method
+        auto* newMethod = new StructMethodNode(
+            newReturnType, method->name, newParams, method->body,
+            method->isPublic, method->isStatic);
+
+        // Register the method
+        structMethods[mangledStructName][method->name] =
+            std::make_pair(method->isPublic, newMethod);
+
+        // Generate only declaration (body is generated lazily on first call)
+        generateMethodDeclaration(mangledStructName, newMethod);
+    }
+}
+
+// Get or create a monomorphized struct type
+std::string CodeGenerator::getOrCreateMonomorphizedStruct(
+    const std::string& genericName, const std::vector<TypeNode*>& typeArgs)
+{
+    // Generate the mangled name
+    std::string mangledName = generateMangledName(genericName, typeArgs);
+
+    // Check if already monomorphized
+    if(monomorphizedTypes.count(mangledName))
+    {
+        return mangledName;
+    }
+
+    // Check if this is actually a generic struct
+    if(genericStructTemplates.find(genericName) == genericStructTemplates.end())
+    {
+        // Not a generic struct - might be a non-generic struct being used
+        // Just return the original name
+        return genericName;
+    }
+
+    // Monomorphize the struct
+    monomorphizeStruct(genericName, typeArgs, mangledName);
+
+    return mangledName;
 }
 
 // Backend implementation

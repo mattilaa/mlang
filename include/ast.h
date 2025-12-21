@@ -18,6 +18,10 @@ class ProgramNode;
 class StructDefNode;
 class StructListNode;
 class TopLevelListNode;
+class TypeParamListNode;
+class ImplBlockNode;
+class ImplListNode;
+class StructLiteralNode;
 
 // Base AST node
 class ASTNode
@@ -125,6 +129,24 @@ public:
         : TypeNode(TYPE_STRUCT), structName(name)
     {
     }
+    std::string toString() const override;
+};
+
+// Generic struct type reference node: for types like Pair<i32, i64>
+class GenericStructTypeRefNode : public TypeNode
+{
+public:
+    std::string structName;
+    std::vector<TypeNode*> typeArgs; // The concrete type arguments
+
+    GenericStructTypeRefNode(const std::string& name)
+        : TypeNode(TYPE_STRUCT), structName(name)
+    {
+    }
+
+    // Get the mangled name for this instantiation (e.g., "Pair_i32_i64")
+    std::string getMangledName() const;
+
     std::string toString() const override;
 };
 
@@ -622,6 +644,8 @@ public:
     bool isPublic;
     std::string sourceModule; // Module this struct was defined in (for
                               // visibility checks)
+    std::vector<std::string>
+        typeParams; // Generic type parameters like T, U, etc.
 
     StructDefNode(const std::string& n, const std::string& b,
                   StructMemberListNode* m, bool pub = false)
@@ -632,6 +656,67 @@ public:
 
     // Get all methods including inherited ones
     std::vector<StructMethodNode*> getAllMethods() const;
+
+    // Check if this is a generic struct
+    bool isGeneric() const
+    {
+        return !typeParams.empty();
+    }
+};
+
+// Type parameter list node for generic types
+class TypeParamListNode : public ASTNode
+{
+public:
+    std::vector<std::string> params;
+
+    void addParam(const std::string& p)
+    {
+        params.push_back(p);
+    }
+    std::string toString() const override;
+};
+
+// Impl block for adding methods to a struct
+class ImplBlockNode : public ASTNode
+{
+public:
+    std::string structName;
+    std::vector<std::string> typeParams; // Generic type parameters
+    std::vector<StructMethodNode*> methods;
+
+    ImplBlockNode(const std::string& name) : structName(name) {}
+    std::string toString() const override;
+};
+
+// List of impl blocks
+class ImplListNode : public ASTNode
+{
+public:
+    std::vector<ImplBlockNode*> impls;
+
+    void addImpl(ImplBlockNode* impl)
+    {
+        impls.push_back(impl);
+    }
+    std::string toString() const override;
+};
+
+// Struct literal expression: StructName { field1: value1, field2: value2 }
+class StructLiteralNode : public ExpressionNode
+{
+public:
+    std::string structName;
+    std::vector<std::string> typeArgs; // For generic types like Box<int>
+    std::vector<std::pair<std::string, ExpressionNode*>> fields;
+
+    StructLiteralNode(const std::string& name) : structName(name) {}
+
+    void addField(const std::string& fieldName, ExpressionNode* value)
+    {
+        fields.push_back({fieldName, value});
+    }
+    std::string toString() const override;
 };
 
 class StructListNode : public ASTNode
@@ -740,6 +825,7 @@ class ProgramNode : public ASTNode
 public:
     StructListNode* structList = nullptr;
     FunctionListNode* functionList = nullptr;
+    ImplListNode* implList = nullptr;
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
 
@@ -834,5 +920,19 @@ ASTNode* create_field_assignment(char* struct_name, char* field_name,
                                  ASTNode* expr, int line);
 ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr,
                                          int line);
+
+// Generic structs and impl blocks
+ASTNode* create_type_param_list(char* param);
+ASTNode* add_type_param(ASTNode* list, char* param);
+ASTNode* create_generic_struct_def(char* name, char* base_name,
+                                   ASTNode* type_params, ASTNode* members,
+                                   int is_public);
+ASTNode* create_impl_block(char* struct_name, ASTNode* type_params);
+ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
+ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args,
+                               ASTNode* fields, int line);
+ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
+ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value);
+ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 
 #endif // AST_H

@@ -89,6 +89,16 @@ ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
 ASTNode* create_struct_type_ref(char* name);
 ASTNode* create_len_expression(ASTNode* expr, int line);
 ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
+// Generic structs and impl blocks
+ASTNode* create_type_param_list(char* param);
+ASTNode* add_type_param(ASTNode* list, char* param);
+ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public);
+ASTNode* create_impl_block(char* struct_name, ASTNode* type_params);
+ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
+ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
+ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
+ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value);
+ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %}
 
 %union {
@@ -104,7 +114,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP TUPLE STRUCT
-%token PUB
+%token PUB IMPL
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
@@ -132,6 +142,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
+%type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -158,6 +169,7 @@ top_level_item
     | function_def
     | mod_declaration
     | use_declaration
+    | impl_block
     ;
 
 mod_declaration
@@ -181,6 +193,50 @@ struct_def
         { $$ = create_struct_def($3, NULL, $5, 1); }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_struct_def($3, $5, $7, 1); }
+    /* Generic struct definitions */
+    | STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($2, NULL, $4, $7, 0); }
+    | PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($3, NULL, $5, $8, 1); }
+    ;
+
+type_param_list
+    : IDENTIFIER { $$ = create_type_param_list($1); }
+    | type_param_list COMMA IDENTIFIER { $$ = add_type_param($1, $3); }
+    ;
+
+impl_block
+    : IMPL IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = create_impl_block($2, NULL);
+            // Copy methods from temp list
+            $$ = impl;
+            // Methods are added via impl_method_list
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($4);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+        }
+    | IMPL LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = create_impl_block($5, $3);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($7);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            $$ = impl;
+        }
+    ;
+
+impl_method_list
+    : /* empty */ { $$ = create_impl_block("", NULL); }
+    | impl_method_list struct_method
+        {
+            $$ = add_impl_method($1, $2);
+        }
+    ;
     ;
 
 struct_member_list
@@ -245,6 +301,7 @@ type
     | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
     | IDENTIFIER { $$ = create_struct_type_ref($1); }
+    | IDENTIFIER LT type_list GT { $$ = create_generic_struct_type_ref($1, $3); }
     ;
 
 tuple_type
@@ -326,15 +383,37 @@ block_statement
 for_statement
     : FOR IDENTIFIER IN range_expression block_statement
         { $$ = create_for_range($2, $4, $5, yylineno); }
-    | FOR IDENTIFIER IN expression block_statement
+    | FOR IDENTIFIER IN primary_expression block_statement
         { $$ = create_for_iterator($2, $4, $5, yylineno); }
+    | FOR IDENTIFIER IN primary_expression KEYS_METHOD block_statement
+        { $$ = create_for_iterator($2, create_map_keys_iterator($4, yylineno), $6, yylineno); }
+    | FOR IDENTIFIER IN primary_expression VALUES_METHOD block_statement
+        { $$ = create_for_iterator($2, create_map_values_iterator($4, yylineno), $6, yylineno); }
+    | FOR IDENTIFIER IN primary_expression ENTRIES_METHOD block_statement
+        { $$ = create_for_iterator($2, create_map_entries_iterator($4, yylineno), $6, yylineno); }
     ;
 
 range_expression
-    : expression DOTDOT expression
+    : primary_expression DOTDOT primary_expression
         { $$ = create_range_expression($1, $3, 0); }
-    | expression DOTDOTEQ expression
+    | primary_expression DOTDOTEQ primary_expression
         { $$ = create_range_expression($1, $3, 1); }
+    | primary_expression DOTDOT primary_expression PLUS primary_expression
+        { $$ = create_range_expression($1, create_binary_op(PLUS, $3, $5), 0); }
+    | primary_expression DOTDOT primary_expression MINUS primary_expression
+        { $$ = create_range_expression($1, create_binary_op(MINUS, $3, $5), 0); }
+    | primary_expression DOTDOTEQ primary_expression PLUS primary_expression
+        { $$ = create_range_expression($1, create_binary_op(PLUS, $3, $5), 1); }
+    | primary_expression DOTDOTEQ primary_expression MINUS primary_expression
+        { $$ = create_range_expression($1, create_binary_op(MINUS, $3, $5), 1); }
+    | primary_expression PLUS primary_expression DOTDOT primary_expression
+        { $$ = create_range_expression(create_binary_op(PLUS, $1, $3), $5, 0); }
+    | primary_expression MINUS primary_expression DOTDOT primary_expression
+        { $$ = create_range_expression(create_binary_op(MINUS, $1, $3), $5, 0); }
+    | primary_expression PLUS primary_expression DOTDOTEQ primary_expression
+        { $$ = create_range_expression(create_binary_op(PLUS, $1, $3), $5, 1); }
+    | primary_expression MINUS primary_expression DOTDOTEQ primary_expression
+        { $$ = create_range_expression(create_binary_op(MINUS, $1, $3), $5, 1); }
     ;
 
 struct_init
@@ -399,6 +478,7 @@ expression
     | index_expression
     | tuple_literal
     | map_iterator
+    | struct_literal
     ;
 
 primary_expression
@@ -410,6 +490,22 @@ primary_expression
     | FALSE_LIT { $$ = create_bool_literal(0); }
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }
+    ;
+
+/* Struct literal: StructName { field: value, ... } */
+struct_literal
+    : IDENTIFIER LBRACE struct_field_init_list RBRACE
+        { $$ = create_struct_literal($1, NULL, $3, yylineno); }
+    | IDENTIFIER LT type_list GT LBRACE struct_field_init_list RBRACE
+        { $$ = create_struct_literal($1, $3, $6, yylineno); }
+    ;
+
+struct_field_init_list
+    : /* empty */ { $$ = NULL; }
+    | IDENTIFIER COLON expression
+        { $$ = create_struct_field_init_list($1, $3); }
+    | struct_field_init_list COMMA IDENTIFIER COLON expression
+        { $$ = add_struct_field_init($1, $3, $5); }
     ;
 
 postfix_expression
