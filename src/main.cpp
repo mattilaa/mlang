@@ -1,6 +1,8 @@
 #include "ast.h"
 #include "ir.h"
+#include "module.h"
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -169,6 +171,58 @@ int main(int argc, char** argv)
             std::cerr << "Error: No program root node created" << std::endl;
             fclose(input_file);
             return 1;
+        }
+
+        // Process modules
+        if(auto* program = dynamic_cast<ProgramNode*>(programRoot))
+        {
+            // Get the directory of the input file for module resolution
+            std::filesystem::path inputPath(inputFile);
+            std::string basePath = inputPath.parent_path().string();
+            if(basePath.empty())
+            {
+                basePath = ".";
+            }
+
+            // Initialize module loader
+            ModuleLoader moduleLoader(basePath);
+
+            // Process mod declarations (load modules)
+            if(!program->modules.empty())
+            {
+                if(verbose)
+                {
+                    std::cout << "Loading modules..." << std::endl;
+                }
+
+                std::string errorMsg;
+                if(!moduleLoader.processModDeclarations(program, errorMsg))
+                {
+                    std::cerr << "Error: " << errorMsg << std::endl;
+                    fclose(input_file);
+                    delete programRoot;
+                    return 1;
+                }
+
+                // Process use declarations (import symbols)
+                if(!moduleLoader.processUseDeclarations(program, errorMsg))
+                {
+                    std::cerr << "Error: " << errorMsg << std::endl;
+                    fclose(input_file);
+                    delete programRoot;
+                    return 1;
+                }
+
+                if(verbose)
+                {
+                    std::cout << "Modules loaded: ";
+                    for(const auto& mod : moduleLoader.getLoadedModules())
+                    {
+                        std::cout << mod << " ";
+                    }
+                    std::cout << std::endl;
+                }
+            }
         }
 
         // Initialize code generator

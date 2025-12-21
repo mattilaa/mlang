@@ -49,6 +49,14 @@ private:
     std::map<std::string, std::string> structVariableTypes;
     bool hasError;
 
+    // Visibility tracking for functions
+    // Maps function name -> (isPublic, sourceModule)
+    std::map<std::string, std::pair<bool, std::string>> functionVisibility;
+    // Maps struct name -> (isPublic, sourceModule)
+    std::map<std::string, std::pair<bool, std::string>> structVisibility;
+    // Current module being compiled (empty string for main module)
+    std::string currentModule;
+
     // Stdio function support
     bool stdioInitialized;
     llvm::FunctionCallee printfFunc;

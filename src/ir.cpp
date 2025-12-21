@@ -415,12 +415,26 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 
 void CodeGenerator::generateCode(ProgramNode* program)
 {
-    // First generate all struct definitions
+    // First generate all struct definitions and track their visibility
     if(program->structList)
     {
         for(auto structDef : program->structList->structs)
         {
+            // Track struct visibility
+            structVisibility[structDef->name] =
+                std::make_pair(structDef->isPublic, structDef->sourceModule);
             generateStructDefinition(structDef);
+        }
+    }
+
+    // Track function visibility before generating declarations
+    if(program->functionList)
+    {
+        for(auto funcDef : program->functionList->functions)
+        {
+            // Track function visibility
+            functionVisibility[funcDef->name] =
+                std::make_pair(funcDef->isPublic, funcDef->sourceModule);
         }
     }
 
@@ -455,10 +469,24 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     std::vector<llvm::Type*> paramTypes;
     for(auto param : node->parameters->parameters)
     {
-        paramTypes.push_back(getLLVMType(param->type->kind));
+        llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+        if(!paramType)
+        {
+            reportError(param->line,
+                        "unknown parameter type for '" + param->name + "'");
+            paramType = llvm::Type::getInt32Ty(context); // fallback
+        }
+        paramTypes.push_back(paramType);
     }
 
-    llvm::Type* returnType = getLLVMType(node->returnType->kind);
+    llvm::Type* returnType = getLLVMTypeFromNode(node->returnType);
+    if(!returnType)
+    {
+        reportError(node->line,
+                    "unknown return type for function '" + node->name + "'");
+        returnType = llvm::Type::getVoidTy(context); // fallback
+    }
+
     llvm::FunctionType* funcType =
         llvm::FunctionType::get(returnType, paramTypes, false);
     llvm::Function* function = llvm::Function::Create(
@@ -484,6 +512,25 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         function = generateFunctionDeclaration(node);
     }
 
+    // Check if function already has a body (was already defined)
+    if(!function->empty())
+    {
+        // Function already defined, skip
+        return function;
+    }
+
+    // Check if this function has a body to generate
+    if(!node->body)
+    {
+        // No body - this shouldn't happen for valid functions
+        reportError(node->line, "function '" + node->name + "' has no body");
+        return function;
+    }
+
+    // Track which module this function is from (for visibility checks)
+    std::string savedModule = currentModule;
+    currentModule = node->sourceModule;
+
     // Create a new basic block for the function
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
     builder.SetInsertPoint(bb);
@@ -493,6 +540,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     constantVariables.clear();
     variableTypes.clear();
 
+    // Set up parameters
+    unsigned paramIdx = 0;
     for(auto& arg : function->args())
     {
         // Allocate space for parameters so they can be modified
@@ -500,24 +549,44 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
         builder.CreateStore(&arg, alloca);
         namedValues[std::string(arg.getName())] = alloca;
+
+        // Track parameter types
+        if(paramIdx < node->parameters->parameters.size())
+        {
+            variableTypes[std::string(arg.getName())] =
+                node->parameters->parameters[paramIdx]->type->kind;
+        }
+        paramIdx++;
     }
 
     // Generate the function body
-    for(auto stmt : node->body->statements)
+    if(node->body)
     {
-        generateStatement(stmt);
+        for(auto stmt : node->body->statements)
+        {
+            generateStatement(stmt);
+        }
     }
 
     // If the function is void and doesn't have a return, add one
     llvm::Type* returnType = function->getReturnType();
-    if(returnType->isVoidTy())
+    llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
+    if(!currentBlock->getTerminator())
     {
-        llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
-        if(!currentBlock->getTerminator())
+        if(returnType->isVoidTy())
         {
             builder.CreateRetVoid();
         }
+        else
+        {
+            // For non-void functions without a return, add unreachable
+            // This indicates a bug in the source code but prevents LLVM crashes
+            builder.CreateUnreachable();
+        }
     }
+
+    // Restore the previous module context
+    currentModule = savedModule;
 
     // Verify the function
     llvm::verifyFunction(*function);
@@ -2287,6 +2356,23 @@ void CodeGenerator::reportError(int line, const std::string& message)
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    // Check visibility
+    auto visIt = functionVisibility.find(node->name);
+    if(visIt != functionVisibility.end())
+    {
+        bool isPublic = visIt->second.first;
+        const std::string& sourceModule = visIt->second.second;
+
+        // If the function is from a different module and is private, error
+        if(!sourceModule.empty() && sourceModule != currentModule && !isPublic)
+        {
+            reportError(node->line, "function '" + node->name +
+                                        "' is private in module '" +
+                                        sourceModule + "'");
+            return nullptr;
+        }
+    }
+
     llvm::Function* callee = module->getFunction(node->name);
     if(!callee)
     {

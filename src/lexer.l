@@ -37,6 +37,7 @@
     [^\\\n\"]+  { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + strlen(yytext) + 1);
                   strcat(yylval.sval, yytext); }
 }
+"pub"           { return PUB; }
 "fn"            { return FUNCTION; }
 "return"        { return RETURN; }
 "if"            { return IF; }

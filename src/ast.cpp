@@ -67,11 +67,12 @@ ASTNode* add_function_to_list(ASTNode* list, ASTNode* function)
 }
 
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
-                             ASTNode* body)
+                             ASTNode* body, int is_public)
 {
     return new FunctionDefNode(static_cast<TypeNode*>(type), std::string(name),
                                static_cast<ParameterListNode*>(params),
-                               static_cast<StatementListNode*>(body));
+                               static_cast<StatementListNode*>(body),
+                               is_public != 0);
 }
 
 ASTNode* create_type_node(TypeNode::TypeKind type)
@@ -212,9 +213,11 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
                             static_cast<ExpressionNode*>(right));
 }
 
-ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2)
+ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
+                              int line)
 {
     auto call = new FunctionCallNode(std::string(name));
+    call->line = line;
     if(arg1)
         call->arguments.push_back(static_cast<ExpressionNode*>(arg1));
     if(arg2)
@@ -253,9 +256,10 @@ ASTNode* add_argument(ASTNode* list, ASTNode* arg)
     return argList;
 }
 
-ASTNode* create_function_call_multi(char* name, ASTNode* args)
+ASTNode* create_function_call_multi(char* name, ASTNode* args, int line)
 {
     auto call = new FunctionCallNode(std::string(name));
+    call->line = line;
     if(args)
     {
         auto argList = static_cast<ArgumentListNode*>(args);
@@ -320,11 +324,12 @@ ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def)
     return structList;
 }
 
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members)
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
+                           int is_public)
 {
-    return new StructDefNode(std::string(name),
-                             base_name ? std::string(base_name) : "",
-                             static_cast<StructMemberListNode*>(members));
+    return new StructDefNode(
+        std::string(name), base_name ? std::string(base_name) : "",
+        static_cast<StructMemberListNode*>(members), is_public != 0);
 }
 
 ASTNode* create_struct_member_list(ASTNode* member)
@@ -512,7 +517,8 @@ std::string ParameterListNode::toString() const
 
 std::string FunctionDefNode::toString() const
 {
-    std::string result = "fn " + name + "(" + parameters->toString() + ") -> ";
+    std::string result = isPublic ? "pub fn " : "fn ";
+    result += name + "(" + parameters->toString() + ") -> ";
     result += returnType->toString() + " {\n";
     result += body->toString();
     result += "}\n";
@@ -739,7 +745,8 @@ std::string StructMemberListNode::toString() const
 
 std::string StructDefNode::toString() const
 {
-    std::string result = "struct " + name;
+    std::string result = isPublic ? "pub struct " : "struct ";
+    result += name;
     if(!baseName.empty())
     {
         result += " : " + baseName;

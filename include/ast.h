@@ -556,10 +556,13 @@ public:
     std::string name;
     std::string baseName;
     StructMemberListNode* members;
+    bool isPublic;
+    std::string sourceModule; // Module this struct was defined in (for
+                              // visibility checks)
 
     StructDefNode(const std::string& n, const std::string& b,
-                  StructMemberListNode* m)
-        : name(n), baseName(b), members(m)
+                  StructMemberListNode* m, bool pub = false)
+        : name(n), baseName(b), members(m), isPublic(pub)
     {
     }
     std::string toString() const override;
@@ -614,10 +617,13 @@ public:
     std::string name;
     ParameterListNode* parameters;
     StatementListNode* body;
+    bool isPublic;
+    std::string sourceModule; // Module this function was defined in (for
+                              // visibility checks)
 
     FunctionDefNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
-                    StatementListNode* b)
-        : returnType(rt), name(n), parameters(p), body(b)
+                    StatementListNode* b, bool pub = false)
+        : returnType(rt), name(n), parameters(p), body(b), isPublic(pub)
     {
     }
     std::string toString() const override;
@@ -683,7 +689,7 @@ ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
-                             ASTNode* body);
+                             ASTNode* body, int is_public);
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
@@ -701,14 +707,16 @@ ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
-ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
-ASTNode* create_function_call_multi(char* name, ASTNode* args);
+ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
+                              int line);
+ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
+                           int is_public);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,

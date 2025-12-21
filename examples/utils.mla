@@ -1,25 +1,25 @@
-fn max(a: int, b: int) -> int {
+pub fn max(a: int, b: int) -> int {
     if a > b: {
         return a;
     }
     return b;
 }
 
-fn min(a: int, b: int) -> int {
+pub fn min(a: int, b: int) -> int {
     if a < b: {
         return a;
     }
     return b;
 }
 
-fn abs(x: int) -> int {
+pub fn abs(x: int) -> int {
     if x < 0: {
         return 0 - x;
     }
     return x;
 }
 
-fn clamp(value: int, low: int, high: int) -> int {
+pub fn clamp(value: int, low: int, high: int) -> int {
     if value < low: {
         return low;
     }

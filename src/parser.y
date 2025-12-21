@@ -21,7 +21,7 @@ ASTNode* create_struct_list(ASTNode* struct_def);
 ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
-ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body);
+ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public);
 ASTNode* create_type_node(int type);
 ASTNode* create_parameter_list();
 ASTNode* create_empty_parameter_list();
@@ -40,13 +40,13 @@ ASTNode* create_double_literal(float value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
-ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2);
-ASTNode* create_function_call_multi(char* name, ASTNode* args);
+ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
+ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members);
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
@@ -99,6 +99,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP TUPLE STRUCT
+%token PUB
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
@@ -168,9 +169,13 @@ use_declaration
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($2, NULL, $4); }
+        { $$ = create_struct_def($2, NULL, $4, 0); }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($2, $4, $6); }
+        { $$ = create_struct_def($2, $4, $6, 0); }
+    | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($3, NULL, $5, 1); }
+    | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($3, $5, $7, 1); }
     ;
 
 struct_member_list
@@ -187,7 +192,9 @@ struct_member
 
 function_def
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_function_def($7, $2, $4, $9); }
+        { $$ = create_function_def($7, $2, $4, $9, 0); }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = create_function_def($8, $3, $5, $10, 1); }
     ;
 
 parameter_list
@@ -400,8 +407,8 @@ binary_expression
     ;
 
 function_call
-    : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL); }
-    | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3); }
+    : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL, yylineno); }
+    | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3, yylineno); }
     ;
 
 cast_expression

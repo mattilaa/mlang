@@ -1,9 +1,7 @@
 mod math;
 mod utils;
 
-use math::factorial;
-use math::sum_range;
-use math::square;
+use math::*;
 
 use utils::*;
 
@@ -11,14 +9,14 @@ fn main() -> int {
     let fact5: int = factorial(5);
     let sum: int = sum_range(1, 5);
     let sq: int = square(3);
-    
+
     let maximum: int = max(10, 20);
     let minimum: int = min(10, 20);
     let absolute: int = abs(0 - 15);
-    
+
     var result: int = fact5 + sum + sq;
     result = result + maximum + minimum;
     result = result + absolute;
-    
-    return result;
+    println!("result: {}", result);
+    return 0;
 }

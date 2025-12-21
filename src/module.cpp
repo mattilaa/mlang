@@ -221,37 +221,69 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             return false;
         }
 
-        if(useDecl->importAll)
+        // Always import ALL functions from the module (for internal calls)
+        // but mark their source module so visibility can be checked at call
+        // sites
+        if(module->functionList)
         {
-            // Import all functions
-            if(module->functionList)
+            if(!program->functionList)
             {
-                if(!program->functionList)
+                program->functionList = new FunctionListNode();
+            }
+            for(auto* func : module->functionList->functions)
+            {
+                // Set source module for all functions
+                func->sourceModule = useDecl->moduleName;
+
+                // Check if function already added (avoid duplicates)
+                bool alreadyAdded = false;
+                for(auto* existing : program->functionList->functions)
                 {
-                    program->functionList = new FunctionListNode();
+                    if(existing->name == func->name)
+                    {
+                        alreadyAdded = true;
+                        break;
+                    }
                 }
-                for(auto* func : module->functionList->functions)
+                if(!alreadyAdded)
                 {
                     program->functionList->functions.push_back(func);
                 }
             }
+        }
 
-            // Import all structs
-            if(module->structList)
+        // Always import ALL structs from the module (for internal use)
+        if(module->structList)
+        {
+            if(!program->structList)
             {
-                if(!program->structList)
+                program->structList = new StructListNode();
+            }
+            for(auto* structDef : module->structList->structs)
+            {
+                // Set source module for all structs
+                structDef->sourceModule = useDecl->moduleName;
+
+                // Check if struct already added (avoid duplicates)
+                bool alreadyAdded = false;
+                for(auto* existing : program->structList->structs)
                 {
-                    program->structList = new StructListNode();
+                    if(existing->name == structDef->name)
+                    {
+                        alreadyAdded = true;
+                        break;
+                    }
                 }
-                for(auto* structDef : module->structList->structs)
+                if(!alreadyAdded)
                 {
                     program->structList->addStruct(structDef);
                 }
             }
         }
-        else
+
+        // For specific imports (not import all), verify the item is public
+        if(!useDecl->importAll)
         {
-            // Import specific item
             bool found = false;
 
             // Try to find as function
@@ -259,11 +291,14 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 getFunction(useDecl->moduleName, useDecl->itemName);
             if(func)
             {
-                if(!program->functionList)
+                // Check if the function is public
+                if(!func->isPublic)
                 {
-                    program->functionList = new FunctionListNode();
+                    errorMsg = "function '" + useDecl->itemName +
+                               "' is private in module '" +
+                               useDecl->moduleName + "'";
+                    return false;
                 }
-                program->functionList->functions.push_back(func);
                 found = true;
             }
 
@@ -274,11 +309,14 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 {
                     if(structDef->name == useDecl->itemName)
                     {
-                        if(!program->structList)
+                        // Check if the struct is public
+                        if(!structDef->isPublic)
                         {
-                            program->structList = new StructListNode();
+                            errorMsg = "struct '" + useDecl->itemName +
+                                       "' is private in module '" +
+                                       useDecl->moduleName + "'";
+                            return false;
                         }
-                        program->structList->addStruct(structDef);
                         found = true;
                         break;
                     }
@@ -291,6 +329,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                            useDecl->moduleName + "'";
                 return false;
             }
+        }
+        else
+        {
+            // For "use module::*", verify at least one public item exists
+            // (this is optional, just a warning might be nice)
         }
     }
     return true;
