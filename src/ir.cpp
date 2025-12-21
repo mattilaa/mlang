@@ -1,4 +1,5 @@
 #include "ir.h"
+#include <functional>
 #include <iostream>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -416,14 +417,44 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 void CodeGenerator::generateCode(ProgramNode* program)
 {
     // First generate all struct definitions and track their visibility
+    // We need to process base structs before derived structs
     if(program->structList)
     {
+        // Build a map of struct names to their definitions
+        std::map<std::string, StructDefNode*> structMap;
         for(auto structDef : program->structList->structs)
         {
+            structMap[structDef->name] = structDef;
+        }
+
+        // Process structs in dependency order (bases before derived)
+        std::set<std::string> processed;
+        std::function<void(StructDefNode*)> processStruct =
+            [&](StructDefNode* structDef)
+        {
+            if(processed.count(structDef->name))
+                return;
+
+            // Process base first if it exists
+            if(!structDef->baseName.empty())
+            {
+                auto baseIt = structMap.find(structDef->baseName);
+                if(baseIt != structMap.end())
+                {
+                    processStruct(baseIt->second);
+                }
+            }
+
             // Track struct visibility
             structVisibility[structDef->name] =
                 std::make_pair(structDef->isPublic, structDef->sourceModule);
             generateStructDefinition(structDef);
+            processed.insert(structDef->name);
+        };
+
+        for(auto structDef : program->structList->structs)
+        {
+            processStruct(structDef);
         }
     }
 
@@ -447,12 +478,36 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
+    // Generate struct method declarations and track visibility
+    if(program->structList)
+    {
+        for(auto structDef : program->structList->structs)
+        {
+            generateStructMethods(structDef);
+        }
+    }
+
     // Then generate all function bodies
     if(program->functionList)
     {
         for(auto funcDef : program->functionList->functions)
         {
             generateFunctionDefinition(funcDef);
+        }
+    }
+
+    // Generate struct method bodies
+    if(program->structList)
+    {
+        for(auto structDef : program->structList->structs)
+        {
+            if(structDef->members)
+            {
+                for(auto method : structDef->members->methods)
+                {
+                    generateMethodDefinition(structDef->name, method);
+                }
+            }
         }
     }
 }
@@ -685,6 +740,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto call = dynamic_cast<FunctionCallNode*>(node))
     {
         return generateFunctionCall(call);
+    }
+    else if(auto methodCall = dynamic_cast<MethodCallNode*>(node))
+    {
+        return generateMethodCall(methodCall);
     }
     else if(auto cast = dynamic_cast<CastExpressionNode*>(node))
     {
@@ -1589,6 +1648,26 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
 
+    // If this struct has a base, include base struct's fields first
+    if(!node->baseName.empty())
+    {
+        auto baseMemIt = structMembers.find(node->baseName);
+        if(baseMemIt != structMembers.end())
+        {
+            for(const auto& baseMember : baseMemIt->second)
+            {
+                memberTypes.push_back(getLLVMTypeFromNode(baseMember.second));
+                members.push_back(baseMember);
+            }
+        }
+        else
+        {
+            reportError(node->line,
+                        "base struct '" + node->baseName + "' not found");
+        }
+    }
+
+    // Add this struct's own members
     for(auto member : node->members->members)
     {
         memberTypes.push_back(getLLVMTypeFromNode(member->type));
@@ -1599,6 +1678,12 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         llvm::StructType::create(context, memberTypes, node->name);
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
+
+    // Track base name for inheritance lookups
+    if(!node->baseName.empty())
+    {
+        structBases[node->name] = node->baseName;
+    }
 }
 
 llvm::StructType* CodeGenerator::getStructType(const std::string& name)
@@ -2268,9 +2353,23 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
     }
 
+    // Check if structPtr is an alloca containing a pointer (like 'self' in
+    // methods) In that case, we need to load the pointer first
+    llvm::Value* actualStructPtr = structPtr;
+    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+    {
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        // If the alloca holds a pointer type, load it first
+        if(allocaType->isPointerTy())
+        {
+            actualStructPtr = builder.CreateLoad(allocaType, alloca,
+                                                 node->structName + ".ptr");
+        }
+    }
+
     // Create GEP to field and store
     llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, static_cast<unsigned>(fieldIndex),
+        structType, actualStructPtr, static_cast<unsigned>(fieldIndex),
         node->fieldName + "_ptr");
     builder.CreateStore(value, fieldPtr);
 }
@@ -2334,9 +2433,23 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
     // Get field type
     llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
 
+    // Check if structPtr is an alloca containing a pointer (like 'self' in
+    // methods) In that case, we need to load the pointer first
+    llvm::Value* actualStructPtr = structPtr;
+    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+    {
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        // If the alloca holds a pointer type, load it first
+        if(allocaType->isPointerTy())
+        {
+            actualStructPtr = builder.CreateLoad(allocaType, alloca,
+                                                 node->structName + ".ptr");
+        }
+    }
+
     // Create GEP to field and load
     llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, static_cast<unsigned>(fieldIndex),
+        structType, actualStructPtr, static_cast<unsigned>(fieldIndex),
         node->fieldName + "_ptr");
     return builder.CreateLoad(llvmFieldType, fieldPtr, node->fieldName);
 }
@@ -2394,6 +2507,333 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return builder.CreateCall(callee, args);
     }
     return builder.CreateCall(callee, args, "calltmp");
+}
+
+void CodeGenerator::generateStructMethods(StructDefNode* node)
+{
+    if(!node->members)
+        return;
+
+    // First, inherit methods from base struct if any
+    if(!node->baseName.empty())
+    {
+        auto baseMethodsIt = structMethods.find(node->baseName);
+        if(baseMethodsIt != structMethods.end())
+        {
+            // Copy all base methods to this struct
+            for(const auto& methodPair : baseMethodsIt->second)
+            {
+                // Only inherit if not overridden by this struct
+                bool overridden = false;
+                for(auto method : node->members->methods)
+                {
+                    if(method->name == methodPair.first)
+                    {
+                        overridden = true;
+                        break;
+                    }
+                }
+                if(!overridden)
+                {
+                    structMethods[node->name][methodPair.first] =
+                        methodPair.second;
+                }
+            }
+        }
+    }
+
+    // Register all methods for this struct
+    for(auto method : node->members->methods)
+    {
+        structMethods[node->name][method->name] =
+            std::make_pair(method->isPublic, method);
+
+        // Generate forward declaration
+        generateMethodDeclaration(node->name, method);
+    }
+}
+
+llvm::Function*
+CodeGenerator::generateMethodDeclaration(const std::string& structName,
+                                         StructMethodNode* method)
+{
+    // Method name is mangled: StructName_methodName
+    std::string mangledName = structName + "_" + method->name;
+
+    // Check if already declared
+    if(module->getFunction(mangledName))
+    {
+        return module->getFunction(mangledName);
+    }
+
+    std::vector<llvm::Type*> paramTypes;
+
+    // First parameter is pointer to struct (self)
+    if(!method->isStatic)
+    {
+        llvm::Type* structType = getStructType(structName);
+        if(structType)
+        {
+#if LLVM_VERSION_MAJOR >= 15
+            paramTypes.push_back(llvm::PointerType::get(context, 0));
+#else
+            paramTypes.push_back(llvm::PointerType::get(structType, 0));
+#endif
+        }
+    }
+
+    // Add other parameters
+    for(auto param : method->parameters->parameters)
+    {
+        llvm::Type* paramType = getLLVMTypeFromNode(param->type);
+        if(!paramType)
+        {
+            reportError(param->line,
+                        "unknown parameter type for '" + param->name + "'");
+            paramType = llvm::Type::getInt32Ty(context);
+        }
+        paramTypes.push_back(paramType);
+    }
+
+    llvm::Type* returnType = getLLVMTypeFromNode(method->returnType);
+    if(!returnType)
+    {
+        reportError(method->line,
+                    "unknown return type for method '" + method->name + "'");
+        returnType = llvm::Type::getVoidTy(context);
+    }
+
+    llvm::FunctionType* funcType =
+        llvm::FunctionType::get(returnType, paramTypes, false);
+    llvm::Function* function = llvm::Function::Create(
+        funcType, llvm::Function::ExternalLinkage, mangledName, module.get());
+
+    // Set parameter names
+    unsigned idx = 0;
+    for(auto& arg : function->args())
+    {
+        if(idx == 0 && !method->isStatic)
+        {
+            arg.setName("self");
+        }
+        else
+        {
+            unsigned paramIdx = method->isStatic ? idx : idx - 1;
+            if(paramIdx < method->parameters->parameters.size())
+            {
+                arg.setName(method->parameters->parameters[paramIdx]->name);
+            }
+        }
+        idx++;
+    }
+
+    return function;
+}
+
+llvm::Function*
+CodeGenerator::generateMethodDefinition(const std::string& structName,
+                                        StructMethodNode* method)
+{
+    std::string mangledName = structName + "_" + method->name;
+
+    llvm::Function* function = module->getFunction(mangledName);
+    if(!function)
+    {
+        function = generateMethodDeclaration(structName, method);
+    }
+
+    // Check if already has a body
+    if(!function->empty())
+    {
+        return function;
+    }
+
+    if(!method->body)
+    {
+        reportError(method->line, "method '" + method->name + "' has no body");
+        return function;
+    }
+
+    // Create entry block
+    llvm::BasicBlock* bb = llvm::BasicBlock::Create(context, "entry", function);
+    builder.SetInsertPoint(bb);
+
+    // Clear scope
+    namedValues.clear();
+    constantVariables.clear();
+    variableTypes.clear();
+
+    // Set up self parameter and other parameters
+    unsigned paramIdx = 0;
+    for(auto& arg : function->args())
+    {
+        llvm::AllocaInst* alloca = builder.CreateAlloca(
+            arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
+        builder.CreateStore(&arg, alloca);
+        namedValues[std::string(arg.getName())] = alloca;
+
+        if(paramIdx == 0 && !method->isStatic)
+        {
+            // 'self' is a pointer to the struct
+            structVariableTypes["self"] = structName;
+            variableTypes["self"] = TypeNode::TYPE_STRUCT;
+        }
+        else
+        {
+            unsigned methodParamIdx =
+                method->isStatic ? paramIdx : paramIdx - 1;
+            if(methodParamIdx < method->parameters->parameters.size())
+            {
+                variableTypes[std::string(arg.getName())] =
+                    method->parameters->parameters[methodParamIdx]->type->kind;
+            }
+        }
+        paramIdx++;
+    }
+
+    // Generate body
+    for(auto stmt : method->body->statements)
+    {
+        generateStatement(stmt);
+    }
+
+    // Add terminator if needed
+    llvm::Type* returnType = function->getReturnType();
+    llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
+    if(!currentBlock->getTerminator())
+    {
+        if(returnType->isVoidTy())
+        {
+            builder.CreateRetVoid();
+        }
+        else
+        {
+            builder.CreateUnreachable();
+        }
+    }
+
+    llvm::verifyFunction(*function);
+    return function;
+}
+
+llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
+{
+    // Get the object (should be an identifier referring to a struct variable)
+    auto* objId = dynamic_cast<IdentifierNode*>(node->object);
+    if(!objId)
+    {
+        reportError(node->line, "method call requires a struct variable");
+        return nullptr;
+    }
+
+    // Get struct type
+    auto typeIt = structVariableTypes.find(objId->name);
+    if(typeIt == structVariableTypes.end())
+    {
+        reportError(node->line,
+                    "'" + objId->name + "' is not a struct variable");
+        return nullptr;
+    }
+
+    std::string structTypeName = typeIt->second;
+
+    // Check if method exists on this struct (including inherited methods)
+    auto structIt = structMethods.find(structTypeName);
+    if(structIt == structMethods.end())
+    {
+        reportError(node->line,
+                    "struct '" + structTypeName + "' has no methods");
+        return nullptr;
+    }
+
+    auto methodIt = structIt->second.find(node->methodName);
+    if(methodIt == structIt->second.end())
+    {
+        reportError(node->line, "struct '" + structTypeName +
+                                    "' has no method named '" +
+                                    node->methodName + "'");
+        return nullptr;
+    }
+
+    bool isPublic = methodIt->second.first;
+    StructMethodNode* methodNode = methodIt->second.second;
+
+    // Check visibility - if calling from outside the struct's module, must be
+    // public For now, we allow all calls within the same compilation unit
+    // TODO: Add proper cross-module visibility checking for methods
+
+    // Find the actual struct that defines this method (may be a base struct)
+    std::string definingStruct = structTypeName;
+    std::string searchStruct = structTypeName;
+    while(!searchStruct.empty())
+    {
+        // Check if this struct directly defines the method (has it in its
+        // members)
+        std::string mangledName = searchStruct + "_" + node->methodName;
+        if(module->getFunction(mangledName))
+        {
+            definingStruct = searchStruct;
+            break;
+        }
+        // Move to base struct
+        auto baseIt = structBases.find(searchStruct);
+        if(baseIt != structBases.end())
+        {
+            searchStruct = baseIt->second;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    std::string mangledName = definingStruct + "_" + node->methodName;
+    llvm::Function* callee = module->getFunction(mangledName);
+    if(!callee)
+    {
+        reportError(node->line, "unknown method: " + node->methodName);
+        return nullptr;
+    }
+
+    // Build arguments - first is pointer to struct
+    std::vector<llvm::Value*> args;
+
+    llvm::Value* objPtr = namedValues[objId->name];
+    if(!objPtr)
+    {
+        reportError(node->line, "unknown variable: " + objId->name);
+        return nullptr;
+    }
+
+    // Check if objPtr is an alloca containing a pointer (like 'self' in
+    // methods) In that case, we need to load the pointer first
+    llvm::Value* actualObjPtr = objPtr;
+    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(objPtr))
+    {
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        // If the alloca holds a pointer type, load it first
+        if(allocaType->isPointerTy())
+        {
+            actualObjPtr =
+                builder.CreateLoad(allocaType, alloca, objId->name + ".ptr");
+        }
+    }
+    args.push_back(actualObjPtr);
+
+    // Add other arguments
+    for(auto arg : node->arguments)
+    {
+        llvm::Value* argVal = generateExpression(arg);
+        if(!argVal)
+            return nullptr;
+        args.push_back(argVal);
+    }
+
+    if(callee->getReturnType()->isVoidTy())
+    {
+        return builder.CreateCall(callee, args);
+    }
+    return builder.CreateCall(callee, args, "methodcall");
 }
 
 llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)

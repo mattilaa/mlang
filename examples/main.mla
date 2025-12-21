@@ -5,6 +5,37 @@ use math::*;
 
 use utils::*;
 
+pub struct Point {
+    var x: i32;
+    var y: i32;
+
+    // Private method - only callable within the struct
+    fn distance_squared() -> i32 {
+        return self.x * self.x + self.y * self.y;
+    }
+
+    // Public method - callable from outside
+    pub fn distance() -> i32 {
+        return int(double(self.distance_squared()));
+    }
+};
+
+struct Base {
+    var value: i32;
+
+    pub fn get_value() -> i32 {
+        return self.value;
+    }
+};
+
+pub struct Derived : Base {
+    var extra: i32;
+
+    pub fn get_total() -> int {
+        return self.extra + self.value;
+    }
+};
+
 fn main() -> int {
     let fact5: int = factorial(5);
     let sum: int = sum_range(1, 5);
@@ -18,5 +49,20 @@ fn main() -> int {
     result = result + maximum + minimum;
     result = result + absolute;
     println!("result: {}", result);
+
+    var p: Point;
+    p.x = 3;
+    p.y = 4;
+    let dist: int = p.distance();  // Calls Point_distance with p as self
+    println!("distance: {}", dist);
+
+    var derived: Derived;
+    derived.extra = 50;
+    derived.value = 20;
+    let v: i32 = derived.get_value();
+    println!("v: {} {}", v, derived.get_value());
+    println!("derived: {} base: {}", derived.extra, derived.value);
+
+
     return 0;
 }

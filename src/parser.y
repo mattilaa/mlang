@@ -46,11 +46,15 @@ ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* 
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
+ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* create_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
+ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
+ASTNode* create_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* create_list_type();
 ASTNode* create_list_literal(ASTNode* elements);
 ASTNode* create_list_element_list(ASTNode* element);
@@ -116,12 +120,12 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %type <ast> struct_def function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression cast_expression
 %type <ast> if_statement else_if_list else_if optional_else
-%type <ast> struct_member_list struct_member struct_init
+%type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement
 %type <ast> return_statement block_statement for_statement range_expression
 %type <ast> break_statement continue_statement
-%type <ast> primary_expression binary_expression function_call
+%type <ast> primary_expression postfix_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
 %type <ast> print_statement argument_list
 %type <ast> map_literal map_entries map_entry index_expression
@@ -137,8 +141,8 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %%
 
 program
-    : top_level_list { 
-        $$ = create_program($1); 
+    : top_level_list {
+        $$ = create_program($1);
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
@@ -181,6 +185,8 @@ struct_def
 struct_member_list
     : struct_member { $$ = create_struct_member_list($1); }
     | struct_member_list struct_member { $$ = add_struct_member($1, $2); }
+    | struct_method { $$ = create_struct_member_list($1); }
+    | struct_member_list struct_method { $$ = add_struct_method($1, $2); }
     ;
 
 struct_member
@@ -188,6 +194,13 @@ struct_member
         { $$ = create_struct_member(0, $4, $2, $6); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = create_struct_member(1, $4, $2, NULL); }
+    ;
+
+struct_method
+    : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = create_struct_method($7, $2, $4, $9, 0, 0); }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
+        { $$ = create_struct_method($8, $3, $5, $10, 1, 0); }
     ;
 
 function_def
@@ -369,7 +382,7 @@ optional_else
     ;
 
 expression
-    : primary_expression
+    : postfix_expression
     | binary_expression
     | function_call
     | cast_expression
@@ -388,9 +401,17 @@ primary_expression
     | TRUE_LIT { $$ = create_bool_literal(1); }
     | FALSE_LIT { $$ = create_bool_literal(0); }
     | IDENTIFIER { $$ = create_identifier($1); }
-    | IDENTIFIER DOT IDENTIFIER { $$ = create_field_access($1, $3, yylineno); }
-    | IDENTIFIER DOT INT_LITERAL { $$ = create_tuple_access(create_identifier($1), $3, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
+    ;
+
+postfix_expression
+    : primary_expression { $$ = $1; }
+    | postfix_expression DOT IDENTIFIER { $$ = create_field_access_expr($1, $3, yylineno); }
+    | postfix_expression DOT IDENTIFIER LPAREN RPAREN
+        { $$ = create_method_call_expr($1, $3, NULL, yylineno); }
+    | postfix_expression DOT IDENTIFIER LPAREN argument_list RPAREN
+        { $$ = create_method_call_expr($1, $3, $5, yylineno); }
+    | postfix_expression DOT INT_LITERAL { $$ = create_tuple_access($1, $3, yylineno); }
     ;
 
 binary_expression
@@ -450,7 +471,7 @@ tuple_literal
     ;
 
 tuple_elements
-    : expression COMMA expression { 
+    : expression COMMA expression {
         ASTNode* list = create_list_element_list($1);
         $$ = add_list_element(list, $3);
     }

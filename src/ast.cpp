@@ -335,14 +335,29 @@ ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
 ASTNode* create_struct_member_list(ASTNode* member)
 {
     auto list = new StructMemberListNode();
-    list->addMember(static_cast<StructMemberNode*>(member));
+    // Check if it's a member or method
+    if(auto* memberNode = dynamic_cast<StructMemberNode*>(member))
+    {
+        list->addMember(memberNode);
+    }
+    else if(auto* methodNode = dynamic_cast<StructMethodNode*>(member))
+    {
+        list->addMethod(methodNode);
+    }
     return list;
 }
 
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member)
 {
     auto memberList = static_cast<StructMemberListNode*>(list);
-    memberList->addMember(static_cast<StructMemberNode*>(member));
+    if(auto* memberNode = dynamic_cast<StructMemberNode*>(member))
+    {
+        memberList->addMember(memberNode);
+    }
+    else if(auto* methodNode = dynamic_cast<StructMethodNode*>(member))
+    {
+        memberList->addMethod(methodNode);
+    }
     return memberList;
 }
 
@@ -352,6 +367,46 @@ ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
     return new StructMemberNode(is_var != 0, static_cast<TypeNode*>(type),
                                 std::string(name),
                                 static_cast<ExpressionNode*>(init_expr));
+}
+
+ASTNode* create_struct_method(ASTNode* type, char* name, ASTNode* params,
+                              ASTNode* body, int is_public, int is_static)
+{
+    return new StructMethodNode(static_cast<TypeNode*>(type), std::string(name),
+                                static_cast<ParameterListNode*>(params),
+                                static_cast<StatementListNode*>(body),
+                                is_public != 0, is_static != 0);
+}
+
+ASTNode* add_struct_method(ASTNode* list, ASTNode* method)
+{
+    auto memberList = static_cast<StructMemberListNode*>(list);
+    memberList->addMethod(static_cast<StructMethodNode*>(method));
+    return memberList;
+}
+
+ASTNode* create_method_call_expr(ASTNode* object, char* method_name,
+                                 ASTNode* args, int line)
+{
+    auto* node = new MethodCallNode(static_cast<ExpressionNode*>(object),
+                                    std::string(method_name));
+    node->line = line;
+    if(args)
+    {
+        // ArgumentListNode is defined locally in ast.cpp
+        class ArgumentListNode : public ASTNode
+        {
+        public:
+            std::vector<ExpressionNode*> args;
+            std::string toString() const override
+            {
+                return "ArgumentList";
+            }
+        };
+        auto* argList = static_cast<ArgumentListNode*>(args);
+        node->arguments = argList->args;
+    }
+    return node;
 }
 
 ASTNode* create_list_type()
@@ -568,6 +623,20 @@ ASTNode* create_field_access(char* struct_name, char* field_name, int line)
     return node;
 }
 
+ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line)
+{
+    // Extract the struct name from the object expression
+    // For now, only support simple identifiers
+    if(auto* id = dynamic_cast<IdentifierNode*>(object))
+    {
+        auto* node = new FieldAccessNode(id->name, std::string(field_name));
+        node->line = line;
+        return node;
+    }
+    // TODO: Support chained field access like a.b.c
+    return nullptr;
+}
+
 ASTNode* create_field_assignment(char* struct_name, char* field_name,
                                  ASTNode* expr, int line)
 {
@@ -668,6 +737,19 @@ std::string FunctionCallNode::toString() const
     return result;
 }
 
+std::string MethodCallNode::toString() const
+{
+    std::string result = object->toString() + "." + methodName + "(";
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += arguments[i]->toString();
+    }
+    result += ")";
+    return result;
+}
+
 std::string IfNode::toString() const
 {
     std::string result = "if " + condition->toString() + ": ";
@@ -740,6 +822,27 @@ std::string StructMemberListNode::toString() const
     {
         result += "    " + member->toString() + "\n";
     }
+    for(const auto& method : methods)
+    {
+        result += "    " + method->toString() + "\n";
+    }
+    return result;
+}
+
+std::string StructMethodNode::toString() const
+{
+    std::string result = isPublic ? "pub fn " : "fn ";
+    result += name + "(";
+    if(parameters)
+    {
+        result += parameters->toString();
+    }
+    result += ") -> " + returnType->toString() + " {\n";
+    if(body)
+    {
+        result += body->toString();
+    }
+    result += "    }";
     return result;
 }
 

@@ -38,6 +38,8 @@ private:
     // type)
     std::map<std::string, std::vector<std::pair<std::string, TypeNode*>>>
         structMembers;
+    // Track struct inheritance: derived struct name -> base struct name
+    std::map<std::string, std::string> structBases;
     std::set<std::string> constantVariables;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     // Track element types for generic lists and maps
@@ -106,12 +108,26 @@ private:
     llvm::Value* generateIdentifier(IdentifierNode* node);
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
+    llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     llvm::Value* generateListLiteral(ListLiteralNode* node);
     llvm::Value* generateMapLiteral(MapLiteralNode* node);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
+
+    // Struct method helpers
+    void generateStructMethods(StructDefNode* node);
+    llvm::Function* generateMethodDeclaration(const std::string& structName,
+                                              StructMethodNode* method);
+    llvm::Function* generateMethodDefinition(const std::string& structName,
+                                             StructMethodNode* method);
+
+    // Track struct method info: struct name -> method name -> (isPublic, method
+    // node)
+    std::map<std::string,
+             std::map<std::string, std::pair<bool, StructMethodNode*>>>
+        structMethods;
 
     // List/Map iteration helpers
     void generateForListLiteralIteration(ForNode* node,

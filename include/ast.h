@@ -219,6 +219,21 @@ public:
     std::string toString() const override;
 };
 
+// Method call on a struct instance: obj.method(args)
+class MethodCallNode : public ExpressionNode
+{
+public:
+    ExpressionNode* object; // The object to call the method on
+    std::string methodName;
+    std::vector<ExpressionNode*> arguments;
+
+    MethodCallNode(ExpressionNode* obj, const std::string& method)
+        : object(obj), methodName(method)
+    {
+    }
+    std::string toString() const override;
+};
+
 class CastExpressionNode : public ExpressionNode
 {
 public:
@@ -539,13 +554,43 @@ public:
     std::string toString() const override;
 };
 
+// Forward declaration
+class StatementListNode;
+class ParameterListNode;
+
+// Struct method node - a function defined inside a struct
+class StructMethodNode : public ASTNode
+{
+public:
+    TypeNode* returnType;
+    std::string name;
+    ParameterListNode* parameters;
+    StatementListNode* body;
+    bool isPublic;
+    bool isStatic; // static methods don't have 'self' parameter
+
+    StructMethodNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
+                     StatementListNode* b, bool pub = false, bool stat = false)
+        : returnType(rt), name(n), parameters(p), body(b), isPublic(pub),
+          isStatic(stat)
+    {
+    }
+    std::string toString() const override;
+};
+
 class StructMemberListNode : public ASTNode
 {
 public:
     std::vector<StructMemberNode*> members;
+    std::vector<StructMethodNode*> methods;
+
     void addMember(StructMemberNode* m)
     {
         members.push_back(m);
+    }
+    void addMethod(StructMethodNode* m)
+    {
+        methods.push_back(m);
     }
     std::string toString() const override;
 };
@@ -566,6 +611,9 @@ public:
     {
     }
     std::string toString() const override;
+
+    // Get all methods including inherited ones
+    std::vector<StructMethodNode*> getAllMethods() const;
 };
 
 class StructListNode : public ASTNode
@@ -721,7 +769,12 @@ ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
                               ASTNode* init_expr);
+ASTNode* create_struct_method(ASTNode* type, char* name, ASTNode* params,
+                              ASTNode* body, int is_public, int is_static);
+ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
+ASTNode* create_method_call_expr(ASTNode* object, char* method_name,
+                                 ASTNode* args, int line);
 ASTNode* create_list_type();
 ASTNode* create_list_literal(ASTNode* elements);
 ASTNode* create_list_element_list(ASTNode* element);
@@ -758,6 +811,7 @@ ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
 ASTNode* create_struct_type_ref(char* name);
 ASTNode* create_field_access(char* struct_name, char* field_name, int line);
+ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
 ASTNode* create_field_assignment(char* struct_name, char* field_name,
                                  ASTNode* expr, int line);
 

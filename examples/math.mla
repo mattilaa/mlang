@@ -7,11 +7,6 @@ fn helper(a: int, b: int) -> int {  // private - can't be used outside this modu
     return a + b;
 }
 
-pub struct Point {
-    var x: int;
-    var y: int;
-};
-
 struct InternalData {  // private struct
     var value: int;
 };
