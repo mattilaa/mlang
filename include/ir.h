@@ -23,7 +23,10 @@ public:
     }
 
     void generateCode(ProgramNode* program);
-    bool hadError() const { return hasError; }
+    bool hadError() const
+    {
+        return hasError;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -31,6 +34,10 @@ private:
     std::unique_ptr<llvm::Module>& module;
     std::map<std::string, llvm::Value*> namedValues;
     std::map<std::string, llvm::Type*> structTypes;
+    // Store struct member info: struct name -> vector of (member name, member
+    // type)
+    std::map<std::string, std::vector<std::pair<std::string, TypeNode*>>>
+        structMembers;
     std::set<std::string> constantVariables;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     // Track element types for generic lists and maps
@@ -38,6 +45,8 @@ private:
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
     // Track tuple element types
     std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
+    // Track struct variable types (var name -> struct type name)
+    std::map<std::string, std::string> structVariableTypes;
     bool hasError;
 
     // Stdio function support
@@ -72,6 +81,7 @@ private:
     void generateLetDeclaration(LetDeclNode* node);
     void generateVarDeclaration(VarDeclNode* node);
     void generateAssignment(AssignmentNode* node);
+    void generateFieldAssignment(FieldAssignmentNode* node);
     void generateIfStatement(IfNode* node);
     void generateForStatement(ForNode* node);
     void generatePrintStatement(PrintNode* node);
@@ -86,6 +96,7 @@ private:
     llvm::Value* generateDoubleLiteral(DoubleLiteralNode* node);
     llvm::Value* generateStringLiteral(StringLiteralNode* node);
     llvm::Value* generateIdentifier(IdentifierNode* node);
+    llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     llvm::Value* generateListLiteral(ListLiteralNode* node);
@@ -95,8 +106,10 @@ private:
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
 
     // List/Map iteration helpers
-    void generateForListLiteralIteration(ForNode* node, ListLiteralNode* listLit);
-    void generateForListVariableIteration(ForNode* node, IdentifierNode* listId);
+    void generateForListLiteralIteration(ForNode* node,
+                                         ListLiteralNode* listLit);
+    void generateForListVariableIteration(ForNode* node,
+                                          IdentifierNode* listId);
     void generateForMapIteration(ForNode* node, MapIteratorNode* mapIter);
 
     // Collection type helpers
@@ -118,7 +131,10 @@ public:
     bool emitBitcode(const std::string& filename);
     bool compileToExecutable(const std::string& outputFile);
     void optimize(int level);
-    std::string getTargetTriple() const { return targetTriple; }
+    std::string getTargetTriple() const
+    {
+        return targetTriple;
+    }
 
 private:
     std::unique_ptr<llvm::Module>& module;

@@ -97,7 +97,10 @@ class TypeListNode : public ASTNode
 {
 public:
     std::vector<TypeNode*> types;
-    void addType(TypeNode* t) { types.push_back(t); }
+    void addType(TypeNode* t)
+    {
+        types.push_back(t);
+    }
     std::string toString() const override;
 };
 
@@ -106,7 +109,8 @@ class TupleTypeNode : public TypeNode
 {
 public:
     TypeListNode* elementTypes;
-    TupleTypeNode(TypeListNode* types) : TypeNode(TYPE_TUPLE), elementTypes(types)
+    TupleTypeNode(TypeListNode* types)
+        : TypeNode(TYPE_TUPLE), elementTypes(types)
     {
     }
     std::string toString() const override;
@@ -246,7 +250,10 @@ class ListElementsNode : public ASTNode
 {
 public:
     std::vector<ExpressionNode*> elements;
-    void addElement(ExpressionNode* e) { elements.push_back(e); }
+    void addElement(ExpressionNode* e)
+    {
+        elements.push_back(e);
+    }
     std::string toString() const override;
 };
 
@@ -273,7 +280,10 @@ class MapEntriesNode : public ASTNode
 {
 public:
     std::vector<MapEntryNode*> entries;
-    void addEntry(MapEntryNode* e) { entries.push_back(e); }
+    void addEntry(MapEntryNode* e)
+    {
+        entries.push_back(e);
+    }
     std::string toString() const override;
 };
 
@@ -292,7 +302,8 @@ class IndexExpressionNode : public ExpressionNode
 public:
     ExpressionNode* base;
     ExpressionNode* index;
-    IndexExpressionNode(ExpressionNode* b, ExpressionNode* i) : base(b), index(i)
+    IndexExpressionNode(ExpressionNode* b, ExpressionNode* i)
+        : base(b), index(i)
     {
     }
     std::string toString() const override;
@@ -426,6 +437,36 @@ public:
     std::string toString() const override;
 };
 
+// Struct field access: struct_var.field_name
+class FieldAccessNode : public ExpressionNode
+{
+public:
+    std::string structName;
+    std::string fieldName;
+
+    FieldAccessNode(const std::string& s, const std::string& f)
+        : structName(s), fieldName(f)
+    {
+    }
+    std::string toString() const override;
+};
+
+// Struct field assignment: struct_var.field_name = expr
+class FieldAssignmentNode : public StatementNode
+{
+public:
+    std::string structName;
+    std::string fieldName;
+    ExpressionNode* expression;
+
+    FieldAssignmentNode(const std::string& s, const std::string& f,
+                        ExpressionNode* e)
+        : structName(s), fieldName(f), expression(e)
+    {
+    }
+    std::string toString() const override;
+};
+
 class IfNode : public StatementNode
 {
 public:
@@ -474,7 +515,10 @@ public:
     PrintNode(PrintKind k, const std::string& fmt) : kind(k), formatString(fmt)
     {
     }
-    void addArgument(ExpressionNode* arg) { arguments.push_back(arg); }
+    void addArgument(ExpressionNode* arg)
+    {
+        arguments.push_back(arg);
+    }
     std::string toString() const override;
 };
 
@@ -499,7 +543,10 @@ class StructMemberListNode : public ASTNode
 {
 public:
     std::vector<StructMemberNode*> members;
-    void addMember(StructMemberNode* m) { members.push_back(m); }
+    void addMember(StructMemberNode* m)
+    {
+        members.push_back(m);
+    }
     std::string toString() const override;
 };
 
@@ -522,7 +569,10 @@ class StructListNode : public ASTNode
 {
 public:
     std::vector<StructDefNode*> structs;
-    void addStruct(StructDefNode* s) { structs.push_back(s); }
+    void addStruct(StructDefNode* s)
+    {
+        structs.push_back(s);
+    }
     std::string toString() const override;
 };
 
@@ -699,5 +749,8 @@ ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
 ASTNode* create_struct_type_ref(char* name);
+ASTNode* create_field_access(char* struct_name, char* field_name, int line);
+ASTNode* create_field_assignment(char* struct_name, char* field_name,
+                                 ASTNode* expr, int line);
 
 #endif // AST_H

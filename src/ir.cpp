@@ -542,6 +542,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         generateAssignment(assignNode);
     }
+    else if(auto fieldAssignNode = dynamic_cast<FieldAssignmentNode*>(node))
+    {
+        generateFieldAssignment(fieldAssignNode);
+    }
     else if(auto ifNode = dynamic_cast<IfNode*>(node))
     {
         generateIfStatement(ifNode);
@@ -604,6 +608,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto id = dynamic_cast<IdentifierNode*>(node))
     {
         return generateIdentifier(id);
+    }
+    else if(auto fieldAcc = dynamic_cast<FieldAccessNode*>(node))
+    {
+        return generateFieldAccess(fieldAcc);
     }
     else if(auto call = dynamic_cast<FunctionCallNode*>(node))
     {
@@ -1466,14 +1474,18 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 void CodeGenerator::generateStructDefinition(StructDefNode* node)
 {
     std::vector<llvm::Type*> memberTypes;
+    std::vector<std::pair<std::string, TypeNode*>> members;
+
     for(auto member : node->members->members)
     {
-        memberTypes.push_back(getLLVMType(member->type->kind));
+        memberTypes.push_back(getLLVMTypeFromNode(member->type));
+        members.push_back({member->name, member->type});
     }
 
     llvm::StructType* structType =
         llvm::StructType::create(context, memberTypes, node->name);
     structTypes[node->name] = structType;
+    structMembers[node->name] = members;
 }
 
 llvm::StructType* CodeGenerator::getStructType(const std::string& name)
@@ -1649,6 +1661,27 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_TUPLE;
+        constantVariables.insert(node->name);
+        return;
+    }
+
+    // Handle struct type reference
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(node->type))
+    {
+        llvm::Type* structType = getStructType(structRef->structName);
+        if(!structType)
+        {
+            reportError(node->line,
+                        "unknown struct type: " + structRef->structName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(structType, nullptr, node->name);
+        builder.CreateStore(initValue, alloca);
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->name] = structRef->structName;
         constantVariables.insert(node->name);
         return;
     }
@@ -1892,6 +1925,35 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         return;
     }
 
+    // Handle struct type reference
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(node->type))
+    {
+        llvm::Type* structType = getStructType(structRef->structName);
+        if(!structType)
+        {
+            reportError(node->line,
+                        "unknown struct type: " + structRef->structName);
+            return;
+        }
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(structType, nullptr, node->name);
+
+        if(node->initExpr)
+        {
+            llvm::Value* initValue = generateExpression(node->initExpr);
+            if(initValue)
+            {
+                builder.CreateStore(initValue, alloca);
+            }
+        }
+
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->name] = structRef->structName;
+        return;
+    }
+
     llvm::Type* targetType = getLLVMType(node->type->kind);
     llvm::AllocaInst* alloca =
         builder.CreateAlloca(targetType, nullptr, node->name);
@@ -1977,6 +2039,159 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     {
         builder.CreateStore(value, alloca);
     }
+}
+
+void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
+{
+    // Get the struct variable
+    llvm::Value* structPtr = namedValues[node->structName];
+    if(!structPtr)
+    {
+        reportError(node->line, "unknown variable: " + node->structName);
+        return;
+    }
+
+    // Get the struct type name
+    auto typeIt = structVariableTypes.find(node->structName);
+    if(typeIt == structVariableTypes.end())
+    {
+        reportError(node->line,
+                    "variable '" + node->structName + "' is not a struct");
+        return;
+    }
+
+    std::string structTypeName = typeIt->second;
+
+    // Get struct member info
+    auto memberIt = structMembers.find(structTypeName);
+    if(memberIt == structMembers.end())
+    {
+        reportError(node->line, "unknown struct type: " + structTypeName);
+        return;
+    }
+
+    // Find field index
+    int fieldIndex = -1;
+    TypeNode* fieldType = nullptr;
+    const auto& members = memberIt->second;
+    for(size_t i = 0; i < members.size(); ++i)
+    {
+        if(members[i].first == node->fieldName)
+        {
+            fieldIndex = static_cast<int>(i);
+            fieldType = members[i].second;
+            break;
+        }
+    }
+
+    if(fieldIndex < 0)
+    {
+        reportError(node->line, "struct '" + structTypeName +
+                                    "' has no field named '" + node->fieldName +
+                                    "'");
+        return;
+    }
+
+    // Generate the value to assign
+    llvm::Value* value = generateExpression(node->expression);
+    if(!value)
+        return;
+
+    // Get struct type
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+        return;
+
+    // Convert value if needed
+    llvm::Type* targetType = getLLVMTypeFromNode(fieldType);
+    if(value->getType() != targetType)
+    {
+        if(value->getType()->isIntegerTy() && targetType->isIntegerTy())
+        {
+            unsigned srcBits = value->getType()->getIntegerBitWidth();
+            unsigned dstBits = targetType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+            {
+                value = builder.CreateTrunc(value, targetType, "trunc");
+            }
+            else if(srcBits < dstBits)
+            {
+                value = builder.CreateSExt(value, targetType, "sext");
+            }
+        }
+    }
+
+    // Create GEP to field and store
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, static_cast<unsigned>(fieldIndex),
+        node->fieldName + "_ptr");
+    builder.CreateStore(value, fieldPtr);
+}
+
+llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
+{
+    // Get the struct variable
+    llvm::Value* structPtr = namedValues[node->structName];
+    if(!structPtr)
+    {
+        reportError(node->line, "unknown variable: " + node->structName);
+        return nullptr;
+    }
+
+    // Get the struct type name
+    auto typeIt = structVariableTypes.find(node->structName);
+    if(typeIt == structVariableTypes.end())
+    {
+        reportError(node->line,
+                    "variable '" + node->structName + "' is not a struct");
+        return nullptr;
+    }
+
+    std::string structTypeName = typeIt->second;
+
+    // Get struct member info
+    auto memberIt = structMembers.find(structTypeName);
+    if(memberIt == structMembers.end())
+    {
+        reportError(node->line, "unknown struct type: " + structTypeName);
+        return nullptr;
+    }
+
+    // Find field index
+    int fieldIndex = -1;
+    TypeNode* fieldType = nullptr;
+    const auto& members = memberIt->second;
+    for(size_t i = 0; i < members.size(); ++i)
+    {
+        if(members[i].first == node->fieldName)
+        {
+            fieldIndex = static_cast<int>(i);
+            fieldType = members[i].second;
+            break;
+        }
+    }
+
+    if(fieldIndex < 0)
+    {
+        reportError(node->line, "struct '" + structTypeName +
+                                    "' has no field named '" + node->fieldName +
+                                    "'");
+        return nullptr;
+    }
+
+    // Get struct type
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+        return nullptr;
+
+    // Get field type
+    llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
+
+    // Create GEP to field and load
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, static_cast<unsigned>(fieldIndex),
+        node->fieldName + "_ptr");
+    return builder.CreateLoad(llvmFieldType, fieldPtr, node->fieldName);
 }
 
 void CodeGenerator::reportError(int line, const std::string& message)

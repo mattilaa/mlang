@@ -544,6 +544,34 @@ std::string AssignmentNode::toString() const
     return name + " = " + expression->toString() + ";";
 }
 
+std::string FieldAccessNode::toString() const
+{
+    return structName + "." + fieldName;
+}
+
+std::string FieldAssignmentNode::toString() const
+{
+    return structName + "." + fieldName + " = " + expression->toString() + ";";
+}
+
+ASTNode* create_field_access(char* struct_name, char* field_name, int line)
+{
+    auto* node =
+        new FieldAccessNode(std::string(struct_name), std::string(field_name));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_field_assignment(char* struct_name, char* field_name,
+                                 ASTNode* expr, int line)
+{
+    auto* node = new FieldAssignmentNode(std::string(struct_name),
+                                         std::string(field_name),
+                                         static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
 std::string ReturnNode::toString() const
 {
     if(expression)

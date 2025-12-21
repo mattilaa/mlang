@@ -30,6 +30,8 @@ ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
+ASTNode* create_field_access(char* struct_name, char* field_name, int line);
+ASTNode* create_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_int_literal(int value);
 ASTNode* create_bool_literal(int value);
@@ -122,7 +124,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %type <ast> mod_declaration use_declaration
 %type <ast> print_statement argument_list
 %type <ast> map_literal map_entries map_entry index_expression
-%type <ast> tuple_type type_list tuple_literal tuple_access tuple_elements
+%type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
 
 %left LT GT LE GE EQ NE
@@ -268,6 +270,8 @@ var_statement
 assignment_statement
     : IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_assignment($1, $3, yylineno); }
+    | IDENTIFIER DOT IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = create_field_assignment($1, $3, $5, yylineno); }
     ;
 
 expression_statement
@@ -364,7 +368,6 @@ expression
     | map_literal
     | index_expression
     | tuple_literal
-    | tuple_access
     | map_iterator
     ;
 
@@ -376,6 +379,8 @@ primary_expression
     | TRUE_LIT { $$ = create_bool_literal(1); }
     | FALSE_LIT { $$ = create_bool_literal(0); }
     | IDENTIFIER { $$ = create_identifier($1); }
+    | IDENTIFIER DOT IDENTIFIER { $$ = create_field_access($1, $3, yylineno); }
+    | IDENTIFIER DOT INT_LITERAL { $$ = create_tuple_access(create_identifier($1), $3, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
     ;
 
@@ -441,10 +446,6 @@ tuple_elements
         $$ = add_list_element(list, $3);
     }
     | tuple_elements COMMA expression { $$ = add_list_element($1, $3); }
-    ;
-
-tuple_access
-    : primary_expression DOT INT_LITERAL { $$ = create_tuple_access($1, $3, yylineno); }
     ;
 
 map_iterator

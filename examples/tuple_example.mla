@@ -7,11 +7,10 @@ struct Point {
 };
 
 fn main() -> i32 {
-    // Tuple with bool
+    // Tuple with bool - test direct access in if statement
     let flags: tuple<bool, bool, int> = (true, false, 42);
 
-    // Access bool elements
-    // Note: println for bool needs special handling, using int comparison
+    // Direct tuple access in if condition
     if flags.0: {
         println!("First flag is true");
     }
@@ -27,15 +26,36 @@ fn main() -> i32 {
         println!("Person is active");
     }
 
-    // Tuple with coordinates
-    let coords: tuple<int, int, int> = (10, 20, 30);
-    println!("x: {}, y: {}, z: {}", coords.0, coords.1, coords.2);
+    // Create a Point instance
+    var p1: Point;
+    p1.x = 100;
+    p1.y = 200;
 
-    // Nested data example - tuple with different numeric types
-    let measurements: tuple<double, float, i64> = (3.14159, 2.71f, 100);
-    println!("Pi: {}", measurements.0);
-    println!("E: {}", measurements.1);
-    println!("Count: {}", measurements.2);
+    var p2: Point;
+    p2.x = 300;
+    p2.y = 400;
+
+    // Tuple containing a Point struct and other data
+    let pointData: tuple<Point, string> = (p1, "origin");
+
+    // Access the Point from tuple and its fields
+    let extractedPoint: Point = pointData.0;
+    println!("Point x: {}", extractedPoint.x);
+    println!("Point y: {}", extractedPoint.y);
+    println!("Label: {}", pointData.1);
+
+    // Tuple with two Points (line segment)
+    let line: tuple<Point, Point> = (p1, p2);
+    let start: Point = line.0;
+    let end: Point = line.1;
+    println!("Line from ({}, {}) to ({}, {})", start.x, start.y, end.x, end.y);
+
+    // Tuple with Point, bool, and int
+    let markedPoint: tuple<Point, bool, int> = (p1, true, 5);
+    if markedPoint.1: {
+        let mp: Point = markedPoint.0;
+        println!("Marked point at ({}, {}) with priority {}", mp.x, mp.y, markedPoint.2);
+    }
 
     return 0;
 }
