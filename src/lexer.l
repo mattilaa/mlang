@@ -77,6 +77,7 @@
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
+"..="           { return DOTDOTEQ; }
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }
 "."             { return DOT; }

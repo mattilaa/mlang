@@ -102,7 +102,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
-%token FOR IN DOTDOT BREAK CONTINUE
+%token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
@@ -305,6 +305,8 @@ for_statement
 range_expression
     : expression DOTDOT expression
         { $$ = create_range_expression($1, $3, 0); }
+    | expression DOTDOTEQ expression
+        { $$ = create_range_expression($1, $3, 1); }
     ;
 
 struct_init

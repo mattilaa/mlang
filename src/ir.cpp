@@ -656,6 +656,26 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     bool isFloat =
         L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy();
 
+    // Handle type mismatches for integer operands
+    if(!isFloat && L->getType()->isIntegerTy() && R->getType()->isIntegerTy())
+    {
+        unsigned LBits = L->getType()->getIntegerBitWidth();
+        unsigned RBits = R->getType()->getIntegerBitWidth();
+
+        if(LBits != RBits)
+        {
+            // Extend the smaller type to match the larger type
+            if(LBits > RBits)
+            {
+                R = builder.CreateSExt(R, L->getType(), "sext");
+            }
+            else
+            {
+                L = builder.CreateSExt(L, R->getType(), "sext");
+            }
+        }
+    }
+
     switch(node->op)
     {
     case BinaryOpNode::OP_PLUS:
@@ -776,6 +796,22 @@ void CodeGenerator::generateForStatement(ForNode* node)
 
         llvm::Type* loopType = llvm::Type::getInt64Ty(context);
 
+        // Extend start and end values to i64 if necessary
+        if(startVal->getType() != loopType)
+        {
+            if(startVal->getType()->isIntegerTy())
+            {
+                startVal = builder.CreateSExt(startVal, loopType, "start.ext");
+            }
+        }
+        if(endVal->getType() != loopType)
+        {
+            if(endVal->getType()->isIntegerTy())
+            {
+                endVal = builder.CreateSExt(endVal, loopType, "end.ext");
+            }
+        }
+
         // Create alloca for loop variable
         llvm::AllocaInst* loopVar =
             builder.CreateAlloca(loopType, nullptr, node->varName);
@@ -810,12 +846,20 @@ void CodeGenerator::generateForStatement(ForNode* node)
         // Branch to condition check
         builder.CreateBr(condBB);
 
-        // Condition block: check if loop variable < end
+        // Condition block: check if loop variable < end (exclusive) or <= end
+        // (inclusive)
         builder.SetInsertPoint(condBB);
         llvm::Value* currentVal =
             builder.CreateLoad(loopType, loopVar, node->varName);
-        llvm::Value* cond =
-            builder.CreateICmpSLT(currentVal, endVal, "loopcond");
+        llvm::Value* cond;
+        if(rangeExpr->inclusive)
+        {
+            cond = builder.CreateICmpSLE(currentVal, endVal, "loopcond");
+        }
+        else
+        {
+            cond = builder.CreateICmpSLT(currentVal, endVal, "loopcond");
+        }
         builder.CreateCondBr(cond, bodyBB, endBB);
 
         // Body block
@@ -2037,6 +2081,40 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
     if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(variable))
     {
+        llvm::Type* targetType = alloca->getAllocatedType();
+        llvm::Type* valueType = value->getType();
+
+        // Convert value to target type if necessary
+        if(valueType != targetType)
+        {
+            if(valueType->isIntegerTy() && targetType->isIntegerTy())
+            {
+                unsigned valueBits = valueType->getIntegerBitWidth();
+                unsigned targetBits = targetType->getIntegerBitWidth();
+                if(valueBits > targetBits)
+                {
+                    value = builder.CreateTrunc(value, targetType, "trunc");
+                }
+                else if(valueBits < targetBits)
+                {
+                    value = builder.CreateSExt(value, targetType, "sext");
+                }
+            }
+            else if(valueType->isIntegerTy() && targetType->isFloatingPointTy())
+            {
+                value = builder.CreateSIToFP(value, targetType, "sitofp");
+            }
+            else if(valueType->isFloatingPointTy() && targetType->isIntegerTy())
+            {
+                value = builder.CreateFPToSI(value, targetType, "fptosi");
+            }
+            else if(valueType->isFloatingPointTy() &&
+                    targetType->isFloatingPointTy())
+            {
+                value = builder.CreateFPCast(value, targetType, "fpcast");
+            }
+        }
+
         builder.CreateStore(value, alloca);
     }
 }
