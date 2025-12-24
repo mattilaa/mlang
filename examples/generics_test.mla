@@ -1,6 +1,10 @@
 // Test file for MLA generics
 // This tests the monomorphization implementation
 
+pub struct Foo {
+    var value: i32;
+};
+
 // Generic Box struct - holds a single value of type T
 pub struct Box<T> {
     var value: T;
@@ -24,7 +28,7 @@ impl<T, U> Pair {
     pub fn get_first(self: Pair<T, U>) -> T {
         return self.first;
     }
-    
+
     pub fn get_second(self: Pair<T, U>) -> U {
         return self.second;
     }
@@ -34,18 +38,26 @@ fn main() -> i32 {
     // Test Box with i32
     let box_int: Box<i32> = Box<i32> { value: 42 };
     println!("Box<i32> value: {}", box_int.get());
-    
+
     // Test Box with i64
     let box_long: Box<i64> = Box<i64> { value: 1234567890 };
     println!("Box<i64> value: {}", box_long.get());
-    
+
     // Test Pair with i32, i64
     let pair1: Pair<i32, i64> = Pair<i32, i64> { first: 10, second: 20 };
     println!("Pair<i32, i64>: ({}, {})", pair1.get_first(), pair1.get_second());
-    
+
     // Test Pair with different types
     let pair2: Pair<i64, i32> = Pair<i64, i32> { first: 100, second: 200 };
     println!("Pair<i64, i32>: ({}, {})", pair2.first, pair2.second);
-    
+
+    // Test Box with custom struct Foo
+    let my_foo: Foo = Foo { value: 11 };
+    let box_foo: Box<Foo> = Box<Foo> { value: my_foo };
+    println!("Box<Foo> value: {}", box_foo.value.value);
+
+    // Also test using the get() method
+    println!("Box<Foo> get().value: {}", box_foo.get());
+
     return 0;
 }

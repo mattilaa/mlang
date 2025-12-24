@@ -3909,6 +3909,54 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                 fieldValue =
                     builder.CreateFPToSI(fieldValue, expectedType, "fptosi");
             }
+            else
+            {
+                // Types are incompatible - report error
+                std::string actualTypeStr, expectedTypeStr;
+
+                // Get actual type name
+                if(actualType->isIntegerTy())
+                    actualTypeStr =
+                        "i" + std::to_string(actualType->getIntegerBitWidth());
+                else if(actualType->isFloatTy())
+                    actualTypeStr = "float";
+                else if(actualType->isDoubleTy())
+                    actualTypeStr = "double";
+                else if(actualType->isPointerTy())
+                    actualTypeStr = "pointer";
+                else if(actualType->isStructTy())
+                    actualTypeStr = actualType->getStructName().str().empty()
+                                        ? "struct"
+                                        : actualType->getStructName().str();
+                else
+                    actualTypeStr = "unknown";
+
+                // Get expected type name
+                if(expectedType->isIntegerTy())
+                    expectedTypeStr =
+                        "i" +
+                        std::to_string(expectedType->getIntegerBitWidth());
+                else if(expectedType->isFloatTy())
+                    expectedTypeStr = "float";
+                else if(expectedType->isDoubleTy())
+                    expectedTypeStr = "double";
+                else if(expectedType->isPointerTy())
+                    expectedTypeStr = "pointer";
+                else if(expectedType->isStructTy())
+                    expectedTypeStr =
+                        expectedType->getStructName().str().empty()
+                            ? "struct"
+                            : expectedType->getStructName().str();
+                else
+                    expectedTypeStr = "unknown";
+
+                reportError(node->line, "type mismatch for field '" +
+                                            fieldName + "' in struct '" +
+                                            structTypeName + "': expected '" +
+                                            expectedTypeStr + "', got '" +
+                                            actualTypeStr + "'");
+                return nullptr;
+            }
         }
 
         // Insert the value into the struct
