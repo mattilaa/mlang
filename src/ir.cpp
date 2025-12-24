@@ -338,9 +338,28 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
                         cFormat += "%s";
                         argValues.push_back(argVal);
                     }
+                    else if(argType->isStructTy())
+                    {
+                        // Struct types cannot be printed directly
+                        std::string structName =
+                            argType->getStructName().str().empty()
+                                ? "anonymous struct"
+                                : argType->getStructName().str();
+                        std::cerr
+                            << "Error: cannot print struct type '" << structName
+                            << "' directly; access a specific field instead"
+                            << std::endl;
+                        hasError = true;
+                        cFormat += "%d"; // Placeholder to continue
+                        argValues.push_back(llvm::ConstantInt::get(
+                            context, llvm::APInt(32, 0)));
+                    }
                     else
                     {
-                        // Unknown type, try as int
+                        // Unknown type
+                        std::cerr << "Error: cannot print value of unknown type"
+                                  << std::endl;
+                        hasError = true;
                         cFormat += "%d";
                         argValues.push_back(argVal);
                     }
@@ -879,9 +898,45 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     if(!L || !R)
         return nullptr;
 
+    // Check for struct types - cannot perform arithmetic on structs
+    if(L->getType()->isStructTy())
+    {
+        std::string typeName = L->getType()->getStructName().str().empty()
+                                   ? "struct"
+                                   : L->getType()->getStructName().str();
+        reportError(node->line,
+                    "cannot perform binary operation on struct type '" +
+                        typeName + "'");
+        return nullptr;
+    }
+    if(R->getType()->isStructTy())
+    {
+        std::string typeName = R->getType()->getStructName().str().empty()
+                                   ? "struct"
+                                   : R->getType()->getStructName().str();
+        reportError(node->line,
+                    "cannot perform binary operation on struct type '" +
+                        typeName + "'");
+        return nullptr;
+    }
+
     // Check if we're dealing with floating point or integer types
     bool isFloat =
         L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy();
+
+    // Verify operand types are numeric
+    bool LIsNumeric =
+        L->getType()->isIntegerTy() || L->getType()->isFloatingPointTy();
+    bool RIsNumeric =
+        R->getType()->isIntegerTy() || R->getType()->isFloatingPointTy();
+
+    if(!LIsNumeric || !RIsNumeric)
+    {
+        reportError(node->line,
+                    "binary operations require numeric operands (integer or "
+                    "floating-point)");
+        return nullptr;
+    }
 
     // Handle type mismatches for integer operands
     if(!isFloat && L->getType()->isIntegerTy() && R->getType()->isIntegerTy())
@@ -915,8 +970,47 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         return isFloat ? builder.CreateFMul(L, R, "multmp")
                        : builder.CreateMul(L, R, "multmp");
     case BinaryOpNode::OP_DIVIDE:
+    {
+        // Check for division by zero with constant divisor
+        if(auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(R))
+        {
+            if(constInt->isZero())
+            {
+                reportError(node->line, "division by zero");
+                return nullptr;
+            }
+        }
+        if(auto* constFP = llvm::dyn_cast<llvm::ConstantFP>(R))
+        {
+            if(constFP->isZero())
+            {
+                reportError(node->line, "division by zero");
+                return nullptr;
+            }
+        }
         return isFloat ? builder.CreateFDiv(L, R, "divtmp")
                        : builder.CreateSDiv(L, R, "divtmp");
+    }
+    case BinaryOpNode::OP_MODULO:
+    {
+        // Check for modulo by zero with constant divisor
+        if(auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(R))
+        {
+            if(constInt->isZero())
+            {
+                reportError(node->line, "modulo by zero");
+                return nullptr;
+            }
+        }
+        if(isFloat)
+        {
+            reportError(
+                node->line,
+                "modulo operator not supported for floating-point types");
+            return nullptr;
+        }
+        return builder.CreateSRem(L, R, "modtmp");
+    }
     case BinaryOpNode::OP_LT:
         return isFloat ? builder.CreateFCmpOLT(L, R, "cmptmp")
                        : builder.CreateICmpSLT(L, R, "cmptmp");
@@ -945,12 +1039,42 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     if(!condValue)
         return;
 
+    // Check that condition is a valid boolean type
+    llvm::Type* condType = condValue->getType();
+    if(!condType->isIntegerTy() && !condType->isFloatingPointTy())
+    {
+        std::string typeStr;
+        if(condType->isStructTy())
+            typeStr = condType->getStructName().str().empty()
+                          ? "struct"
+                          : condType->getStructName().str();
+        else if(condType->isPointerTy())
+            typeStr = "pointer";
+        else
+            typeStr = "non-boolean";
+
+        reportError(node->line,
+                    "if condition must be a boolean or numeric type, got '" +
+                        typeStr + "'");
+        return;
+    }
+
     // Convert condition to boolean if necessary
     if(!condValue->getType()->isIntegerTy(1))
     {
-        condValue = builder.CreateICmpNE(
-            condValue, llvm::ConstantInt::get(condValue->getType(), 0),
-            "ifcond");
+        if(condValue->getType()->isFloatingPointTy())
+        {
+            // Compare float/double to 0.0
+            condValue = builder.CreateFCmpONE(
+                condValue, llvm::ConstantFP::get(condValue->getType(), 0.0),
+                "ifcond");
+        }
+        else
+        {
+            condValue = builder.CreateICmpNE(
+                condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+                "ifcond");
+        }
     }
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
@@ -1018,6 +1142,47 @@ void CodeGenerator::generateForStatement(ForNode* node)
         if(!startVal || !endVal)
         {
             reportError(node->line, "invalid range expression in for loop");
+            return;
+        }
+
+        // Check that range values are integers
+        if(!startVal->getType()->isIntegerTy())
+        {
+            std::string typeStr;
+            if(startVal->getType()->isFloatTy())
+                typeStr = "float";
+            else if(startVal->getType()->isDoubleTy())
+                typeStr = "double";
+            else if(startVal->getType()->isStructTy())
+                typeStr = startVal->getType()->getStructName().str().empty()
+                              ? "struct"
+                              : startVal->getType()->getStructName().str();
+            else
+                typeStr = "non-integer";
+
+            reportError(node->line,
+                        "for loop range start must be an integer, got '" +
+                            typeStr + "'");
+            return;
+        }
+
+        if(!endVal->getType()->isIntegerTy())
+        {
+            std::string typeStr;
+            if(endVal->getType()->isFloatTy())
+                typeStr = "float";
+            else if(endVal->getType()->isDoubleTy())
+                typeStr = "double";
+            else if(endVal->getType()->isStructTy())
+                typeStr = endVal->getType()->getStructName().str().empty()
+                              ? "struct"
+                              : endVal->getType()->getStructName().str();
+            else
+                typeStr = "non-integer";
+
+            reportError(node->line,
+                        "for loop range end must be an integer, got '" +
+                            typeStr + "'");
             return;
         }
 
@@ -1661,13 +1826,117 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
 
 void CodeGenerator::generateReturnStatement(ReturnNode* node)
 {
+    llvm::Function* currentFunc = builder.GetInsertBlock()->getParent();
+    llvm::Type* expectedRetType = currentFunc->getReturnType();
+
     if(node->expression)
     {
         llvm::Value* returnValue = generateExpression(node->expression);
+        if(!returnValue)
+            return;
+
+        llvm::Type* actualType = returnValue->getType();
+
+        // Check if return type matches
+        if(expectedRetType->isVoidTy())
+        {
+            reportError(node->line,
+                        "function with void return type cannot return a value");
+            return;
+        }
+
+        // Try to convert if types don't match
+        if(actualType != expectedRetType)
+        {
+            if(actualType->isIntegerTy() && expectedRetType->isIntegerTy())
+            {
+                unsigned actualBits = actualType->getIntegerBitWidth();
+                unsigned expectedBits = expectedRetType->getIntegerBitWidth();
+                if(actualBits > expectedBits)
+                {
+                    returnValue = builder.CreateTrunc(
+                        returnValue, expectedRetType, "rettrunc");
+                }
+                else if(actualBits < expectedBits)
+                {
+                    returnValue = builder.CreateSExt(
+                        returnValue, expectedRetType, "retsext");
+                }
+            }
+            else if(actualType->isIntegerTy() &&
+                    expectedRetType->isFloatingPointTy())
+            {
+                returnValue = builder.CreateSIToFP(returnValue, expectedRetType,
+                                                   "retsitofp");
+            }
+            else if(actualType->isFloatingPointTy() &&
+                    expectedRetType->isIntegerTy())
+            {
+                returnValue = builder.CreateFPToSI(returnValue, expectedRetType,
+                                                   "retfptosi");
+            }
+            else if(actualType->isFloatingPointTy() &&
+                    expectedRetType->isFloatingPointTy())
+            {
+                returnValue = builder.CreateFPCast(returnValue, expectedRetType,
+                                                   "retfpcast");
+            }
+            else if(!(actualType->isPointerTy() &&
+                      expectedRetType->isPointerTy()))
+            {
+                // Incompatible types
+                std::string actualStr, expectedStr;
+
+                if(actualType->isStructTy())
+                    actualStr = actualType->getStructName().str().empty()
+                                    ? "struct"
+                                    : actualType->getStructName().str();
+                else if(actualType->isIntegerTy())
+                    actualStr =
+                        "i" + std::to_string(actualType->getIntegerBitWidth());
+                else if(actualType->isFloatTy())
+                    actualStr = "float";
+                else if(actualType->isDoubleTy())
+                    actualStr = "double";
+                else if(actualType->isPointerTy())
+                    actualStr = "pointer/string";
+                else
+                    actualStr = "unknown";
+
+                if(expectedRetType->isStructTy())
+                    expectedStr = expectedRetType->getStructName().str().empty()
+                                      ? "struct"
+                                      : expectedRetType->getStructName().str();
+                else if(expectedRetType->isIntegerTy())
+                    expectedStr =
+                        "i" +
+                        std::to_string(expectedRetType->getIntegerBitWidth());
+                else if(expectedRetType->isFloatTy())
+                    expectedStr = "float";
+                else if(expectedRetType->isDoubleTy())
+                    expectedStr = "double";
+                else if(expectedRetType->isPointerTy())
+                    expectedStr = "pointer/string";
+                else
+                    expectedStr = "unknown";
+
+                reportError(node->line, "return type mismatch: expected '" +
+                                            expectedStr + "', got '" +
+                                            actualStr + "'");
+                return;
+            }
+        }
+
         builder.CreateRet(returnValue);
     }
     else
     {
+        // No expression - check if function expects void
+        if(!expectedRetType->isVoidTy())
+        {
+            reportError(node->line, "non-void function must return a value");
+            return;
+        }
         builder.CreateRetVoid();
     }
 }
@@ -1728,7 +1997,7 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
     llvm::Value* value = namedValues[node->name];
     if(!value)
     {
-        std::cerr << "Unknown variable: " << node->name << std::endl;
+        reportError(node->line, "unknown variable: '" + node->name + "'");
         return nullptr;
     }
 
@@ -2385,9 +2654,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         return;
     }
 
-    llvm::Value* value = generateExpression(node->expression);
     llvm::Value* variable = namedValues[node->name];
-    if(!variable || !value)
+    if(!variable)
+    {
+        reportError(node->line, "unknown variable: '" + node->name + "'");
+        return;
+    }
+
+    llvm::Value* value = generateExpression(node->expression);
+    if(!value)
         return;
 
     if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(variable))
@@ -2423,6 +2698,49 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                     targetType->isFloatingPointTy())
             {
                 value = builder.CreateFPCast(value, targetType, "fpcast");
+            }
+            else
+            {
+                // Incompatible types
+                std::string valueTypeStr, targetTypeStr;
+
+                if(valueType->isIntegerTy())
+                    valueTypeStr =
+                        "i" + std::to_string(valueType->getIntegerBitWidth());
+                else if(valueType->isFloatTy())
+                    valueTypeStr = "float";
+                else if(valueType->isDoubleTy())
+                    valueTypeStr = "double";
+                else if(valueType->isPointerTy())
+                    valueTypeStr = "pointer/string";
+                else if(valueType->isStructTy())
+                    valueTypeStr = valueType->getStructName().str().empty()
+                                       ? "struct"
+                                       : valueType->getStructName().str();
+                else
+                    valueTypeStr = "unknown";
+
+                if(targetType->isIntegerTy())
+                    targetTypeStr =
+                        "i" + std::to_string(targetType->getIntegerBitWidth());
+                else if(targetType->isFloatTy())
+                    targetTypeStr = "float";
+                else if(targetType->isDoubleTy())
+                    targetTypeStr = "double";
+                else if(targetType->isPointerTy())
+                    targetTypeStr = "pointer/string";
+                else if(targetType->isStructTy())
+                    targetTypeStr = targetType->getStructName().str().empty()
+                                        ? "struct"
+                                        : targetType->getStructName().str();
+                else
+                    targetTypeStr = "unknown";
+
+                reportError(node->line,
+                            "type mismatch in assignment to variable '" +
+                                node->name + "': expected '" + targetTypeStr +
+                                "', got '" + valueTypeStr + "'");
+                return;
             }
         }
 
@@ -2567,11 +2885,13 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     // Convert value if needed
     llvm::Type* targetType = getLLVMTypeFromNode(fieldType);
-    if(value->getType() != targetType)
+    llvm::Type* valueType = value->getType();
+
+    if(valueType != targetType)
     {
-        if(value->getType()->isIntegerTy() && targetType->isIntegerTy())
+        if(valueType->isIntegerTy() && targetType->isIntegerTy())
         {
-            unsigned srcBits = value->getType()->getIntegerBitWidth();
+            unsigned srcBits = valueType->getIntegerBitWidth();
             unsigned dstBits = targetType->getIntegerBitWidth();
             if(srcBits > dstBits)
             {
@@ -2581,6 +2901,62 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             {
                 value = builder.CreateSExt(value, targetType, "sext");
             }
+        }
+        else if(valueType->isFloatingPointTy() &&
+                targetType->isFloatingPointTy())
+        {
+            value = builder.CreateFPCast(value, targetType, "fpcast");
+        }
+        else if(valueType->isIntegerTy() && targetType->isFloatingPointTy())
+        {
+            value = builder.CreateSIToFP(value, targetType, "sitofp");
+        }
+        else if(valueType->isFloatingPointTy() && targetType->isIntegerTy())
+        {
+            value = builder.CreateFPToSI(value, targetType, "fptosi");
+        }
+        else
+        {
+            // Incompatible types
+            std::string valueTypeStr, targetTypeStr;
+
+            if(valueType->isIntegerTy())
+                valueTypeStr =
+                    "i" + std::to_string(valueType->getIntegerBitWidth());
+            else if(valueType->isFloatTy())
+                valueTypeStr = "float";
+            else if(valueType->isDoubleTy())
+                valueTypeStr = "double";
+            else if(valueType->isPointerTy())
+                valueTypeStr = "pointer";
+            else if(valueType->isStructTy())
+                valueTypeStr = valueType->getStructName().str().empty()
+                                   ? "struct"
+                                   : valueType->getStructName().str();
+            else
+                valueTypeStr = "unknown";
+
+            if(targetType->isIntegerTy())
+                targetTypeStr =
+                    "i" + std::to_string(targetType->getIntegerBitWidth());
+            else if(targetType->isFloatTy())
+                targetTypeStr = "float";
+            else if(targetType->isDoubleTy())
+                targetTypeStr = "double";
+            else if(targetType->isPointerTy())
+                targetTypeStr = "pointer";
+            else if(targetType->isStructTy())
+                targetTypeStr = targetType->getStructName().str().empty()
+                                    ? "struct"
+                                    : targetType->getStructName().str();
+            else
+                targetTypeStr = "unknown";
+
+            reportError(node->line, "type mismatch in assignment to field '" +
+                                        fieldName + "': expected '" +
+                                        targetTypeStr + "', got '" +
+                                        valueTypeStr + "'");
+            return;
         }
     }
 
@@ -2599,8 +2975,6 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
     // Case 1: Simple identifier (e.g., "myStruct")
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
-        std::cerr << "DEBUG getStructPtrAndType: identifier '" << id->name
-                  << "'" << std::endl;
         llvm::Value* ptr = namedValues[id->name];
         if(!ptr)
         {
@@ -2633,12 +3007,6 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
     // Case 2: Field access (e.g., "a.b" in "a.b.c")
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
     {
-        std::cerr << "DEBUG getStructPtrAndType: field access structName='"
-                  << fieldAccess->structName << "' fieldName='"
-                  << fieldAccess->fieldName
-                  << "' object=" << (fieldAccess->object ? "set" : "null")
-                  << std::endl;
-
         // Recursively get the struct pointer for the object
         llvm::Value* objPtr;
         std::string objTypeName;
@@ -2874,17 +3242,130 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     llvm::Function* callee = module->getFunction(node->name);
     if(!callee)
     {
-        std::cerr << "Unknown function: " << node->name << std::endl;
+        reportError(node->line, "unknown function: '" + node->name + "'");
+        return nullptr;
+    }
+
+    // Check argument count
+    size_t expectedArgs = callee->arg_size();
+    size_t actualArgs = node->arguments.size();
+    bool isVarArg = callee->isVarArg();
+
+    if(!isVarArg && expectedArgs != actualArgs)
+    {
+        reportError(node->line, "function '" + node->name + "' expects " +
+                                    std::to_string(expectedArgs) +
+                                    " argument(s), but " +
+                                    std::to_string(actualArgs) + " provided");
+        return nullptr;
+    }
+    if(isVarArg && actualArgs < expectedArgs)
+    {
+        reportError(node->line,
+                    "function '" + node->name + "' requires at least " +
+                        std::to_string(expectedArgs) + " argument(s), but " +
+                        std::to_string(actualArgs) + " provided");
         return nullptr;
     }
 
     std::vector<llvm::Value*> args;
+    unsigned paramIdx = 0;
     for(auto arg : node->arguments)
     {
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
+
+        // Type check for non-vararg parameters
+        if(paramIdx < expectedArgs)
+        {
+            llvm::Type* expectedType = callee->getArg(paramIdx)->getType();
+            llvm::Type* actualType = argVal->getType();
+
+            if(actualType != expectedType)
+            {
+                // Try implicit conversions
+                if(actualType->isIntegerTy() && expectedType->isIntegerTy())
+                {
+                    unsigned actualBits = actualType->getIntegerBitWidth();
+                    unsigned expectedBits = expectedType->getIntegerBitWidth();
+                    if(actualBits > expectedBits)
+                    {
+                        argVal =
+                            builder.CreateTrunc(argVal, expectedType, "trunc");
+                    }
+                    else if(actualBits < expectedBits)
+                    {
+                        argVal =
+                            builder.CreateSExt(argVal, expectedType, "sext");
+                    }
+                }
+                else if(actualType->isIntegerTy() &&
+                        expectedType->isFloatingPointTy())
+                {
+                    argVal =
+                        builder.CreateSIToFP(argVal, expectedType, "sitofp");
+                }
+                else if(actualType->isFloatingPointTy() &&
+                        expectedType->isIntegerTy())
+                {
+                    argVal =
+                        builder.CreateFPToSI(argVal, expectedType, "fptosi");
+                }
+                else if(actualType->isFloatingPointTy() &&
+                        expectedType->isFloatingPointTy())
+                {
+                    argVal =
+                        builder.CreateFPCast(argVal, expectedType, "fpcast");
+                }
+                else if(!(actualType->isPointerTy() &&
+                          expectedType->isPointerTy()))
+                {
+                    // Incompatible types (allow pointer-to-pointer)
+                    std::string actualStr, expectedStr;
+
+                    if(actualType->isStructTy())
+                        actualStr = actualType->getStructName().str().empty()
+                                        ? "struct"
+                                        : actualType->getStructName().str();
+                    else if(actualType->isIntegerTy())
+                        actualStr = "i" + std::to_string(
+                                              actualType->getIntegerBitWidth());
+                    else if(actualType->isFloatTy())
+                        actualStr = "float";
+                    else if(actualType->isDoubleTy())
+                        actualStr = "double";
+                    else
+                        actualStr = "unknown";
+
+                    if(expectedType->isStructTy())
+                        expectedStr =
+                            expectedType->getStructName().str().empty()
+                                ? "struct"
+                                : expectedType->getStructName().str();
+                    else if(expectedType->isIntegerTy())
+                        expectedStr =
+                            "i" +
+                            std::to_string(expectedType->getIntegerBitWidth());
+                    else if(expectedType->isFloatTy())
+                        expectedStr = "float";
+                    else if(expectedType->isDoubleTy())
+                        expectedStr = "double";
+                    else
+                        expectedStr = "unknown";
+
+                    reportError(node->line,
+                                "argument " + std::to_string(paramIdx + 1) +
+                                    " of function '" + node->name +
+                                    "' has wrong type: expected '" +
+                                    expectedStr + "', got '" + actualStr + "'");
+                    return nullptr;
+                }
+            }
+        }
+
         args.push_back(argVal);
+        paramIdx++;
     }
 
     if(callee->getReturnType()->isVoidTy())
