@@ -64,6 +64,8 @@ struct FunctionInfo
     int startLine = -1;
     int endLine = -1;
     std::unordered_map<std::string, std::string> varTypes;
+    std::unordered_map<std::string, Location> varDecls;
+    std::unordered_map<std::string, Location> paramDecls;
     std::string ownerStruct;
 };
 
@@ -795,9 +797,10 @@ private:
             auto it = info.structs.find(objType);
             if(it != info.structs.end())
             {
-                auto mit = it->second.methods.find(method->methodName);
-                if(mit != it->second.methods.end())
-                    return mit->second.returnType;
+                auto* mi =
+                    find_method_in_struct(it->second, method->methodName, info);
+                if(mi)
+                    return mi->returnType;
             }
             return {};
         }
@@ -836,6 +839,21 @@ private:
             auto baseIt = info.structs.find(st.baseName);
             if(baseIt != info.structs.end())
                 return find_field_in_struct(baseIt->second, name, info);
+        }
+        return nullptr;
+    }
+
+    MethodInfo* find_method_in_struct(StructInfo& st, const std::string& name,
+                                      FileInfo& info)
+    {
+        auto it = st.methods.find(name);
+        if(it != st.methods.end())
+            return &it->second;
+        if(!st.baseName.empty())
+        {
+            auto baseIt = info.structs.find(st.baseName);
+            if(baseIt != info.structs.end())
+                return find_method_in_struct(baseIt->second, name, info);
         }
         return nullptr;
     }
@@ -967,6 +985,47 @@ private:
                 fn->startLine = span.startLine;
                 fn->endLine = span.endLine;
                 info.functionSpans.push_back(fn);
+
+                // Capture parameter decls from the fn signature line.
+                if(span.startLine >= 0 &&
+                   span.startLine < (int)cleanedLines.size())
+                {
+                    const std::string& sig = cleanedLines[span.startLine];
+                    std::regex paramRx(
+                        "([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*[^,\\)]+");
+                    for(auto itp = std::sregex_iterator(sig.begin(), sig.end(),
+                                                        paramRx);
+                        itp != std::sregex_iterator(); ++itp)
+                    {
+                        std::string pname = (*itp)[1].str();
+                        Location loc;
+                        loc.uri = info.uri;
+                        loc.line = span.startLine;
+                        loc.character = (int)itp->position(1);
+                        fn->paramDecls[pname] = loc;
+                    }
+                }
+
+                // Capture var/let decls within function span.
+                std::regex varRx(
+                    "\\b(let|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b");
+                for(int l = span.startLine; l <= span.endLine &&
+                                             l < (int)cleanedLines.size();
+                    ++l)
+                {
+                    const std::string& ln = cleanedLines[l];
+                    for(auto itv = std::sregex_iterator(ln.begin(), ln.end(),
+                                                        varRx);
+                        itv != std::sregex_iterator(); ++itv)
+                    {
+                        std::string vname = (*itv)[2].str();
+                        Location loc;
+                        loc.uri = info.uri;
+                        loc.line = l;
+                        loc.character = (int)itv->position(2);
+                        fn->varDecls[vname] = loc;
+                    }
+                }
             }
         }
     }
@@ -1061,9 +1120,10 @@ private:
                         break;
                     if(idxChain == chain.size() - 1 && isMethodCall)
                     {
-                        auto mit = sit->second.methods.find(chain[idxChain]);
-                        if(mit != sit->second.methods.end())
-                            return location_to_json(mit->second.loc);
+                        auto* mi = find_method_in_struct(sit->second,
+                                                         chain[idxChain], info);
+                        if(mi)
+                            return location_to_json(mi->loc);
                     }
                     auto field = find_field_in_struct(sit->second, chain[idxChain], info);
                     if(!field)
@@ -1073,6 +1133,16 @@ private:
                     baseType = field->typeName;
                 }
             }
+        }
+
+        if(auto fn = find_enclosing_function(info, *line))
+        {
+            auto itv = fn->varDecls.find(word);
+            if(itv != fn->varDecls.end())
+                return location_to_json(itv->second);
+            auto itp = fn->paramDecls.find(word);
+            if(itp != fn->paramDecls.end())
+                return location_to_json(itp->second);
         }
 
         if(auto fit = info.functions.find(word); fit != info.functions.end())
