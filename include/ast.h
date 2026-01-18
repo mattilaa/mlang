@@ -212,6 +212,7 @@ public:
         OP_MINUS,
         OP_MULTIPLY,
         OP_DIVIDE,
+        OP_MODULO,
         OP_LT,
         OP_GT,
         OP_LE,

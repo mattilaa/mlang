@@ -746,6 +746,9 @@ std::string BinaryOpNode::toString() const
     case OP_DIVIDE:
         op_str = "/";
         break;
+    case OP_MODULO:
+        op_str = "%";
+        break;
     case OP_LT:
         op_str = "<";
         break;

@@ -3,6 +3,7 @@ project(MLang)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(GNUInstallDirs)
 
 # Create compile_commands.json in build directory
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -159,6 +160,24 @@ llvm_map_components_to_libnames(llvm_libs
 
 target_link_libraries(mlang ${llvm_libs})
 
+# ============================================================================
+# mlang-lsp (C++ LSP server)
+# ============================================================================
+add_executable(mlang-lsp
+    tools/mlang_lsp_cpp/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${LEXER_OUT}
+    ${PARSER_OUT}
+)
+
+add_dependencies(mlang-lsp ParserTarget LexerTarget)
+target_include_directories(mlang-lsp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mlang-lsp PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mlang-lsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mlang-lsp ${llvm_libs})
+
 # Print debug information
 message(STATUS "LEXER_OUT: ${LEXER_OUT}")
 message(STATUS "PARSER_OUT: ${PARSER_OUT}")
@@ -184,3 +203,12 @@ if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# ============================================================================
+# LSP script install (user-level install via CMAKE_INSTALL_PREFIX)
+# ============================================================================
+install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlang_lsp/mlang_lsp.py
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang-lsp)
+
+install(TARGETS mlang-lsp
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
