@@ -1,6 +1,56 @@
 %{
 #include "parser.hpp"
 #include <string.h>
+#include <cctype>
+#include <string>
+
+static int yyinput(void);
+static void yyunput(int, char*);
+
+static int is_generic_struct_literal_start()
+{
+    std::string buf;
+    buf.reserve(64);
+    bool saw_gt = false;
+    bool saw_lbrace = false;
+    int limit = 256;
+    int c = 0;
+
+    while(limit-- > 0 && (c = yyinput()) != 0)
+    {
+        buf.push_back((char)c);
+        if(c == '\n' || c == ';')
+            break;
+        if(c == '>')
+        {
+            saw_gt = true;
+            break;
+        }
+        if(!(std::isalnum(c) || c == '_' || c == ',' || std::isspace(c) ||
+             c == '<'))
+        {
+            break;
+        }
+    }
+
+    if(saw_gt)
+    {
+        while(limit-- > 0 && (c = yyinput()) != 0)
+        {
+            buf.push_back((char)c);
+            if(std::isspace(c))
+                continue;
+            if(c == '{')
+                saw_lbrace = true;
+            break;
+        }
+    }
+
+    for(int i = (int)buf.size() - 1; i >= 0; --i)
+        unput(buf[(size_t)i]);
+
+    return (saw_gt && saw_lbrace) ? 1 : 0;
+}
 %}
 
 %option noyywrap
@@ -86,7 +136,7 @@
 ".keys()"       { return KEYS_METHOD; }
 ".values()"     { return VALUES_METHOD; }
 ".entries()"    { return ENTRIES_METHOD; }
-"<"             { return LT; }
+"<"             { return is_generic_struct_literal_start() ? GENERIC_LT : LT; }
 ">"             { return GT; }
 "<="            { return LE; }
 ">="            { return GE; }

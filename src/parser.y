@@ -124,6 +124,7 @@ ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
+%token GENERIC_LT
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
 
@@ -496,7 +497,7 @@ primary_expression
 struct_literal
     : IDENTIFIER LBRACE struct_field_init_list RBRACE
         { $$ = create_struct_literal($1, NULL, $3, yylineno); }
-    | IDENTIFIER LT type_list GT LBRACE struct_field_init_list RBRACE
+    | IDENTIFIER GENERIC_LT type_list GT LBRACE struct_field_init_list RBRACE
         { $$ = create_struct_literal($1, $3, $6, yylineno); }
     ;
 
