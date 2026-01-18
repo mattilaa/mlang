@@ -69,6 +69,13 @@ struct FunctionInfo
     std::string ownerStruct;
 };
 
+struct UseImport
+{
+    std::string moduleName;
+    std::string itemName;
+    bool importAll = false;
+};
+
 struct FileInfo
 {
     std::string path;
@@ -79,6 +86,8 @@ struct FileInfo
     std::unordered_map<std::string, StructInfo> structs;
     std::unordered_map<std::string, FunctionInfo> functions;
     std::vector<FunctionInfo*> functionSpans;
+    std::vector<std::string> moduleDecls;
+    std::vector<UseImport> imports;
 };
 
 static std::string read_file(const std::string& path)
@@ -408,6 +417,68 @@ private:
         return payload;
     }
 
+    std::string resolve_module_path(const std::string& baseDir,
+                                    const std::string& moduleName) const
+    {
+        std::filesystem::path base(baseDir);
+        std::filesystem::path direct = base / (moduleName + ".mla");
+        std::error_code ec;
+        if(std::filesystem::exists(direct, ec) && !ec)
+            return direct.string();
+        std::filesystem::path dirMod = base / moduleName / "mod.mla";
+        if(std::filesystem::exists(dirMod, ec) && !ec)
+            return dirMod.string();
+        return {};
+    }
+
+    std::string resolve_module_path_for_file(const FileInfo& info,
+                                             const std::string& moduleName) const
+    {
+        std::filesystem::path base =
+            std::filesystem::path(info.path).parent_path();
+        std::string path = resolve_module_path(base.string(), moduleName);
+        if(!path.empty())
+            return path;
+        if(!rootPath.empty())
+            return resolve_module_path(rootPath, moduleName);
+        return {};
+    }
+
+    FileInfo* get_or_index_file(const std::string& path)
+    {
+        std::string uri = path_to_uri(path);
+        auto it = files.find(uri);
+        if(it != files.end())
+            return &it->second;
+        std::string text = read_file(path);
+        if(text.empty())
+            return nullptr;
+        index_document(uri, text);
+        auto it2 = files.find(uri);
+        if(it2 != files.end())
+            return &it2->second;
+        return nullptr;
+    }
+
+    std::optional<Location> find_symbol_in_file(FileInfo& info,
+                                                const std::string& name)
+    {
+        if(auto fit = info.functions.find(name); fit != info.functions.end())
+            return fit->second.loc;
+        if(auto sit = info.structs.find(name); sit != info.structs.end())
+            return sit->second.loc;
+        for(auto& [sname, st] : info.structs)
+        {
+            auto itf = st.fields.find(name);
+            if(itf != st.fields.end())
+                return itf->second.loc;
+            auto itm = st.methods.find(name);
+            if(itm != st.methods.end())
+                return itm->second.loc;
+        }
+        return std::nullopt;
+    }
+
     void send_json(llvm::json::Value v)
     {
         std::string out;
@@ -604,9 +675,31 @@ private:
         functionReturns.clear();
         if(!info.ast)
             return;
+        collect_modules_imports(info, info.ast);
         collect_structs(info, info.ast);
         collect_functions(info, info.ast);
         index_locations(info);
+    }
+
+    void collect_modules_imports(FileInfo& info, ProgramNode* program)
+    {
+        info.moduleDecls.clear();
+        info.imports.clear();
+        for(auto* modDecl : program->modules)
+        {
+            if(modDecl)
+                info.moduleDecls.push_back(modDecl->moduleName);
+        }
+        for(auto* useDecl : program->imports)
+        {
+            if(!useDecl)
+                continue;
+            UseImport ui;
+            ui.moduleName = useDecl->moduleName;
+            ui.itemName = useDecl->itemName;
+            ui.importAll = useDecl->importAll;
+            info.imports.push_back(ui);
+        }
     }
 
     void collect_structs(FileInfo& info, ProgramNode* program)
@@ -1067,6 +1160,105 @@ private:
         if(word.empty())
             return nullptr;
 
+        auto find_module_prefix = [&](int wordStart) -> std::string {
+            int j = wordStart - 1;
+            while(j >= 0 && std::isspace((unsigned char)lineText[j]))
+                --j;
+            if(j < 1 || lineText[j] != ':' || lineText[j - 1] != ':')
+                return {};
+            j -= 2;
+            while(j >= 0 && std::isspace((unsigned char)lineText[j]))
+                --j;
+            int end = j;
+            while(j >= 0 && (std::isalnum((unsigned char)lineText[j]) ||
+                             lineText[j] == '_'))
+                --j;
+            if(end < j + 1)
+                return {};
+            return lineText.substr(j + 1, end - j);
+        };
+
+        // Jump from module declarations/usages first.
+        static const std::regex modRx(
+            "\\bmod\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*;");
+        static const std::regex useRx(
+            "\\buse\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*::\\s*([A-Za-z_][A-Za-z0-9_]*|\\*)\\s*;");
+        std::smatch match;
+        if(std::regex_search(lineText, match, modRx))
+        {
+            std::string modName = match[1].str();
+            int pos = (int)match.position(1);
+            int len = (int)match.length(1);
+            if(idx >= pos && idx < pos + len)
+            {
+                std::string modPath =
+                    resolve_module_path_for_file(info, modName);
+                if(!modPath.empty())
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(modPath);
+                    loc.line = 0;
+                    loc.character = 0;
+                    return location_to_json(loc);
+                }
+            }
+        }
+        if(std::regex_search(lineText, match, useRx))
+        {
+            std::string modName = match[1].str();
+            std::string itemName = match[2].str();
+            int modPos = (int)match.position(1);
+            int modLen = (int)match.length(1);
+            int itemPos = (int)match.position(2);
+            int itemLen = (int)match.length(2);
+            std::string modPath = resolve_module_path_for_file(info, modName);
+            if(idx >= modPos && idx < modPos + modLen)
+            {
+                if(!modPath.empty())
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(modPath);
+                    loc.line = 0;
+                    loc.character = 0;
+                    return location_to_json(loc);
+                }
+            }
+            if(idx >= itemPos && idx < itemPos + itemLen)
+            {
+                if(itemName != "*" && !modPath.empty())
+                {
+                    if(auto* modInfo = get_or_index_file(modPath))
+                    {
+                        if(auto loc = find_symbol_in_file(*modInfo, itemName))
+                            return location_to_json(*loc);
+                    }
+                }
+                if(!modPath.empty())
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(modPath);
+                    loc.line = 0;
+                    loc.character = 0;
+                    return location_to_json(loc);
+                }
+            }
+        }
+
+        std::string modulePrefix = find_module_prefix(left);
+        if(!modulePrefix.empty())
+        {
+            std::string modPath =
+                resolve_module_path_for_file(info, modulePrefix);
+            if(!modPath.empty())
+            {
+                if(auto* modInfo = get_or_index_file(modPath))
+                {
+                    if(auto loc = find_symbol_in_file(*modInfo, word))
+                        return location_to_json(*loc);
+                }
+            }
+        }
+
         bool isMethodCall = false;
         for(int i = right; i < (int)lineText.size(); ++i)
         {
@@ -1154,6 +1346,21 @@ private:
             auto itf = st.fields.find(word);
             if(itf != st.fields.end())
                 return location_to_json(itf->second.loc);
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            if(!imp.importAll && imp.itemName != word)
+                continue;
+            std::string modPath =
+                resolve_module_path_for_file(info, imp.moduleName);
+            if(modPath.empty())
+                continue;
+            if(auto* modInfo = get_or_index_file(modPath))
+            {
+                if(auto loc = find_symbol_in_file(*modInfo, word))
+                    return location_to_json(*loc);
+            }
         }
 
         return nullptr;
