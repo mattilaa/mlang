@@ -2,6 +2,8 @@
 #include "module.h"
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -397,6 +399,15 @@ private:
         return llvm::json::Value(std::move(range));
     }
 
+    llvm::json::Value make_range_value(int startLine, int startChar,
+                                       int endLine, int endChar)
+    {
+        llvm::json::Object range;
+        range["start"] = make_position_value(startLine, startChar);
+        range["end"] = make_position_value(endLine, endChar);
+        return llvm::json::Value(std::move(range));
+    }
+
     std::optional<std::string> read_message()
     {
         std::string line;
@@ -719,6 +730,7 @@ private:
             caps["completionProvider"] = llvm::json::Value(std::move(completion));
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
+            caps["documentFormattingProvider"] = true;
             llvm::json::Object result;
             result["capabilities"] = llvm::json::Value(std::move(caps));
             send_response(id, llvm::json::Value(std::move(result)));
@@ -742,6 +754,10 @@ private:
         else if(method == "textDocument/documentSymbol")
         {
             send_response(id, handle_document_symbols(params));
+        }
+        else if(method == "textDocument/formatting")
+        {
+            send_response(id, handle_formatting(params));
         }
         else if(method == "workspace/symbol")
         {
@@ -1834,6 +1850,37 @@ private:
         return llvm::json::Value(std::move(out));
     }
 
+    llvm::json::Value handle_formatting(llvm::json::Object* params)
+    {
+        if(!params)
+            return llvm::json::Array{};
+        auto* textDoc = params->getObject("textDocument");
+        if(!textDoc)
+            return llvm::json::Array{};
+        auto uri = textDoc->getString("uri");
+        if(!uri)
+            return llvm::json::Array{};
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return llvm::json::Array{};
+
+        const auto& info = it->second;
+        std::string formatted = format_mlang_text(info);
+        if(formatted.empty() || formatted == info.text)
+            return llvm::json::Array{};
+
+        auto lines = split_lines(info.text);
+        int endLine = (int)lines.size() - 1;
+        int endChar = endLine >= 0 ? (int)lines[endLine].size() : 0;
+
+        llvm::json::Object edit;
+        edit["range"] = make_range_value(0, 0, endLine, endChar);
+        edit["newText"] = formatted;
+        llvm::json::Array out;
+        out.push_back(llvm::json::Value(std::move(edit)));
+        return llvm::json::Value(std::move(out));
+    }
+
     llvm::json::Value handle_workspace_symbols(llvm::json::Object* params)
     {
         std::string query;
@@ -1888,6 +1935,50 @@ private:
         out["kind"] = kind;
         out["location"] = llvm::json::Value(std::move(location));
         return llvm::json::Value(std::move(out));
+    }
+
+    std::string format_mlang_text(const FileInfo& info)
+    {
+        if(info.path.empty())
+            return {};
+
+        std::filesystem::path sourcePath(info.path);
+        std::filesystem::path dir = sourcePath.parent_path();
+        if(dir.empty())
+            dir = std::filesystem::current_path();
+
+        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        std::string tmpName = sourcePath.filename().string() +
+                              ".mlang_format_tmp_" + std::to_string(now);
+        std::filesystem::path tmpPath = dir / tmpName;
+
+        std::ofstream tmpFile(tmpPath, std::ios::binary);
+        if(!tmpFile)
+            return {};
+        tmpFile << info.text;
+        tmpFile.close();
+
+        std::filesystem::path script =
+            std::filesystem::path(rootPath) / "tools" / "mlang_format" /
+            "mlang_format.py";
+        if(!std::filesystem::exists(script))
+        {
+            std::filesystem::remove(tmpPath);
+            return {};
+        }
+
+        std::string cmd = "python3 \"" + script.string() +
+                          "\" --in-place \"" + tmpPath.string() + "\"";
+        int result = std::system(cmd.c_str());
+        if(result != 0)
+        {
+            std::filesystem::remove(tmpPath);
+            return {};
+        }
+
+        std::string formatted = read_file(tmpPath.string());
+        std::filesystem::remove(tmpPath);
+        return formatted;
     }
 };
 
