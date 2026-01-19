@@ -50,6 +50,14 @@ LSP_SYMBOL_KIND_STRUCT = 23
 
 WORD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
+MLANG_FORMAT_DIR = os.path.join(os.path.dirname(__file__), "..", "mlang_format")
+if MLANG_FORMAT_DIR not in sys.path:
+    sys.path.insert(0, MLANG_FORMAT_DIR)
+try:
+    import mlang_format
+except ImportError:
+    mlang_format = None
+
 
 class MlangLspServer:
     def __init__(self) -> None:
@@ -91,6 +99,7 @@ class MlangLspServer:
                     "referencesProvider": True,
                     "documentSymbolProvider": True,
                     "workspaceSymbolProvider": True,
+                    "documentFormattingProvider": True,
                 }
             }
         if method == "shutdown":
@@ -103,6 +112,8 @@ class MlangLspServer:
             return self._handle_document_symbols(params)
         if method == "workspace/symbol":
             return self._handle_workspace_symbols(params)
+        if method == "textDocument/formatting":
+            return self._handle_formatting(params)
         return None
 
     def _handle_notification(self, method: str, params: dict) -> None:
@@ -221,6 +232,42 @@ class MlangLspServer:
             for sym in syms:
                 out.append(self._symbol_to_workspace_symbol(sym))
         return out
+
+    def _handle_formatting(self, params: dict) -> List[object]:
+        if mlang_format is None:
+            return []
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri")
+        if not uri:
+            return []
+        text = self.documents.get(uri)
+        if text is None:
+            text = self._read_uri_text(uri)
+        if text is None:
+            return []
+        path = self._uri_to_path(uri)
+        config_path = mlang_format.find_config(
+            path or (self.root_path or os.getcwd()),
+            root_path=self.root_path,
+        )
+        config = mlang_format.load_config(config_path)
+        formatted = mlang_format.format_text(text, config)
+        if formatted == text:
+            return []
+        return [
+            {
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": self._end_position(text),
+                },
+                "newText": formatted,
+            }
+        ]
+
+    @staticmethod
+    def _end_position(text: str) -> Dict[str, int]:
+        lines = text.split("\n")
+        return {"line": len(lines) - 1, "character": len(lines[-1])}
 
     def _scan_workspace(self) -> None:
         if not self.root_path:
@@ -380,14 +427,19 @@ class MlangLspServer:
         lines = cleaned.splitlines()
         for line_no, line in enumerate(lines):
             if pending_fn is None:
-                m = re.search(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*->\s*([^\s{]+)", line)
+                m = re.search(
+                    r"\b(?:(extern)\s+)?(?:pub\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*->\s*([^\s{;]+)",
+                    line,
+                )
                 if m:
-                    name = m.group(1)
-                    params = m.group(2)
-                    ret_raw = m.group(3)
+                    is_extern = m.group(1) is not None
+                    name = m.group(2)
+                    params = m.group(3)
+                    ret_raw = m.group(4)
                     ret_type = self._normalize_type(ret_raw)
-                    pending_fn = (name, line_no, params, ret_type)
                     fn_returns.append((name, ret_type))
+                    if not is_extern:
+                        pending_fn = (name, line_no, params, ret_type)
 
             for ch in line:
                 if ch == '{':
@@ -447,6 +499,8 @@ class MlangLspServer:
         patterns = [
             (r"^\s*pub\s+struct\s+([A-Za-z_][A-Za-z0-9_]*)", LSP_SYMBOL_KIND_STRUCT),
             (r"^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)", LSP_SYMBOL_KIND_STRUCT),
+            (r"^\s*extern\s+pub\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)", LSP_SYMBOL_KIND_FUNCTION),
+            (r"^\s*extern\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)", LSP_SYMBOL_KIND_FUNCTION),
             (r"^\s*pub\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)", LSP_SYMBOL_KIND_FUNCTION),
             (r"^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)", LSP_SYMBOL_KIND_FUNCTION),
             (r"^\s*mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", LSP_SYMBOL_KIND_MODULE),
