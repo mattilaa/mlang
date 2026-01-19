@@ -13,6 +13,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "SpaceAfterComma": True,
     "SpaceAfterColon": True,
     "SpaceAroundOperators": True,
+    "SpaceInsideBracesSingleLine": True,
 }
 
 
@@ -183,9 +184,16 @@ def _needs_space(
     space_after_colon: bool,
     space_around_ops: bool,
     type_context: bool,
+    space_inside_braces_single_line: bool,
+    in_single_line_braces: bool,
 ) -> bool:
     if prev is None:
         return False
+    if space_inside_braces_single_line and in_single_line_braces:
+        if prev.kind == "OP" and prev.text == "{":
+            return True
+        if cur.kind == "OP" and cur.text == "}":
+            return True
     if prev.kind == "OP" and prev.text in NO_SPACE_AFTER:
         return False
     if cur.kind == "OP" and cur.text in NO_SPACE_BEFORE:
@@ -203,6 +211,8 @@ def _needs_space(
             return False
     if cur.kind == "OP" and cur.text == "{":
         if prev.kind == "OP" and prev.text in {")", "]", "}"}:
+            return True
+        if space_inside_braces_single_line and in_single_line_braces:
             return True
     if prev.kind == "OP" and prev.text == "}":
         if cur.kind in {"WORD", "NUMBER", "STRING"}:
@@ -245,6 +255,9 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
     space_after_comma = bool(config.get("SpaceAfterComma", True))
     space_after_colon = bool(config.get("SpaceAfterColon", True))
     space_around_ops = bool(config.get("SpaceAroundOperators", True))
+    space_inside_braces_single_line = bool(
+        config.get("SpaceInsideBracesSingleLine", True)
+    )
 
     output: List[str] = []
     indent_level = 0
@@ -257,6 +270,7 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
     fn_signature_pending = False
     in_fn_params = False
     fn_param_depth = 0
+    single_line_brace_depth = 0
 
     def write_indent() -> None:
         output.append(indent_unit * indent_level)
@@ -285,7 +299,29 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
                         )
         return False
 
+    def is_single_line_brace_block(start_idx: int) -> bool:
+        depth = 0
+        for j in range(start_idx, len(tokens)):
+            tok = tokens[j]
+            if tok.kind == "NEWLINE":
+                return False
+            if tok.kind == "OP" and tok.text == "{":
+                depth += 1
+            elif tok.kind == "OP" and tok.text == "}":
+                depth -= 1
+                if depth == 0:
+                    return True
+        return False
+
     for idx, token in enumerate(tokens):
+        in_single_line_braces = single_line_brace_depth > 0
+        if space_inside_braces_single_line and token.kind == "OP":
+            if token.text == "{":
+                if is_single_line_brace_block(idx):
+                    in_single_line_braces = True
+            elif token.text == "}" and single_line_brace_depth > 0:
+                in_single_line_braces = True
+
         if (
             token.kind == "OP"
             and token.text == "<"
@@ -331,6 +367,8 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
                     space_after_colon,
                     space_around_ops,
                     type_context,
+                    space_inside_braces_single_line,
+                    in_single_line_braces,
                 ):
                     output.append(" ")
             output.append("}")
@@ -350,6 +388,8 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
                 space_after_colon,
                 space_around_ops,
                 type_context,
+                space_inside_braces_single_line,
+                in_single_line_braces,
             ):
                 output.append(" ")
 
@@ -357,6 +397,11 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
 
         if token.kind == "OP" and token.text == "{":
             indent_level += 1
+            if space_inside_braces_single_line and is_single_line_brace_block(idx):
+                single_line_brace_depth += 1
+        elif token.kind == "OP" and token.text == "}":
+            if single_line_brace_depth > 0:
+                single_line_brace_depth -= 1
 
         if token.kind == "WORD" and token.text == "struct":
             struct_name_pending = True

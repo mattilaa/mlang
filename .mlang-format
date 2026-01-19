@@ -4,3 +4,4 @@ MaxWidth: 100
 SpaceAfterComma: true
 SpaceAfterColon: true
 SpaceAroundOperators: true
+SpaceInsideBracesSingleLine: true
