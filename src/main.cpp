@@ -3,12 +3,14 @@
 #include "module.h"
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
+#include <unordered_set>
 
 // Declare functions and globals from parser/lexer
 extern int yyparse();
@@ -43,6 +45,53 @@ void printUsage(const char* programName)
               << "  " << programName
               << " -emit-llvm test.mla   # Emit LLVM IR\n"
               << std::endl;
+}
+
+static std::string escape_json_string(std::string_view s)
+{
+    std::string out;
+    out.reserve(s.size() + 8);
+    for(char c : s)
+    {
+        if(c == '\\' || c == '"')
+        {
+            out.push_back('\\');
+            out.push_back(c);
+        }
+        else if(c == '\n')
+        {
+            out += "\\n";
+        }
+        else if(c == '\r')
+        {
+            out += "\\r";
+        }
+        else if(c == '\t')
+        {
+            out += "\\t";
+        }
+        else
+        {
+            out.push_back(c);
+        }
+    }
+    return out;
+}
+
+static void write_mlang_commands_json(
+    const std::vector<std::string>& files)
+{
+    std::ofstream out("mlang_commands.json", std::ios::binary);
+    if(!out)
+        return;
+    out << "{ \"files\": [";
+    for(size_t i = 0; i < files.size(); ++i)
+    {
+        if(i > 0)
+            out << ", ";
+        out << "\"" << escape_json_string(files[i]) << "\"";
+    }
+    out << "] }";
 }
 
 int main(int argc, char** argv)
@@ -146,6 +195,8 @@ int main(int argc, char** argv)
     std::unique_ptr<llvm::Module> module =
         std::make_unique<llvm::Module>("MLang", context);
 
+    std::vector<std::string> modulePaths;
+
     try
     {
         // Parse the input
@@ -223,6 +274,8 @@ int main(int argc, char** argv)
                     std::cout << std::endl;
                 }
             }
+
+            modulePaths = moduleLoader.getLoadedModulePaths();
         }
 
         // Initialize code generator
@@ -364,6 +417,28 @@ int main(int argc, char** argv)
     {
         std::cout << "Compilation completed successfully." << std::endl;
     }
+
+    // Emit mlang_commands.json for LSP indexing.
+    std::unordered_set<std::string> unique;
+    std::vector<std::string> files;
+    files.reserve(modulePaths.size() + 1);
+    std::error_code ec;
+    std::filesystem::path inputAbs =
+        std::filesystem::absolute(std::filesystem::path(inputFile), ec);
+    std::string inputNorm = ec ? inputFile : inputAbs.lexically_normal().string();
+    unique.insert(inputNorm);
+    files.push_back(inputNorm);
+    for(const auto& path : modulePaths)
+    {
+        std::filesystem::path p = std::filesystem::path(path);
+        std::filesystem::path abs = p.is_absolute()
+                                        ? p
+                                        : std::filesystem::absolute(p, ec);
+        std::string norm = ec ? path : abs.lexically_normal().string();
+        if(unique.insert(norm).second)
+            files.push_back(norm);
+    }
+    write_mlang_commands_json(files);
 
     return 0;
 }

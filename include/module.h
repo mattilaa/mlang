@@ -65,4 +65,7 @@ public:
 
     // Get list of all loaded module names
     std::vector<std::string> getLoadedModules() const;
+
+    // Get list of all loaded module file paths
+    std::vector<std::string> getLoadedModulePaths() const;
 };

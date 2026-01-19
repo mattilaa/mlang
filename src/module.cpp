@@ -351,3 +351,16 @@ std::vector<std::string> ModuleLoader::getLoadedModules() const
     }
     return names;
 }
+
+std::vector<std::string> ModuleLoader::getLoadedModulePaths() const
+{
+    std::vector<std::string> paths;
+    for(const auto& pair : modules)
+    {
+        if(pair.second.loaded && !pair.second.filePath.empty())
+        {
+            paths.push_back(pair.second.filePath);
+        }
+    }
+    return paths;
+}
