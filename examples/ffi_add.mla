@@ -1,0 +1,7 @@
+extern fn c_add(a: i32, b: i32) -> i32;
+
+fn main() -> i32 {
+    let sum: i32 = c_add(2, 40);
+    println!("sum: {}", sum);
+    return 0;
+}

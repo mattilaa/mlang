@@ -183,7 +183,8 @@ public:
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);
     bool emitBitcode(const std::string& filename);
-    bool compileToExecutable(const std::string& outputFile);
+    bool compileToExecutable(const std::string& outputFile,
+                             const std::vector<std::string>& linkArgs);
     void optimize(int level);
     std::string getTargetTriple() const
     {
@@ -197,7 +198,8 @@ private:
 
     bool initializeTarget();
     bool linkExecutable(const std::string& objectFile,
-                        const std::string& outputFile);
+                        const std::string& outputFile,
+                        const std::vector<std::string>& linkArgs);
 };
 
 #endif // IR_H

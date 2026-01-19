@@ -75,12 +75,13 @@ ASTNode* add_function_to_list(ASTNode* list, ASTNode* function)
 }
 
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
-                             ASTNode* body, int is_public)
+                             ASTNode* body, int is_public, int is_extern)
 {
     return new FunctionDefNode(static_cast<TypeNode*>(type), std::string(name),
                                static_cast<ParameterListNode*>(params),
                                static_cast<StatementListNode*>(body),
-                               is_public != 0);
+                               is_public != 0,
+                               is_extern != 0);
 }
 
 ASTNode* create_type_node(TypeNode::TypeKind type)
@@ -580,10 +581,21 @@ std::string ParameterListNode::toString() const
 
 std::string FunctionDefNode::toString() const
 {
-    std::string result = isPublic ? "pub fn " : "fn ";
+    std::string result;
+    if(isExtern)
+    {
+        result += "extern ";
+    }
+    result += isPublic ? "pub fn " : "fn ";
     result += name + "(" + parameters->toString() + ") -> ";
-    result += returnType->toString() + " {\n";
-    result += body->toString();
+    result += returnType->toString();
+    if(isExtern)
+    {
+        result += ";\n";
+        return result;
+    }
+    result += " {\n";
+    result += body ? body->toString() : "";
     result += "}\n";
     return result;
 }

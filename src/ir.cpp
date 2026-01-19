@@ -681,18 +681,15 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         function = generateFunctionDeclaration(node);
     }
 
+    if(node->isExtern || !node->body)
+    {
+        return function;
+    }
+
     // Check if function already has a body (was already defined)
     if(!function->empty())
     {
         // Function already defined, skip
-        return function;
-    }
-
-    // Check if this function has a body to generate
-    if(!node->body)
-    {
-        // No body - this shouldn't happen for valid functions
-        reportError(node->line, "function '" + node->name + "' has no body");
         return function;
     }
 
@@ -4984,10 +4981,16 @@ bool Backend::emitBitcode(const std::string& filename)
 }
 
 bool Backend::linkExecutable(const std::string& objectFile,
-                             const std::string& outputFile)
+                             const std::string& outputFile,
+                             const std::vector<std::string>& linkArgs)
 {
     // Use system linker (cc/clang/gcc)
-    std::string command = "cc -o " + outputFile + " " + objectFile + " 2>&1";
+    std::string command = "cc -o " + outputFile + " " + objectFile;
+    for(const auto& arg : linkArgs)
+    {
+        command += " " + arg;
+    }
+    command += " 2>&1";
     std::cout << "Linking: " << command << std::endl;
 
     int result = system(command.c_str());
@@ -5001,7 +5004,8 @@ bool Backend::linkExecutable(const std::string& objectFile,
     return true;
 }
 
-bool Backend::compileToExecutable(const std::string& outputFile)
+bool Backend::compileToExecutable(const std::string& outputFile,
+                                  const std::vector<std::string>& linkArgs)
 {
     std::string objectFile = outputFile + ".o";
 
@@ -5010,7 +5014,7 @@ bool Backend::compileToExecutable(const std::string& outputFile)
         return false;
     }
 
-    return linkExecutable(objectFile, outputFile);
+    return linkExecutable(objectFile, outputFile, linkArgs);
 }
 
 void Backend::optimize(int level)

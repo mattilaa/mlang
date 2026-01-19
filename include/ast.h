@@ -770,12 +770,18 @@ public:
     ParameterListNode* parameters;
     StatementListNode* body;
     bool isPublic;
+    bool isExtern;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 
     FunctionDefNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
-                    StatementListNode* b, bool pub = false)
-        : returnType(rt), name(n), parameters(p), body(b), isPublic(pub)
+                    StatementListNode* b, bool pub = false, bool ext = false)
+        : returnType(rt),
+          name(n),
+          parameters(p),
+          body(b),
+          isPublic(pub),
+          isExtern(ext)
     {
     }
     std::string toString() const override;
@@ -842,7 +848,7 @@ ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
-                             ASTNode* body, int is_public);
+                             ASTNode* body, int is_public, int is_extern);
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();

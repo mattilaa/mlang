@@ -21,7 +21,7 @@ ASTNode* create_struct_list(ASTNode* struct_def);
 ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
-ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public);
+ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
 ASTNode* create_type_node(int type);
 ASTNode* create_parameter_list();
 ASTNode* create_empty_parameter_list();
@@ -115,6 +115,7 @@ ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP TUPLE STRUCT
 %token PUB IMPL
+%token EXTERN
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
@@ -263,9 +264,13 @@ struct_method
 
 function_def
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_function_def($7, $2, $4, $9, 0); }
+        { $$ = create_function_def($7, $2, $4, $9, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_function_def($8, $3, $5, $10, 1); }
+        { $$ = create_function_def($8, $3, $5, $10, 1, 0); }
+    | EXTERN FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
+        { $$ = create_function_def($8, $3, $5, NULL, 0, 1); }
+    | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
+        { $$ = create_function_def($9, $4, $6, NULL, 1, 1); }
     ;
 
 parameter_list

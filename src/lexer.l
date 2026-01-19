@@ -88,6 +88,7 @@ static int is_generic_struct_literal_start()
                   strcat(yylval.sval, yytext); }
 }
 "pub"           { return PUB; }
+"extern"        { return EXTERN; }
 "fn"            { return FUNCTION; }
 "impl"          { return IMPL; }
 "return"        { return RETURN; }

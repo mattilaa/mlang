@@ -33,6 +33,8 @@ void printUsage(const char* programName)
               << "  -O1           Basic optimization\n"
               << "  -O2           Standard optimization (default)\n"
               << "  -O3           Aggressive optimization\n"
+              << "  -L <dir>      Add a library search path for linking\n"
+              << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -v            Verbose output\n"
               << "  -h, --help    Show this help message\n"
               << "\nExamples:\n"
@@ -111,6 +113,7 @@ int main(int argc, char** argv)
     bool emitBitcode = false;
     int optimizationLevel = 2;
     bool verbose = false;
+    std::vector<std::string> linkArgs;
 
     for(int i = 1; i < argc; ++i)
     {
@@ -140,6 +143,22 @@ int main(int argc, char** argv)
         else if(arg == "-emit-bc")
         {
             emitBitcode = true;
+        }
+        else if(arg == "-L" && i + 1 < argc)
+        {
+            linkArgs.push_back(std::string("-L") + argv[++i]);
+        }
+        else if(arg.rfind("-L", 0) == 0 && arg.size() > 2)
+        {
+            linkArgs.push_back(arg);
+        }
+        else if(arg == "-l" && i + 1 < argc)
+        {
+            linkArgs.push_back(std::string("-l") + argv[++i]);
+        }
+        else if(arg.rfind("-l", 0) == 0 && arg.size() > 2)
+        {
+            linkArgs.push_back(arg);
         }
         else if(arg == "-O0")
         {
@@ -384,7 +403,7 @@ int main(int argc, char** argv)
             else
             {
                 // Compile to executable
-                success = backend.compileToExecutable(outputFile);
+                success = backend.compileToExecutable(outputFile, linkArgs);
             }
 
             if(!success)
