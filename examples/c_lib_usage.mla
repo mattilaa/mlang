@@ -1,0 +1,8 @@
+extern fn printf(format: string, value: i32) -> i32;
+extern fn cos(x: double) -> double;
+
+fn main() -> i32 {
+    let v: double = cos(0.0);
+    printf("cos(0) = %d\n", 1);
+    return 0;
+}

@@ -611,6 +611,7 @@ private:
             add_dir(std::string(sdkRoot) + "/usr/include");
         }
         add_dir("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include");
+        add_dir("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     }
 
     void log_c_headers() const

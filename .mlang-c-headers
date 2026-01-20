@@ -9,6 +9,8 @@ include_dir: /opt/homebrew/include
 
 header: mlang_c_types.h
 header: stdio.h
+header: _stdio.h
+header: _printf.h
 header: stdlib.h
 header: stdint.h
 header: stdbool.h
