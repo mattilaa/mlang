@@ -916,6 +916,15 @@ private:
         int kind = 0;
     };
 
+    static constexpr const char* kMlangKeywords[] = {
+        "fn",
+        "let",
+        "struct",
+        "if",
+        "else",
+        "return",
+    };
+
     void add_completion(std::vector<CompletionCandidate>& out,
                         std::unordered_set<std::string>& seen,
                         const std::string& label, int kind,
@@ -2013,6 +2022,9 @@ private:
                     for(const auto& [name, loc] : fn->paramDecls)
                         add_completion(candidates, seen, name, 6, prefix);
                 }
+
+                for(const auto* kw : kMlangKeywords)
+                    add_completion(candidates, seen, kw, 14, prefix);
 
                 collect_file_completions(info, prefix, candidates, seen);
 
