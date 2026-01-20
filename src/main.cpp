@@ -13,6 +13,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <sstream>
+#include <algorithm>
 #include <unordered_set>
 
 // Declare functions and globals from parser/lexer
@@ -219,6 +220,12 @@ struct DepSpec
     std::string build;
 };
 
+struct LinkFlags
+{
+    std::vector<std::string> libDirs;
+    std::vector<std::string> libs;
+};
+
 static std::vector<std::string> split_csv(std::string_view input)
 {
     std::vector<std::string> out;
@@ -320,6 +327,68 @@ static std::vector<DepSpec> parse_git_deps(const std::string& content)
         deps.push_back(dep);
     }
     return deps;
+}
+
+static bool extract_lib_name(const std::filesystem::path& path,
+                             std::string& out)
+{
+    std::string name = path.filename().string();
+    if(name.rfind("lib", 0) != 0)
+        return false;
+    if(path.extension() == ".a" || path.extension() == ".dylib" ||
+       path.extension() == ".so")
+    {
+        std::string stem = path.stem().string();
+        if(stem.rfind("lib", 0) != 0 || stem.size() <= 3)
+            return false;
+        out = stem.substr(3);
+        return true;
+    }
+    size_t soPos = name.find(".so.");
+    if(soPos != std::string::npos && soPos > 3)
+    {
+        out = name.substr(3, soPos - 3);
+        return true;
+    }
+    return false;
+}
+
+static void scan_lib_dir(const std::filesystem::path& dir,
+                         std::unordered_set<std::string>& libDirs,
+                         std::unordered_set<std::string>& libs)
+{
+    if(!std::filesystem::exists(dir))
+        return;
+    libDirs.insert(dir.string());
+    for(const auto& entry : std::filesystem::directory_iterator(dir))
+    {
+        if(!entry.is_regular_file())
+            continue;
+        std::string libName;
+        if(extract_lib_name(entry.path(), libName))
+            libs.insert(libName);
+    }
+}
+
+static LinkFlags collect_dep_link_flags(
+    const std::vector<DepSpec>& deps,
+    const std::filesystem::path& depsDir)
+{
+    std::unordered_set<std::string> libDirs;
+    std::unordered_set<std::string> libs;
+    for(const auto& dep : deps)
+    {
+        std::filesystem::path path = depsDir / dep.name;
+        scan_lib_dir(path / "build" / "lib", libDirs, libs);
+        scan_lib_dir(path / "build", libDirs, libs);
+        scan_lib_dir(path / "lib", libDirs, libs);
+    }
+    LinkFlags flags;
+    flags.libDirs.assign(libDirs.begin(), libDirs.end());
+    flags.libs.assign(libs.begin(), libs.end());
+    std::sort(flags.libDirs.begin(), flags.libDirs.end());
+    std::sort(flags.libs.begin(), flags.libs.end());
+    return flags;
 }
 
 static int run_command(const std::string& cmd)
@@ -593,6 +662,8 @@ static int handle_pkg_command(int argc, char** argv)
                 return 1;
         }
 
+        LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+
         std::string entry = "src/main.mla";
         if(auto v = find_toml_string(content, "entry"); v.has_value())
             entry = v.value();
@@ -605,6 +676,10 @@ static int handle_pkg_command(int argc, char** argv)
 
         std::string cmd =
             std::string(argv[0]) + " " + entry + " -o " + output;
+        for(const auto& dir : linkFlags.libDirs)
+            cmd += " -L" + dir;
+        for(const auto& lib : linkFlags.libs)
+            cmd += " -l" + lib;
         int rc = std::system(cmd.c_str());
         if(rc != 0)
         {
