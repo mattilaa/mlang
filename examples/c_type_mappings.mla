@@ -1,0 +1,22 @@
+extern fn c_add_i32(a: i32, b: i32) -> i32;
+extern fn c_add_i64(a: i64, b: i64) -> i64;
+extern fn c_add_u32(a: u32, b: u32) -> u32;
+extern fn c_is_true(v: bool) -> bool;
+extern fn c_float(x: float) -> float;
+extern fn c_double(x: double) -> double;
+extern fn c_str8(s: str8) -> i32;
+extern fn c_str16(s: str16) -> i32;
+extern fn c_string(s: string) -> i32;
+
+fn main() -> i32 {
+    let a: i32 = 1;
+    let b: i64 = 2;
+    let c: u32 = 3;
+    let ok: bool = true;
+    let f: float = 1.5;
+    let d: double = 2.5;
+    let s8: str8 = "hello";
+    let s16: str16 = "hi";
+    let s: string = "world";
+    return 0;
+}

@@ -557,6 +557,7 @@ private:
                 {"str16", "mlang_str16"},
             };
         }
+        add_sdk_include_dirs();
         resolve_c_headers();
         if(cHeaderDebug)
             log_c_headers();
@@ -576,8 +577,10 @@ private:
             }
             for(const auto& dir : cIncludeDirs)
             {
-                std::filesystem::path cand =
-                    std::filesystem::path(dir) / header;
+                std::filesystem::path base(dir);
+                if(!base.is_absolute())
+                    base = std::filesystem::path(rootPath) / base;
+                std::filesystem::path cand = base / header;
                 if(std::filesystem::exists(cand))
                 {
                     cHeaderPaths.push_back(cand.string());
@@ -585,6 +588,29 @@ private:
                 }
             }
         }
+    }
+
+    void add_sdk_include_dirs()
+    {
+        auto add_dir = [&](const std::string& dir) {
+            if(dir.empty())
+                return;
+            std::error_code ec;
+            if(!std::filesystem::exists(dir, ec))
+                return;
+            for(const auto& existing : cIncludeDirs)
+            {
+                if(existing == dir)
+                    return;
+            }
+            cIncludeDirs.push_back(dir);
+        };
+
+        if(const char* sdkRoot = std::getenv("SDKROOT"))
+        {
+            add_dir(std::string(sdkRoot) + "/usr/include");
+        }
+        add_dir("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include");
     }
 
     void log_c_headers() const
