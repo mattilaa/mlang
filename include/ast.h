@@ -44,6 +44,8 @@ public:
         TYPE_FLOAT,
         TYPE_DOUBLE,
         TYPE_STRING,
+        TYPE_STR8,
+        TYPE_STR16,
         TYPE_LIST,
         TYPE_MAP,
         TYPE_TUPLE,

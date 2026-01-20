@@ -1,0 +1,10 @@
+extern fn dummy_str8(s: str8) -> i32;
+extern fn dummy_str16(s: str16) -> i32;
+extern fn dummy_string(s: string) -> i32;
+
+fn main() -> i32 {
+    let a: str8 = "hello";
+    let b: string = "world";
+    let c: str16 = "hi";
+    return 0;
+}

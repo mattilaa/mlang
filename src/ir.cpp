@@ -40,6 +40,18 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
 #else
         return llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
+    case TypeNode::TYPE_STR8:
+#if LLVM_VERSION_MAJOR >= 15
+        return llvm::PointerType::get(context, 0);
+#else
+        return llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    case TypeNode::TYPE_STR16:
+#if LLVM_VERSION_MAJOR >= 15
+        return llvm::PointerType::get(context, 0);
+#else
+        return llvm::PointerType::get(llvm::Type::getInt16Ty(context), 0);
+#endif
     case TypeNode::TYPE_I8:
         return llvm::Type::getInt8Ty(context);
     case TypeNode::TYPE_I16:
@@ -4280,6 +4292,10 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     typeArg = new TypeNode(TypeNode::TYPE_BOOL);
                 else if(typeArgStr == "string")
                     typeArg = new TypeNode(TypeNode::TYPE_STRING);
+                else if(typeArgStr == "str8")
+                    typeArg = new TypeNode(TypeNode::TYPE_STR8);
+                else if(typeArgStr == "str16")
+                    typeArg = new TypeNode(TypeNode::TYPE_STR16);
                 else
                 {
                     // Assume it's a struct type reference
@@ -4582,6 +4598,12 @@ static std::string generateMangledName(const std::string& baseName,
                 break;
             case TypeNode::TYPE_STRING:
                 mangled += "string";
+                break;
+            case TypeNode::TYPE_STR8:
+                mangled += "str8";
+                break;
+            case TypeNode::TYPE_STR16:
+                mangled += "str16";
                 break;
             default:
                 mangled += "unknown";

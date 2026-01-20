@@ -533,6 +533,10 @@ std::string TypeNode::toString() const
         return "double";
     case TYPE_STRING:
         return "string";
+    case TYPE_STR8:
+        return "str8";
+    case TYPE_STR16:
+        return "str16";
     case TYPE_LIST:
         return "list";
     case TYPE_MAP:
@@ -1327,6 +1331,12 @@ std::string GenericStructTypeRefNode::getMangledName() const
                 break;
             case TypeNode::TYPE_STRING:
                 mangled += "string";
+                break;
+            case TypeNode::TYPE_STR8:
+                mangled += "str8";
+                break;
+            case TypeNode::TYPE_STR16:
+                mangled += "str16";
                 break;
             default:
                 mangled += "unknown";

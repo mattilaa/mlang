@@ -113,7 +113,7 @@ ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING LIST MAP TUPLE STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT
 %token PUB IMPL
 %token EXTERN
 %token TRUE_LIT FALSE_LIT
@@ -294,6 +294,8 @@ type
     | FLOAT  { $$ = create_type_node(TypeNode::TYPE_FLOAT); }
     | DOUBLE { $$ = create_type_node(TypeNode::TYPE_DOUBLE); }
     | STRING { $$ = create_type_node(TypeNode::TYPE_STRING); }
+    | STR8   { $$ = create_type_node(TypeNode::TYPE_STR8); }
+    | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = create_list_type(); }
     | LIST LT type GT { $$ = create_generic_list_type($3); }
     | MAP LT type COMMA type GT { $$ = create_map_type($3, $5); }

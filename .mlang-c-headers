@@ -1,0 +1,22 @@
+# C header lookup for mlang-lsp (C++). Lines can be:
+# - header: stdint.h
+# - include_dir: /usr/include
+# -I/opt/homebrew/include
+include_dir: .
+include_dir: /usr/include
+include_dir: /usr/local/include
+include_dir: /opt/homebrew/include
+
+header: mlang_c_types.h
+header: stdio.h
+header: stdlib.h
+header: stdint.h
+header: stdbool.h
+header: math.h
+
+# Type mappings: Mlang type -> C typedef
+type_map: i8=int8_t, i16=int16_t, i32=int32_t, i64=int64_t
+type_map: u8=uint8_t, u16=uint16_t, u32=uint32_t, u64=uint64_t
+type_map: int=int32_t, bool=bool
+type_map: float=mlang_float, double=mlang_double, string=mlang_string
+type_map: str8=mlang_str8, str16=mlang_str16

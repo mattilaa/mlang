@@ -110,6 +110,8 @@ static int is_generic_struct_literal_start()
 "float"         { return FLOAT; }
 "double"        { return DOUBLE; }
 "string"        { return STRING; }
+"str8"          { return STR8; }
+"str16"         { return STR16; }
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }

@@ -66,6 +66,7 @@ struct FunctionInfo
     Location loc;
     int startLine = -1;
     int endLine = -1;
+    bool isExtern = false;
     std::unordered_map<std::string, std::string> varTypes;
     std::unordered_map<std::string, Location> varDecls;
     std::unordered_map<std::string, Location> paramDecls;
@@ -382,6 +383,14 @@ private:
     std::string mlangCommandsPath;
     std::filesystem::file_time_type mlangCommandsMtime{};
     bool mlangCommandsLoaded = false;
+    std::vector<std::string> cHeaderNames;
+    std::vector<std::string> cIncludeDirs;
+    std::vector<std::string> cHeaderPaths;
+    std::unordered_map<std::string, std::string> cTypeMap;
+    std::unordered_map<std::string, Location> cSymbolCache;
+    bool cHeadersLoaded = false;
+    bool cHeaderDebug = false;
+    std::string cHeaderDebugLog;
 
     llvm::json::Value make_position_value(int line, int character)
     {
@@ -406,6 +415,283 @@ private:
         range["start"] = make_position_value(startLine, startChar);
         range["end"] = make_position_value(endLine, endChar);
         return llvm::json::Value(std::move(range));
+    }
+
+    static std::string trim(std::string s)
+    {
+        auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+        size_t start = 0;
+        while(start < s.size() && is_space((unsigned char)s[start]))
+            ++start;
+        size_t end = s.size();
+        while(end > start && is_space((unsigned char)s[end - 1]))
+            --end;
+        return s.substr(start, end - start);
+    }
+
+    void load_c_header_config()
+    {
+        cHeaderNames.clear();
+        cIncludeDirs.clear();
+        cHeaderPaths.clear();
+        cTypeMap.clear();
+        cSymbolCache.clear();
+        cHeadersLoaded = true;
+
+        std::filesystem::path configPath =
+            std::filesystem::path(rootPath) / ".mlang-c-headers";
+        if(!std::filesystem::exists(configPath))
+        {
+            cHeaderNames = {"stdio.h", "stdlib.h", "stdint.h", "stdbool.h",
+                            "math.h"};
+            cIncludeDirs = {rootPath, "/usr/include", "/usr/local/include",
+                            "/opt/homebrew/include"};
+            cTypeMap = {
+                {"i8", "int8_t"},
+                {"i16", "int16_t"},
+                {"i32", "int32_t"},
+                {"i64", "int64_t"},
+                {"u8", "uint8_t"},
+                {"u16", "uint16_t"},
+                {"u32", "uint32_t"},
+                {"u64", "uint64_t"},
+                {"int", "int32_t"},
+                {"bool", "bool"},
+                {"float", "mlang_float"},
+                {"double", "mlang_double"},
+                {"string", "mlang_string"},
+                {"str8", "mlang_str8"},
+                {"str16", "mlang_str16"},
+            };
+            resolve_c_headers();
+            if(cHeaderDebug)
+                log_c_headers();
+            return;
+        }
+
+        std::ifstream f(configPath);
+        if(!f)
+            return;
+        std::string line;
+        while(std::getline(f, line))
+        {
+            line = trim(line);
+            if(line.empty() || line[0] == '#')
+                continue;
+            if(line.rfind("-I", 0) == 0)
+            {
+                std::string dir = trim(line.substr(2));
+                if(!dir.empty())
+                    cIncludeDirs.push_back(dir);
+                continue;
+            }
+            const std::string includePrefix = "include_dir:";
+            const std::string headerPrefix = "header:";
+            const std::string typeMapPrefix = "type_map:";
+            if(line.rfind(includePrefix, 0) == 0)
+            {
+                std::string dir = trim(line.substr(includePrefix.size()));
+                if(!dir.empty())
+                    cIncludeDirs.push_back(dir);
+                continue;
+            }
+            if(line.rfind(headerPrefix, 0) == 0)
+            {
+                std::string hdr = trim(line.substr(headerPrefix.size()));
+                if(!hdr.empty())
+                    cHeaderNames.push_back(hdr);
+                continue;
+            }
+            if(line.rfind(typeMapPrefix, 0) == 0)
+            {
+                std::string maps = trim(line.substr(typeMapPrefix.size()));
+                size_t start = 0;
+                while(start < maps.size())
+                {
+                    size_t comma = maps.find(',', start);
+                    std::string entry = trim(maps.substr(
+                        start, comma == std::string::npos ? std::string::npos
+                                                          : comma - start));
+                    if(!entry.empty())
+                    {
+                        size_t eq = entry.find('=');
+                        if(eq != std::string::npos)
+                        {
+                            std::string lhs = trim(entry.substr(0, eq));
+                            std::string rhs = trim(entry.substr(eq + 1));
+                            if(!lhs.empty() && !rhs.empty())
+                                cTypeMap[lhs] = rhs;
+                        }
+                    }
+                    if(comma == std::string::npos)
+                        break;
+                    start = comma + 1;
+                }
+                continue;
+            }
+            cHeaderNames.push_back(line);
+        }
+
+        if(cIncludeDirs.empty())
+        {
+            cIncludeDirs = {rootPath, "/usr/include", "/usr/local/include",
+                            "/opt/homebrew/include"};
+        }
+        if(cTypeMap.empty())
+        {
+            cTypeMap = {
+                {"i8", "int8_t"},
+                {"i16", "int16_t"},
+                {"i32", "int32_t"},
+                {"i64", "int64_t"},
+                {"u8", "uint8_t"},
+                {"u16", "uint16_t"},
+                {"u32", "uint32_t"},
+                {"u64", "uint64_t"},
+                {"int", "int32_t"},
+                {"bool", "bool"},
+                {"float", "mlang_float"},
+                {"double", "mlang_double"},
+                {"string", "mlang_string"},
+                {"str8", "mlang_str8"},
+                {"str16", "mlang_str16"},
+            };
+        }
+        resolve_c_headers();
+        if(cHeaderDebug)
+            log_c_headers();
+    }
+
+    void resolve_c_headers()
+    {
+        cHeaderPaths.clear();
+        for(const auto& header : cHeaderNames)
+        {
+            std::filesystem::path p(header);
+            if(p.is_absolute())
+            {
+                if(std::filesystem::exists(p))
+                    cHeaderPaths.push_back(p.string());
+                continue;
+            }
+            for(const auto& dir : cIncludeDirs)
+            {
+                std::filesystem::path cand =
+                    std::filesystem::path(dir) / header;
+                if(std::filesystem::exists(cand))
+                {
+                    cHeaderPaths.push_back(cand.string());
+                    break;
+                }
+            }
+        }
+    }
+
+    void log_c_headers() const
+    {
+        std::string msg = "[mlang-lsp] c headers: ";
+        for(size_t i = 0; i < cHeaderPaths.size(); ++i)
+        {
+            if(i)
+                msg += ", ";
+            msg += cHeaderPaths[i];
+        }
+        debug_log(msg);
+    }
+
+    void debug_log(const std::string& msg) const
+    {
+        if(!cHeaderDebug)
+            return;
+        std::string path =
+            cHeaderDebugLog.empty() ? "/tmp/mlang_lsp_debug.log"
+                                    : cHeaderDebugLog;
+        std::ofstream f(path, std::ios::app);
+        if(f)
+            f << msg << "\n";
+    }
+
+    std::optional<Location> find_c_symbol_location(const std::string& name)
+    {
+        if(!cHeadersLoaded)
+            load_c_header_config();
+        if(auto it = cSymbolCache.find(name); it != cSymbolCache.end())
+            return it->second;
+
+        std::regex rx("\\b" + name + "\\s*\\(");
+        for(const auto& path : cHeaderPaths)
+        {
+            std::ifstream f(path);
+            if(!f)
+                continue;
+            std::string line;
+            int lineNo = 0;
+            while(std::getline(f, line))
+            {
+                std::smatch match;
+                if(std::regex_search(line, match, rx))
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(path);
+                    loc.line = lineNo;
+                    loc.character = (int)match.position();
+                    cSymbolCache[name] = loc;
+                    return loc;
+                }
+                ++lineNo;
+            }
+        }
+        debug_log("[mlang-lsp] c symbol not found: " + name);
+        return std::nullopt;
+    }
+
+    std::optional<Location> find_c_typedef_location(const std::string& name)
+    {
+        if(!cHeadersLoaded)
+            load_c_header_config();
+
+        std::regex typedefRx("\\btypedef\\b[^;]*\\b" + name + "\\b");
+        std::regex usingRx("\\busing\\s+" + name + "\\s*=");
+        for(const auto& path : cHeaderPaths)
+        {
+            std::ifstream f(path);
+            if(!f)
+                continue;
+            std::string line;
+            int lineNo = 0;
+            while(std::getline(f, line))
+            {
+                std::smatch match;
+                if(std::regex_search(line, match, typedefRx) ||
+                   std::regex_search(line, match, usingRx))
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(path);
+                    loc.line = lineNo;
+                    loc.character = (int)match.position();
+                    cSymbolCache[name] = loc;
+                    return loc;
+                }
+                ++lineNo;
+            }
+        }
+        debug_log("[mlang-lsp] c typedef not found: " + name);
+        return std::nullopt;
+    }
+
+    std::optional<Location> find_c_type_location(const std::string& typeName)
+    {
+        if(!cHeadersLoaded)
+            load_c_header_config();
+        auto it = cTypeMap.find(typeName);
+        if(it == cTypeMap.end())
+        {
+            debug_log("[mlang-lsp] c type not mapped: " + typeName);
+            return std::nullopt;
+        }
+        if(auto loc = find_c_typedef_location(it->second))
+            return loc;
+        return find_c_symbol_location(it->second);
     }
 
     std::optional<std::string> read_message()
@@ -829,6 +1115,10 @@ private:
             root = std::filesystem::current_path().string();
         rootPath = root;
         scan_workspace(rootPath);
+        cHeadersLoaded = false;
+        cHeaderDebug = std::getenv("MLANG_LSP_DEBUG") != nullptr;
+        if(const char* logPath = std::getenv("MLANG_LSP_DEBUG_LOG"))
+            cHeaderDebugLog = logPath;
         if(auto path = find_mlang_commands_path())
         {
             mlangCommandsPath = *path;
@@ -987,6 +1277,7 @@ private:
                 FunctionInfo fi;
                 fi.name = fn->name;
                 fi.returnType = type_name(fn->returnType);
+                fi.isExtern = fn->isExtern;
                 collect_param_types(fi, fn->parameters);
                 collect_var_types(fi, fn->body, info);
                 info.functions[fi.name] = fi;
@@ -1389,6 +1680,9 @@ private:
         if(word.empty())
             return nullptr;
 
+        if(auto typeLoc = find_c_type_location(word))
+            return location_to_json(*typeLoc);
+
         auto find_module_prefix = [&](int wordStart) -> std::string {
             int j = wordStart - 1;
             while(j >= 0 && std::isspace((unsigned char)lineText[j]))
@@ -1567,7 +1861,14 @@ private:
         }
 
         if(auto fit = info.functions.find(word); fit != info.functions.end())
+        {
+            if(fit->second.isExtern)
+            {
+                if(auto cLoc = find_c_symbol_location(word))
+                    return location_to_json(*cLoc);
+            }
             return location_to_json(fit->second.loc);
+        }
         if(auto sit = info.structs.find(word); sit != info.structs.end())
             return location_to_json(sit->second.loc);
         for(auto& [sname, st] : info.structs)
