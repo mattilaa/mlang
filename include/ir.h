@@ -49,6 +49,8 @@ private:
     std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
     // Track struct variable types (var name -> struct type name)
     std::map<std::string, std::string> structVariableTypes;
+    // Track enum variants: enum name -> variant name -> value
+    std::map<std::string, std::map<std::string, int64_t>> enumValues;
     bool hasError;
 
     // Visibility tracking for functions
@@ -132,6 +134,7 @@ private:
     llvm::Value* generateDoubleLiteral(DoubleLiteralNode* node);
     llvm::Value* generateStringLiteral(StringLiteralNode* node);
     llvm::Value* generateIdentifier(IdentifierNode* node);
+    llvm::Value* generateEnumLiteral(EnumLiteralNode* node);
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
@@ -143,7 +146,9 @@ private:
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
     llvm::Value* generateStructLiteral(StructLiteralNode* node);
 
+    void generateEnumDefinition(EnumDefNode* node);
     void ensureResultBuiltin(ProgramNode* program);
+    void ensureOptionBuiltin(ProgramNode* program);
 
     // Struct method helpers
     void generateStructMethods(StructDefNode* node);

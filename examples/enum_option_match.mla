@@ -1,0 +1,31 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+};
+
+fn choose_color(flag: bool) -> Option<Color> {
+    if flag: {
+        return Some<Color>(Color::Red);
+    }
+    return None<Color>();
+}
+
+fn describe_color(color: Color) -> int {
+    return match color {
+        Color::Red => 1,
+        Color::Green => 2,
+        Color::Blue => 3,
+        _ => 0
+    };
+}
+
+fn main() -> int {
+    let chosen: Option<Color> = choose_color(true);
+    let value: int = match chosen {
+        Some(c) => describe_color(c),
+        None => 0
+    };
+    println!("value = {}", value);
+    return 0;
+}

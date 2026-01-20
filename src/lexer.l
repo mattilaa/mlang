@@ -95,6 +95,7 @@ static int is_generic_struct_literal_start()
 "if"            { return IF; }
 "else"          { return ELSE; }
 "match"         { return MATCH; }
+"enum"          { return ENUM; }
 "for"           { return FOR; }
 "in"            { return IN; }
 "break"         { return BREAK; }

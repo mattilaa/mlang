@@ -922,6 +922,7 @@ private:
         "fn",
         "let",
         "struct",
+        "enum",
         "if",
         "else",
         "match",

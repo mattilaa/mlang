@@ -107,6 +107,11 @@ ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* create_match_arm_list(ASTNode* arm);
 ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
 ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
+ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public);
+ASTNode* create_enum_variant(char* name);
+ASTNode* create_enum_variant_list(ASTNode* variant);
+ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
+ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %}
 
 %union {
@@ -121,7 +126,7 @@ ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT ENUM
 %token MATCH
 %token PUB IMPL
 %token EXTERN
@@ -140,7 +145,8 @@ ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
 
 %type <ast> program top_level_list top_level_item
-%type <ast> struct_def function_def type parameter_list parameters parameter
+%type <ast> struct_def enum_def enum_variant_list enum_variant
+%type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression cast_expression
 %type <ast> if_statement else_if_list else_if optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
@@ -179,6 +185,7 @@ top_level_list
 
 top_level_item
     : struct_def
+    | enum_def
     | function_def
     | mod_declaration
     | use_declaration
@@ -211,6 +218,22 @@ struct_def
         { $$ = create_generic_struct_def($2, NULL, $4, $7, 0); }
     | PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($3, NULL, $5, $8, 1); }
+    ;
+
+enum_def
+    : ENUM IDENTIFIER LBRACE enum_variant_list RBRACE SEMICOLON
+        { $$ = create_enum_def($2, $4, 0); }
+    | PUB ENUM IDENTIFIER LBRACE enum_variant_list RBRACE SEMICOLON
+        { $$ = create_enum_def($3, $5, 1); }
+    ;
+
+enum_variant_list
+    : enum_variant { $$ = create_enum_variant_list($1); }
+    | enum_variant_list COMMA enum_variant { $$ = add_enum_variant($1, $3); }
+    ;
+
+enum_variant
+    : IDENTIFIER { $$ = create_enum_variant($1); }
     ;
 
 type_param_list
@@ -552,6 +575,8 @@ match_arm
 match_pattern
     : IDENTIFIER LPAREN IDENTIFIER RPAREN
         { $$ = create_match_pattern($1, $3, yylineno); }
+    | IDENTIFIER COLONCOLON IDENTIFIER
+        { $$ = create_match_literal_pattern(create_enum_literal($1, $3, yylineno), yylineno); }
     | IDENTIFIER
         { $$ = create_match_pattern($1, NULL, yylineno); }
     | INT_LITERAL
@@ -575,6 +600,8 @@ primary_expression
     | STRING_LITERAL { $$ = create_string_literal($1); }
     | TRUE_LIT { $$ = create_bool_literal(1); }
     | FALSE_LIT { $$ = create_bool_literal(0); }
+    | IDENTIFIER COLONCOLON IDENTIFIER
+        { $$ = create_enum_literal($1, $3, yylineno); }
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }
     | match_expression { $$ = $1; }
@@ -624,8 +651,12 @@ binary_expression
 function_call
     : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL, yylineno); }
     | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
+        { $$ = create_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
         { $$ = create_result_constructor($1, $3, $6, yylineno); }
+    | IDENTIFIER LT type_list GT LPAREN RPAREN
+        { $$ = create_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER LT type_list GT LPAREN argument_list RPAREN
         { $$ = create_result_constructor($1, $3, $6, yylineno); }
     ;

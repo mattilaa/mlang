@@ -32,6 +32,7 @@ KEYWORDS = {
     "mod",
     "use",
     "match",
+    "enum",
 }
 
 MACRO_BANG_WORDS = {"println", "print", "eprintln", "eprint"}

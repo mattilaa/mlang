@@ -22,6 +22,11 @@ class TypeParamListNode;
 class ImplBlockNode;
 class ImplListNode;
 class StructLiteralNode;
+class EnumDefNode;
+class EnumListNode;
+class EnumVariantNode;
+class EnumVariantListNode;
+class EnumLiteralNode;
 
 // Base AST node
 class ASTNode
@@ -266,6 +271,8 @@ public:
     {
         PATTERN_OK,
         PATTERN_ERR,
+        PATTERN_SOME,
+        PATTERN_NONE,
         PATTERN_LITERAL,
         PATTERN_WILDCARD
     };
@@ -318,6 +325,19 @@ public:
     {
         if(list)
             arms = list->arms;
+    }
+    std::string toString() const override;
+};
+
+class EnumLiteralNode : public ExpressionNode
+{
+public:
+    std::string enumName;
+    std::string variantName;
+
+    EnumLiteralNode(const std::string& e, const std::string& v)
+        : enumName(e), variantName(v)
+    {
     }
     std::string toString() const override;
 };
@@ -730,6 +750,54 @@ public:
     }
 };
 
+class EnumVariantNode : public ASTNode
+{
+public:
+    std::string name;
+
+    EnumVariantNode(const std::string& n) : name(n) {}
+    std::string toString() const override;
+};
+
+class EnumVariantListNode : public ASTNode
+{
+public:
+    std::vector<EnumVariantNode*> variants;
+
+    void addVariant(EnumVariantNode* v)
+    {
+        variants.push_back(v);
+    }
+    std::string toString() const override;
+};
+
+class EnumDefNode : public ASTNode
+{
+public:
+    std::string name;
+    EnumVariantListNode* variants;
+    bool isPublic;
+    std::string sourceModule;
+
+    EnumDefNode(const std::string& n, EnumVariantListNode* v,
+                bool pub = false)
+        : name(n), variants(v), isPublic(pub)
+    {
+    }
+    std::string toString() const override;
+};
+
+class EnumListNode : public ASTNode
+{
+public:
+    std::vector<EnumDefNode*> enums;
+    void addEnum(EnumDefNode* e)
+    {
+        enums.push_back(e);
+    }
+    std::string toString() const override;
+};
+
 // Type parameter list node for generic types
 class TypeParamListNode : public ASTNode
 {
@@ -898,6 +966,7 @@ public:
     StructListNode* structList = nullptr;
     FunctionListNode* functionList = nullptr;
     ImplListNode* implList = nullptr;
+    EnumListNode* enumList = nullptr;
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
 
@@ -1000,6 +1069,11 @@ ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* create_match_arm_list(ASTNode* arm);
 ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
 ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
+ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public);
+ASTNode* create_enum_variant(char* name);
+ASTNode* create_enum_variant_list(ASTNode* variant);
+ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
+ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);

@@ -42,6 +42,14 @@ ASTNode* create_program(ASTNode* top_level_list)
             }
             program->implList->addImpl(implBlock);
         }
+        else if(auto* enumDef = dynamic_cast<EnumDefNode*>(item))
+        {
+            if(!program->enumList)
+            {
+                program->enumList = new EnumListNode();
+            }
+            program->enumList->addEnum(enumDef);
+        }
     }
 
     return program;
@@ -282,7 +290,9 @@ ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
                                    ASTNode* args, int line)
 {
     std::string variantStr = variant ? variant : "";
-    if(variantStr != "Ok" && variantStr != "Err")
+    bool isResult = (variantStr == "Ok" || variantStr == "Err");
+    bool isOption = (variantStr == "Some" || variantStr == "None");
+    if(!isResult && !isOption)
     {
         fprintf(stderr, "Error (line %d): generic function calls are not "
                         "supported\n",
@@ -294,27 +304,37 @@ ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
     if(args)
     {
         auto* argList = static_cast<ArgumentListNode*>(args);
-        if(argList->args.size() == 1)
+        if(isOption && variantStr == "None")
+        {
+            fprintf(stderr,
+                    "Error (line %d): %s expects zero arguments\n",
+                    line, variantStr.c_str());
+        }
+        else if(argList->args.size() == 1)
         {
             valueExpr = argList->args[0];
         }
         else
+        {
+            fprintf(stderr, "Error (line %d): %s expects %s arguments\n", line,
+                    variantStr.c_str(),
+                    isOption && variantStr == "None" ? "zero" : "one");
+        }
+    }
+    else
+    {
+        if(!(isOption && variantStr == "None"))
         {
             fprintf(stderr,
                     "Error (line %d): %s expects one argument\n",
                     line, variantStr.c_str());
         }
     }
-    else
-    {
-        fprintf(stderr,
-                "Error (line %d): %s expects one argument\n",
-                line, variantStr.c_str());
-    }
 
-    ASTNode* fields =
-        create_struct_field_init_list(strdup("is_ok"),
-                                      create_bool_literal(variantStr == "Ok"));
+    const char* flagField = isResult ? "is_ok" : "is_some";
+    ASTNode* fields = create_struct_field_init_list(
+        strdup(flagField), create_bool_literal(variantStr == "Ok" ||
+                                               variantStr == "Some"));
 
     if(valueExpr)
     {
@@ -323,14 +343,20 @@ ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
             fields =
                 add_struct_field_init(fields, strdup("ok"), valueExpr);
         }
-        else
+        else if(variantStr == "Err")
         {
             fields =
                 add_struct_field_init(fields, strdup("err"), valueExpr);
         }
+        else if(variantStr == "Some")
+        {
+            fields =
+                add_struct_field_init(fields, strdup("value"), valueExpr);
+        }
     }
 
-    return create_struct_literal(strdup("Result"), type_args, fields, line);
+    return create_struct_literal(strdup(isResult ? "Result" : "Option"),
+                                 type_args, fields, line);
 }
 
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
@@ -395,6 +421,33 @@ ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
     return new StructDefNode(
         std::string(name), base_name ? std::string(base_name) : "",
         static_cast<StructMemberListNode*>(members), is_public != 0);
+}
+
+ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public)
+{
+    return new EnumDefNode(std::string(name),
+                           static_cast<EnumVariantListNode*>(variants),
+                           is_public != 0);
+}
+
+ASTNode* create_enum_variant(char* name)
+{
+    return new EnumVariantNode(std::string(name));
+}
+
+ASTNode* create_enum_variant_list(ASTNode* variant)
+{
+    auto* list = new EnumVariantListNode();
+    if(variant)
+        list->addVariant(static_cast<EnumVariantNode*>(variant));
+    return list;
+}
+
+ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant)
+{
+    auto* variantList = static_cast<EnumVariantListNode*>(list);
+    variantList->addVariant(static_cast<EnumVariantNode*>(variant));
+    return variantList;
 }
 
 ASTNode* create_struct_member_list(ASTNode* member)
@@ -484,6 +537,10 @@ ASTNode* create_match_pattern(char* name, char* binding, int line)
         kind = MatchPatternNode::PATTERN_OK;
     else if(nameStr == "Err")
         kind = MatchPatternNode::PATTERN_ERR;
+    else if(nameStr == "Some")
+        kind = MatchPatternNode::PATTERN_SOME;
+    else if(nameStr == "None")
+        kind = MatchPatternNode::PATTERN_NONE;
     else if(nameStr == "_")
         kind = MatchPatternNode::PATTERN_WILDCARD;
     else
@@ -492,6 +549,13 @@ ASTNode* create_match_pattern(char* name, char* binding, int line)
                 "Error (line %d): unknown match pattern '%s'\n",
                 line, nameStr.c_str());
         kind = MatchPatternNode::PATTERN_WILDCARD;
+    }
+
+    if(kind == MatchPatternNode::PATTERN_NONE && !bindStr.empty())
+    {
+        fprintf(stderr,
+                "Error (line %d): None pattern cannot bind a value\n", line);
+        bindStr.clear();
     }
 
     return new MatchPatternNode(kind, bindStr);
@@ -533,6 +597,14 @@ ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line)
 {
     auto* node = new MatchExpressionNode(static_cast<ExpressionNode*>(target),
                                          static_cast<MatchArmListNode*>(arms));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line)
+{
+    auto* node =
+        new EnumLiteralNode(std::string(enum_name), std::string(variant_name));
     node->line = line;
     return node;
 }
@@ -864,6 +936,11 @@ std::string IdentifierNode::toString() const
     return name;
 }
 
+std::string EnumLiteralNode::toString() const
+{
+    return enumName + "::" + variantName;
+}
+
 std::string BinaryOpNode::toString() const
 {
     std::string op_str;
@@ -941,6 +1018,10 @@ std::string MatchPatternNode::toString() const
         return "Ok(" + binding + ")";
     case PATTERN_ERR:
         return "Err(" + binding + ")";
+    case PATTERN_SOME:
+        return "Some(" + binding + ")";
+    case PATTERN_NONE:
+        return "None";
     case PATTERN_LITERAL:
         return literal ? literal->toString() : "_";
     case PATTERN_WILDCARD:
@@ -1087,6 +1168,43 @@ std::string StructDefNode::toString() const
     return result;
 }
 
+std::string EnumVariantNode::toString() const
+{
+    return name;
+}
+
+std::string EnumVariantListNode::toString() const
+{
+    std::string result;
+    for(size_t i = 0; i < variants.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += variants[i]->toString();
+    }
+    return result;
+}
+
+std::string EnumDefNode::toString() const
+{
+    std::string result = isPublic ? "pub enum " : "enum ";
+    result += name + " { ";
+    if(variants)
+        result += variants->toString();
+    result += " };\n";
+    return result;
+}
+
+std::string EnumListNode::toString() const
+{
+    std::string result;
+    for(const auto& enumDef : enums)
+    {
+        result += enumDef->toString() + "\n";
+    }
+    return result;
+}
+
 std::string StructListNode::toString() const
 {
     std::string result;
@@ -1112,6 +1230,10 @@ std::string ProgramNode::toString() const
     for(const auto& use : imports)
     {
         result += use->toString() + "\n";
+    }
+    if(enumList)
+    {
+        result += enumList->toString();
     }
     if(structList)
     {
