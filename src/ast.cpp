@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "parser.hpp"
+#include <cstring>
 #include <stdexcept>
 
 ASTNode* create_program(ASTNode* top_level_list)
@@ -277,6 +278,61 @@ ASTNode* create_function_call_multi(char* name, ASTNode* args, int line)
     return call;
 }
 
+ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
+                                   ASTNode* args, int line)
+{
+    std::string variantStr = variant ? variant : "";
+    if(variantStr != "Ok" && variantStr != "Err")
+    {
+        fprintf(stderr, "Error (line %d): generic function calls are not "
+                        "supported\n",
+                line);
+        return create_function_call_multi(variant, args, line);
+    }
+
+    ExpressionNode* valueExpr = nullptr;
+    if(args)
+    {
+        auto* argList = static_cast<ArgumentListNode*>(args);
+        if(argList->args.size() == 1)
+        {
+            valueExpr = argList->args[0];
+        }
+        else
+        {
+            fprintf(stderr,
+                    "Error (line %d): %s expects one argument\n",
+                    line, variantStr.c_str());
+        }
+    }
+    else
+    {
+        fprintf(stderr,
+                "Error (line %d): %s expects one argument\n",
+                line, variantStr.c_str());
+    }
+
+    ASTNode* fields =
+        create_struct_field_init_list(strdup("is_ok"),
+                                      create_bool_literal(variantStr == "Ok"));
+
+    if(valueExpr)
+    {
+        if(variantStr == "Ok")
+        {
+            fields =
+                add_struct_field_init(fields, strdup("ok"), valueExpr);
+        }
+        else
+        {
+            fields =
+                add_struct_field_init(fields, strdup("err"), valueExpr);
+        }
+    }
+
+    return create_struct_literal(strdup("Result"), type_args, fields, line);
+}
+
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch)
 {
@@ -415,6 +471,69 @@ ASTNode* create_method_call_expr(ASTNode* object, char* method_name,
         auto* argList = static_cast<ArgumentListNode*>(args);
         node->arguments = argList->args;
     }
+    return node;
+}
+
+ASTNode* create_match_pattern(char* name, char* binding, int line)
+{
+    std::string nameStr = name ? name : "";
+    std::string bindStr = binding ? binding : "";
+
+    MatchPatternNode::PatternKind kind = MatchPatternNode::PATTERN_WILDCARD;
+    if(nameStr == "Ok")
+        kind = MatchPatternNode::PATTERN_OK;
+    else if(nameStr == "Err")
+        kind = MatchPatternNode::PATTERN_ERR;
+    else if(nameStr == "_")
+        kind = MatchPatternNode::PATTERN_WILDCARD;
+    else
+    {
+        fprintf(stderr,
+                "Error (line %d): unknown match pattern '%s'\n",
+                line, nameStr.c_str());
+        kind = MatchPatternNode::PATTERN_WILDCARD;
+    }
+
+    return new MatchPatternNode(kind, bindStr);
+}
+
+ASTNode* create_match_literal_pattern(ASTNode* literal, int line)
+{
+    auto* lit = static_cast<ExpressionNode*>(literal);
+    auto* node =
+        new MatchPatternNode(MatchPatternNode::PATTERN_LITERAL, "", lit);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line)
+{
+    auto* node = new MatchArmNode(static_cast<MatchPatternNode*>(pattern),
+                                  static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_match_arm_list(ASTNode* arm)
+{
+    auto* list = new MatchArmListNode();
+    if(arm)
+        list->addArm(static_cast<MatchArmNode*>(arm));
+    return list;
+}
+
+ASTNode* add_match_arm(ASTNode* list, ASTNode* arm)
+{
+    auto* armList = static_cast<MatchArmListNode*>(list);
+    armList->addArm(static_cast<MatchArmNode*>(arm));
+    return armList;
+}
+
+ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line)
+{
+    auto* node = new MatchExpressionNode(static_cast<ExpressionNode*>(target),
+                                         static_cast<MatchArmListNode*>(arms));
+    node->line = line;
     return node;
 }
 
@@ -811,6 +930,52 @@ std::string MethodCallNode::toString() const
         result += arguments[i]->toString();
     }
     result += ")";
+    return result;
+}
+
+std::string MatchPatternNode::toString() const
+{
+    switch(kind)
+    {
+    case PATTERN_OK:
+        return "Ok(" + binding + ")";
+    case PATTERN_ERR:
+        return "Err(" + binding + ")";
+    case PATTERN_LITERAL:
+        return literal ? literal->toString() : "_";
+    case PATTERN_WILDCARD:
+        return "_";
+    }
+    return "_";
+}
+
+std::string MatchArmNode::toString() const
+{
+    return pattern->toString() + " => " + expression->toString();
+}
+
+std::string MatchArmListNode::toString() const
+{
+    std::string result;
+    for(size_t i = 0; i < arms.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += arms[i]->toString();
+    }
+    return result;
+}
+
+std::string MatchExpressionNode::toString() const
+{
+    std::string result = "match " + target->toString() + " { ";
+    for(size_t i = 0; i < arms.size(); ++i)
+    {
+        if(i > 0)
+            result += ", ";
+        result += arms[i]->toString();
+    }
+    result += " }";
     return result;
 }
 

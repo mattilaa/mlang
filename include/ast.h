@@ -259,6 +259,69 @@ public:
     std::string toString() const override;
 };
 
+class MatchPatternNode : public ASTNode
+{
+public:
+    enum PatternKind
+    {
+        PATTERN_OK,
+        PATTERN_ERR,
+        PATTERN_LITERAL,
+        PATTERN_WILDCARD
+    };
+
+    PatternKind kind;
+    std::string binding;
+    ExpressionNode* literal = nullptr;
+
+    MatchPatternNode(PatternKind k, const std::string& b,
+                     ExpressionNode* lit = nullptr)
+        : kind(k), binding(b), literal(lit)
+    {
+    }
+    std::string toString() const override;
+};
+
+class MatchArmNode : public ASTNode
+{
+public:
+    MatchPatternNode* pattern;
+    ExpressionNode* expression;
+
+    MatchArmNode(MatchPatternNode* p, ExpressionNode* e)
+        : pattern(p), expression(e)
+    {
+    }
+    std::string toString() const override;
+};
+
+class MatchArmListNode : public ASTNode
+{
+public:
+    std::vector<MatchArmNode*> arms;
+
+    void addArm(MatchArmNode* arm)
+    {
+        arms.push_back(arm);
+    }
+    std::string toString() const override;
+};
+
+class MatchExpressionNode : public ExpressionNode
+{
+public:
+    ExpressionNode* target;
+    std::vector<MatchArmNode*> arms;
+
+    MatchExpressionNode(ExpressionNode* t, MatchArmListNode* list)
+        : target(t)
+    {
+        if(list)
+            arms = list->arms;
+    }
+    std::string toString() const override;
+};
+
 class CastExpressionNode : public ExpressionNode
 {
 public:
@@ -871,6 +934,8 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
+ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
+                                   ASTNode* args, int line);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -929,6 +994,12 @@ ASTNode* create_field_assignment(char* struct_name, char* field_name,
                                  ASTNode* expr, int line);
 ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr,
                                          int line);
+ASTNode* create_match_pattern(char* name, char* binding, int line);
+ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
+ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
+ASTNode* create_match_arm_list(ASTNode* arm);
+ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
+ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
 
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);

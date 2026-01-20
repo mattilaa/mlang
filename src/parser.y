@@ -1,6 +1,7 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "ast.h"
 
 extern int yylex();
@@ -43,6 +44,7 @@ ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
+ASTNode* create_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -99,6 +101,12 @@ ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* f
 ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
 ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value);
 ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
+ASTNode* create_match_pattern(char* name, char* binding, int line);
+ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
+ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
+ASTNode* create_match_arm_list(ASTNode* arm);
+ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
+ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
 %}
 
 %union {
@@ -114,6 +122,7 @@ ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT
+%token MATCH
 %token PUB IMPL
 %token EXTERN
 %token TRUE_LIT FALSE_LIT
@@ -125,6 +134,7 @@ ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
+%token FAT_ARROW
 %token GENERIC_LT
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
@@ -145,6 +155,7 @@ ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list
+%type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
@@ -298,7 +309,9 @@ type
     | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = create_list_type(); }
     | LIST LT type GT { $$ = create_generic_list_type($3); }
+    | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
     | MAP LT type COMMA type GT { $$ = create_map_type($3, $5); }
+    | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
@@ -310,10 +323,12 @@ type
     | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
     | IDENTIFIER { $$ = create_struct_type_ref($1); }
     | IDENTIFIER LT type_list GT { $$ = create_generic_struct_type_ref($1, $3); }
+    | IDENTIFIER GENERIC_LT type_list GT { $$ = create_generic_struct_type_ref($1, $3); }
     ;
 
 tuple_type
     : TUPLE LT type_list GT { $$ = create_tuple_type($3); }
+    | TUPLE GENERIC_LT type_list GT { $$ = create_tuple_type($3); }
     ;
 
 type_list
@@ -489,6 +504,70 @@ expression
     | struct_literal
     ;
 
+match_expression
+    : MATCH match_target LBRACE match_arm_list RBRACE
+        { $$ = create_match_expression($2, $4, yylineno); }
+    ;
+
+match_target
+    : match_atom
+    | match_binary_expression
+    ;
+
+match_atom
+    : postfix_expression
+    | function_call
+    | cast_expression
+    | list_literal
+    | index_expression
+    | tuple_literal
+    | map_iterator
+    ;
+
+match_binary_expression
+    : match_target PLUS match_target { $$ = create_binary_op(PLUS, $1, $3); }
+    | match_target MINUS match_target { $$ = create_binary_op(MINUS, $1, $3); }
+    | match_target MULTIPLY match_target { $$ = create_binary_op(MULTIPLY, $1, $3); }
+    | match_target DIVIDE match_target { $$ = create_binary_op(DIVIDE, $1, $3); }
+    | match_target LT match_target { $$ = create_binary_op(LT, $1, $3); }
+    | match_target GT match_target { $$ = create_binary_op(GT, $1, $3); }
+    | match_target LE match_target { $$ = create_binary_op(LE, $1, $3); }
+    | match_target GE match_target { $$ = create_binary_op(GE, $1, $3); }
+    | match_target EQ match_target { $$ = create_binary_op(EQ, $1, $3); }
+    | match_target NE match_target { $$ = create_binary_op(NE, $1, $3); }
+    ;
+
+match_arm_list
+    : match_arm { $$ = create_match_arm_list($1); }
+    | match_arm_list COMMA match_arm { $$ = add_match_arm($1, $3); }
+    ;
+
+match_arm
+    : match_pattern FAT_ARROW expression
+        { $$ = create_match_arm($1, $3, yylineno); }
+    | match_pattern ASSIGN GT expression
+        { $$ = create_match_arm($1, $4, yylineno); }
+    ;
+
+match_pattern
+    : IDENTIFIER LPAREN IDENTIFIER RPAREN
+        { $$ = create_match_pattern($1, $3, yylineno); }
+    | IDENTIFIER
+        { $$ = create_match_pattern($1, NULL, yylineno); }
+    | INT_LITERAL
+        { $$ = create_match_literal_pattern(create_int_literal($1), yylineno); }
+    | FLOAT_LITERAL
+        { $$ = create_match_literal_pattern(create_float_literal($1), yylineno); }
+    | DOUBLE_LITERAL
+        { $$ = create_match_literal_pattern(create_double_literal($1), yylineno); }
+    | STRING_LITERAL
+        { $$ = create_match_literal_pattern(create_string_literal($1), yylineno); }
+    | TRUE_LIT
+        { $$ = create_match_literal_pattern(create_bool_literal(1), yylineno); }
+    | FALSE_LIT
+        { $$ = create_match_literal_pattern(create_bool_literal(0), yylineno); }
+    ;
+
 primary_expression
     : INT_LITERAL { $$ = create_int_literal($1); }
     | FLOAT_LITERAL { $$ = create_float_literal($1); }
@@ -498,6 +577,7 @@ primary_expression
     | FALSE_LIT { $$ = create_bool_literal(0); }
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }
+    | match_expression { $$ = $1; }
     ;
 
 /* Struct literal: StructName { field: value, ... } */
@@ -505,6 +585,8 @@ struct_literal
     : IDENTIFIER LBRACE struct_field_init_list RBRACE
         { $$ = create_struct_literal($1, NULL, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LBRACE struct_field_init_list RBRACE
+        { $$ = create_struct_literal($1, $3, $6, yylineno); }
+    | IDENTIFIER LT type_list GT LBRACE struct_field_init_list RBRACE
         { $$ = create_struct_literal($1, $3, $6, yylineno); }
     ;
 
@@ -542,6 +624,10 @@ binary_expression
 function_call
     : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL, yylineno); }
     | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3, yylineno); }
+    | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
+        { $$ = create_result_constructor($1, $3, $6, yylineno); }
+    | IDENTIFIER LT type_list GT LPAREN argument_list RPAREN
+        { $$ = create_result_constructor($1, $3, $6, yylineno); }
     ;
 
 cast_expression

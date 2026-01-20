@@ -914,6 +914,8 @@ private:
     {
         std::string label;
         int kind = 0;
+        std::string insertText;
+        bool isSnippet = false;
     };
 
     static constexpr const char* kMlangKeywords[] = {
@@ -922,18 +924,37 @@ private:
         "struct",
         "if",
         "else",
+        "match",
         "return",
     };
 
     void add_completion(std::vector<CompletionCandidate>& out,
                         std::unordered_set<std::string>& seen,
                         const std::string& label, int kind,
-                        const std::string& prefix)
+                        const std::string& prefix,
+                        const std::string& insertText = {},
+                        bool isSnippet = false)
     {
         if(!starts_with(label, prefix))
             return;
         if(seen.insert(label).second)
-            out.push_back({label, kind});
+        {
+            CompletionCandidate cand;
+            cand.label = label;
+            cand.kind = kind;
+            cand.insertText = insertText;
+            cand.isSnippet = isSnippet;
+            out.push_back(std::move(cand));
+        }
+    }
+
+    void add_completion_snippet(std::vector<CompletionCandidate>& out,
+                                std::unordered_set<std::string>& seen,
+                                const std::string& label, int kind,
+                                const std::string& prefix,
+                                const std::string& snippet)
+    {
+        add_completion(out, seen, label, kind, prefix, snippet, true);
     }
 
     void collect_file_completions(FileInfo& info, const std::string& prefix,
@@ -2025,6 +2046,14 @@ private:
 
                 for(const auto* kw : kMlangKeywords)
                     add_completion(candidates, seen, kw, 14, prefix);
+                add_completion_snippet(
+                    candidates, seen, "match", 14, prefix,
+                    "match ${1:expr} { Ok(${2:value}) => ${3:value}, "
+                    "Err(${4:err}) => ${5:value} }");
+                add_completion_snippet(candidates, seen, "Ok", 3, prefix,
+                                       "Ok(${1:value})");
+                add_completion_snippet(candidates, seen, "Err", 3, prefix,
+                                       "Err(${1:error})");
 
                 collect_file_completions(info, prefix, candidates, seen);
 
@@ -2071,9 +2100,12 @@ private:
         {
             llvm::json::Object obj;
             obj["label"] = item.label;
-            obj["insertText"] = item.label;
+            obj["insertText"] =
+                item.insertText.empty() ? item.label : item.insertText;
             if(item.kind > 0)
                 obj["kind"] = item.kind;
+            if(item.isSnippet)
+                obj["insertTextFormat"] = 2;
             out.push_back(llvm::json::Value(std::move(obj)));
         }
         return llvm::json::Value(std::move(out));

@@ -1,0 +1,16 @@
+fn div(a: i32, b: i32) -> Result<i32, string> {
+    if b == 0: {
+        return Err<i32, string>("divide by zero");
+    }
+    return Ok<i32, string>(a / b);
+}
+
+fn main() -> i32 {
+    let r: Result<i32, string> = div(10, 2);
+    let v: i32 = match r { Ok(x) => x, Err(e) => 0 };
+    let w: i32 = match 1 + 1 { 1 => 10, 2 => 20, _ => 0 };
+    let n: i32 = 2;
+    let m: i32 = match n { 0 => 10, 1 => 11, _ => 12 };
+    println!("result = {}, {}, {}", v, w, m);
+    return 0;
+}

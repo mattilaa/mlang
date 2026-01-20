@@ -94,6 +94,7 @@ static int is_generic_struct_literal_start()
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }
+"match"         { return MATCH; }
 "for"           { return FOR; }
 "in"            { return IN; }
 "break"         { return BREAK; }
@@ -132,6 +133,7 @@ static int is_generic_struct_literal_start()
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
+"=>"            { return FAT_ARROW; }
 "..="           { return DOTDOTEQ; }
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }

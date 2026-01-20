@@ -469,6 +469,8 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 
 void CodeGenerator::generateCode(ProgramNode* program)
 {
+    ensureResultBuiltin(program);
+
     // First, collect generic struct templates and impl blocks
     // These are NOT generated immediately - they're instantiated on demand
     if(program->structList)
@@ -636,6 +638,47 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
         }
     }
+}
+
+void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
+{
+    if(!program)
+        return;
+
+    bool hasResult = false;
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(st && st->name == "Result")
+            {
+                hasResult = true;
+                break;
+            }
+        }
+    }
+
+    if(hasResult)
+        return;
+
+    auto* members = new StructMemberListNode();
+    members->addMember(new StructMemberNode(false,
+                                            new TypeNode(TypeNode::TYPE_BOOL),
+                                            "is_ok", nullptr));
+    members->addMember(new StructMemberNode(false,
+                                            new StructTypeRefNode("T"),
+                                            "ok", nullptr));
+    members->addMember(new StructMemberNode(false,
+                                            new StructTypeRefNode("E"),
+                                            "err", nullptr));
+
+    auto* resultDef = new StructDefNode("Result", "", members, true);
+    resultDef->typeParams = {"T", "E"};
+    resultDef->sourceModule = "";
+
+    if(!program->structList)
+        program->structList = new StructListNode();
+    program->structList->addStruct(resultDef);
 }
 
 llvm::Function*
@@ -895,6 +938,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto structLit = dynamic_cast<StructLiteralNode*>(node))
     {
         return generateStructLiteral(structLit);
+    }
+    else if(auto matchExpr = dynamic_cast<MatchExpressionNode*>(node))
+    {
+        return generateMatchExpression(matchExpr);
     }
     return nullptr;
 }
@@ -4252,6 +4299,13 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     std::string structTypeName = node->structName;
 
     // Check if this is a generic struct instantiation (has type arguments)
+    if(node->structName == "Result" && node->typeArgs.empty())
+    {
+        reportError(node->line,
+                    "Result literals require type arguments (e.g. "
+                    "Ok<i32, string>(...))");
+        return nullptr;
+    }
     if(!node->typeArgs.empty())
         if(!node->typeArgs.empty())
         {
@@ -4460,6 +4514,573 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     }
 
     return structVal;
+}
+
+llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
+{
+    if(!node || !node->target)
+        return nullptr;
+
+    llvm::Value* matchVal = generateExpression(node->target);
+    if(!matchVal)
+        return nullptr;
+
+    bool hasOk = false;
+    bool hasErr = false;
+    bool hasLiteral = false;
+    MatchArmNode* okArm = nullptr;
+    MatchArmNode* errArm = nullptr;
+    MatchArmNode* wildcardArm = nullptr;
+    std::vector<MatchArmNode*> literalArms;
+    for(auto* arm : node->arms)
+    {
+        if(!arm || !arm->pattern)
+            continue;
+        switch(arm->pattern->kind)
+        {
+        case MatchPatternNode::PATTERN_OK:
+            hasOk = true;
+            if(okArm)
+            {
+                reportError(node->line, "duplicate Ok match arm");
+                return nullptr;
+            }
+            okArm = arm;
+            break;
+        case MatchPatternNode::PATTERN_ERR:
+            hasErr = true;
+            if(errArm)
+            {
+                reportError(node->line, "duplicate Err match arm");
+                return nullptr;
+            }
+            errArm = arm;
+            break;
+        case MatchPatternNode::PATTERN_LITERAL:
+            hasLiteral = true;
+            literalArms.push_back(arm);
+            break;
+        case MatchPatternNode::PATTERN_WILDCARD:
+            if(wildcardArm)
+            {
+                reportError(node->line, "duplicate wildcard match arm");
+                return nullptr;
+            }
+            wildcardArm = arm;
+            break;
+        }
+    }
+
+    if((hasOk || hasErr) && hasLiteral)
+    {
+        reportError(node->line, "match cannot mix Result and literal patterns");
+        return nullptr;
+    }
+
+    if(hasOk || hasErr)
+    {
+        llvm::Type* matchType = matchVal->getType();
+        if(!matchType->isStructTy())
+        {
+            reportError(node->line, "match expects a Result value");
+            return nullptr;
+        }
+
+        auto* structType = llvm::cast<llvm::StructType>(matchType);
+        std::string structName = structType->getName().str();
+        if(structName.empty())
+        {
+            reportError(node->line, "match expects a named struct type");
+            return nullptr;
+        }
+
+        auto memIt = structMembers.find(structName);
+        if(memIt == structMembers.end())
+        {
+            reportError(node->line, "unknown struct type: " + structName);
+            return nullptr;
+        }
+
+        int isOkIndex = -1;
+        int okIndex = -1;
+        int errIndex = -1;
+        TypeNode* okType = nullptr;
+        TypeNode* errType = nullptr;
+
+        const auto& members = memIt->second;
+        for(size_t i = 0; i < members.size(); ++i)
+        {
+            if(members[i].first == "is_ok")
+                isOkIndex = static_cast<int>(i);
+            else if(members[i].first == "ok")
+            {
+                okIndex = static_cast<int>(i);
+                okType = members[i].second;
+            }
+            else if(members[i].first == "err")
+            {
+                errIndex = static_cast<int>(i);
+                errType = members[i].second;
+            }
+        }
+
+        if(isOkIndex < 0 || okIndex < 0 || errIndex < 0)
+        {
+            reportError(node->line,
+                        "match expects Result with is_ok/ok/err fields");
+            return nullptr;
+        }
+
+        if(!okArm)
+            okArm = wildcardArm;
+        if(!errArm)
+            errArm = wildcardArm;
+        if(!okArm || !errArm)
+        {
+            reportError(node->line,
+                        "match requires Ok and Err arms or wildcard");
+            return nullptr;
+        }
+
+        llvm::Function* func = builder.GetInsertBlock()->getParent();
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, "match.ok", func);
+        llvm::BasicBlock* errBB =
+            llvm::BasicBlock::Create(context, "match.err", func);
+        llvm::BasicBlock* mergeBB =
+            llvm::BasicBlock::Create(context, "match.merge", func);
+
+        llvm::Value* isOkVal =
+            builder.CreateExtractValue(matchVal, isOkIndex, "match.is_ok");
+        builder.CreateCondBr(isOkVal, okBB, errBB);
+
+        auto bindValue = [&](const std::string& name, TypeNode* type,
+                             llvm::Value* value)
+        {
+            if(name.empty() || !type || !value)
+                return;
+
+            llvm::Type* llvmType = getLLVMTypeFromNode(type);
+            if(!llvmType)
+                return;
+
+            llvm::AllocaInst* alloca =
+                builder.CreateAlloca(llvmType, nullptr, name);
+            builder.CreateStore(value, alloca);
+            namedValues[name] = alloca;
+
+            if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+            {
+                variableTypes[name] = TypeNode::TYPE_STRUCT;
+                structVariableTypes[name] = structRef->structName;
+            }
+            else if(auto* genRef =
+                        dynamic_cast<GenericStructTypeRefNode*>(type))
+            {
+                variableTypes[name] = TypeNode::TYPE_STRUCT;
+                structVariableTypes[name] = getOrCreateMonomorphizedStruct(
+                    genRef->structName, genRef->typeArgs);
+            }
+            else if(auto* listType =
+                        dynamic_cast<GenericListTypeNode*>(type))
+            {
+                variableTypes[name] = TypeNode::TYPE_LIST;
+                listElementTypes[name] = listType->elementType;
+            }
+            else if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+            {
+                variableTypes[name] = TypeNode::TYPE_MAP;
+                mapKeyValueTypes[name] =
+                    std::make_pair(mapType->keyType, mapType->valueType);
+            }
+            else if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+            {
+                variableTypes[name] = TypeNode::TYPE_TUPLE;
+                std::vector<TypeNode*> elemTypes;
+                for(auto* t : tupleType->elementTypes->types)
+                    elemTypes.push_back(t);
+                tupleElementTypes[name] = elemTypes;
+            }
+            else
+            {
+                variableTypes[name] = type->kind;
+            }
+        };
+
+        auto generateArmValue =
+            [&](MatchArmNode* arm, int valueIndex, TypeNode* valueType)
+            -> llvm::Value*
+        {
+            auto savedNamedValues = namedValues;
+            auto savedVariableTypes = variableTypes;
+            auto savedStructVariableTypes = structVariableTypes;
+            auto savedListElementTypes = listElementTypes;
+            auto savedMapKeyValueTypes = mapKeyValueTypes;
+            auto savedTupleElementTypes = tupleElementTypes;
+
+            std::string binding =
+                arm && arm->pattern ? arm->pattern->binding : "";
+            if(!binding.empty())
+            {
+                llvm::Value* payload = builder.CreateExtractValue(
+                    matchVal, valueIndex, "match.val");
+                bindValue(binding, valueType, payload);
+            }
+
+            llvm::Value* armValue =
+                arm ? generateExpression(arm->expression) : nullptr;
+
+            namedValues = savedNamedValues;
+            variableTypes = savedVariableTypes;
+            structVariableTypes = savedStructVariableTypes;
+            listElementTypes = savedListElementTypes;
+            mapKeyValueTypes = savedMapKeyValueTypes;
+            tupleElementTypes = savedTupleElementTypes;
+
+            return armValue;
+        };
+
+        builder.SetInsertPoint(okBB);
+        llvm::Value* okValue = generateArmValue(okArm, okIndex, okType);
+        if(!okValue)
+            return nullptr;
+        builder.CreateBr(mergeBB);
+        llvm::BasicBlock* okEnd = builder.GetInsertBlock();
+
+        builder.SetInsertPoint(errBB);
+        llvm::Value* errValue = generateArmValue(errArm, errIndex, errType);
+        if(!errValue)
+            return nullptr;
+        builder.CreateBr(mergeBB);
+        llvm::BasicBlock* errEnd = builder.GetInsertBlock();
+
+        builder.SetInsertPoint(mergeBB);
+        llvm::Type* okValueType = okValue->getType();
+        llvm::Type* errValueType = errValue->getType();
+
+        if(okValueType != errValueType)
+        {
+            llvm::Type* commonType = nullptr;
+            if(okValueType->isIntegerTy() && errValueType->isIntegerTy())
+            {
+                unsigned okBits = okValueType->getIntegerBitWidth();
+                unsigned errBits = errValueType->getIntegerBitWidth();
+                commonType = okBits >= errBits ? okValueType : errValueType;
+            }
+            else if(okValueType->isFloatingPointTy() &&
+                    errValueType->isFloatingPointTy())
+            {
+                commonType = okValueType->isDoubleTy() ||
+                                     errValueType->isDoubleTy()
+                                 ? llvm::Type::getDoubleTy(context)
+                                 : llvm::Type::getFloatTy(context);
+            }
+            else if(okValueType->isFloatingPointTy() &&
+                    errValueType->isIntegerTy())
+            {
+                commonType = okValueType;
+            }
+            else if(okValueType->isIntegerTy() &&
+                    errValueType->isFloatingPointTy())
+            {
+                commonType = errValueType;
+            }
+
+            if(!commonType)
+            {
+                reportError(node->line, "match arm types do not match");
+                return nullptr;
+            }
+
+            auto castValue =
+                [&](llvm::Value* val, llvm::Type* target) -> llvm::Value*
+            {
+                llvm::Type* src = val->getType();
+                if(src == target)
+                    return val;
+                if(src->isIntegerTy() && target->isIntegerTy())
+                {
+                    unsigned srcBits = src->getIntegerBitWidth();
+                    unsigned dstBits = target->getIntegerBitWidth();
+                    if(srcBits > dstBits)
+                        return builder.CreateTrunc(val, target, "match.trunc");
+                    if(srcBits < dstBits)
+                        return builder.CreateSExt(val, target, "match.sext");
+                    return val;
+                }
+                if(src->isIntegerTy() && target->isFloatingPointTy())
+                    return builder.CreateSIToFP(val, target, "match.sitofp");
+                if(src->isFloatingPointTy() && target->isFloatingPointTy())
+                    return builder.CreateFPCast(val, target, "match.fpcast");
+                return val;
+            };
+
+            okValue = castValue(okValue, commonType);
+            errValue = castValue(errValue, commonType);
+            okValueType = commonType;
+        }
+
+        if(okValueType->isVoidTy())
+        {
+            reportError(node->line, "match arms must return a value");
+            return nullptr;
+        }
+
+        llvm::PHINode* phi =
+            builder.CreatePHI(okValueType, 2, "match.result");
+        phi->addIncoming(okValue, okEnd);
+        phi->addIncoming(errValue, errEnd);
+        return phi;
+    }
+
+    if(!literalArms.empty() && !wildcardArm)
+    {
+        reportError(node->line,
+                    "literal match requires a wildcard arm");
+        return nullptr;
+    }
+
+    if(literalArms.empty() && wildcardArm)
+    {
+        return generateExpression(wildcardArm->expression);
+    }
+
+    llvm::Type* matchType = matchVal->getType();
+    if(matchType->isStructTy())
+    {
+        reportError(node->line, "literal match expects a scalar value");
+        return nullptr;
+    }
+
+    auto buildLiteralCompare =
+        [&](llvm::Value* litVal) -> llvm::Value*
+    {
+        if(!litVal)
+            return nullptr;
+        llvm::Type* targetType = matchType;
+        llvm::Type* litType = litVal->getType();
+        if(targetType->isIntegerTy())
+        {
+            if(!litType->isIntegerTy())
+            {
+                reportError(node->line,
+                            "literal pattern type does not match target");
+                return nullptr;
+            }
+            unsigned dstBits = targetType->getIntegerBitWidth();
+            unsigned srcBits = litType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+                litVal = builder.CreateTrunc(litVal, targetType, "match.lit");
+            else if(srcBits < dstBits)
+                litVal = builder.CreateSExt(litVal, targetType, "match.lit");
+            return builder.CreateICmpEQ(matchVal, litVal, "match.cmp");
+        }
+        if(targetType->isFloatingPointTy())
+        {
+            if(litType->isIntegerTy())
+                litVal = builder.CreateSIToFP(litVal, targetType, "match.lit");
+            else if(litType->isFloatingPointTy() && litType != targetType)
+                litVal = builder.CreateFPCast(litVal, targetType, "match.lit");
+            else if(!litType->isFloatingPointTy())
+            {
+                reportError(node->line,
+                            "literal pattern type does not match target");
+                return nullptr;
+            }
+            return builder.CreateFCmpOEQ(matchVal, litVal, "match.fcmp");
+        }
+        if(targetType->isPointerTy())
+        {
+            if(!litType->isPointerTy())
+            {
+                reportError(node->line,
+                            "literal pattern type does not match target");
+                return nullptr;
+            }
+            return builder.CreateICmpEQ(matchVal, litVal, "match.pcmp");
+        }
+        reportError(node->line, "literal match expects numeric or pointer type");
+        return nullptr;
+    };
+
+    llvm::Function* func = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* mergeBB =
+        llvm::BasicBlock::Create(context, "match.merge", func);
+    llvm::BasicBlock* wildcardBB = nullptr;
+    if(wildcardArm)
+        wildcardBB = llvm::BasicBlock::Create(context, "match.wildcard", func);
+
+    std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
+    std::vector<llvm::BasicBlock*> armBlocks;
+
+    llvm::BasicBlock* nextBB = nullptr;
+    for(size_t i = 0; i < literalArms.size(); ++i)
+    {
+        MatchArmNode* arm = literalArms[i];
+        llvm::BasicBlock* armBB =
+            llvm::BasicBlock::Create(context, "match.case", func);
+        bool isLast = (i + 1 == literalArms.size());
+        llvm::BasicBlock* fallBB =
+            isLast ? (wildcardBB ? wildcardBB : mergeBB)
+                   : llvm::BasicBlock::Create(context, "match.next", func);
+
+        llvm::Value* litVal =
+            generateExpression(arm->pattern->literal);
+        llvm::Value* cmp = buildLiteralCompare(litVal);
+        if(!cmp)
+            return nullptr;
+        builder.CreateCondBr(cmp, armBB, fallBB);
+
+        builder.SetInsertPoint(armBB);
+        llvm::Value* armVal = generateExpression(arm->expression);
+        if(!armVal)
+            return nullptr;
+        builder.CreateBr(mergeBB);
+        armValues.push_back({armVal, builder.GetInsertBlock()});
+        armBlocks.push_back(armBB);
+
+        builder.SetInsertPoint(fallBB);
+        nextBB = fallBB;
+    }
+
+    if(wildcardArm)
+    {
+        builder.SetInsertPoint(wildcardBB);
+        llvm::Value* armVal = generateExpression(wildcardArm->expression);
+        if(!armVal)
+            return nullptr;
+        builder.CreateBr(mergeBB);
+        armValues.push_back({armVal, builder.GetInsertBlock()});
+    }
+    else
+    {
+        if(nextBB && nextBB != mergeBB)
+            builder.SetInsertPoint(nextBB);
+    }
+
+    std::vector<llvm::Type*> armTypes;
+    armTypes.reserve(armValues.size());
+    for(const auto& pair : armValues)
+        armTypes.push_back(pair.first->getType());
+
+    auto commonTypeFrom = [&](const std::vector<llvm::Type*>& types)
+        -> llvm::Type*
+    {
+        if(types.empty())
+            return nullptr;
+        llvm::Type* common = types[0];
+        bool anyFloat = common->isFloatingPointTy();
+        bool anyInt = common->isIntegerTy();
+        bool anyPtr = common->isPointerTy();
+        bool anyStruct = common->isStructTy();
+
+        unsigned maxIntBits = anyInt ? common->getIntegerBitWidth() : 0;
+        bool anyDouble = common->isDoubleTy();
+
+        for(size_t i = 1; i < types.size(); ++i)
+        {
+            llvm::Type* t = types[i];
+            if(t == common)
+                continue;
+            if(t->isFloatingPointTy())
+            {
+                anyFloat = true;
+                if(t->isDoubleTy())
+                    anyDouble = true;
+            }
+            if(t->isIntegerTy())
+            {
+                anyInt = true;
+                unsigned bits = t->getIntegerBitWidth();
+                if(bits > maxIntBits)
+                    maxIntBits = bits;
+            }
+            if(t->isPointerTy())
+                anyPtr = true;
+            if(t->isStructTy())
+                anyStruct = true;
+        }
+
+        if(anyStruct)
+        {
+            for(auto* t : types)
+            {
+                if(t != types[0])
+                    return nullptr;
+            }
+            return types[0];
+        }
+
+        if(anyPtr && !(anyFloat || anyInt))
+        {
+            for(auto* t : types)
+            {
+                if(!t->isPointerTy() || t != types[0])
+                    return nullptr;
+            }
+            return types[0];
+        }
+
+        if(anyFloat)
+            return anyDouble ? llvm::Type::getDoubleTy(context)
+                             : llvm::Type::getFloatTy(context);
+        if(anyInt)
+            return llvm::Type::getIntNTy(context, maxIntBits);
+
+        for(auto* t : types)
+        {
+            if(t != types[0])
+                return nullptr;
+        }
+        return types[0];
+    };
+
+    llvm::Type* commonType = commonTypeFrom(armTypes);
+    if(!commonType)
+    {
+        reportError(node->line, "match arm types do not match");
+        return nullptr;
+    }
+    if(commonType->isVoidTy())
+    {
+        reportError(node->line, "match arms must return a value");
+        return nullptr;
+    }
+
+    for(auto& pair : armValues)
+    {
+        llvm::Value* val = pair.first;
+        llvm::BasicBlock* blk = pair.second;
+        if(val->getType() == commonType)
+            continue;
+        llvm::IRBuilder<> castBuilder(blk->getTerminator());
+        llvm::Value* casted = val;
+        llvm::Type* src = val->getType();
+        if(src->isIntegerTy() && commonType->isIntegerTy())
+        {
+            unsigned srcBits = src->getIntegerBitWidth();
+            unsigned dstBits = commonType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+                casted = castBuilder.CreateTrunc(val, commonType, "match.trunc");
+            else if(srcBits < dstBits)
+                casted = castBuilder.CreateSExt(val, commonType, "match.sext");
+        }
+        else if(src->isIntegerTy() && commonType->isFloatingPointTy())
+        {
+            casted = castBuilder.CreateSIToFP(val, commonType, "match.sitofp");
+        }
+        else if(src->isFloatingPointTy() && commonType->isFloatingPointTy())
+        {
+            casted = castBuilder.CreateFPCast(val, commonType, "match.fpcast");
+        }
+        pair.first = casted;
+    }
+    builder.SetInsertPoint(mergeBB);
+    llvm::PHINode* phi =
+        builder.CreatePHI(commonType, (unsigned)armValues.size(), "match.result");
+    for(const auto& pair : armValues)
+        phi->addIncoming(pair.first, pair.second);
+    return phi;
 }
 
 // ============================================================================

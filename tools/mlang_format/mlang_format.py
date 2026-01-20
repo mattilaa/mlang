@@ -31,6 +31,7 @@ KEYWORDS = {
     "var",
     "mod",
     "use",
+    "match",
 }
 
 MACRO_BANG_WORDS = {"println", "print", "eprintln", "eprint"}

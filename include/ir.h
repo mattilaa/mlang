@@ -124,6 +124,7 @@ private:
     void generateContinueStatement(ContinueNode* node);
 
     llvm::Value* generateExpression(ExpressionNode* node);
+    llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateIntLiteral(IntLiteralNode* node);
     llvm::Value* generateBoolLiteral(BoolLiteralNode* node);
@@ -141,6 +142,8 @@ private:
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
     llvm::Value* generateStructLiteral(StructLiteralNode* node);
+
+    void ensureResultBuiltin(ProgramNode* program);
 
     // Struct method helpers
     void generateStructMethods(StructDefNode* node);
