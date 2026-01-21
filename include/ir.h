@@ -75,6 +75,10 @@ private:
     bool pthreadInitialized;
     llvm::FunctionCallee pthreadCreateFunc;
     llvm::FunctionCallee pthreadJoinFunc;
+    llvm::FunctionCallee pthreadMutexInitFunc;
+    llvm::FunctionCallee pthreadMutexDestroyFunc;
+    llvm::FunctionCallee pthreadMutexLockFunc;
+    llvm::FunctionCallee pthreadMutexUnlockFunc;
 
     // Loop control flow support (for break/continue)
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
@@ -150,6 +154,15 @@ private:
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
+    llvm::Value* generateMutexCreate(FunctionCallNode* node);
+    llvm::Value* generateMutexLock(FunctionCallNode* node);
+    llvm::Value* generateMutexUnlock(FunctionCallNode* node);
+    llvm::Value* generateMutexDestroy(FunctionCallNode* node);
+    llvm::Value* generateAtomicI64New(FunctionCallNode* node);
+    llvm::Value* generateAtomicI64Load(FunctionCallNode* node);
+    llvm::Value* generateAtomicI64Store(FunctionCallNode* node);
+    llvm::Value* generateAtomicI64Add(FunctionCallNode* node);
+    llvm::Value* generateAtomicI64Free(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     llvm::Value* generateListLiteral(ListLiteralNode* node);

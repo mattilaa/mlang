@@ -1,0 +1,40 @@
+fn worker(id: i64, total: i64, mtx: i64, counter: i64) -> void {
+    var local: i64 = 0;
+    for i in 0..100000 {
+        local = local + 1;
+    }
+
+    atomic_i64_add(counter, local);
+
+    mutex_lock(mtx);
+    let current: i64 = atomic_i64_load(total);
+    atomic_i64_store(total, current + local);
+    mutex_unlock(mtx);
+
+    println!("worker {} done", id);
+}
+
+fn main() -> int {
+    let total: i64 = atomic_i64_new(0);
+    let counter: i64 = atomic_i64_new(0);
+    let mtx: i64 = mutex_create();
+
+    let h1: i64 = thread_spawn(worker, 1, total, mtx, counter);
+    let h2: i64 = thread_spawn(worker, 2, total, mtx, counter);
+    let h3: i64 = thread_spawn(worker, 3, total, mtx, counter);
+    let h4: i64 = thread_spawn(worker, 4, total, mtx, counter);
+
+    thread_join(h1);
+    thread_join(h2);
+    thread_join(h3);
+    thread_join(h4);
+
+    let total_val: i64 = atomic_i64_load(total);
+    let counter_val: i64 = atomic_i64_load(counter);
+    println!("total = {} counter = {}", total_val, counter_val);
+
+    mutex_destroy(mtx);
+    atomic_i64_free(total);
+    atomic_i64_free(counter);
+    return 0;
+}

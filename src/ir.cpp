@@ -246,6 +246,30 @@ void CodeGenerator::initializePthreadFunctions()
     pthreadJoinFunc =
         module->getOrInsertFunction("pthread_join", pthreadJoinType);
 
+    llvm::FunctionType* pthreadMutexInitType =
+        llvm::FunctionType::get(intType, {ptrType, ptrType}, false);
+    pthreadMutexInitFunc =
+        module->getOrInsertFunction("pthread_mutex_init",
+                                    pthreadMutexInitType);
+
+    llvm::FunctionType* pthreadMutexDestroyType =
+        llvm::FunctionType::get(intType, {ptrType}, false);
+    pthreadMutexDestroyFunc =
+        module->getOrInsertFunction("pthread_mutex_destroy",
+                                    pthreadMutexDestroyType);
+
+    llvm::FunctionType* pthreadMutexLockType =
+        llvm::FunctionType::get(intType, {ptrType}, false);
+    pthreadMutexLockFunc =
+        module->getOrInsertFunction("pthread_mutex_lock",
+                                    pthreadMutexLockType);
+
+    llvm::FunctionType* pthreadMutexUnlockType =
+        llvm::FunctionType::get(intType, {ptrType}, false);
+    pthreadMutexUnlockFunc =
+        module->getOrInsertFunction("pthread_mutex_unlock",
+                                    pthreadMutexUnlockType);
+
     pthreadInitialized = true;
 }
 
@@ -3518,6 +3542,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return generateThreadSpawn(node);
     if(node->name == "thread_join")
         return generateThreadJoin(node);
+    if(node->name == "mutex_create")
+        return generateMutexCreate(node);
+    if(node->name == "mutex_lock")
+        return generateMutexLock(node);
+    if(node->name == "mutex_unlock")
+        return generateMutexUnlock(node);
+    if(node->name == "mutex_destroy")
+        return generateMutexDestroy(node);
+    if(node->name == "atomic_i64_new")
+        return generateAtomicI64New(node);
+    if(node->name == "atomic_i64_load")
+        return generateAtomicI64Load(node);
+    if(node->name == "atomic_i64_store")
+        return generateAtomicI64Store(node);
+    if(node->name == "atomic_i64_add")
+        return generateAtomicI64Add(node);
+    if(node->name == "atomic_i64_free")
+        return generateAtomicI64Free(node);
 
     // Check visibility
     auto visIt = functionVisibility.find(node->name);
@@ -3674,11 +3716,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
 llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 {
-    if(node->arguments.size() < 1 || node->arguments.size() > 2)
+    if(node->arguments.size() < 1 || node->arguments.size() > 5)
     {
         reportError(node->line,
-                    "thread_spawn expects a function name and optional i64 "
-                    "argument");
+                    "thread_spawn expects a function name and up to 4 integer "
+                    "arguments");
         return nullptr;
     }
 
@@ -3698,25 +3740,22 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         return nullptr;
     }
 
-    bool wantsArg = node->arguments.size() == 2;
-    if(wantsArg && targetFunc->arg_size() != 1)
+    size_t argCount = node->arguments.size() - 1;
+    if(targetFunc->arg_size() != argCount)
     {
         reportError(node->line,
-                    "thread_spawn target must take one argument");
-        return nullptr;
-    }
-    if(!wantsArg && targetFunc->arg_size() != 0)
-    {
-        reportError(node->line,
-                    "thread_spawn target must take no arguments");
+                    "thread_spawn target argument count mismatch");
         return nullptr;
     }
 
-    if(wantsArg && !targetFunc->getFunctionType()->getParamType(0)->isIntegerTy())
+    for(size_t i = 0; i < argCount; ++i)
     {
-        reportError(node->line,
-                    "thread_spawn argument must be an integer type");
-        return nullptr;
+        if(!targetFunc->getFunctionType()->getParamType(i)->isIntegerTy())
+        {
+            reportError(node->line,
+                        "thread_spawn arguments must be integer types");
+            return nullptr;
+        }
     }
 
     initializePthreadFunctions();
@@ -3731,8 +3770,8 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
     std::string wrapperName = "__mlang_thread_wrapper_" + targetId->name;
-    if(wantsArg)
-        wrapperName += "_arg";
+    if(argCount > 0)
+        wrapperName += "_args" + std::to_string(argCount);
     llvm::Function* wrapperFunc = module->getFunction(wrapperName);
     if(!wrapperFunc)
     {
@@ -3747,32 +3786,46 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             llvm::BasicBlock::Create(context, "entry", wrapperFunc);
         builder.SetInsertPoint(entry);
 
-        if(wantsArg)
+        std::vector<llvm::Value*> callArgs;
+        if(argCount > 0)
         {
-            llvm::Value* argPtr = wrapperFunc->getArg(0);
-#if LLVM_VERSION_MAJOR < 15
-            llvm::Type* int64PtrType =
-                llvm::PointerType::get(int64Type, 0);
-            argPtr = builder.CreateBitCast(argPtr, int64PtrType,
-                                           "thread.argptr");
-#endif
-            llvm::Value* argVal =
-                builder.CreateLoad(int64Type, argPtr, "thread.arg");
-            llvm::Type* expectedType =
-                targetFunc->getFunctionType()->getParamType(0);
-            llvm::Value* callArg = argVal;
-            if(expectedType != int64Type)
+            llvm::Value* basePtr = wrapperFunc->getArg(0);
+            for(size_t i = 0; i < argCount; ++i)
             {
-                unsigned srcBits = int64Type->getIntegerBitWidth();
-                unsigned dstBits = expectedType->getIntegerBitWidth();
-                if(srcBits > dstBits)
-                    callArg = builder.CreateTrunc(callArg, expectedType,
-                                                  "thread.trunc");
-                else if(srcBits < dstBits)
-                    callArg = builder.CreateSExt(callArg, expectedType,
-                                                 "thread.sext");
+                llvm::Value* offset = llvm::ConstantInt::get(
+                    int64Type, static_cast<uint64_t>(i * 8), false);
+                llvm::Value* bytePtr = builder.CreateGEP(
+                    llvm::Type::getInt8Ty(context), basePtr, offset,
+                    "thread.argbyte");
+#if LLVM_VERSION_MAJOR < 15
+                llvm::Type* int64PtrType =
+                    llvm::PointerType::get(int64Type, 0);
+                llvm::Value* argPtr =
+                    builder.CreateBitCast(bytePtr, int64PtrType,
+                                          "thread.argptr");
+                llvm::Value* argVal =
+                    builder.CreateLoad(int64Type, argPtr, "thread.arg");
+#else
+                llvm::Value* argVal =
+                    builder.CreateLoad(int64Type, bytePtr, "thread.arg");
+#endif
+                llvm::Type* expectedType =
+                    targetFunc->getFunctionType()->getParamType(i);
+                llvm::Value* callArg = argVal;
+                if(expectedType != int64Type)
+                {
+                    unsigned srcBits = int64Type->getIntegerBitWidth();
+                    unsigned dstBits = expectedType->getIntegerBitWidth();
+                    if(srcBits > dstBits)
+                        callArg = builder.CreateTrunc(callArg, expectedType,
+                                                      "thread.trunc");
+                    else if(srcBits < dstBits)
+                        callArg = builder.CreateSExt(callArg, expectedType,
+                                                     "thread.sext");
+                }
+                callArgs.push_back(callArg);
             }
-            builder.CreateCall(targetFunc, {callArg});
+            builder.CreateCall(targetFunc, callArgs);
             builder.CreateCall(freeFunc, {wrapperFunc->getArg(0)});
         }
         else
@@ -3805,33 +3858,44 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
     llvm::Value* wrapperPtr =
         builder.CreateBitCast(wrapperFunc, ptrType, "thread.wrapper");
     llvm::Value* argPtr = nullPtr;
-    if(wantsArg)
+    if(argCount > 0)
     {
-        llvm::Value* rawArg = generateExpression(node->arguments[1]);
-        if(!rawArg)
-            return nullptr;
-        if(!rawArg->getType()->isIntegerTy())
-        {
-            reportError(node->line,
-                        "thread_spawn argument must be integer");
-            return nullptr;
-        }
-        if(rawArg->getType() != int64Type)
-        {
-            rawArg = builder.CreateSExt(rawArg, int64Type, "thread.argsext");
-        }
-        llvm::Value* sizeVal =
-            llvm::ConstantInt::get(int64Type, 8, false);
+        llvm::Value* sizeVal = llvm::ConstantInt::get(
+            int64Type, static_cast<uint64_t>(argCount * 8), false);
         argPtr = builder.CreateCall(mallocFunc, {sizeVal}, "thread.argptr");
+        for(size_t i = 0; i < argCount; ++i)
+        {
+            llvm::Value* rawArg =
+                generateExpression(node->arguments[i + 1]);
+            if(!rawArg)
+                return nullptr;
+            if(!rawArg->getType()->isIntegerTy())
+            {
+                reportError(node->line,
+                            "thread_spawn arguments must be integer");
+                return nullptr;
+            }
+            if(rawArg->getType() != int64Type)
+            {
+                rawArg = builder.CreateSExt(rawArg, int64Type,
+                                            "thread.argsext");
+            }
+            llvm::Value* offset = llvm::ConstantInt::get(
+                int64Type, static_cast<uint64_t>(i * 8), false);
+            llvm::Value* bytePtr = builder.CreateGEP(
+                llvm::Type::getInt8Ty(context), argPtr, offset,
+                "thread.argbyte");
 #if LLVM_VERSION_MAJOR < 15
-        llvm::Type* int64PtrType =
-            llvm::PointerType::get(int64Type, 0);
-        llvm::Value* typedPtr =
-            builder.CreateBitCast(argPtr, int64PtrType, "thread.argptr_i64");
-        builder.CreateStore(rawArg, typedPtr);
+            llvm::Type* int64PtrType =
+                llvm::PointerType::get(int64Type, 0);
+            llvm::Value* typedPtr =
+                builder.CreateBitCast(bytePtr, int64PtrType,
+                                      "thread.argptr_i64");
+            builder.CreateStore(rawArg, typedPtr);
 #else
-        builder.CreateStore(rawArg, argPtr);
+            builder.CreateStore(rawArg, bytePtr);
 #endif
+        }
     }
 
     builder.CreateCall(pthreadCreateFunc,
@@ -3890,6 +3954,359 @@ llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
 
     return builder.CreateCall(pthreadJoinFunc, {threadPtr, nullPtr},
                               "thread.join");
+}
+
+llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
+{
+    if(!node->arguments.empty())
+    {
+        reportError(node->line, "mutex_create expects no arguments");
+        return nullptr;
+    }
+
+    initializePthreadFunctions();
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* sizeVal = llvm::ConstantInt::get(int64Type, 64, false);
+    llvm::Value* mem = builder.CreateCall(mallocFunc, {sizeVal}, "mutex.mem");
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::cast<llvm::PointerType>(ptrType)
+#else
+            llvm::cast<llvm::PointerType>(ptrType)
+#endif
+        );
+    builder.CreateCall(pthreadMutexInitFunc, {mem, nullPtr});
+    return builder.CreatePtrToInt(mem, int64Type, "mutex.handle");
+}
+
+llvm::Value* CodeGenerator::generateMutexLock(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "mutex_lock expects one argument");
+        return nullptr;
+    }
+
+    initializePthreadFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    if(!handleVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "mutex_lock expects integer handle");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "mutex.sext");
+
+    llvm::Value* mutexPtr =
+        builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
+    return builder.CreateCall(pthreadMutexLockFunc, {mutexPtr},
+                              "mutex.lock");
+}
+
+llvm::Value* CodeGenerator::generateMutexUnlock(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "mutex_unlock expects one argument");
+        return nullptr;
+    }
+
+    initializePthreadFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    if(!handleVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "mutex_unlock expects integer handle");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "mutex.sext");
+
+    llvm::Value* mutexPtr =
+        builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
+    return builder.CreateCall(pthreadMutexUnlockFunc, {mutexPtr},
+                              "mutex.unlock");
+}
+
+llvm::Value* CodeGenerator::generateMutexDestroy(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "mutex_destroy expects one argument");
+        return nullptr;
+    }
+
+    initializePthreadFunctions();
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    if(!handleVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "mutex_destroy expects integer handle");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "mutex.sext");
+
+    llvm::Value* mutexPtr =
+        builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
+    llvm::Value* result =
+        builder.CreateCall(pthreadMutexDestroyFunc, {mutexPtr},
+                           "mutex.destroy");
+    builder.CreateCall(freeFunc, {mutexPtr});
+    return result;
+}
+
+llvm::Value* CodeGenerator::generateAtomicI64New(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "atomic_i64_new expects one argument");
+        return nullptr;
+    }
+
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* initVal = generateExpression(node->arguments[0]);
+    if(!initVal)
+        return nullptr;
+    if(!initVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "atomic_i64_new expects integer value");
+        return nullptr;
+    }
+    if(initVal->getType() != int64Type)
+        initVal =
+            builder.CreateSExt(initVal, int64Type, "atomic.sext");
+
+    llvm::Value* sizeVal = llvm::ConstantInt::get(int64Type, 8, false);
+    llvm::Value* mem = builder.CreateCall(mallocFunc, {sizeVal}, "atomic.mem");
+#if LLVM_VERSION_MAJOR < 15
+    llvm::Type* int64PtrType =
+        llvm::PointerType::get(int64Type, 0);
+    llvm::Value* typedPtr =
+        builder.CreateBitCast(mem, int64PtrType, "atomic.ptr");
+    builder.CreateStore(initVal, typedPtr);
+#else
+    builder.CreateStore(initVal, mem);
+#endif
+    return builder.CreatePtrToInt(mem, int64Type, "atomic.handle");
+}
+
+llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "atomic_i64_load expects one argument");
+        return nullptr;
+    }
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    if(!handleVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "atomic_i64_load expects integer handle");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
+
+    llvm::Value* ptr =
+        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+#if LLVM_VERSION_MAJOR < 15
+    llvm::Type* int64PtrType =
+        llvm::PointerType::get(int64Type, 0);
+    ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
+#endif
+    auto* loadInst = builder.CreateLoad(int64Type, ptr, "atomic.load");
+    loadInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
+    return loadInst;
+}
+
+llvm::Value* CodeGenerator::generateAtomicI64Store(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 2)
+    {
+        reportError(node->line, "atomic_i64_store expects two arguments");
+        return nullptr;
+    }
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    llvm::Value* valueVal = generateExpression(node->arguments[1]);
+    if(!handleVal || !valueVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy() ||
+       !valueVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "atomic_i64_store expects integer arguments");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
+    if(valueVal->getType() != int64Type)
+        valueVal =
+            builder.CreateSExt(valueVal, int64Type, "atomic.sextval");
+
+    llvm::Value* ptr =
+        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+#if LLVM_VERSION_MAJOR < 15
+    llvm::Type* int64PtrType =
+        llvm::PointerType::get(int64Type, 0);
+    ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
+#endif
+    auto* storeInst = builder.CreateStore(valueVal, ptr);
+    storeInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
+    return valueVal;
+}
+
+llvm::Value* CodeGenerator::generateAtomicI64Add(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 2)
+    {
+        reportError(node->line, "atomic_i64_add expects two arguments");
+        return nullptr;
+    }
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    llvm::Value* addVal = generateExpression(node->arguments[1]);
+    if(!handleVal || !addVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy() ||
+       !addVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "atomic_i64_add expects integer arguments");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
+    if(addVal->getType() != int64Type)
+        addVal = builder.CreateSExt(addVal, int64Type, "atomic.sextval");
+
+    llvm::Value* ptr =
+        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+#if LLVM_VERSION_MAJOR < 15
+    llvm::Type* int64PtrType =
+        llvm::PointerType::get(int64Type, 0);
+    ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
+#endif
+    return builder.CreateAtomicRMW(
+        llvm::AtomicRMWInst::Add, ptr, addVal, llvm::MaybeAlign(),
+        llvm::AtomicOrdering::SequentiallyConsistent);
+}
+
+llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "atomic_i64_free expects one argument");
+        return nullptr;
+    }
+
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    if(!handleVal)
+        return nullptr;
+    if(!handleVal->getType()->isIntegerTy())
+    {
+        reportError(node->line, "atomic_i64_free expects integer handle");
+        return nullptr;
+    }
+    if(handleVal->getType() != int64Type)
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
+
+    llvm::Value* ptr =
+        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+    return builder.CreateCall(freeFunc, {ptr});
 }
 
 void CodeGenerator::generateStructMethods(StructDefNode* node)
