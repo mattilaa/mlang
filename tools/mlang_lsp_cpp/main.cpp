@@ -59,6 +59,21 @@ struct StructInfo
     int endLine = -1;
 };
 
+struct EnumVariantInfo
+{
+    std::string name;
+    Location loc;
+};
+
+struct EnumInfo
+{
+    std::string name;
+    std::unordered_map<std::string, EnumVariantInfo> variants;
+    Location loc;
+    int startLine = -1;
+    int endLine = -1;
+};
+
 struct FunctionInfo
 {
     std::string name;
@@ -88,6 +103,7 @@ struct FileInfo
     std::vector<std::string> lines;
     ProgramNode* ast = nullptr;
     std::unordered_map<std::string, StructInfo> structs;
+    std::unordered_map<std::string, EnumInfo> enums;
     std::unordered_map<std::string, FunctionInfo> functions;
     std::vector<FunctionInfo*> functionSpans;
     std::vector<std::string> moduleDecls;
@@ -888,6 +904,8 @@ private:
             return fit->second.loc;
         if(auto sit = info.structs.find(name); sit != info.structs.end())
             return sit->second.loc;
+        if(auto eit = info.enums.find(name); eit != info.enums.end())
+            return eit->second.loc;
         for(auto& [sname, st] : info.structs)
         {
             auto itf = st.fields.find(name);
@@ -896,6 +914,12 @@ private:
             auto itm = st.methods.find(name);
             if(itm != st.methods.end())
                 return itm->second.loc;
+        }
+        for(auto& [ename, en] : info.enums)
+        {
+            auto itv = en.variants.find(name);
+            if(itv != en.variants.end())
+                return itv->second.loc;
         }
         return std::nullopt;
     }
@@ -1253,6 +1277,7 @@ private:
         if(!info.ast)
             return;
         collect_modules_imports(info, info.ast);
+        collect_enums(info, info.ast);
         collect_structs(info, info.ast);
         collect_functions(info, info.ast);
         index_locations(info);
@@ -1322,6 +1347,29 @@ private:
                     mi.returnType = type_name(method->returnType);
                     it->second.methods[mi.name] = mi;
                 }
+            }
+        }
+    }
+
+    void collect_enums(FileInfo& info, ProgramNode* program)
+    {
+        info.enums.clear();
+        if(program->enumList)
+        {
+            for(auto* e : program->enumList->enums)
+            {
+                EnumInfo en;
+                en.name = e->name;
+                if(e->variants)
+                {
+                    for(auto* v : e->variants->variants)
+                    {
+                        EnumVariantInfo vi;
+                        vi.name = v->name;
+                        en.variants[vi.name] = vi;
+                    }
+                }
+                info.enums[en.name] = en;
             }
         }
     }
@@ -1538,6 +1586,8 @@ private:
                                      std::regex("\\bstruct\\s+([A-Za-z_][A-Za-z0-9_]*)"));
         auto implSpans = find_spans(cleanedLines,
                                    std::regex("\\bimpl(?:\\s*<[^>]+>)?\\s+([A-Za-z_][A-Za-z0-9_]*)"));
+        auto enumSpans = find_spans(cleanedLines,
+                                    std::regex("\\benum\\s+([A-Za-z_][A-Za-z0-9_]*)"));
 
         for(auto& span : structSpans)
         {
@@ -1549,6 +1599,24 @@ private:
             auto loc = find_definition_location(
                 info.lines, span.startLine, span.startLine,
                 std::regex("(?:pub\\s+)?struct\\s+(" + span.name + ")\\b"));
+            if(loc)
+            {
+                it->second.loc.uri = info.uri;
+                it->second.loc.line = loc->line;
+                it->second.loc.character = loc->character;
+            }
+        }
+
+        for(auto& span : enumSpans)
+        {
+            auto it = info.enums.find(span.name);
+            if(it == info.enums.end())
+                continue;
+            it->second.startLine = span.startLine;
+            it->second.endLine = span.endLine;
+            auto loc = find_definition_location(
+                info.lines, span.startLine, span.startLine,
+                std::regex("(?:pub\\s+)?enum\\s+(" + span.name + ")\\b"));
             if(loc)
             {
                 it->second.loc.uri = info.uri;
@@ -1583,6 +1651,24 @@ private:
                     method.loc.uri = info.uri;
                     method.loc.line = loc->line;
                     method.loc.character = loc->character;
+                }
+            }
+        }
+
+        for(auto& [name, en] : info.enums)
+        {
+            if(en.startLine < 0)
+                continue;
+            for(auto& [vname, variant] : en.variants)
+            {
+                auto loc = find_definition_location(
+                    info.lines, en.startLine, en.endLine,
+                    std::regex("\\b(" + vname + ")\\b"));
+                if(loc)
+                {
+                    variant.loc.uri = info.uri;
+                    variant.loc.line = loc->line;
+                    variant.loc.character = loc->character;
                 }
             }
         }
@@ -1828,6 +1914,14 @@ private:
         std::string modulePrefix = find_module_prefix(left);
         if(!modulePrefix.empty())
         {
+            auto enumIt = info.enums.find(modulePrefix);
+            if(enumIt != info.enums.end())
+            {
+                auto varIt = enumIt->second.variants.find(word);
+                if(varIt != enumIt->second.variants.end())
+                    return location_to_json(varIt->second.loc);
+            }
+
             std::string modPath =
                 resolve_module_path_for_file(info, modulePrefix);
             if(!modPath.empty())
@@ -1929,11 +2023,19 @@ private:
         }
         if(auto sit = info.structs.find(word); sit != info.structs.end())
             return location_to_json(sit->second.loc);
+        if(auto eit = info.enums.find(word); eit != info.enums.end())
+            return location_to_json(eit->second.loc);
         for(auto& [sname, st] : info.structs)
         {
             auto itf = st.fields.find(word);
             if(itf != st.fields.end())
                 return location_to_json(itf->second.loc);
+        }
+        for(auto& [ename, en] : info.enums)
+        {
+            auto itv = en.variants.find(word);
+            if(itv != en.variants.end())
+                return location_to_json(itv->second.loc);
         }
 
         for(const auto& imp : info.imports)
