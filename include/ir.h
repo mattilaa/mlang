@@ -18,7 +18,8 @@ public:
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
                   std::unique_ptr<llvm::Module>& m)
         : context(ctx), builder(b), module(m), hasError(false),
-          stdioInitialized(false)
+          stdioInitialized(false), stdlibInitialized(false),
+          pthreadInitialized(false)
     {
     }
 
@@ -66,6 +67,14 @@ private:
     llvm::FunctionCallee printfFunc;
     llvm::FunctionCallee fprintfFunc;
     llvm::Value* stderrPtr;
+    // Stdlib support
+    bool stdlibInitialized;
+    llvm::FunctionCallee mallocFunc;
+    llvm::FunctionCallee freeFunc;
+    // Pthread support
+    bool pthreadInitialized;
+    llvm::FunctionCallee pthreadCreateFunc;
+    llvm::FunctionCallee pthreadJoinFunc;
 
     // Loop control flow support (for break/continue)
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
@@ -104,6 +113,8 @@ private:
 
     // Stdio initialization
     void initializeStdioFunctions();
+    void initializeStdlibFunctions();
+    void initializePthreadFunctions();
     std::string convertFormatString(const std::string& mlaFormat,
                                     const std::vector<ExpressionNode*>& args,
                                     std::vector<llvm::Value*>& argValues);
@@ -137,6 +148,8 @@ private:
     llvm::Value* generateEnumLiteral(EnumLiteralNode* node);
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
+    llvm::Value* generateThreadSpawn(FunctionCallNode* node);
+    llvm::Value* generateThreadJoin(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
     llvm::Value* generateListLiteral(ListLiteralNode* node);

@@ -222,6 +222,59 @@ void CodeGenerator::initializeStdioFunctions()
     stdioInitialized = true;
 }
 
+void CodeGenerator::initializePthreadFunctions()
+{
+    if(pthreadInitialized)
+        return;
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* intType = llvm::Type::getInt32Ty(context);
+
+    llvm::FunctionType* pthreadCreateType =
+        llvm::FunctionType::get(intType,
+                                {ptrType, ptrType, ptrType, ptrType}, false);
+    pthreadCreateFunc =
+        module->getOrInsertFunction("pthread_create", pthreadCreateType);
+
+    llvm::FunctionType* pthreadJoinType =
+        llvm::FunctionType::get(intType, {ptrType, ptrType}, false);
+    pthreadJoinFunc =
+        module->getOrInsertFunction("pthread_join", pthreadJoinType);
+
+    pthreadInitialized = true;
+}
+
+void CodeGenerator::initializeStdlibFunctions()
+{
+    if(stdlibInitialized)
+        return;
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* intType = llvm::Type::getInt32Ty(context);
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::FunctionType* mallocType =
+        llvm::FunctionType::get(ptrType, {int64Type}, false);
+    mallocFunc = module->getOrInsertFunction("malloc", mallocType);
+
+    llvm::FunctionType* freeType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {ptrType},
+                                false);
+    freeFunc = module->getOrInsertFunction("free", freeType);
+
+    stdlibInitialized = true;
+}
+
 // Helper to get the TypeKind from an expression (for identifiers)
 TypeNode::TypeKind getExpressionTypeKind(
     ExpressionNode* expr,
@@ -3461,6 +3514,11 @@ void CodeGenerator::reportError(int line, const std::string& message)
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    if(node->name == "thread_spawn")
+        return generateThreadSpawn(node);
+    if(node->name == "thread_join")
+        return generateThreadJoin(node);
+
     // Check visibility
     auto visIt = functionVisibility.find(node->name);
     if(visIt != functionVisibility.end())
@@ -3612,6 +3670,226 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return builder.CreateCall(callee, args);
     }
     return builder.CreateCall(callee, args, "calltmp");
+}
+
+llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
+{
+    if(node->arguments.size() < 1 || node->arguments.size() > 2)
+    {
+        reportError(node->line,
+                    "thread_spawn expects a function name and optional i64 "
+                    "argument");
+        return nullptr;
+    }
+
+    auto* targetId = dynamic_cast<IdentifierNode*>(node->arguments[0]);
+    if(!targetId)
+    {
+        reportError(node->line,
+                    "thread_spawn expects a function name identifier");
+        return nullptr;
+    }
+
+    llvm::Function* targetFunc = module->getFunction(targetId->name);
+    if(!targetFunc)
+    {
+        reportError(node->line,
+                    "unknown function: '" + targetId->name + "'");
+        return nullptr;
+    }
+
+    bool wantsArg = node->arguments.size() == 2;
+    if(wantsArg && targetFunc->arg_size() != 1)
+    {
+        reportError(node->line,
+                    "thread_spawn target must take one argument");
+        return nullptr;
+    }
+    if(!wantsArg && targetFunc->arg_size() != 0)
+    {
+        reportError(node->line,
+                    "thread_spawn target must take no arguments");
+        return nullptr;
+    }
+
+    if(wantsArg && !targetFunc->getFunctionType()->getParamType(0)->isIntegerTy())
+    {
+        reportError(node->line,
+                    "thread_spawn argument must be an integer type");
+        return nullptr;
+    }
+
+    initializePthreadFunctions();
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    std::string wrapperName = "__mlang_thread_wrapper_" + targetId->name;
+    if(wantsArg)
+        wrapperName += "_arg";
+    llvm::Function* wrapperFunc = module->getFunction(wrapperName);
+    if(!wrapperFunc)
+    {
+        llvm::FunctionType* wrapperType =
+            llvm::FunctionType::get(ptrType, {ptrType}, false);
+        wrapperFunc = llvm::Function::Create(
+            wrapperType, llvm::Function::PrivateLinkage, wrapperName,
+            module.get());
+
+        auto savedIP = builder.saveIP();
+        llvm::BasicBlock* entry =
+            llvm::BasicBlock::Create(context, "entry", wrapperFunc);
+        builder.SetInsertPoint(entry);
+
+        if(wantsArg)
+        {
+            llvm::Value* argPtr = wrapperFunc->getArg(0);
+#if LLVM_VERSION_MAJOR < 15
+            llvm::Type* int64PtrType =
+                llvm::PointerType::get(int64Type, 0);
+            argPtr = builder.CreateBitCast(argPtr, int64PtrType,
+                                           "thread.argptr");
+#endif
+            llvm::Value* argVal =
+                builder.CreateLoad(int64Type, argPtr, "thread.arg");
+            llvm::Type* expectedType =
+                targetFunc->getFunctionType()->getParamType(0);
+            llvm::Value* callArg = argVal;
+            if(expectedType != int64Type)
+            {
+                unsigned srcBits = int64Type->getIntegerBitWidth();
+                unsigned dstBits = expectedType->getIntegerBitWidth();
+                if(srcBits > dstBits)
+                    callArg = builder.CreateTrunc(callArg, expectedType,
+                                                  "thread.trunc");
+                else if(srcBits < dstBits)
+                    callArg = builder.CreateSExt(callArg, expectedType,
+                                                 "thread.sext");
+            }
+            builder.CreateCall(targetFunc, {callArg});
+            builder.CreateCall(freeFunc, {wrapperFunc->getArg(0)});
+        }
+        else
+        {
+            builder.CreateCall(targetFunc, {});
+        }
+
+        llvm::Value* nullPtr =
+            llvm::ConstantPointerNull::get(
+#if LLVM_VERSION_MAJOR >= 15
+                llvm::cast<llvm::PointerType>(ptrType)
+#else
+                llvm::cast<llvm::PointerType>(ptrType)
+#endif
+            );
+        builder.CreateRet(nullPtr);
+        builder.restoreIP(savedIP);
+    }
+
+    llvm::AllocaInst* threadHandle =
+        builder.CreateAlloca(ptrType, nullptr, "thread.handle");
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::cast<llvm::PointerType>(ptrType)
+#else
+            llvm::cast<llvm::PointerType>(ptrType)
+#endif
+        );
+    llvm::Value* wrapperPtr =
+        builder.CreateBitCast(wrapperFunc, ptrType, "thread.wrapper");
+    llvm::Value* argPtr = nullPtr;
+    if(wantsArg)
+    {
+        llvm::Value* rawArg = generateExpression(node->arguments[1]);
+        if(!rawArg)
+            return nullptr;
+        if(!rawArg->getType()->isIntegerTy())
+        {
+            reportError(node->line,
+                        "thread_spawn argument must be integer");
+            return nullptr;
+        }
+        if(rawArg->getType() != int64Type)
+        {
+            rawArg = builder.CreateSExt(rawArg, int64Type, "thread.argsext");
+        }
+        llvm::Value* sizeVal =
+            llvm::ConstantInt::get(int64Type, 8, false);
+        argPtr = builder.CreateCall(mallocFunc, {sizeVal}, "thread.argptr");
+#if LLVM_VERSION_MAJOR < 15
+        llvm::Type* int64PtrType =
+            llvm::PointerType::get(int64Type, 0);
+        llvm::Value* typedPtr =
+            builder.CreateBitCast(argPtr, int64PtrType, "thread.argptr_i64");
+        builder.CreateStore(rawArg, typedPtr);
+#else
+        builder.CreateStore(rawArg, argPtr);
+#endif
+    }
+
+    builder.CreateCall(pthreadCreateFunc,
+                       {threadHandle, nullPtr, wrapperPtr, argPtr});
+
+    llvm::Value* threadVal =
+        builder.CreateLoad(ptrType, threadHandle, "thread.value");
+    return builder.CreatePtrToInt(threadVal, int64Type, "thread.handle_i64");
+}
+
+llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
+{
+    if(node->arguments.size() != 1)
+    {
+        reportError(node->line, "thread_join expects one argument");
+        return nullptr;
+    }
+
+    initializePthreadFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    if(!handleVal)
+        return nullptr;
+
+    if(!handleVal->getType()->isIntegerTy())
+    {
+        reportError(node->line,
+                    "thread_join expects an integer thread handle");
+        return nullptr;
+    }
+
+    if(handleVal->getType() != int64Type)
+    {
+        handleVal =
+            builder.CreateSExt(handleVal, int64Type, "thread.sext");
+    }
+
+    llvm::Value* threadPtr =
+        builder.CreateIntToPtr(handleVal, ptrType, "thread.ptr");
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::cast<llvm::PointerType>(ptrType)
+#else
+            llvm::cast<llvm::PointerType>(ptrType)
+#endif
+        );
+
+    return builder.CreateCall(pthreadJoinFunc, {threadPtr, nullPtr},
+                              "thread.join");
 }
 
 void CodeGenerator::generateStructMethods(StructDefNode* node)

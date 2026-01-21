@@ -1,0 +1,10 @@
+fn worker() -> void {
+    println!("worker started");
+}
+
+fn main() -> int {
+    let handle: i64 = thread_spawn(worker);
+    let status: int = thread_join(handle);
+    println!("join status = {}", status);
+    return 0;
+}
