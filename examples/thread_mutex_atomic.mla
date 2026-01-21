@@ -1,4 +1,4 @@
-fn worker(id: i64, total: i64, mtx: i64, counter: i64) -> void {
+fn worker(id: i64, total: Handle<Atomic64>, mtx: Handle<Mutex>, counter: Handle<Atomic64>) -> void {
     var local: i64 = 0;
     for i in 0..100000 {
         local = local + 1;
@@ -15,14 +15,14 @@ fn worker(id: i64, total: i64, mtx: i64, counter: i64) -> void {
 }
 
 fn main() -> int {
-    let total: i64 = atomic_i64_new(0);
-    let counter: i64 = atomic_i64_new(0);
-    let mtx: i64 = mutex_create();
+    let total: Handle<Atomic64> = atomic_i64_new(0);
+    let counter: Handle<Atomic64> = atomic_i64_new(0);
+    let mtx: Handle<Mutex> = mutex_create();
 
-    let h1: i64 = thread_spawn(worker, 1, total, mtx, counter);
-    let h2: i64 = thread_spawn(worker, 2, total, mtx, counter);
-    let h3: i64 = thread_spawn(worker, 3, total, mtx, counter);
-    let h4: i64 = thread_spawn(worker, 4, total, mtx, counter);
+    let h1: Handle<Thread> = thread_spawn(worker, 1, total, mtx, counter);
+    let h2: Handle<Thread> = thread_spawn(worker, 2, total, mtx, counter);
+    let h3: Handle<Thread> = thread_spawn(worker, 3, total, mtx, counter);
+    let h4: Handle<Thread> = thread_spawn(worker, 4, total, mtx, counter);
 
     thread_join(h1);
     thread_join(h2);

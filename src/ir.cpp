@@ -552,6 +552,10 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 
 void CodeGenerator::generateCode(ProgramNode* program)
 {
+    ensureHandleBuiltin(program);
+    ensureThreadBuiltin(program);
+    ensureMutexBuiltin(program);
+    ensureAtomic64Builtin(program);
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
 
@@ -809,6 +813,143 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
     if(!program->structList)
         program->structList = new StructListNode();
     program->structList->addStruct(optionDef);
+}
+
+void CodeGenerator::ensureHandleBuiltin(ProgramNode* program)
+{
+    if(!program)
+        return;
+
+    bool hasHandle = false;
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(st && st->name == "Handle")
+            {
+                hasHandle = true;
+                break;
+            }
+        }
+    }
+
+    if(hasHandle)
+        return;
+
+    auto* members = new StructMemberListNode();
+    members->addMember(new StructMemberNode(false,
+                                            new TypeNode(TypeNode::TYPE_I64),
+                                            "raw", nullptr));
+
+    auto* handleDef = new StructDefNode("Handle", "", members, true);
+    handleDef->typeParams = {"T"};
+    handleDef->sourceModule = "";
+
+    if(!program->structList)
+        program->structList = new StructListNode();
+    program->structList->addStruct(handleDef);
+}
+
+void CodeGenerator::ensureThreadBuiltin(ProgramNode* program)
+{
+    if(!program)
+        return;
+
+    bool hasThread = false;
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(st && st->name == "Thread")
+            {
+                hasThread = true;
+                break;
+            }
+        }
+    }
+
+    if(hasThread)
+        return;
+
+    auto* members = new StructMemberListNode();
+    members->addMember(new StructMemberNode(false,
+                                            new TypeNode(TypeNode::TYPE_I8),
+                                            "_pad", nullptr));
+
+    auto* threadDef = new StructDefNode("Thread", "", members, true);
+    threadDef->sourceModule = "";
+
+    if(!program->structList)
+        program->structList = new StructListNode();
+    program->structList->addStruct(threadDef);
+}
+
+void CodeGenerator::ensureMutexBuiltin(ProgramNode* program)
+{
+    if(!program)
+        return;
+
+    bool hasMutex = false;
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(st && st->name == "Mutex")
+            {
+                hasMutex = true;
+                break;
+            }
+        }
+    }
+
+    if(hasMutex)
+        return;
+
+    auto* members = new StructMemberListNode();
+    members->addMember(new StructMemberNode(false,
+                                            new TypeNode(TypeNode::TYPE_I8),
+                                            "_pad", nullptr));
+
+    auto* mutexDef = new StructDefNode("Mutex", "", members, true);
+    mutexDef->sourceModule = "";
+
+    if(!program->structList)
+        program->structList = new StructListNode();
+    program->structList->addStruct(mutexDef);
+}
+
+void CodeGenerator::ensureAtomic64Builtin(ProgramNode* program)
+{
+    if(!program)
+        return;
+
+    bool hasAtomic = false;
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(st && st->name == "Atomic64")
+            {
+                hasAtomic = true;
+                break;
+            }
+        }
+    }
+
+    if(hasAtomic)
+        return;
+
+    auto* members = new StructMemberListNode();
+    members->addMember(new StructMemberNode(false,
+                                            new TypeNode(TypeNode::TYPE_I8),
+                                            "_pad", nullptr));
+
+    auto* atomicDef = new StructDefNode("Atomic64", "", members, true);
+    atomicDef->sourceModule = "";
+
+    if(!program->structList)
+        program->structList = new StructListNode();
+    program->structList->addStruct(atomicDef);
 }
 
 llvm::Function*
@@ -3750,12 +3891,32 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 
     for(size_t i = 0; i < argCount; ++i)
     {
-        if(!targetFunc->getFunctionType()->getParamType(i)->isIntegerTy())
+        llvm::Type* paramType = targetFunc->getFunctionType()->getParamType(i);
+        if(paramType->isIntegerTy())
+            continue;
+        if(paramType->isStructTy())
         {
-            reportError(node->line,
-                        "thread_spawn arguments must be integer types");
-            return nullptr;
+            auto* structType = llvm::cast<llvm::StructType>(paramType);
+            std::string structName = structType->getName().str();
+            auto memIt = structMembers.find(structName);
+            int rawIndex = -1;
+            if(memIt != structMembers.end())
+            {
+                for(size_t m = 0; m < memIt->second.size(); ++m)
+                {
+                    if(memIt->second[m].first == "raw")
+                    {
+                        rawIndex = static_cast<int>(m);
+                        break;
+                    }
+                }
+            }
+            if(rawIndex >= 0)
+                continue;
         }
+        reportError(node->line,
+                    "thread_spawn arguments must be integer or handle types");
+        return nullptr;
     }
 
     initializePthreadFunctions();
@@ -3812,18 +3973,38 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                 llvm::Type* expectedType =
                     targetFunc->getFunctionType()->getParamType(i);
                 llvm::Value* callArg = argVal;
-                if(expectedType != int64Type)
+                if(expectedType->isIntegerTy())
                 {
-                    unsigned srcBits = int64Type->getIntegerBitWidth();
-                    unsigned dstBits = expectedType->getIntegerBitWidth();
-                    if(srcBits > dstBits)
-                        callArg = builder.CreateTrunc(callArg, expectedType,
-                                                      "thread.trunc");
-                    else if(srcBits < dstBits)
-                        callArg = builder.CreateSExt(callArg, expectedType,
-                                                     "thread.sext");
+                    if(expectedType != int64Type)
+                    {
+                        unsigned srcBits = int64Type->getIntegerBitWidth();
+                        unsigned dstBits = expectedType->getIntegerBitWidth();
+                        if(srcBits > dstBits)
+                            callArg = builder.CreateTrunc(
+                                callArg, expectedType, "thread.trunc");
+                        else if(srcBits < dstBits)
+                            callArg = builder.CreateSExt(
+                                callArg, expectedType, "thread.sext");
+                    }
+                    callArgs.push_back(callArg);
                 }
-                callArgs.push_back(callArg);
+                else if(expectedType->isStructTy())
+                {
+                    auto* structType =
+                        llvm::cast<llvm::StructType>(expectedType);
+                    std::string structName = structType->getName().str();
+                    llvm::Value* handleVal =
+                        buildHandleValue(structName, callArg, node->line);
+                    if(!handleVal)
+                        return nullptr;
+                    callArgs.push_back(handleVal);
+                }
+                else
+                {
+                    reportError(node->line,
+                                "thread_spawn arg type unsupported");
+                    return nullptr;
+                }
             }
             builder.CreateCall(targetFunc, callArgs);
             builder.CreateCall(freeFunc, {wrapperFunc->getArg(0)});
@@ -3869,16 +4050,51 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                 generateExpression(node->arguments[i + 1]);
             if(!rawArg)
                 return nullptr;
-            if(!rawArg->getType()->isIntegerTy())
+            if(rawArg->getType()->isIntegerTy())
+            {
+                if(rawArg->getType() != int64Type)
+                {
+                    rawArg = builder.CreateSExt(rawArg, int64Type,
+                                                "thread.argsext");
+                }
+            }
+            else if(rawArg->getType()->isStructTy())
+            {
+                auto* structType = llvm::cast<llvm::StructType>(
+                    rawArg->getType());
+                std::string structName = structType->getName().str();
+                auto memIt = structMembers.find(structName);
+                int rawIndex = -1;
+                if(memIt != structMembers.end())
+                {
+                    for(size_t m = 0; m < memIt->second.size(); ++m)
+                    {
+                        if(memIt->second[m].first == "raw")
+                        {
+                            rawIndex = static_cast<int>(m);
+                            break;
+                        }
+                    }
+                }
+                if(rawIndex < 0)
+                {
+                    reportError(node->line,
+                                "thread_spawn handle arg missing raw field");
+                    return nullptr;
+                }
+                rawArg = builder.CreateExtractValue(rawArg, rawIndex,
+                                                   "thread.handle.raw");
+                if(rawArg->getType() != int64Type)
+                {
+                    rawArg = builder.CreateSExt(rawArg, int64Type,
+                                                "thread.argsext");
+                }
+            }
+            else
             {
                 reportError(node->line,
-                            "thread_spawn arguments must be integer");
+                            "thread_spawn arguments must be integer or handle");
                 return nullptr;
-            }
-            if(rawArg->getType() != int64Type)
-            {
-                rawArg = builder.CreateSExt(rawArg, int64Type,
-                                            "thread.argsext");
             }
             llvm::Value* offset = llvm::ConstantInt::get(
                 int64Type, static_cast<uint64_t>(i * 8), false);
@@ -3903,7 +4119,14 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 
     llvm::Value* threadVal =
         builder.CreateLoad(ptrType, threadHandle, "thread.value");
-    return builder.CreatePtrToInt(threadVal, int64Type, "thread.handle_i64");
+    llvm::Value* rawHandle =
+        builder.CreatePtrToInt(threadVal, int64Type, "thread.handle_i64");
+
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Thread"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    return buildHandleValue(handleTypeName, rawHandle, node->line);
 }
 
 llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
@@ -3924,22 +4147,14 @@ llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Thread"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
         return nullptr;
-
-    if(!handleVal->getType()->isIntegerTy())
-    {
-        reportError(node->line,
-                    "thread_join expects an integer thread handle");
-        return nullptr;
-    }
-
-    if(handleVal->getType() != int64Type)
-    {
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "thread.sext");
-    }
 
     llvm::Value* threadPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "thread.ptr");
@@ -3954,6 +4169,131 @@ llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
 
     return builder.CreateCall(pthreadJoinFunc, {threadPtr, nullPtr},
                               "thread.join");
+}
+
+llvm::Value* CodeGenerator::buildHandleValue(const std::string& handleTypeName,
+                                              llvm::Value* rawHandle, int line)
+{
+    if(!rawHandle)
+        return nullptr;
+
+    llvm::StructType* handleType = getStructType(handleTypeName);
+    if(!handleType)
+    {
+        reportError(line, "unknown handle type: " + handleTypeName);
+        return nullptr;
+    }
+
+    auto memIt = structMembers.find(handleTypeName);
+    if(memIt == structMembers.end())
+    {
+        reportError(line, "unknown handle struct members: " + handleTypeName);
+        return nullptr;
+    }
+
+    int rawIndex = -1;
+    for(size_t i = 0; i < memIt->second.size(); ++i)
+    {
+        if(memIt->second[i].first == "raw")
+        {
+            rawIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    if(rawIndex < 0)
+    {
+        reportError(line, "handle type missing raw field: " + handleTypeName);
+        return nullptr;
+    }
+
+    llvm::Type* expectedType = handleType->getElementType(rawIndex);
+    llvm::Value* rawVal = rawHandle;
+    if(rawVal->getType() != expectedType)
+    {
+        if(rawVal->getType()->isIntegerTy() && expectedType->isIntegerTy())
+        {
+            unsigned srcBits = rawVal->getType()->getIntegerBitWidth();
+            unsigned dstBits = expectedType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+                rawVal =
+                    builder.CreateTrunc(rawVal, expectedType, "handle.trunc");
+            else if(srcBits < dstBits)
+                rawVal =
+                    builder.CreateSExt(rawVal, expectedType, "handle.sext");
+        }
+        else
+        {
+            reportError(line, "handle raw type mismatch");
+            return nullptr;
+        }
+    }
+
+    llvm::Value* handleVal = llvm::Constant::getNullValue(handleType);
+    return builder.CreateInsertValue(handleVal, rawVal,
+                                     static_cast<unsigned>(rawIndex),
+                                     "handle.raw");
+}
+
+llvm::Value* CodeGenerator::extractHandleValue(ExpressionNode* expr,
+                                                const std::string& expectedHandleType,
+                                                int line)
+{
+    llvm::Value* val = generateExpression(expr);
+    if(!val)
+        return nullptr;
+
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+    llvm::Type* valType = val->getType();
+
+    if(valType->isIntegerTy())
+    {
+        if(valType != int64Type)
+            val = builder.CreateSExt(val, int64Type, "handle.sext");
+        return val;
+    }
+
+    if(valType->isStructTy())
+    {
+        auto* structType = llvm::cast<llvm::StructType>(valType);
+        std::string structName = structType->getName().str();
+        if(!expectedHandleType.empty() && structName != expectedHandleType)
+        {
+            reportError(line, "handle type mismatch: expected " +
+                                   expectedHandleType + ", got " + structName);
+            return nullptr;
+        }
+
+        auto memIt = structMembers.find(structName);
+        if(memIt == structMembers.end())
+        {
+            reportError(line, "unknown handle struct members: " + structName);
+            return nullptr;
+        }
+        int rawIndex = -1;
+        for(size_t i = 0; i < memIt->second.size(); ++i)
+        {
+            if(memIt->second[i].first == "raw")
+            {
+                rawIndex = static_cast<int>(i);
+                break;
+            }
+        }
+        if(rawIndex < 0)
+        {
+            reportError(line, "handle type missing raw field: " + structName);
+            return nullptr;
+        }
+        llvm::Value* rawVal =
+            builder.CreateExtractValue(val, rawIndex, "handle.raw");
+        if(rawVal->getType() != int64Type)
+            rawVal =
+                builder.CreateSExt(rawVal, int64Type, "handle.sext");
+        return rawVal;
+    }
+
+    reportError(line, "expected handle or integer value");
+    return nullptr;
 }
 
 llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
@@ -3986,7 +4326,13 @@ llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
 #endif
         );
     builder.CreateCall(pthreadMutexInitFunc, {mem, nullPtr});
-    return builder.CreatePtrToInt(mem, int64Type, "mutex.handle");
+    llvm::Value* rawHandle =
+        builder.CreatePtrToInt(mem, int64Type, "mutex.handle_i64");
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Mutex"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    return buildHandleValue(handleTypeName, rawHandle, node->line);
 }
 
 llvm::Value* CodeGenerator::generateMutexLock(FunctionCallNode* node)
@@ -4007,17 +4353,14 @@ llvm::Value* CodeGenerator::generateMutexLock(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Mutex"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "mutex_lock expects integer handle");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "mutex.sext");
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
@@ -4043,17 +4386,14 @@ llvm::Value* CodeGenerator::generateMutexUnlock(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Mutex"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "mutex_unlock expects integer handle");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "mutex.sext");
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
@@ -4080,17 +4420,14 @@ llvm::Value* CodeGenerator::generateMutexDestroy(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Mutex"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "mutex_destroy expects integer handle");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "mutex.sext");
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
@@ -4142,7 +4479,13 @@ llvm::Value* CodeGenerator::generateAtomicI64New(FunctionCallNode* node)
 #else
     builder.CreateStore(initVal, mem);
 #endif
-    return builder.CreatePtrToInt(mem, int64Type, "atomic.handle");
+    llvm::Value* rawHandle =
+        builder.CreatePtrToInt(mem, int64Type, "atomic.handle_i64");
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    return buildHandleValue(handleTypeName, rawHandle, node->line);
 }
 
 llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
@@ -4161,17 +4504,14 @@ llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "atomic_i64_load expects integer handle");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
 
     llvm::Value* ptr =
         builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
@@ -4201,19 +4541,15 @@ llvm::Value* CodeGenerator::generateAtomicI64Store(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     llvm::Value* valueVal = generateExpression(node->arguments[1]);
     if(!handleVal || !valueVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy() ||
-       !valueVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "atomic_i64_store expects integer arguments");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
     if(valueVal->getType() != int64Type)
         valueVal =
             builder.CreateSExt(valueVal, int64Type, "atomic.sextval");
@@ -4246,19 +4582,15 @@ llvm::Value* CodeGenerator::generateAtomicI64Add(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     llvm::Value* addVal = generateExpression(node->arguments[1]);
     if(!handleVal || !addVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy() ||
-       !addVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "atomic_i64_add expects integer arguments");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
     if(addVal->getType() != int64Type)
         addVal = builder.CreateSExt(addVal, int64Type, "atomic.sextval");
 
@@ -4292,17 +4624,14 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* handleVal = generateExpression(node->arguments[0]);
+    std::vector<TypeNode*> typeArgs;
+    typeArgs.push_back(new StructTypeRefNode("Atomic64"));
+    std::string handleTypeName =
+        getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    llvm::Value* handleVal =
+        extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
         return nullptr;
-    if(!handleVal->getType()->isIntegerTy())
-    {
-        reportError(node->line, "atomic_i64_free expects integer handle");
-        return nullptr;
-    }
-    if(handleVal->getType() != int64Type)
-        handleVal =
-            builder.CreateSExt(handleVal, int64Type, "atomic.sext");
 
     llvm::Value* ptr =
         builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");

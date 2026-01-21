@@ -951,6 +951,10 @@ private:
         "else",
         "match",
         "return",
+        "Handle",
+        "Thread",
+        "Mutex",
+        "Atomic64",
     };
 
     void add_completion(std::vector<CompletionCandidate>& out,

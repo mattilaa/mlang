@@ -3,7 +3,7 @@ fn worker() -> void {
 }
 
 fn main() -> int {
-    let handle: i64 = thread_spawn(worker);
+    let handle: Handle<Thread> = thread_spawn(worker);
     let status: int = thread_join(handle);
     println!("join status = {}", status);
     return 0;

@@ -7,10 +7,10 @@ fn worker(id: i64) -> void {
 }
 
 fn main() -> int {
-    let h1: i64 = thread_spawn(worker, 1);
-    let h2: i64 = thread_spawn(worker, 2);
-    let h3: i64 = thread_spawn(worker, 3);
-    let h4: i64 = thread_spawn(worker, 4);
+    let h1: Handle<Thread> = thread_spawn(worker, 1);
+    let h2: Handle<Thread> = thread_spawn(worker, 2);
+    let h3: Handle<Thread> = thread_spawn(worker, 3);
+    let h4: Handle<Thread> = thread_spawn(worker, 4);
 
     thread_join(h1);
     thread_join(h2);
