@@ -1,0 +1,35 @@
+// Runtime builtins (for LSP navigation).
+// These declarations are not required for compilation.
+
+// NOTE: Handle<T> is generic in the language; the placeholder here is
+// non-generic so the LSP can parse and index this file.
+pub struct Handle {
+    var raw: i64;
+};
+
+pub struct Thread {
+    var _pad: i8;
+};
+
+pub struct Mutex {
+    var _pad: i8;
+};
+
+pub struct Atomic64 {
+    var _pad: i8;
+};
+
+extern fn thread_spawn(func: i64, arg1: i64, arg2: i64, arg3: i64, arg4: i64)
+    -> Handle<Thread>;
+extern fn thread_join(handle: Handle<Thread>) -> int;
+
+extern fn mutex_create() -> Handle<Mutex>;
+extern fn mutex_lock(handle: Handle<Mutex>) -> int;
+extern fn mutex_unlock(handle: Handle<Mutex>) -> int;
+extern fn mutex_destroy(handle: Handle<Mutex>) -> int;
+
+extern fn atomic_i64_new(initial: i64) -> Handle<Atomic64>;
+extern fn atomic_i64_load(handle: Handle<Atomic64>) -> i64;
+extern fn atomic_i64_store(handle: Handle<Atomic64>, value: i64) -> i64;
+extern fn atomic_i64_add(handle: Handle<Atomic64>, delta: i64) -> i64;
+extern fn atomic_i64_free(handle: Handle<Atomic64>) -> void;

@@ -924,6 +924,85 @@ private:
         return std::nullopt;
     }
 
+    std::optional<Location> find_symbol_in_workspace(const std::string& name)
+    {
+        for(auto& [uri, info] : files)
+        {
+            if(auto loc = find_symbol_in_file(info, name))
+                return loc;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<Location>
+    find_runtime_builtin_location(const std::string& name)
+    {
+        if(rootPath.empty())
+            return std::nullopt;
+
+        std::filesystem::path docsPath =
+            std::filesystem::path(rootPath) / "docs" /
+            "runtime_builtins.mla";
+        if(!std::filesystem::exists(docsPath))
+            return std::nullopt;
+
+        std::string text = read_file(docsPath.string());
+        if(text.empty())
+            return std::nullopt;
+        auto lines = split_lines(text);
+
+        auto find_struct = [&](const std::string& typeName)
+            -> std::optional<Location>
+        {
+            return find_definition_location(
+                lines, 0, -1,
+                std::regex("(?:pub\\s+)?struct\\s+(" + typeName + ")\\b"));
+        };
+
+        auto find_extern_fn = [&](const std::string& fnName)
+            -> std::optional<Location>
+        {
+            return find_definition_location(
+                lines, 0, -1,
+                std::regex("\\bextern\\s+fn\\s+(" + fnName + ")\\b"));
+        };
+
+        static const std::unordered_set<std::string> typeNames = {
+            "Handle", "Thread", "Mutex", "Atomic64"};
+        if(typeNames.count(name))
+        {
+            if(auto loc = find_struct(name))
+            {
+                loc->uri = path_to_uri(docsPath.string());
+                return loc;
+            }
+        }
+
+        static const std::unordered_set<std::string> funcNames = {
+            "thread_spawn",
+            "thread_join",
+            "mutex_create",
+            "mutex_lock",
+            "mutex_unlock",
+            "mutex_destroy",
+            "atomic_i64_new",
+            "atomic_i64_load",
+            "atomic_i64_store",
+            "atomic_i64_add",
+            "atomic_i64_free",
+        };
+        if(funcNames.count(name))
+        {
+            if(auto loc = find_extern_fn(name))
+            {
+                loc->uri = path_to_uri(docsPath.string());
+                return loc;
+            }
+        }
+
+        return std::nullopt;
+    }
+
     static bool starts_with(const std::string& value,
                             const std::string& prefix)
     {
@@ -1201,6 +1280,16 @@ private:
             root = std::filesystem::current_path().string();
         rootPath = root;
         scan_workspace(rootPath);
+
+        std::filesystem::path docsPath =
+            std::filesystem::path(rootPath) / "docs" /
+            "runtime_builtins.mla";
+        if(std::filesystem::exists(docsPath))
+        {
+            std::string text = read_file(docsPath.string());
+            if(!text.empty())
+                index_document(path_to_uri(docsPath.string()), text);
+        }
         cHeadersLoaded = false;
         cHeaderDebug = std::getenv("MLANG_LSP_DEBUG") != nullptr;
         if(const char* logPath = std::getenv("MLANG_LSP_DEBUG_LOG"))
@@ -2056,6 +2145,12 @@ private:
                     return location_to_json(*loc);
             }
         }
+
+        if(auto loc = find_runtime_builtin_location(word))
+            return location_to_json(*loc);
+
+        if(auto loc = find_symbol_in_workspace(word))
+            return location_to_json(*loc);
 
         return nullptr;
     }
