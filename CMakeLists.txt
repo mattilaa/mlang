@@ -212,3 +212,18 @@ install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlang_lsp/mlang_lsp.py
 
 install(TARGETS mlang-lsp
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# ============================================================================
+# Documentation (Doxygen)
+# ============================================================================
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_SOURCE_DIR}/docs/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating documentation with Doxygen"
+        VERBATIM
+    )
+else()
+    message(STATUS "Doxygen not found; docs target will not be available")
+endif()
