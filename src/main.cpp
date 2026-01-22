@@ -27,6 +27,7 @@ extern "C"
 void printUsage(const char* programName)
 {
     std::cerr << "Usage: " << programName << " [options] <input_file>\n"
+              << "Version: " << MLANG_VERSION << "\n"
               << "\nOptions:\n"
               << "  -o <file>     Output file name (default: a.out)\n"
               << "  -c            Compile to object file only (don't link)\n"
@@ -40,6 +41,7 @@ void printUsage(const char* programName)
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -v            Verbose output\n"
+              << "  --version     Show version and exit\n"
               << "  -h, --help    Show this help message\n"
               << "\nPackage manager:\n"
               << "  " << programName << " pkg init\n"
@@ -503,7 +505,7 @@ static int handle_pkg_command(int argc, char** argv)
         }
         out << "[package]\n"
             << "name = \"" << name << "\"\n"
-            << "version = \"0.1.0\"\n"
+            << "version = \"" << MLANG_VERSION << "\"\n"
             << "entry = \"src/main.mla\"\n\n"
             << "[dependencies]\n\n"
             << "[c-dependencies]\n";
@@ -695,6 +697,15 @@ static int handle_pkg_command(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+#ifndef MLANG_VERSION
+#define MLANG_VERSION "0.1.0"
+#endif
+
+    if(argc >= 2 && std::string(argv[1]) == "--version")
+    {
+        std::cout << "mlang " << MLANG_VERSION << "\n";
+        return 0;
+    }
     if(argc < 2)
     {
         printUsage(argv[0]);
@@ -723,6 +734,11 @@ int main(int argc, char** argv)
         if(arg == "-h" || arg == "--help")
         {
             printUsage(argv[0]);
+            return 0;
+        }
+        else if(arg == "--version")
+        {
+            std::cout << "mlang " << MLANG_VERSION << "\n";
             return 0;
         }
         else if(arg == "-o" && i + 1 < argc)

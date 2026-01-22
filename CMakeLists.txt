@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
-project(MLang)
+set(MLANG_VERSION_MAJOR 0)
+set(MLANG_VERSION_MINOR 1)
+set(MLANG_VERSION_BUILD 0 CACHE STRING "Build number")
+project(MLang VERSION ${MLANG_VERSION_MAJOR}.${MLANG_VERSION_MINOR}.${MLANG_VERSION_BUILD})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -131,6 +134,7 @@ set(SOURCE_FILES
 )
 
 add_executable(mlang ${SOURCE_FILES} ${HEADER_FILES})
+target_compile_definitions(mlang PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 
 # Add dependencies to ensure Flex and Bison run before building the executable
 add_dependencies(mlang ParserTarget LexerTarget)
