@@ -119,6 +119,12 @@ static std::string read_file(const std::string& path)
                        std::istreambuf_iterator<char>());
 }
 
+static bool is_mlang_source_path(const std::filesystem::path& path)
+{
+    auto ext = path.extension();
+    return ext == ".mla" || ext == ".mlastub";
+}
+
 static std::string path_to_uri(const std::string& path)
 {
     std::string out = "file://";
@@ -822,7 +828,7 @@ private:
                         abs =
                             (std::filesystem::path(rootPath) / filePath).string();
                     }
-                    if(std::filesystem::path(abs).extension() != ".mla")
+                    if(!is_mlang_source_path(std::filesystem::path(abs)))
                         continue;
                     std::string content = read_file(abs);
                     if(!content.empty())
@@ -846,7 +852,7 @@ private:
                 else if(!rootPath.empty())
                     abs = (std::filesystem::path(rootPath) / filePath).string();
             }
-            if(std::filesystem::path(abs).extension() != ".mla")
+            if(!is_mlang_source_path(std::filesystem::path(abs)))
                 continue;
             std::string content = read_file(abs);
             if(!content.empty())
@@ -942,7 +948,7 @@ private:
 
         std::filesystem::path docsPath =
             std::filesystem::path(rootPath) / "docs" /
-            "runtime_builtins.mla";
+            "runtime_builtins.mlastub";
         if(!std::filesystem::exists(docsPath))
             return std::nullopt;
 
@@ -1283,7 +1289,7 @@ private:
 
         std::filesystem::path docsPath =
             std::filesystem::path(rootPath) / "docs" /
-            "runtime_builtins.mla";
+            "runtime_builtins.mlastub";
         if(std::filesystem::exists(docsPath))
         {
             std::string text = read_file(docsPath.string());
@@ -1321,7 +1327,7 @@ private:
             }
             if(!it->is_regular_file(ec))
                 continue;
-            if(it->path().extension() != ".mla")
+            if(!is_mlang_source_path(it->path()))
                 continue;
             std::string path = it->path().string();
             std::string text = read_file(path);

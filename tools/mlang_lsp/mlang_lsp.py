@@ -49,6 +49,7 @@ LSP_SYMBOL_KIND_STRUCT = 23
 
 
 WORD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+MLANG_SOURCE_EXTS = (".mla", ".mlastub")
 
 MLANG_FORMAT_DIR = os.path.join(os.path.dirname(__file__), "..", "mlang_format")
 if MLANG_FORMAT_DIR not in sys.path:
@@ -286,11 +287,12 @@ class MlangLspServer:
                 d for d in dirnames if d not in {".git", "build", "out", "dist"}
             ]
             for fname in filenames:
-                if not fname.endswith(".mla"):
+                if not fname.endswith(MLANG_SOURCE_EXTS):
                     continue
                 path = os.path.join(dirpath, fname)
                 uri = self._path_to_uri(path)
-                self.file_by_stem[os.path.splitext(fname)[0]] = path
+                if fname.endswith(".mla"):
+                    self.file_by_stem[os.path.splitext(fname)[0]] = path
                 text = self._read_path_text(path)
                 if text is None:
                     continue
@@ -753,7 +755,7 @@ class MlangLspServer:
                     d for d in dirnames if d not in {".git", "build", "out", "dist"}
                 ]
                 for fname in filenames:
-                    if not fname.endswith(".mla"):
+                    if not fname.endswith(MLANG_SOURCE_EXTS):
                         continue
                     path = os.path.join(dirpath, fname)
                     uri = self._path_to_uri(path)
