@@ -69,3 +69,15 @@ Enable debug-only logging (`debug!`) via:
 ```sh
 mlang --debug main.mla
 ```
+
+## Package Manager (C++)
+Example of calling the package manager from code:
+
+```cpp
+#include "package_manager.h"
+
+int main(int argc, char** argv) {
+    PackageManager pkg;
+    return pkg.run(argc, argv);
+}
+```

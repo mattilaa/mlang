@@ -75,6 +75,7 @@ find_package(BISON REQUIRED)
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h
     ${CMAKE_SOURCE_DIR}/include/ir.h
+    ${CMAKE_SOURCE_DIR}/include/package_manager.h
 )
 
 # Specify the full path to the lexer and parser files
@@ -127,6 +128,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ir.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/package_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
     ${LEXER_OUT}
