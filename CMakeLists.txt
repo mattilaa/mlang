@@ -165,9 +165,9 @@ llvm_map_components_to_libnames(llvm_libs
 target_link_libraries(mlang ${llvm_libs})
 
 # ============================================================================
-# mlang-lsp (C++ LSP server)
+# mlangd (C++ LSP server)
 # ============================================================================
-add_executable(mlang-lsp
+add_executable(mlangd
     tools/mlang_lsp_cpp/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
@@ -176,11 +176,11 @@ add_executable(mlang-lsp
     ${PARSER_OUT}
 )
 
-add_dependencies(mlang-lsp ParserTarget LexerTarget)
-target_include_directories(mlang-lsp PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(mlang-lsp PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(mlang-lsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mlang-lsp ${llvm_libs})
+add_dependencies(mlangd ParserTarget LexerTarget)
+target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mlangd ${llvm_libs})
 
 # Print debug information
 message(STATUS "LEXER_OUT: ${LEXER_OUT}")
@@ -212,9 +212,12 @@ endif()
 # LSP script install (user-level install via CMAKE_INSTALL_PREFIX)
 # ============================================================================
 install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlang_lsp/mlang_lsp.py
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang-lsp)
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlangd)
 
-install(TARGETS mlang-lsp
+install(TARGETS mlang
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ============================================================================

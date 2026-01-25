@@ -485,6 +485,7 @@ private:
                 {"str8", "mlang_str8"},
                 {"str16", "mlang_str16"},
             };
+            add_sdk_include_dirs();
             resolve_c_headers();
             if(cHeaderDebug)
                 log_c_headers();
@@ -638,7 +639,7 @@ private:
 
     void log_c_headers() const
     {
-        std::string msg = "[mlang-lsp] c headers: ";
+        std::string msg = "[mlangd] c headers: ";
         for(size_t i = 0; i < cHeaderPaths.size(); ++i)
         {
             if(i)
@@ -690,7 +691,7 @@ private:
                 ++lineNo;
             }
         }
-        debug_log("[mlang-lsp] c symbol not found: " + name);
+        debug_log("[mlangd] c symbol not found: " + name);
         return std::nullopt;
     }
 
@@ -724,7 +725,7 @@ private:
                 ++lineNo;
             }
         }
-        debug_log("[mlang-lsp] c typedef not found: " + name);
+        debug_log("[mlangd] c typedef not found: " + name);
         return std::nullopt;
     }
 
@@ -735,7 +736,7 @@ private:
         auto it = cTypeMap.find(typeName);
         if(it == cTypeMap.end())
         {
-            debug_log("[mlang-lsp] c type not mapped: " + typeName);
+            debug_log("[mlangd] c type not mapped: " + typeName);
             return std::nullopt;
         }
         if(auto loc = find_c_typedef_location(it->second))

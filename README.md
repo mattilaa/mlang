@@ -9,16 +9,36 @@ python3 tools/mlang_lsp/mlang_lsp.py --stdio
 ```
 
 ## C++ LSP
-C++ LSP server target is `mlang-lsp` (stdio).
+C++ LSP server target is `mlangd` (stdio).
 
 ```sh
 cmake -S . -B build
 cmake --build build
-./build/mlang-lsp --stdio
+./build/mlangd --stdio
 ```
 
 Use with UVim:
 
 ```sh
-uvim --mlang-lsp --mlang-lsp-path ./build/mlang-lsp
+uvim --mlang-lsp --mlang-lsp-path ./build/mlangd
+```
+
+## Build + Install
+Build and install both `mlang` and `mlangd`:
+
+```sh
+./scripts/build_install.sh
+```
+
+Build and install only `mlangd`:
+
+```sh
+./scripts/build_install_lsp.sh
+```
+
+Use Make instead of Ninja:
+
+```sh
+./scripts/build_install.sh --use-make
+./scripts/build_install_lsp.sh --use-make
 ```
