@@ -41,6 +41,7 @@ void printUsage(const char* programName)
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -v            Verbose output\n"
+              << "  --debug       Enable debug-only logging\n"
               << "  --version     Show version and exit\n"
               << "  -h, --help    Show this help message\n"
               << "\nPackage manager:\n"
@@ -725,6 +726,7 @@ int main(int argc, char** argv)
     bool emitBitcode = false;
     int optimizationLevel = 2;
     bool verbose = false;
+    bool debugMode = false;
     std::vector<std::string> linkArgs;
 
     for(int i = 1; i < argc; ++i)
@@ -796,6 +798,10 @@ int main(int argc, char** argv)
         else if(arg == "-v")
         {
             verbose = true;
+        }
+        else if(arg == "--debug")
+        {
+            debugMode = true;
         }
         else if(arg[0] != '-')
         {
@@ -915,7 +921,7 @@ int main(int argc, char** argv)
         }
 
         // Initialize code generator
-        CodeGenerator generator(context, builder, module);
+        CodeGenerator generator(context, builder, module, debugMode);
 
         // Generate LLVM IR
         if(auto* program = dynamic_cast<ProgramNode*>(programRoot))

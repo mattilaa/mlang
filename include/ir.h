@@ -16,10 +16,10 @@ class CodeGenerator
 {
 public:
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
-                  std::unique_ptr<llvm::Module>& m)
+                  std::unique_ptr<llvm::Module>& m, bool debug = false)
         : context(ctx), builder(b), module(m), hasError(false),
           stdioInitialized(false), stdlibInitialized(false),
-          pthreadInitialized(false)
+          pthreadInitialized(false), debugEnabled(debug)
     {
     }
 
@@ -52,7 +52,9 @@ private:
     std::map<std::string, std::string> structVariableTypes;
     // Track enum variants: enum name -> variant name -> value
     std::map<std::string, std::map<std::string, int64_t>> enumValues;
+    std::set<std::string> debugStructs;
     bool hasError;
+    bool debugEnabled;
 
     // Visibility tracking for functions
     // Maps function name -> (isPublic, sourceModule)
@@ -66,11 +68,14 @@ private:
     bool stdioInitialized;
     llvm::FunctionCallee printfFunc;
     llvm::FunctionCallee fprintfFunc;
+    llvm::FunctionCallee snprintfFunc;
     llvm::Value* stderrPtr;
     // Stdlib support
     bool stdlibInitialized;
     llvm::FunctionCallee mallocFunc;
     llvm::FunctionCallee freeFunc;
+    llvm::FunctionCallee strcmpFunc;
+    llvm::FunctionCallee abortFunc;
     // Pthread support
     bool pthreadInitialized;
     llvm::FunctionCallee pthreadCreateFunc;
@@ -118,10 +123,12 @@ private:
     // Stdio initialization
     void initializeStdioFunctions();
     void initializeStdlibFunctions();
+    void initializeFormatFunctions();
     void initializePthreadFunctions();
     std::string convertFormatString(const std::string& mlaFormat,
                                     const std::vector<ExpressionNode*>& args,
-                                    std::vector<llvm::Value*>& argValues);
+                                    std::vector<llvm::Value*>& argValues,
+                                    int line);
 
     // Code generation for different node types
     llvm::Function* generateFunctionDeclaration(FunctionDefNode* node);
@@ -137,6 +144,8 @@ private:
     void generateIfStatement(IfNode* node);
     void generateForStatement(ForNode* node);
     void generatePrintStatement(PrintNode* node);
+    llvm::Value* generateFormatExpression(FormatNode* node);
+    void generateAssertEq(AssertEqNode* node);
     void generateBreakStatement(BreakNode* node);
     void generateContinueStatement(ContinueNode* node);
 
@@ -176,6 +185,15 @@ private:
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);
     llvm::Value* generateTupleAccess(TupleAccessNode* node);
     llvm::Value* generateStructLiteral(StructLiteralNode* node);
+    llvm::Value* buildDebugString(ExpressionNode* expr, bool pretty, int line);
+    llvm::Value* buildStructDebugString(llvm::Value* structVal,
+                                        const std::string& structName,
+                                        bool pretty, int line);
+    bool isStringExpression(ExpressionNode* expr) const;
+    std::string getStructTypeName(ExpressionNode* expr) const;
+    void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
+                           bool pretty, std::string& cFormat,
+                           std::vector<llvm::Value*>& argValues, int line);
 
     void generateEnumDefinition(EnumDefNode* node);
     void ensureResultBuiltin(ProgramNode* program);

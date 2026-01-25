@@ -42,3 +42,30 @@ Use Make instead of Ninja:
 ./scripts/build_install.sh --use-make
 ./scripts/build_install_lsp.sh --use-make
 ```
+
+## Debug Formatting + Assertions
+Derive Debug for structs, use `format!` with `{:?}`/`{:#?}`, and `assert_eq!`:
+
+```mla
+#[derive(Debug)]
+struct Point {
+    var x: i32;
+    var y: i32;
+};
+
+fn main() -> i32 {
+    let origin: Point = Point { x: 0, y: 0 };
+    let expected: string = "The origin is: Point { x: 0, y: 0 }";
+
+    assert_eq!(format!("The origin is: {origin}"), expected);
+    println!(origin);
+    debug!("origin = {origin}");
+    return 0;
+}
+```
+
+Enable debug-only logging (`debug!`) via:
+
+```sh
+mlang --debug main.mla
+```

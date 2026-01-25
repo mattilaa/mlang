@@ -130,6 +130,10 @@ static int is_generic_struct_literal_start()
 "print!"        { return PRINT; }
 "eprintln!"     { return EPRINTLN; }
 "eprint!"       { return EPRINT; }
+"debug!"        { return DEBUGPRINT; }
+"format!"       { return FORMAT; }
+"assert_eq!"    { return ASSERT_EQ; }
+"#[derive(Debug)]" { return DERIVE_DEBUG; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }

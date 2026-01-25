@@ -652,14 +652,40 @@ public:
     PrintKind kind;
     std::string formatString;
     std::vector<ExpressionNode*> arguments;
+    bool debugOnly = false;
 
-    PrintNode(PrintKind k, const std::string& fmt) : kind(k), formatString(fmt)
+    PrintNode(PrintKind k, const std::string& fmt, bool debug = false)
+        : kind(k), formatString(fmt), debugOnly(debug)
     {
     }
     void addArgument(ExpressionNode* arg)
     {
         arguments.push_back(arg);
     }
+    std::string toString() const override;
+};
+
+class FormatNode : public ExpressionNode
+{
+public:
+    std::string formatString;
+    std::vector<ExpressionNode*> arguments;
+
+    FormatNode(const std::string& fmt) : formatString(fmt) {}
+    void addArgument(ExpressionNode* arg)
+    {
+        arguments.push_back(arg);
+    }
+    std::string toString() const override;
+};
+
+class AssertEqNode : public StatementNode
+{
+public:
+    ExpressionNode* left;
+    ExpressionNode* right;
+
+    AssertEqNode(ExpressionNode* l, ExpressionNode* r) : left(l), right(r) {}
     std::string toString() const override;
 };
 
@@ -728,14 +754,17 @@ public:
     std::string baseName;
     StructMemberListNode* members;
     bool isPublic;
+    bool deriveDebug = false;
     std::string sourceModule; // Module this struct was defined in (for
                               // visibility checks)
     std::vector<std::string>
         typeParams; // Generic type parameters like T, U, etc.
 
     StructDefNode(const std::string& n, const std::string& b,
-                  StructMemberListNode* m, bool pub = false)
-        : name(n), baseName(b), members(m), isPublic(pub)
+                  StructMemberListNode* m, bool pub = false,
+                  bool derive = false)
+        : name(n), baseName(b), members(m), isPublic(pub),
+          deriveDebug(derive)
     {
     }
     std::string toString() const override;
@@ -1011,7 +1040,7 @@ ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
-                           int is_public);
+                           int is_public, int derive_debug);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
@@ -1039,8 +1068,12 @@ ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
+ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
+ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
 ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
+ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
+ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* create_generic_list_type(ASTNode* element_type);
 ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
 ASTNode* create_map_literal(ASTNode* entries);
@@ -1080,7 +1113,7 @@ ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
 ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
-                                   int is_public);
+                                   int is_public, int derive_debug);
 ASTNode* create_impl_block(char* struct_name, ASTNode* type_params);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
 ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args,

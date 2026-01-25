@@ -1,4 +1,5 @@
 #include "ir.h"
+#include <cctype>
 #include <functional>
 #include <iostream>
 #include <llvm/Config/llvm-config.h>
@@ -189,6 +190,7 @@ void CodeGenerator::initializeStdioFunctions()
     llvm::Type* ptrType =
         llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
     // Declare printf: int printf(const char* format, ...)
     llvm::FunctionType* printfType =
@@ -203,6 +205,13 @@ void CodeGenerator::initializeStdioFunctions()
         true // variadic
     );
     fprintfFunc = module->getOrInsertFunction("fprintf", fprintfType);
+
+    // Declare snprintf: int snprintf(char* str, size_t size, const char* format, ...)
+    llvm::FunctionType* snprintfType = llvm::FunctionType::get(
+        llvm::Type::getInt32Ty(context), {ptrType, int64Type, ptrType},
+        true // variadic
+    );
+    snprintfFunc = module->getOrInsertFunction("snprintf", snprintfType);
 
     // Get stderr - platform specific
     // On macOS/Darwin, stderr is accessed via __stderrp
@@ -296,7 +305,21 @@ void CodeGenerator::initializeStdlibFunctions()
                                 false);
     freeFunc = module->getOrInsertFunction("free", freeType);
 
+    llvm::FunctionType* strcmpType =
+        llvm::FunctionType::get(intType, {ptrType, ptrType}, false);
+    strcmpFunc = module->getOrInsertFunction("strcmp", strcmpType);
+
+    llvm::FunctionType* abortType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
+    abortFunc = module->getOrInsertFunction("abort", abortType);
+
     stdlibInitialized = true;
+}
+
+void CodeGenerator::initializeFormatFunctions()
+{
+    initializeStdioFunctions();
+    initializeStdlibFunctions();
 }
 
 // Helper to get the TypeKind from an expression (for identifiers)
@@ -319,180 +342,282 @@ TypeNode::TypeKind getExpressionTypeKind(
 std::string
 CodeGenerator::convertFormatString(const std::string& mlaFormat,
                                    const std::vector<ExpressionNode*>& args,
-                                   std::vector<llvm::Value*>& argValues)
+                                   std::vector<llvm::Value*>& argValues,
+                                   int line)
 {
     std::string cFormat;
     size_t argIndex = 0;
 
+    auto trim = [](std::string s) {
+        size_t start = 0;
+        while(start < s.size() &&
+              std::isspace(static_cast<unsigned char>(s[start])))
+            ++start;
+        size_t end = s.size();
+        while(end > start &&
+              std::isspace(static_cast<unsigned char>(s[end - 1])))
+            --end;
+        return s.substr(start, end - start);
+    };
+
     for(size_t i = 0; i < mlaFormat.size(); ++i)
     {
         if(mlaFormat[i] == '{' && i + 1 < mlaFormat.size() &&
-           mlaFormat[i + 1] == '}')
-        {
-            // Found a {} placeholder
-            if(argIndex < args.size())
-            {
-                ExpressionNode* argExpr = args[argIndex];
-                llvm::Value* argVal = generateExpression(argExpr);
-                if(argVal)
-                {
-                    llvm::Type* argType = argVal->getType();
-                    TypeNode::TypeKind typeKind =
-                        getExpressionTypeKind(argExpr, variableTypes);
-                    bool isUnsigned = isUnsignedType(typeKind);
-
-                    // Determine format specifier based on type
-                    if(argType->isIntegerTy(1))
-                    {
-                        // Bool: convert to int for printing
-                        cFormat += "%d";
-                        llvm::Value* intVal = builder.CreateZExt(
-                            argVal, llvm::Type::getInt32Ty(context),
-                            "booltoInt");
-                        argValues.push_back(intVal);
-                    }
-                    else if(argType->isIntegerTy(8))
-                    {
-                        if(isUnsigned)
-                        {
-                            cFormat += "%u";
-                            llvm::Value* intVal = builder.CreateZExt(
-                                argVal, llvm::Type::getInt32Ty(context),
-                                "u8toInt");
-                            argValues.push_back(intVal);
-                        }
-                        else
-                        {
-                            cFormat += "%d";
-                            llvm::Value* intVal = builder.CreateSExt(
-                                argVal, llvm::Type::getInt32Ty(context),
-                                "i8toInt");
-                            argValues.push_back(intVal);
-                        }
-                    }
-                    else if(argType->isIntegerTy(16))
-                    {
-                        if(isUnsigned)
-                        {
-                            cFormat += "%u";
-                            llvm::Value* intVal = builder.CreateZExt(
-                                argVal, llvm::Type::getInt32Ty(context),
-                                "u16toInt");
-                            argValues.push_back(intVal);
-                        }
-                        else
-                        {
-                            cFormat += "%d";
-                            llvm::Value* intVal = builder.CreateSExt(
-                                argVal, llvm::Type::getInt32Ty(context),
-                                "i16toInt");
-                            argValues.push_back(intVal);
-                        }
-                    }
-                    else if(argType->isIntegerTy(32))
-                    {
-                        if(isUnsigned)
-                        {
-                            cFormat += "%u";
-                        }
-                        else
-                        {
-                            cFormat += "%d";
-                        }
-                        argValues.push_back(argVal);
-                    }
-                    else if(argType->isIntegerTy(64))
-                    {
-                        if(isUnsigned)
-                        {
-                            cFormat += "%llu";
-                        }
-                        else
-                        {
-                            cFormat += "%lld";
-                        }
-                        argValues.push_back(argVal);
-                    }
-                    else if(argType->isFloatTy())
-                    {
-                        // Float needs to be promoted to double for printf
-                        cFormat += "%f";
-                        llvm::Value* doubleVal = builder.CreateFPExt(
-                            argVal, llvm::Type::getDoubleTy(context),
-                            "floatToDouble");
-                        argValues.push_back(doubleVal);
-                    }
-                    else if(argType->isDoubleTy())
-                    {
-                        cFormat += "%f";
-                        argValues.push_back(argVal);
-                    }
-                    else if(argType->isPointerTy())
-                    {
-                        // Assume it's a string pointer
-                        cFormat += "%s";
-                        argValues.push_back(argVal);
-                    }
-                    else if(argType->isStructTy())
-                    {
-                        // Struct types cannot be printed directly
-                        std::string structName =
-                            argType->getStructName().str().empty()
-                                ? "anonymous struct"
-                                : argType->getStructName().str();
-                        std::cerr
-                            << "Error: cannot print struct type '" << structName
-                            << "' directly; access a specific field instead"
-                            << std::endl;
-                        hasError = true;
-                        cFormat += "%d"; // Placeholder to continue
-                        argValues.push_back(llvm::ConstantInt::get(
-                            context, llvm::APInt(32, 0)));
-                    }
-                    else
-                    {
-                        // Unknown type
-                        std::cerr << "Error: cannot print value of unknown type"
-                                  << std::endl;
-                        hasError = true;
-                        cFormat += "%d";
-                        argValues.push_back(argVal);
-                    }
-                }
-                argIndex++;
-            }
-            else
-            {
-                // More placeholders than arguments, keep literal {}
-                cFormat += "{}";
-            }
-            i++; // Skip the '}'
-        }
-        else if(mlaFormat[i] == '{' && i + 1 < mlaFormat.size() &&
-                mlaFormat[i + 1] == '{')
+           mlaFormat[i + 1] == '{')
         {
             // Escaped {{ -> {
             cFormat += '{';
-            i++; // Skip the second {
+            i++;
+            continue;
         }
-        else if(mlaFormat[i] == '}' && i + 1 < mlaFormat.size() &&
-                mlaFormat[i + 1] == '}')
+        if(mlaFormat[i] == '}' && i + 1 < mlaFormat.size() &&
+           mlaFormat[i + 1] == '}')
         {
             // Escaped }} -> }
             cFormat += '}';
-            i++; // Skip the second }
+            i++;
+            continue;
         }
-        else
+        if(mlaFormat[i] == '{')
         {
-            cFormat += mlaFormat[i];
+            size_t close = mlaFormat.find('}', i + 1);
+            if(close == std::string::npos)
+            {
+                cFormat += '{';
+                continue;
+            }
+
+            std::string inside = trim(mlaFormat.substr(i + 1, close - i - 1));
+            std::string name;
+            std::string spec;
+
+            if(!inside.empty())
+            {
+                size_t colon = inside.find(':');
+                if(colon == std::string::npos)
+                {
+                    if(inside == "?" || inside == "#?")
+                        spec = inside;
+                    else
+                        name = inside;
+                }
+                else
+                {
+                    name = trim(inside.substr(0, colon));
+                    spec = trim(inside.substr(colon + 1));
+                }
+            }
+
+            bool debug = false;
+            bool pretty = false;
+            if(!spec.empty())
+            {
+                if(spec == "?")
+                    debug = true;
+                else if(spec == "#?")
+                {
+                    debug = true;
+                    pretty = true;
+                }
+                else
+                {
+                    reportError(line, "unsupported format specifier: {" + spec +
+                                          "}");
+                }
+            }
+
+            ExpressionNode* argExpr = nullptr;
+            if(!name.empty())
+            {
+                argExpr = new IdentifierNode(name);
+            }
+            else if(argIndex < args.size())
+            {
+                argExpr = args[argIndex++];
+            }
+            else
+            {
+                cFormat += "{" + inside + "}";
+                i = close;
+                continue;
+            }
+
+            llvm::Value* argVal = generateExpression(argExpr);
+            if(argVal)
+                appendFormatValue(argExpr, argVal, debug, pretty, cFormat,
+                                  argValues, line);
+
+            i = close;
+            continue;
         }
+
+        cFormat += mlaFormat[i];
     }
 
     return cFormat;
 }
 
+bool CodeGenerator::isStringExpression(ExpressionNode* expr) const
+{
+    if(dynamic_cast<StringLiteralNode*>(expr))
+        return true;
+    if(dynamic_cast<FormatNode*>(expr))
+        return true;
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = variableTypes.find(id->name);
+        return it != variableTypes.end() && it->second == TypeNode::TYPE_STRING;
+    }
+    return false;
+}
+
+std::string CodeGenerator::getStructTypeName(ExpressionNode* expr) const
+{
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = structVariableTypes.find(id->name);
+        if(it != structVariableTypes.end())
+            return it->second;
+    }
+    if(auto* lit = dynamic_cast<StructLiteralNode*>(expr))
+        return lit->structName;
+    return {};
+}
+
+void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
+                                      bool debug, bool pretty,
+                                      std::string& cFormat,
+                                      std::vector<llvm::Value*>& argValues,
+                                      int line)
+{
+    llvm::Type* argType = value->getType();
+
+    if(argType->isStructTy())
+    {
+        std::string structName = argType->getStructName().str();
+        if(structName.empty())
+            structName = getStructTypeName(expr);
+        if(!(debug || ( !structName.empty() && debugStructs.count(structName))))
+        {
+            // fall through to non-debug handling below
+        }
+        else
+        {
+        if(structName.empty())
+        {
+            reportError(line, "cannot debug-format unnamed struct");
+            cFormat += "%s";
+            argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+            return;
+        }
+        if(!debugStructs.count(structName))
+        {
+            reportError(line, "struct '" + structName +
+                                  "' does not derive Debug");
+        }
+        llvm::Value* dbg =
+            buildStructDebugString(value, structName, debug ? pretty : false, line);
+        cFormat += "%s";
+        argValues.push_back(dbg);
+        return;
+        }
+    }
+
+    TypeNode::TypeKind typeKind = getExpressionTypeKind(expr, variableTypes);
+    bool isUnsigned = isUnsignedType(typeKind);
+
+    if(argType->isIntegerTy(1))
+    {
+        cFormat += "%d";
+        llvm::Value* intVal = builder.CreateZExt(
+            value, llvm::Type::getInt32Ty(context), "booltoInt");
+        argValues.push_back(intVal);
+    }
+    else if(argType->isIntegerTy(8))
+    {
+        if(isUnsigned)
+        {
+            cFormat += "%u";
+            llvm::Value* intVal = builder.CreateZExt(
+                value, llvm::Type::getInt32Ty(context), "u8toInt");
+            argValues.push_back(intVal);
+        }
+        else
+        {
+            cFormat += "%d";
+            llvm::Value* intVal = builder.CreateSExt(
+                value, llvm::Type::getInt32Ty(context), "i8toInt");
+            argValues.push_back(intVal);
+        }
+    }
+    else if(argType->isIntegerTy(16))
+    {
+        if(isUnsigned)
+        {
+            cFormat += "%u";
+            llvm::Value* intVal = builder.CreateZExt(
+                value, llvm::Type::getInt32Ty(context), "u16toInt");
+            argValues.push_back(intVal);
+        }
+        else
+        {
+            cFormat += "%d";
+            llvm::Value* intVal = builder.CreateSExt(
+                value, llvm::Type::getInt32Ty(context), "i16toInt");
+            argValues.push_back(intVal);
+        }
+    }
+    else if(argType->isIntegerTy(32))
+    {
+        cFormat += isUnsigned ? "%u" : "%d";
+        argValues.push_back(value);
+    }
+    else if(argType->isIntegerTy(64))
+    {
+        cFormat += isUnsigned ? "%llu" : "%lld";
+        argValues.push_back(value);
+    }
+    else if(argType->isFloatTy())
+    {
+        cFormat += "%f";
+        llvm::Value* doubleVal = builder.CreateFPExt(
+            value, llvm::Type::getDoubleTy(context), "floatToDouble");
+        argValues.push_back(doubleVal);
+    }
+    else if(argType->isDoubleTy())
+    {
+        cFormat += "%f";
+        argValues.push_back(value);
+    }
+    else if(argType->isPointerTy())
+    {
+        cFormat += "%s";
+        argValues.push_back(value);
+    }
+    else if(argType->isStructTy())
+    {
+        std::string structName =
+            argType->getStructName().str().empty()
+                ? "anonymous struct"
+                : argType->getStructName().str();
+        reportError(line, "cannot print struct type '" + structName +
+                              "' directly; use {:?} with #[derive(Debug)]");
+        cFormat += "%s";
+        argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+    }
+    else
+    {
+        reportError(line, "cannot print value of unknown type");
+        cFormat += "%d";
+        argValues.push_back(value);
+    }
+}
+
 void CodeGenerator::generatePrintStatement(PrintNode* node)
 {
+    if(node->debugOnly && !debugEnabled)
+        return;
+
     // Initialize stdio functions if not already done
     if(!stdioInitialized)
     {
@@ -502,7 +627,8 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
     // Convert MLA format string to C format string and collect argument values
     std::vector<llvm::Value*> argValues;
     std::string cFormat =
-        convertFormatString(node->formatString, node->arguments, argValues);
+        convertFormatString(node->formatString, node->arguments, argValues,
+                            node->line);
 
     // Add newline for println!/eprintln!
     if(node->kind == PrintNode::PRINTLN_STDOUT ||
@@ -548,6 +674,374 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
 
         builder.CreateCall(printfFunc, printArgs);
     }
+}
+
+llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
+{
+    initializeFormatFunctions();
+
+    std::vector<llvm::Value*> argValues;
+    std::string cFormat =
+        convertFormatString(node->formatString, node->arguments, argValues,
+                            node->line);
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "formatstr");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(cFormat, "formatstr");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
+        llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
+
+    std::vector<llvm::Value*> sizeArgs;
+    sizeArgs.push_back(nullPtr);
+    sizeArgs.push_back(zero);
+    sizeArgs.push_back(formatStr);
+    sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
+
+    llvm::Value* len32 =
+        builder.CreateCall(snprintfFunc, sizeArgs, "fmtlen");
+    llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "fmtlen64");
+    llvm::Value* size =
+        builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "fmtsz");
+
+    llvm::Value* buffer =
+        builder.CreateCall(mallocFunc, {size}, "fmtbuf");
+
+    std::vector<llvm::Value*> writeArgs;
+    writeArgs.push_back(buffer);
+    writeArgs.push_back(size);
+    writeArgs.push_back(formatStr);
+    writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
+    builder.CreateCall(snprintfFunc, writeArgs);
+
+    return buffer;
+}
+
+void CodeGenerator::generateAssertEq(AssertEqNode* node)
+{
+    initializeFormatFunctions();
+
+    llvm::Value* lhs = generateExpression(node->left);
+    llvm::Value* rhs = generateExpression(node->right);
+    if(!lhs || !rhs)
+        return;
+
+    llvm::Value* cmp = nullptr;
+    if(isStringExpression(node->left) || isStringExpression(node->right))
+    {
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* lhsPtr = builder.CreateBitCast(lhs, ptrType, "lhsstr");
+        llvm::Value* rhsPtr = builder.CreateBitCast(rhs, ptrType, "rhsstr");
+        llvm::Value* cmpVal = builder.CreateCall(strcmpFunc, {lhsPtr, rhsPtr});
+        cmp = builder.CreateICmpEQ(
+            cmpVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+            "streq");
+    }
+    else if(lhs->getType()->isFloatingPointTy() ||
+            rhs->getType()->isFloatingPointTy())
+    {
+        llvm::Value* l = lhs;
+        llvm::Value* r = rhs;
+        if(!l->getType()->isDoubleTy())
+            l = builder.CreateFPExt(l, llvm::Type::getDoubleTy(context), "l2d");
+        if(!r->getType()->isDoubleTy())
+            r = builder.CreateFPExt(r, llvm::Type::getDoubleTy(context), "r2d");
+        cmp = builder.CreateFCmpOEQ(l, r, "feq");
+    }
+    else if(lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy())
+    {
+        llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+        llvm::Value* l = lhs;
+        llvm::Value* r = rhs;
+        if(l->getType() != int64Type)
+            l = builder.CreateSExtOrTrunc(l, int64Type, "l2i64");
+        if(r->getType() != int64Type)
+            r = builder.CreateSExtOrTrunc(r, int64Type, "r2i64");
+        cmp = builder.CreateICmpEQ(l, r, "ieq");
+    }
+    else
+    {
+        reportError(node->line, "assert_eq! supports only numeric and string types");
+        return;
+    }
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* okBB =
+        llvm::BasicBlock::Create(context, "assert.ok", function);
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "assert.fail");
+    builder.CreateCondBr(cmp, okBB, failBB);
+
+    failBB->insertInto(function);
+    builder.SetInsertPoint(failBB);
+
+    std::string msg = "assert_eq! failed: left = {:#?}, right = {:#?}";
+    std::vector<ExpressionNode*> args = {node->left, node->right};
+    std::vector<llvm::Value*> argValues;
+    std::string cFormat = convertFormatString(msg, args, argValues, node->line);
+
+    // Ensure newline
+    cFormat += "\n";
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "assertfmt");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(cFormat, "assertfmt");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrVal =
+        builder.CreateLoad(ptrType, stderrPtr, "stderr");
+
+    std::vector<llvm::Value*> printArgs;
+    printArgs.push_back(stderrVal);
+    printArgs.push_back(formatStr);
+    printArgs.insert(printArgs.end(), argValues.begin(), argValues.end());
+    builder.CreateCall(fprintfFunc, printArgs);
+
+    builder.CreateCall(abortFunc, {});
+    builder.CreateUnreachable();
+
+    builder.SetInsertPoint(okBB);
+}
+
+llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
+                                             int line)
+{
+    llvm::Value* val = generateExpression(expr);
+    if(!val)
+        return builder.CreateGlobalStringPtr("<null>");
+    if(val->getType()->isStructTy())
+    {
+        std::string structName = val->getType()->getStructName().str();
+        if(structName.empty())
+            structName = getStructTypeName(expr);
+        return buildStructDebugString(val, structName, pretty, line);
+    }
+
+    std::vector<llvm::Value*> argValues;
+    std::string cFormat;
+    appendFormatValue(expr, val, false, false, cFormat, argValues, line);
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "dbgfmt");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(cFormat, "dbgfmt");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
+        llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
+    std::vector<llvm::Value*> sizeArgs = {nullPtr, zero, formatStr};
+    sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
+    llvm::Value* len32 =
+        builder.CreateCall(snprintfFunc, sizeArgs, "dbglen");
+    llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "dbglen64");
+    llvm::Value* size =
+        builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "dbgsz");
+    llvm::Value* buffer =
+        builder.CreateCall(mallocFunc, {size}, "dbgbuf");
+    std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
+    writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
+    builder.CreateCall(snprintfFunc, writeArgs);
+    return buffer;
+}
+
+llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
+                                                   const std::string& structName,
+                                                   bool pretty, int line)
+{
+    initializeFormatFunctions();
+
+    auto it = structMembers.find(structName);
+    if(it == structMembers.end())
+    {
+        reportError(line, "unknown struct for debug: " + structName);
+        return builder.CreateGlobalStringPtr("<struct>");
+    }
+
+    std::string displayName = structName;
+    if(auto mit = mangledToGenericName.find(structName);
+       mit != mangledToGenericName.end())
+    {
+        displayName = mit->second;
+    }
+
+    std::string fmt = displayName + (pretty ? " {\n" : " { ");
+    std::vector<llvm::Value*> argValues;
+
+    for(size_t idx = 0; idx < it->second.size(); ++idx)
+    {
+        const auto& member = it->second[idx];
+        const std::string& memberName = member.first;
+        TypeNode* memberType = member.second;
+
+        if(pretty)
+            fmt += "    " + memberName + ": ";
+        else
+            fmt += memberName + ": ";
+
+        llvm::Value* fieldVal =
+            builder.CreateExtractValue(structVal, static_cast<unsigned>(idx),
+                                       "dbgfield");
+
+        bool handled = false;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType))
+        {
+            std::string fieldStruct = structRef->structName;
+            if(!debugStructs.count(fieldStruct))
+            {
+                reportError(line, "struct '" + fieldStruct +
+                                      "' does not derive Debug");
+            }
+            llvm::Value* fieldStr =
+                buildStructDebugString(fieldVal, fieldStruct, pretty, line);
+            fmt += "%s";
+            argValues.push_back(fieldStr);
+            handled = true;
+        }
+
+        if(!handled)
+        {
+            switch(memberType->kind)
+            {
+            case TypeNode::TYPE_BOOL: {
+                fmt += "%d";
+                llvm::Value* intVal = builder.CreateZExt(
+                    fieldVal, llvm::Type::getInt32Ty(context), "dbgbool");
+                argValues.push_back(intVal);
+                break;
+            }
+            case TypeNode::TYPE_I8:
+            case TypeNode::TYPE_I16:
+            case TypeNode::TYPE_INT: {
+                fmt += "%d";
+                llvm::Value* intVal = builder.CreateSExt(
+                    fieldVal, llvm::Type::getInt32Ty(context), "dbgint");
+                argValues.push_back(intVal);
+                break;
+            }
+            case TypeNode::TYPE_U8:
+            case TypeNode::TYPE_U16:
+            case TypeNode::TYPE_U32: {
+                fmt += "%u";
+                llvm::Value* intVal = builder.CreateZExt(
+                    fieldVal, llvm::Type::getInt32Ty(context), "dbgu");
+                argValues.push_back(intVal);
+                break;
+            }
+            case TypeNode::TYPE_I32: {
+                fmt += "%d";
+                argValues.push_back(fieldVal);
+                break;
+            }
+            case TypeNode::TYPE_I64: {
+                fmt += "%lld";
+                argValues.push_back(fieldVal);
+                break;
+            }
+            case TypeNode::TYPE_U64: {
+                fmt += "%llu";
+                argValues.push_back(fieldVal);
+                break;
+            }
+            case TypeNode::TYPE_FLOAT: {
+                fmt += "%f";
+                llvm::Value* doubleVal = builder.CreateFPExt(
+                    fieldVal, llvm::Type::getDoubleTy(context), "dbgfloat");
+                argValues.push_back(doubleVal);
+                break;
+            }
+            case TypeNode::TYPE_DOUBLE: {
+                fmt += "%f";
+                argValues.push_back(fieldVal);
+                break;
+            }
+            case TypeNode::TYPE_STRING:
+            case TypeNode::TYPE_STR8:
+            case TypeNode::TYPE_STR16: {
+                fmt += "%s";
+                argValues.push_back(fieldVal);
+                break;
+            }
+            default:
+                fmt += "<unsupported>";
+                break;
+            }
+        }
+
+        if(pretty)
+            fmt += ",\n";
+        else if(idx + 1 < it->second.size())
+            fmt += ", ";
+        else
+            fmt += " ";
+    }
+
+    if(pretty)
+        fmt += "}";
+    else
+        fmt += "}";
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(fmt, "dbgfmt");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(fmt, "dbgfmt");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
+        llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
+    std::vector<llvm::Value*> sizeArgs = {nullPtr, zero, formatStr};
+    sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
+    llvm::Value* len32 =
+        builder.CreateCall(snprintfFunc, sizeArgs, "dbglen");
+    llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "dbglen64");
+    llvm::Value* size =
+        builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "dbgsz");
+    llvm::Value* buffer =
+        builder.CreateCall(mallocFunc, {size}, "dbgbuf");
+    std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
+    writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
+    builder.CreateCall(snprintfFunc, writeArgs);
+    return buffer;
 }
 
 void CodeGenerator::generateCode(ProgramNode* program)
@@ -1126,6 +1620,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         generatePrintStatement(printNode);
     }
+    else if(auto assertNode = dynamic_cast<AssertEqNode*>(node))
+    {
+        generateAssertEq(assertNode);
+    }
     else if(auto breakNode = dynamic_cast<BreakNode*>(node))
     {
         generateBreakStatement(breakNode);
@@ -1161,6 +1659,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto stringLit = dynamic_cast<StringLiteralNode*>(node))
     {
         return generateStringLiteral(stringLit);
+    }
+    else if(auto formatExpr = dynamic_cast<FormatNode*>(node))
+    {
+        return generateFormatExpression(formatExpr);
     }
     else if(auto enumLit = dynamic_cast<EnumLiteralNode*>(node))
     {
@@ -2397,6 +2899,8 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         llvm::StructType::create(context, memberTypes, node->name);
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
+    if(node->deriveDebug)
+        debugStructs.insert(node->name);
 
     // Track base name for inheritance lookups
     if(!node->baseName.empty())
@@ -6715,6 +7219,8 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     structMembers[mangledName] = members;
     monomorphizedTypes.insert(mangledName);
     mangledToGenericName[mangledName] = genericName;
+    if(templateStruct->deriveDebug)
+        debugStructs.insert(mangledName);
 
     // Copy visibility from template
     structVisibility[mangledName] =

@@ -416,11 +416,12 @@ ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def)
 }
 
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
-                           int is_public)
+                           int is_public, int derive_debug)
 {
     return new StructDefNode(
         std::string(name), base_name ? std::string(base_name) : "",
-        static_cast<StructMemberListNode*>(members), is_public != 0);
+        static_cast<StructMemberListNode*>(members), is_public != 0,
+        derive_debug != 0);
 }
 
 ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public)
@@ -691,7 +692,7 @@ ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line)
         printKind = PrintNode::PRINTLN_STDOUT;
     }
 
-    auto* node = new PrintNode(printKind, std::string(format_str));
+    auto* node = new PrintNode(printKind, std::string(format_str), false);
     node->line = line;
 
     if(args)
@@ -703,6 +704,58 @@ ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line)
         }
     }
 
+    return node;
+}
+
+ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line)
+{
+    auto* node =
+        new PrintNode(PrintNode::EPRINTLN_STDERR, std::string(format_str), true);
+    node->line = line;
+
+    if(args)
+    {
+        auto* argList = static_cast<ArgumentListNode*>(args);
+        for(auto* arg : argList->args)
+        {
+            node->addArgument(arg);
+        }
+    }
+
+    return node;
+}
+
+ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line)
+{
+    auto* node = new PrintNode(static_cast<PrintNode::PrintKind>(kind), "{}", false);
+    node->line = line;
+    if(expr)
+        node->addArgument(static_cast<ExpressionNode*>(expr));
+    return node;
+}
+
+ASTNode* create_format_expr(char* format_str, ASTNode* args, int line)
+{
+    auto* node = new FormatNode(std::string(format_str));
+    node->line = line;
+
+    if(args)
+    {
+        auto* argList = static_cast<ArgumentListNode*>(args);
+        for(auto* arg : argList->args)
+        {
+            node->addArgument(arg);
+        }
+    }
+
+    return node;
+}
+
+ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line)
+{
+    auto* node = new AssertEqNode(static_cast<ExpressionNode*>(left),
+                                  static_cast<ExpressionNode*>(right));
+    node->line = line;
     return node;
 }
 
@@ -1158,7 +1211,10 @@ std::string StructMethodNode::toString() const
 
 std::string StructDefNode::toString() const
 {
-    std::string result = isPublic ? "pub struct " : "struct ";
+    std::string result;
+    if(deriveDebug)
+        result += "#[derive(Debug)]\n";
+    result += isPublic ? "pub struct " : "struct ";
     result += name;
     if(!baseName.empty())
     {
@@ -1401,6 +1457,11 @@ std::string ContinueNode::toString() const
 std::string PrintNode::toString() const
 {
     std::string result;
+    if(debugOnly)
+    {
+        result = "debug!(\"";
+    }
+    else
     switch(kind)
     {
     case PRINT_STDOUT:
@@ -1423,6 +1484,23 @@ std::string PrintNode::toString() const
     }
     result += ");";
     return result;
+}
+
+std::string FormatNode::toString() const
+{
+    std::string result = "format!(\"";
+    result += formatString + "\"";
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        result += ", " + arguments[i]->toString();
+    }
+    result += ")";
+    return result;
+}
+
+std::string AssertEqNode::toString() const
+{
+    return "assert_eq!(" + left->toString() + ", " + right->toString() + ");";
 }
 
 // Generic list type
@@ -1808,12 +1886,12 @@ ASTNode* add_type_param(ASTNode* list, char* param)
 
 ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
-                                   int is_public)
+                                   int is_public, int derive_debug)
 {
     std::string baseName = base_name ? std::string(base_name) : "";
     auto* node = new StructDefNode(std::string(name), baseName,
                                    static_cast<StructMemberListNode*>(members),
-                                   is_public != 0);
+                                   is_public != 0, derive_debug != 0);
 
     if(type_params)
     {

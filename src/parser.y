@@ -50,7 +50,7 @@ ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
 ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public);
+ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
 ASTNode* create_struct_member_list(ASTNode* member);
 ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
@@ -69,8 +69,12 @@ ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
+ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
+ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
 ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
+ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
+ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);
 ASTNode* create_generic_list_type(ASTNode* element_type);
@@ -94,7 +98,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
-ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public);
+ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
 ASTNode* create_impl_block(char* struct_name, ASTNode* type_params);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
 ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
@@ -135,7 +139,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token LET VAR
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
-%token PRINTLN PRINT EPRINTLN EPRINT
+%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
 %token PLUS MINUS MULTIPLY DIVIDE ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
@@ -143,6 +147,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token GENERIC_LT
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
+%token DERIVE_DEBUG
 
 %type <ast> program top_level_list top_level_item
 %type <ast> struct_def enum_def enum_variant_list enum_variant
@@ -156,7 +161,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
-%type <ast> print_statement argument_list field_target
+%type <ast> print_statement argument_list field_target assert_eq_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
@@ -206,18 +211,30 @@ use_declaration
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($2, NULL, $4, 0); }
+        { $$ = create_struct_def($2, NULL, $4, 0, 0); }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($2, $4, $6, 0); }
+        { $$ = create_struct_def($2, $4, $6, 0, 0); }
     | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($3, NULL, $5, 1); }
+        { $$ = create_struct_def($3, NULL, $5, 1, 0); }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($3, $5, $7, 1); }
+        { $$ = create_struct_def($3, $5, $7, 1, 0); }
+    | DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($3, NULL, $5, 0, 1); }
+    | DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($3, $5, $7, 0, 1); }
+    | DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($4, NULL, $6, 1, 1); }
+    | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_struct_def($4, $6, $8, 1, 1); }
     /* Generic struct definitions */
     | STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($2, NULL, $4, $7, 0); }
+        { $$ = create_generic_struct_def($2, NULL, $4, $7, 0, 0); }
     | PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($3, NULL, $5, $8, 1); }
+        { $$ = create_generic_struct_def($3, NULL, $5, $8, 1, 0); }
+    | DERIVE_DEBUG STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($3, NULL, $5, $8, 0, 1); }
+    | DERIVE_DEBUG PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($4, NULL, $6, $9, 1, 1); }
     ;
 
 enum_def
@@ -375,6 +392,7 @@ statement
     | block_statement
     | struct_init
     | print_statement
+    | assert_eq_statement
     | break_statement
     | continue_statement
     ;
@@ -472,18 +490,35 @@ print_statement
         { $$ = create_print_stmt(1, $3, NULL, yylineno); }
     | PRINTLN LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
         { $$ = create_print_stmt(1, $3, $5, yylineno); }
+    | PRINTLN LPAREN expression RPAREN SEMICOLON
+        { $$ = create_print_expr_stmt(1, $3, yylineno); }
     | PRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = create_print_stmt(0, $3, NULL, yylineno); }
     | PRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
         { $$ = create_print_stmt(0, $3, $5, yylineno); }
+    | PRINT LPAREN expression RPAREN SEMICOLON
+        { $$ = create_print_expr_stmt(0, $3, yylineno); }
     | EPRINTLN LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = create_print_stmt(3, $3, NULL, yylineno); }
     | EPRINTLN LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
         { $$ = create_print_stmt(3, $3, $5, yylineno); }
+    | EPRINTLN LPAREN expression RPAREN SEMICOLON
+        { $$ = create_print_expr_stmt(3, $3, yylineno); }
     | EPRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = create_print_stmt(2, $3, NULL, yylineno); }
     | EPRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
         { $$ = create_print_stmt(2, $3, $5, yylineno); }
+    | EPRINT LPAREN expression RPAREN SEMICOLON
+        { $$ = create_print_expr_stmt(2, $3, yylineno); }
+    | DEBUGPRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
+        { $$ = create_debug_print_stmt($3, NULL, yylineno); }
+    | DEBUGPRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+        { $$ = create_debug_print_stmt($3, $5, yylineno); }
+    ;
+
+assert_eq_statement
+    : ASSERT_EQ LPAREN expression COMMA expression RPAREN SEMICOLON
+        { $$ = create_assert_eq($3, $5, yylineno); }
     ;
 
 argument_list
@@ -600,6 +635,10 @@ primary_expression
     | STRING_LITERAL { $$ = create_string_literal($1); }
     | TRUE_LIT { $$ = create_bool_literal(1); }
     | FALSE_LIT { $$ = create_bool_literal(0); }
+    | FORMAT LPAREN STRING_LITERAL RPAREN
+        { $$ = create_format_expr($3, NULL, yylineno); }
+    | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = create_format_expr($3, $5, yylineno); }
     | IDENTIFIER COLONCOLON IDENTIFIER
         { $$ = create_enum_literal($1, $3, yylineno); }
     | IDENTIFIER { $$ = create_identifier($1); }
