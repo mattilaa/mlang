@@ -41,6 +41,7 @@ void printUsage(const char* programName)
               << "  -O3           Aggressive optimization\n"
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
+              << "  -Wl,<args>    Pass raw linker arguments\n"
               << "  -v            Verbose output\n"
               << "  --debug       Enable debug-only logging\n"
               << "  --version     Show version and exit\n"
@@ -193,6 +194,10 @@ int main(int argc, char** argv)
             linkArgs.push_back(std::string("-l") + argv[++i]);
         }
         else if(arg.rfind("-l", 0) == 0 && arg.size() > 2)
+        {
+            linkArgs.push_back(arg);
+        }
+        else if(arg.rfind("-Wl,", 0) == 0 && arg.size() > 4)
         {
             linkArgs.push_back(arg);
         }

@@ -1,0 +1,10 @@
+[package]
+name = "cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", build = "cmake", cmake_args = "CMAKE_POLICY_VERSION_MINIMUM=3.5;BUILD_SHARED_LIBS=OFF;CJSON_BUILD_SHARED_LIBS=OFF;CJSON_BUILD_STATIC_LIBS=ON" }
+
+[c-dependencies]
+curl = { pkg_config = "libcurl" }

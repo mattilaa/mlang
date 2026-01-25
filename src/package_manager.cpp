@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -128,6 +129,7 @@ struct DepSpec
     std::string rev;
     std::string tag;
     std::string build;
+    std::string cmakeArgs;
 };
 
 struct LinkFlags
@@ -148,6 +150,27 @@ static std::vector<std::string> split_csv(std::string_view input)
         else if(c == '}')
             --depth;
         if(c == ',' && depth == 0)
+        {
+            out.push_back(trim(cur));
+            cur.clear();
+        }
+        else
+        {
+            cur.push_back(c);
+        }
+    }
+    if(!cur.empty())
+        out.push_back(trim(cur));
+    return out;
+}
+
+static std::vector<std::string> split_semicolon(std::string_view input)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    for(char c : input)
+    {
+        if(c == ';')
         {
             out.push_back(trim(cur));
             cur.clear();
@@ -232,6 +255,8 @@ static std::vector<DepSpec> parse_git_deps(const std::string& content)
             dep.tag = it->second;
         if(auto it = kv.find("build"); it != kv.end())
             dep.build = it->second;
+        if(auto it = kv.find("cmake_args"); it != kv.end())
+            dep.cmakeArgs = it->second;
         if(dep.build.empty())
             dep.build = "cmake";
         deps.push_back(dep);
@@ -307,6 +332,62 @@ static int run_command(const std::string& cmd)
     return std::system(cmd.c_str());
 }
 
+static std::optional<std::string> run_command_capture(const std::string& cmd)
+{
+    std::string full = cmd + " 2>/dev/null";
+    FILE* pipe = popen(full.c_str(), "r");
+    if(!pipe)
+        return std::nullopt;
+    std::string out;
+    char buf[256];
+    while(fgets(buf, sizeof(buf), pipe))
+        out += buf;
+    int rc = pclose(pipe);
+    if(rc != 0)
+        return std::nullopt;
+    return out;
+}
+
+static std::vector<std::string> split_shell_tokens(std::string_view input)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    bool in_quotes = false;
+    char quote = 0;
+    for(char c : input)
+    {
+        if(in_quotes)
+        {
+            if(c == quote)
+            {
+                in_quotes = false;
+                continue;
+            }
+            cur.push_back(c);
+            continue;
+        }
+        if(c == '"' || c == '\'')
+        {
+            in_quotes = true;
+            quote = c;
+            continue;
+        }
+        if(std::isspace(static_cast<unsigned char>(c)))
+        {
+            if(!cur.empty())
+            {
+                out.push_back(cur);
+                cur.clear();
+            }
+            continue;
+        }
+        cur.push_back(c);
+    }
+    if(!cur.empty())
+        out.push_back(cur);
+    return out;
+}
+
 static int fetch_git_dep(const DepSpec& dep,
                          const std::filesystem::path& depsDir)
 {
@@ -352,6 +433,18 @@ static int build_git_dep(const DepSpec& dep,
         std::filesystem::path buildDir = path / "build";
         std::string cfg = "cmake -S " + path.string() + " -B " +
                           buildDir.string();
+        if(!dep.cmakeArgs.empty())
+        {
+            for(const auto& arg : split_semicolon(dep.cmakeArgs))
+            {
+                if(arg.empty())
+                    continue;
+                if(arg.rfind("-", 0) == 0)
+                    cfg += " " + arg;
+                else
+                    cfg += " -D" + arg;
+            }
+        }
         if(run_command(cfg) != 0)
             return 1;
         std::string build = "cmake --build " + buildDir.string();
@@ -378,6 +471,84 @@ static int build_git_dep(const DepSpec& dep,
 
     std::cerr << "Unknown build system: " << dep.build << "\n";
     return 1;
+}
+
+struct CDepSpec
+{
+    std::string name;
+    std::string pkgConfig;
+    bool usePkgConfig = false;
+};
+
+static std::vector<CDepSpec> parse_c_deps(const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::string section;
+    std::vector<CDepSpec> deps;
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t.front() == '[' && t.back() == ']')
+        {
+            section = t.substr(1, t.size() - 2);
+            continue;
+        }
+        if(section != "c-dependencies")
+            continue;
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        std::string name = trim(t.substr(0, eq));
+        if(name.empty())
+            continue;
+
+        CDepSpec dep;
+        dep.name = name;
+        if(t.find('{') != std::string::npos)
+        {
+            auto kv = parse_inline_table(t);
+            if(auto it = kv.find("pkg_config"); it != kv.end())
+            {
+                dep.pkgConfig = it->second;
+                dep.usePkgConfig = true;
+            }
+            else if(auto it = kv.find("system"); it != kv.end() &&
+                    (it->second == "true" || it->second == "1"))
+            {
+                dep.pkgConfig = name;
+                dep.usePkgConfig = true;
+            }
+        }
+        else
+        {
+            dep.pkgConfig = name;
+            dep.usePkgConfig = true;
+        }
+
+        if(dep.usePkgConfig)
+            deps.push_back(dep);
+    }
+    return deps;
+}
+
+static bool append_pkg_config_flags(const CDepSpec& dep,
+                                    std::vector<std::string>& outFlags)
+{
+    if(!dep.usePkgConfig || dep.pkgConfig.empty())
+        return true;
+    std::string cmd = "pkg-config --cflags --libs " + dep.pkgConfig;
+    auto result = run_command_capture(cmd);
+    if(!result.has_value())
+    {
+        std::cerr << "pkg-config failed for: " << dep.pkgConfig << "\n";
+        return false;
+    }
+    for(const auto& token : split_shell_tokens(result.value()))
+        outFlags.push_back(token);
+    return true;
 }
 
 } // namespace
@@ -532,6 +703,7 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         }
         auto deps = parse_git_deps(content);
+        auto cdeps = parse_c_deps(content);
         std::filesystem::path depsDir = std::filesystem::path("build") / "deps";
         std::filesystem::create_directories(depsDir);
         for(const auto& dep : deps)
@@ -561,6 +733,7 @@ int PackageManager::run(int argc, char** argv)
         }
 
         auto deps = parse_git_deps(content);
+        auto cdeps = parse_c_deps(content);
         std::filesystem::path depsDir = std::filesystem::path("build") / "deps";
         std::filesystem::create_directories(depsDir);
         for(const auto& dep : deps)
@@ -575,6 +748,12 @@ int PackageManager::run(int argc, char** argv)
         }
 
         LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+        std::vector<std::string> pkgFlags;
+        for(const auto& dep : cdeps)
+        {
+            if(!append_pkg_config_flags(dep, pkgFlags))
+                return 1;
+        }
 
         std::string entry = "src/main.mla";
         if(auto v = find_toml_string(content, "entry"); v.has_value())
@@ -592,6 +771,10 @@ int PackageManager::run(int argc, char** argv)
             cmd += " -L" + dir;
         for(const auto& lib : linkFlags.libs)
             cmd += " -l" + lib;
+        for(const auto& dir : linkFlags.libDirs)
+            cmd += " -Wl,-rpath," + dir;
+        for(const auto& flag : pkgFlags)
+            cmd += " " + flag;
         int rc = std::system(cmd.c_str());
         if(rc != 0)
         {

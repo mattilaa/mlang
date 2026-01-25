@@ -81,3 +81,17 @@ int main(int argc, char** argv) {
     return pkg.run(argc, argv);
 }
 ```
+
+`mlang.toml` example with pkg-config C dependencies:
+
+```toml
+[package]
+name = "curl_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+curl = { pkg_config = "libcurl" }
+```

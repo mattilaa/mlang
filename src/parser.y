@@ -24,8 +24,9 @@ ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
 ASTNode* create_type_node(int type);
-ASTNode* create_parameter_list();
+ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
+ASTNode* set_parameter_list_vararg(ASTNode* list);
 ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
@@ -131,6 +132,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT ENUM
+%token ELLIPSIS
 %token MATCH
 %token PUB IMPL
 %token EXTERN
@@ -327,6 +329,8 @@ function_def
 parameter_list
     : /* empty */ { $$ = create_empty_parameter_list(); }
     | parameters
+    | parameters COMMA ELLIPSIS { $$ = set_parameter_list_vararg($1); }
+    | ELLIPSIS { $$ = set_parameter_list_vararg(create_empty_parameter_list()); }
     ;
 
 parameters

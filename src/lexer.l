@@ -139,6 +139,7 @@ static int is_generic_struct_literal_start()
 "double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
 "=>"            { return FAT_ARROW; }
+"..."           { return ELLIPSIS; }
 "..="           { return DOTDOTEQ; }
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }

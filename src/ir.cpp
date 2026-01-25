@@ -1477,7 +1477,8 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     }
 
     llvm::FunctionType* funcType =
-        llvm::FunctionType::get(returnType, paramTypes, false);
+        llvm::FunctionType::get(returnType, paramTypes,
+                                node->parameters->isVarArg);
     llvm::Function* function = llvm::Function::Create(
         funcType, llvm::Function::ExternalLinkage, node->name, module.get());
 

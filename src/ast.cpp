@@ -118,6 +118,14 @@ ASTNode* create_parameter(ASTNode* type, char* name)
     return new ParameterNode(static_cast<TypeNode*>(type), std::string(name));
 }
 
+ASTNode* set_parameter_list_vararg(ASTNode* list)
+{
+    auto param_list = static_cast<ParameterListNode*>(list);
+    if(param_list)
+        param_list->isVarArg = true;
+    return param_list;
+}
+
 ASTNode* add_parameter(ASTNode* list, ASTNode* param)
 {
     auto param_list = static_cast<ParameterListNode*>(list);
@@ -823,6 +831,12 @@ std::string ParameterListNode::toString() const
         if(i > 0)
             result += ", ";
         result += parameters[i]->toString();
+    }
+    if(isVarArg)
+    {
+        if(!result.empty())
+            result += ", ";
+        result += "...";
     }
     return result;
 }

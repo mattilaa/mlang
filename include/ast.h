@@ -921,6 +921,7 @@ class ParameterListNode : public ASTNode
 {
 public:
     std::vector<ParameterNode*> parameters;
+    bool isVarArg = false;
     std::string toString() const override;
 };
 
@@ -1015,6 +1016,7 @@ ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
+ASTNode* set_parameter_list_vararg(ASTNode* list);
 ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);

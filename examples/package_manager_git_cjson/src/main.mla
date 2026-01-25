@@ -1,0 +1,36 @@
+extern fn cJSON_Version() -> str8;
+extern fn strlen(s: str8) -> i64;
+
+extern fn curl_easy_init() -> i64;
+extern fn curl_easy_setopt(handle: i64, option: i64, ...) -> i32;
+extern fn curl_easy_perform(handle: i64) -> i32;
+extern fn curl_easy_cleanup(handle: i64) -> void;
+
+fn main() -> i32 {
+    let version: str8 = cJSON_Version();
+    println!("cJSON version: {}", version);
+    println!("version length: {}", strlen(version));
+
+    let curl: i64 = curl_easy_init();
+    if curl == 0: {
+        eprintln!("curl_easy_init failed");
+        return 1;
+    }
+
+    let CURLOPT_URL: i64 = 10002; // CURLOPTTYPE_STRINGPOINT + 2
+    let CURLOPT_USERAGENT: i64 = 10018;
+
+    curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "mlang-example/1.0");
+
+    println!("--- Fetching https://www.google.com ---");
+    let rc: i32 = curl_easy_perform(curl);
+    if rc != 0: {
+        eprintln!("curl_easy_perform failed: {}", rc);
+        curl_easy_cleanup(curl);
+        return 1;
+    }
+
+    curl_easy_cleanup(curl);
+    return 0;
+}
