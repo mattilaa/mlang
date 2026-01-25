@@ -15,25 +15,35 @@ extern "C"
 // Reset lexer state for new file
 extern void yyrestart(FILE* input_file);
 
-ModuleLoader::ModuleLoader(const std::string& basePath) : basePath(basePath) {}
+ModuleLoader::ModuleLoader(const std::string& basePath,
+                           const std::vector<std::string>& extraPaths)
+    : basePath(basePath)
+{
+    searchPaths.clear();
+    if(!this->basePath.empty())
+        searchPaths.push_back(this->basePath);
+    for(const auto& p : extraPaths)
+    {
+        if(!p.empty())
+            searchPaths.push_back(p);
+    }
+}
 
 std::string ModuleLoader::resolveModulePath(const std::string& moduleName)
 {
     namespace fs = std::filesystem;
 
-    // Try moduleName.mla in the base path
-    fs::path modulePath = fs::path(basePath) / (moduleName + ".mla");
-
-    if(fs::exists(modulePath))
+    for(const auto& root : searchPaths)
     {
-        return modulePath.string();
-    }
+        // Try moduleName.mla in the search path
+        fs::path modulePath = fs::path(root) / (moduleName + ".mla");
+        if(fs::exists(modulePath))
+            return modulePath.string();
 
-    // Try moduleName/mod.mla (directory module)
-    fs::path dirModulePath = fs::path(basePath) / moduleName / "mod.mla";
-    if(fs::exists(dirModulePath))
-    {
-        return dirModulePath.string();
+        // Try moduleName/mod.mla (directory module)
+        fs::path dirModulePath = fs::path(root) / moduleName / "mod.mla";
+        if(fs::exists(dirModulePath))
+            return dirModulePath.string();
     }
 
     return "";
@@ -96,8 +106,17 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
     std::string modulePath = resolveModulePath(moduleName);
     if(modulePath.empty())
     {
+        std::string paths;
+        for(size_t i = 0; i < searchPaths.size(); ++i)
+        {
+            if(i > 0)
+                paths += ", ";
+            paths += searchPaths[i];
+        }
+        if(paths.empty())
+            paths = basePath;
         errorMsg = "Cannot find module '" + moduleName + "' (looked for " +
-                   moduleName + ".mla in " + basePath + ")";
+                   moduleName + ".mla in " + paths + ")";
         return false;
     }
 

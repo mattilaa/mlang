@@ -22,6 +22,7 @@ class ModuleLoader
 {
 private:
     std::string basePath; // Base directory for module resolution
+    std::vector<std::string> searchPaths;
     std::map<std::string, ModuleInfo> modules;
     std::set<std::string> loadingStack; // For detecting circular imports
 
@@ -32,7 +33,8 @@ private:
     std::string resolveModulePath(const std::string& moduleName);
 
 public:
-    explicit ModuleLoader(const std::string& basePath = ".");
+    explicit ModuleLoader(const std::string& basePath = ".",
+                          const std::vector<std::string>& extraPaths = {});
 
     // Load a module by name
     bool loadModule(const std::string& moduleName, std::string& errorMsg);
@@ -61,6 +63,10 @@ public:
     void setBasePath(const std::string& path)
     {
         basePath = path;
+        if(searchPaths.empty())
+            searchPaths.push_back(basePath);
+        else
+            searchPaths[0] = basePath;
     }
 
     // Get list of all loaded module names

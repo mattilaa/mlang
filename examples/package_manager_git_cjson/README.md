@@ -24,6 +24,9 @@ This example additionally links against libcurl via pkg-config and uses it to
 fetch `https://www.google.com`. libcurl writes the response body to stdout by
 default (since no custom write callback is provided).
 The `curl_easy_setopt` function is variadic, so the extern signature uses `...`.
+Common libcurl externs are collected in `curl.mla` and imported by `src/main.mla`.
+`mlang.toml` includes `module_paths = ["."]` so the module loader can find
+`curl.mla` from `src/main.mla`.
 
 ## Prereqs
 - `mlang` on your PATH

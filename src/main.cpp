@@ -13,6 +13,7 @@
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <algorithm>
 #include <unordered_set>
@@ -98,7 +99,8 @@ static std::string escape_json_string(std::string_view s)
 }
 
 static void write_mlang_commands_json(
-    const std::vector<std::string>& files)
+    const std::vector<std::string>& files,
+    const std::vector<std::string>& modulePaths)
 {
     std::ofstream out("mlang_commands.json", std::ios::binary);
     if(!out)
@@ -110,7 +112,134 @@ static void write_mlang_commands_json(
             out << ", ";
         out << "\"" << escape_json_string(files[i]) << "\"";
     }
+    out << "], \"module_paths\": [";
+    for(size_t i = 0; i < modulePaths.size(); ++i)
+    {
+        if(i > 0)
+            out << ", ";
+        out << "\"" << escape_json_string(modulePaths[i]) << "\"";
+    }
     out << "] }";
+}
+
+static std::string trim(std::string_view s)
+{
+    size_t start = 0;
+    while(start < s.size() && std::isspace(static_cast<unsigned char>(s[start])))
+        ++start;
+    size_t end = s.size();
+    while(end > start &&
+          std::isspace(static_cast<unsigned char>(s[end - 1])))
+        --end;
+    return std::string(s.substr(start, end - start));
+}
+
+static std::string unquote(std::string_view v)
+{
+    std::string t = trim(v);
+    if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
+        return t.substr(1, t.size() - 2);
+    return t;
+}
+
+static std::vector<std::string> split_toml_array(std::string_view input)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    bool in_quotes = false;
+    for(char c : input)
+    {
+        if(c == '"')
+        {
+            in_quotes = !in_quotes;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == ',' && !in_quotes)
+        {
+            out.push_back(trim(cur));
+            cur.clear();
+            continue;
+        }
+        cur.push_back(c);
+    }
+    if(!cur.empty())
+        out.push_back(trim(cur));
+    return out;
+}
+
+static std::vector<std::string> parse_module_paths_from_toml(
+    const std::filesystem::path& manifestPath)
+{
+    std::ifstream in(manifestPath, std::ios::binary);
+    if(!in)
+        return {};
+
+    std::vector<std::string> out;
+    std::string line;
+    std::string section;
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t.front() == '[' && t.back() == ']')
+        {
+            section = t.substr(1, t.size() - 2);
+            continue;
+        }
+        if(section != "package" && section != "tool.mlang")
+            continue;
+
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        std::string key = trim(t.substr(0, eq));
+        if(key != "module_paths")
+            continue;
+        std::string value = trim(t.substr(eq + 1));
+        if(value.empty())
+            continue;
+        if(value.front() == '[' && value.back() == ']')
+        {
+            std::string inner = value.substr(1, value.size() - 2);
+            for(const auto& part : split_toml_array(inner))
+            {
+                std::string v = unquote(part);
+                if(!v.empty())
+                    out.push_back(v);
+            }
+        }
+        else
+        {
+            std::string v = unquote(value);
+            if(!v.empty())
+                out.push_back(v);
+        }
+    }
+    return out;
+}
+
+static std::optional<std::filesystem::path> find_manifest_path(
+    std::filesystem::path startDir)
+{
+    std::error_code ec;
+    startDir = std::filesystem::absolute(startDir, ec);
+    if(ec)
+        return std::nullopt;
+
+    std::filesystem::path cur = startDir;
+    while(!cur.empty())
+    {
+        auto candidate = cur / "mlang.toml";
+        if(std::filesystem::exists(candidate))
+            return candidate;
+        auto parent = cur.parent_path();
+        if(parent == cur)
+            break;
+        cur = parent;
+    }
+    return std::nullopt;
 }
 
 int main(int argc, char** argv)
@@ -260,6 +389,7 @@ int main(int argc, char** argv)
         std::make_unique<llvm::Module>("MLang", context);
 
     std::vector<std::string> modulePaths;
+    std::vector<std::string> moduleSearchPaths;
 
     try
     {
@@ -299,8 +429,32 @@ int main(int argc, char** argv)
                 basePath = ".";
             }
 
+            // Load module search paths from mlang.toml (if present)
+            std::filesystem::path inputDir = inputPath.parent_path();
+            if(inputDir.empty())
+                inputDir = ".";
+            auto manifestPath = find_manifest_path(inputDir);
+            if(manifestPath.has_value())
+            {
+                moduleSearchPaths =
+                    parse_module_paths_from_toml(manifestPath.value());
+                std::filesystem::path manifestDir =
+                    manifestPath.value().parent_path();
+                std::error_code pathEc;
+                for(auto& p : moduleSearchPaths)
+                {
+                    std::filesystem::path mp = std::filesystem::path(p);
+                    if(!mp.is_absolute())
+                        mp = manifestDir / mp;
+                    std::filesystem::path abs =
+                        std::filesystem::absolute(mp, pathEc);
+                    if(!pathEc)
+                        p = abs.lexically_normal().string();
+                }
+            }
+
             // Initialize module loader
-            ModuleLoader moduleLoader(basePath);
+            ModuleLoader moduleLoader(basePath, moduleSearchPaths);
 
             // Process mod declarations (load modules)
             if(!program->modules.empty())
@@ -502,7 +656,20 @@ int main(int argc, char** argv)
         if(unique.insert(norm).second)
             files.push_back(norm);
     }
-    write_mlang_commands_json(files);
+    std::vector<std::string> searchPaths;
+    std::unordered_set<std::string> searchUnique;
+    for(const auto& path : moduleSearchPaths)
+    {
+        std::filesystem::path p = std::filesystem::path(path);
+        std::filesystem::path abs = p.is_absolute()
+                                        ? p
+                                        : std::filesystem::absolute(p, ec);
+        std::string norm = ec ? path : abs.lexically_normal().string();
+        if(searchUnique.insert(norm).second)
+            searchPaths.push_back(norm);
+    }
+
+    write_mlang_commands_json(files, searchPaths);
 
     return 0;
 }

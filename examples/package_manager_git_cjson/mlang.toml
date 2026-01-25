@@ -8,3 +8,6 @@ cjson = { git = "https://github.com/DaveGamble/cJSON.git", build = "cmake", cmak
 
 [c-dependencies]
 curl = { pkg_config = "libcurl" }
+
+[tool.mlang]
+module_paths = ["."]

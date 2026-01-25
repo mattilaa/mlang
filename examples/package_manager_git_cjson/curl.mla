@@ -1,0 +1,15 @@
+// Minimal libcurl externs for common usage.
+
+extern pub fn curl_global_init(flags: i64) -> i32;
+extern pub fn curl_global_cleanup() -> void;
+
+extern pub fn curl_easy_init() -> i64;
+extern pub fn curl_easy_setopt(handle: i64, option: i64, ...) -> i32;
+extern pub fn curl_easy_perform(handle: i64) -> i32;
+extern pub fn curl_easy_cleanup(handle: i64) -> void;
+extern pub fn curl_easy_reset(handle: i64) -> void;
+extern pub fn curl_easy_strerror(code: i32) -> str8;
+extern pub fn curl_easy_getinfo(handle: i64, info: i64, ...) -> i32;
+
+extern pub fn curl_slist_append(list: i64, header: str8) -> i64;
+extern pub fn curl_slist_free_all(list: i64) -> void;

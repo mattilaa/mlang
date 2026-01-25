@@ -23,6 +23,14 @@ Use with UVim:
 uvim --mlang-lsp --mlang-lsp-path ./build/mlangd
 ```
 
+`mlang` emits `mlang_commands.json` for editor tooling. You can add module
+search paths in `mlang.toml`:
+
+```toml
+[tool.mlang]
+module_paths = ["modules", "vendor/mlang"]
+```
+
 ## Build + Install
 Build and install both `mlang` and `mlangd`:
 

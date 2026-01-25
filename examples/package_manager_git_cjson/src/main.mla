@@ -1,36 +1,46 @@
+mod curl;
+
+use curl::*;
+
 extern fn cJSON_Version() -> str8;
 extern fn strlen(s: str8) -> i64;
-
-extern fn curl_easy_init() -> i64;
-extern fn curl_easy_setopt(handle: i64, option: i64, ...) -> i32;
-extern fn curl_easy_perform(handle: i64) -> i32;
-extern fn curl_easy_cleanup(handle: i64) -> void;
 
 fn main() -> i32 {
     let version: str8 = cJSON_Version();
     println!("cJSON version: {}", version);
     println!("version length: {}", strlen(version));
 
+    let CURL_GLOBAL_DEFAULT: i64 = 3;
+    if curl_global_init(CURL_GLOBAL_DEFAULT) != 0 {
+        eprintln!("curl_global_init failed");
+        return 1;
+    }
+
     let curl: i64 = curl_easy_init();
     if curl == 0: {
         eprintln!("curl_easy_init failed");
+        curl_global_cleanup();
         return 1;
     }
 
     let CURLOPT_URL: i64 = 10002; // CURLOPTTYPE_STRINGPOINT + 2
     let CURLOPT_USERAGENT: i64 = 10018;
+    let CURLOPT_FOLLOWLOCATION: i64 = 52;
 
     curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "mlang-example/1.0");
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 
     println!("--- Fetching https://www.google.com ---");
     let rc: i32 = curl_easy_perform(curl);
     if rc != 0: {
-        eprintln!("curl_easy_perform failed: {}", rc);
+        eprintln!("curl_easy_perform failed: {}", curl_easy_strerror(rc));
         curl_easy_cleanup(curl);
+        curl_global_cleanup();
         return 1;
     }
 
     curl_easy_cleanup(curl);
+    curl_global_cleanup();
     return 0;
 }
