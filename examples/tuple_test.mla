@@ -11,7 +11,7 @@ fn main() -> i32 {
     let data: tuple<string, int, double> = ("test", 42, 3.14);
     println!("{} {} {}", data.0, data.1, data.2);
 
-    let data2: tuple<string, int, bool> = ("test", 42, true;
+    let data2: tuple<string, int, bool> = ("test", 42, true);
     println!("{} {} {}", data.0, data.1, data.2);
 
     return 0;

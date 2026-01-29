@@ -11,7 +11,7 @@ fn main() -> i32 {
     println!("version length: {}", strlen(version));
 
     let CURL_GLOBAL_DEFAULT: i64 = 3;
-    if curl_global_init(CURL_GLOBAL_DEFAULT) != 0 {
+    if curl_global_init(CURL_GLOBAL_DEFAULT) != 0: {
         eprintln!("curl_global_init failed");
         return 1;
     }
