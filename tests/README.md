@@ -40,6 +40,22 @@ cd tests
 ./run_tests.sh
 ```
 
+### Option 1b: Compile All Examples (Robot Framework)
+
+This uses Robot Framework to compile every example with `mlang -c`.
+
+Setup (virtual env + deps):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r tests/requirements.txt
+```
+
+```bash
+./tests/run_examples_robot.sh
+```
+
 ### Option 2: Manual CMake Build
 
 ```bash
