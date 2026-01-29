@@ -53,9 +53,12 @@ if [[ ${#ROBOT_CMD[@]} -eq 0 ]]; then
   exit 1
 fi
 
+CONSOLE_MODE="${ROBOT_CONSOLE_MODE:-verbose}"
+CONSOLE_COLORS="${ROBOT_CONSOLE_COLORS:-on}"
+
 "${ROBOT_CMD[@]}" \
-  --console dotted \
-  --consolecolors off \
+  --console "$CONSOLE_MODE" \
+  --consolecolors "$CONSOLE_COLORS" \
   --consolewidth 120 \
   --variable MLANG:"$MLANG_BIN" \
   --outputdir "$ROOT_DIR/build/robot" \

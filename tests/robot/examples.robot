@@ -36,3 +36,22 @@ Compile All Examples
         ${result}=    Run Process    ${MLANG}    -c    ${example}    stdout=PIPE    stderr=PIPE
         Should Be Equal As Integers    ${result.rc}    0    msg=Failed compiling ${example} (rc=${result.rc})\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}
     END
+
+Compile Errors For Conflicting Types
+    ${tmp}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/conflicting_types.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    struct Foo { var x: i32; };
+    ...    enum Foo { A };
+    Create File    ${tmp}    ${code}
+    ${result}=    Run Process    ${MLANG}    -c    ${tmp}    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stderr}    type name 'Foo' conflicts with earlier struct defined at line 1
+
+Compile Errors For Reserved Type Keywords
+    ${tmp}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/reserved_keyword.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    struct list { var x: i32; };
+    Create File    ${tmp}    ${code}
+    ${result}=    Run Process    ${MLANG}    -c    ${tmp}    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stderr}    expected identifier, found keyword 'list'
