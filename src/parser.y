@@ -229,20 +229,12 @@ struct_def
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_struct_def($4, $6, $8, 1, 1); }
     /* Generic struct definitions */
-    | STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($2, NULL, $4, $7, 0, 0); }
     | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($2, NULL, $4, $7, 0, 0); }
-    | PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($3, NULL, $5, $8, 1, 0); }
     | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($3, NULL, $5, $8, 1, 0); }
-    | DERIVE_DEBUG STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($3, NULL, $5, $8, 0, 1); }
     | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($3, NULL, $5, $8, 0, 1); }
-    | DERIVE_DEBUG PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($4, NULL, $6, $9, 1, 1); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($4, NULL, $6, $9, 1, 1); }
     ;
@@ -370,9 +362,7 @@ type
     | STR8   { $$ = create_type_node(TypeNode::TYPE_STR8); }
     | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = create_list_type(); }
-    | LIST LT type GT { $$ = create_generic_list_type($3); }
     | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
-    | MAP LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
@@ -384,13 +374,11 @@ type
     | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
     | IDENTIFIER { $$ = create_struct_type_ref($1); }
-    | IDENTIFIER LT type_list GT { $$ = create_generic_struct_type_ref($1, $3); }
     | IDENTIFIER GENERIC_LT type_list GT { $$ = create_generic_struct_type_ref($1, $3); }
     ;
 
 tuple_type
-    : TUPLE LT type_list GT { $$ = create_tuple_type($3); }
-    | TUPLE GENERIC_LT type_list GT { $$ = create_tuple_type($3); }
+    : TUPLE GENERIC_LT type_list GT { $$ = create_tuple_type($3); }
     ;
 
 type_list
@@ -666,6 +654,8 @@ primary_expression
     | IDENTIFIER { $$ = create_identifier($1); }
     | LPAREN expression RPAREN { $$ = $2; }
     | match_expression { $$ = $1; }
+    | list_literal { $$ = $1; }
+    | map_literal { $$ = $1; }
     ;
 
 /* Struct literal: StructName { field: value, ... } */
@@ -673,8 +663,6 @@ struct_literal
     : IDENTIFIER LBRACE struct_field_init_list RBRACE
         { $$ = create_struct_literal($1, NULL, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LBRACE struct_field_init_list RBRACE
-        { $$ = create_struct_literal($1, $3, $6, yylineno); }
-    | IDENTIFIER LT type_list GT LBRACE struct_field_init_list RBRACE
         { $$ = create_struct_literal($1, $3, $6, yylineno); }
     ;
 
@@ -715,10 +703,6 @@ function_call
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         { $$ = create_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
-        { $$ = create_result_constructor($1, $3, $6, yylineno); }
-    | IDENTIFIER LT type_list GT LPAREN RPAREN
-        { $$ = create_result_constructor($1, $3, NULL, yylineno); }
-    | IDENTIFIER LT type_list GT LPAREN argument_list RPAREN
         { $$ = create_result_constructor($1, $3, $6, yylineno); }
     ;
 

@@ -12,7 +12,7 @@ static int is_generic_struct_literal_start()
     std::string buf;
     buf.reserve(64);
     bool saw_gt = false;
-    bool saw_lbrace = false;
+    bool saw_generic_tail = false;
     int limit = 256;
     int c = 0;
 
@@ -40,8 +40,11 @@ static int is_generic_struct_literal_start()
             buf.push_back((char)c);
             if(std::isspace(c))
                 continue;
-            if(c == '{')
-                saw_lbrace = true;
+            if(c == '{' || c == '(' || c == ')' || c == ',' || c == ';' ||
+               c == '=' || c == ':' || c == '.' || c == ']' || c == '>')
+            {
+                saw_generic_tail = true;
+            }
             break;
         }
     }
@@ -49,7 +52,7 @@ static int is_generic_struct_literal_start()
     for(int i = (int)buf.size() - 1; i >= 0; --i)
         unput(buf[(size_t)i]);
 
-    return (saw_gt && saw_lbrace) ? 1 : 0;
+    return (saw_gt && saw_generic_tail) ? 1 : 0;
 }
 %}
 
