@@ -213,37 +213,37 @@ use_declaration
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($2, NULL, $4, 0, 0); }
+        { auto* node = create_struct_def($2, NULL, $4, 0, 0); node->line = yylineno; $$ = node; }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($2, $4, $6, 0, 0); }
+        { auto* node = create_struct_def($2, $4, $6, 0, 0); node->line = yylineno; $$ = node; }
     | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($3, NULL, $5, 1, 0); }
+        { auto* node = create_struct_def($3, NULL, $5, 1, 0); node->line = yylineno; $$ = node; }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($3, $5, $7, 1, 0); }
+        { auto* node = create_struct_def($3, $5, $7, 1, 0); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($3, NULL, $5, 0, 1); }
+        { auto* node = create_struct_def($3, NULL, $5, 0, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($3, $5, $7, 0, 1); }
+        { auto* node = create_struct_def($3, $5, $7, 0, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($4, NULL, $6, 1, 1); }
+        { auto* node = create_struct_def($4, NULL, $6, 1, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_struct_def($4, $6, $8, 1, 1); }
+        { auto* node = create_struct_def($4, $6, $8, 1, 1); node->line = yylineno; $$ = node; }
     /* Generic struct definitions */
     | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($2, NULL, $4, $7, 0, 0); }
+        { auto* node = create_generic_struct_def($2, NULL, $4, $7, 0, 0); node->line = yylineno; $$ = node; }
     | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($3, NULL, $5, $8, 1, 0); }
+        { auto* node = create_generic_struct_def($3, NULL, $5, $8, 1, 0); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($3, NULL, $5, $8, 0, 1); }
+        { auto* node = create_generic_struct_def($3, NULL, $5, $8, 0, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { $$ = create_generic_struct_def($4, NULL, $6, $9, 1, 1); }
+        { auto* node = create_generic_struct_def($4, NULL, $6, $9, 1, 1); node->line = yylineno; $$ = node; }
     ;
 
 enum_def
     : ENUM IDENTIFIER LBRACE enum_variant_list RBRACE SEMICOLON
-        { $$ = create_enum_def($2, $4, 0); }
+        { auto* node = create_enum_def($2, $4, 0); node->line = yylineno; $$ = node; }
     | PUB ENUM IDENTIFIER LBRACE enum_variant_list RBRACE SEMICOLON
-        { $$ = create_enum_def($3, $5, 1); }
+        { auto* node = create_enum_def($3, $5, 1); node->line = yylineno; $$ = node; }
     ;
 
 enum_variant_list
@@ -327,13 +327,13 @@ struct_method
 
 function_def
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_function_def($7, $2, $4, $9, 0, 0); }
+        { auto* node = create_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_function_def($8, $3, $5, $10, 1, 0); }
+        { auto* node = create_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
     | EXTERN FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { $$ = create_function_def($8, $3, $5, NULL, 0, 1); }
+        { auto* node = create_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
     | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { $$ = create_function_def($9, $4, $6, NULL, 1, 1); }
+        { auto* node = create_function_def($9, $4, $6, NULL, 1, 1); node->line = yylineno; $$ = node; }
     ;
 
 parameter_list
@@ -760,6 +760,29 @@ map_iterator
 
 %%
 
+static bool is_reserved_type_keyword(const char* s)
+{
+    if(!s || !*s)
+        return false;
+    return strcmp(s, "void") == 0 || strcmp(s, "bool") == 0 ||
+           strcmp(s, "int") == 0 || strcmp(s, "float") == 0 ||
+           strcmp(s, "double") == 0 || strcmp(s, "string") == 0 ||
+           strcmp(s, "str8") == 0 || strcmp(s, "str16") == 0 ||
+           strcmp(s, "list") == 0 || strcmp(s, "map") == 0 ||
+           strcmp(s, "tuple") == 0 || strcmp(s, "i8") == 0 ||
+           strcmp(s, "i16") == 0 || strcmp(s, "i32") == 0 ||
+           strcmp(s, "i64") == 0 || strcmp(s, "u8") == 0 ||
+           strcmp(s, "u16") == 0 || strcmp(s, "u32") == 0 ||
+           strcmp(s, "u64") == 0;
+}
+
 void yyerror(const char* s) {
+    if(is_reserved_type_keyword(yytext))
+    {
+        fprintf(stderr,
+                "error: expected identifier, found keyword '%s' (line %d)\n",
+                yytext, yylineno);
+        return;
+    }
     fprintf(stderr, "Error at line %d: %s\n", yylineno, s);
 }

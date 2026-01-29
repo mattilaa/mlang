@@ -1053,6 +1053,83 @@ void CodeGenerator::generateCode(ProgramNode* program)
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
 
+    // Reserved type keywords and type/name conflicts.
+    const std::unordered_set<std::string> reservedTypeNames = {
+        "void",  "bool", "int",  "float", "double", "string", "str8", "str16",
+        "list",  "map",  "tuple","i8",    "i16",    "i32",    "i64",
+        "u8",    "u16",  "u32",  "u64"};
+
+    std::map<std::string, std::pair<std::string, int>> typeDefs;
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(!st)
+                continue;
+            if(reservedTypeNames.count(st->name))
+            {
+                reportError(st->line, "type name '" + st->name +
+                                          "' is a reserved keyword");
+            }
+            auto it = typeDefs.find(st->name);
+            if(it != typeDefs.end())
+            {
+                reportError(st->line,
+                            "type name '" + st->name +
+                                "' conflicts with earlier " + it->second.first +
+                                " defined at line " +
+                                std::to_string(it->second.second));
+            }
+            else
+            {
+                typeDefs[st->name] = {"struct", st->line};
+            }
+        }
+    }
+
+    if(program->enumList)
+    {
+        for(auto* en : program->enumList->enums)
+        {
+            if(!en)
+                continue;
+            if(reservedTypeNames.count(en->name))
+            {
+                reportError(en->line, "type name '" + en->name +
+                                          "' is a reserved keyword");
+            }
+            auto it = typeDefs.find(en->name);
+            if(it != typeDefs.end())
+            {
+                reportError(en->line,
+                            "type name '" + en->name +
+                                "' conflicts with earlier " + it->second.first +
+                                " defined at line " +
+                                std::to_string(it->second.second));
+            }
+            else
+            {
+                typeDefs[en->name] = {"enum", en->line};
+            }
+        }
+    }
+
+    if(program->functionList)
+    {
+        for(auto* fn : program->functionList->functions)
+        {
+            if(!fn)
+                continue;
+            auto it = typeDefs.find(fn->name);
+            if(it != typeDefs.end())
+            {
+                reportError(fn->line,
+                            "function name '" + fn->name +
+                                "' conflicts with type '" + it->first + "'");
+            }
+        }
+    }
+
     if(program->enumList)
     {
         for(auto enumDef : program->enumList->enums)
