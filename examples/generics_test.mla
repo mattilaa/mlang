@@ -1,6 +1,7 @@
 // Test file for MLA generics
 // This tests the monomorphization implementation
 
+#[derive(Debug)]
 pub struct Foo {
     var value: i32;
 };
@@ -57,7 +58,7 @@ fn main() -> i32 {
     println!("Box<Foo> value: {}", box_foo.value.value);
 
     // Also test using the get() method
-    println!("Box<Foo> get().value: {}", box_foo.get());
+    println!("Box<Foo> get(): {:?}", box_foo.get());
 
     return 0;
 }
