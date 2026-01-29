@@ -231,11 +231,19 @@ struct_def
     /* Generic struct definitions */
     | STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($2, NULL, $4, $7, 0, 0); }
+    | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($2, NULL, $4, $7, 0, 0); }
     | PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($3, NULL, $5, $8, 1, 0); }
+    | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($3, NULL, $5, $8, 1, 0); }
     | DERIVE_DEBUG STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($3, NULL, $5, $8, 0, 1); }
+    | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($3, NULL, $5, $8, 0, 1); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
+        { $$ = create_generic_struct_def($4, NULL, $6, $9, 1, 1); }
+    | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
         { $$ = create_generic_struct_def($4, NULL, $6, $9, 1, 1); }
     ;
 
@@ -274,6 +282,16 @@ impl_block
             }
         }
     | IMPL LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = create_impl_block($5, $3);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($7);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            $$ = impl;
+        }
+    | IMPL GENERIC_LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
         {
             ASTNode* impl = create_impl_block($5, $3);
             auto* implBlock = static_cast<ImplBlockNode*>(impl);
