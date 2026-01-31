@@ -16,6 +16,10 @@ Options:
   --build-dir <dir>  Build directory (default: build)
   --use-make         Use Unix Makefiles instead of Ninja
   --help             Show this help
+
+Notes:
+  The install step also installs the stdlib docs (including builtin types)
+  to: <prefix>/share/mlang/stdlib
 USAGE
 }
 
@@ -85,4 +89,15 @@ if $install_after_build; then
   else
     cmake --install "$build_dir" --prefix "$prefix"
   fi
+
+  stdlib_dir="$prefix/share/mlang/stdlib"
+  if [[ -f "$stdlib_dir/types.mla" ]]; then
+    echo "installed stdlib docs: $stdlib_dir"
+  else
+    echo "warning: stdlib docs not found at $stdlib_dir" >&2
+    echo "         ensure stdlib/ is present in the repo and install again" >&2
+  fi
+else
+  echo "note: stdlib docs (builtin type definitions) are not installed" >&2
+  echo "      run with --install to copy stdlib to <prefix>/share/mlang/stdlib" >&2
 fi
