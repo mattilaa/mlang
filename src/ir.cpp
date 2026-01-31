@@ -1,5 +1,6 @@
 #include "ir.h"
 #include <cctype>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <llvm/Config/llvm-config.h>
@@ -1510,6 +1511,55 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
     members->addMember(new StructMemberNode(false,
                                             new StructTypeRefNode("E"),
                                             "err", nullptr));
+
+    auto make_self_param = []() -> ParameterNode*
+    {
+        auto* selfType = new GenericStructTypeRefNode("Result");
+        selfType->typeArgs.push_back(new StructTypeRefNode("T"));
+        selfType->typeArgs.push_back(new StructTypeRefNode("E"));
+        return new ParameterNode(selfType, "self");
+    };
+
+    auto make_simple_method = [&](const std::string& name, TypeNode* retType,
+                                  ExpressionNode* retExpr) -> StructMethodNode*
+    {
+        auto* params = new ParameterListNode();
+        params->parameters.push_back(make_self_param());
+        auto* retStmt = new ReturnNode(retExpr);
+        auto* body = new StatementListNode();
+        body->statements.push_back(retStmt);
+        auto* method =
+            new StructMethodNode(retType, name, params, body, true, false);
+        return method;
+    };
+
+    members->addMethod(
+        make_simple_method("is_ok", new TypeNode(TypeNode::TYPE_BOOL),
+                           static_cast<ExpressionNode*>(
+                               create_field_access_expr(
+                                   new IdentifierNode("self"),
+                                   strdup("is_ok"), 0))));
+    members->addMethod(
+        make_simple_method("is_err", new TypeNode(TypeNode::TYPE_BOOL),
+                           new BinaryOpNode(
+                               BinaryOpNode::OP_EQ,
+                               static_cast<ExpressionNode*>(
+                                   create_field_access_expr(
+                                       new IdentifierNode("self"),
+                                       strdup("is_ok"), 0)),
+                               new BoolLiteralNode(false))));
+    members->addMethod(
+        make_simple_method("unwrap", new StructTypeRefNode("T"),
+                           static_cast<ExpressionNode*>(
+                               create_field_access_expr(
+                                   new IdentifierNode("self"),
+                                   strdup("ok"), 0))));
+    members->addMethod(
+        make_simple_method("unwrap_err", new StructTypeRefNode("E"),
+                           static_cast<ExpressionNode*>(
+                               create_field_access_expr(
+                                   new IdentifierNode("self"),
+                                   strdup("err"), 0))));
 
     auto* resultDef = new StructDefNode("Result", "", members, true);
     resultDef->typeParams = {"T", "E"};
@@ -5977,6 +6027,32 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "' has no method named '" +
                                     node->methodName + "'");
         return nullptr;
+    }
+
+    auto isResultType = [&](const std::string& typeName) -> bool
+    {
+        if(typeName == "Result")
+            return true;
+        auto it = mangledToGenericName.find(typeName);
+        return it != mangledToGenericName.end() && it->second == "Result";
+    };
+
+    if(node->methodName == "unwrap" && isResultType(structTypeName))
+    {
+        if(node->line > 0)
+        {
+            std::cerr << "Warning (line " << node->line
+                      << "): Result.unwrap() may panic on Err; consider "
+                         "match/is_ok/is_err"
+                      << std::endl;
+        }
+        else
+        {
+            std::cerr
+                << "Warning: Result.unwrap() may panic on Err; consider "
+                   "match/is_ok/is_err"
+                << std::endl;
+        }
     }
 
     bool isPublic = methodIt->second.first;

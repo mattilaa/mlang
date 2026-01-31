@@ -1064,6 +1064,39 @@ TEST_F(MLATest, TernaryPrecedence)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+TEST_F(MLATest, ResultIsOkAndUnwrap)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let r: Result<i32, string> = Ok<i32, string>(123);
+            if r.is_ok(): {
+                let v: i32 = r.unwrap();
+                println!("{}", v);
+            } else: {
+                println!("bad");
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "123\n");
+}
+
+TEST_F(MLATest, ResultUnwrapWarns)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let r: Result<i32, string> = Ok<i32, string>(1);
+            let v: i32 = r.unwrap();
+            return v;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_EQ(rc, 0);
+    EXPECT_NE(out.find("Result.unwrap() may panic"), std::string::npos);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================

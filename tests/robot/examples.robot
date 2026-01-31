@@ -20,6 +20,7 @@ ${MLANG}           ./build/mlang
 ...    examples/math.mla
 ...    examples/print_test.mla
 ...    examples/result_match.mla
+...    examples/result_usage.mla
 ...    examples/str_types.mla
 ...    examples/thread_basic.mla
 ...    examples/thread_multi.mla
@@ -114,3 +115,24 @@ Compile Error Returns Nonzero
     Create File    ${src}    ${code}
     ${build}=    Run Process    ${MLANG}    ${src}    -o    ${OUTPUT DIR}/compile_error_bin    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${build.rc}    0    msg=Expected nonzero exit for compile error, got ${build.rc}\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+
+Result Methods And Unwrap Warns
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/result_unwrap_warn.mla
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/result_unwrap_warn_bin
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let r: Result<i32, string> = Ok<i32, string>(42);
+    ...        if r.is_ok(): {
+    ...            println!("{}", r.unwrap());
+    ...        } else: {
+    ...            println!("err");
+    ...        }
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0    msg=Failed building Result unwrap test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    Should Contain    ${build.stderr}    Result.unwrap() may panic
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    42

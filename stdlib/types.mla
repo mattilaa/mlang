@@ -58,3 +58,23 @@
 
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.
+
+// @builtin Result
+// Result<T, E> represents success (Ok) or failure (Err).
+// Construct with Ok<T, E>(value) or Err<T, E>(error).
+// Methods:
+//   - is_ok() -> bool
+//   - is_err() -> bool
+//   - unwrap() -> T (warning: may panic on Err)
+//   - unwrap_err() -> E
+// Prefer match or is_ok/is_err checks before unwrap().
+
+// @builtin Ok
+// Result constructor: Ok<T, E>(value).
+
+// @builtin Err
+// Result constructor: Err<T, E>(error).
+
+// @builtin Option
+// Option<T> represents Some(value) or None.
+// Construct with Some<T>(value) or None<T>().
