@@ -6,3 +6,4 @@ prefix on `make install` and are not required at runtime.
 
 Currently provided:
 - `types.mla`: built-in primitive and generic types.
+- `macros.mla`: built-in macros (println!, format!, assert_eq!, ...).

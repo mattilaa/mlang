@@ -103,7 +103,8 @@ static std::string escape_json_string(std::string_view s)
 static void write_mlang_commands_json(
     const std::vector<std::string>& files,
     const std::vector<std::string>& modulePaths,
-    const std::vector<std::tuple<std::string, std::string, int>>& builtinTypes)
+    const std::vector<std::tuple<std::string, std::string, int>>& builtinTypes,
+    const std::vector<std::tuple<std::string, std::string, int>>& builtinMacros)
 {
     std::ofstream out("mlang_commands.json", std::ios::binary);
     if(!out)
@@ -142,6 +143,16 @@ static void write_mlang_commands_json(
     for(size_t i = 0; i < builtinTypes.size(); ++i)
     {
         const auto& [name, path, line] = builtinTypes[i];
+        if(i > 0)
+            out << ", ";
+        out << "{ \"name\": \"" << escape_json_string(name) << "\", "
+            << "\"path\": \"" << escape_json_string(path) << "\", "
+            << "\"line\": " << line << " }";
+    }
+    out << "], \"builtin_macros\": [";
+    for(size_t i = 0; i < builtinMacros.size(); ++i)
+    {
+        const auto& [name, path, line] = builtinMacros[i];
         if(i > 0)
             out << ", ";
         out << "{ \"name\": \"" << escape_json_string(name) << "\", "
@@ -199,6 +210,38 @@ collect_builtin_type_defs(const std::vector<std::string>& modulePaths)
         {
             ++lineNo;
             const std::string marker = "// @builtin ";
+            if(line.rfind(marker, 0) != 0)
+                continue;
+            std::string name = line.substr(marker.size());
+            if(name.empty())
+                continue;
+            out.emplace_back(name, p.string(), lineNo);
+        }
+        if(!out.empty())
+            break;
+    }
+    return out;
+}
+
+static std::vector<std::tuple<std::string, std::string, int>>
+collect_builtin_macro_defs(const std::vector<std::string>& modulePaths)
+{
+    std::vector<std::tuple<std::string, std::string, int>> out;
+    for(const auto& root : modulePaths)
+    {
+        std::filesystem::path p = std::filesystem::path(root) / "macros.mla";
+        std::error_code ec;
+        if(!std::filesystem::exists(p, ec))
+            continue;
+        std::ifstream in(p);
+        if(!in)
+            continue;
+        std::string line;
+        int lineNo = 0;
+        while(std::getline(in, line))
+        {
+            ++lineNo;
+            const std::string marker = "// @builtin_macro ";
             if(line.rfind(marker, 0) != 0)
                 continue;
             std::string name = line.substr(marker.size());
@@ -763,7 +806,8 @@ int main(int argc, char** argv)
     }
 
     auto builtinTypes = collect_builtin_type_defs(searchPaths);
-    write_mlang_commands_json(files, searchPaths, builtinTypes);
+    auto builtinMacros = collect_builtin_macro_defs(searchPaths);
+    write_mlang_commands_json(files, searchPaths, builtinTypes, builtinMacros);
 
     return 0;
 }

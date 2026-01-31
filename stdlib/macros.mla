@@ -1,0 +1,31 @@
+// MLang built-in macros
+// This module is documentation-only and is used by editor tooling.
+// It is not meant to be imported at runtime.
+
+// @builtin_macro println
+// Prints to stdout with a newline.
+// Usage: println!("format {}", value)
+
+// @builtin_macro print
+// Prints to stdout without a newline.
+// Usage: print!("format {}", value)
+
+// @builtin_macro eprintln
+// Prints to stderr with a newline.
+// Usage: eprintln!("format {}", value)
+
+// @builtin_macro eprint
+// Prints to stderr without a newline.
+// Usage: eprint!("format {}", value)
+
+// @builtin_macro debug
+// Debug-only print to stderr. Printed only when --debug is enabled.
+// Usage: debug!("value: {}", value)
+
+// @builtin_macro format
+// Returns a formatted string.
+// Usage: let s: str8 = format!("{}", value);
+
+// @builtin_macro assert_eq
+// Asserts that two values are equal. Debug-only by default.
+// Usage: assert_eq!(left, right);
