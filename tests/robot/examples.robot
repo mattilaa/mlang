@@ -136,3 +136,22 @@ Result Methods And Unwrap Warns
     ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stdout}    42
+
+Mlang Test Runner
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/test_runner.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    #[test]
+    ...    fn test_ok() -> i32 {
+    ...        return 0;
+    ...    }
+    ...    #[test]
+    ...    fn test_fail() -> i32 {
+    ...        return 1;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${MLANG}    test    ${src}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    1    msg=Expected 1 failing test, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+
+Mlang Test Sample Directory
+    ${run}=    Run Process    ${MLANG}    test    tests    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0    msg=Expected sample tests to pass, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}

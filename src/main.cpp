@@ -18,6 +18,7 @@
 #include <sstream>
 #include <algorithm>
 #include <unordered_set>
+#include <sys/wait.h>
 
 // Declare functions and globals from parser/lexer
 extern int yyparse();
@@ -42,6 +43,7 @@ void printUsage(const char* programName)
               << "  -O1           Basic optimization\n"
               << "  -O2           Standard optimization (default)\n"
               << "  -O3           Aggressive optimization\n"
+              << "  --no-tests    Skip compiling #[test] functions\n"
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -Wl,<args>    Pass raw linker arguments\n"
@@ -57,6 +59,9 @@ void printUsage(const char* programName)
               << " pkg add <name> [--pkg-config NAME] [--system]\n"
               << "  " << programName << " pkg fetch\n"
               << "  " << programName << " pkg build\n"
+              << "\nTesting:\n"
+              << "  " << programName << " test [path]\n"
+              << "  " << programName << " run tests\n"
               << "\nExamples:\n"
               << "  " << programName
               << " test.mla              # Compile to a.out\n"
@@ -104,7 +109,8 @@ static void write_mlang_commands_json(
     const std::vector<std::string>& files,
     const std::vector<std::string>& modulePaths,
     const std::vector<std::tuple<std::string, std::string, int>>& builtinTypes,
-    const std::vector<std::tuple<std::string, std::string, int>>& builtinMacros)
+    const std::vector<std::tuple<std::string, std::string, int>>& builtinMacros,
+    const std::vector<std::tuple<std::string, std::string, int>>& builtinFunctions)
 {
     std::ofstream out("mlang_commands.json", std::ios::binary);
     if(!out)
@@ -153,6 +159,16 @@ static void write_mlang_commands_json(
     for(size_t i = 0; i < builtinMacros.size(); ++i)
     {
         const auto& [name, path, line] = builtinMacros[i];
+        if(i > 0)
+            out << ", ";
+        out << "{ \"name\": \"" << escape_json_string(name) << "\", "
+            << "\"path\": \"" << escape_json_string(path) << "\", "
+            << "\"line\": " << line << " }";
+    }
+    out << "], \"builtin_functions\": [";
+    for(size_t i = 0; i < builtinFunctions.size(); ++i)
+    {
+        const auto& [name, path, line] = builtinFunctions[i];
         if(i > 0)
             out << ", ";
         out << "{ \"name\": \"" << escape_json_string(name) << "\", "
@@ -242,6 +258,38 @@ collect_builtin_macro_defs(const std::vector<std::string>& modulePaths)
         {
             ++lineNo;
             const std::string marker = "// @builtin_macro ";
+            if(line.rfind(marker, 0) != 0)
+                continue;
+            std::string name = line.substr(marker.size());
+            if(name.empty())
+                continue;
+            out.emplace_back(name, p.string(), lineNo);
+        }
+        if(!out.empty())
+            break;
+    }
+    return out;
+}
+
+static std::vector<std::tuple<std::string, std::string, int>>
+collect_builtin_function_defs(const std::vector<std::string>& modulePaths)
+{
+    std::vector<std::tuple<std::string, std::string, int>> out;
+    for(const auto& root : modulePaths)
+    {
+        std::filesystem::path p = std::filesystem::path(root) / "test.mla";
+        std::error_code ec;
+        if(!std::filesystem::exists(p, ec))
+            continue;
+        std::ifstream in(p);
+        if(!in)
+            continue;
+        std::string line;
+        int lineNo = 0;
+        while(std::getline(in, line))
+        {
+            ++lineNo;
+            const std::string marker = "// @builtin_fn ";
             if(line.rfind(marker, 0) != 0)
                 continue;
             std::string name = line.substr(marker.size());
@@ -397,6 +445,25 @@ int main(int argc, char** argv)
         return pkg.run(argc, argv);
     }
 
+    bool testMode = false;
+    bool runTests = false;
+    bool includeTests = true;
+    int argStart = 1;
+
+    if(std::string(argv[1]) == "test")
+    {
+        testMode = true;
+        runTests = true;
+        argStart = 2;
+    }
+    else if(argc >= 3 && std::string(argv[1]) == "run" &&
+            std::string(argv[2]) == "tests")
+    {
+        testMode = true;
+        runTests = true;
+        argStart = 3;
+    }
+
     // Parse command line arguments
     std::string inputFile;
     std::string outputFile = "a.out";
@@ -409,7 +476,7 @@ int main(int argc, char** argv)
     bool debugMode = false;
     std::vector<std::string> linkArgs;
 
-    for(int i = 1; i < argc; ++i)
+    for(int i = argStart; i < argc; ++i)
     {
         std::string arg = argv[i];
 
@@ -487,6 +554,14 @@ int main(int argc, char** argv)
         {
             debugMode = true;
         }
+        else if(arg == "--no-tests")
+        {
+            includeTests = false;
+        }
+        else if(arg == "--no-run" && testMode)
+        {
+            runTests = false;
+        }
         else if(arg[0] != '-')
         {
             inputFile = arg;
@@ -501,9 +576,76 @@ int main(int argc, char** argv)
 
     if(inputFile.empty())
     {
-        std::cerr << "Error: No input file specified" << std::endl;
-        printUsage(argv[0]);
-        return 1;
+        if(testMode)
+        {
+            inputFile = "tests";
+        }
+        else
+        {
+            std::cerr << "Error: No input file specified" << std::endl;
+            printUsage(argv[0]);
+            return 1;
+        }
+    }
+
+    std::string generatedTestRoot;
+    if(testMode)
+    {
+        std::error_code tec;
+        std::filesystem::path inPath = inputFile;
+        if(std::filesystem::is_directory(inPath, tec))
+        {
+            std::vector<std::filesystem::path> files;
+            for(std::filesystem::directory_iterator it(inPath, tec), end;
+                it != end; ++it)
+            {
+                if(!it->is_regular_file(tec))
+                    continue;
+                auto p = it->path();
+                if(p.extension() != ".mla")
+                    continue;
+                if(p.filename() == "__mlang_test_root.mla")
+                    continue;
+                std::string filename = p.filename().string();
+                if(filename.rfind("test_", 0) != 0)
+                    continue;
+                files.push_back(p);
+            }
+            if(files.empty())
+            {
+                std::cerr << "Error: No .mla test files found in " << inputFile
+                          << std::endl;
+                return 1;
+            }
+
+            std::filesystem::path rootFile =
+                inPath / "__mlang_test_root.mla";
+            std::ofstream out(rootFile);
+            if(!out)
+            {
+                std::cerr << "Error: Failed to create test root file: "
+                          << rootFile << std::endl;
+                return 1;
+            }
+            for(const auto& f : files)
+            {
+                std::string modName = f.stem().string();
+                out << "mod " << modName << ";\n";
+                out << "use " << modName << "::*;\n";
+            }
+            out.close();
+
+            generatedTestRoot = rootFile.string();
+            inputFile = generatedTestRoot;
+            if(outputFile == "a.out")
+            {
+                outputFile = (inPath / "__mlang_test_bin").string();
+            }
+        }
+        else if(outputFile == "a.out")
+        {
+            outputFile = "mlang_test_bin";
+        }
     }
 
     FILE* input_file = fopen(inputFile.c_str(), "r");
@@ -634,6 +776,9 @@ int main(int argc, char** argv)
 
         // Initialize code generator
         CodeGenerator generator(context, builder, module, debugMode);
+        generator.setTestMode(testMode);
+        if(!testMode)
+            generator.setIncludeTests(includeTests);
 
         // Generate LLVM IR
         if(auto* program = dynamic_cast<ProgramNode*>(programRoot))
@@ -807,7 +952,30 @@ int main(int argc, char** argv)
 
     auto builtinTypes = collect_builtin_type_defs(searchPaths);
     auto builtinMacros = collect_builtin_macro_defs(searchPaths);
-    write_mlang_commands_json(files, searchPaths, builtinTypes, builtinMacros);
+    auto builtinFunctions = collect_builtin_function_defs(searchPaths);
+    write_mlang_commands_json(files, searchPaths, builtinTypes, builtinMacros,
+                              builtinFunctions);
+
+    if(testMode && runTests && !emitObjectOnly && !emitAssembly &&
+       !emitLLVMIR && !emitBitcode)
+    {
+        int rc = std::system(outputFile.c_str());
+        int exitCode = 1;
+        if(rc != -1 && WIFEXITED(rc))
+            exitCode = WEXITSTATUS(rc);
+        if(!generatedTestRoot.empty())
+        {
+            std::error_code rmec;
+            std::filesystem::remove(generatedTestRoot, rmec);
+        }
+        return exitCode;
+    }
+
+    if(!generatedTestRoot.empty())
+    {
+        std::error_code rmec;
+        std::filesystem::remove(generatedTestRoot, rmec);
+    }
 
     return 0;
 }

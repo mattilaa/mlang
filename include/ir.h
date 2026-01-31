@@ -28,6 +28,14 @@ public:
     {
         return hasError;
     }
+    void setTestMode(bool enabled)
+    {
+        testMode = enabled;
+    }
+    void setIncludeTests(bool enabled)
+    {
+        includeTests = enabled;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -55,6 +63,8 @@ private:
     std::set<std::string> debugStructs;
     bool hasError;
     bool debugEnabled;
+    bool testMode = false;
+    bool includeTests = true;
 
     // Visibility tracking for functions
     // Maps function name -> (isPublic, sourceModule)
@@ -113,6 +123,7 @@ private:
     std::string
     getOrCreateMonomorphizedStruct(const std::string& genericName,
                                    const std::vector<TypeNode*>& typeArgs);
+    void generateTestMain(const std::vector<FunctionDefNode*>& tests);
 
     // Type helpers
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);

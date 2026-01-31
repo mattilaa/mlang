@@ -963,6 +963,7 @@ public:
     StatementListNode* body;
     bool isPublic;
     bool isExtern;
+    bool isTest = false;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 

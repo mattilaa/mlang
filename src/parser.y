@@ -153,8 +153,9 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
 %token DERIVE_DEBUG
+%token TEST_ATTR
 
-%type <ast> program top_level_list top_level_item
+%type <ast> program top_level_list top_level_item test_function_def
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
@@ -197,6 +198,7 @@ top_level_item
     : struct_def
     | enum_def
     | function_def
+    | test_function_def
     | mod_declaration
     | use_declaration
     | impl_block
@@ -337,6 +339,11 @@ function_def
         { auto* node = create_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
     | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
         { auto* node = create_function_def($9, $4, $6, NULL, 1, 1); node->line = yylineno; $$ = node; }
+    ;
+
+test_function_def
+    : TEST_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isTest = true; $$ = $2; }
     ;
 
 parameter_list

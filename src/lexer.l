@@ -139,6 +139,7 @@ static int is_generic_struct_literal_start()
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
 "#[derive(Debug)]" { return DERIVE_DEBUG; }
+"#[test]"         { return TEST_ATTR; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }

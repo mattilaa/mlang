@@ -1065,6 +1065,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     MainArgMode mainArgMode = MainArgMode::None;
     GenericListTypeNode* mainArgsListType = nullptr;
     TypeNode::TypeKind mainArgcKind = TypeNode::TYPE_VOID;
+    std::vector<FunctionDefNode*> testFunctions;
 
     if(program->functionList)
     {
@@ -1073,9 +1074,16 @@ void CodeGenerator::generateCode(ProgramNode* program)
             if(fn && fn->name == "main" && !fn->isExtern)
             {
                 mainDef = fn;
-                break;
             }
+            if(fn && fn->isTest && !fn->isExtern)
+                testFunctions.push_back(fn);
         }
+    }
+
+    if(testMode && mainDef)
+    {
+        reportError(mainDef->line,
+                    "main is not allowed in test mode; use #[test] functions");
     }
 
     if(mainDef)
@@ -1314,6 +1322,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto funcDef : program->functionList->functions)
         {
+            if(funcDef->isTest && !includeTests)
+                continue;
             // Track function visibility
             functionVisibility[funcDef->name] =
                 std::make_pair(funcDef->isPublic, funcDef->sourceModule);
@@ -1325,6 +1335,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto funcDef : program->functionList->functions)
         {
+            if(funcDef->isTest && !includeTests)
+                continue;
             generateFunctionDeclaration(funcDef);
         }
     }
@@ -1367,12 +1379,39 @@ void CodeGenerator::generateCode(ProgramNode* program)
     {
         for(auto funcDef : program->functionList->functions)
         {
+            if(funcDef->isTest && !includeTests)
+                continue;
             generateFunctionDefinition(funcDef);
         }
     }
 
+    if(testMode && !testFunctions.empty())
+    {
+        for(auto* testFn : testFunctions)
+        {
+            if(!testFn || !testFn->parameters)
+                continue;
+            if(!testFn->parameters->parameters.empty())
+            {
+                reportError(testFn->line,
+                            "test functions must have no parameters");
+                continue;
+            }
+            if(testFn->returnType &&
+               !(testFn->returnType->kind == TypeNode::TYPE_VOID ||
+                 testFn->returnType->kind == TypeNode::TYPE_INT ||
+                 testFn->returnType->kind == TypeNode::TYPE_I32))
+            {
+                reportError(testFn->line,
+                            "test functions must return void or i32");
+                continue;
+            }
+        }
+        generateTestMain(testFunctions);
+    }
+
     // Generate a C-compatible main wrapper if needed.
-    if(mainDef && mainArgMode != MainArgMode::None && mainArgsListType)
+    if(!testMode && mainDef && mainArgMode != MainArgMode::None && mainArgsListType)
     {
         llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -1478,6 +1517,49 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
         }
     }
+}
+
+void CodeGenerator::generateTestMain(
+    const std::vector<FunctionDefNode*>& tests)
+{
+    llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+    llvm::FunctionType* mainType =
+        llvm::FunctionType::get(i32Type, {}, false);
+    llvm::Function* mainFn =
+        llvm::Function::Create(mainType, llvm::Function::ExternalLinkage,
+                               "main", module.get());
+
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", mainFn);
+    builder.SetInsertPoint(entry);
+
+    llvm::AllocaInst* failures =
+        builder.CreateAlloca(i32Type, nullptr, "failures");
+    builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), failures);
+
+    for(auto* testFn : tests)
+    {
+        if(!testFn || testFn->isExtern)
+            continue;
+        llvm::Function* callee = module->getFunction(testFn->name);
+        if(!callee)
+            continue;
+        llvm::Value* result = builder.CreateCall(callee, {});
+        if(callee->getReturnType()->isVoidTy())
+            continue;
+        llvm::Value* isFail = builder.CreateICmpNE(
+            result, llvm::ConstantInt::get(i32Type, 0), "testfail");
+        llvm::Value* failInc =
+            builder.CreateZExt(isFail, i32Type, "failinc");
+        llvm::Value* cur =
+            builder.CreateLoad(i32Type, failures, "failures.cur");
+        llvm::Value* next = builder.CreateAdd(cur, failInc, "failures.next");
+        builder.CreateStore(next, failures);
+    }
+
+    llvm::Value* total =
+        builder.CreateLoad(i32Type, failures, "failures.total");
+    builder.CreateRet(total);
 }
 
 void CodeGenerator::ensureResultBuiltin(ProgramNode* program)

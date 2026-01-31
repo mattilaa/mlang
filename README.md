@@ -51,6 +51,28 @@ Use Make instead of Ninja:
 ./scripts/build_install_lsp.sh --use-make
 ```
 
+## Testing
+Run tests with the built-in runner. Mark test functions with `#[test]` and
+return `0` for pass, non-zero for failure.
+
+```sh
+# Run tests in the ./tests directory
+mlang test
+
+# Run tests in a specific file or directory
+mlang test tests/test_sample.mla
+mlang test tests
+
+# Alternative entry point
+mlang run tests
+```
+
+Skip compiling tests in normal builds:
+
+```sh
+mlang --no-tests main.mla
+```
+
 ## Debug Formatting + Assertions
 Derive Debug for structs, use `format!` with `{:?}`/`{:#?}`, and `assert_eq!`:
 
