@@ -1053,6 +1053,100 @@ void CodeGenerator::generateCode(ProgramNode* program)
     ensureOptionBuiltin(program);
     ensureResultBuiltin(program);
 
+    enum class MainArgMode
+    {
+        None,
+        ArgsList,
+        ArgsListWithCount
+    };
+
+    FunctionDefNode* mainDef = nullptr;
+    MainArgMode mainArgMode = MainArgMode::None;
+    GenericListTypeNode* mainArgsListType = nullptr;
+    TypeNode::TypeKind mainArgcKind = TypeNode::TYPE_VOID;
+
+    if(program->functionList)
+    {
+        for(auto* fn : program->functionList->functions)
+        {
+            if(fn && fn->name == "main" && !fn->isExtern)
+            {
+                mainDef = fn;
+                break;
+            }
+        }
+    }
+
+    if(mainDef)
+    {
+        size_t paramCount = mainDef->parameters->parameters.size();
+        bool returnOk = mainDef->returnType &&
+                        (mainDef->returnType->kind == TypeNode::TYPE_INT ||
+                         mainDef->returnType->kind == TypeNode::TYPE_I32);
+        if(!returnOk)
+        {
+            reportError(
+                mainDef->line,
+                "invalid signature for 'main': return type must be i32");
+        }
+
+        if(paramCount == 0)
+        {
+            mainArgMode = MainArgMode::None;
+        }
+        else if(paramCount == 1 || paramCount == 2)
+        {
+            size_t listIndex = paramCount - 1;
+            if(paramCount == 2)
+            {
+                mainArgcKind =
+                    mainDef->parameters->parameters[0]->type->kind;
+                if(!(mainArgcKind == TypeNode::TYPE_INT ||
+                     mainArgcKind == TypeNode::TYPE_I32 ||
+                     mainArgcKind == TypeNode::TYPE_I64))
+                {
+                    reportError(
+                        mainDef->line,
+                        "invalid signature for 'main': argc must be i32/i64");
+                }
+            }
+
+            auto* listType = dynamic_cast<GenericListTypeNode*>(
+                mainDef->parameters->parameters[listIndex]->type);
+            if(!listType)
+            {
+                reportError(
+                    mainDef->line,
+                    "invalid signature for 'main': argv must be list<str8>");
+            }
+            else
+            {
+                auto elemKind = listType->elementType->kind;
+                if(!(elemKind == TypeNode::TYPE_STR8 ||
+                     elemKind == TypeNode::TYPE_STRING))
+                {
+                    reportError(
+                        mainDef->line,
+                        "invalid signature for 'main': argv must be list<str8>");
+                }
+                else
+                {
+                    mainArgsListType = listType;
+                }
+            }
+
+            mainArgMode = (paramCount == 1) ? MainArgMode::ArgsList
+                                            : MainArgMode::ArgsListWithCount;
+            mainDef->name = "__mlang_user_main";
+        }
+        else
+        {
+            reportError(mainDef->line,
+                        "invalid signature for 'main': expected no args, "
+                        "list<str8>, or (i32, list<str8>)");
+        }
+    }
+
     // Reserved type keywords and type/name conflicts.
     const std::unordered_set<std::string> reservedTypeNames = {
         "void",  "bool", "int",  "float", "double", "string", "str8", "str16",
@@ -1273,6 +1367,84 @@ void CodeGenerator::generateCode(ProgramNode* program)
         for(auto funcDef : program->functionList->functions)
         {
             generateFunctionDefinition(funcDef);
+        }
+    }
+
+    // Generate a C-compatible main wrapper if needed.
+    if(mainDef && mainArgMode != MainArgMode::None && mainArgsListType)
+    {
+        llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+        llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+        llvm::Type* argvPtrType = ptrType;
+#else
+        llvm::Type* i8Type = llvm::Type::getInt8Ty(context);
+        llvm::Type* i8PtrType = llvm::PointerType::get(i8Type, 0);
+        llvm::Type* argvPtrType = llvm::PointerType::get(i8PtrType, 0);
+        llvm::Type* ptrType = llvm::PointerType::get(
+            getLLVMTypeFromNode(mainArgsListType->elementType), 0);
+#endif
+
+        std::vector<llvm::Type*> wrapperParams = {i32Type, argvPtrType};
+        llvm::FunctionType* wrapperType =
+            llvm::FunctionType::get(i32Type, wrapperParams, false);
+        llvm::Function* wrapper =
+            llvm::Function::Create(wrapperType, llvm::Function::ExternalLinkage,
+                                   "main", module.get());
+
+        auto argIt = wrapper->arg_begin();
+        llvm::Value* argcArg = &*argIt++;
+        llvm::Value* argvArg = &*argIt++;
+        argcArg->setName("argc");
+        argvArg->setName("argv");
+
+        llvm::BasicBlock* entry =
+            llvm::BasicBlock::Create(context, "entry", wrapper);
+        builder.SetInsertPoint(entry);
+
+        llvm::Value* argc64 =
+            builder.CreateSExt(argcArg, i64Type, "argc64");
+
+        // Build list struct { size: i64, data: ptr }
+        llvm::Type* listStructType = getLLVMTypeFromNode(mainArgsListType);
+        llvm::Value* listStruct = llvm::UndefValue::get(listStructType);
+        listStruct =
+            builder.CreateInsertValue(listStruct, argc64, 0, "args.size");
+
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Value* dataPtr = argvArg;
+#else
+        llvm::Value* dataPtr = argvArg;
+        if(argvArg->getType() != ptrType)
+            dataPtr = builder.CreateBitCast(argvArg, ptrType, "args.data");
+#endif
+
+        listStruct =
+            builder.CreateInsertValue(listStruct, dataPtr, 1, "args.data");
+
+        llvm::Function* userMain =
+            module->getFunction("__mlang_user_main");
+        if(!userMain)
+        {
+            reportError(mainDef->line,
+                        "failed to generate main wrapper: missing user main");
+            builder.CreateRet(llvm::ConstantInt::get(i32Type, 1));
+        }
+        else
+        {
+            std::vector<llvm::Value*> callArgs;
+            if(mainArgMode == MainArgMode::ArgsListWithCount)
+            {
+                llvm::Value* argcValue = argcArg;
+                if(mainArgcKind == TypeNode::TYPE_I64)
+                    argcValue = argc64;
+                callArgs.push_back(argcValue);
+            }
+            callArgs.push_back(listStruct);
+            llvm::Value* rc =
+                builder.CreateCall(userMain, callArgs, "mainrc");
+            builder.CreateRet(rc);
         }
     }
 
@@ -1617,8 +1789,19 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         // Track parameter types
         if(paramIdx < node->parameters->parameters.size())
         {
-            variableTypes[std::string(arg.getName())] =
-                node->parameters->parameters[paramIdx]->type->kind;
+            auto* paramNode = node->parameters->parameters[paramIdx];
+            variableTypes[std::string(arg.getName())] = paramNode->type->kind;
+            if(auto* genListType =
+                   dynamic_cast<GenericListTypeNode*>(paramNode->type))
+            {
+                listElementTypes[std::string(arg.getName())] =
+                    genListType->elementType;
+            }
+            if(auto* mapType = dynamic_cast<MapTypeNode*>(paramNode->type))
+            {
+                mapKeyValueTypes[std::string(arg.getName())] =
+                    std::make_pair(mapType->keyType, mapType->valueType);
+            }
         }
         paramIdx++;
     }

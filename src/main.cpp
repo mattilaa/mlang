@@ -119,6 +119,22 @@ static void write_mlang_commands_json(
             out << ", ";
         out << "\"" << escape_json_string(modulePaths[i]) << "\"";
     }
+    out << "], \"builtins\": [";
+    const char* builtins[] = {
+        "println!",
+        "print!",
+        "eprintln!",
+        "eprint!",
+        "debug!",
+        "format!",
+        "assert_eq!"
+    };
+    for(size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); ++i)
+    {
+        if(i > 0)
+            out << ", ";
+        out << "\"" << builtins[i] << "\"";
+    }
     out << "] }";
 }
 
