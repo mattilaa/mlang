@@ -1,0 +1,8 @@
+// Example: command line arguments
+fn main(argc: i32, args: list<str8>) -> i32 {
+    println!("argc: {}", argc);
+    for a in args {
+        println!("{}", a);
+    }
+    return 0;
+}
