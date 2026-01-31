@@ -1,0 +1,60 @@
+// MLang built-in types
+// This module is documentation-only and is used by editor tooling.
+// It is not meant to be imported at runtime.
+
+// @builtin void
+// No value. Used as the return type for functions that do not return.
+
+// @builtin bool
+// Boolean value: true or false.
+
+// @builtin int
+// Default integer type (alias of i32).
+
+// @builtin i8
+// Signed 8-bit integer. Range: -128..127.
+
+// @builtin i16
+// Signed 16-bit integer. Range: -32768..32767.
+
+// @builtin i32
+// Signed 32-bit integer. Range: -2147483648..2147483647.
+
+// @builtin i64
+// Signed 64-bit integer. Range: -9223372036854775808..9223372036854775807.
+
+// @builtin u8
+// Unsigned 8-bit integer. Range: 0..255.
+
+// @builtin u16
+// Unsigned 16-bit integer. Range: 0..65535.
+
+// @builtin u32
+// Unsigned 32-bit integer. Range: 0..4294967295.
+
+// @builtin u64
+// Unsigned 64-bit integer. Range: 0..18446744073709551615.
+
+// @builtin float
+// 32-bit floating point (single precision).
+
+// @builtin double
+// 64-bit floating point (double precision).
+
+// @builtin string
+// Default string type (alias of str8).
+
+// @builtin str8
+// UTF-8 string type.
+
+// @builtin str16
+// UTF-16 string type.
+
+// @builtin list
+// Generic list type: list<T>.
+
+// @builtin map
+// Generic map type: map<K, V>.
+
+// @builtin tuple
+// Tuple type: tuple<T1, T2, ...>.

@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cstdlib>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -101,7 +102,8 @@ static std::string escape_json_string(std::string_view s)
 
 static void write_mlang_commands_json(
     const std::vector<std::string>& files,
-    const std::vector<std::string>& modulePaths)
+    const std::vector<std::string>& modulePaths,
+    const std::vector<std::tuple<std::string, std::string, int>>& builtinTypes)
 {
     std::ofstream out("mlang_commands.json", std::ios::binary);
     if(!out)
@@ -136,7 +138,78 @@ static void write_mlang_commands_json(
             out << ", ";
         out << "\"" << builtins[i] << "\"";
     }
+    out << "], \"builtin_types\": [";
+    for(size_t i = 0; i < builtinTypes.size(); ++i)
+    {
+        const auto& [name, path, line] = builtinTypes[i];
+        if(i > 0)
+            out << ", ";
+        out << "{ \"name\": \"" << escape_json_string(name) << "\", "
+            << "\"path\": \"" << escape_json_string(path) << "\", "
+            << "\"line\": " << line << " }";
+    }
     out << "] }";
+}
+
+static std::vector<std::string> default_stdlib_paths()
+{
+    std::vector<std::string> paths;
+    if(const char* env = std::getenv("MLANG_STDLIB_PATH"))
+        paths.emplace_back(env);
+    if(const char* xdg = std::getenv("XDG_DATA_HOME"))
+        paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
+    if(const char* home = std::getenv("HOME"))
+        paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
+#ifdef MLANG_STDLIB_INSTALL_DIR
+    paths.emplace_back(MLANG_STDLIB_INSTALL_DIR);
+#endif
+    paths.emplace_back("/usr/local/share/mlang/stdlib");
+    paths.emplace_back("/usr/share/mlang/stdlib");
+    return paths;
+}
+
+static void append_stdlib_paths(std::vector<std::string>& modulePaths)
+{
+    std::unordered_set<std::string> seen;
+    for(const auto& p : modulePaths)
+        seen.insert(p);
+    for(const auto& p : default_stdlib_paths())
+    {
+        if(!p.empty() && seen.insert(p).second)
+            modulePaths.push_back(p);
+    }
+}
+
+static std::vector<std::tuple<std::string, std::string, int>>
+collect_builtin_type_defs(const std::vector<std::string>& modulePaths)
+{
+    std::vector<std::tuple<std::string, std::string, int>> out;
+    for(const auto& root : modulePaths)
+    {
+        std::filesystem::path p = std::filesystem::path(root) / "types.mla";
+        std::error_code ec;
+        if(!std::filesystem::exists(p, ec))
+            continue;
+        std::ifstream in(p);
+        if(!in)
+            continue;
+        std::string line;
+        int lineNo = 0;
+        while(std::getline(in, line))
+        {
+            ++lineNo;
+            const std::string marker = "// @builtin ";
+            if(line.rfind(marker, 0) != 0)
+                continue;
+            std::string name = line.substr(marker.size());
+            if(name.empty())
+                continue;
+            out.emplace_back(name, p.string(), lineNo);
+        }
+        if(!out.empty())
+            break;
+    }
+    return out;
 }
 
 static std::string trim(std::string_view s)
@@ -471,6 +544,8 @@ int main(int argc, char** argv)
                 }
             }
 
+            append_stdlib_paths(moduleSearchPaths);
+
             // Initialize module loader
             ModuleLoader moduleLoader(basePath, moduleSearchPaths);
 
@@ -687,7 +762,8 @@ int main(int argc, char** argv)
             searchPaths.push_back(norm);
     }
 
-    write_mlang_commands_json(files, searchPaths);
+    auto builtinTypes = collect_builtin_type_defs(searchPaths);
+    write_mlang_commands_json(files, searchPaths, builtinTypes);
 
     return 0;
 }

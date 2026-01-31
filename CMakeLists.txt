@@ -8,6 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(GNUInstallDirs)
 
+# Install location for stdlib modules.
+set(MLANG_STDLIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/mlang/stdlib")
+add_compile_definitions(MLANG_STDLIB_INSTALL_DIR="${MLANG_STDLIB_INSTALL_DIR}")
+
 # Create compile_commands.json in build directory
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -221,6 +225,11 @@ install(TARGETS mlang
 
 install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Install stdlib modules for editor tooling and go-to-definition.
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlang/stdlib
+        FILES_MATCHING PATTERN "*.mla" PATTERN "*.md")
 
 # ============================================================================
 # Documentation (Doxygen)
