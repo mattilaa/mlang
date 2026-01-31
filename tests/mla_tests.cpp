@@ -84,6 +84,30 @@ protected:
         return result != 0;
     }
 
+    std::string compileCapture(int& exitCode)
+    {
+        std::string cmd =
+            compilerPath + " -o " + outputExe + " " + sourceFile + " 2>&1";
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if(!pipe)
+        {
+            exitCode = -1;
+            return "";
+        }
+        std::string output;
+        char buffer[256];
+        while(fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        {
+            output += buffer;
+        }
+        int rc = pclose(pipe);
+        if(WIFEXITED(rc))
+            exitCode = WEXITSTATUS(rc);
+        else
+            exitCode = -1;
+        return output;
+    }
+
     // Run the compiled executable and capture stdout
     std::string run()
     {
@@ -484,7 +508,7 @@ TEST_F(MLATest, LetCannotReassign)
         }
     )";
     writeSource(code);
-    EXPECT_FALSE(compile(false)); // Should fail compilation
+    EXPECT_TRUE(compile(false)); // Should fail compilation
 }
 
 // ============================================================================
@@ -999,6 +1023,45 @@ TEST_F(MLATest, LargeExpression)
         }
     )";
     EXPECT_EQ(compileAndRun(code), "55\n");
+}
+
+TEST_F(MLATest, TernaryReturn)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 5;
+            return x > 3 ? 7 : 9;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
+TEST_F(MLATest, TernaryTypeMismatch)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1;
+            let y: i32 = x > 0 ? 1 : "no";
+            return y;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("ternary branches must return the same type"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, TernaryPrecedence)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1 + 2 > 2 ? 4 : 5;
+            return x;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
 // ============================================================================

@@ -24,6 +24,7 @@ ${MLANG}           ./build/mlang
 ...    examples/thread_basic.mla
 ...    examples/thread_multi.mla
 ...    examples/thread_mutex_atomic.mla
+...    examples/ternary_example.mla
 ...    examples/tuple_example.mla
 ...    examples/tuple_test.mla
 ...    examples/package_manager_git_cjson/src/main.mla
@@ -75,3 +76,17 @@ Main Accepts Command Line Arguments
     Should Contain    ${run.stdout}    argc: 3
     Should Contain    ${run.stdout}    hello
     Should Contain    ${run.stdout}    world
+
+Main Return Uses Ternary
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_ternary_return.mla
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_ternary_return_bin
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let x: i32 = 3;
+    ...        return x > 2 ? 7 : 9;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0    msg=Failed building ternary return test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    7

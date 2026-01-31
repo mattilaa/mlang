@@ -239,6 +239,30 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
                             static_cast<ExpressionNode*>(right));
 }
 
+ASTNode* create_unary_op(int op, ASTNode* operand)
+{
+    UnaryOpNode::OpType opType;
+    switch(op)
+    {
+    case MINUS:
+        opType = UnaryOpNode::OP_NEG;
+        break;
+    default:
+        throw std::runtime_error("Unknown unary operator");
+    }
+    return new UnaryOpNode(opType, static_cast<ExpressionNode*>(operand));
+}
+
+ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
+                                   int line)
+{
+    auto* node = new TernaryNode(static_cast<ExpressionNode*>(cond),
+                                 static_cast<ExpressionNode*>(t),
+                                 static_cast<ExpressionNode*>(f));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line)
 {
@@ -370,10 +394,17 @@ ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch)
 {
-    return new IfNode(static_cast<ExpressionNode*>(condition),
-                      static_cast<StatementListNode*>(then_branch),
-                      static_cast<IfNode*>(else_if_branch),
-                      static_cast<StatementListNode*>(else_branch));
+    auto* thenBlock = dynamic_cast<BlockStatementNode*>(then_branch);
+    auto* elseBlock = dynamic_cast<BlockStatementNode*>(else_branch);
+    StatementListNode* thenList =
+        thenBlock ? thenBlock->statements
+                  : dynamic_cast<StatementListNode*>(then_branch);
+    StatementListNode* elseList =
+        elseBlock ? elseBlock->statements
+                  : dynamic_cast<StatementListNode*>(else_branch);
+
+    return new IfNode(static_cast<ExpressionNode*>(condition), thenList,
+                      static_cast<IfNode*>(else_if_branch), elseList);
 }
 
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr)
@@ -655,7 +686,9 @@ ASTNode* create_block_statement(ASTNode* stmt_list)
 ASTNode* create_else_if(ASTNode* condition, ASTNode* body)
 {
     auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
-    StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
+    StatementListNode* stmtList =
+        blockBody ? blockBody->statements
+                  : dynamic_cast<StatementListNode*>(body);
 
     return new IfNode(static_cast<ExpressionNode*>(condition), stmtList);
 }
@@ -1049,6 +1082,24 @@ std::string BinaryOpNode::toString() const
     }
     return "(" + left->toString() + " " + op_str + " " + right->toString() +
            ")";
+}
+
+std::string UnaryOpNode::toString() const
+{
+    std::string op_str;
+    switch(op)
+    {
+    case OP_NEG:
+        op_str = "-";
+        break;
+    }
+    return "(" + op_str + operand->toString() + ")";
+}
+
+std::string TernaryNode::toString() const
+{
+    return "(" + condition->toString() + " ? " + trueExpr->toString() + " : " +
+           falseExpr->toString() + ")";
 }
 
 std::string FunctionCallNode::toString() const

@@ -43,6 +43,7 @@ ASTNode* create_double_literal(float value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* create_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
@@ -132,6 +133,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT ENUM
+%token QUESTION
 %token ELLIPSIS
 %token MATCH
 %token PUB IMPL
@@ -154,14 +156,14 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %type <ast> program top_level_list top_level_item
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
-%type <ast> statement_list statement expression cast_expression
+%type <ast> statement_list statement expression ternary_expression cast_expression
 %type <ast> if_statement else_if_list else_if optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement
 %type <ast> return_statement block_statement for_statement range_expression
 %type <ast> break_statement continue_statement
-%type <ast> primary_expression postfix_expression binary_expression function_call
+%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
 %type <ast> print_statement argument_list field_target assert_eq_statement
 %type <ast> map_literal map_entries map_entry index_expression
@@ -560,8 +562,20 @@ optional_else
     ;
 
 expression
-    : postfix_expression
+    : ternary_expression
+    ;
+
+ternary_expression
+    : binary_expression QUESTION ternary_expression COLON ternary_expression
+        { $$ = create_ternary_expression($1, $3, $5, yylineno); }
     | binary_expression
+    | unary_expression
+    ;
+
+unary_expression
+    : MINUS unary_expression
+        { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
+    | postfix_expression
     | function_call
     | cast_expression
     | list_literal

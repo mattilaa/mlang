@@ -239,6 +239,35 @@ public:
     std::string toString() const override;
 };
 
+class UnaryOpNode : public ExpressionNode
+{
+public:
+    enum OpType
+    {
+        OP_NEG
+    };
+
+    OpType op;
+    ExpressionNode* operand;
+
+    UnaryOpNode(OpType o, ExpressionNode* value) : op(o), operand(value) {}
+    std::string toString() const override;
+};
+
+class TernaryNode : public ExpressionNode
+{
+public:
+    ExpressionNode* condition;
+    ExpressionNode* trueExpr;
+    ExpressionNode* falseExpr;
+
+    TernaryNode(ExpressionNode* cond, ExpressionNode* t, ExpressionNode* f)
+        : condition(cond), trueExpr(t), falseExpr(f)
+    {
+    }
+    std::string toString() const override;
+};
+
 class FunctionCallNode : public ExpressionNode
 {
 public:
@@ -1031,6 +1060,9 @@ ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* create_unary_op(int op, ASTNode* operand);
+ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
+                                   int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);

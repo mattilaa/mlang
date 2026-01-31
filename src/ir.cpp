@@ -1933,6 +1933,14 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateBinaryOp(binOp);
     }
+    else if(auto unaryOp = dynamic_cast<UnaryOpNode*>(node))
+    {
+        return generateUnaryOp(unaryOp);
+    }
+    else if(auto ternary = dynamic_cast<TernaryNode*>(node))
+    {
+        return generateTernaryExpression(ternary);
+    }
     else if(auto id = dynamic_cast<IdentifierNode*>(node))
     {
         return generateIdentifier(id);
@@ -2127,6 +2135,262 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     return nullptr;
 }
 
+llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
+{
+    llvm::Value* value = generateExpression(node->operand);
+    if(!value)
+        return nullptr;
+
+    bool isFloat = value->getType()->isFloatingPointTy();
+    bool isInt = value->getType()->isIntegerTy();
+
+    if(!isFloat && !isInt)
+    {
+        reportError(node->line,
+                    "unary '-' requires numeric operand (integer or float)");
+        return nullptr;
+    }
+
+    switch(node->op)
+    {
+    case UnaryOpNode::OP_NEG:
+        return isFloat ? builder.CreateFNeg(value, "negtmp")
+                       : builder.CreateNeg(value, "negtmp");
+    }
+    return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
+{
+    llvm::Value* condValue = generateExpression(node->condition);
+    if(!condValue)
+        return nullptr;
+
+    llvm::Type* condType = condValue->getType();
+    if(!condType->isIntegerTy() && !condType->isFloatingPointTy())
+    {
+        std::string typeStr;
+        if(condType->isStructTy())
+            typeStr = condType->getStructName().str().empty()
+                          ? "struct"
+                          : condType->getStructName().str();
+        else if(condType->isPointerTy())
+            typeStr = "pointer";
+        else
+            typeStr = "non-boolean";
+
+        reportError(node->line,
+                    "ternary condition must be a boolean or numeric type, got '" +
+                        typeStr + "'");
+        return nullptr;
+    }
+
+    if(!condValue->getType()->isIntegerTy(1))
+    {
+        if(condValue->getType()->isFloatingPointTy())
+        {
+            condValue = builder.CreateFCmpONE(
+                condValue, llvm::ConstantFP::get(condValue->getType(), 0.0),
+                "ternary.cond");
+        }
+        else
+        {
+            condValue = builder.CreateICmpNE(
+                condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+                "ternary.cond");
+        }
+    }
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* thenBB =
+        llvm::BasicBlock::Create(context, "ternary.then", function);
+    llvm::BasicBlock* elseBB = llvm::BasicBlock::Create(context, "ternary.else");
+    llvm::BasicBlock* mergeBB =
+        llvm::BasicBlock::Create(context, "ternary.end");
+
+    builder.CreateCondBr(condValue, thenBB, elseBB);
+
+    // Then block
+    builder.SetInsertPoint(thenBB);
+    llvm::Value* thenVal = generateExpression(node->trueExpr);
+    if(!thenVal)
+        return nullptr;
+    if(!builder.GetInsertBlock()->getTerminator())
+        builder.CreateBr(mergeBB);
+    llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
+
+    // Else block
+    elseBB->insertInto(function);
+    builder.SetInsertPoint(elseBB);
+    llvm::Value* elseVal = generateExpression(node->falseExpr);
+    if(!elseVal)
+        return nullptr;
+    if(!builder.GetInsertBlock()->getTerminator())
+        builder.CreateBr(mergeBB);
+    llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
+
+    std::vector<llvm::Type*> types = {thenVal->getType(), elseVal->getType()};
+    auto commonTypeFrom = [&](const std::vector<llvm::Type*>& tps)
+        -> llvm::Type*
+    {
+        if(tps.empty())
+            return nullptr;
+        llvm::Type* common = tps[0];
+        bool anyFloat = common->isFloatingPointTy();
+        bool anyInt = common->isIntegerTy();
+        bool anyPtr = common->isPointerTy();
+        bool anyStruct = common->isStructTy();
+
+        unsigned maxIntBits = anyInt ? common->getIntegerBitWidth() : 0;
+        bool anyDouble = common->isDoubleTy();
+
+        for(size_t i = 1; i < tps.size(); ++i)
+        {
+            llvm::Type* t = tps[i];
+            if(t == common)
+                continue;
+            if(t->isFloatingPointTy())
+            {
+                anyFloat = true;
+                if(t->isDoubleTy())
+                    anyDouble = true;
+            }
+            if(t->isIntegerTy())
+            {
+                anyInt = true;
+                unsigned bits = t->getIntegerBitWidth();
+                if(bits > maxIntBits)
+                    maxIntBits = bits;
+            }
+            if(t->isPointerTy())
+                anyPtr = true;
+            if(t->isStructTy())
+                anyStruct = true;
+        }
+
+        if(anyStruct)
+        {
+            for(auto* t : tps)
+            {
+                if(t != tps[0])
+                    return nullptr;
+            }
+            return tps[0];
+        }
+
+        if(anyPtr && (anyFloat || anyInt || anyStruct))
+            return nullptr;
+
+        if(anyPtr && !(anyFloat || anyInt))
+        {
+            for(auto* t : tps)
+            {
+                if(!t->isPointerTy() || t != tps[0])
+                    return nullptr;
+            }
+            return tps[0];
+        }
+
+        if(anyFloat)
+            return anyDouble ? llvm::Type::getDoubleTy(context)
+                             : llvm::Type::getFloatTy(context);
+        if(anyInt)
+            return llvm::Type::getIntNTy(context, maxIntBits);
+
+        for(auto* t : tps)
+        {
+            if(t != tps[0])
+                return nullptr;
+        }
+        return tps[0];
+    };
+
+    llvm::Type* commonType = commonTypeFrom(types);
+    if(!commonType)
+    {
+        std::string t0 = thenVal->getType()->isStructTy()
+                                  ? (thenVal->getType()->getStructName().str().empty()
+                                         ? "struct"
+                                         : thenVal->getType()->getStructName().str())
+                                  : (thenVal->getType()->isPointerTy() ? "pointer"
+                                                                       : "value");
+        std::string t1 = elseVal->getType()->isStructTy()
+                                  ? (elseVal->getType()->getStructName().str().empty()
+                                         ? "struct"
+                                         : elseVal->getType()->getStructName().str())
+                                  : (elseVal->getType()->isPointerTy() ? "pointer"
+                                                                       : "value");
+        reportError(node->line, "ternary branches must return the same type (got " + t0 + " and " + t1 + ")");
+        return nullptr;
+    }
+    if(commonType->isVoidTy())
+    {
+        reportError(node->line, "ternary branches must return a value");
+        return nullptr;
+    }
+
+    if(thenVal->getType() != commonType)
+    {
+        llvm::IRBuilder<> castBuilder(thenEnd->getTerminator());
+        llvm::Type* src = thenVal->getType();
+        if(src->isIntegerTy() && commonType->isIntegerTy())
+        {
+            unsigned srcBits = src->getIntegerBitWidth();
+            unsigned dstBits = commonType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+                thenVal =
+                    castBuilder.CreateTrunc(thenVal, commonType, "tern.trunc");
+            else if(srcBits < dstBits)
+                thenVal =
+                    castBuilder.CreateSExt(thenVal, commonType, "tern.sext");
+        }
+        else if(src->isIntegerTy() && commonType->isFloatingPointTy())
+        {
+            thenVal =
+                castBuilder.CreateSIToFP(thenVal, commonType, "tern.sitofp");
+        }
+        else if(src->isFloatingPointTy() && commonType->isFloatingPointTy())
+        {
+            thenVal =
+                castBuilder.CreateFPCast(thenVal, commonType, "tern.fpcast");
+        }
+    }
+
+    if(elseVal->getType() != commonType)
+    {
+        llvm::IRBuilder<> castBuilder(elseEnd->getTerminator());
+        llvm::Type* src = elseVal->getType();
+        if(src->isIntegerTy() && commonType->isIntegerTy())
+        {
+            unsigned srcBits = src->getIntegerBitWidth();
+            unsigned dstBits = commonType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+                elseVal =
+                    castBuilder.CreateTrunc(elseVal, commonType, "tern.trunc");
+            else if(srcBits < dstBits)
+                elseVal =
+                    castBuilder.CreateSExt(elseVal, commonType, "tern.sext");
+        }
+        else if(src->isIntegerTy() && commonType->isFloatingPointTy())
+        {
+            elseVal =
+                castBuilder.CreateSIToFP(elseVal, commonType, "tern.sitofp");
+        }
+        else if(src->isFloatingPointTy() && commonType->isFloatingPointTy())
+        {
+            elseVal =
+                castBuilder.CreateFPCast(elseVal, commonType, "tern.fpcast");
+        }
+    }
+
+    mergeBB->insertInto(function);
+    builder.SetInsertPoint(mergeBB);
+    llvm::PHINode* phi = builder.CreatePHI(commonType, 2, "ternary.result");
+    phi->addIncoming(thenVal, thenEnd);
+    phi->addIncoming(elseVal, elseEnd);
+    return phi;
+}
+
 void CodeGenerator::generateIfStatement(IfNode* node)
 {
     llvm::Value* condValue = generateExpression(node->condition);
@@ -2199,6 +2463,17 @@ void CodeGenerator::generateIfStatement(IfNode* node)
 
     if(node->elseIfBranch)
     {
+        // Attach final else branch to the last else-if so it is not skipped.
+        IfNode* last = node->elseIfBranch;
+        while(last->elseIfBranch)
+        {
+            last = last->elseIfBranch;
+        }
+        if(!last->elseBranch)
+        {
+            last->elseBranch = node->elseBranch;
+        }
+
         // Handle else-if chain
         generateIfStatement(node->elseIfBranch);
     }

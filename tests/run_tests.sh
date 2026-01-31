@@ -3,13 +3,34 @@
 # MLA Test Runner Script
 #
 # Usage:
-#   ./run_tests.sh                      # Auto-detect compiler
-#   ./run_tests.sh /path/to/mlang      # Specify compiler path
+#   ./run_tests.sh                           # Auto-detect compiler
+#   ./run_tests.sh /path/to/mlang           # Specify compiler path
+#   ./run_tests.sh --output-on-failure      # Pass args to ctest
+#   ./run_tests.sh /path/to/mlang -- -V     # Compiler + ctest args
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPILER_PATH="${1:-}"
+COMPILER_PATH=""
+CTEST_ARGS=()
+
+if [ $# -gt 0 ]; then
+    if [ "$1" = "--" ]; then
+        shift
+        CTEST_ARGS+=("$@")
+    elif [[ "$1" == -* ]]; then
+        CTEST_ARGS+=("$@")
+    else
+        COMPILER_PATH="$1"
+        shift
+        if [ "${1:-}" = "--" ]; then
+            shift
+        fi
+        if [ $# -gt 0 ]; then
+            CTEST_ARGS+=("$@")
+        fi
+    fi
+fi
 
 # Try to find compiler if not specified
 if [ -z "$COMPILER_PATH" ]; then
@@ -32,7 +53,11 @@ if [ -z "$COMPILER_PATH" ]; then
     fi
 fi
 
-COMPILER_PATH=$(realpath "$COMPILER_PATH")
+if command -v realpath >/dev/null 2>&1; then
+    COMPILER_PATH=$(realpath "$COMPILER_PATH")
+else
+    COMPILER_PATH=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$COMPILER_PATH")
+fi
 
 if [ ! -f "$COMPILER_PATH" ]; then
     echo "Error: Compiler not found at $COMPILER_PATH"
@@ -61,4 +86,7 @@ echo ""
 echo "=========================================="
 echo "Running MLA tests..."
 echo "=========================================="
-ctest --output-on-failure
+if [ ${#CTEST_ARGS[@]} -eq 0 ]; then
+    CTEST_ARGS+=(--output-on-failure)
+fi
+ctest "${CTEST_ARGS[@]}"
