@@ -4,6 +4,8 @@
 #include <cctype>
 #include <string>
 
+extern bool parseHadError;
+
 static int yyinput(void);
 static void yyunput(int, char*);
 
@@ -175,5 +177,5 @@ static int is_generic_struct_literal_start()
 "-"             { return MINUS; }
 "*"             { return MULTIPLY; }
 "/"             { return DIVIDE; }
-.               { printf("Unexpected character: %s\n", yytext); }
+.               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
 %%

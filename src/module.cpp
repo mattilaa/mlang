@@ -10,6 +10,7 @@ extern int yylineno;
 extern "C"
 {
     extern ASTNode* programRoot;
+    extern bool parseHadError;
 }
 
 // Reset lexer state for new file
@@ -71,11 +72,12 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     yyin = file;
 
     // Parse the file
+    parseHadError = false;
     int result = yyparse();
     fclose(file);
 
     ProgramNode* parsedProgram = nullptr;
-    if(result == 0 && programRoot)
+    if(result == 0 && !parseHadError && programRoot)
     {
         parsedProgram = dynamic_cast<ProgramNode*>(programRoot);
     }

@@ -24,6 +24,7 @@ extern FILE* yyin;
 extern "C"
 {
     extern ASTNode* programRoot;
+    extern bool parseHadError;
 }
 
 void printUsage(const char* programName)
@@ -415,7 +416,8 @@ int main(int argc, char** argv)
             std::cout << "Parsing " << inputFile << "..." << std::endl;
         }
 
-        if(yyparse() != 0)
+        parseHadError = false;
+        if(yyparse() != 0 || parseHadError)
         {
             std::cerr << "Parsing failed." << std::endl;
             fclose(input_file);

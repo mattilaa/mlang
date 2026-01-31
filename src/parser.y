@@ -12,6 +12,7 @@ void yyerror(const char* s);
 // External reference to programRoot defined in globals.cpp
 extern "C" {
     extern ASTNode* programRoot;
+    extern bool parseHadError;
 }
 
 // Function prototypes for AST node creation
@@ -791,6 +792,7 @@ static bool is_reserved_type_keyword(const char* s)
 }
 
 void yyerror(const char* s) {
+    parseHadError = true;
     if(is_reserved_type_keyword(yytext))
     {
         fprintf(stderr,

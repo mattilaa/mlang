@@ -3,4 +3,5 @@
 extern "C"
 {
     ASTNode* programRoot = nullptr;
+    bool parseHadError = false;
 }

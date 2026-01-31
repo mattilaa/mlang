@@ -1826,9 +1826,17 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         }
         else
         {
-            // For non-void functions without a return, add unreachable
-            // This indicates a bug in the source code but prevents LLVM crashes
-            builder.CreateUnreachable();
+            if(node->name == "main" || node->name == "__mlang_user_main")
+            {
+                // Default main return to 0 when no explicit return is present.
+                builder.CreateRet(llvm::ConstantInt::get(returnType, 0, true));
+            }
+            else
+            {
+                // For non-void functions without a return, add unreachable
+                // This indicates a bug in the source code but prevents LLVM crashes
+                builder.CreateUnreachable();
+            }
         }
     }
 
