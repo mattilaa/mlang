@@ -55,3 +55,23 @@ Compile Errors For Reserved Type Keywords
     ${result}=    Run Process    ${MLANG}    -c    ${tmp}    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${result.rc}    0
     Should Contain    ${result.stderr}    expected identifier, found keyword 'list'
+
+Main Accepts Command Line Arguments
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_args.mla
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_args_bin
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main(argc: i32, args: list<str8>) -> i32 {
+    ...        println!("argc: {}", argc);
+    ...        for a in args {
+    ...            println!("{}", a);
+    ...        }
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0    msg=Failed building main args test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    hello    world    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    argc: 3
+    Should Contain    ${run.stdout}    hello
+    Should Contain    ${run.stdout}    world
