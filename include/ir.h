@@ -54,6 +54,8 @@ private:
     // Track element types for generic lists and maps
     std::map<std::string, TypeNode*> listElementTypes;
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
+    // Track element types for pointers
+    std::map<std::string, TypeNode*> pointerElementTypes;
     // Track tuple element types
     std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
     // Track struct variable types (var name -> struct type name)
@@ -152,6 +154,7 @@ private:
     void generateVarDeclaration(VarDeclNode* node);
     void generateAssignment(AssignmentNode* node);
     void generateFieldAssignment(FieldAssignmentNode* node);
+    void generateDerefAssignment(DerefAssignmentNode* node);
     void generateIfStatement(IfNode* node);
     void generateForStatement(ForNode* node);
     void generatePrintStatement(PrintNode* node);
@@ -204,6 +207,9 @@ private:
                                         bool pretty, int line);
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
+    llvm::Value* getLValuePointer(ExpressionNode* expr, int line);
+    TypeNode* getLValueType(ExpressionNode* expr, int line);
+    TypeNode* getPointerElementType(ExpressionNode* expr, int line);
     void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
                            bool pretty, std::string& cFormat,
                            std::vector<llvm::Value*>& argValues, int line);

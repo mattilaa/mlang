@@ -122,6 +122,7 @@ static int is_generic_struct_literal_start()
 "list"          { return LIST; }
 "map"           { return MAP; }
 "tuple"         { return TUPLE; }
+"ptr"           { return PTR; }
 "struct"        { return STRUCT; }
 "i8"            { return I8; }
 "i16"           { return I16; }
@@ -178,5 +179,6 @@ static int is_generic_struct_literal_start()
 "-"             { return MINUS; }
 "*"             { return MULTIPLY; }
 "/"             { return DIVIDE; }
+"&"             { return AMP; }
 .               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
 %%

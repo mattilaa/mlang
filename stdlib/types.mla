@@ -59,6 +59,10 @@
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.
 
+// @builtin ptr
+// Pointer type: ptr<T>.
+// Take an address with &value and dereference with *ptr.
+
 // @builtin Result
 // Result<T, E> represents success (Ok) or failure (Err).
 // Construct with Ok<T, E>(value) or Err<T, E>(error).

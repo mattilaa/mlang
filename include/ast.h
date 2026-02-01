@@ -54,6 +54,7 @@ public:
         TYPE_LIST,
         TYPE_MAP,
         TYPE_TUPLE,
+        TYPE_PTR,
         TYPE_STRUCT,
         TYPE_I8,
         TYPE_I16,
@@ -68,6 +69,18 @@ public:
     TypeKind kind;
 
     TypeNode(TypeKind k) : kind(k) {}
+    std::string toString() const override;
+};
+
+// Pointer type node: ptr<T>
+class PointerTypeNode : public TypeNode
+{
+public:
+    TypeNode* elementType;
+    PointerTypeNode(TypeNode* elemType)
+        : TypeNode(TYPE_PTR), elementType(elemType)
+    {
+    }
     std::string toString() const override;
 };
 
@@ -244,7 +257,9 @@ class UnaryOpNode : public ExpressionNode
 public:
     enum OpType
     {
-        OP_NEG
+        OP_NEG,
+        OP_ADDR,
+        OP_DEREF
     };
 
     OpType op;
@@ -515,6 +530,18 @@ class BlockStatementNode : public StatementNode
 public:
     StatementListNode* statements;
     BlockStatementNode(StatementListNode* s) : statements(s) {}
+    std::string toString() const override;
+};
+
+class DerefAssignmentNode : public StatementNode
+{
+public:
+    ExpressionNode* pointerExpr;
+    ExpressionNode* value;
+    DerefAssignmentNode(ExpressionNode* p, ExpressionNode* v)
+        : pointerExpr(p), value(v)
+    {
+    }
     std::string toString() const override;
 };
 
@@ -1044,6 +1071,7 @@ ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
                              ASTNode* body, int is_public, int is_extern);
 ASTNode* create_type_node(TypeNode::TypeKind type);
+ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
 ASTNode* set_parameter_list_vararg(ASTNode* list);
@@ -1052,6 +1080,8 @@ ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
+ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr,
+                                 int line);
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);

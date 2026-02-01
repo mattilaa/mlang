@@ -119,6 +119,8 @@ ASTNode* create_enum_variant(char* name);
 ASTNode* create_enum_variant_list(ASTNode* variant);
 ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
+ASTNode* create_pointer_type(ASTNode* element_type);
+ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 %}
 
 %union {
@@ -133,7 +135,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE STRUCT ENUM
+%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
 %token QUESTION
 %token ELLIPSIS
 %token MATCH
@@ -145,7 +147,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
-%token PLUS MINUS MULTIPLY DIVIDE ASSIGN
+%token PLUS MINUS MULTIPLY DIVIDE ASSIGN AMP
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -167,7 +169,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
-%type <ast> print_statement argument_list field_target assert_eq_statement
+%type <ast> print_statement argument_list assert_eq_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
@@ -375,6 +377,7 @@ type
     | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
     | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
+    | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
     | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
@@ -430,17 +433,15 @@ var_statement
     ;
 
 assignment_statement
-    : IDENTIFIER ASSIGN expression SEMICOLON
-        { $$ = create_assignment($1, $3, yylineno); }
-    | field_target ASSIGN expression SEMICOLON
-        { $$ = create_chained_field_assignment($1, $3, yylineno); }
-    ;
-
-field_target
-    : IDENTIFIER DOT IDENTIFIER
-        { $$ = create_field_access_expr(create_identifier($1), $3, yylineno); }
-    | field_target DOT IDENTIFIER
-        { $$ = create_field_access_expr($1, $3, yylineno); }
+    : postfix_expression ASSIGN expression SEMICOLON
+        {
+            if(auto* id = dynamic_cast<IdentifierNode*>($1))
+                $$ = create_assignment(const_cast<char*>(id->name.c_str()), $3, yylineno);
+            else
+                $$ = create_chained_field_assignment($1, $3, yylineno);
+        }
+    | MULTIPLY unary_expression ASSIGN expression SEMICOLON
+        { $$ = create_deref_assignment($2, $4, yylineno); }
     ;
 
 expression_statement
@@ -583,6 +584,10 @@ ternary_expression
 unary_expression
     : MINUS unary_expression
         { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
+    | AMP unary_expression
+        { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
+    | MULTIPLY unary_expression
+        { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
     | postfix_expression
     | function_call
     | cast_expression
@@ -795,7 +800,7 @@ static bool is_reserved_type_keyword(const char* s)
            strcmp(s, "i16") == 0 || strcmp(s, "i32") == 0 ||
            strcmp(s, "i64") == 0 || strcmp(s, "u8") == 0 ||
            strcmp(s, "u16") == 0 || strcmp(s, "u32") == 0 ||
-           strcmp(s, "u64") == 0;
+           strcmp(s, "u64") == 0 || strcmp(s, "ptr") == 0;
 }
 
 void yyerror(const char* s) {

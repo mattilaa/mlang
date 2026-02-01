@@ -1,0 +1,16 @@
+struct Foo {
+    var value: i32;
+};
+
+fn main() -> i32 {
+    var foo: Foo = Foo { value: 10 };
+    let p: ptr<Foo> = &foo;
+    (*p).value = 22;
+    println!("after struct ptr: {}", foo.value);
+
+    let pi: ptr<i32> = &foo.value;
+    *pi = 7;
+    println!("after int ptr: {}", foo.value);
+
+    return 0;
+}

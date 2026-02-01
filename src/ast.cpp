@@ -155,6 +155,15 @@ ASTNode* create_assignment(char* name, ASTNode* expr, int line)
     return node;
 }
 
+ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
+{
+    auto* node = new DerefAssignmentNode(
+        static_cast<ExpressionNode*>(pointer_expr),
+        static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_return_stmt(ASTNode* expr)
 {
     return new ReturnNode(static_cast<ExpressionNode*>(expr));
@@ -246,6 +255,12 @@ ASTNode* create_unary_op(int op, ASTNode* operand)
     {
     case MINUS:
         opType = UnaryOpNode::OP_NEG;
+        break;
+    case AMP:
+        opType = UnaryOpNode::OP_ADDR;
+        break;
+    case MULTIPLY:
+        opType = UnaryOpNode::OP_DEREF;
         break;
     default:
         throw std::runtime_error("Unknown unary operator");
@@ -654,6 +669,11 @@ ASTNode* create_list_type()
     return new ListTypeNode();
 }
 
+ASTNode* create_pointer_type(ASTNode* element_type)
+{
+    return new PointerTypeNode(static_cast<TypeNode*>(element_type));
+}
+
 ASTNode* create_list_literal(ASTNode* elements)
 {
     return new ListLiteralNode(static_cast<ListElementsNode*>(elements));
@@ -828,6 +848,8 @@ std::string TypeNode::toString() const
         return "map";
     case TYPE_TUPLE:
         return "tuple";
+    case TYPE_PTR:
+        return "ptr";
     case TYPE_STRUCT:
         return "struct";
     case TYPE_I8:
@@ -849,6 +871,11 @@ std::string TypeNode::toString() const
     default:
         return "unknown";
     }
+}
+
+std::string PointerTypeNode::toString() const
+{
+    return "ptr<" + (elementType ? elementType->toString() : "void") + ">";
 }
 
 std::string ParameterNode::toString() const
@@ -918,6 +945,11 @@ std::string StatementListNode::toString() const
 std::string AssignmentNode::toString() const
 {
     return name + " = " + expression->toString() + ";";
+}
+
+std::string DerefAssignmentNode::toString() const
+{
+    return "*" + pointerExpr->toString() + " = " + value->toString() + ";";
 }
 
 std::string FieldAccessNode::toString() const
@@ -1091,6 +1123,12 @@ std::string UnaryOpNode::toString() const
     {
     case OP_NEG:
         op_str = "-";
+        break;
+    case OP_ADDR:
+        op_str = "&";
+        break;
+    case OP_DEREF:
+        op_str = "*";
         break;
     }
     return "(" + op_str + operand->toString() + ")";
