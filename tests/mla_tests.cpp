@@ -498,6 +498,24 @@ TEST_F(MLATest, VarReassignment)
     EXPECT_EQ(compileAndRun(code), "20\n");
 }
 
+TEST_F(MLATest, PointerAccess)
+{
+    std::string code = R"(
+        struct Foo { var value: i32; };
+        fn main() -> i32 {
+            var foo: Foo = Foo { value: 10 };
+            let p: ptr<Foo> = &foo;
+            (*p).value = 22;
+            println!("{}", foo.value);
+            let pi: ptr<i32> = &foo.value;
+            *pi = 7;
+            println!("{}", foo.value);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "22\n7\n");
+}
+
 TEST_F(MLATest, LetCannotReassign)
 {
     std::string code = R"(

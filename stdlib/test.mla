@@ -1,0 +1,23 @@
+// MLang test framework (documentation-only + simple helpers)
+// This module is installed for editor go-to-definition.
+
+// @builtin_fn test::assert
+// Asserts that a condition is true. Returns 0 on pass, 1 on failure.
+// Usage: test::assert(x == 1)
+
+// @builtin_fn test::run_all
+// Placeholder for test runner. Prefer: mlang test
+
+pub fn assert(cond: bool) -> i32 {
+    if cond: {
+        return 0;
+    } else: {
+        println!("test::assert failed");
+        return 1;
+    }
+}
+
+pub fn run_all() -> i32 {
+    // mlang test builds its own runner.
+    return 0;
+}

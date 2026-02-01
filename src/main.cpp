@@ -109,6 +109,7 @@ static std::string escape_json_string(std::string_view s)
 static void write_mlang_commands_json(
     const std::vector<std::string>& files,
     const std::vector<std::string>& modulePaths,
+    const std::vector<std::string>& typeTokens,
     const std::vector<std::tuple<std::string, std::string, int>>& builtinTypes,
     const std::vector<std::tuple<std::string, std::string, int>>& builtinMacros,
     const std::vector<std::tuple<std::string, std::string, int>>& builtinFunctions)
@@ -145,6 +146,18 @@ static void write_mlang_commands_json(
         if(i > 0)
             out << ", ";
         out << "\"" << builtins[i] << "\"";
+    }
+    out << "], \"tokens\": [";
+    if(!typeTokens.empty())
+    {
+        out << "{ \"type\": \"type\", \"items\": [";
+        for(size_t i = 0; i < typeTokens.size(); ++i)
+        {
+            if(i > 0)
+                out << ", ";
+            out << "\"" << escape_json_string(typeTokens[i]) << "\"";
+        }
+        out << "] }";
     }
     out << "], \"builtin_types\": [";
     for(size_t i = 0; i < builtinTypes.size(); ++i)
@@ -268,6 +281,36 @@ collect_builtin_macro_defs(const std::vector<std::string>& modulePaths)
         }
         if(!out.empty())
             break;
+    }
+    return out;
+}
+
+static std::vector<std::string> collect_user_type_tokens(ProgramNode* program)
+{
+    std::vector<std::string> out;
+    if(!program)
+        return out;
+
+    std::unordered_set<std::string> seen;
+    if(program->structList)
+    {
+        for(auto* s : program->structList->structs)
+        {
+            if(!s)
+                continue;
+            if(seen.insert(s->name).second)
+                out.push_back(s->name);
+        }
+    }
+    if(program->enumList)
+    {
+        for(auto* e : program->enumList->enums)
+        {
+            if(!e)
+                continue;
+            if(seen.insert(e->name).second)
+                out.push_back(e->name);
+        }
     }
     return out;
 }
@@ -909,15 +952,6 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // Clean up
-    fclose(input_file);
-    delete programRoot;
-
-    if(verbose)
-    {
-        std::cout << "Compilation completed successfully." << std::endl;
-    }
-
     // Emit mlang_commands.json for LSP indexing.
     std::unordered_set<std::string> unique;
     std::vector<std::string> files;
@@ -954,8 +988,19 @@ int main(int argc, char** argv)
     auto builtinTypes = collect_builtin_type_defs(searchPaths);
     auto builtinMacros = collect_builtin_macro_defs(searchPaths);
     auto builtinFunctions = collect_builtin_function_defs(searchPaths);
-    write_mlang_commands_json(files, searchPaths, builtinTypes, builtinMacros,
-                              builtinFunctions);
+    auto* programNode = dynamic_cast<ProgramNode*>(programRoot);
+    auto typeTokens = collect_user_type_tokens(programNode);
+    write_mlang_commands_json(files, searchPaths, typeTokens, builtinTypes,
+                              builtinMacros, builtinFunctions);
+
+    // Clean up
+    fclose(input_file);
+    delete programRoot;
+
+    if(verbose)
+    {
+        std::cout << "Compilation completed successfully." << std::endl;
+    }
 
     if(testMode && runTests && !emitObjectOnly && !emitAssembly &&
        !emitLLVMIR && !emitBitcode)

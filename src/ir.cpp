@@ -68,6 +68,12 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
         return llvm::Type::getInt32Ty(context);
     case TypeNode::TYPE_U64:
         return llvm::Type::getInt64Ty(context);
+    case TypeNode::TYPE_PTR:
+#if LLVM_VERSION_MAJOR >= 15
+        return llvm::PointerType::get(context, 0);
+#else
+        return llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
     default:
         return nullptr;
     }
@@ -173,6 +179,19 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
 #endif
         std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType, ptrType};
         return llvm::StructType::get(context, mapStructTypes);
+    }
+
+    // Handle pointer type
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
+    {
+        llvm::Type* elemType = getLLVMTypeFromNode(ptrType->elementType);
+        if(!elemType)
+            return nullptr;
+#if LLVM_VERSION_MAJOR >= 15
+        return llvm::PointerType::get(context, 0);
+#else
+        return llvm::PointerType::get(elemType, 0);
+#endif
     }
 
     // Fall back to basic type kind
@@ -483,6 +502,284 @@ std::string CodeGenerator::getStructTypeName(ExpressionNode* expr) const
     if(auto* lit = dynamic_cast<StructLiteralNode*>(expr))
         return lit->structName;
     return {};
+}
+
+llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
+{
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = namedValues.find(id->name);
+        if(it == namedValues.end())
+        {
+            reportError(line, "unknown variable: '" + id->name + "'");
+            return nullptr;
+        }
+        return it->second;
+    }
+
+    if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
+    {
+        llvm::Value* structPtr = nullptr;
+        std::string structTypeName;
+
+        if(fieldAccess->object)
+        {
+            auto [ptr, typeName] =
+                getStructPtrAndType(fieldAccess->object, line);
+            if(!ptr)
+                return nullptr;
+            structPtr = ptr;
+            structTypeName = typeName;
+        }
+        else
+        {
+            structPtr = namedValues[fieldAccess->structName];
+            if(!structPtr)
+            {
+                reportError(line,
+                            "unknown variable: " + fieldAccess->structName);
+                return nullptr;
+            }
+
+            auto typeIt = structVariableTypes.find(fieldAccess->structName);
+            if(typeIt == structVariableTypes.end())
+            {
+                reportError(line, "variable '" + fieldAccess->structName +
+                                      "' is not a struct");
+                return nullptr;
+            }
+            structTypeName = typeIt->second;
+
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+            {
+                llvm::Type* allocaType = alloca->getAllocatedType();
+                if(allocaType->isPointerTy())
+                {
+                    structPtr = builder.CreateLoad(
+                        allocaType, alloca, fieldAccess->structName + ".ptr");
+                }
+            }
+        }
+
+        auto memberIt = structMembers.find(structTypeName);
+        if(memberIt == structMembers.end())
+        {
+            reportError(line, "unknown struct type: " + structTypeName);
+            return nullptr;
+        }
+
+        int fieldIndex = -1;
+        const auto& members = memberIt->second;
+        for(size_t i = 0; i < members.size(); ++i)
+        {
+            if(members[i].first == fieldAccess->fieldName)
+            {
+                fieldIndex = static_cast<int>(i);
+                break;
+            }
+        }
+
+        if(fieldIndex < 0)
+        {
+            reportError(line, "struct '" + structTypeName +
+                                  "' has no field named '" +
+                                  fieldAccess->fieldName + "'");
+            return nullptr;
+        }
+
+        llvm::StructType* structType = getStructType(structTypeName);
+        if(!structType)
+            return nullptr;
+
+        return builder.CreateStructGEP(
+            structType, structPtr, static_cast<unsigned>(fieldIndex),
+            fieldAccess->fieldName + "_ptr");
+    }
+
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_DEREF)
+        {
+            llvm::Value* ptrVal = generateExpression(unary->operand);
+            if(!ptrVal)
+                return nullptr;
+            if(!ptrVal->getType()->isPointerTy())
+            {
+                reportError(line, "dereference requires a pointer value");
+                return nullptr;
+            }
+            return ptrVal;
+        }
+    }
+
+    reportError(line, "address-of operator requires an assignable expression");
+    return nullptr;
+}
+
+TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
+{
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto typeIt = variableTypes.find(id->name);
+        if(typeIt == variableTypes.end())
+        {
+            reportError(line, "unknown variable: '" + id->name + "'");
+            return nullptr;
+        }
+
+        TypeNode::TypeKind kind = typeIt->second;
+        if(kind == TypeNode::TYPE_STRUCT)
+        {
+            auto structIt = structVariableTypes.find(id->name);
+            if(structIt == structVariableTypes.end())
+            {
+                reportError(line, "variable '" + id->name +
+                                      "' is not a struct");
+                return nullptr;
+            }
+            return new StructTypeRefNode(structIt->second);
+        }
+        if(kind == TypeNode::TYPE_LIST)
+        {
+            auto listIt = listElementTypes.find(id->name);
+            if(listIt == listElementTypes.end())
+            {
+                reportError(line, "list element type not known for '" +
+                                      id->name + "'");
+                return nullptr;
+            }
+            return new GenericListTypeNode(listIt->second);
+        }
+        if(kind == TypeNode::TYPE_MAP)
+        {
+            auto mapIt = mapKeyValueTypes.find(id->name);
+            if(mapIt == mapKeyValueTypes.end())
+            {
+                reportError(line, "map key/value types not known for '" +
+                                      id->name + "'");
+                return nullptr;
+            }
+            return new MapTypeNode(mapIt->second.first, mapIt->second.second);
+        }
+        if(kind == TypeNode::TYPE_TUPLE)
+        {
+            auto tupleIt = tupleElementTypes.find(id->name);
+            if(tupleIt == tupleElementTypes.end())
+            {
+                reportError(line,
+                            "tuple element types not known for '" + id->name +
+                                "'");
+                return nullptr;
+            }
+            auto* list = new TypeListNode();
+            for(auto* t : tupleIt->second)
+                list->addType(t);
+            return new TupleTypeNode(list);
+        }
+        if(kind == TypeNode::TYPE_PTR)
+        {
+            auto ptrIt = pointerElementTypes.find(id->name);
+            if(ptrIt == pointerElementTypes.end())
+            {
+                reportError(line, "pointer element type not known for '" +
+                                      id->name + "'");
+                return nullptr;
+            }
+            return new PointerTypeNode(ptrIt->second);
+        }
+
+        return new TypeNode(kind);
+    }
+
+    if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
+    {
+        std::string structTypeName;
+        if(fieldAccess->object)
+        {
+            TypeNode* objType = getLValueType(fieldAccess->object, line);
+            if(!objType)
+                return nullptr;
+            if(objType->kind != TypeNode::TYPE_STRUCT)
+            {
+                reportError(line, "field access requires a struct value");
+                return nullptr;
+            }
+
+            if(auto* structRef = dynamic_cast<StructTypeRefNode*>(objType))
+            {
+                structTypeName = structRef->structName;
+            }
+            else if(auto* genRef =
+                        dynamic_cast<GenericStructTypeRefNode*>(objType))
+            {
+                structTypeName = getOrCreateMonomorphizedStruct(
+                    genRef->structName, genRef->typeArgs);
+            }
+        }
+        else
+        {
+            auto typeIt = structVariableTypes.find(fieldAccess->structName);
+            if(typeIt == structVariableTypes.end())
+            {
+                reportError(line, "variable '" + fieldAccess->structName +
+                                      "' is not a struct");
+                return nullptr;
+            }
+            structTypeName = typeIt->second;
+        }
+
+        auto memberIt = structMembers.find(structTypeName);
+        if(memberIt == structMembers.end())
+        {
+            reportError(line, "unknown struct type: " + structTypeName);
+            return nullptr;
+        }
+
+        for(const auto& member : memberIt->second)
+        {
+            if(member.first == fieldAccess->fieldName)
+                return member.second;
+        }
+
+        reportError(line, "struct '" + structTypeName +
+                              "' has no field named '" +
+                              fieldAccess->fieldName + "'");
+        return nullptr;
+    }
+
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_DEREF)
+        {
+            TypeNode* ptrType = getLValueType(unary->operand, line);
+            if(auto* ptrNode = dynamic_cast<PointerTypeNode*>(ptrType))
+                return ptrNode->elementType;
+
+            reportError(line, "dereference requires a pointer value");
+            return nullptr;
+        }
+    }
+
+    reportError(line, "cannot determine type of expression");
+    return nullptr;
+}
+
+TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
+{
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR)
+        {
+            return getLValueType(unary->operand, line);
+        }
+    }
+
+    TypeNode* type = getLValueType(expr, line);
+    if(auto* ptrNode = dynamic_cast<PointerTypeNode*>(type))
+        return ptrNode->elementType;
+
+    reportError(line, "dereference requires a pointer value");
+    return nullptr;
 }
 
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
@@ -1934,6 +2231,11 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 mapKeyValueTypes[std::string(arg.getName())] =
                     std::make_pair(mapType->keyType, mapType->valueType);
             }
+            if(auto* ptrType = dynamic_cast<PointerTypeNode*>(paramNode->type))
+            {
+                pointerElementTypes[std::string(arg.getName())] =
+                    ptrType->elementType;
+            }
         }
         paramIdx++;
     }
@@ -2001,6 +2303,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto fieldAssignNode = dynamic_cast<FieldAssignmentNode*>(node))
     {
         generateFieldAssignment(fieldAssignNode);
+    }
+    else if(auto derefAssignNode = dynamic_cast<DerefAssignmentNode*>(node))
+    {
+        generateDerefAssignment(derefAssignNode);
     }
     else if(auto ifNode = dynamic_cast<IfNode*>(node))
     {
@@ -2277,25 +2583,53 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
 llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
 {
-    llvm::Value* value = generateExpression(node->operand);
-    if(!value)
-        return nullptr;
-
-    bool isFloat = value->getType()->isFloatingPointTy();
-    bool isInt = value->getType()->isIntegerTy();
-
-    if(!isFloat && !isInt)
-    {
-        reportError(node->line,
-                    "unary '-' requires numeric operand (integer or float)");
-        return nullptr;
-    }
-
     switch(node->op)
     {
     case UnaryOpNode::OP_NEG:
+    {
+        llvm::Value* value = generateExpression(node->operand);
+        if(!value)
+            return nullptr;
+
+        bool isFloat = value->getType()->isFloatingPointTy();
+        bool isInt = value->getType()->isIntegerTy();
+
+        if(!isFloat && !isInt)
+        {
+            reportError(node->line,
+                        "unary '-' requires numeric operand (integer or float)");
+            return nullptr;
+        }
         return isFloat ? builder.CreateFNeg(value, "negtmp")
                        : builder.CreateNeg(value, "negtmp");
+    }
+    case UnaryOpNode::OP_ADDR:
+    {
+        llvm::Value* ptr = getLValuePointer(node->operand, node->line);
+        if(!ptr)
+            return nullptr;
+        return ptr;
+    }
+    case UnaryOpNode::OP_DEREF:
+    {
+        llvm::Value* ptrVal = generateExpression(node->operand);
+        if(!ptrVal)
+            return nullptr;
+        if(!ptrVal->getType()->isPointerTy())
+        {
+            reportError(node->line, "dereference requires a pointer value");
+            return nullptr;
+        }
+
+        TypeNode* elemTypeNode = getPointerElementType(node->operand, node->line);
+        if(!elemTypeNode)
+            return nullptr;
+        llvm::Type* elemType = getLLVMTypeFromNode(elemTypeNode);
+        if(!elemType)
+            return nullptr;
+
+        return builder.CreateLoad(elemType, ptrVal, "deref");
+    }
     }
     return nullptr;
 }
@@ -3713,6 +4047,24 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
+    // Handle pointer type
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(node->type))
+    {
+        pointerElementTypes[node->name] = ptrType->elementType;
+
+        llvm::Type* llvmPtrType = getLLVMTypeFromNode(ptrType);
+        if(!llvmPtrType)
+            return;
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(llvmPtrType, nullptr, node->name);
+        builder.CreateStore(initValue, alloca);
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_PTR;
+        constantVariables.insert(node->name);
+        return;
+    }
+
     // Handle tuple type
     if(auto* tupleType = dynamic_cast<TupleTypeNode*>(node->type))
     {
@@ -4033,6 +4385,32 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_MAP;
+        return;
+    }
+
+    // Handle pointer type
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(node->type))
+    {
+        pointerElementTypes[node->name] = ptrType->elementType;
+
+        llvm::Type* llvmPtrType = getLLVMTypeFromNode(ptrType);
+        if(!llvmPtrType)
+            return;
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(llvmPtrType, nullptr, node->name);
+
+        if(node->initExpr)
+        {
+            llvm::Value* initValue = generateExpression(node->initExpr);
+            if(initValue)
+            {
+                builder.CreateStore(initValue, alloca);
+            }
+        }
+
+        namedValues[node->name] = alloca;
+        variableTypes[node->name] = TypeNode::TYPE_PTR;
         return;
     }
 
@@ -4604,6 +4982,71 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     builder.CreateStore(value, fieldPtr);
 }
 
+void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
+{
+    llvm::Value* ptrVal = generateExpression(node->pointerExpr);
+    if(!ptrVal)
+        return;
+
+    if(!ptrVal->getType()->isPointerTy())
+    {
+        reportError(node->line, "dereference requires a pointer value");
+        return;
+    }
+
+    TypeNode* elemTypeNode =
+        getPointerElementType(node->pointerExpr, node->line);
+    if(!elemTypeNode)
+        return;
+
+    llvm::Type* elemType = getLLVMTypeFromNode(elemTypeNode);
+    if(!elemType)
+        return;
+
+    llvm::Value* value = generateExpression(node->value);
+    if(!value)
+        return;
+
+    llvm::Type* valueType = value->getType();
+    if(valueType != elemType)
+    {
+        if(valueType->isIntegerTy() && elemType->isIntegerTy())
+        {
+            unsigned valueBits = valueType->getIntegerBitWidth();
+            unsigned targetBits = elemType->getIntegerBitWidth();
+            if(valueBits > targetBits)
+            {
+                value = builder.CreateTrunc(value, elemType, "trunc");
+            }
+            else if(valueBits < targetBits)
+            {
+                value = builder.CreateSExt(value, elemType, "sext");
+            }
+        }
+        else if(valueType->isIntegerTy() && elemType->isFloatingPointTy())
+        {
+            value = builder.CreateSIToFP(value, elemType, "sitofp");
+        }
+        else if(valueType->isFloatingPointTy() && elemType->isIntegerTy())
+        {
+            value = builder.CreateFPToSI(value, elemType, "fptosi");
+        }
+        else if(valueType->isFloatingPointTy() &&
+                elemType->isFloatingPointTy())
+        {
+            value = builder.CreateFPCast(value, elemType, "fpcast");
+        }
+        else
+        {
+            reportError(node->line,
+                        "type mismatch in deref assignment");
+            return;
+        }
+    }
+
+    builder.CreateStore(value, ptrVal);
+}
+
 // Helper to get struct pointer and type name from an expression
 // Returns {pointer, typeName} or {nullptr, ""} on error
 std::pair<llvm::Value*, std::string>
@@ -4746,6 +5189,44 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             reportError(line, "field '" + fieldAccess->fieldName +
                                   "' is not a struct type");
             return {nullptr, ""};
+        }
+    }
+
+    // Case 3: Dereference of a pointer to struct (e.g., "*p")
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_DEREF)
+        {
+            llvm::Value* ptrVal = generateExpression(unary->operand);
+            if(!ptrVal)
+                return {nullptr, ""};
+            if(!ptrVal->getType()->isPointerTy())
+            {
+                reportError(line, "dereference requires a pointer value");
+                return {nullptr, ""};
+            }
+
+            TypeNode* elemType = getPointerElementType(unary->operand, line);
+            if(!elemType)
+                return {nullptr, ""};
+            if(elemType->kind != TypeNode::TYPE_STRUCT)
+            {
+                reportError(line, "dereference does not yield a struct value");
+                return {nullptr, ""};
+            }
+
+            if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemType))
+            {
+                return {ptrVal, structRef->structName};
+            }
+            if(auto* genRef =
+                   dynamic_cast<GenericStructTypeRefNode*>(elemType))
+            {
+                std::string mangled =
+                    getOrCreateMonomorphizedStruct(genRef->structName,
+                                                   genRef->typeArgs);
+                return {ptrVal, mangled};
+            }
         }
     }
 
@@ -6010,8 +6491,35 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             }
             if(methodParamIdx < method->parameters->parameters.size())
             {
+                auto* paramNode =
+                    method->parameters->parameters[methodParamIdx];
                 variableTypes[std::string(arg.getName())] =
-                    method->parameters->parameters[methodParamIdx]->type->kind;
+                    paramNode->type->kind;
+                if(auto* genListType =
+                       dynamic_cast<GenericListTypeNode*>(paramNode->type))
+                {
+                    listElementTypes[std::string(arg.getName())] =
+                        genListType->elementType;
+                }
+                if(auto* mapType = dynamic_cast<MapTypeNode*>(paramNode->type))
+                {
+                    mapKeyValueTypes[std::string(arg.getName())] =
+                        std::make_pair(mapType->keyType, mapType->valueType);
+                }
+                if(auto* tupleType =
+                       dynamic_cast<TupleTypeNode*>(paramNode->type))
+                {
+                    std::vector<TypeNode*> elemTypes;
+                    for(auto* t : tupleType->elementTypes->types)
+                        elemTypes.push_back(t);
+                    tupleElementTypes[std::string(arg.getName())] = elemTypes;
+                }
+                if(auto* ptrType =
+                       dynamic_cast<PointerTypeNode*>(paramNode->type))
+                {
+                    pointerElementTypes[std::string(arg.getName())] =
+                        ptrType->elementType;
+                }
                 methodParamIdx++;
             }
         }
@@ -6201,6 +6709,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedListElementTypes = listElementTypes;
                     auto savedMapKeyValueTypes = mapKeyValueTypes;
                     auto savedTupleElementTypes = tupleElementTypes;
+                    auto savedPointerElementTypes = pointerElementTypes;
 
                     // Generate the method body
                     generateMethodDefinition(definingStruct, methodDef);
@@ -6213,6 +6722,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     listElementTypes = savedListElementTypes;
                     mapKeyValueTypes = savedMapKeyValueTypes;
                     tupleElementTypes = savedTupleElementTypes;
+                    pointerElementTypes = savedPointerElementTypes;
 
                     if(savedBlock)
                     {
@@ -7075,6 +7585,11 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 elemTypes.push_back(t);
             tupleElementTypes[name] = elemTypes;
         }
+        else if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
+        {
+            variableTypes[name] = TypeNode::TYPE_PTR;
+            pointerElementTypes[name] = ptrType->elementType;
+        }
         else
         {
             variableTypes[name] = type->kind;
@@ -7091,6 +7606,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedListElementTypes = listElementTypes;
         auto savedMapKeyValueTypes = mapKeyValueTypes;
         auto savedTupleElementTypes = tupleElementTypes;
+        auto savedPointerElementTypes = pointerElementTypes;
 
         std::string binding =
             arm && arm->pattern ? arm->pattern->binding : "";
@@ -7110,6 +7626,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         listElementTypes = savedListElementTypes;
         mapKeyValueTypes = savedMapKeyValueTypes;
         tupleElementTypes = savedTupleElementTypes;
+        pointerElementTypes = savedPointerElementTypes;
 
         return armValue;
     };

@@ -195,8 +195,12 @@ class MlangLspServer:
                 return [self._symbol_to_location(resolved)]
 
         locations = []
-        for sym in self.symbols_by_name.get(word, []):
-            locations.append(self._symbol_to_location(sym))
+        syms = self.symbols_by_name.get(word, [])
+        if syms:
+            same_file = [s for s in syms if s.uri == uri]
+            preferred = same_file if same_file else syms
+            for sym in preferred:
+                locations.append(self._symbol_to_location(sym))
 
         if not locations:
             stem_path = self.file_by_stem.get(word)
