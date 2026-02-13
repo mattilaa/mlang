@@ -2,6 +2,7 @@ build
 *.a
 *.out
 *.o
+docs/out
 
 .cache
 .DS_store

@@ -78,3 +78,17 @@
 // @builtin Option
 // Option<T> represents Some(value) or None.
 // Construct with Some<T>(value) or None<T>().
+
+// @builtin Some
+// Option constructor for present values: Some<T>(value).
+
+// @builtin None
+// Option constructor for absent values: None<T>().
+
+// Language keyword reference:
+// - `match` performs pattern matching for Result/Option and literal values.
+// Example:
+// let value: i32 = match maybe {
+//     Some(x) => x,
+//     None => 0,
+// };
