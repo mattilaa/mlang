@@ -51,6 +51,29 @@ Use Make instead of Ninja:
 ./scripts/build_install_lsp.sh --use-make
 ```
 
+## Quickstart (Package Manager + curl example)
+Build `mlang`, fetch a git dependency with the package manager, compile the
+example, and run it (the program uses libcurl to fetch a URL).
+
+```sh
+# Build compiler first
+./scripts/build_install.sh --no-install
+
+# Run package-manager demo
+cd examples/package_manager_git_cjson
+../../build/mlang pkg fetch
+../../build/mlang pkg build
+./build/cjson_demo
+```
+
+Prereqs for this example:
+- `git`, `cmake`, C toolchain
+- `pkg-config`
+- `libcurl` development package
+
+See `examples/package_manager_git_cjson/README.md` for distro-specific install
+commands.
+
 ## Testing
 Run tests with the built-in runner. Mark test functions with `#[test]` and
 return `0` for pass, non-zero for failure.
