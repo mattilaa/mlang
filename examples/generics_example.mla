@@ -1,0 +1,160 @@
+// ===========================================
+// MLA Generics and Impl Blocks Example
+// ===========================================
+
+// --- Simple non-generic struct with impl block ---
+pub struct Counter {
+    var value: i32;
+};
+
+impl Counter {
+    pub fn increment(self: Counter) -> Counter {
+        return Counter { value: self.value + 1 };
+    }
+
+    pub fn decrement(self: Counter) -> Counter {
+        return Counter { value: self.value - 1 };
+    }
+
+    pub fn get(self: Counter) -> i32 {
+        return self.value;
+    }
+
+    pub fn add(self: Counter, amount: i32) -> Counter {
+        return Counter { value: self.value + amount };
+    }
+}
+
+// --- Generic struct: a simple Pair/Tuple-like container ---
+pub struct Pair<T, U> {
+    var first: T;
+    var second: U;
+};
+
+impl<T, U> Pair {
+    pub fn getFirst(self: Pair<T, U>) -> T {
+        return self.first;
+    }
+
+    pub fn getSecond(self: Pair<T, U>) -> U {
+        return self.second;
+    }
+}
+
+// --- Generic struct: simple Box/Wrapper ---
+pub struct Box<T> {
+    var inner: T;
+};
+
+impl<T> Box {
+    pub fn get(self: Box<T>) -> T {
+        return self.inner;
+    }
+
+    pub fn set(self: Box<T>, val: T) -> Box<T> {
+        return Box<T> { inner: val };
+    }
+}
+
+// --- Generic struct: Point with same type for x and y ---
+pub struct Point<T> {
+    var x: T;
+    var y: T;
+};
+
+impl<T> Point {
+    pub fn getX(self: Point<T>) -> T {
+        return self.x;
+    }
+
+    pub fn getY(self: Point<T>) -> T {
+        return self.y;
+    }
+}
+
+// --- Generic struct: Optional/Maybe type ---
+pub struct Optional<T> {
+    var hasValue: bool;
+    var value: T;
+};
+
+impl<T> Optional {
+    pub fn isSome(self: Optional<T>) -> bool {
+        return self.hasValue;
+    }
+
+    pub fn unwrap(self: Optional<T>) -> T {
+        return self.value;
+    }
+}
+
+// --- Struct inheritance example ---
+struct Animal {
+    var age: i32;
+};
+
+struct Dog : Animal {
+    var name: string;
+};
+
+// --- Main function demonstrating usage ---
+fn main() -> i32 {
+    // Using Counter with impl methods
+    let c1: Counter = Counter { value: 0 };
+    let c2: Counter = c1.increment();
+    let c3: Counter = c2.increment();
+    let c4: Counter = c3.add(10);
+    println!("Counter after 2 increments + 10: {}", c4.get());
+
+    // Using generic Pair with i32, i64
+    let pair1: Pair<i32, i64> = Pair<i32, i64> { first: 10, second: 20 };
+    println!("Pair<i32, i64>: ({}, {})", pair1.first, pair1.second);
+    println!("Via methods: ({}, {})", pair1.getFirst(), pair1.getSecond());
+
+    // Using generic Pair with i64, i32
+    let pair2: Pair<i64, i32> = Pair<i64, i32> { first: 100, second: 200 };
+    println!("Pair<i64, i32>: ({}, {})", pair2.getFirst(), pair2.getSecond());
+
+    // Using generic Box with i32
+    let boxed: Box<i32> = Box<i32> { inner: 42 };
+    println!("Boxed value: {}", boxed.get());
+
+    let newBox: Box<i32> = boxed.set(100);
+    println!("New boxed value: {}", newBox.get());
+
+    // Using generic Box with i64
+    let boxed64: Box<i64> = Box<i64> { inner: 9876543210 };
+    println!("Boxed i64 value: {}", boxed64.get());
+
+    // Using generic Point with i32
+    let p1: Point<i32> = Point<i32> { x: 5, y: 10 };
+    println!("Point<i32>: ({}, {})", p1.getX(), p1.getY());
+
+    // Using generic Point with i64
+    let p2: Point<i64> = Point<i64> { x: 100, y: 200 };
+    println!("Point<i64>: ({}, {})", p2.x, p2.y);
+
+    // Using Optional with a value
+    let some_val: Optional<i32> = Optional<i32> { hasValue: true, value: 42 };
+    if some_val.isSome() {
+        println!("Optional has value: {}", some_val.unwrap());
+    }
+
+    // Using Optional without a value
+    let none_val: Optional<i32> = Optional<i32> { hasValue: false, value: 0 };
+    if none_val.isSome() {
+        println!("This won't print");
+    } else {
+        println!("Optional has no value");
+    }
+
+    // Struct inheritance
+    var my_dog: Dog = Dog { age: 5, name: "Buddy" };
+    println!("Dog {} is {} years old", my_dog.name, my_dog.age);
+
+    // Modify inherited field
+    my_dog.age = 6;
+    println!("Dog {} is now {} years old", my_dog.name, my_dog.age);
+
+    return 0;
+}
