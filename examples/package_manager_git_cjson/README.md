@@ -63,6 +63,8 @@ From this directory:
 ```sh
 mlang pkg fetch
 mlang pkg build
+# Optional optimization level:
+# mlang pkg build -O3
 ./build/cjson_demo
 ```
 

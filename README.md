@@ -63,6 +63,7 @@ example, and run it (the program uses libcurl to fetch a URL).
 cd examples/package_manager_git_cjson
 ../../build/mlang pkg fetch
 ../../build/mlang pkg build
+# Or: ../../build/mlang pkg build -O3
 ./build/cjson_demo
 ```
 

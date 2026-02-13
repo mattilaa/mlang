@@ -717,6 +717,23 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "build")
     {
+        std::string optFlag;
+        for(int i = 3; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3")
+            {
+                optFlag = arg;
+            }
+            else
+            {
+                std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
+                          << "Usage: " << argv[0]
+                          << " pkg build [-O0|-O1|-O2|-O3]\n";
+                return 1;
+            }
+        }
+
         if(!std::filesystem::exists(manifestPath))
         {
             std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
@@ -767,6 +784,8 @@ int PackageManager::run(int argc, char** argv)
 
         std::string cmd =
             std::string(argv[0]) + " " + entry + " -o " + output;
+        if(!optFlag.empty())
+            cmd += " " + optFlag;
         for(const auto& dir : linkFlags.libDirs)
             cmd += " -L" + dir;
         for(const auto& lib : linkFlags.libs)

@@ -58,7 +58,8 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg add <name> [--pkg-config NAME] [--system]\n"
               << "  " << programName << " pkg fetch\n"
-              << "  " << programName << " pkg build\n"
+              << "  " << programName
+              << " pkg build [-O0|-O1|-O2|-O3]\n"
               << "\nTesting:\n"
               << "  " << programName << " test [path]\n"
               << "  " << programName << " run tests\n"
