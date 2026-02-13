@@ -1,0 +1,21 @@
+#[derive(Debug)]
+struct Point {
+    var x: i32;
+    var y: i32;
+};
+
+#[test]
+fn test_origin_x() -> i32 {
+    let origin: Point = Point { x: 0, y: 0 };
+    if origin.x == 0: {
+        return 0;
+    }
+    return 1;
+}
+
+fn main() -> i32 {
+    let p: Point = Point { x: 10, y: 20 };
+    println!("debug: {:?}", p);
+    println!(p);
+    return 0;
+}

@@ -1,6 +1,23 @@
 // Runtime builtins (for LSP navigation).
 // These declarations are not required for compilation.
 // Documentation here is intended for editor help and go-to-definition.
+//
+// Language attributes (compiler-recognized):
+// - #[derive(Debug)] on struct definitions enables {:?}/{:#?} formatting and
+//   struct printing in formatting macros.
+// - #[test] on function definitions marks test functions for:
+//   `mlang test` and `mlang run tests`.
+//
+// Example:
+// #[derive(Debug)]
+// struct Point { var x: i32; var y: i32; };
+//
+// #[test]
+// fn test_point_debug() -> i32 {
+//     let p: Point = Point { x: 1, y: 2 };
+//     println!("{:?}", p);
+//     return 0;
+// }
 
 // NOTE: Handle<T> is generic in the language; the placeholder here is
 // non-generic so the LSP can parse and index this file.
