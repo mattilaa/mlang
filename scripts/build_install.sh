@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--help]
+Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
                         [--unit-tests] [--robot-tests] [--tests] [--no-tests]
                         [--install-if-tests-pass]
 
@@ -17,6 +17,7 @@ Options:
   --sudo             Use sudo for install step
   --build-dir <dir>  Build directory (default: build)
   --use-make         Use Unix Makefiles instead of Ninja
+  --all              Build/install both mlang and mlangd (default behavior)
   --tests            Run unit + robot tests after build (installs only if tests pass)
   --unit-tests       Run unit tests after build (ctest, installs only if tests pass)
   --robot-tests      Run robot tests after build (installs only if tests pass)
@@ -39,6 +40,7 @@ prefix="${HOME}/.local"
 use_sudo=false
 build_dir="build"
 generator="Ninja"
+build_all=true
 run_unit_tests=false
 run_robot_tests=false
 install_if_tests_pass=false
@@ -87,6 +89,10 @@ while [[ $# -gt 0 ]]; do
       generator="Unix Makefiles"
       shift
       ;;
+    --all)
+      build_all=true
+      shift
+      ;;
     --tests)
       run_unit_tests=true
       run_robot_tests=true
@@ -122,7 +128,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
-cmake --build "$build_dir" --target mlang mlangd
+if $build_all; then
+  cmake --build "$build_dir" --target mlang mlangd
+fi
 
 if $run_unit_tests; then
   ./tests/run_tests.sh --output-on-failure
