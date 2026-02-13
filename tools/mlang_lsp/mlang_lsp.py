@@ -101,6 +101,13 @@ class MlangLspServer:
                     "documentSymbolProvider": True,
                     "workspaceSymbolProvider": True,
                     "documentFormattingProvider": True,
+                    "semanticTokensProvider": {
+                        "legend": {
+                            "tokenTypes": ["keyword"],
+                            "tokenModifiers": [],
+                        },
+                        "full": True,
+                    },
                 }
             }
         if method == "shutdown":
@@ -115,6 +122,8 @@ class MlangLspServer:
             return self._handle_workspace_symbols(params)
         if method == "textDocument/formatting":
             return self._handle_formatting(params)
+        if method == "textDocument/semanticTokens/full":
+            return self._handle_semantic_tokens(params)
         return None
 
     def _handle_notification(self, method: str, params: dict) -> None:
@@ -171,6 +180,11 @@ class MlangLspServer:
             return None
 
         word, start_idx = self._word_at_position_with_index(text, line, character)
+        attr = self._attribute_at_position(text, line, character)
+        if attr and (not word or word in {"test", "derive"}):
+            loc = self._runtime_attribute_location(attr)
+            if loc:
+                return [loc]
         if not word:
             return None
 
@@ -192,6 +206,52 @@ class MlangLspServer:
         if not locations:
             return None
         return locations
+
+    def _attribute_at_position(
+        self, text: str, line: int, character_utf16: int
+    ) -> Optional[str]:
+        lines = text.splitlines()
+        if line < 0 or line >= len(lines):
+            return None
+        line_text = lines[line]
+        idx = self._utf16_to_index(line_text, character_utf16)
+        if idx < 0 or idx > len(line_text):
+            return None
+        for attr in ("#[test]", "#[derive(Debug)]"):
+            start = 0
+            while True:
+                pos = line_text.find(attr, start)
+                if pos == -1:
+                    break
+                end = pos + len(attr)
+                if pos <= idx <= end:
+                    return attr
+                start = end
+        return None
+
+    def _runtime_attribute_location(self, attr: str) -> Optional[object]:
+        if not self.root_path:
+            return None
+        docs_path = os.path.join(self.root_path, "docs", "language_attributes.mlastub")
+        if not os.path.isfile(docs_path):
+            docs_path = os.path.join(self.root_path, "docs", "runtime_builtins.mlastub")
+        if not os.path.isfile(docs_path):
+            return None
+        try:
+            with open(docs_path, "r", encoding="utf-8") as handle:
+                for line_no, line in enumerate(handle):
+                    col = line.find(attr)
+                    if col != -1:
+                        return {
+                            "uri": self._path_to_uri(docs_path),
+                            "range": {
+                                "start": {"line": line_no, "character": col},
+                                "end": {"line": line_no, "character": col + len(attr)},
+                            },
+                        }
+        except OSError:
+            return None
+        return None
 
     def _handle_references(self, params: dict) -> List[object]:
         uri, line, character = self._extract_position(params)
@@ -264,6 +324,52 @@ class MlangLspServer:
                 "newText": formatted,
             }
         ]
+
+    def _handle_semantic_tokens(self, params: dict) -> dict:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri")
+        if not uri:
+            return {"data": []}
+        text = self.documents.get(uri)
+        if text is None:
+            text = self._read_uri_text(uri)
+        if text is None:
+            return {"data": []}
+
+        tokens: List[Tuple[int, int, int, int, int]] = []
+        for line_no, line in enumerate(text.splitlines()):
+            scan_limit = len(line)
+            comment_pos = line.find("//")
+            if comment_pos != -1:
+                scan_limit = comment_pos
+            attr_specs = (
+                ("#[derive(Debug)]", 2, 6),  # derive
+                ("#[test]", 2, 4),          # test
+            )
+            for attr, word_offset, word_len in attr_specs:
+                start = 0
+                while True:
+                    idx = line.find(attr, start)
+                    if idx == -1:
+                        break
+                    end = idx + len(attr)
+                    if end <= scan_limit:
+                        tokens.append((line_no, idx + word_offset, word_len, 0, 0))
+                    start = end
+
+        tokens.sort(key=lambda t: (t[0], t[1]))
+        data: List[int] = []
+        prev_line = 0
+        prev_start = 0
+        first = True
+        for line_no, start, length, token_type, mods in tokens:
+            delta_line = line_no if first else line_no - prev_line
+            delta_start = start if first or delta_line != 0 else start - prev_start
+            data.extend([delta_line, delta_start, length, token_type, mods])
+            prev_line = line_no
+            prev_start = start
+            first = False
+        return {"data": data}
 
     @staticmethod
     def _end_position(text: str) -> Dict[str, int]:

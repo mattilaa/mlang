@@ -29,3 +29,7 @@
 // @builtin_macro assert_eq
 // Asserts that two values are equal. Debug-only by default.
 // Usage: assert_eq!(left, right);
+
+// Built-in attributes (compiler-recognized)
+// Usage: #[derive(Debug)] struct Foo { ... };
+// Usage: #[test] fn test_name() -> i32 { return 0; }

@@ -1,9 +1,12 @@
 #include "ast.h"
+#include "mlang_constants.h"
 #include "module.h"
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -974,9 +977,9 @@ private:
                 std::regex("\\bextern\\s+fn\\s+(" + fnName + ")\\b"));
         };
 
-        static const std::unordered_set<std::string> typeNames = {
-            "Handle", "Thread", "Mutex", "Atomic64"};
-        if(typeNames.count(name))
+        if(std::find(mlang::constants::kRuntimeBuiltinTypes.begin(),
+                     mlang::constants::kRuntimeBuiltinTypes.end(),
+                     name) != mlang::constants::kRuntimeBuiltinTypes.end())
         {
             if(auto loc = find_struct(name))
             {
@@ -985,20 +988,10 @@ private:
             }
         }
 
-        static const std::unordered_set<std::string> funcNames = {
-            "thread_spawn",
-            "thread_join",
-            "mutex_create",
-            "mutex_lock",
-            "mutex_unlock",
-            "mutex_destroy",
-            "atomic_i64_new",
-            "atomic_i64_load",
-            "atomic_i64_store",
-            "atomic_i64_add",
-            "atomic_i64_free",
-        };
-        if(funcNames.count(name))
+        if(std::find(mlang::constants::kRuntimeBuiltinFunctions.begin(),
+                     mlang::constants::kRuntimeBuiltinFunctions.end(),
+                     name) !=
+           mlang::constants::kRuntimeBuiltinFunctions.end())
         {
             if(auto loc = find_extern_fn(name))
             {
@@ -1007,6 +1000,44 @@ private:
             }
         }
 
+        return std::nullopt;
+    }
+
+    std::optional<Location>
+    find_runtime_attribute_location(const std::string& attrText)
+    {
+        if(rootPath.empty())
+            return std::nullopt;
+
+        std::filesystem::path docsPath =
+            std::filesystem::path(rootPath) / "docs" /
+            "language_attributes.mlastub";
+        if(!std::filesystem::exists(docsPath))
+        {
+            docsPath = std::filesystem::path(rootPath) / "docs" /
+                       "runtime_builtins.mlastub";
+        }
+        if(!std::filesystem::exists(docsPath))
+            return std::nullopt;
+
+        std::string text = read_file(docsPath.string());
+        if(text.empty())
+            return std::nullopt;
+        auto lines = split_lines(text);
+
+        for(int i = 0; i < (int)lines.size(); ++i)
+        {
+            const auto& line = lines[(size_t)i];
+            size_t pos = line.find(attrText);
+            if(pos != std::string::npos)
+            {
+                Location loc;
+                loc.uri = path_to_uri(docsPath.string());
+                loc.line = i;
+                loc.character = (int)pos;
+                return loc;
+            }
+        }
         return std::nullopt;
     }
 
@@ -1026,21 +1057,6 @@ private:
         int kind = 0;
         std::string insertText;
         bool isSnippet = false;
-    };
-
-    static constexpr const char* kMlangKeywords[] = {
-        "fn",
-        "let",
-        "struct",
-        "enum",
-        "if",
-        "else",
-        "match",
-        "return",
-        "Handle",
-        "Thread",
-        "Mutex",
-        "Atomic64",
     };
 
     void add_completion(std::vector<CompletionCandidate>& out,
@@ -1189,6 +1205,17 @@ private:
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
             caps["documentFormattingProvider"] = true;
+            llvm::json::Object semanticLegend;
+            llvm::json::Array semanticTokenTypes;
+            semanticTokenTypes.push_back("keyword");
+            semanticLegend["tokenTypes"] =
+                llvm::json::Value(std::move(semanticTokenTypes));
+            semanticLegend["tokenModifiers"] = llvm::json::Array{};
+            llvm::json::Object semanticProvider;
+            semanticProvider["legend"] = llvm::json::Value(std::move(semanticLegend));
+            semanticProvider["full"] = true;
+            caps["semanticTokensProvider"] =
+                llvm::json::Value(std::move(semanticProvider));
             llvm::json::Object result;
             result["capabilities"] = llvm::json::Value(std::move(caps));
             send_response(id, llvm::json::Value(std::move(result)));
@@ -1216,6 +1243,10 @@ private:
         else if(method == "textDocument/formatting")
         {
             send_response(id, handle_formatting(params));
+        }
+        else if(method == "textDocument/semanticTokens/full")
+        {
+            send_response(id, handle_semantic_tokens(params));
         }
         else if(method == "workspace/symbol")
         {
@@ -1921,6 +1952,43 @@ private:
                lineText[right] == '_'))
             ++right;
         std::string word = lineText.substr(left, right - left);
+
+        auto cursor_in_attribute = [&](const char* attrText) -> bool {
+            size_t attrLen = std::strlen(attrText);
+            size_t pos = 0;
+            while(true)
+            {
+                pos = lineText.find(attrText, pos);
+                if(pos == std::string::npos)
+                    return false;
+                int start = (int)pos;
+                int end = start + (int)attrLen;
+                if(idx >= start && idx <= end)
+                    return true;
+                pos += attrLen;
+            }
+        };
+
+        bool isAttributeWord =
+            std::find(mlang::constants::kAttributeKeywords.begin(),
+                      mlang::constants::kAttributeKeywords.end(),
+                      word) != mlang::constants::kAttributeKeywords.end();
+
+        if((word.empty() || isAttributeWord) &&
+           cursor_in_attribute(mlang::constants::kAttrTest))
+        {
+            if(auto loc = find_runtime_attribute_location(
+                   mlang::constants::kAttrTest))
+                return location_to_json(*loc);
+        }
+        if((word.empty() || isAttributeWord) &&
+           cursor_in_attribute(mlang::constants::kAttrDeriveDebug))
+        {
+            if(auto loc = find_runtime_attribute_location(
+                   mlang::constants::kAttrDeriveDebug))
+                return location_to_json(*loc);
+        }
+
         if(word.empty())
             return nullptr;
 
@@ -2253,7 +2321,7 @@ private:
                         add_completion(candidates, seen, name, 6, prefix);
                 }
 
-                for(const auto* kw : kMlangKeywords)
+                for(const auto* kw : mlang::constants::kLspKeywords)
                     add_completion(candidates, seen, kw, 14, prefix);
                 add_completion_snippet(
                     candidates, seen, "match", 14, prefix,
@@ -2459,6 +2527,104 @@ private:
         edit["newText"] = formatted;
         llvm::json::Array out;
         out.push_back(llvm::json::Value(std::move(edit)));
+        return llvm::json::Value(std::move(out));
+    }
+
+    llvm::json::Value handle_semantic_tokens(llvm::json::Object* params)
+    {
+        llvm::json::Object empty;
+        empty["data"] = llvm::json::Array{};
+        if(!params)
+            return llvm::json::Value(std::move(empty));
+        auto* textDoc = params->getObject("textDocument");
+        if(!textDoc)
+            return llvm::json::Value(std::move(empty));
+        auto uri = textDoc->getString("uri");
+        if(!uri)
+            return llvm::json::Value(std::move(empty));
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return llvm::json::Value(std::move(empty));
+
+        struct SemanticTok
+        {
+            int line = 0;
+            int start = 0;
+            int length = 0;
+            int type = 0;
+            int modifiers = 0;
+        };
+
+        std::vector<SemanticTok> tokens;
+        const auto& info = it->second;
+        for(int lineNo = 0; lineNo < (int)info.lines.size(); ++lineNo)
+        {
+            const std::string& line = info.lines[lineNo];
+            size_t scanLimit = line.size();
+            if(auto commentPos = line.find("//"); commentPos != std::string::npos)
+                scanLimit = commentPos;
+
+            auto add_attr_keyword =
+                [&](const char* attrText, int keywordOffset, int keywordLen) {
+                    size_t attrLen = std::strlen(attrText);
+                    size_t pos = 0;
+                    while(true)
+                    {
+                        pos = line.find(attrText, pos);
+                        if(pos == std::string::npos)
+                            break;
+                        if(pos + attrLen <= scanLimit)
+                        {
+                            SemanticTok tok;
+                            tok.line = lineNo;
+                            tok.start = (int)pos + keywordOffset;
+                            tok.length = keywordLen;
+                            tok.type = 0; // keyword
+                            tok.modifiers = 0;
+                            tokens.push_back(tok);
+                        }
+                        pos += attrLen;
+                    }
+                };
+
+            // Highlight only the attribute names; many clients ignore punctuation
+            // spans like "#[...]" for semantic tokens.
+            for(const auto& attrSpec : mlang::constants::kAttributeTokenSpecs)
+            {
+                add_attr_keyword(attrSpec.text, attrSpec.keywordOffset,
+                                 attrSpec.keywordLength);
+            }
+        }
+
+        std::sort(tokens.begin(), tokens.end(),
+                  [](const SemanticTok& a, const SemanticTok& b) {
+                      if(a.line != b.line)
+                          return a.line < b.line;
+                      return a.start < b.start;
+                  });
+
+        llvm::json::Array data;
+        int prevLine = 0;
+        int prevStart = 0;
+        bool first = true;
+        for(const auto& tok : tokens)
+        {
+            int deltaLine = first ? tok.line : (tok.line - prevLine);
+            int deltaStart = first || deltaLine != 0 ? tok.start
+                                                     : (tok.start - prevStart);
+            data.push_back(deltaLine);
+            data.push_back(deltaStart);
+            data.push_back(tok.length);
+            data.push_back(tok.type);
+            data.push_back(tok.modifiers);
+            prevLine = tok.line;
+            prevStart = tok.start;
+            first = false;
+        }
+
+        llvm::json::Object out;
+        out["data"] = llvm::json::Value(std::move(data));
         return llvm::json::Value(std::move(out));
     }
 

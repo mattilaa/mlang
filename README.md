@@ -73,8 +73,15 @@ Skip compiling tests in normal builds:
 mlang --no-tests main.mla
 ```
 
-## Debug Formatting + Assertions
-Derive Debug for structs, use `format!` with `{:?}`/`{:#?}`, and `assert_eq!`:
+## Rust-like Attributes
+Mlang currently supports these Rust-like attributes:
+
+| Attribute | Target | Purpose |
+|---|---|---|
+| `#[derive(Debug)]` | `struct` definitions | Enables debug formatting (`{:?}`/`{:#?}` and `println!(value)` for structs). |
+| `#[test]` | `fn` definitions | Marks test functions discoverable by `mlang test` / `mlang run tests`. |
+
+### `#[derive(Debug)]`
 
 ```mla
 #[derive(Debug)]
@@ -94,7 +101,25 @@ fn main() -> i32 {
 }
 ```
 
-Enable debug-only logging (`debug!`) via:
+### `#[test]`
+Test functions should take no parameters and return `void` or `i32`:
+
+```mla
+#[test]
+fn test_addition() -> i32 {
+    let x: i32 = 2 + 2;
+    if x == 4: {
+        return 0;
+    }
+    return 1;
+}
+```
+
+### Related
+- Full attribute notes and contributor guide: `docs/language_attributes.md`
+- Runnable example: `examples/rust_attributes.mla`
+
+Enable debug-only logging (`debug!`) with:
 
 ```sh
 mlang --debug main.mla
