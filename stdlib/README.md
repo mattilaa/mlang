@@ -7,4 +7,5 @@ prefix on `make install` and are not required at runtime.
 Currently provided:
 - `types.mla`: built-in primitive and generic types.
 - `macros.mla`: built-in macros (println!, format!, assert_eq!, ...).
+- `attributes.mla`: built-in attributes (`#[derive(Debug)]`, `#[test]`).
 - `test.mla`: test framework helpers (test::assert, test::run_all).

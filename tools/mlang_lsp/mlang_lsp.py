@@ -103,7 +103,7 @@ class MlangLspServer:
                     "documentFormattingProvider": True,
                     "semanticTokensProvider": {
                         "legend": {
-                            "tokenTypes": ["keyword"],
+                            "tokenTypes": ["keyword", "macro"],
                             "tokenModifiers": [],
                         },
                         "full": True,
@@ -232,14 +232,38 @@ class MlangLspServer:
     def _runtime_attribute_location(self, attr: str) -> Optional[object]:
         if not self.root_path:
             return None
-        docs_path = os.path.join(self.root_path, "docs", "language_attributes.mlastub")
-        if not os.path.isfile(docs_path):
-            docs_path = os.path.join(self.root_path, "docs", "runtime_builtins.mlastub")
-        if not os.path.isfile(docs_path):
-            return None
-        try:
-            with open(docs_path, "r", encoding="utf-8") as handle:
-                for line_no, line in enumerate(handle):
+        attr_name = ""
+        if attr == "#[test]":
+            attr_name = "test"
+        elif attr == "#[derive(Debug)]":
+            attr_name = "derive"
+        candidates = [
+            os.path.join(self.root_path, "stdlib", "attributes.mla"),
+            os.path.join(self.root_path, "docs", "language_attributes.mlastub"),
+            os.path.join(self.root_path, "docs", "runtime_builtins.mlastub"),
+        ]
+        for docs_path in candidates:
+            if not os.path.isfile(docs_path):
+                continue
+            try:
+                with open(docs_path, "r", encoding="utf-8") as handle:
+                    lines = handle.readlines()
+                if attr_name:
+                    header_tag = f"@builtin_attribute {attr_name}"
+                    for line_no, line in enumerate(lines):
+                        col = line.find(header_tag)
+                        if col != -1:
+                            return {
+                                "uri": self._path_to_uri(docs_path),
+                                "range": {
+                                    "start": {"line": line_no, "character": col},
+                                    "end": {"line": line_no, "character": col + len(header_tag)},
+                                },
+                            }
+                for line_no, line in enumerate(lines):
+                    stripped = line.lstrip()
+                    if stripped.startswith("//"):
+                        continue
                     col = line.find(attr)
                     if col != -1:
                         return {
@@ -249,8 +273,8 @@ class MlangLspServer:
                                 "end": {"line": line_no, "character": col + len(attr)},
                             },
                         }
-        except OSError:
-            return None
+            except OSError:
+                continue
         return None
 
     def _handle_references(self, params: dict) -> List[object]:
@@ -356,6 +380,15 @@ class MlangLspServer:
                     if end <= scan_limit:
                         tokens.append((line_no, idx + word_offset, word_len, 0, 0))
                     start = end
+
+            for tag in ("@builtin_macro", "@builtin_attribute"):
+                start = 0
+                while True:
+                    idx = line.find(tag, start)
+                    if idx == -1:
+                        break
+                    tokens.append((line_no, idx, len(tag), 1, 0))
+                    start = idx + len(tag)
 
         tokens.sort(key=lambda t: (t[0], t[1]))
         data: List[int] = []

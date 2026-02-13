@@ -1,0 +1,15 @@
+// MLang built-in attributes
+// This module is documentation-only and is used by editor tooling.
+// It is not meant to be imported at runtime.
+
+// @builtin_attribute derive
+// Enables debug formatting support for structs.
+// Usage:
+// #[derive(Debug)]
+// struct Point { var x: i32; var y: i32; };
+
+// @builtin_attribute test
+// Marks a function as a test callable by `mlang test`.
+// Usage:
+// #[test]
+// fn test_add() -> i32 { return 0; }

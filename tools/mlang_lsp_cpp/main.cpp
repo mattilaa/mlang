@@ -1009,33 +1009,64 @@ private:
         if(rootPath.empty())
             return std::nullopt;
 
-        std::filesystem::path docsPath =
-            std::filesystem::path(rootPath) / "docs" /
-            "language_attributes.mlastub";
-        if(!std::filesystem::exists(docsPath))
-        {
-            docsPath = std::filesystem::path(rootPath) / "docs" /
-                       "runtime_builtins.mlastub";
-        }
-        if(!std::filesystem::exists(docsPath))
-            return std::nullopt;
+        std::vector<std::filesystem::path> candidates = {
+            std::filesystem::path(rootPath) / "stdlib" / "attributes.mla",
+            std::filesystem::path(rootPath) / "docs" / "language_attributes.mlastub",
+            std::filesystem::path(rootPath) / "docs" / "runtime_builtins.mlastub",
+        };
 
-        std::string text = read_file(docsPath.string());
-        if(text.empty())
-            return std::nullopt;
-        auto lines = split_lines(text);
-
-        for(int i = 0; i < (int)lines.size(); ++i)
+        for(const auto& docsPath : candidates)
         {
-            const auto& line = lines[(size_t)i];
-            size_t pos = line.find(attrText);
-            if(pos != std::string::npos)
+            if(!std::filesystem::exists(docsPath))
+                continue;
+            std::string text = read_file(docsPath.string());
+            if(text.empty())
+                continue;
+            auto lines = split_lines(text);
+
+            std::string attrName;
+            if(attrText == mlang::constants::kAttrTest)
+                attrName = "test";
+            else if(attrText == mlang::constants::kAttrDeriveDebug)
+                attrName = "derive";
+
+            if(!attrName.empty())
             {
-                Location loc;
-                loc.uri = path_to_uri(docsPath.string());
-                loc.line = i;
-                loc.character = (int)pos;
-                return loc;
+                const std::string headerTag =
+                    "@builtin_attribute " + attrName;
+                for(int i = 0; i < (int)lines.size(); ++i)
+                {
+                    const auto& line = lines[(size_t)i];
+                    size_t pos = line.find(headerTag);
+                    if(pos != std::string::npos)
+                    {
+                        Location loc;
+                        loc.uri = path_to_uri(docsPath.string());
+                        loc.line = i;
+                        loc.character = (int)pos;
+                        return loc;
+                    }
+                }
+            }
+
+            for(int i = 0; i < (int)lines.size(); ++i)
+            {
+                const auto& line = lines[(size_t)i];
+                const auto trimmed = line.find_first_not_of(" \t");
+                if(trimmed != std::string::npos && trimmed + 1 < line.size() &&
+                   line[trimmed] == '/' && line[trimmed + 1] == '/')
+                {
+                    continue;
+                }
+                size_t pos = line.find(attrText);
+                if(pos != std::string::npos)
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(docsPath.string());
+                    loc.line = i;
+                    loc.character = (int)pos;
+                    return loc;
+                }
             }
         }
         return std::nullopt;
@@ -1208,6 +1239,7 @@ private:
             llvm::json::Object semanticLegend;
             llvm::json::Array semanticTokenTypes;
             semanticTokenTypes.push_back("keyword");
+            semanticTokenTypes.push_back("macro");
             semanticLegend["tokenTypes"] =
                 llvm::json::Value(std::move(semanticTokenTypes));
             semanticLegend["tokenModifiers"] = llvm::json::Array{};
@@ -2595,6 +2627,28 @@ private:
                 add_attr_keyword(attrSpec.text, attrSpec.keywordOffset,
                                  attrSpec.keywordLength);
             }
+
+            auto add_doc_tag_token = [&](const char* tagText) {
+                size_t tagLen = std::strlen(tagText);
+                size_t pos = 0;
+                while(true)
+                {
+                    pos = line.find(tagText, pos);
+                    if(pos == std::string::npos)
+                        break;
+                    SemanticTok tok;
+                    tok.line = lineNo;
+                    tok.start = (int)pos;
+                    tok.length = (int)tagLen;
+                    tok.type = 1; // macro
+                    tok.modifiers = 0;
+                    tokens.push_back(tok);
+                    pos += tagLen;
+                }
+            };
+
+            add_doc_tag_token("@builtin_macro");
+            add_doc_tag_token("@builtin_attribute");
         }
 
         std::sort(tokens.begin(), tokens.end(),
