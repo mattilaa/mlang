@@ -65,6 +65,8 @@ cd examples/package_manager_git_cjson
 ../../build/mlang pkg build
 # Or: ../../build/mlang pkg build -O3
 ./build/cjson_demo
+# Optional URL override:
+# ./build/cjson_demo --url https://www.someplace.com
 ```
 
 Prereqs for this example:

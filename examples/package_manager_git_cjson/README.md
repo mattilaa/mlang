@@ -21,8 +21,9 @@ The package manager forwards `cmake_args` entries to CMake as `-D` definitions.
 
 ## Also uses a system dependency (libcurl)
 This example additionally links against libcurl via pkg-config and uses it to
-fetch `https://www.google.com`. libcurl writes the response body to stdout by
-default (since no custom write callback is provided).
+fetch a URL. By default it fetches `https://www.google.com`, or you can pass
+`--url <site>` to choose another target. libcurl writes the response body to
+stdout by default (since no custom write callback is provided).
 The `curl_easy_setopt` function is variadic, so the extern signature uses `...`.
 Common libcurl externs are collected in `curl.mla` and imported by `src/main.mla`.
 `mlang.toml` includes `module_paths = ["."]` so the module loader can find
@@ -66,6 +67,8 @@ mlang pkg build
 # Optional optimization level:
 # mlang pkg build -O3
 ./build/cjson_demo
+./build/cjson_demo --url https://www.someplace.com
+./build/cjson_demo --help
 ```
 
 ## Notes
