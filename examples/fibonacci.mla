@@ -1,0 +1,63 @@
+fn fib_recursive(n: int) -> int {
+    if n <= 1: {
+        return n;
+    }
+    return fib_recursive(n - 1) + fib_recursive(n - 2);
+}
+
+fn fib_iter(n: int) -> int {
+    if n <= 1: {
+        return n;
+    }
+    var a: int = 0;
+    var b: int = 1;
+    for i in 2..n + 1 {
+        let next: int = a + b;
+        a = b;
+        b = next;
+    }
+    return b;
+}
+
+fn main() -> i32 {
+    let count: int = 12;
+    println!("Fibonacci series ({} terms):", count);
+
+    for i in 0..count {
+        let value: int = fib_iter(i);
+        println!("fib({}) = {}", i, value);
+    }
+
+    // Small recursive demo
+    println!("fib_recursive(10) = {}", fib_recursive(10));
+
+    // Tweak 1: only iterative, inline output
+    let inline_count: int = 10;
+    print!("Inline (iter only): ");
+    for i in 0..inline_count {
+        let value: int = fib_iter(i);
+        if i + 1 == inline_count: {
+            print!("{}", value);
+        } else: {
+            print!("{} ", value);
+        }
+    }
+    println!("");
+
+    // Tweak 2: different output format (CSV)
+    let csv_count: int = 8;
+    println!("CSV:");
+    println!("i,value");
+    for i in 0..csv_count {
+        println!("{},{}", i, fib_iter(i));
+    }
+
+    // Tweak 3: bigger range
+    let big_count: int = 20;
+    println!("First {} terms (iter):", big_count);
+    for i in 0..big_count {
+        println!("fib({}) = {}", i, fib_iter(i));
+    }
+
+    return 0;
+}
