@@ -28,6 +28,7 @@ Options:
 Notes:
   The install step also installs the stdlib docs (including builtin types)
   to: <prefix>/share/mlang/stdlib
+  and stdlib libraries to: <prefix>/lib
   - Install runs by default unless --no-install is set.
   - --tests/--unit-tests/--robot-tests imply --install-if-tests-pass.
   - --install-if-tests-pass requires tests to be selected.
@@ -129,7 +130,7 @@ done
 
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 if $build_all; then
-  cmake --build "$build_dir" --target mlang mlangd
+  cmake --build "$build_dir" --target mlang mlangd mlang_std
 fi
 
 if $run_unit_tests; then
@@ -152,11 +153,32 @@ if $install_after_build; then
   fi
 
   stdlib_dir="$prefix/share/mlang/stdlib"
+  stdlib_lib_dir="$prefix/lib"
+  stdlib_lib_src_dir="$prefix/lib/mlang"
   if [[ -f "$stdlib_dir/types.mla" ]]; then
     echo "installed stdlib docs: $stdlib_dir"
   else
     echo "warning: stdlib docs not found at $stdlib_dir" >&2
     echo "         ensure stdlib/ is present in the repo and install again" >&2
+  fi
+  # Ensure stdlib lib lives in <prefix>/lib
+  if [[ -d "$stdlib_lib_src_dir" ]]; then
+    if [[ -f "$stdlib_lib_src_dir/libmlang_std.a" ]]; then
+      cp -f "$stdlib_lib_src_dir/libmlang_std.a" "$stdlib_lib_dir/"
+    fi
+    if [[ -f "$stdlib_lib_src_dir/libmlang_std.dylib" ]]; then
+      cp -f "$stdlib_lib_src_dir/libmlang_std.dylib" "$stdlib_lib_dir/"
+    fi
+    if [[ -f "$stdlib_lib_src_dir/libmlang_std.so" ]]; then
+      cp -f "$stdlib_lib_src_dir/libmlang_std.so" "$stdlib_lib_dir/"
+    fi
+  fi
+
+  if [[ -f "$stdlib_lib_dir/libmlang_std.a" || -f "$stdlib_lib_dir/libmlang_std.dylib" || -f "$stdlib_lib_dir/libmlang_std.so" ]]; then
+    echo "installed stdlib lib: $stdlib_lib_dir"
+  else
+    echo "warning: stdlib lib not found at $stdlib_lib_dir" >&2
+    echo "         ensure stdlib/src is present and install again" >&2
   fi
 else
   echo "note: stdlib docs (builtin type definitions) are not installed" >&2

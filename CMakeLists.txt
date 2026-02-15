@@ -11,6 +11,11 @@ include(GNUInstallDirs)
 # Install location for stdlib modules.
 set(MLANG_STDLIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/mlang/stdlib")
 add_compile_definitions(MLANG_STDLIB_INSTALL_DIR="${MLANG_STDLIB_INSTALL_DIR}")
+add_compile_definitions(MLANG_STDLIB_SOURCE_DIR="${CMAKE_SOURCE_DIR}/stdlib")
+
+# Install location for stdlib libraries.
+set(MLANG_STDLIB_LIB_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/mlang")
+add_compile_definitions(MLANG_STDLIB_LIB_INSTALL_DIR="${MLANG_STDLIB_LIB_INSTALL_DIR}")
 
 # Create compile_commands.json in build directory
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -188,6 +193,11 @@ target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mlangd ${llvm_libs})
 
+add_library(mlang_std STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
+)
+set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
+
 # Print debug information
 message(STATUS "LEXER_OUT: ${LEXER_OUT}")
 message(STATUS "PARSER_OUT: ${PARSER_OUT}")
@@ -225,6 +235,10 @@ install(TARGETS mlang
 
 install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(TARGETS mlang_std
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mlang)
 
 # Install stdlib modules for editor tooling and go-to-definition.
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/

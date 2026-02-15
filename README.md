@@ -31,6 +31,23 @@ search paths in `mlang.toml`:
 module_paths = ["modules", "vendor/mlang"]
 ```
 
+## Stdlib Linking
+When using stdlib modules backed by native code (e.g. `std::math`), link
+against the stdlib library just like GCC/Clang:
+
+```sh
+mlang main.mla -L ~/.local/lib -lmlang_std
+```
+
+You can also set a default search path:
+
+```sh
+export MLANG_STDLIB_LIB_PATH=~/.local/lib
+```
+
+The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults
+to `~/.local/share/mlang/stdlib` when installed.
+
 ## Build + Install
 Build and install both `mlang` and `mlangd`:
 

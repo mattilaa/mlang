@@ -4,6 +4,16 @@
 #include <string.h>
 #include "ast.h"
 
+static char* join_module_path(char* left, char* right)
+{
+    size_t len = strlen(left) + 2 + strlen(right) + 1;
+    char* out = (char*)malloc(len);
+    if(!out)
+        return left;
+    snprintf(out, len, "%s::%s", left, right);
+    return out;
+}
+
 extern int yylex();
 extern int yylineno;
 extern char* yytext;
@@ -169,6 +179,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
+%type <sval> module_path
 %type <ast> print_statement argument_list assert_eq_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
@@ -206,15 +217,22 @@ top_level_item
     | impl_block
     ;
 
+module_path
+    : IDENTIFIER
+        { $$ = $1; }
+    | module_path COLONCOLON IDENTIFIER
+        { $$ = join_module_path($1, $3); }
+    ;
+
 mod_declaration
-    : MOD IDENTIFIER SEMICOLON
+    : MOD module_path SEMICOLON
         { $$ = create_mod_declaration($2, yylineno); }
     ;
 
 use_declaration
-    : USE IDENTIFIER COLONCOLON IDENTIFIER SEMICOLON
+    : USE module_path COLONCOLON IDENTIFIER SEMICOLON
         { $$ = create_use_declaration($2, $4, yylineno); }
-    | USE IDENTIFIER COLONCOLON MULTIPLY SEMICOLON
+    | USE module_path COLONCOLON MULTIPLY SEMICOLON
         { $$ = create_use_all_declaration($2, yylineno); }
     ;
 

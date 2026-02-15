@@ -3,6 +3,120 @@
 #include <fstream>
 #include <iostream>
 
+static std::string type_mangle(TypeNode* typeNode)
+{
+    if(!typeNode)
+        return "void";
+
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
+        return "ptr_" + type_mangle(ptrType->elementType);
+
+    if(auto* genList = dynamic_cast<GenericListTypeNode*>(typeNode))
+        return "list_" + type_mangle(genList->elementType);
+
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(typeNode))
+    {
+        return "map_" + type_mangle(mapType->keyType) + "_" +
+               type_mangle(mapType->valueType);
+    }
+
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(typeNode))
+    {
+        std::string out = "tuple";
+        if(tupleType->elementTypes)
+        {
+            for(auto* elem : tupleType->elementTypes->types)
+            {
+                out += "_" + type_mangle(elem);
+            }
+        }
+        return out;
+    }
+
+    if(auto* genStruct = dynamic_cast<GenericStructTypeRefNode*>(typeNode))
+    {
+        std::string out = "struct_" + genStruct->structName;
+        for(auto* arg : genStruct->typeArgs)
+        {
+            out += "_" + type_mangle(arg);
+        }
+        return out;
+    }
+
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeNode))
+        return "struct_" + structRef->structName;
+
+    switch(typeNode->kind)
+    {
+    case TypeNode::TYPE_VOID:
+        return "void";
+    case TypeNode::TYPE_BOOL:
+        return "bool";
+    case TypeNode::TYPE_INT:
+        return "int";
+    case TypeNode::TYPE_FLOAT:
+        return "float";
+    case TypeNode::TYPE_DOUBLE:
+        return "double";
+    case TypeNode::TYPE_STRING:
+        return "string";
+    case TypeNode::TYPE_STR8:
+        return "str8";
+    case TypeNode::TYPE_STR16:
+        return "str16";
+    case TypeNode::TYPE_LIST:
+        return "list";
+    case TypeNode::TYPE_MAP:
+        return "map";
+    case TypeNode::TYPE_TUPLE:
+        return "tuple";
+    case TypeNode::TYPE_PTR:
+        return "ptr";
+    case TypeNode::TYPE_STRUCT:
+        return "struct";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    default:
+        return "unknown";
+    }
+}
+
+static std::string function_signature_key(FunctionDefNode* node)
+{
+    std::string key = node->name + "(";
+    if(node->parameters)
+    {
+        for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+        {
+            if(i > 0)
+                key += ",";
+            key += type_mangle(node->parameters->parameters[i]->type);
+        }
+        if(node->parameters->isVarArg)
+        {
+            if(!node->parameters->parameters.empty())
+                key += ",";
+            key += "...";
+        }
+    }
+    key += ")";
+    return key;
+}
+
 // External parser functions
 extern int yyparse();
 extern FILE* yyin;
@@ -34,15 +148,23 @@ std::string ModuleLoader::resolveModulePath(const std::string& moduleName)
 {
     namespace fs = std::filesystem;
 
+    std::string relName = moduleName;
+    size_t pos = 0;
+    while((pos = relName.find("::", pos)) != std::string::npos)
+    {
+        relName.replace(pos, 2, "/");
+        pos += 1;
+    }
+
     for(const auto& root : searchPaths)
     {
         // Try moduleName.mla in the search path
-        fs::path modulePath = fs::path(root) / (moduleName + ".mla");
+        fs::path modulePath = fs::path(root) / (relName + ".mla");
         if(fs::exists(modulePath))
             return modulePath.string();
 
         // Try moduleName/mod.mla (directory module)
-        fs::path dirModulePath = fs::path(root) / moduleName / "mod.mla";
+        fs::path dirModulePath = fs::path(root) / relName / "mod.mla";
         if(fs::exists(dirModulePath))
             return dirModulePath.string();
     }
@@ -257,10 +379,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 func->sourceModule = useDecl->moduleName;
 
                 // Check if function already added (avoid duplicates)
+                std::string sigKey = function_signature_key(func);
                 bool alreadyAdded = false;
                 for(auto* existing : program->functionList->functions)
                 {
-                    if(existing->name == func->name)
+                    if(function_signature_key(existing) == sigKey)
                     {
                         alreadyAdded = true;
                         break;
@@ -308,12 +431,23 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             bool found = false;
 
             // Try to find as function
-            FunctionDefNode* func =
-                getFunction(useDecl->moduleName, useDecl->itemName);
-            if(func)
+            bool hasFunction = false;
+            bool hasPublicFunction = false;
+            if(module->functionList)
             {
-                // Check if the function is public
-                if(!func->isPublic)
+                for(auto* func : module->functionList->functions)
+                {
+                    if(func->name == useDecl->itemName)
+                    {
+                        hasFunction = true;
+                        if(func->isPublic)
+                            hasPublicFunction = true;
+                    }
+                }
+            }
+            if(hasFunction)
+            {
+                if(!hasPublicFunction)
                 {
                     errorMsg = "function '" + useDecl->itemName +
                                "' is private in module '" +

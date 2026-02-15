@@ -69,8 +69,19 @@ private:
     bool includeTests = true;
 
     // Visibility tracking for functions
-    // Maps function name -> (isPublic, sourceModule)
+    // Maps function signature key -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> functionVisibility;
+    struct FunctionOverloadInfo
+    {
+        FunctionDefNode* node;
+        llvm::Function* function;
+        std::string signatureKey;
+        std::string symbolName;
+        bool isVarArg;
+        bool isPublic;
+        std::string sourceModule;
+    };
+    std::map<std::string, std::vector<FunctionOverloadInfo>> functionOverloads;
     // Maps struct name -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
     // Current module being compiled (empty string for main module)
@@ -132,6 +143,14 @@ private:
     llvm::Type* getLLVMTypeFromNode(TypeNode* typeNode);
     bool isUnsignedType(TypeNode::TypeKind kind);
     llvm::StructType* getStructType(const std::string& name);
+    std::string typeMangle(TypeNode* typeNode) const;
+    std::string functionSignatureKey(FunctionDefNode* node) const;
+    std::string functionSymbolName(FunctionDefNode* node) const;
+    void registerFunctionOverload(FunctionDefNode* node,
+                                  llvm::Function* function);
+    bool isOverloadVisible(const FunctionOverloadInfo& info) const;
+    bool canConvertType(llvm::Type* actualType, llvm::Type* expectedType,
+                        int& cost) const;
 
     // Stdio initialization
     void initializeStdioFunctions();

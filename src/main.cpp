@@ -72,6 +72,9 @@ void printUsage(const char* programName)
               << " -S test.mla           # Emit assembly\n"
               << "  " << programName
               << " -emit-llvm test.mla   # Emit LLVM IR\n"
+              << "\nStdlib linking:\n"
+              << "  " << programName << " main.mla -L ~/.local/lib -lmlang_std\n"
+              << "  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib)\n"
               << std::endl;
 }
 
@@ -201,6 +204,13 @@ static std::vector<std::string> default_stdlib_paths()
         paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
     if(const char* home = std::getenv("HOME"))
         paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
+#ifdef MLANG_STDLIB_SOURCE_DIR
+    {
+        std::error_code ec;
+        if(std::filesystem::exists(MLANG_STDLIB_SOURCE_DIR, ec))
+            paths.emplace_back(MLANG_STDLIB_SOURCE_DIR);
+    }
+#endif
 #ifdef MLANG_STDLIB_INSTALL_DIR
     paths.emplace_back(MLANG_STDLIB_INSTALL_DIR);
 #endif
@@ -219,6 +229,135 @@ static void append_stdlib_paths(std::vector<std::string>& modulePaths)
         if(!p.empty() && seen.insert(p).second)
             modulePaths.push_back(p);
     }
+}
+
+static std::vector<std::string> split_env_paths(const char* env)
+{
+    std::vector<std::string> out;
+    if(!env)
+        return out;
+    std::string cur;
+    for(const char* p = env; *p; ++p)
+    {
+        if(*p == ':')
+        {
+            if(!cur.empty())
+                out.push_back(cur);
+            cur.clear();
+        }
+        else
+        {
+            cur.push_back(*p);
+        }
+    }
+    if(!cur.empty())
+        out.push_back(cur);
+    return out;
+}
+
+static std::vector<std::string> default_stdlib_lib_paths()
+{
+    std::vector<std::string> paths;
+    if(const char* env = std::getenv("MLANG_STDLIB_LIB_PATH"))
+    {
+        for(const auto& p : split_env_paths(env))
+            paths.emplace_back(p);
+    }
+    if(const char* home = std::getenv("HOME"))
+    {
+        paths.emplace_back(std::string(home) + "/.local/lib");
+        paths.emplace_back(std::string(home) + "/.local/lib/mlang");
+    }
+#ifdef MLANG_STDLIB_LIB_INSTALL_DIR
+    paths.emplace_back(MLANG_STDLIB_LIB_INSTALL_DIR);
+#endif
+    paths.emplace_back("/usr/local/lib");
+    paths.emplace_back("/usr/local/lib/mlang");
+    paths.emplace_back("/usr/lib");
+    paths.emplace_back("/usr/lib/mlang");
+    return paths;
+}
+
+
+static bool stdlib_lib_exists(const std::string& dir)
+{
+    std::error_code ec;
+    std::filesystem::path base(dir);
+    const char* names[] = {"libmlang_std.a", "libmlang_std.so", "libmlang_std.dylib"};
+    for(const char* name : names)
+    {
+        if(std::filesystem::exists(base / name, ec))
+            return true;
+    }
+    return false;
+}
+
+static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
+                                    std::string_view exePath)
+{
+    bool hasStdlib = false;
+    for(const auto& arg : linkArgs)
+    {
+        if(arg == "-lmlang_std" || arg == "-lmlang_stdlib")
+        {
+            hasStdlib = true;
+            break;
+        }
+    }
+    if(hasStdlib)
+        return;
+
+    std::string foundDir;
+    if(!exePath.empty())
+    {
+        std::error_code ec;
+        std::filesystem::path exe = std::filesystem::absolute(
+            std::filesystem::path(std::string(exePath)), ec);
+        if(!ec)
+        {
+            std::string exeDir = exe.parent_path().string();
+            if(!exeDir.empty() && stdlib_lib_exists(exeDir))
+                foundDir = exeDir;
+        }
+    }
+
+    for(const auto& dir : default_stdlib_lib_paths())
+    {
+        if(!foundDir.empty())
+            break;
+        if(!dir.empty() && stdlib_lib_exists(dir))
+        {
+            foundDir = dir;
+            break;
+        }
+    }
+    if(foundDir.empty())
+        return;
+
+    bool hasDir = false;
+    for(const auto& arg : linkArgs)
+    {
+        if(arg == std::string("-L") + foundDir)
+        {
+            hasDir = true;
+            break;
+        }
+    }
+    if(!hasDir)
+        linkArgs.push_back(std::string("-L") + foundDir);
+    linkArgs.push_back("-lmlang_std");
+
+    bool hasLibm = false;
+    for(const auto& arg : linkArgs)
+    {
+        if(arg == "-lm")
+        {
+            hasLibm = true;
+            break;
+        }
+    }
+    if(!hasLibm)
+        linkArgs.push_back("-lm");
 }
 
 static std::vector<std::tuple<std::string, std::string, int>>
@@ -774,6 +913,7 @@ int main(int argc, char** argv)
             }
 
             append_stdlib_paths(moduleSearchPaths);
+            append_stdlib_link_args(linkArgs, argv[0]);
 
             // Initialize module loader
             ModuleLoader moduleLoader(basePath, moduleSearchPaths);

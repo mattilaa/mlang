@@ -3,6 +3,7 @@
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
@@ -1614,19 +1615,6 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
     }
 
-    // Track function visibility before generating declarations
-    if(program->functionList)
-    {
-        for(auto funcDef : program->functionList->functions)
-        {
-            if(funcDef->isTest && !includeTests)
-                continue;
-            // Track function visibility
-            functionVisibility[funcDef->name] =
-                std::make_pair(funcDef->isPublic, funcDef->sourceModule);
-        }
-    }
-
     // Generate forward declarations for all functions first
     if(program->functionList)
     {
@@ -1634,7 +1622,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         {
             if(funcDef->isTest && !includeTests)
                 continue;
-            generateFunctionDeclaration(funcDef);
+            llvm::Function* decl = generateFunctionDeclaration(funcDef);
+            registerFunctionOverload(funcDef, decl);
         }
     }
 
@@ -1838,7 +1827,8 @@ void CodeGenerator::generateTestMain(
     {
         if(!testFn || testFn->isExtern)
             continue;
-        llvm::Function* callee = module->getFunction(testFn->name);
+        llvm::Function* callee =
+            module->getFunction(functionSymbolName(testFn));
         if(!callee)
             continue;
         llvm::Value* result = builder.CreateCall(callee, {});
@@ -2127,12 +2117,7 @@ void CodeGenerator::ensureAtomic64Builtin(ProgramNode* program)
 llvm::Function*
 CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
 {
-    // Check if function already declared
-    if(module->getFunction(node->name))
-    {
-        return module->getFunction(node->name);
-    }
-
+    std::string symbolName = functionSymbolName(node);
     std::vector<llvm::Type*> paramTypes;
     for(auto param : node->parameters->parameters)
     {
@@ -2154,11 +2139,25 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
         returnType = llvm::Type::getVoidTy(context); // fallback
     }
 
+    // Check if function already declared
+    if(llvm::Function* existing = module->getFunction(symbolName))
+    {
+        if(existing->arg_size() != paramTypes.size() ||
+           existing->getReturnType() != returnType ||
+           existing->isVarArg() != node->parameters->isVarArg)
+        {
+            reportError(node->line,
+                        "conflicting declaration for function '" +
+                            node->name + "'");
+        }
+        return existing;
+    }
+
     llvm::FunctionType* funcType =
         llvm::FunctionType::get(returnType, paramTypes,
                                 node->parameters->isVarArg);
     llvm::Function* function = llvm::Function::Create(
-        funcType, llvm::Function::ExternalLinkage, node->name, module.get());
+        funcType, llvm::Function::ExternalLinkage, symbolName, module.get());
 
     // Set parameter names
     unsigned idx = 0;
@@ -2172,8 +2171,9 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
 
 llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 {
+    std::string symbolName = functionSymbolName(node);
     // Get the function (should already be declared)
-    llvm::Function* function = module->getFunction(node->name);
+    llvm::Function* function = module->getFunction(symbolName);
     if(!function)
     {
         // If not declared yet, declare it now
@@ -3961,6 +3961,223 @@ llvm::StructType* CodeGenerator::getStructType(const std::string& name)
     return nullptr;
 }
 
+std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
+{
+    if(!typeNode)
+        return "void";
+
+    if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
+        return "ptr_" + typeMangle(ptrType->elementType);
+
+    if(auto* genList = dynamic_cast<GenericListTypeNode*>(typeNode))
+        return "list_" + typeMangle(genList->elementType);
+
+    if(auto* mapType = dynamic_cast<MapTypeNode*>(typeNode))
+    {
+        return "map_" + typeMangle(mapType->keyType) + "_" +
+               typeMangle(mapType->valueType);
+    }
+
+    if(auto* tupleType = dynamic_cast<TupleTypeNode*>(typeNode))
+    {
+        std::string out = "tuple";
+        if(tupleType->elementTypes)
+        {
+            for(auto* elem : tupleType->elementTypes->types)
+            {
+                out += "_" + typeMangle(elem);
+            }
+        }
+        return out;
+    }
+
+    if(auto* genStruct = dynamic_cast<GenericStructTypeRefNode*>(typeNode))
+    {
+        std::string out = "struct_" + genStruct->structName;
+        for(auto* arg : genStruct->typeArgs)
+        {
+            out += "_" + typeMangle(arg);
+        }
+        return out;
+    }
+
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeNode))
+        return "struct_" + structRef->structName;
+
+    switch(typeNode->kind)
+    {
+    case TypeNode::TYPE_VOID:
+        return "void";
+    case TypeNode::TYPE_BOOL:
+        return "bool";
+    case TypeNode::TYPE_INT:
+        return "int";
+    case TypeNode::TYPE_FLOAT:
+        return "float";
+    case TypeNode::TYPE_DOUBLE:
+        return "double";
+    case TypeNode::TYPE_STRING:
+        return "string";
+    case TypeNode::TYPE_STR8:
+        return "str8";
+    case TypeNode::TYPE_STR16:
+        return "str16";
+    case TypeNode::TYPE_LIST:
+        return "list";
+    case TypeNode::TYPE_MAP:
+        return "map";
+    case TypeNode::TYPE_TUPLE:
+        return "tuple";
+    case TypeNode::TYPE_PTR:
+        return "ptr";
+    case TypeNode::TYPE_STRUCT:
+        return "struct";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    default:
+        return "unknown";
+    }
+}
+
+std::string CodeGenerator::functionSignatureKey(FunctionDefNode* node) const
+{
+    std::string key = node->name + "(";
+    if(node->parameters)
+    {
+        for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+        {
+            if(i > 0)
+                key += ",";
+            key += typeMangle(node->parameters->parameters[i]->type);
+        }
+        if(node->parameters->isVarArg)
+        {
+            if(!node->parameters->parameters.empty())
+                key += ",";
+            key += "...";
+        }
+    }
+    key += ")";
+    return key;
+}
+
+std::string CodeGenerator::functionSymbolName(FunctionDefNode* node) const
+{
+    if(node->isExtern)
+        return node->name;
+    if(node->name == "main")
+        return "main";
+
+    std::string suffix;
+    if(node->parameters && !node->parameters->parameters.empty())
+    {
+        for(size_t i = 0; i < node->parameters->parameters.size(); ++i)
+        {
+            if(i > 0)
+                suffix += "_";
+            suffix += typeMangle(node->parameters->parameters[i]->type);
+        }
+    }
+    else
+    {
+        suffix = "void";
+    }
+    if(node->parameters && node->parameters->isVarArg)
+    {
+        if(!suffix.empty())
+            suffix += "_";
+        suffix += "vararg";
+    }
+    return node->name + "__" + suffix;
+}
+
+void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
+                                              llvm::Function* function)
+{
+    if(!node || !function)
+        return;
+
+    std::string signatureKey = functionSignatureKey(node);
+    auto& overloads = functionOverloads[node->name];
+    for(const auto& info : overloads)
+    {
+        if(info.signatureKey == signatureKey)
+        {
+            reportError(node->line,
+                        "duplicate function overload: '" + signatureKey + "'");
+            return;
+        }
+    }
+
+    FunctionOverloadInfo info{
+        node, function, signatureKey, function->getName().str(),
+        node->parameters ? node->parameters->isVarArg : false, node->isPublic,
+        node->sourceModule};
+    overloads.push_back(info);
+
+    functionVisibility[signatureKey] =
+        std::make_pair(node->isPublic, node->sourceModule);
+}
+
+bool CodeGenerator::isOverloadVisible(const FunctionOverloadInfo& info) const
+{
+    if(info.sourceModule.empty())
+        return true;
+    if(info.sourceModule == currentModule)
+        return true;
+    return info.isPublic;
+}
+
+bool CodeGenerator::canConvertType(llvm::Type* actualType,
+                                   llvm::Type* expectedType, int& cost) const
+{
+    if(actualType == expectedType)
+    {
+        cost = 0;
+        return true;
+    }
+    if(actualType->isPointerTy() && expectedType->isPointerTy())
+    {
+        cost = 0;
+        return true;
+    }
+    if(actualType->isIntegerTy() && expectedType->isIntegerTy())
+    {
+        cost = 1;
+        return true;
+    }
+    if(actualType->isFloatingPointTy() && expectedType->isFloatingPointTy())
+    {
+        cost = 1;
+        return true;
+    }
+    if(actualType->isIntegerTy() && expectedType->isFloatingPointTy())
+    {
+        cost = 2;
+        return true;
+    }
+    if(actualType->isFloatingPointTy() && expectedType->isIntegerTy())
+    {
+        cost = 2;
+        return true;
+    }
+    return false;
+}
+
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
     llvm::Value* initValue = generateExpression(node->expression);
@@ -5363,61 +5580,116 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name == "atomic_i64_free")
         return generateAtomicI64Free(node);
 
-    // Check visibility
-    auto visIt = functionVisibility.find(node->name);
-    if(visIt != functionVisibility.end())
-    {
-        bool isPublic = visIt->second.first;
-        const std::string& sourceModule = visIt->second.second;
-
-        // If the function is from a different module and is private, error
-        if(!sourceModule.empty() && sourceModule != currentModule && !isPublic)
-        {
-            reportError(node->line, "function '" + node->name +
-                                        "' is private in module '" +
-                                        sourceModule + "'");
-            return nullptr;
-        }
-    }
-
-    llvm::Function* callee = module->getFunction(node->name);
-    if(!callee)
+    auto overloadIt = functionOverloads.find(node->name);
+    if(overloadIt == functionOverloads.end())
     {
         reportError(node->line, "unknown function: '" + node->name + "'");
         return nullptr;
     }
 
-    // Check argument count
-    size_t expectedArgs = callee->arg_size();
-    size_t actualArgs = node->arguments.size();
-    bool isVarArg = callee->isVarArg();
-
-    if(!isVarArg && expectedArgs != actualArgs)
-    {
-        reportError(node->line, "function '" + node->name + "' expects " +
-                                    std::to_string(expectedArgs) +
-                                    " argument(s), but " +
-                                    std::to_string(actualArgs) + " provided");
-        return nullptr;
-    }
-    if(isVarArg && actualArgs < expectedArgs)
-    {
-        reportError(node->line,
-                    "function '" + node->name + "' requires at least " +
-                        std::to_string(expectedArgs) + " argument(s), but " +
-                        std::to_string(actualArgs) + " provided");
-        return nullptr;
-    }
-
-    std::vector<llvm::Value*> args;
-    unsigned paramIdx = 0;
+    std::vector<llvm::Value*> argVals;
+    argVals.reserve(node->arguments.size());
     for(auto arg : node->arguments)
     {
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
+        argVals.push_back(argVal);
+    }
 
-        // Type check for non-vararg parameters
+    FunctionOverloadInfo* best = nullptr;
+    int bestCost = std::numeric_limits<int>::max();
+    bool ambiguous = false;
+    std::string privateModule;
+
+    for(auto& info : overloadIt->second)
+    {
+        if(!isOverloadVisible(info))
+        {
+            if(privateModule.empty() && !info.sourceModule.empty())
+                privateModule = info.sourceModule;
+            continue;
+        }
+
+        llvm::Function* callee = info.function;
+        size_t expectedArgs = callee->arg_size();
+        size_t actualArgs = argVals.size();
+        bool isVarArg = callee->isVarArg();
+
+        if(!isVarArg && expectedArgs != actualArgs)
+            continue;
+        if(isVarArg && actualArgs < expectedArgs)
+            continue;
+
+        int totalCost = 0;
+        bool ok = true;
+        for(size_t i = 0; i < expectedArgs; ++i)
+        {
+            int cost = 0;
+            if(!canConvertType(argVals[i]->getType(),
+                               callee->getArg(i)->getType(), cost))
+            {
+                ok = false;
+                break;
+            }
+            totalCost += cost;
+        }
+        if(!ok)
+            continue;
+
+        if(totalCost < bestCost)
+        {
+            bestCost = totalCost;
+            best = &info;
+            ambiguous = false;
+        }
+        else if(totalCost == bestCost)
+        {
+            ambiguous = true;
+        }
+    }
+
+    if(!best)
+    {
+        if(!privateModule.empty())
+        {
+            reportError(node->line, "function '" + node->name +
+                                        "' is private in module '" +
+                                        privateModule + "'");
+        }
+        else
+        {
+            reportError(node->line,
+                        "no matching overload for function '" + node->name +
+                            "'");
+        }
+        return nullptr;
+    }
+    if(ambiguous)
+    {
+        reportError(node->line,
+                    "ambiguous call to function '" + node->name + "'");
+        return nullptr;
+    }
+
+    llvm::Function* callee = best->function;
+    size_t expectedArgs = callee->arg_size();
+    bool isVarArg = callee->isVarArg();
+
+    if(isVarArg && argVals.size() < expectedArgs)
+    {
+        reportError(node->line,
+                    "function '" + node->name + "' requires at least " +
+                        std::to_string(expectedArgs) + " argument(s), but " +
+                        std::to_string(argVals.size()) + " provided");
+        return nullptr;
+    }
+
+    std::vector<llvm::Value*> args;
+    unsigned paramIdx = 0;
+    for(auto* argValIn : argVals)
+    {
+        llvm::Value* argVal = argValIn;
         if(paramIdx < expectedArgs)
         {
             llvm::Type* expectedType = callee->getArg(paramIdx)->getType();
@@ -5425,7 +5697,6 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
             if(actualType != expectedType)
             {
-                // Try implicit conversions
                 if(actualType->isIntegerTy() && expectedType->isIntegerTy())
                 {
                     unsigned actualBits = actualType->getIntegerBitWidth();
@@ -5462,7 +5733,6 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 else if(!(actualType->isPointerTy() &&
                           expectedType->isPointerTy()))
                 {
-                    // Incompatible types (allow pointer-to-pointer)
                     std::string actualStr, expectedStr;
 
                     if(actualType->isStructTy())
@@ -5510,9 +5780,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     }
 
     if(callee->getReturnType()->isVoidTy())
-    {
         return builder.CreateCall(callee, args);
-    }
     return builder.CreateCall(callee, args, "calltmp");
 }
 
