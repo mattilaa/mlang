@@ -14,6 +14,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "SpaceAfterColon": True,
     "SpaceAroundOperators": True,
     "SpaceInsideBracesSingleLine": True,
+    "EnsureTrailingNewline": False,
 }
 
 
@@ -166,6 +167,8 @@ def tokenize(text: str) -> Iterable[Token]:
                 i += 1
                 while i < n and (text[i].isdigit() or text[i] == "_"):
                     i += 1
+            if i < n and text[i] in {"f", "F"}:
+                i += 1
             yield Token("NUMBER", text[start:i])
             continue
 
@@ -188,6 +191,7 @@ def _needs_space(
     type_context: bool,
     space_inside_braces_single_line: bool,
     in_single_line_braces: bool,
+    in_generic: bool,
 ) -> bool:
     if prev is None:
         return False
@@ -196,6 +200,13 @@ def _needs_space(
             return True
         if cur.kind == "OP" and cur.text == "}":
             return True
+    if (
+        prev.kind == "OP"
+        and prev.text == ">"
+        and cur.kind == "OP"
+        and cur.text in {"{", "="}
+    ):
+        return True
     if prev.kind == "OP" and prev.text in NO_SPACE_AFTER:
         return False
     if cur.kind == "OP" and cur.text in NO_SPACE_BEFORE:
@@ -206,12 +217,20 @@ def _needs_space(
         return False
     if cur.kind == "OP" and cur.text in NO_SPACE_AROUND_OPS:
         return False
+    if prev.kind == "WORD" and prev.text == "impl" and cur.kind == "OP" and cur.text == "<":
+        return False
+    if in_generic and cur.kind == "OP" and cur.text in {"<", ">"}:
+        return False
     if type_context:
-        if prev.kind == "OP" and prev.text in {"<", ">"}:
+        if prev.kind == "OP" and prev.text == "<":
             return False
-        if cur.kind == "OP" and cur.text in {"<", ">"}:
+        if cur.kind == "OP" and cur.text == "<":
+            return False
+        if cur.kind == "OP" and cur.text == ">":
             return False
     if cur.kind == "OP" and cur.text == "{":
+        if prev.kind in {"WORD", "NUMBER", "STRING"}:
+            return True
         if prev.kind == "OP" and prev.text in {")", "]", "}"}:
             return True
         if space_inside_braces_single_line and in_single_line_braces:
@@ -260,6 +279,7 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
     space_inside_braces_single_line = bool(
         config.get("SpaceInsideBracesSingleLine", True)
     )
+    ensure_trailing_newline = bool(config.get("EnsureTrailingNewline", False))
 
     output: List[str] = []
     indent_level = 0
@@ -273,6 +293,7 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
     in_fn_params = False
     fn_param_depth = 0
     single_line_brace_depth = 0
+    impl_generic_pending = False
 
     def write_indent() -> None:
         output.append(indent_unit * indent_level)
@@ -333,6 +354,27 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
             and looks_like_generic_literal(idx)
         ):
             type_context = True
+
+        if (
+            token.kind == "OP"
+            and token.text == ">="
+            and (type_context or generic_depth > 0)
+        ):
+            if output and output[-1] == " ":
+                output.pop()
+            output.append(">")
+            if type_context and generic_depth > 0:
+                generic_depth -= 1
+            if at_line_start:
+                at_line_start = False
+            if space_around_ops and (not output or output[-1] != " "):
+                output.append(" ")
+            output.append("=")
+            prev = Token("OP", "=")
+            if type_context and generic_depth == 0:
+                type_context = False
+                decl_pending = False
+            continue
         if token.kind == "NEWLINE":
             output.append("\n")
             at_line_start = True
@@ -371,6 +413,7 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
                     type_context,
                     space_inside_braces_single_line,
                     in_single_line_braces,
+                    generic_depth > 0,
                 ):
                     output.append(" ")
             output.append("}")
@@ -392,6 +435,7 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
                 type_context,
                 space_inside_braces_single_line,
                 in_single_line_braces,
+                generic_depth > 0,
             ):
                 output.append(" ")
 
@@ -407,12 +451,18 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
 
         if token.kind == "WORD" and token.text == "struct":
             struct_name_pending = True
+        if token.kind == "WORD" and token.text == "impl":
+            impl_generic_pending = True
         if token.kind == "WORD" and token.text == "fn":
             fn_signature_pending = True
         if token.kind == "WORD" and token.text in {"let", "var"}:
             decl_pending = True
         elif token.kind == "WORD" and struct_name_pending:
             struct_name_pending = False
+            type_context = True
+
+        if token.kind == "OP" and token.text == "<" and impl_generic_pending:
+            impl_generic_pending = False
             type_context = True
 
         if token.kind == "OP" and token.text == "(":
@@ -451,8 +501,11 @@ def format_text(text: str, config: Optional[Dict[str, object]] = None) -> str:
         prev = token
 
     formatted = "".join(output)
-    if formatted and not formatted.endswith("\n"):
-        formatted += "\n"
+    if ensure_trailing_newline:
+        if formatted and not formatted.endswith("\n"):
+            formatted += "\n"
+    else:
+        formatted = formatted.rstrip("\n")
     return formatted
 
 

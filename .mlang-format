@@ -5,3 +5,4 @@ SpaceAfterComma: true
 SpaceAfterColon: true
 SpaceAroundOperators: true
 SpaceInsideBracesSingleLine: true
+EnsureTrailingNewline: false
