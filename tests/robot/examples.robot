@@ -18,6 +18,7 @@ ${MLANG}           ./build/mlang
 ...    examples/map_iteration.mla
 ...    examples/map_list.mla
 ...    examples/std_math_demo.mla
+...    examples/std_thread_demo.mla
 ...    examples/pointer_access.mla
 ...    examples/print_test.mla
 ...    examples/result_match.mla

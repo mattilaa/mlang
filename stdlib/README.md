@@ -11,3 +11,4 @@ Currently provided:
 - `test.mla`: test framework helpers (test::assert, test::run_all).
 
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
+- `std/thread.mla`: thread/concurrency helpers (join/mutex/atomic wrappers).
