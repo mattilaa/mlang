@@ -209,6 +209,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
 )
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
 

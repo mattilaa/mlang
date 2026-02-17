@@ -1,0 +1,67 @@
+mod std::fs;
+mod std::strbuf;
+
+use std::fs::BufReader;
+use std::fs::File;
+use std::fs::free_lines;
+use std::strbuf::eq;
+
+#[test]
+fn test_create_open_and_lines() -> i32 {
+    let path = "/tmp/mlang_std_fs_test.txt";
+
+    let created: Result<File, string> = File::create(path);
+    if created.is_err(): { return 1; }
+    let wf: File = created.unwrap();
+    let w1: Result<i64, string> = wf.write_line("alpha");
+    if w1.is_err(): {
+        wf.close();
+        return 1;
+    }
+    let w2: Result<i64, string> = wf.write_line("beta");
+    if w2.is_err(): {
+        wf.close();
+        return 1;
+    }
+    if wf.close() != 0: { return 1; }
+
+    let opened: Result<File, string> = File::open(path);
+    if opened.is_err(): { return 1; }
+    let rf: File = opened.unwrap();
+
+    let reader: BufReader = BufReader::new(rf);
+    let lines: list<string> = reader.lines();
+
+    var count: i32 = 0;
+    for line in lines {
+        if count == 0: {
+            if eq(line, "alpha") != 1: {
+                free_lines(lines);
+                rf.close();
+                return 1;
+            }
+        } else: {
+            if count == 1: {
+                if eq(line, "beta") != 1: {
+                    free_lines(lines);
+                    rf.close();
+                    return 1;
+                }
+            }
+        }
+        count = count + 1;
+    }
+
+    free_lines(lines);
+    rf.close();
+    return count == 2 ? 0 : 1;
+}
+
+#[test]
+fn test_open_missing_file_is_err() -> i32 {
+    let missing: Result<File, string> = File::open("/tmp/mlang_std_fs_missing_no_such_file.txt");
+    if missing.is_err(): {
+        return 0;
+    }
+    return 1;
+}

@@ -545,10 +545,20 @@ ASTNode* create_struct_member(int is_var, ASTNode* type, char* name,
 ASTNode* create_struct_method(ASTNode* type, char* name, ASTNode* params,
                               ASTNode* body, int is_public, int is_static)
 {
+    auto* p = static_cast<ParameterListNode*>(params);
+    bool staticMethod = (is_static != 0);
+    // If no explicit self parameter is present, treat as static-style method
+    // callable via Type::method(...).
+    if(!staticMethod)
+    {
+        if(!p || p->parameters.empty() || p->parameters[0]->name != "self")
+            staticMethod = true;
+    }
+
     return new StructMethodNode(static_cast<TypeNode*>(type), std::string(name),
-                                static_cast<ParameterListNode*>(params),
+                                p,
                                 static_cast<StatementListNode*>(body),
-                                is_public != 0, is_static != 0);
+                                is_public != 0, staticMethod);
 }
 
 ASTNode* add_struct_method(ASTNode* list, ASTNode* method)

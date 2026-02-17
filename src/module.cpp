@@ -425,6 +425,44 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
         }
 
+        // Always import impl blocks so methods are available across modules.
+        if(module->implList)
+        {
+            if(!program->implList)
+            {
+                program->implList = new ImplListNode();
+            }
+            for(auto* impl : module->implList->impls)
+            {
+                bool alreadyAdded = false;
+                for(auto* existing : program->implList->impls)
+                {
+                    if(existing->structName == impl->structName &&
+                       existing->methods.size() == impl->methods.size())
+                    {
+                        bool same = true;
+                        for(size_t i = 0; i < impl->methods.size(); ++i)
+                        {
+                            if(existing->methods[i]->name != impl->methods[i]->name)
+                            {
+                                same = false;
+                                break;
+                            }
+                        }
+                        if(same)
+                        {
+                            alreadyAdded = true;
+                            break;
+                        }
+                    }
+                }
+                if(!alreadyAdded)
+                {
+                    program->implList->impls.push_back(impl);
+                }
+            }
+        }
+
         // For specific imports (not import all), verify the item is public
         if(!useDecl->importAll)
         {

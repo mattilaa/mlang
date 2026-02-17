@@ -6123,6 +6123,145 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     auto overloadIt = functionOverloads.find(node->name);
     if(overloadIt == functionOverloads.end())
     {
+        // Static struct method call syntax: Type::method(...)
+        size_t scopePos = node->name.find("::");
+        if(scopePos != std::string::npos)
+        {
+            std::string structName = node->name.substr(0, scopePos);
+            std::string methodName = node->name.substr(scopePos + 2);
+
+            auto sit = structMethods.find(structName);
+            std::string resolvedStructName = structName;
+            if(sit == structMethods.end())
+            {
+                // Imported structs can be namespaced internally. Allow calling
+                // with the visible tail name (e.g. File::open).
+                for(auto it = structMethods.begin(); it != structMethods.end();
+                    ++it)
+                {
+                    const std::string& candidate = it->first;
+                    if(candidate == structName)
+                    {
+                        sit = it;
+                        resolvedStructName = candidate;
+                        break;
+                    }
+                    if(candidate.size() > structName.size() &&
+                       candidate.compare(candidate.size() - structName.size(),
+                                         structName.size(), structName) == 0)
+                    {
+                        char sep =
+                            candidate[candidate.size() - structName.size() - 1];
+                        if(sep == ':' || sep == '.' || sep == '_')
+                        {
+                            sit = it;
+                            resolvedStructName = candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if(sit != structMethods.end())
+            {
+                auto mit = sit->second.find(methodName);
+                if(mit != sit->second.end() && mit->second.second &&
+                   mit->second.second->isStatic)
+                {
+                    std::string mangledName =
+                        resolvedStructName + "_" + methodName;
+                    llvm::Function* callee = module->getFunction(mangledName);
+                    if(!callee)
+                    {
+                        callee =
+                            generateMethodDeclaration(resolvedStructName,
+                                                      mit->second.second);
+                    }
+                    if(callee && callee->empty())
+                    {
+                        callee =
+                            generateMethodDefinition(resolvedStructName,
+                                                     mit->second.second);
+                    }
+                    if(!callee)
+                    {
+                        reportError(node->line,
+                                    "unknown static method: '" + node->name +
+                                        "'");
+                        return nullptr;
+                    }
+
+                    if(callee->arg_size() != node->arguments.size())
+                    {
+                        reportError(
+                            node->line,
+                            "wrong number of arguments for static method '" +
+                                node->name + "': expected " +
+                                std::to_string(callee->arg_size()) + ", got " +
+                                std::to_string(node->arguments.size()));
+                        return nullptr;
+                    }
+
+                    std::vector<llvm::Value*> callArgs;
+                    callArgs.reserve(node->arguments.size());
+                    size_t idx = 0;
+                    for(auto* argNode : node->arguments)
+                    {
+                        llvm::Value* argVal = generateExpression(argNode);
+                        if(!argVal)
+                            return nullptr;
+
+                        llvm::Type* expectedType = callee->getArg(idx)->getType();
+                        if(argVal->getType() != expectedType)
+                        {
+                            int convCost = 0;
+                            if(!canConvertType(argVal->getType(), expectedType,
+                                               convCost))
+                            {
+                                reportError(node->line,
+                                            "argument type mismatch for static "
+                                            "method '" +
+                                                node->name + "'");
+                                return nullptr;
+                            }
+
+                            if(argVal->getType()->isIntegerTy() &&
+                               expectedType->isIntegerTy())
+                            {
+                                argVal = builder.CreateIntCast(
+                                    argVal, expectedType, true, "arg.cast");
+                            }
+                            else if(argVal->getType()->isIntegerTy() &&
+                                    expectedType->isFloatingPointTy())
+                            {
+                                argVal = builder.CreateSIToFP(
+                                    argVal, expectedType, "arg.sitofp");
+                            }
+                            else if(argVal->getType()->isFloatingPointTy() &&
+                                    expectedType->isFloatingPointTy())
+                            {
+                                argVal = builder.CreateFPCast(
+                                    argVal, expectedType, "arg.fpcast");
+                            }
+                            else if(argVal->getType()->isPointerTy() &&
+                                    expectedType->isPointerTy())
+                            {
+                                argVal = builder.CreateBitCast(
+                                    argVal, expectedType, "arg.ptrcast");
+                            }
+                        }
+
+                        callArgs.push_back(argVal);
+                        ++idx;
+                    }
+
+                    if(callee->getReturnType()->isVoidTy())
+                        return builder.CreateCall(callee, callArgs);
+                    return builder.CreateCall(callee, callArgs, "staticcall");
+                }
+            }
+        }
+
         reportError(node->line, "unknown function: '" + node->name + "'");
         return nullptr;
     }
@@ -7261,6 +7400,41 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
             }
         }
         idx++;
+    }
+
+    // Register static methods as callable qualified functions:
+    // StructName::method(...)
+    if(method->isStatic)
+    {
+        std::string qname = structName + "::" + method->name;
+        auto& overloads = functionOverloads[qname];
+        bool exists = false;
+        for(const auto& ov : overloads)
+        {
+            if(ov.function == function)
+            {
+                exists = true;
+                break;
+            }
+        }
+        if(!exists)
+        {
+            std::string srcModule;
+            auto sit = structVisibility.find(structName);
+            if(sit != structVisibility.end())
+                srcModule = sit->second.second;
+
+            std::string signatureKey = qname + "#" + function->getName().str();
+
+            FunctionOverloadInfo info{nullptr,
+                                      function,
+                                      signatureKey,
+                                      function->getName().str(),
+                                      false,
+                                      method->isPublic,
+                                      srcModule};
+            overloads.push_back(info);
+        }
     }
 
     return function;

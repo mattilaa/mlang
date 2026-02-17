@@ -122,12 +122,16 @@ The example uses `var user_input` directly (no `&mut` required) and trims with
 `trim(user_input)`.
 Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
+Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
+`examples/std_fs_demo.mla`.
 
 ## Examples
 - Scope-exit destructor + owned resource cleanup:
   `examples/scope_exit_drop_demo.mla`
 - Trait-like IO (`Read`/`Write`/`Seek`/`BufRead`) using in-memory cursor:
   `examples/std_io_traits_demo.mla`
+- Filesystem read-lines flow (`File::open`, `BufReader::new`, `lines`):
+  `examples/std_fs_demo.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

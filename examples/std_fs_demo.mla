@@ -1,0 +1,33 @@
+mod std::fs;
+
+use std::fs::BufReader;
+use std::fs::File;
+use std::fs::free_lines;
+
+fn main() -> i32 {
+    // Rust-style API target:
+    // let f = File::open("foo.txt")?;
+    // let reader = BufReader::new(f);
+    // for line in reader.lines() { println!("{}", line?); }
+    //
+    // Note: mlang currently does not support `?`, so this demo uses explicit
+    // Result handling.
+
+    let f_res: Result<File, string> = File::open("foo.txt");
+    if f_res.is_err(): {
+        println!("open failed");
+        return 1;
+    }
+
+    let f: File = f_res.unwrap();
+    let reader: BufReader = BufReader::new(f);
+    let lines: list<string> = reader.lines();
+
+    for line in lines {
+        println!("{}", line);
+    }
+
+    free_lines(lines);
+    f.close();
+    return 0;
+}

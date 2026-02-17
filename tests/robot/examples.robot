@@ -20,6 +20,7 @@ ${MLANG}           ./build/mlang
 ...    examples/std_math_demo.mla
 ...    examples/std_string_demo.mla
 ...    examples/std_thread_demo.mla
+...    examples/std_fs_demo.mla
 ...    examples/pointer_access.mla
 ...    examples/print_test.mla
 ...    examples/result_match.mla
