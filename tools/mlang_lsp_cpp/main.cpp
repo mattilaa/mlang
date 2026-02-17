@@ -641,6 +641,82 @@ private:
         add_dir("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     }
 
+    static bool is_c_source_path(const std::filesystem::path& path)
+    {
+        auto ext = path.extension().string();
+        return ext == ".h" || ext == ".hpp" || ext == ".hh" ||
+               ext == ".c" || ext == ".cc" || ext == ".cxx" ||
+               ext == ".cpp";
+    }
+
+    std::optional<Location> find_c_symbol_in_workspace(const std::string& name)
+    {
+        if(rootPath.empty())
+            return std::nullopt;
+
+        // Prefer likely definition forms before generic declaration matches.
+        std::regex defRx("\\b" + name + "\\s*\\([^;]*\\)\\s*\\{");
+        std::regex declRx("\\b" + name + "\\s*\\(");
+
+        auto search = [&](const std::regex& rx,
+                          const std::filesystem::path& path)
+            -> std::optional<Location> {
+            std::ifstream f(path);
+            if(!f)
+                return std::nullopt;
+            std::string line;
+            int lineNo = 0;
+            while(std::getline(f, line))
+            {
+                std::smatch match;
+                if(std::regex_search(line, match, rx))
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(path.string());
+                    loc.line = lineNo;
+                    loc.character = (int)match.position();
+                    return loc;
+                }
+                ++lineNo;
+            }
+            return std::nullopt;
+        };
+
+        auto scan = [&](const std::regex& rx) -> std::optional<Location> {
+            std::error_code ec;
+            for(auto it = std::filesystem::recursive_directory_iterator(
+                    rootPath,
+                    std::filesystem::directory_options::skip_permission_denied,
+                    ec);
+                it != std::filesystem::recursive_directory_iterator(); ++it)
+            {
+                if(it->is_directory(ec))
+                {
+                    auto dirName = it->path().filename().string();
+                    if(dirName == ".git" || dirName == "build" ||
+                       dirName == "out" || dirName == "dist")
+                    {
+                        it.disable_recursion_pending();
+                    }
+                    continue;
+                }
+
+                if(!it->is_regular_file(ec))
+                    continue;
+                if(!is_c_source_path(it->path()))
+                    continue;
+
+                if(auto loc = search(rx, it->path()))
+                    return loc;
+            }
+            return std::nullopt;
+        };
+
+        if(auto loc = scan(defRx))
+            return loc;
+        return scan(declRx);
+    }
+
     void log_c_headers() const
     {
         std::string msg = "[mlangd] c headers: ";
@@ -695,6 +771,12 @@ private:
                 ++lineNo;
             }
         }
+        if(auto loc = find_c_symbol_in_workspace(name))
+        {
+            cSymbolCache[name] = *loc;
+            return loc;
+        }
+
         debug_log("[mlangd] c symbol not found: " + name);
         return std::nullopt;
     }
