@@ -148,6 +148,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )
@@ -195,6 +196,7 @@ add_executable(mlangd
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )
