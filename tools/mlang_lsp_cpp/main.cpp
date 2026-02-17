@@ -1211,6 +1211,97 @@ private:
         return std::nullopt;
     }
 
+    std::optional<std::filesystem::path>
+    resolve_std_strbuf_module_path(const FileInfo* contextFile) const
+    {
+        auto try_from_base = [](const std::filesystem::path& base)
+            -> std::optional<std::filesystem::path> {
+            if(base.empty())
+                return std::nullopt;
+            std::error_code ec;
+            std::filesystem::path cand = base / "stdlib" / "std" / "strbuf.mla";
+            if(std::filesystem::exists(cand, ec) && !ec)
+                return cand;
+            return std::nullopt;
+        };
+
+        if(!rootPath.empty())
+        {
+            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+                return p;
+        }
+
+        if(contextFile && !contextFile->path.empty())
+        {
+            std::filesystem::path dir =
+                std::filesystem::path(contextFile->path).parent_path();
+            while(!dir.empty())
+            {
+                if(auto p = try_from_base(dir))
+                    return p;
+                std::filesystem::path parent = dir.parent_path();
+                if(parent == dir)
+                    break;
+                dir = parent;
+            }
+        }
+
+        for(const auto& [_, info] : files)
+        {
+            if(info.path.empty())
+                continue;
+            std::filesystem::path dir =
+                std::filesystem::path(info.path).parent_path();
+            while(!dir.empty())
+            {
+                if(auto p = try_from_base(dir))
+                    return p;
+                std::filesystem::path parent = dir.parent_path();
+                if(parent == dir)
+                    break;
+                dir = parent;
+            }
+        }
+
+        if(auto p = try_from_base(std::filesystem::current_path()))
+            return p;
+
+        return std::nullopt;
+    }
+
+    std::optional<Location>
+    find_string_intrinsic_location(const std::string& memberName,
+                                   const FileInfo* contextFile = nullptr)
+    {
+        std::string targetName;
+        if(memberName == "new")
+            targetName = "new";
+        else if(memberName == "with_capacity")
+            targetName = "with_capacity";
+        else if(memberName == "free")
+            targetName = "free";
+        else
+            return std::nullopt;
+
+        auto modPathOpt = resolve_std_strbuf_module_path(contextFile);
+        if(!modPathOpt)
+            return std::nullopt;
+
+        const std::filesystem::path modPath = *modPathOpt;
+        std::string text = read_file(modPath.string());
+        if(text.empty())
+            return std::nullopt;
+        auto lines = split_lines(text);
+
+        auto loc = find_definition_location(
+            lines, 0, -1,
+            std::regex("\\bpub\\s+fn\\s+(" + targetName + ")\\b"));
+        if(!loc)
+            return std::nullopt;
+        loc->uri = path_to_uri(modPath.string());
+        return loc;
+    }
+
     std::optional<Location>
     find_runtime_attribute_location(const std::string& attrText)
     {
@@ -2629,8 +2720,23 @@ private:
         if(word.empty())
             return nullptr;
 
-        if(auto typeLoc = find_c_type_location(word))
-            return location_to_json(*typeLoc);
+        std::string modulePrefix = find_module_prefix(lineText, left);
+
+        if(modulePrefix.empty())
+        {
+            if(auto typeLoc = find_c_type_location(word))
+                return location_to_json(*typeLoc);
+        }
+
+        // Resolve String::new/with_capacity/free before other fallbacks.
+        if(modulePrefix == "String")
+        {
+            if(auto loc = find_string_intrinsic_location(word, &info))
+                return location_to_json(*loc);
+        }
+
+        if(auto loc = find_runtime_builtin_location(word, &info))
+            return location_to_json(*loc);
 
         // Jump from module declarations/usages first.
         static const std::regex modRx(
@@ -2698,7 +2804,6 @@ private:
             }
         }
 
-        std::string modulePrefix = find_module_prefix(lineText, left);
         if(!modulePrefix.empty())
         {
             auto enumIt = info.enums.find(modulePrefix);

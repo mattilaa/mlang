@@ -1,0 +1,50 @@
+mod std::strbuf;
+
+use std::strbuf::*;
+
+extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> int;
+extern fn strcmp(a: string, b: string) -> int;
+
+#[test]
+fn test_string_new_and_free() -> i32 {
+    let s = String::new();
+    let ok: int = strcmp(s, "");
+    String::free(s);
+    return ok == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_string_with_capacity_and_write() -> i32 {
+    var s = with_capacity(32);
+    snprintf(s, 32, "n=%d", 7);
+    let ok: int = strcmp(s, "n=7");
+    free(s);
+    return ok == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_string_utils_and_utf() -> i32 {
+    let s = concat("he", "llo");
+    if len(s) != 5: { return 1; }
+    if is_empty(s) != 0: { return 1; }
+    if eq(s, "hello") != 1: { return 1; }
+    if starts_with(s, "he") != 1: { return 1; }
+    if ends_with(s, "lo") != 1: { return 1; }
+    if contains(s, "ell") != 1: { return 1; }
+    if find(s, "ell") != 1: { return 1; }
+    if rfind(s, "l") != 3: { return 1; }
+    if compare(s, "hello") != 0: { return 1; }
+
+    let rep = repeat("xo", 3);
+    if eq(rep, "xoxoxo") != 1: { return 1; }
+
+    let utf16_buf = to_utf16(s);
+    let back = to_utf8(utf16_buf);
+    if eq(back, "hello") != 1: { return 1; }
+
+    free_utf16(utf16_buf);
+    free(back);
+    free(rep);
+    free(s);
+    return 0;
+}

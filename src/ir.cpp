@@ -4186,6 +4186,145 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(!initValue)
         return;
 
+    if(!node->type)
+    {
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(initValue->getType(), nullptr, node->name);
+        builder.CreateStore(initValue, alloca);
+        namedValues[node->name] = alloca;
+
+        auto infer_kind_from_expr = [&](ExpressionNode* expr) -> TypeNode::TypeKind
+        {
+            if(dynamic_cast<BoolLiteralNode*>(expr))
+                return TypeNode::TYPE_BOOL;
+            if(dynamic_cast<FloatLiteralNode*>(expr))
+                return TypeNode::TYPE_FLOAT;
+            if(dynamic_cast<DoubleLiteralNode*>(expr))
+                return TypeNode::TYPE_DOUBLE;
+            if(dynamic_cast<StringLiteralNode*>(expr))
+                return TypeNode::TYPE_STRING;
+            if(dynamic_cast<ListLiteralNode*>(expr))
+                return TypeNode::TYPE_LIST;
+            if(dynamic_cast<MapLiteralNode*>(expr))
+                return TypeNode::TYPE_MAP;
+            if(dynamic_cast<TupleLiteralNode*>(expr))
+                return TypeNode::TYPE_TUPLE;
+            if(dynamic_cast<StructLiteralNode*>(expr))
+                return TypeNode::TYPE_STRUCT;
+            if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+            {
+                auto it = variableTypes.find(id->name);
+                if(it != variableTypes.end())
+                    return it->second;
+            }
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+            {
+                if(call->name == "String::new" ||
+                   call->name == "String::with_capacity")
+                    return TypeNode::TYPE_STRING;
+            }
+
+            llvm::Type* t = initValue->getType();
+            if(t->isIntegerTy(1))
+                return TypeNode::TYPE_BOOL;
+            if(t->isFloatingPointTy())
+            {
+                if(t->isFloatTy())
+                    return TypeNode::TYPE_FLOAT;
+                if(t->isDoubleTy())
+                    return TypeNode::TYPE_DOUBLE;
+            }
+            if(t->isPointerTy())
+                return TypeNode::TYPE_PTR;
+            if(t->isStructTy())
+                return TypeNode::TYPE_STRUCT;
+            return TypeNode::TYPE_INT;
+        };
+
+        TypeNode::TypeKind inferredKind = infer_kind_from_expr(node->expression);
+        variableTypes[node->name] = inferredKind;
+
+        if(auto* id = dynamic_cast<IdentifierNode*>(node->expression))
+        {
+            auto sit = structVariableTypes.find(id->name);
+            if(sit != structVariableTypes.end())
+                structVariableTypes[node->name] = sit->second;
+            auto lit = listElementTypes.find(id->name);
+            if(lit != listElementTypes.end())
+                listElementTypes[node->name] = lit->second;
+            auto mit = mapKeyValueTypes.find(id->name);
+            if(mit != mapKeyValueTypes.end())
+                mapKeyValueTypes[node->name] = mit->second;
+            auto tit = tupleElementTypes.find(id->name);
+            if(tit != tupleElementTypes.end())
+                tupleElementTypes[node->name] = tit->second;
+            auto pit = pointerElementTypes.find(id->name);
+            if(pit != pointerElementTypes.end())
+                pointerElementTypes[node->name] = pit->second;
+        }
+
+        if(auto* call = dynamic_cast<FunctionCallNode*>(node->expression))
+        {
+            if(call->name == "String::new" ||
+               call->name == "String::with_capacity")
+            {
+                variableTypes[node->name] = TypeNode::TYPE_STRING;
+            }
+        }
+
+        if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_LIST;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_INT;
+            if(listLit->elements && !listLit->elements->elements.empty())
+                elemKind = infer_kind_from_expr(listLit->elements->elements[0]);
+            listElementTypes[node->name] =
+                static_cast<TypeNode*>(create_type_node(elemKind));
+        }
+        else if(auto* mapLit = dynamic_cast<MapLiteralNode*>(node->expression))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_MAP;
+            TypeNode::TypeKind keyKind = TypeNode::TYPE_INT;
+            TypeNode::TypeKind valKind = TypeNode::TYPE_INT;
+            if(mapLit->entries && !mapLit->entries->entries.empty())
+            {
+                auto* first = mapLit->entries->entries[0];
+                keyKind = infer_kind_from_expr(first->key);
+                valKind = infer_kind_from_expr(first->value);
+            }
+            mapKeyValueTypes[node->name] = std::make_pair(
+                static_cast<TypeNode*>(create_type_node(keyKind)),
+                static_cast<TypeNode*>(create_type_node(valKind)));
+        }
+        else if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->expression))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_TUPLE;
+            std::vector<TypeNode*> elems;
+            if(tupleLit->elements)
+            {
+                for(auto* e : tupleLit->elements->elements)
+                {
+                    elems.push_back(
+                        static_cast<TypeNode*>(create_type_node(infer_kind_from_expr(e))));
+                }
+            }
+            tupleElementTypes[node->name] = elems;
+        }
+        else if(auto* structLit = dynamic_cast<StructLiteralNode*>(node->expression))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+            structVariableTypes[node->name] = structLit->structName;
+        }
+        else if(variableTypes[node->name] == TypeNode::TYPE_PTR)
+        {
+            pointerElementTypes[node->name] =
+                static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
+        }
+
+        constantVariables.insert(node->name);
+        return;
+    }
+
     // Handle generic struct type reference (e.g., Pair<i32, i64>)
     if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(node->type))
     {
@@ -4507,6 +4646,155 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    if(!node->type)
+    {
+        if(!node->initExpr)
+        {
+            reportError(node->line,
+                        "var declaration without type requires initializer");
+            return;
+        }
+
+        llvm::Value* initValue = generateExpression(node->initExpr);
+        if(!initValue)
+            return;
+
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(initValue->getType(), nullptr, node->name);
+        builder.CreateStore(initValue, alloca);
+        namedValues[node->name] = alloca;
+
+        auto infer_kind_from_expr = [&](ExpressionNode* expr) -> TypeNode::TypeKind
+        {
+            if(dynamic_cast<BoolLiteralNode*>(expr))
+                return TypeNode::TYPE_BOOL;
+            if(dynamic_cast<FloatLiteralNode*>(expr))
+                return TypeNode::TYPE_FLOAT;
+            if(dynamic_cast<DoubleLiteralNode*>(expr))
+                return TypeNode::TYPE_DOUBLE;
+            if(dynamic_cast<StringLiteralNode*>(expr))
+                return TypeNode::TYPE_STRING;
+            if(dynamic_cast<ListLiteralNode*>(expr))
+                return TypeNode::TYPE_LIST;
+            if(dynamic_cast<MapLiteralNode*>(expr))
+                return TypeNode::TYPE_MAP;
+            if(dynamic_cast<TupleLiteralNode*>(expr))
+                return TypeNode::TYPE_TUPLE;
+            if(dynamic_cast<StructLiteralNode*>(expr))
+                return TypeNode::TYPE_STRUCT;
+            if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+            {
+                auto it = variableTypes.find(id->name);
+                if(it != variableTypes.end())
+                    return it->second;
+            }
+            if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+            {
+                if(call->name == "String::new" ||
+                   call->name == "String::with_capacity")
+                    return TypeNode::TYPE_STRING;
+            }
+
+            llvm::Type* t = initValue->getType();
+            if(t->isIntegerTy(1))
+                return TypeNode::TYPE_BOOL;
+            if(t->isFloatingPointTy())
+            {
+                if(t->isFloatTy())
+                    return TypeNode::TYPE_FLOAT;
+                if(t->isDoubleTy())
+                    return TypeNode::TYPE_DOUBLE;
+            }
+            if(t->isPointerTy())
+                return TypeNode::TYPE_PTR;
+            if(t->isStructTy())
+                return TypeNode::TYPE_STRUCT;
+            return TypeNode::TYPE_INT;
+        };
+
+        TypeNode::TypeKind inferredKind = infer_kind_from_expr(node->initExpr);
+        variableTypes[node->name] = inferredKind;
+
+        if(auto* id = dynamic_cast<IdentifierNode*>(node->initExpr))
+        {
+            auto sit = structVariableTypes.find(id->name);
+            if(sit != structVariableTypes.end())
+                structVariableTypes[node->name] = sit->second;
+            auto lit = listElementTypes.find(id->name);
+            if(lit != listElementTypes.end())
+                listElementTypes[node->name] = lit->second;
+            auto mit = mapKeyValueTypes.find(id->name);
+            if(mit != mapKeyValueTypes.end())
+                mapKeyValueTypes[node->name] = mit->second;
+            auto tit = tupleElementTypes.find(id->name);
+            if(tit != tupleElementTypes.end())
+                tupleElementTypes[node->name] = tit->second;
+            auto pit = pointerElementTypes.find(id->name);
+            if(pit != pointerElementTypes.end())
+                pointerElementTypes[node->name] = pit->second;
+        }
+
+        if(auto* call = dynamic_cast<FunctionCallNode*>(node->initExpr))
+        {
+            if(call->name == "String::new" ||
+               call->name == "String::with_capacity")
+            {
+                variableTypes[node->name] = TypeNode::TYPE_STRING;
+            }
+        }
+
+        if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_LIST;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_INT;
+            if(listLit->elements && !listLit->elements->elements.empty())
+                elemKind = infer_kind_from_expr(listLit->elements->elements[0]);
+            listElementTypes[node->name] =
+                static_cast<TypeNode*>(create_type_node(elemKind));
+        }
+        else if(auto* mapLit = dynamic_cast<MapLiteralNode*>(node->initExpr))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_MAP;
+            TypeNode::TypeKind keyKind = TypeNode::TYPE_INT;
+            TypeNode::TypeKind valKind = TypeNode::TYPE_INT;
+            if(mapLit->entries && !mapLit->entries->entries.empty())
+            {
+                auto* first = mapLit->entries->entries[0];
+                keyKind = infer_kind_from_expr(first->key);
+                valKind = infer_kind_from_expr(first->value);
+            }
+            mapKeyValueTypes[node->name] = std::make_pair(
+                static_cast<TypeNode*>(create_type_node(keyKind)),
+                static_cast<TypeNode*>(create_type_node(valKind)));
+        }
+        else if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->initExpr))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_TUPLE;
+            std::vector<TypeNode*> elems;
+            if(tupleLit->elements)
+            {
+                for(auto* e : tupleLit->elements->elements)
+                {
+                    elems.push_back(
+                        static_cast<TypeNode*>(create_type_node(infer_kind_from_expr(e))));
+                }
+            }
+            tupleElementTypes[node->name] = elems;
+        }
+        else if(auto* structLit = dynamic_cast<StructLiteralNode*>(node->initExpr))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+            structVariableTypes[node->name] = structLit->structName;
+        }
+        else if(variableTypes[node->name] == TypeNode::TYPE_PTR)
+        {
+            pointerElementTypes[node->name] =
+                static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
+        }
+
+        return;
+    }
+
     // Handle generic struct type reference (e.g., Pair<i32, i64>)
     if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(node->type))
     {
@@ -5559,6 +5847,80 @@ void CodeGenerator::reportError(int line, const std::string& message)
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    if(node->name == "String::new")
+    {
+        if(!node->arguments.empty())
+        {
+            reportError(node->line, "String::new expects no arguments");
+            return nullptr;
+        }
+        initializeStdlibFunctions();
+        llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+        llvm::Type* int8Type = llvm::Type::getInt8Ty(context);
+        llvm::Value* size = llvm::ConstantInt::get(int64Type, 1);
+        llvm::Value* ptr = builder.CreateCall(mallocFunc, {size}, "string_new");
+        builder.CreateStore(llvm::ConstantInt::get(int8Type, 0), ptr);
+        return ptr;
+    }
+    if(node->name == "String::with_capacity")
+    {
+        if(node->arguments.size() != 1)
+        {
+            reportError(node->line,
+                        "String::with_capacity expects one argument");
+            return nullptr;
+        }
+        initializeStdlibFunctions();
+        llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+        llvm::Type* int8Type = llvm::Type::getInt8Ty(context);
+        llvm::Value* cap = generateExpression(node->arguments[0]);
+        if(!cap)
+            return nullptr;
+        if(!cap->getType()->isIntegerTy())
+        {
+            reportError(
+                node->line,
+                "String::with_capacity expects an integer capacity");
+            return nullptr;
+        }
+        if(cap->getType()->getIntegerBitWidth() < 64)
+            cap = builder.CreateSExt(cap, int64Type, "cap_sext");
+        else if(cap->getType()->getIntegerBitWidth() > 64)
+            cap = builder.CreateTrunc(cap, int64Type, "cap_trunc");
+        llvm::Value* size = builder.CreateAdd(
+            cap, llvm::ConstantInt::get(int64Type, 1), "string_cap_plus_one");
+        llvm::Value* ptr =
+            builder.CreateCall(mallocFunc, {size}, "string_with_capacity");
+        builder.CreateStore(llvm::ConstantInt::get(int8Type, 0), ptr);
+        return ptr;
+    }
+    if(node->name == "String::free")
+    {
+        if(node->arguments.size() != 1)
+        {
+            reportError(node->line, "String::free expects one argument");
+            return nullptr;
+        }
+        initializeStdlibFunctions();
+        llvm::Value* ptr = generateExpression(node->arguments[0]);
+        if(!ptr)
+            return nullptr;
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        if(ptr->getType() != ptrType && ptr->getType()->isPointerTy())
+            ptr = builder.CreateBitCast(ptr, ptrType, "string_free_cast");
+        if(!ptr->getType()->isPointerTy())
+        {
+            reportError(node->line, "String::free expects a string/pointer");
+            return nullptr;
+        }
+        return builder.CreateCall(freeFunc, {ptr});
+    }
+
     if(node->name == "thread_spawn")
         return generateThreadSpawn(node);
     if(node->name == "thread_join")

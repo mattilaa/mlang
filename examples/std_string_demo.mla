@@ -1,0 +1,38 @@
+mod std::strbuf;
+
+use std::strbuf::*;
+
+extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> int;
+
+fn main() -> i32 {
+    // Rust-like style with inferred type.
+    var buffer = String::new();
+    snprintf(buffer, 64, "hello %d", 42);
+    println!("{}", buffer);
+    println!("len={} empty={}", len(buffer), is_empty(buffer));
+    println!("starts_with(he)={} contains(lo)={}",
+             starts_with(buffer, "he"), contains(buffer, "lo"));
+    println!("find(lo)={} rfind(l)={}", find(buffer, "lo"), rfind(buffer, "l"));
+
+    // Module helpers from std::strbuf.
+    let tiny = new();
+    free(tiny);
+
+    let hello = concat("he", "llo");
+    println!("concat={} eq={}", hello, eq(hello, "hello"));
+    println!("compare(hello, world)={}", compare(hello, "world"));
+
+    let padded = repeat("ab", 3);
+    println!("repeat={}", padded);
+
+    let utf16 = to_utf16(hello);
+    let roundtrip = to_utf8(utf16);
+    println!("utf roundtrip={}", roundtrip);
+    free_utf16(utf16);
+    free(roundtrip);
+    free(padded);
+    free(hello);
+
+    String::free(buffer);
+    return 0;
+}

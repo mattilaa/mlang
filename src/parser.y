@@ -441,11 +441,15 @@ statement
 let_statement
     : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_let_declaration($4, $2, $6); }
+    | LET IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = create_let_declaration(NULL, $2, $4); }
     ;
 
 var_statement
     : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = create_var_declaration($4, $2, $6); }
+    | VAR IDENTIFIER ASSIGN expression SEMICOLON
+        { $$ = create_var_declaration(NULL, $2, $4); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = create_var_declaration($4, $2, NULL); }
     ;
@@ -745,6 +749,16 @@ binary_expression
 function_call
     : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL, yylineno); }
     | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3, yylineno); }
+    | IDENTIFIER COLONCOLON IDENTIFIER LPAREN RPAREN
+        {
+            char* qname = join_module_path($1, $3);
+            $$ = create_function_call(qname, NULL, NULL, yylineno);
+        }
+    | IDENTIFIER COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
+        {
+            char* qname = join_module_path($1, $3);
+            $$ = create_function_call_multi(qname, $5, yylineno);
+        }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         { $$ = create_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
