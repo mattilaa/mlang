@@ -1306,6 +1306,12 @@ private:
             llvm::json::Object completion;
             completion["triggerCharacters"] = llvm::json::Value(std::move(triggers));
             caps["completionProvider"] = llvm::json::Value(std::move(completion));
+            llvm::json::Object signatureHelp;
+            llvm::json::Array sigTriggers;
+            sigTriggers.push_back("(");
+            sigTriggers.push_back(",");
+            signatureHelp["triggerCharacters"] = llvm::json::Value(std::move(sigTriggers));
+            caps["signatureHelpProvider"] = llvm::json::Value(std::move(signatureHelp));
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
             caps["documentFormattingProvider"] = true;
@@ -1344,6 +1350,10 @@ private:
         else if(method == "textDocument/completion")
         {
             send_response(id, handle_completion(params));
+        }
+        else if(method == "textDocument/signatureHelp")
+        {
+            send_response(id, handle_signature_help(params));
         }
         else if(method == "textDocument/documentSymbol")
         {
@@ -2667,6 +2677,355 @@ private:
             return location_to_json(*loc);
 
         return nullptr;
+    }
+
+    struct SignatureHelpContext
+    {
+        std::string callee;
+        int activeParameter = 0;
+    };
+
+    std::optional<SignatureHelpContext>
+    parse_signature_help_context(std::string_view lineText, int character) const
+    {
+        int idx = character;
+        if(idx < 0)
+            return std::nullopt;
+        if(idx > (int)lineText.size())
+            idx = (int)lineText.size();
+
+        int parenDepth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        int openParen = -1;
+
+        for(int i = idx - 1; i >= 0; --i)
+        {
+            char c = lineText[(size_t)i];
+            if(c == ')')
+            {
+                ++parenDepth;
+                continue;
+            }
+            if(c == ']')
+            {
+                ++bracketDepth;
+                continue;
+            }
+            if(c == '}')
+            {
+                ++braceDepth;
+                continue;
+            }
+            if(c == '(')
+            {
+                if(parenDepth > 0)
+                {
+                    --parenDepth;
+                    continue;
+                }
+                if(bracketDepth == 0 && braceDepth == 0)
+                {
+                    openParen = i;
+                    break;
+                }
+                continue;
+            }
+            if(c == '[' && bracketDepth > 0)
+            {
+                --bracketDepth;
+                continue;
+            }
+            if(c == '{' && braceDepth > 0)
+            {
+                --braceDepth;
+                continue;
+            }
+        }
+
+        if(openParen < 0)
+            return std::nullopt;
+
+        int j = openParen - 1;
+        while(j >= 0 && std::isspace((unsigned char)lineText[(size_t)j]))
+            --j;
+        if(j < 0)
+            return std::nullopt;
+
+        int end = j;
+        while(j >= 0)
+        {
+            char c = lineText[(size_t)j];
+            if(std::isalnum((unsigned char)c) || c == '_' || c == ':' || c == '.')
+                --j;
+            else
+                break;
+        }
+
+        std::string callee = std::string(lineText.substr((size_t)(j + 1),
+                                                         (size_t)(end - j)));
+        if(callee.empty())
+            return std::nullopt;
+
+        int activeParam = 0;
+        int nestedParen = 0;
+        int nestedBracket = 0;
+        int nestedBrace = 0;
+        for(int i = openParen + 1; i < idx; ++i)
+        {
+            char c = lineText[(size_t)i];
+            if(c == '(')
+                ++nestedParen;
+            else if(c == ')' && nestedParen > 0)
+                --nestedParen;
+            else if(c == '[')
+                ++nestedBracket;
+            else if(c == ']' && nestedBracket > 0)
+                --nestedBracket;
+            else if(c == '{')
+                ++nestedBrace;
+            else if(c == '}' && nestedBrace > 0)
+                --nestedBrace;
+            else if(c == ',' && nestedParen == 0 && nestedBracket == 0 &&
+                    nestedBrace == 0)
+                ++activeParam;
+        }
+
+        SignatureHelpContext ctx;
+        ctx.callee = callee;
+        ctx.activeParameter = activeParam;
+        return ctx;
+    }
+
+    std::string unqualified_callee_name(const std::string& callee) const
+    {
+        size_t pos = callee.rfind("::");
+        if(pos != std::string::npos)
+            return callee.substr(pos + 2);
+        pos = callee.rfind('.');
+        if(pos != std::string::npos)
+            return callee.substr(pos + 1);
+        return callee;
+    }
+
+    std::vector<std::string> signature_parameter_labels(const std::string& signature) const
+    {
+        std::vector<std::string> out;
+        size_t open = signature.find('(');
+        if(open == std::string::npos)
+            return out;
+
+        int depth = 0;
+        size_t close = std::string::npos;
+        for(size_t i = open; i < signature.size(); ++i)
+        {
+            char c = signature[i];
+            if(c == '(')
+                ++depth;
+            else if(c == ')')
+            {
+                --depth;
+                if(depth == 0)
+                {
+                    close = i;
+                    break;
+                }
+            }
+        }
+        if(close == std::string::npos || close <= open + 1)
+            return out;
+
+        std::string inside = signature.substr(open + 1, close - open - 1);
+        int angle = 0;
+        int paren = 0;
+        int bracket = 0;
+        int brace = 0;
+        size_t segStart = 0;
+
+        for(size_t i = 0; i <= inside.size(); ++i)
+        {
+            char c = i < inside.size() ? inside[i] : ',';
+            if(i < inside.size())
+            {
+                if(c == '<')
+                    ++angle;
+                else if(c == '>' && angle > 0)
+                    --angle;
+                else if(c == '(')
+                    ++paren;
+                else if(c == ')' && paren > 0)
+                    --paren;
+                else if(c == '[')
+                    ++bracket;
+                else if(c == ']' && bracket > 0)
+                    --bracket;
+                else if(c == '{')
+                    ++brace;
+                else if(c == '}' && brace > 0)
+                    --brace;
+            }
+
+            bool split = (c == ',' && angle == 0 && paren == 0 && bracket == 0 &&
+                          brace == 0) || (i == inside.size());
+            if(!split)
+                continue;
+
+            std::string part = trim(inside.substr(segStart, i - segStart));
+            if(!part.empty())
+                out.push_back(part);
+            segStart = i + 1;
+        }
+
+        return out;
+    }
+
+    llvm::json::Value make_signature_help_response(
+        const std::vector<llvm::json::Object>& signatures,
+        int activeSignature, int activeParameter)
+    {
+        if(signatures.empty())
+            return nullptr;
+
+        llvm::json::Array sigArray;
+        for(auto sig : signatures)
+            sigArray.push_back(llvm::json::Value(std::move(sig)));
+
+        llvm::json::Object out;
+        out["signatures"] = llvm::json::Value(std::move(sigArray));
+        out["activeSignature"] = std::max(0, activeSignature);
+        out["activeParameter"] = std::max(0, activeParameter);
+        return llvm::json::Value(std::move(out));
+    }
+
+    void add_signature_candidate(std::vector<llvm::json::Object>& out,
+                                 std::unordered_set<std::string>& seen,
+                                 FileInfo& info, FunctionInfo& fn,
+                                 const std::string& calleeName,
+                                 int activeParameter)
+    {
+        std::string fallback = "fn " + calleeName + "(...)";
+        if(!fn.returnType.empty())
+            fallback += " -> " + fn.returnType;
+
+        int sigLine = fn.startLine >= 0 ? fn.startLine : fn.loc.line;
+        std::string label = signature_from_line(info, sigLine, fallback);
+        std::string key = info.uri + ":" + std::to_string(fn.loc.line) + ":" + label;
+        if(!seen.insert(key).second)
+            return;
+
+        llvm::json::Object sig;
+        sig["label"] = label;
+
+        std::string docs = docs_before_line(info, fn.loc.line);
+        if(!docs.empty())
+        {
+            llvm::json::Object doc;
+            doc["kind"] = "markdown";
+            doc["value"] = docs;
+            sig["documentation"] = llvm::json::Value(std::move(doc));
+        }
+
+        auto params = signature_parameter_labels(label);
+        if(!params.empty())
+        {
+            llvm::json::Array p;
+            for(const auto& item : params)
+            {
+                llvm::json::Object pi;
+                pi["label"] = item;
+                p.push_back(llvm::json::Value(std::move(pi)));
+            }
+            sig["parameters"] = llvm::json::Value(std::move(p));
+
+            int maxParam = (int)params.size() - 1;
+            if(activeParameter > maxParam && maxParam >= 0)
+                activeParameter = maxParam;
+        }
+
+        out.push_back(std::move(sig));
+    }
+
+    llvm::json::Value handle_signature_help(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return nullptr;
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+
+        FileInfo& info = it->second;
+        if(*line < 0 || *line >= (int)info.lines.size())
+            return nullptr;
+
+        const std::string& lineText = info.lines[(size_t)*line];
+        auto ctx = parse_signature_help_context(lineText,
+                                                static_cast<int>(*character));
+        if(!ctx)
+            return nullptr;
+
+        std::string calleeName = unqualified_callee_name(ctx->callee);
+        if(calleeName.empty())
+            return nullptr;
+
+        std::vector<llvm::json::Object> signatures;
+        std::unordered_set<std::string> seen;
+
+        for(auto& [key, fn] : info.functions)
+        {
+            if(fn.name == calleeName || key == calleeName ||
+               (key.size() > calleeName.size() + 2 &&
+                key.compare(key.size() - calleeName.size(), calleeName.size(),
+                            calleeName) == 0 &&
+                key[key.size() - calleeName.size() - 2] == ':' &&
+                key[key.size() - calleeName.size() - 1] == ':'))
+            {
+                add_signature_candidate(signatures, seen, info, fn, calleeName,
+                                        ctx->activeParameter);
+            }
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            std::string modPath = resolve_module_path_for_file(info, imp.moduleName);
+            if(modPath.empty())
+                continue;
+            FileInfo* modInfo = get_or_index_file(modPath);
+            if(!modInfo)
+                continue;
+
+            for(auto& [key, fn] : modInfo->functions)
+            {
+                if(fn.name != calleeName && key != calleeName)
+                    continue;
+                add_signature_candidate(signatures, seen, *modInfo, fn,
+                                        calleeName, ctx->activeParameter);
+            }
+        }
+
+        for(auto& [_, finfo] : files)
+        {
+            for(auto& [key, fn] : finfo.functions)
+            {
+                if(fn.name != calleeName && key != calleeName)
+                    continue;
+                add_signature_candidate(signatures, seen, finfo, fn,
+                                        calleeName, ctx->activeParameter);
+            }
+        }
+
+        return make_signature_help_response(signatures, 0, ctx->activeParameter);
     }
 
     llvm::json::Value handle_completion(llvm::json::Object* params)
