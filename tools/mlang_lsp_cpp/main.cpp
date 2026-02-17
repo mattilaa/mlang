@@ -413,6 +413,7 @@ private:
     std::vector<std::string> cHeaderPaths;
     std::unordered_map<std::string, std::string> cTypeMap;
     std::unordered_map<std::string, Location> cSymbolCache;
+    std::unordered_map<std::string, std::string> diagnosticResultIds;
     bool cHeadersLoaded = false;
     bool cHeaderDebug = false;
     std::string cHeaderDebugLog;
@@ -1318,6 +1319,11 @@ private:
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
             caps["documentFormattingProvider"] = true;
+            caps["codeActionProvider"] = true;
+            llvm::json::Object diagnosticProvider;
+            diagnosticProvider["interFileDependencies"] = false;
+            diagnosticProvider["workspaceDiagnostics"] = false;
+            caps["diagnosticProvider"] = llvm::json::Value(std::move(diagnosticProvider));
             llvm::json::Object semanticLegend;
             llvm::json::Array semanticTokenTypes;
             semanticTokenTypes.push_back("keyword");
@@ -1373,6 +1379,14 @@ private:
         else if(method == "textDocument/formatting")
         {
             send_response(id, handle_formatting(params));
+        }
+        else if(method == "textDocument/codeAction")
+        {
+            send_response(id, handle_code_action(params));
+        }
+        else if(method == "textDocument/diagnostic")
+        {
+            send_response(id, handle_document_diagnostic(params));
         }
         else if(method == "textDocument/semanticTokens/full")
         {
@@ -3424,6 +3438,521 @@ private:
         llvm::json::Object out;
         out["changes"] = llvm::json::Value(std::move(changes));
         return llvm::json::Value(std::move(out));
+    }
+
+    static int edit_distance_limited(const std::string& a,
+                                     const std::string& b,
+                                     int maxDistance = 3)
+    {
+        if(a == b)
+            return 0;
+        if(a.empty() || b.empty())
+            return (int)std::max(a.size(), b.size());
+
+        if(std::abs((int)a.size() - (int)b.size()) > maxDistance)
+            return maxDistance + 1;
+
+        std::vector<int> prev(b.size() + 1);
+        std::vector<int> cur(b.size() + 1);
+        for(size_t j = 0; j <= b.size(); ++j)
+            prev[j] = (int)j;
+
+        for(size_t i = 1; i <= a.size(); ++i)
+        {
+            cur[0] = (int)i;
+            int rowMin = cur[0];
+            for(size_t j = 1; j <= b.size(); ++j)
+            {
+                int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+                cur[j] = std::min({
+                    prev[j] + 1,
+                    cur[j - 1] + 1,
+                    prev[j - 1] + cost,
+                });
+                rowMin = std::min(rowMin, cur[j]);
+            }
+            if(rowMin > maxDistance)
+                return maxDistance + 1;
+            prev.swap(cur);
+        }
+
+        return prev[b.size()];
+    }
+
+    std::string extract_unknown_symbol_from_message(const std::string& msg) const
+    {
+        static const std::regex rx1("unknown\\s+(?:function|symbol|type)\\s*:\\s*'([A-Za-z_][A-Za-z0-9_]*)'",
+                                    std::regex::icase);
+        static const std::regex rx2("undeclared\\s+identifier\\s*:\\s*'([A-Za-z_][A-Za-z0-9_]*)'",
+                                    std::regex::icase);
+        std::smatch m;
+        if(std::regex_search(msg, m, rx1) && m.size() >= 2)
+            return m[1].str();
+        if(std::regex_search(msg, m, rx2) && m.size() >= 2)
+            return m[1].str();
+        return {};
+    }
+
+    std::vector<std::string> collect_workspace_symbol_names() const
+    {
+        std::unordered_set<std::string> names;
+        for(const auto& [_, info] : files)
+        {
+            for(const auto& [name, _] : info.functions)
+                names.insert(name);
+            for(const auto& [name, st] : info.structs)
+            {
+                names.insert(name);
+                for(const auto& [field, __] : st.fields)
+                    names.insert(field);
+                for(const auto& [method, __] : st.methods)
+                    names.insert(method);
+            }
+            for(const auto& [name, en] : info.enums)
+            {
+                names.insert(name);
+                for(const auto& [variant, __] : en.variants)
+                    names.insert(variant);
+            }
+        }
+
+        std::vector<std::string> out;
+        out.reserve(names.size());
+        for(const auto& n : names)
+            out.push_back(n);
+        return out;
+    }
+
+    std::optional<std::string>
+    best_symbol_correction(const std::string& unknown) const
+    {
+        auto names = collect_workspace_symbol_names();
+        int bestDist = 4;
+        std::string best;
+
+        for(const auto& name : names)
+        {
+            std::string probe = name;
+            size_t pos = probe.rfind("::");
+            if(pos != std::string::npos)
+                probe = probe.substr(pos + 2);
+
+            int dist = edit_distance_limited(unknown, probe, 3);
+            if(dist < bestDist)
+            {
+                bestDist = dist;
+                best = probe;
+            }
+        }
+
+        if(best.empty() || bestDist > 2)
+            return std::nullopt;
+        return best;
+    }
+
+    int preferred_import_insertion_line(const FileInfo& info) const
+    {
+        int line = 0;
+        for(; line < (int)info.lines.size(); ++line)
+        {
+            std::string t = trim(info.lines[(size_t)line]);
+            if(t.empty())
+                continue;
+            if(t.rfind("//", 0) == 0)
+                continue;
+            if(t.rfind("mod ", 0) == 0 || t.rfind("use ", 0) == 0)
+                continue;
+            break;
+        }
+        return line;
+    }
+
+    std::vector<std::pair<std::string, std::string>>
+    find_import_candidates(const FileInfo& current,
+                           const std::string& symbol) const
+    {
+        std::unordered_set<std::string> existing;
+        for(const auto& imp : current.imports)
+        {
+            if(!imp.moduleName.empty() && !imp.importAll && !imp.itemName.empty())
+                existing.insert(imp.moduleName + "::" + imp.itemName);
+        }
+
+        std::vector<std::pair<std::string, std::string>> out;
+        std::unordered_set<std::string> seen;
+
+        for(const auto& [_, info] : files)
+        {
+            std::string module = module_name_for_file(info);
+            if(module.empty())
+                continue;
+
+            bool hasSymbol = false;
+            if(info.functions.find(symbol) != info.functions.end())
+                hasSymbol = true;
+            if(info.structs.find(symbol) != info.structs.end())
+                hasSymbol = true;
+            if(info.enums.find(symbol) != info.enums.end())
+                hasSymbol = true;
+
+            if(!hasSymbol)
+                continue;
+
+            std::string qualified = module + "::" + symbol;
+            if(existing.find(qualified) != existing.end())
+                continue;
+            if(seen.insert(qualified).second)
+                out.emplace_back(module, symbol);
+        }
+
+        return out;
+    }
+
+    llvm::json::Value handle_code_action(llvm::json::Object* params)
+    {
+        llvm::json::Array out;
+        if(!params)
+            return llvm::json::Value(std::move(out));
+
+        auto* textDoc = params->getObject("textDocument");
+        auto* range = params->getObject("range");
+        auto* context = params->getObject("context");
+        if(!textDoc || !range || !context)
+            return llvm::json::Value(std::move(out));
+
+        auto uri = textDoc->getString("uri");
+        auto* diagnostics = context->getArray("diagnostics");
+        if(!uri || !diagnostics)
+            return llvm::json::Value(std::move(out));
+
+        auto fit = files.find(uri->str());
+        if(fit == files.end())
+            return llvm::json::Value(std::move(out));
+        FileInfo& current = fit->second;
+
+        for(const auto& d : *diagnostics)
+        {
+            auto* dobj = d.getAsObject();
+            if(!dobj)
+                continue;
+
+            auto msg = dobj->getString("message");
+            auto* drange = dobj->getObject("range");
+            if(!msg || !drange)
+                continue;
+
+            int dStartLine = -1;
+            int dStartChar = -1;
+            int dEndLine = -1;
+            int dEndChar = -1;
+            if(auto* start = drange->getObject("start"))
+            {
+                if(auto* end = drange->getObject("end"))
+                {
+                    auto sl = start->getInteger("line");
+                    auto sc = start->getInteger("character");
+                    auto el = end->getInteger("line");
+                    auto ec = end->getInteger("character");
+                    if(sl && sc && el && ec)
+                    {
+                        dStartLine = (int)*sl;
+                        dStartChar = (int)*sc;
+                        dEndLine = (int)*el;
+                        dEndChar = (int)*ec;
+                    }
+                }
+            }
+
+            std::string unknown = extract_unknown_symbol_from_message(msg->str());
+            if(unknown.empty() && dStartLine >= 0 && dStartLine == dEndLine)
+            {
+                int lineNo = dStartLine;
+                int startCh = dStartChar;
+                int endCh = dEndChar;
+                if(lineNo >= 0 && lineNo < (int)current.lines.size() &&
+                   startCh >= 0 && endCh >= startCh &&
+                   endCh <= (int)current.lines[(size_t)lineNo].size())
+                {
+                    unknown = current.lines[(size_t)lineNo].substr(
+                        (size_t)startCh,
+                        (size_t)(endCh - startCh));
+                }
+            }
+
+            if(unknown.empty())
+                continue;
+
+            if(auto replacement = best_symbol_correction(unknown))
+            {
+                llvm::json::Object action;
+                action["title"] = "Replace with '" + *replacement + "'";
+                action["kind"] = "quickfix";
+                llvm::json::Array diagArray;
+                diagArray.push_back(d);
+                action["diagnostics"] = llvm::json::Value(std::move(diagArray));
+
+                llvm::json::Object editObj;
+                llvm::json::Object changes;
+                llvm::json::Array edits;
+                llvm::json::Object edit;
+                if(dStartLine < 0 || dStartChar < 0 || dEndLine < 0 || dEndChar < 0)
+                    continue;
+                edit["range"] = make_range_value(dStartLine, dStartChar, dEndLine, dEndChar);
+                edit["newText"] = *replacement;
+                edits.push_back(llvm::json::Value(std::move(edit)));
+                changes[uri->str()] = llvm::json::Value(std::move(edits));
+                editObj["changes"] = llvm::json::Value(std::move(changes));
+                action["edit"] = llvm::json::Value(std::move(editObj));
+                out.push_back(llvm::json::Value(std::move(action)));
+            }
+
+            auto imports = find_import_candidates(current, unknown);
+            for(const auto& [module, symbol] : imports)
+            {
+                int insertLine = preferred_import_insertion_line(current);
+                llvm::json::Object action;
+                action["title"] = "Add import: use " + module + "::" + symbol + ";";
+                action["kind"] = "quickfix";
+                llvm::json::Array diagArray;
+                diagArray.push_back(d);
+                action["diagnostics"] = llvm::json::Value(std::move(diagArray));
+
+                llvm::json::Object editObj;
+                llvm::json::Object changes;
+                llvm::json::Array edits;
+                llvm::json::Object edit;
+                edit["range"] = make_range_value(insertLine, 0, insertLine, 0);
+                edit["newText"] = "use " + module + "::" + symbol + ";\n";
+                edits.push_back(llvm::json::Value(std::move(edit)));
+                changes[uri->str()] = llvm::json::Value(std::move(edits));
+                editObj["changes"] = llvm::json::Value(std::move(changes));
+                action["edit"] = llvm::json::Value(std::move(editObj));
+                out.push_back(llvm::json::Value(std::move(action)));
+            }
+        }
+
+        return llvm::json::Value(std::move(out));
+    }
+
+    std::optional<Location>
+    find_token_location(const FileInfo& info, const std::string& token) const
+    {
+        if(token.empty())
+            return std::nullopt;
+        for(int l = 0; l < (int)info.lines.size(); ++l)
+        {
+            const std::string& line = info.lines[(size_t)l];
+            size_t pos = line.find(token);
+            if(pos == std::string::npos)
+                continue;
+            Location loc;
+            loc.uri = info.uri;
+            loc.line = l;
+            loc.character = (int)pos;
+            return loc;
+        }
+        return std::nullopt;
+    }
+
+    static std::string stable_diag_id(const std::string& uri, int line,
+                                      int character,
+                                      const std::string& code,
+                                      const std::string& message)
+    {
+        std::string key = uri + "|" + std::to_string(line) + ":" +
+                          std::to_string(character) + "|" + code + "|" +
+                          message;
+        size_t h = std::hash<std::string>{}(key);
+        std::ostringstream os;
+        os << std::hex << h;
+        return os.str();
+    }
+
+    static llvm::json::Object make_diag_item(const std::string& uri,
+                                             int line,
+                                             int startChar,
+                                             int endChar,
+                                             int severity,
+                                             const std::string& code,
+                                             const std::string& message)
+    {
+        llvm::json::Object d;
+        llvm::json::Object range;
+        llvm::json::Object start;
+        start["line"] = line;
+        start["character"] = startChar;
+        llvm::json::Object end;
+        end["line"] = line;
+        end["character"] = endChar;
+        range["start"] = llvm::json::Value(std::move(start));
+        range["end"] = llvm::json::Value(std::move(end));
+
+        d["range"] = llvm::json::Value(std::move(range));
+        d["severity"] = severity;
+        d["source"] = "mlangd";
+        d["code"] = code;
+        d["message"] = message;
+
+        llvm::json::Object data;
+        data["id"] = stable_diag_id(uri, line, startChar, code, message);
+        d["data"] = llvm::json::Value(std::move(data));
+        return d;
+    }
+
+    static std::string compute_diagnostic_result_id(const llvm::json::Array& items)
+    {
+        std::string key;
+        key.reserve(items.size() * 64);
+        for(const auto& item : items)
+        {
+            const auto* obj = item.getAsObject();
+            if(!obj)
+                continue;
+            if(auto msg = obj->getString("message"))
+                key += msg->str();
+            if(auto code = obj->getString("code"))
+                key += code->str();
+            if(auto* data = obj->getObject("data"))
+            {
+                if(auto id = data->getString("id"))
+                    key += id->str();
+            }
+            key.push_back('\n');
+        }
+        size_t h = std::hash<std::string>{}(key);
+        std::ostringstream os;
+        os << std::hex << h;
+        return os.str();
+    }
+
+    llvm::json::Array collect_pull_diagnostics(const std::string& uri,
+                                               FileInfo& info)
+    {
+        llvm::json::Array out;
+
+        auto* doc = incrementalCompiler.getDocument(uri);
+        if(doc)
+        {
+            if(!doc->ast)
+            {
+                out.push_back(llvm::json::Value(make_diag_item(
+                    uri, 0, 0, 1, 1, "parser/failed",
+                    "Failed to parse document.")));
+                return out;
+            }
+
+            if(doc->usedRecovery)
+            {
+                if(doc->recoveryKind == mlang::ParseRecoveryKind::DelimiterClosure)
+                {
+                    out.push_back(llvm::json::Value(make_diag_item(
+                        uri, 0, 0, 1, 2, "parser/recovered-delimiters",
+                        "Parser recovered by auto-closing delimiters.")));
+                }
+                else if(doc->recoveryKind == mlang::ParseRecoveryKind::LastGoodAst)
+                {
+                    out.push_back(llvm::json::Value(make_diag_item(
+                        uri, 0, 0, 1, 2, "parser/using-last-good-ast",
+                        "Using last successful AST because current text has parse errors.")));
+                }
+            }
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            if(imp.moduleName.empty())
+                continue;
+
+            std::string modPath = resolve_module_path_for_file(info, imp.moduleName);
+            auto loc = find_token_location(info, imp.moduleName);
+            int line = loc ? loc->line : 0;
+            int ch = loc ? loc->character : 0;
+            int endCh = ch + (int)imp.moduleName.size();
+
+            if(modPath.empty())
+            {
+                out.push_back(llvm::json::Value(make_diag_item(
+                    uri, line, ch, endCh, 1, "import/module-not-found",
+                    "Cannot resolve module '" + imp.moduleName + "'.")));
+                continue;
+            }
+
+            if(imp.importAll || imp.itemName.empty())
+                continue;
+
+            FileInfo* modInfo = get_or_index_file(modPath);
+            if(!modInfo)
+                continue;
+            if(find_symbol_in_file(*modInfo, imp.itemName).has_value())
+                continue;
+
+            auto itemLoc = find_token_location(info, imp.itemName);
+            int il = itemLoc ? itemLoc->line : line;
+            int ic = itemLoc ? itemLoc->character : ch;
+            int ie = ic + (int)imp.itemName.size();
+
+            out.push_back(llvm::json::Value(make_diag_item(
+                uri, il, ic, ie, 1, "import/symbol-not-found",
+                "Module '" + imp.moduleName + "' has no symbol '" + imp.itemName + "'.")));
+        }
+
+        return out;
+    }
+
+    llvm::json::Value handle_document_diagnostic(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+
+        auto* textDoc = params->getObject("textDocument");
+        if(!textDoc)
+            return nullptr;
+
+        auto uri = textDoc->getString("uri");
+        if(!uri)
+            return nullptr;
+
+        std::string uriStr = uri->str();
+        auto it = files.find(uriStr);
+        if(it == files.end())
+        {
+            std::string path = uri_to_path(uriStr);
+            std::string content = read_file(path);
+            if(!content.empty())
+                index_document(uriStr, content);
+            it = files.find(uriStr);
+            if(it == files.end())
+            {
+                llvm::json::Object full;
+                full["kind"] = "full";
+                full["items"] = llvm::json::Array{};
+                full["resultId"] = "0";
+                return llvm::json::Value(std::move(full));
+            }
+        }
+
+        llvm::json::Array items = collect_pull_diagnostics(uriStr, it->second);
+        std::string resultId = compute_diagnostic_result_id(items);
+
+        std::string previous;
+        if(auto prev = params->getString("previousResultId"))
+            previous = prev->str();
+
+        if(!previous.empty() && previous == resultId)
+        {
+            llvm::json::Object unchanged;
+            unchanged["kind"] = "unchanged";
+            unchanged["resultId"] = resultId;
+            diagnosticResultIds[uriStr] = resultId;
+            return llvm::json::Value(std::move(unchanged));
+        }
+
+        llvm::json::Object full;
+        full["kind"] = "full";
+        full["resultId"] = resultId;
+        full["items"] = llvm::json::Value(std::move(items));
+        diagnosticResultIds[uriStr] = resultId;
+        return llvm::json::Value(std::move(full));
     }
 
     llvm::json::Value handle_document_symbols(llvm::json::Object* params)
