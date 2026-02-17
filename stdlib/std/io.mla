@@ -1,0 +1,115 @@
+/// \file io.mla
+/// \brief Basic stdin/stdout helpers for MLang (std::io).
+///
+/// This module provides:
+/// - Rust-like handles: `stdin()` and `stdout()`
+/// - Explicit stdout synchronization via `lock(stdout())`
+/// - Scoped synchronized writes via `write_sync` / `writeln_sync`
+///
+/// Note:
+/// - MLang compiler runs `__drop(T)` on scope/function exit for local values
+///   when a matching drop overload exists. `StdoutLock` uses this to unlock
+///   automatically.
+
+extern fn __mlang_std_io_stdout_lock() -> int;
+extern fn __mlang_std_io_stdout_unlock() -> int;
+extern fn __mlang_std_io_stdout_try_lock() -> int;
+extern fn __mlang_std_io_stdout_write(s: string) -> i64;
+extern fn __mlang_std_io_stdout_writeln(s: string) -> i64;
+extern fn __mlang_std_io_stdin_read_line(buf: string, capacity: i64) -> i64;
+
+pub struct Stdin {
+    var _tag: i32;
+};
+
+pub struct Stdout {
+    var _tag: i32;
+};
+
+pub struct StdoutLock {
+    var _tag: i32;
+};
+
+/// @brief Return stdin handle.
+pub fn stdin() -> Stdin {
+    return Stdin { _tag: 0 };
+}
+
+/// @brief Return stdout handle.
+pub fn stdout() -> Stdout {
+    return Stdout { _tag: 0 };
+}
+
+/// @brief Read a line from stdin into `buf` (NUL-terminated).
+/// @param input stdin handle.
+/// @param buf caller-allocated writable string buffer.
+/// @param capacity max bytes including NUL.
+/// @return bytes read (without trailing newline), or -1 on EOF/error.
+pub fn read_line(input: Stdin, buf: string, capacity: i64) -> i64 {
+    return __mlang_std_io_stdin_read_line(buf, capacity);
+}
+
+/// @brief Acquire global stdout lock.
+/// @param out stdout handle.
+/// @return lock token used for synchronized writes.
+pub fn lock(out: Stdout) -> StdoutLock {
+    __mlang_std_io_stdout_lock();
+    return StdoutLock { _tag: 0 };
+}
+
+/// @brief Write text to stdout.
+/// @param out stdout handle.
+pub fn write(out: Stdout, s: string) -> i64 {
+    return __mlang_std_io_stdout_write(s);
+}
+
+/// @brief Write text + newline to stdout.
+/// @param out stdout handle.
+pub fn writeln(out: Stdout, s: string) -> i64 {
+    return __mlang_std_io_stdout_writeln(s);
+}
+
+/// @brief Write text while holding stdout lock.
+/// @param lockToken stdout lock token.
+pub fn write_locked(lockToken: StdoutLock, s: string) -> i64 {
+    return __mlang_std_io_stdout_write(s);
+}
+
+/// @brief Write text + newline while holding stdout lock.
+/// @param lockToken stdout lock token.
+pub fn writeln_locked(lockToken: StdoutLock, s: string) -> i64 {
+    return __mlang_std_io_stdout_writeln(s);
+}
+
+/// @brief Explicitly release stdout lock.
+pub fn unlock(lockToken: StdoutLock) -> int {
+    return __mlang_std_io_stdout_unlock();
+}
+
+/// @brief Check whether stdout lock is currently acquirable.
+/// Returns 1 when lock is free, 0 when busy.
+pub fn try_lock(out: Stdout) -> int {
+    return __mlang_std_io_stdout_try_lock();
+}
+
+/// @brief Write text with implicit lock/unlock around the write.
+pub fn write_sync(out: Stdout, s: string) -> i64 {
+    let lk: StdoutLock = lock(out);
+    let n = write_locked(lk, s);
+    unlock(lk);
+    return n;
+}
+
+/// @brief Write text+newline with implicit lock/unlock around the write.
+pub fn writeln_sync(out: Stdout, s: string) -> i64 {
+    let lk: StdoutLock = lock(out);
+    let n = writeln_locked(lk, s);
+    unlock(lk);
+    return n;
+}
+
+/// @brief Compiler-recognized scope-exit destructor for StdoutLock.
+/// Local `StdoutLock` variables are auto-unlocked on scope/function exit.
+pub fn __drop(lockToken: StdoutLock) -> void {
+    unlock(lockToken);
+}

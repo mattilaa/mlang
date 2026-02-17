@@ -111,6 +111,13 @@ private:
     // Loop control flow support (for break/continue)
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
     std::vector<llvm::BasicBlock*> loopContinueBlocks;
+    struct ScopeCleanup
+    {
+        std::string varName;
+        std::string structTypeName;
+        llvm::Function* dropFunction = nullptr;
+    };
+    std::vector<std::vector<ScopeCleanup>> cleanupScopes;
 
     // === GENERICS SUPPORT ===
     // Store generic struct templates: name -> StructDefNode*
@@ -181,6 +188,12 @@ private:
     void generateAssertEq(AssertEqNode* node);
     void generateBreakStatement(BreakNode* node);
     void generateContinueStatement(ContinueNode* node);
+    void enterCleanupScope();
+    void exitCleanupScope();
+    void emitAllActiveCleanups();
+    llvm::Function* resolveDropFunctionForStruct(const std::string& structTypeName);
+    void registerStructCleanupIfNeeded(const std::string& varName,
+                                       const std::string& structTypeName);
 
     llvm::Value* generateExpression(ExpressionNode* node);
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);

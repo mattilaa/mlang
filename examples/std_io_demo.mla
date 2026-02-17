@@ -1,0 +1,29 @@
+mod std::io;
+mod std::strbuf;
+
+use std::io::*;
+use std::strbuf::*;
+
+fn main() -> i32 {
+    let out: Stdout = stdout();
+
+    writeln(out, "std::io demo");
+    write(out, "plain write");
+    writeln(out, "");
+
+    let lk: StdoutLock = lock(out);
+    writeln_locked(lk, "locked write 1");
+    writeln_locked(lk, "locked write 2");
+    unlock(lk);
+
+    writeln_sync(out, "sync write with implicit lock/unlock");
+
+    // Optional stdin sample:
+    // let input = with_capacity(128);
+    // let input_handle: Stdin = stdin();
+    // let n = read_line(input_handle, input, 128);
+    // if n >= 0: { writeln(out, input); }
+    // free(input);
+
+    return 0;
+}

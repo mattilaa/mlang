@@ -1,0 +1,22 @@
+mod std::io;
+
+use std::io::*;
+
+fn scoped_locked_write() -> i32 {
+    let out: Stdout = stdout();
+    let lk: StdoutLock = lock(out);
+    writeln_locked(lk, "inside scoped lock");
+    // No unlock() call: compiler invokes __drop(StdoutLock) on return.
+    return 0;
+}
+
+fn main() -> i32 {
+    let out: Stdout = stdout();
+    scoped_locked_write();
+    if try_lock(out) != 1: {
+        writeln(out, "lock still held (unexpected)");
+        return 1;
+    }
+    writeln(out, "lock released by scope-exit destructor");
+    return 0;
+}

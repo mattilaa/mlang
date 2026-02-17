@@ -1,0 +1,38 @@
+mod std::io;
+
+use std::io::*;
+
+#[test]
+fn test_stdout_lock_and_unlock() -> i32 {
+    let out: Stdout = stdout();
+    let lk: StdoutLock = lock(out);
+    let written = writeln_locked(lk, "std_io_lock_test");
+    let rc = unlock(lk);
+    if written <= 0: { return 1; }
+    return rc == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_sync_write_releases_lock() -> i32 {
+    let out: Stdout = stdout();
+    let n = writeln_sync(out, "std_io_sync_test");
+    if n <= 0: { return 1; }
+    let lk: StdoutLock = lock(out);
+    let rc = unlock(lk);
+    return rc == 0 ? 0 : 1;
+}
+
+fn lock_and_return() -> i32 {
+    let out: Stdout = stdout();
+    let lk: StdoutLock = lock(out);
+    writeln_locked(lk, "std_io_raii_drop_test");
+    // No explicit unlock. __drop(StdoutLock) should run on return.
+    return 0;
+}
+
+#[test]
+fn test_scope_exit_drop_unlocks() -> i32 {
+    let out: Stdout = stdout();
+    if lock_and_return() != 0: { return 1; }
+    return try_lock(out) == 1 ? 0 : 1;
+}
