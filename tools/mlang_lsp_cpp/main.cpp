@@ -1301,6 +1301,7 @@ private:
             caps["definitionProvider"] = true;
             caps["referencesProvider"] = true;
             caps["hoverProvider"] = true;
+            caps["documentHighlightProvider"] = true;
             llvm::json::Array triggers;
             triggers.push_back(".");
             triggers.push_back(":");
@@ -1328,6 +1329,11 @@ private:
             llvm::json::Array semanticTokenTypes;
             semanticTokenTypes.push_back("keyword");
             semanticTokenTypes.push_back("macro");
+            semanticTokenTypes.push_back("function");
+            semanticTokenTypes.push_back("parameter");
+            semanticTokenTypes.push_back("variable");
+            semanticTokenTypes.push_back("type");
+            semanticTokenTypes.push_back("enumMember");
             semanticLegend["tokenTypes"] =
                 llvm::json::Value(std::move(semanticTokenTypes));
             semanticLegend["tokenModifiers"] = llvm::json::Array{};
@@ -1355,6 +1361,10 @@ private:
         else if(method == "textDocument/hover")
         {
             send_response(id, handle_hover(params));
+        }
+        else if(method == "textDocument/documentHighlight")
+        {
+            send_response(id, handle_document_highlight(params));
         }
         else if(method == "textDocument/completion")
         {
@@ -3230,6 +3240,93 @@ private:
         return llvm::json::Value(std::move(arr));
     }
 
+    llvm::json::Value handle_document_highlight(llvm::json::Object* params)
+    {
+        llvm::json::Array out;
+        if(!params)
+            return llvm::json::Value(std::move(out));
+
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return llvm::json::Value(std::move(out));
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return llvm::json::Value(std::move(out));
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return llvm::json::Value(std::move(out));
+
+        FileInfo& info = it->second;
+        mlang::Position queryPos;
+        queryPos.line = static_cast<int>(*line);
+        queryPos.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, queryPos);
+        if(!ident)
+            return llvm::json::Value(std::move(out));
+
+        std::unordered_set<std::string> writeKeys;
+        for(auto* fn : info.functionSpans)
+        {
+            for(const auto& [name, loc] : fn->paramDecls)
+            {
+                if(name != ident->text)
+                    continue;
+                writeKeys.insert(std::to_string(loc.line) + ":" +
+                                 std::to_string(loc.character));
+            }
+            for(const auto& [name, loc] : fn->varDecls)
+            {
+                if(name != ident->text)
+                    continue;
+                writeKeys.insert(std::to_string(loc.line) + ":" +
+                                 std::to_string(loc.character));
+            }
+        }
+
+        for(int ln = 0; ln < (int)info.lines.size(); ++ln)
+        {
+            auto matches = mlang::ide::findWholeWordMatches(
+                std::vector<std::string>{info.lines[(size_t)ln]}, ident->text);
+            if(matches.empty())
+                continue;
+
+            for(const auto& m : matches)
+            {
+                int start = m.start.character;
+                int end = m.end.character;
+                int kind = 2; // read
+
+                std::string key = std::to_string(ln) + ":" + std::to_string(start);
+                if(writeKeys.find(key) != writeKeys.end())
+                {
+                    kind = 3; // write
+                }
+                else
+                {
+                    const std::string& lineText = info.lines[(size_t)ln];
+                    size_t idx = (size_t)end;
+                    while(idx < lineText.size() &&
+                          std::isspace((unsigned char)lineText[idx]))
+                        ++idx;
+                    if(idx < lineText.size() && lineText[idx] == '=')
+                        kind = 3;
+                }
+
+                llvm::json::Object obj;
+                obj["range"] = make_range_value(ln, start, ln, end);
+                obj["kind"] = kind;
+                out.push_back(llvm::json::Value(std::move(obj)));
+            }
+        }
+
+        return llvm::json::Value(std::move(out));
+    }
+
     llvm::json::Value handle_references(llvm::json::Object* params)
     {
         if(!params)
@@ -4041,6 +4138,25 @@ private:
         };
 
         std::vector<SemanticTok> tokens;
+        std::unordered_set<std::string> seen;
+
+        auto push_tok = [&](int line, int start, int length, int type) {
+            if(line < 0 || start < 0 || length <= 0)
+                return;
+            std::string key = std::to_string(line) + ":" + std::to_string(start) +
+                              ":" + std::to_string(length) + ":" +
+                              std::to_string(type);
+            if(!seen.insert(key).second)
+                return;
+            SemanticTok tok;
+            tok.line = line;
+            tok.start = start;
+            tok.length = length;
+            tok.type = type;
+            tok.modifiers = 0;
+            tokens.push_back(tok);
+        };
+
         const auto& info = it->second;
         for(int lineNo = 0; lineNo < (int)info.lines.size(); ++lineNo)
         {
@@ -4059,21 +4175,12 @@ private:
                         if(pos == std::string::npos)
                             break;
                         if(pos + attrLen <= scanLimit)
-                        {
-                            SemanticTok tok;
-                            tok.line = lineNo;
-                            tok.start = (int)pos + keywordOffset;
-                            tok.length = keywordLen;
-                            tok.type = 0; // keyword
-                            tok.modifiers = 0;
-                            tokens.push_back(tok);
-                        }
+                            push_tok(lineNo, (int)pos + keywordOffset,
+                                     keywordLen, 0); // keyword
                         pos += attrLen;
                     }
                 };
 
-            // Highlight only the attribute names; many clients ignore punctuation
-            // spans like "#[...]" for semantic tokens.
             for(const auto& attrSpec : mlang::constants::kAttributeTokenSpecs)
             {
                 add_attr_keyword(attrSpec.text, attrSpec.keywordOffset,
@@ -4088,13 +4195,7 @@ private:
                     pos = line.find(tagText, pos);
                     if(pos == std::string::npos)
                         break;
-                    SemanticTok tok;
-                    tok.line = lineNo;
-                    tok.start = (int)pos;
-                    tok.length = (int)tagLen;
-                    tok.type = 1; // macro
-                    tok.modifiers = 0;
-                    tokens.push_back(tok);
+                    push_tok(lineNo, (int)pos, (int)tagLen, 1); // macro
                     pos += tagLen;
                 }
             };
@@ -4103,11 +4204,57 @@ private:
             add_doc_tag_token("@builtin_attribute");
         }
 
+        // Symbol-based semantic tokens.
+        for(const auto& [name, fn] : info.functions)
+        {
+            if(fn.loc.uri.empty())
+                continue;
+            if(name.empty())
+                continue;
+            std::string display = fn.name.empty() ? name : fn.name;
+            push_tok(fn.loc.line, fn.loc.character, (int)display.size(), 2); // function
+        }
+        for(auto* fn : info.functionSpans)
+        {
+            for(const auto& [name, loc] : fn->paramDecls)
+                push_tok(loc.line, loc.character, (int)name.size(), 3); // parameter
+            for(const auto& [name, loc] : fn->varDecls)
+                push_tok(loc.line, loc.character, (int)name.size(), 4); // variable
+        }
+        for(const auto& [name, st] : info.structs)
+        {
+            if(!st.loc.uri.empty())
+                push_tok(st.loc.line, st.loc.character, (int)name.size(), 5); // type
+            for(const auto& [fname, field] : st.fields)
+            {
+                if(!field.loc.uri.empty())
+                    push_tok(field.loc.line, field.loc.character, (int)fname.size(), 4);
+            }
+            for(const auto& [mname, method] : st.methods)
+            {
+                if(!method.loc.uri.empty())
+                    push_tok(method.loc.line, method.loc.character, (int)mname.size(), 2);
+            }
+        }
+        for(const auto& [name, en] : info.enums)
+        {
+            if(!en.loc.uri.empty())
+                push_tok(en.loc.line, en.loc.character, (int)name.size(), 5); // type
+            for(const auto& [vname, variant] : en.variants)
+            {
+                if(!variant.loc.uri.empty())
+                    push_tok(variant.loc.line, variant.loc.character,
+                             (int)vname.size(), 6); // enumMember
+            }
+        }
+
         std::sort(tokens.begin(), tokens.end(),
                   [](const SemanticTok& a, const SemanticTok& b) {
                       if(a.line != b.line)
                           return a.line < b.line;
-                      return a.start < b.start;
+                      if(a.start != b.start)
+                          return a.start < b.start;
+                      return a.type < b.type;
                   });
 
         llvm::json::Array data;
@@ -4133,6 +4280,7 @@ private:
         out["data"] = llvm::json::Value(std::move(data));
         return llvm::json::Value(std::move(out));
     }
+
 
     llvm::json::Value handle_workspace_symbols(llvm::json::Object* params)
     {
