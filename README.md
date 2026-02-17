@@ -116,6 +116,9 @@ Skip compiling tests in normal builds:
 mlang --no-tests main.mla
 ```
 
+Interactive `std::io` input example (manual run, not part of Robot example
+suite): `examples/std_io_input_demo.mla`.
+
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:
 

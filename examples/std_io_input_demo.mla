@@ -1,0 +1,29 @@
+mod std::io;
+mod std::strbuf;
+
+use std::io::*;
+use std::strbuf::*;
+
+fn main() -> i32 {
+    let out: Stdout = stdout();
+    let input: Stdin = stdin();
+
+    writeln(out, "std::io input demo");
+    write(out, "Type your name: ");
+
+    let buf = with_capacity(256);
+    let n = read_line(input, buf, 256);
+    if n < 0: {
+        writeln(out, "No input.");
+        free(buf);
+        return 1;
+    }
+
+    let lk: StdoutLock = lock(out);
+    write_locked(lk, "Hello, ");
+    writeln_locked(lk, buf);
+    // Intentionally no unlock(): StdoutLock is auto-unlocked by __drop.
+
+    free(buf);
+    return 0;
+}
