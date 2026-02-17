@@ -1236,13 +1236,19 @@ std::string IfNode::toString() const
 
 std::string LetDeclNode::toString() const
 {
-    return "let " + name + ": " + type->toString() + " = " +
-           expression->toString() + ";";
+    if(type)
+    {
+        return "let " + name + ": " + type->toString() + " = " +
+               expression->toString() + ";";
+    }
+    return "let " + name + " = " + expression->toString() + ";";
 }
 
 std::string VarDeclNode::toString() const
 {
-    std::string result = "var " + name + ": " + type->toString();
+    std::string result = "var " + name;
+    if(type)
+        result += ": " + type->toString();
     if(initExpr)
     {
         result += " = " + initExpr->toString();

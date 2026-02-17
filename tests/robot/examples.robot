@@ -18,6 +18,7 @@ ${MLANG}           ./build/mlang
 ...    examples/map_iteration.mla
 ...    examples/map_list.mla
 ...    examples/std_math_demo.mla
+...    examples/std_string_demo.mla
 ...    examples/std_thread_demo.mla
 ...    examples/pointer_access.mla
 ...    examples/print_test.mla
@@ -158,3 +159,7 @@ Mlang Test Runner
 Mlang Test Sample Directory
     ${run}=    Run Process    ${MLANG}    test    tests    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0    msg=Expected sample tests to pass, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+
+Type Inference Regression
+    ${run}=    Run Process    ${MLANG}    test    tests/type_inference_tests.mla    stdout=PIPE    stderr=PIPE    env:PATH=.:%{PATH}
+    Should Be Equal As Integers    ${run.rc}    0    msg=Type inference regression failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}

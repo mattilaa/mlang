@@ -207,6 +207,7 @@ target_link_libraries(mlangd ${llvm_libs})
 
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
 )
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
 

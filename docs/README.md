@@ -7,6 +7,17 @@ It also includes language-level builtins such as `Option`, `Result`,
 constructors (`Some`, `None`, `Ok`, `Err`), `match`, builtin macros, and
 Rust-like attributes.
 
+String allocation intrinsics are also available:
+- `String::new()`
+- `String::with_capacity(cap)`
+- `String::free(buf)`
+
+For higher-level string helpers and UTF conversions, see:
+- `stdlib/std/strbuf.mla`
+  (`len`, `is_empty`, `clone`, `eq`, `compare`, `starts_with`, `ends_with`,
+   `contains`, `find`, `rfind`, `concat`, `repeat`,
+   `to_utf16`, `from_utf16`, `to_utf8`, `free_utf16`)
+
 The runtime builtins are implemented by the compiler backend and map to
 platform facilities (pthreads and libc). These symbols are available without
 explicit imports.
