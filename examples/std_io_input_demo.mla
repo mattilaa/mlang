@@ -11,19 +11,21 @@ fn main() -> i32 {
     writeln(out, "std::io input demo");
     write(out, "Type your name: ");
 
-    let buf = with_capacity(256);
-    let n = read_line(input, buf, 256);
+    var user_input = with_capacity(256);
+    let n = read_line(input, user_input, 256);
     if n < 0: {
         writeln(out, "No input.");
-        free(buf);
+        free(user_input);
         return 1;
     }
 
+    let trimmed = trim(user_input);
     let lk: StdoutLock = lock(out);
     write_locked(lk, "Hello, ");
-    writeln_locked(lk, buf);
+    writeln_locked(lk, trimmed);
     // Intentionally no unlock(): StdoutLock is auto-unlocked by __drop.
 
-    free(buf);
+    free(trimmed);
+    free(user_input);
     return 0;
 }

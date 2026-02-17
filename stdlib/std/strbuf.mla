@@ -22,6 +22,9 @@ extern fn __mlang_std_strbuf_find(s: string, needle: string) -> i64;
 extern fn __mlang_std_strbuf_rfind(s: string, needle: string) -> i64;
 extern fn __mlang_std_strbuf_concat(a: string, b: string) -> string;
 extern fn __mlang_std_strbuf_repeat(s: string, count: i64) -> string;
+extern fn __mlang_std_strbuf_trim(s: string) -> string;
+extern fn __mlang_std_strbuf_ltrim(s: string) -> string;
+extern fn __mlang_std_strbuf_rtrim(s: string) -> string;
 extern fn __mlang_std_strbuf_utf8_to_utf16(s: string) -> str16;
 extern fn __mlang_std_strbuf_utf16_to_utf8(s: str16) -> string;
 extern fn __mlang_std_strbuf_free_str16(s: str16) -> void;
@@ -104,6 +107,21 @@ pub fn concat(a: string, b: string) -> string {
 /// @brief Repeat s count times into newly allocated string.
 pub fn repeat(s: string, count: i64) -> string {
     return __mlang_std_strbuf_repeat(s, count);
+}
+
+/// @brief Return a newly allocated trimmed string (both ends).
+pub fn trim(s: string) -> string {
+    return __mlang_std_strbuf_trim(s);
+}
+
+/// @brief Return a newly allocated left-trimmed string.
+pub fn ltrim(s: string) -> string {
+    return __mlang_std_strbuf_ltrim(s);
+}
+
+/// @brief Return a newly allocated right-trimmed string.
+pub fn rtrim(s: string) -> string {
+    return __mlang_std_strbuf_rtrim(s);
 }
 
 /// @brief Convert UTF-8 (string) to UTF-16 (str16).

@@ -118,6 +118,8 @@ mlang --no-tests main.mla
 
 Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
+The example uses `var user_input` directly (no `&mut` required) and trims with
+`trim(user_input)`.
 
 ## Examples
 - Scope-exit destructor + owned resource cleanup:

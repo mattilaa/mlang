@@ -49,6 +49,18 @@ pub fn read_line(input: Stdin, buf: string, capacity: i64) -> i64 {
     return __mlang_std_io_stdin_read_line(buf, capacity);
 }
 
+/// @brief Read one line into a newly allocated buffer.
+/// Returns empty string on EOF/error.
+pub fn read_line_owned(input: Stdin, capacity: i64) -> string {
+    let buf = String::with_capacity(capacity);
+    let n = read_line(input, buf, capacity);
+    if n < 0: {
+        String::free(buf);
+        return String::new();
+    }
+    return buf;
+}
+
 /// @brief Acquire global stdout lock.
 /// @param out stdout handle.
 /// @return lock token used for synchronized writes.
