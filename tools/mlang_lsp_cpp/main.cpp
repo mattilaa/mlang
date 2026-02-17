@@ -1099,18 +1099,71 @@ private:
         return std::nullopt;
     }
 
-    std::optional<Location>
-    find_runtime_builtin_location(const std::string& name)
+    std::optional<std::filesystem::path>
+    resolve_runtime_builtins_stub_path(const FileInfo* contextFile) const
     {
-        if(rootPath.empty())
+        auto try_from_base = [](const std::filesystem::path& base)
+            -> std::optional<std::filesystem::path> {
+            if(base.empty())
+                return std::nullopt;
+            std::error_code ec;
+            std::filesystem::path cand = base / "docs" / "runtime_builtins.mlastub";
+            if(std::filesystem::exists(cand, ec) && !ec)
+                return cand;
+            return std::nullopt;
+        };
+
+        if(!rootPath.empty())
+        {
+            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+                return p;
+        }
+
+        if(contextFile && !contextFile->path.empty())
+        {
+            std::filesystem::path dir = std::filesystem::path(contextFile->path).parent_path();
+            while(!dir.empty())
+            {
+                if(auto p = try_from_base(dir))
+                    return p;
+                std::filesystem::path parent = dir.parent_path();
+                if(parent == dir)
+                    break;
+                dir = parent;
+            }
+        }
+
+        for(const auto& [_, info] : files)
+        {
+            if(info.path.empty())
+                continue;
+            std::filesystem::path dir = std::filesystem::path(info.path).parent_path();
+            while(!dir.empty())
+            {
+                if(auto p = try_from_base(dir))
+                    return p;
+                std::filesystem::path parent = dir.parent_path();
+                if(parent == dir)
+                    break;
+                dir = parent;
+            }
+        }
+
+        if(auto p = try_from_base(std::filesystem::current_path()))
+            return p;
+
+        return std::nullopt;
+    }
+
+    std::optional<Location>
+    find_runtime_builtin_location(const std::string& name,
+                                  const FileInfo* contextFile = nullptr)
+    {
+        auto docsPathOpt = resolve_runtime_builtins_stub_path(contextFile);
+        if(!docsPathOpt)
             return std::nullopt;
 
-        std::filesystem::path docsPath =
-            std::filesystem::path(rootPath) / "docs" /
-            "runtime_builtins.mlastub";
-        if(!std::filesystem::exists(docsPath))
-            return std::nullopt;
-
+        const std::filesystem::path docsPath = *docsPathOpt;
         std::string text = read_file(docsPath.string());
         if(text.empty())
             return std::nullopt;
@@ -2787,7 +2840,7 @@ private:
             }
         }
 
-        if(auto loc = find_runtime_builtin_location(word))
+        if(auto loc = find_runtime_builtin_location(word, &info))
             return location_to_json(*loc);
 
         if(auto loc = find_symbol_in_workspace(word))
