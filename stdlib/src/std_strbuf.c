@@ -261,6 +261,61 @@ char* __mlang_std_strbuf_repeat(const char* s, int64_t count)
     return out;
 }
 
+static int is_ascii_space(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' ||
+           c == '\v';
+}
+
+char* __mlang_std_strbuf_ltrim(const char* s)
+{
+    if(!s)
+        return NULL;
+
+    const char* p = s;
+    while(*p && is_ascii_space(*p))
+        ++p;
+    return __mlang_std_strbuf_clone(p);
+}
+
+char* __mlang_std_strbuf_rtrim(const char* s)
+{
+    if(!s)
+        return NULL;
+
+    size_t n = strlen(s);
+    while(n > 0 && is_ascii_space(s[n - 1]))
+        --n;
+
+    char* out = (char*)malloc(n + 1);
+    if(!out)
+        return NULL;
+    memcpy(out, s, n);
+    out[n] = '\0';
+    return out;
+}
+
+char* __mlang_std_strbuf_trim(const char* s)
+{
+    if(!s)
+        return NULL;
+
+    const char* start = s;
+    while(*start && is_ascii_space(*start))
+        ++start;
+
+    size_t n = strlen(start);
+    while(n > 0 && is_ascii_space(start[n - 1]))
+        --n;
+
+    char* out = (char*)malloc(n + 1);
+    if(!out)
+        return NULL;
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return out;
+}
+
 uint16_t* __mlang_std_strbuf_utf8_to_utf16(const char* s)
 {
     if(!s)

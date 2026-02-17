@@ -1,0 +1,45 @@
+mod std::strbuf;
+
+use std::strbuf::*;
+
+extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> int;
+
+struct OwnedBuffer {
+    var raw: string;
+    var id: i32;
+};
+
+fn make_owned(id: i32, text: string) -> OwnedBuffer {
+    let buf = String::with_capacity(128);
+    snprintf(buf, 128, "owned(%d): %s", id, text);
+    return OwnedBuffer { raw: buf, id: id };
+}
+
+// Scope-exit destructor: compiler calls this automatically for local OwnedBuffer values.
+fn __drop(value: OwnedBuffer) -> void {
+    println!("__drop OwnedBuffer id={}", value.id);
+    String::free(value.raw);
+}
+
+fn early_return_demo() -> i32 {
+    let x: OwnedBuffer = make_owned(2, "beta");
+    println!("using x: {}", x.raw);
+    return 0;
+}
+
+fn main() -> i32 {
+    {
+        let a: OwnedBuffer = make_owned(1, "alpha");
+        println!("using a: {}", a.raw);
+    } // `a` is dropped here.
+
+    println!("after inner scope");
+
+    // `x` is dropped even on early return.
+    if early_return_demo() == 0: {
+        println!("returned from early_return_demo");
+    }
+
+    println!("done");
+    return 0;
+}

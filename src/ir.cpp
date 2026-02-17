@@ -2206,6 +2206,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     namedValues.clear();
     constantVariables.clear();
     variableTypes.clear();
+    cleanupScopes.clear();
+    enterCleanupScope();
 
     // Set up parameters
     unsigned paramIdx = 0;
@@ -2222,6 +2224,19 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         {
             auto* paramNode = node->parameters->parameters[paramIdx];
             variableTypes[std::string(arg.getName())] = paramNode->type->kind;
+            if(auto* structType =
+                   dynamic_cast<StructTypeRefNode*>(paramNode->type))
+            {
+                structVariableTypes[std::string(arg.getName())] =
+                    structType->structName;
+            }
+            if(auto* genStructType =
+                   dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
+            {
+                std::string mangled = getOrCreateMonomorphizedStruct(
+                    genStructType->structName, genStructType->typeArgs);
+                structVariableTypes[std::string(arg.getName())] = mangled;
+            }
             if(auto* genListType =
                    dynamic_cast<GenericListTypeNode*>(paramNode->type))
             {
@@ -2250,6 +2265,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             generateStatement(stmt);
         }
     }
+
+    // Run scope-exit destructors for locals at normal function fallthrough.
+    exitCleanupScope();
 
     // If the function is void and doesn't have a return, add one
     llvm::Type* returnType = function->getReturnType();
@@ -2320,10 +2338,12 @@ void CodeGenerator::generateStatement(StatementNode* node)
     }
     else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
     {
+        enterCleanupScope();
         for(auto stmt : blockNode->statements->statements)
         {
             generateStatement(stmt);
         }
+        exitCleanupScope();
     }
     else if(auto printNode = dynamic_cast<PrintNode*>(node))
     {
@@ -3772,6 +3792,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             }
         }
 
+        emitAllActiveCleanups();
         builder.CreateRet(returnValue);
     }
     else
@@ -3782,6 +3803,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             reportError(node->line, "non-void function must return a value");
             return;
         }
+        emitAllActiveCleanups();
         builder.CreateRetVoid();
     }
 }
@@ -4249,6 +4271,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto sit = structVariableTypes.find(id->name);
             if(sit != structVariableTypes.end())
                 structVariableTypes[node->name] = sit->second;
+                registerStructCleanupIfNeeded(node->name, sit->second);
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
@@ -4314,6 +4337,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             variableTypes[node->name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[node->name] = structLit->structName;
+            registerStructCleanupIfNeeded(node->name, structLit->structName);
         }
         else if(variableTypes[node->name] == TypeNode::TYPE_PTR)
         {
@@ -4346,6 +4370,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->name] = mangledName;
+        registerStructCleanupIfNeeded(node->name, mangledName);
         constantVariables.insert(node->name);
         return;
     }
@@ -4585,6 +4610,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->name] = structRef->structName;
+        registerStructCleanupIfNeeded(node->name, structRef->structName);
         constantVariables.insert(node->name);
         return;
     }
@@ -4720,6 +4746,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             auto sit = structVariableTypes.find(id->name);
             if(sit != structVariableTypes.end())
                 structVariableTypes[node->name] = sit->second;
+                registerStructCleanupIfNeeded(node->name, sit->second);
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
@@ -4785,6 +4812,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             variableTypes[node->name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[node->name] = structLit->structName;
+            registerStructCleanupIfNeeded(node->name, structLit->structName);
         }
         else if(variableTypes[node->name] == TypeNode::TYPE_PTR)
         {
@@ -4825,6 +4853,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->name] = mangledName;
+        registerStructCleanupIfNeeded(node->name, mangledName);
         return;
     }
 
@@ -5097,6 +5126,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->name] = structRef->structName;
+        registerStructCleanupIfNeeded(node->name, structRef->structName);
         return;
     }
 
@@ -5570,10 +5600,23 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
         }
 
         auto typeIt = structVariableTypes.find(id->name);
+        std::string inferredStructName;
         if(typeIt == structVariableTypes.end())
         {
-            reportError(line, "variable '" + id->name + "' is not a struct");
-            return {nullptr, ""};
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr))
+            {
+                llvm::Type* at = alloca->getAllocatedType();
+                if(at && at->isStructTy())
+                {
+                    auto* st = llvm::cast<llvm::StructType>(at);
+                    inferredStructName = st->getName().str();
+                }
+            }
+            if(inferredStructName.empty())
+            {
+                reportError(line, "variable '" + id->name + "' is not a struct");
+                return {nullptr, ""};
+            }
         }
 
         // Handle self pointer (alloca containing pointer)
@@ -5588,7 +5631,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             }
         }
 
-        return {actualPtr, typeIt->second};
+        return {actualPtr,
+                typeIt != structVariableTypes.end() ? typeIt->second
+                                                    : inferredStructName};
     }
 
     // Case 2: Field access (e.g., "a.b" in "a.b.c")
@@ -5769,11 +5814,27 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
         auto typeIt = structVariableTypes.find(node->structName);
         if(typeIt == structVariableTypes.end())
         {
-            reportError(node->line,
-                        "variable '" + node->structName + "' is not a struct");
-            return nullptr;
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+            {
+                llvm::Type* at = alloca->getAllocatedType();
+                if(at && at->isStructTy())
+                {
+                    auto* st = llvm::cast<llvm::StructType>(at);
+                    structTypeName = st->getName().str();
+                }
+            }
+            if(structTypeName.empty())
+            {
+                reportError(node->line,
+                            "variable '" + node->structName +
+                                "' is not a struct");
+                return nullptr;
+            }
         }
-        structTypeName = typeIt->second;
+        else
+        {
+            structTypeName = typeIt->second;
+        }
 
         // Handle self pointer (alloca containing pointer)
         if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
@@ -5843,6 +5904,121 @@ void CodeGenerator::reportError(int line, const std::string& message)
         std::cerr << "Error: " << message << std::endl;
     }
     hasError = true;
+}
+
+void CodeGenerator::enterCleanupScope()
+{
+    cleanupScopes.emplace_back();
+}
+
+void CodeGenerator::exitCleanupScope()
+{
+    if(cleanupScopes.empty())
+        return;
+
+    auto actions = std::move(cleanupScopes.back());
+    cleanupScopes.pop_back();
+
+    if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+        return;
+
+    for(auto it = actions.rbegin(); it != actions.rend(); ++it)
+    {
+        if(!it->dropFunction)
+            continue;
+        auto nv = namedValues.find(it->varName);
+        if(nv == namedValues.end() || !nv->second)
+            continue;
+        auto sv = structVariableTypes.find(it->varName);
+        if(sv == structVariableTypes.end() || sv->second != it->structTypeName)
+            continue;
+
+        auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(nv->second);
+        if(!alloca)
+            continue;
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        if(!allocaType || !allocaType->isStructTy())
+            continue;
+
+        llvm::Value* value = builder.CreateLoad(allocaType, alloca,
+                                                it->varName + ".dropval");
+        builder.CreateCall(it->dropFunction, {value});
+    }
+}
+
+void CodeGenerator::emitAllActiveCleanups()
+{
+    if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+        return;
+
+    for(auto scopeIt = cleanupScopes.rbegin(); scopeIt != cleanupScopes.rend();
+        ++scopeIt)
+    {
+        auto& actions = *scopeIt;
+        for(auto it = actions.rbegin(); it != actions.rend(); ++it)
+        {
+            if(!it->dropFunction)
+                continue;
+            auto nv = namedValues.find(it->varName);
+            if(nv == namedValues.end() || !nv->second)
+                continue;
+            auto sv = structVariableTypes.find(it->varName);
+            if(sv == structVariableTypes.end() ||
+               sv->second != it->structTypeName)
+                continue;
+
+            auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(nv->second);
+            if(!alloca)
+                continue;
+            llvm::Type* allocaType = alloca->getAllocatedType();
+            if(!allocaType || !allocaType->isStructTy())
+                continue;
+
+            llvm::Value* value = builder.CreateLoad(
+                allocaType, alloca, it->varName + ".dropval.ret");
+            builder.CreateCall(it->dropFunction, {value});
+        }
+    }
+}
+
+llvm::Function*
+CodeGenerator::resolveDropFunctionForStruct(const std::string& structTypeName)
+{
+    auto* structType = getStructType(structTypeName);
+    if(!structType)
+        return nullptr;
+
+    auto find_drop = [&](const std::string& fnName) -> llvm::Function* {
+        auto it = functionOverloads.find(fnName);
+        if(it == functionOverloads.end())
+            return nullptr;
+        for(auto& info : it->second)
+        {
+            llvm::Function* fn = info.function;
+            if(!fn || fn->arg_size() != 1 || !fn->getReturnType()->isVoidTy())
+                continue;
+            llvm::Type* p0 = fn->getArg(0)->getType();
+            if(p0 == structType)
+                return fn;
+        }
+        return nullptr;
+    };
+
+    if(auto* f = find_drop("__drop"))
+        return f;
+    return find_drop("drop");
+}
+
+void CodeGenerator::registerStructCleanupIfNeeded(
+    const std::string& varName, const std::string& structTypeName)
+{
+    if(varName.empty() || structTypeName.empty() || cleanupScopes.empty())
+        return;
+    if(auto* dropFn = resolveDropFunctionForStruct(structTypeName))
+    {
+        cleanupScopes.back().push_back(
+            ScopeCleanup{varName, structTypeName, dropFn});
+    }
 }
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
@@ -7122,6 +7298,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     namedValues.clear();
     constantVariables.clear();
     variableTypes.clear();
+    cleanupScopes.clear();
+    enterCleanupScope();
 
     // Set up self parameter and other parameters
     unsigned argIdx = 0;
@@ -7154,6 +7332,19 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                     method->parameters->parameters[methodParamIdx];
                 variableTypes[std::string(arg.getName())] =
                     paramNode->type->kind;
+                if(auto* structType =
+                       dynamic_cast<StructTypeRefNode*>(paramNode->type))
+                {
+                    structVariableTypes[std::string(arg.getName())] =
+                        structType->structName;
+                }
+                if(auto* genStructType =
+                       dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
+                {
+                    std::string mangled = getOrCreateMonomorphizedStruct(
+                        genStructType->structName, genStructType->typeArgs);
+                    structVariableTypes[std::string(arg.getName())] = mangled;
+                }
                 if(auto* genListType =
                        dynamic_cast<GenericListTypeNode*>(paramNode->type))
                 {
@@ -7190,6 +7381,9 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     {
         generateStatement(stmt);
     }
+
+    // Run scope-exit destructors for locals at normal method fallthrough.
+    exitCleanupScope();
 
     // Add terminator if needed
     llvm::Type* returnType = function->getReturnType();
@@ -7369,6 +7563,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedMapKeyValueTypes = mapKeyValueTypes;
                     auto savedTupleElementTypes = tupleElementTypes;
                     auto savedPointerElementTypes = pointerElementTypes;
+                    auto savedCleanupScopes = cleanupScopes;
 
                     // Generate the method body
                     generateMethodDefinition(definingStruct, methodDef);
@@ -7382,6 +7577,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     mapKeyValueTypes = savedMapKeyValueTypes;
                     tupleElementTypes = savedTupleElementTypes;
                     pointerElementTypes = savedPointerElementTypes;
+                    cleanupScopes = savedCleanupScopes;
 
                     if(savedBlock)
                     {
@@ -8266,6 +8462,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedMapKeyValueTypes = mapKeyValueTypes;
         auto savedTupleElementTypes = tupleElementTypes;
         auto savedPointerElementTypes = pointerElementTypes;
+        auto savedCleanupScopes = cleanupScopes;
 
         std::string binding =
             arm && arm->pattern ? arm->pattern->binding : "";
@@ -8286,6 +8483,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         mapKeyValueTypes = savedMapKeyValueTypes;
         tupleElementTypes = savedTupleElementTypes;
         pointerElementTypes = savedPointerElementTypes;
+        cleanupScopes = savedCleanupScopes;
 
         return armValue;
     };
