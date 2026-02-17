@@ -1750,7 +1750,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
             builder.CreateInsertValue(listStruct, dataPtr, 1, "args.data");
 
         llvm::Function* userMain =
-            module->getFunction("__mlang_user_main");
+            module->getFunction(functionSymbolName(mainDef));
+        if(!userMain)
+            userMain = module->getFunction("__mlang_user_main");
         if(!userMain)
         {
             reportError(mainDef->line,
@@ -5802,7 +5804,34 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         return nullptr;
     }
 
-    llvm::Function* targetFunc = module->getFunction(targetId->name);
+    size_t argCount = node->arguments.size() - 1;
+
+    llvm::Function* targetFunc = nullptr;
+    auto overloadIt = functionOverloads.find(targetId->name);
+    if(overloadIt != functionOverloads.end())
+    {
+        for(auto& info : overloadIt->second)
+        {
+            if(!isOverloadVisible(info))
+                continue;
+            llvm::Function* candidate = info.function;
+            if(!candidate || candidate->isVarArg())
+                continue;
+            if(candidate->arg_size() != argCount)
+                continue;
+            if(targetFunc && targetFunc != candidate)
+            {
+                reportError(node->line,
+                            "ambiguous function: '" + targetId->name +
+                                "' for thread_spawn");
+                return nullptr;
+            }
+            targetFunc = candidate;
+        }
+    }
+
+    if(!targetFunc)
+        targetFunc = module->getFunction(targetId->name);
     if(!targetFunc)
     {
         reportError(node->line,
@@ -5810,7 +5839,6 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         return nullptr;
     }
 
-    size_t argCount = node->arguments.size() - 1;
     if(targetFunc->arg_size() != argCount)
     {
         reportError(node->line,
@@ -5859,7 +5887,8 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::string wrapperName = "__mlang_thread_wrapper_" + targetId->name;
+    std::string wrapperName = "__mlang_thread_wrapper_" +
+                              targetFunc->getName().str();
     if(argCount > 0)
         wrapperName += "_args" + std::to_string(argCount);
     llvm::Function* wrapperFunc = module->getFunction(wrapperName);

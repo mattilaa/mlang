@@ -1,6 +1,10 @@
 #include "ast.h"
 #include "mlang_constants.h"
 #include "module.h"
+#include "incremental_compiler.h"
+#include "ide_query.h"
+#include "workspace_graph.h"
+#include "runtime_concurrency.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -12,6 +16,7 @@
 #include <iostream>
 #include <optional>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -21,14 +26,6 @@
 
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
-
-extern int yyparse();
-extern FILE* yyin;
-extern int yylineno;
-extern void yyrestart(FILE* input_file);
-extern "C" {
-    extern ASTNode* programRoot;
-}
 
 struct Location
 {
@@ -403,6 +400,9 @@ public:
 
 private:
     std::unordered_map<std::string, FileInfo> files;
+    mlang::IncrementalCompiler incrementalCompiler;
+    mlang::ide::WorkspaceGraph workspaceGraph;
+    mlang::runtime::RuntimeScheduler runtimeScheduler;
     std::unordered_map<std::string, std::string> functionReturns;
     std::string rootPath;
     std::string mlangCommandsPath;
@@ -413,6 +413,7 @@ private:
     std::vector<std::string> cHeaderPaths;
     std::unordered_map<std::string, std::string> cTypeMap;
     std::unordered_map<std::string, Location> cSymbolCache;
+    std::unordered_map<std::string, std::string> diagnosticResultIds;
     bool cHeadersLoaded = false;
     bool cHeaderDebug = false;
     std::string cHeaderDebugLog;
@@ -640,6 +641,82 @@ private:
         add_dir("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     }
 
+    static bool is_c_source_path(const std::filesystem::path& path)
+    {
+        auto ext = path.extension().string();
+        return ext == ".h" || ext == ".hpp" || ext == ".hh" ||
+               ext == ".c" || ext == ".cc" || ext == ".cxx" ||
+               ext == ".cpp";
+    }
+
+    std::optional<Location> find_c_symbol_in_workspace(const std::string& name)
+    {
+        if(rootPath.empty())
+            return std::nullopt;
+
+        // Prefer likely definition forms before generic declaration matches.
+        std::regex defRx("\\b" + name + "\\s*\\([^;]*\\)\\s*\\{");
+        std::regex declRx("\\b" + name + "\\s*\\(");
+
+        auto search = [&](const std::regex& rx,
+                          const std::filesystem::path& path)
+            -> std::optional<Location> {
+            std::ifstream f(path);
+            if(!f)
+                return std::nullopt;
+            std::string line;
+            int lineNo = 0;
+            while(std::getline(f, line))
+            {
+                std::smatch match;
+                if(std::regex_search(line, match, rx))
+                {
+                    Location loc;
+                    loc.uri = path_to_uri(path.string());
+                    loc.line = lineNo;
+                    loc.character = (int)match.position();
+                    return loc;
+                }
+                ++lineNo;
+            }
+            return std::nullopt;
+        };
+
+        auto scan = [&](const std::regex& rx) -> std::optional<Location> {
+            std::error_code ec;
+            for(auto it = std::filesystem::recursive_directory_iterator(
+                    rootPath,
+                    std::filesystem::directory_options::skip_permission_denied,
+                    ec);
+                it != std::filesystem::recursive_directory_iterator(); ++it)
+            {
+                if(it->is_directory(ec))
+                {
+                    auto dirName = it->path().filename().string();
+                    if(dirName == ".git" || dirName == "build" ||
+                       dirName == "out" || dirName == "dist")
+                    {
+                        it.disable_recursion_pending();
+                    }
+                    continue;
+                }
+
+                if(!it->is_regular_file(ec))
+                    continue;
+                if(!is_c_source_path(it->path()))
+                    continue;
+
+                if(auto loc = search(rx, it->path()))
+                    return loc;
+            }
+            return std::nullopt;
+        };
+
+        if(auto loc = scan(defRx))
+            return loc;
+        return scan(declRx);
+    }
+
     void log_c_headers() const
     {
         std::string msg = "[mlangd] c headers: ";
@@ -694,6 +771,12 @@ private:
                 ++lineNo;
             }
         }
+        if(auto loc = find_c_symbol_in_workspace(name))
+        {
+            cSymbolCache[name] = *loc;
+            return loc;
+        }
+
         debug_log("[mlangd] c symbol not found: " + name);
         return std::nullopt;
     }
@@ -818,34 +901,37 @@ private:
         if(!arr)
             return;
 
+        std::vector<std::string> paths;
+        std::unordered_set<std::string> seen;
+
         for(const auto& item : *arr)
         {
             if(auto s = item.getAsString())
             {
                 std::string filePath = s->str();
-                if(!filePath.empty())
+                if(filePath.empty())
+                    continue;
+
+                std::string abs = filePath;
+                if(!std::filesystem::path(filePath).is_absolute() &&
+                   !rootPath.empty())
                 {
-                    std::string abs = filePath;
-                    if(!std::filesystem::path(filePath).is_absolute() &&
-                       !rootPath.empty())
-                    {
-                        abs =
-                            (std::filesystem::path(rootPath) / filePath).string();
-                    }
-                    if(!is_mlang_source_path(std::filesystem::path(abs)))
-                        continue;
-                    std::string content = read_file(abs);
-                    if(!content.empty())
-                        index_document(path_to_uri(abs), content);
+                    abs = (std::filesystem::path(rootPath) / filePath).string();
                 }
+                if(!is_mlang_source_path(std::filesystem::path(abs)))
+                    continue;
+                if(seen.insert(abs).second)
+                    paths.push_back(abs);
                 continue;
             }
+
             auto* objItem = item.getAsObject();
             if(!objItem)
                 continue;
             auto fileVal = objItem->getString("file");
             if(!fileVal)
                 continue;
+
             std::string filePath = fileVal->str();
             auto dirVal = objItem->getString("directory");
             std::string abs = filePath;
@@ -858,10 +944,67 @@ private:
             }
             if(!is_mlang_source_path(std::filesystem::path(abs)))
                 continue;
-            std::string content = read_file(abs);
-            if(!content.empty())
-                index_document(path_to_uri(abs), content);
+            if(seen.insert(abs).second)
+                paths.push_back(abs);
         }
+
+        auto loaded = runtimeScheduler.loadFiles(paths);
+        for(const auto& file : loaded)
+        {
+            if(file.content.empty())
+                continue;
+            index_document(path_to_uri(file.path), file.content);
+        }
+    }
+
+    std::vector<std::string>
+    infer_provided_modules(const FileInfo& info) const
+    {
+        std::unordered_set<std::string> modules;
+        for(const auto& mod : info.moduleDecls)
+        {
+            if(!mod.empty())
+                modules.insert(mod);
+        }
+
+        std::filesystem::path path(info.path);
+        if(path.filename() == "mod.mla")
+        {
+            std::string parent = path.parent_path().filename().string();
+            if(!parent.empty())
+                modules.insert(parent);
+        }
+        else
+        {
+            std::string stem = path.stem().string();
+            if(!stem.empty())
+                modules.insert(stem);
+        }
+
+        std::vector<std::string> out;
+        out.reserve(modules.size());
+        for(const auto& mod : modules)
+            out.push_back(mod);
+        std::sort(out.begin(), out.end());
+        return out;
+    }
+
+    void update_workspace_graph_for_file(const FileInfo& info)
+    {
+        mlang::ide::WorkspaceDocumentNode node;
+        node.uri = info.uri;
+        node.path = info.path;
+        node.providedModules = infer_provided_modules(info);
+        node.imports.reserve(info.imports.size());
+        for(const auto& imp : info.imports)
+        {
+            mlang::ide::WorkspaceImport wi;
+            wi.moduleName = imp.moduleName;
+            wi.itemName = imp.itemName;
+            wi.importAll = imp.importAll;
+            node.imports.push_back(std::move(wi));
+        }
+        workspaceGraph.upsertDocument(node);
     }
 
     std::string resolve_module_path(const std::string& baseDir,
@@ -881,6 +1024,18 @@ private:
     std::string resolve_module_path_for_file(const FileInfo& info,
                                              const std::string& moduleName) const
     {
+        auto providers = workspaceGraph.findProviderUris(moduleName);
+        for(const auto& providerUri : providers)
+        {
+            auto it = files.find(providerUri);
+            if(it != files.end() && !it->second.path.empty())
+                return it->second.path;
+
+            std::string providerPath = uri_to_path(providerUri);
+            if(!providerPath.empty())
+                return providerPath;
+        }
+
         std::filesystem::path base =
             std::filesystem::path(info.path).parent_path();
         std::string path = resolve_module_path(base.string(), moduleName);
@@ -944,18 +1099,71 @@ private:
         return std::nullopt;
     }
 
-    std::optional<Location>
-    find_runtime_builtin_location(const std::string& name)
+    std::optional<std::filesystem::path>
+    resolve_runtime_builtins_stub_path(const FileInfo* contextFile) const
     {
-        if(rootPath.empty())
+        auto try_from_base = [](const std::filesystem::path& base)
+            -> std::optional<std::filesystem::path> {
+            if(base.empty())
+                return std::nullopt;
+            std::error_code ec;
+            std::filesystem::path cand = base / "docs" / "runtime_builtins.mlastub";
+            if(std::filesystem::exists(cand, ec) && !ec)
+                return cand;
+            return std::nullopt;
+        };
+
+        if(!rootPath.empty())
+        {
+            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+                return p;
+        }
+
+        if(contextFile && !contextFile->path.empty())
+        {
+            std::filesystem::path dir = std::filesystem::path(contextFile->path).parent_path();
+            while(!dir.empty())
+            {
+                if(auto p = try_from_base(dir))
+                    return p;
+                std::filesystem::path parent = dir.parent_path();
+                if(parent == dir)
+                    break;
+                dir = parent;
+            }
+        }
+
+        for(const auto& [_, info] : files)
+        {
+            if(info.path.empty())
+                continue;
+            std::filesystem::path dir = std::filesystem::path(info.path).parent_path();
+            while(!dir.empty())
+            {
+                if(auto p = try_from_base(dir))
+                    return p;
+                std::filesystem::path parent = dir.parent_path();
+                if(parent == dir)
+                    break;
+                dir = parent;
+            }
+        }
+
+        if(auto p = try_from_base(std::filesystem::current_path()))
+            return p;
+
+        return std::nullopt;
+    }
+
+    std::optional<Location>
+    find_runtime_builtin_location(const std::string& name,
+                                  const FileInfo* contextFile = nullptr)
+    {
+        auto docsPathOpt = resolve_runtime_builtins_stub_path(contextFile);
+        if(!docsPathOpt)
             return std::nullopt;
 
-        std::filesystem::path docsPath =
-            std::filesystem::path(rootPath) / "docs" /
-            "runtime_builtins.mlastub";
-        if(!std::filesystem::exists(docsPath))
-            return std::nullopt;
-
+        const std::filesystem::path docsPath = *docsPathOpt;
         std::string text = read_file(docsPath.string());
         if(text.empty())
             return std::nullopt;
@@ -1227,19 +1435,40 @@ private:
             caps["textDocumentSync"] = llvm::json::Value(std::move(sync));
             caps["definitionProvider"] = true;
             caps["referencesProvider"] = true;
+            caps["hoverProvider"] = true;
+            caps["documentHighlightProvider"] = true;
             llvm::json::Array triggers;
             triggers.push_back(".");
             triggers.push_back(":");
             llvm::json::Object completion;
             completion["triggerCharacters"] = llvm::json::Value(std::move(triggers));
             caps["completionProvider"] = llvm::json::Value(std::move(completion));
+            llvm::json::Object signatureHelp;
+            llvm::json::Array sigTriggers;
+            sigTriggers.push_back("(");
+            sigTriggers.push_back(",");
+            signatureHelp["triggerCharacters"] = llvm::json::Value(std::move(sigTriggers));
+            caps["signatureHelpProvider"] = llvm::json::Value(std::move(signatureHelp));
+            llvm::json::Object renameProvider;
+            renameProvider["prepareProvider"] = true;
+            caps["renameProvider"] = llvm::json::Value(std::move(renameProvider));
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
             caps["documentFormattingProvider"] = true;
+            caps["codeActionProvider"] = true;
+            llvm::json::Object diagnosticProvider;
+            diagnosticProvider["interFileDependencies"] = false;
+            diagnosticProvider["workspaceDiagnostics"] = false;
+            caps["diagnosticProvider"] = llvm::json::Value(std::move(diagnosticProvider));
             llvm::json::Object semanticLegend;
             llvm::json::Array semanticTokenTypes;
             semanticTokenTypes.push_back("keyword");
             semanticTokenTypes.push_back("macro");
+            semanticTokenTypes.push_back("function");
+            semanticTokenTypes.push_back("parameter");
+            semanticTokenTypes.push_back("variable");
+            semanticTokenTypes.push_back("type");
+            semanticTokenTypes.push_back("enumMember");
             semanticLegend["tokenTypes"] =
                 llvm::json::Value(std::move(semanticTokenTypes));
             semanticLegend["tokenModifiers"] = llvm::json::Array{};
@@ -1264,9 +1493,29 @@ private:
         {
             send_response(id, handle_references(params));
         }
+        else if(method == "textDocument/hover")
+        {
+            send_response(id, handle_hover(params));
+        }
+        else if(method == "textDocument/documentHighlight")
+        {
+            send_response(id, handle_document_highlight(params));
+        }
         else if(method == "textDocument/completion")
         {
             send_response(id, handle_completion(params));
+        }
+        else if(method == "textDocument/signatureHelp")
+        {
+            send_response(id, handle_signature_help(params));
+        }
+        else if(method == "textDocument/prepareRename")
+        {
+            send_response(id, handle_prepare_rename(params));
+        }
+        else if(method == "textDocument/rename")
+        {
+            send_response(id, handle_rename(params));
         }
         else if(method == "textDocument/documentSymbol")
         {
@@ -1275,6 +1524,14 @@ private:
         else if(method == "textDocument/formatting")
         {
             send_response(id, handle_formatting(params));
+        }
+        else if(method == "textDocument/codeAction")
+        {
+            send_response(id, handle_code_action(params));
+        }
+        else if(method == "textDocument/diagnostic")
+        {
+            send_response(id, handle_document_diagnostic(params));
         }
         else if(method == "textDocument/semanticTokens/full")
         {
@@ -1302,8 +1559,16 @@ private:
                 return;
             auto uri = textDoc->getString("uri");
             auto text = textDoc->getString("text");
-            if(uri && text)
-                index_document(uri->str(), text->str());
+            if(!uri || !text)
+                return;
+
+            std::string uriStr = uri->str();
+            std::string path = uri_to_path(uriStr);
+            int version = -1;
+            if(auto v = textDoc->getInteger("version"))
+                version = static_cast<int>(*v);
+            incrementalCompiler.openDocument(uriStr, path, text->str(), version);
+            reindex_incremental_document(uriStr);
         }
         else if(method == "textDocument/didChange")
         {
@@ -1314,12 +1579,70 @@ private:
             auto uri = textDoc->getString("uri");
             if(!uri)
                 return;
-            auto* last = changes->back().getAsObject();
-            if(!last)
-                return;
-            auto text = last->getString("text");
-            if(text)
-                index_document(uri->str(), text->str());
+
+            std::string uriStr = uri->str();
+            if(!incrementalCompiler.getDocument(uriStr))
+            {
+                std::string path = uri_to_path(uriStr);
+                std::string currentText = read_file(path);
+                incrementalCompiler.openDocument(uriStr, path, currentText);
+            }
+
+            std::vector<mlang::IncrementalTextChange> incrementalChanges;
+            incrementalChanges.reserve(changes->size());
+            for(const auto& item : *changes)
+            {
+                auto* changeObj = item.getAsObject();
+                if(!changeObj)
+                    continue;
+                auto text = changeObj->getString("text");
+                if(!text)
+                    continue;
+
+                mlang::IncrementalTextChange change;
+                change.text = text->str();
+                if(auto* range = changeObj->getObject("range"))
+                {
+                    auto* start = range->getObject("start");
+                    auto* end = range->getObject("end");
+                    if(start && end)
+                    {
+                        auto sl = start->getInteger("line");
+                        auto sc = start->getInteger("character");
+                        auto el = end->getInteger("line");
+                        auto ec = end->getInteger("character");
+                        if(sl && sc && el && ec)
+                        {
+                            mlang::Range range;
+                            range.start.line = static_cast<int>(*sl);
+                            range.start.character = static_cast<int>(*sc);
+                            range.end.line = static_cast<int>(*el);
+                            range.end.character = static_cast<int>(*ec);
+                            change.range = range;
+                        }
+                    }
+                }
+                incrementalChanges.push_back(std::move(change));
+            }
+
+            int version = -1;
+            if(auto v = textDoc->getInteger("version"))
+                version = static_cast<int>(*v);
+
+            if(incrementalCompiler.applyChanges(uriStr, incrementalChanges,
+                                                version))
+            {
+                reindex_incremental_document(uriStr);
+            }
+            else
+            {
+                auto* last = changes->back().getAsObject();
+                if(last)
+                {
+                    if(auto fullText = last->getString("text"))
+                        index_document(uriStr, fullText->str());
+                }
+            }
         }
         else if(method == "textDocument/didSave")
         {
@@ -1329,10 +1652,28 @@ private:
             auto uri = textDoc->getString("uri");
             if(!uri)
                 return;
-            std::string path = uri_to_path(uri->str());
+            std::string uriStr = uri->str();
+            std::string path = uri_to_path(uriStr);
             std::string text = read_file(path);
-            if(!text.empty())
-                index_document(uri->str(), text);
+            if(text.empty())
+                return;
+
+            if(incrementalCompiler.getDocument(uriStr))
+                incrementalCompiler.setDocumentText(uriStr, text);
+            else
+                incrementalCompiler.openDocument(uriStr, path, text);
+            reindex_incremental_document(uriStr);
+        }
+        else if(method == "textDocument/didClose")
+        {
+            auto* textDoc = params ? params->getObject("textDocument") : nullptr;
+            if(!textDoc)
+                return;
+            auto uri = textDoc->getString("uri");
+            if(!uri)
+                return;
+            std::string uriStr = uri->str();
+            incrementalCompiler.closeDocument(uriStr);
         }
     }
 
@@ -1373,6 +1714,7 @@ private:
 
     void scan_workspace(const std::string& root)
     {
+        std::vector<std::string> paths;
         std::error_code ec;
         for(auto it = std::filesystem::recursive_directory_iterator(
                 root, std::filesystem::directory_options::skip_permission_denied,
@@ -1393,45 +1735,40 @@ private:
                 continue;
             if(!is_mlang_source_path(it->path()))
                 continue;
-            std::string path = it->path().string();
-            std::string text = read_file(path);
-            if(text.empty())
+            paths.push_back(it->path().string());
+        }
+
+        auto loaded = runtimeScheduler.loadFiles(paths);
+        for(const auto& file : loaded)
+        {
+            if(file.content.empty())
                 continue;
-            index_document(path_to_uri(path), text);
+            index_document(path_to_uri(file.path), file.content);
         }
     }
 
-    ProgramNode* parse_file(const std::string& path)
+    void reindex_incremental_document(const std::string& uri)
     {
-        FILE* f = fopen(path.c_str(), "r");
-        if(!f)
-            return nullptr;
+        auto* doc = incrementalCompiler.getDocument(uri);
+        if(!doc)
+            return;
 
-        ASTNode* savedRoot = programRoot;
-        programRoot = nullptr;
-        yylineno = 1;
-        yyrestart(f);
-        yyin = f;
-        int result = yyparse();
-        fclose(f);
-        ProgramNode* parsed = nullptr;
-        if(result == 0 && programRoot)
-            parsed = dynamic_cast<ProgramNode*>(programRoot);
-        programRoot = savedRoot;
-        return parsed;
+        FileInfo info;
+        info.path = doc->path;
+        info.uri = uri;
+        info.text = doc->text;
+        info.lines = split_lines(doc->text);
+        info.ast = doc->ast;
+        collect_symbols(info);
+        files[uri] = std::move(info);
+        update_workspace_graph_for_file(files[uri]);
     }
 
     void index_document(const std::string& uri, const std::string& text)
     {
         std::string path = uri_to_path(uri);
-        FileInfo info;
-        info.path = path;
-        info.uri = uri;
-        info.text = text;
-        info.lines = split_lines(text);
-        info.ast = parse_file(path);
-        collect_symbols(info);
-        files[uri] = std::move(info);
+        incrementalCompiler.openDocument(uri, path, text);
+        reindex_incremental_document(uri);
     }
 
     void collect_symbols(FileInfo& info)
@@ -1950,6 +2287,279 @@ private:
         }
     }
 
+    struct HoverEntry
+    {
+        std::string kind;
+        std::string name;
+        std::string typeName;
+        std::string signature;
+        std::string module;
+        std::string docs;
+    };
+
+    std::string module_name_for_file(const FileInfo& info) const
+    {
+        if(!info.moduleDecls.empty() && !info.moduleDecls.front().empty())
+            return info.moduleDecls.front();
+
+        std::filesystem::path p(info.path);
+        if(p.filename() == "mod.mla")
+            return p.parent_path().filename().string();
+        return p.stem().string();
+    }
+
+    std::string docs_before_line(const FileInfo& info, int line) const
+    {
+        if(line <= 0 || line > (int)info.lines.size())
+            return {};
+
+        std::vector<std::string> chunks;
+        for(int l = line - 1; l >= 0; --l)
+        {
+            std::string t = trim(info.lines[(size_t)l]);
+            if(t.empty())
+            {
+                if(chunks.empty())
+                    continue;
+                break;
+            }
+            if(t.rfind("//", 0) != 0)
+                break;
+            chunks.push_back(trim(t.substr(2)));
+        }
+        if(chunks.empty())
+            return {};
+
+        std::reverse(chunks.begin(), chunks.end());
+        std::ostringstream os;
+        for(size_t i = 0; i < chunks.size(); ++i)
+        {
+            if(i)
+                os << "\n";
+            os << chunks[i];
+        }
+        return os.str();
+    }
+
+    std::string signature_from_line(const FileInfo& info, int line,
+                                    const std::string& fallback) const
+    {
+        if(line < 0 || line >= (int)info.lines.size())
+            return fallback;
+        std::string sig = trim(info.lines[(size_t)line]);
+        if(sig.empty())
+            return fallback;
+        size_t brace = sig.find('{');
+        if(brace != std::string::npos)
+            sig = trim(sig.substr(0, brace));
+        if(sig.empty())
+            return fallback;
+        return sig;
+    }
+
+    std::optional<HoverEntry>
+    hover_entry_for_symbol(FileInfo& info, const std::string& word,
+                           int lineHint = -1)
+    {
+        if(word.empty())
+            return std::nullopt;
+
+        HoverEntry h;
+        h.name = word;
+        h.module = module_name_for_file(info);
+
+        if(lineHint >= 0)
+        {
+            if(auto* fn = find_enclosing_function(info, lineHint))
+            {
+                auto vit = fn->varTypes.find(word);
+                if(vit != fn->varTypes.end())
+                {
+                    h.kind = fn->paramDecls.count(word) ? "Parameter" : "Variable";
+                    h.typeName = vit->second;
+                    int docLine = lineHint;
+                    if(auto dit = fn->varDecls.find(word); dit != fn->varDecls.end())
+                        docLine = dit->second.line;
+                    if(auto pit = fn->paramDecls.find(word); pit != fn->paramDecls.end())
+                        docLine = pit->second.line;
+                    h.docs = docs_before_line(info, docLine);
+                    return h;
+                }
+            }
+        }
+
+        if(auto fit = info.functions.find(word); fit != info.functions.end())
+        {
+            h.kind = "Function";
+            h.typeName = fit->second.returnType;
+            std::string fallback = "fn " + word + "(...)";
+            if(!h.typeName.empty())
+                fallback += " -> " + h.typeName;
+            h.signature = signature_from_line(info, fit->second.startLine, fallback);
+            h.docs = docs_before_line(info, fit->second.loc.line);
+            return h;
+        }
+
+        if(auto sit = info.structs.find(word); sit != info.structs.end())
+        {
+            h.kind = "Struct";
+            h.signature = "struct " + word;
+            h.docs = docs_before_line(info, sit->second.loc.line);
+            return h;
+        }
+
+        if(auto eit = info.enums.find(word); eit != info.enums.end())
+        {
+            h.kind = "Enum";
+            h.signature = "enum " + word;
+            h.docs = docs_before_line(info, eit->second.loc.line);
+            return h;
+        }
+
+        for(auto& [sname, st] : info.structs)
+        {
+            if(auto itf = st.fields.find(word); itf != st.fields.end())
+            {
+                h.kind = "Field";
+                h.typeName = itf->second.typeName;
+                h.signature = sname + "." + word;
+                h.docs = docs_before_line(info, itf->second.loc.line);
+                return h;
+            }
+            if(auto itm = st.methods.find(word); itm != st.methods.end())
+            {
+                h.kind = "Method";
+                h.typeName = itm->second.returnType;
+                std::string fallback = "fn " + sname + "::" + word + "(...)";
+                if(!h.typeName.empty())
+                    fallback += " -> " + h.typeName;
+                h.signature = signature_from_line(info, itm->second.loc.line, fallback);
+                h.docs = docs_before_line(info, itm->second.loc.line);
+                return h;
+            }
+        }
+
+        for(auto& [ename, en] : info.enums)
+        {
+            if(auto itv = en.variants.find(word); itv != en.variants.end())
+            {
+                h.kind = "Enum Variant";
+                h.typeName = ename;
+                h.signature = ename + "::" + word;
+                h.docs = docs_before_line(info, itv->second.loc.line);
+                return h;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    llvm::json::Value hover_entry_to_json(const HoverEntry& h,
+                                          int line,
+                                          int startChar,
+                                          int endChar)
+    {
+        std::string md;
+        md += "**" + h.kind + "** `" + h.name + "`";
+        if(!h.typeName.empty())
+            md += "\n\nType: `" + h.typeName + "`";
+        if(!h.module.empty())
+            md += "\n\nModule: `" + h.module + "`";
+        if(!h.signature.empty())
+            md += "\n\n```mlang\n" + h.signature + "\n```";
+        if(!h.docs.empty())
+            md += "\n\n" + h.docs;
+
+        llvm::json::Object contents;
+        contents["kind"] = "markdown";
+        contents["value"] = md;
+
+        llvm::json::Object out;
+        out["contents"] = llvm::json::Value(std::move(contents));
+        out["range"] = make_range_value(line, startChar, line, endChar);
+        return llvm::json::Value(std::move(out));
+    }
+
+    llvm::json::Value handle_hover(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return nullptr;
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+        auto& info = it->second;
+        if(*line < 0 || *line >= (int)info.lines.size())
+            return nullptr;
+
+        mlang::Position queryPos;
+        queryPos.line = static_cast<int>(*line);
+        queryPos.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, queryPos);
+        if(!ident)
+            return nullptr;
+
+        if(auto local = hover_entry_for_symbol(info, ident->text,
+                                               static_cast<int>(*line)))
+        {
+            return hover_entry_to_json(*local, static_cast<int>(*line),
+                                       ident->startCharacter,
+                                       ident->endCharacter);
+        }
+
+        std::string modulePrefix =
+            find_module_prefix(info.lines[(size_t)*line], ident->startCharacter);
+        if(!modulePrefix.empty())
+        {
+            std::string modPath = resolve_module_path_for_file(info, modulePrefix);
+            if(!modPath.empty())
+            {
+                if(auto* modInfo = get_or_index_file(modPath))
+                {
+                    if(auto h = hover_entry_for_symbol(*modInfo, ident->text))
+                        return hover_entry_to_json(*h, static_cast<int>(*line),
+                                                   ident->startCharacter,
+                                                   ident->endCharacter);
+                }
+            }
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            if(!imp.importAll && imp.itemName != ident->text)
+                continue;
+            std::string modPath = resolve_module_path_for_file(info, imp.moduleName);
+            if(modPath.empty())
+                continue;
+            if(auto* modInfo = get_or_index_file(modPath))
+            {
+                if(auto h = hover_entry_for_symbol(*modInfo, ident->text))
+                    return hover_entry_to_json(*h, static_cast<int>(*line),
+                                               ident->startCharacter,
+                                               ident->endCharacter);
+            }
+        }
+
+        for(auto& [_, finfo] : files)
+        {
+            if(auto h = hover_entry_for_symbol(finfo, ident->text))
+                return hover_entry_to_json(*h, static_cast<int>(*line),
+                                           ident->startCharacter,
+                                           ident->endCharacter);
+        }
+
+        return nullptr;
+    }
+
     llvm::json::Value handle_definition(llvm::json::Object* params)
     {
         if(!params)
@@ -1974,16 +2584,11 @@ private:
         int idx = (int)*character;
         if(idx > (int)lineText.size())
             idx = (int)lineText.size();
-        int left = idx;
-        while(left > 0 && (std::isalnum((unsigned char)lineText[left - 1]) ||
-                           lineText[left - 1] == '_'))
-            --left;
-        int right = idx;
-        while(right < (int)lineText.size() &&
-              (std::isalnum((unsigned char)lineText[right]) ||
-               lineText[right] == '_'))
-            ++right;
-        std::string word = lineText.substr(left, right - left);
+
+        auto ident = mlang::ide::identifierAt(lineText, idx);
+        int left = ident ? ident->startCharacter : idx;
+        int right = ident ? ident->endCharacter : idx;
+        std::string word = ident ? ident->text : std::string{};
 
         auto cursor_in_attribute = [&](const char* attrText) -> bool {
             size_t attrLen = std::strlen(attrText);
@@ -2026,24 +2631,6 @@ private:
 
         if(auto typeLoc = find_c_type_location(word))
             return location_to_json(*typeLoc);
-
-        auto find_module_prefix = [&](int wordStart) -> std::string {
-            int j = wordStart - 1;
-            while(j >= 0 && std::isspace((unsigned char)lineText[j]))
-                --j;
-            if(j < 1 || lineText[j] != ':' || lineText[j - 1] != ':')
-                return {};
-            j -= 2;
-            while(j >= 0 && std::isspace((unsigned char)lineText[j]))
-                --j;
-            int end = j;
-            while(j >= 0 && (std::isalnum((unsigned char)lineText[j]) ||
-                             lineText[j] == '_'))
-                --j;
-            if(end < j + 1)
-                return {};
-            return lineText.substr(j + 1, end - j);
-        };
 
         // Jump from module declarations/usages first.
         static const std::regex modRx(
@@ -2111,7 +2698,7 @@ private:
             }
         }
 
-        std::string modulePrefix = find_module_prefix(left);
+        std::string modulePrefix = find_module_prefix(lineText, left);
         if(!modulePrefix.empty())
         {
             auto enumIt = info.enums.find(modulePrefix);
@@ -2253,13 +2840,362 @@ private:
             }
         }
 
-        if(auto loc = find_runtime_builtin_location(word))
+        if(auto loc = find_runtime_builtin_location(word, &info))
             return location_to_json(*loc);
 
         if(auto loc = find_symbol_in_workspace(word))
             return location_to_json(*loc);
 
         return nullptr;
+    }
+
+    struct SignatureHelpContext
+    {
+        std::string callee;
+        int activeParameter = 0;
+    };
+
+    std::optional<SignatureHelpContext>
+    parse_signature_help_context(std::string_view lineText, int character) const
+    {
+        int idx = character;
+        if(idx < 0)
+            return std::nullopt;
+        if(idx > (int)lineText.size())
+            idx = (int)lineText.size();
+
+        int parenDepth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        int openParen = -1;
+
+        for(int i = idx - 1; i >= 0; --i)
+        {
+            char c = lineText[(size_t)i];
+            if(c == ')')
+            {
+                ++parenDepth;
+                continue;
+            }
+            if(c == ']')
+            {
+                ++bracketDepth;
+                continue;
+            }
+            if(c == '}')
+            {
+                ++braceDepth;
+                continue;
+            }
+            if(c == '(')
+            {
+                if(parenDepth > 0)
+                {
+                    --parenDepth;
+                    continue;
+                }
+                if(bracketDepth == 0 && braceDepth == 0)
+                {
+                    openParen = i;
+                    break;
+                }
+                continue;
+            }
+            if(c == '[' && bracketDepth > 0)
+            {
+                --bracketDepth;
+                continue;
+            }
+            if(c == '{' && braceDepth > 0)
+            {
+                --braceDepth;
+                continue;
+            }
+        }
+
+        if(openParen < 0)
+            return std::nullopt;
+
+        int j = openParen - 1;
+        while(j >= 0 && std::isspace((unsigned char)lineText[(size_t)j]))
+            --j;
+        if(j < 0)
+            return std::nullopt;
+
+        int end = j;
+        while(j >= 0)
+        {
+            char c = lineText[(size_t)j];
+            if(std::isalnum((unsigned char)c) || c == '_' || c == ':' || c == '.')
+                --j;
+            else
+                break;
+        }
+
+        std::string callee = std::string(lineText.substr((size_t)(j + 1),
+                                                         (size_t)(end - j)));
+        if(callee.empty())
+            return std::nullopt;
+
+        int activeParam = 0;
+        int nestedParen = 0;
+        int nestedBracket = 0;
+        int nestedBrace = 0;
+        for(int i = openParen + 1; i < idx; ++i)
+        {
+            char c = lineText[(size_t)i];
+            if(c == '(')
+                ++nestedParen;
+            else if(c == ')' && nestedParen > 0)
+                --nestedParen;
+            else if(c == '[')
+                ++nestedBracket;
+            else if(c == ']' && nestedBracket > 0)
+                --nestedBracket;
+            else if(c == '{')
+                ++nestedBrace;
+            else if(c == '}' && nestedBrace > 0)
+                --nestedBrace;
+            else if(c == ',' && nestedParen == 0 && nestedBracket == 0 &&
+                    nestedBrace == 0)
+                ++activeParam;
+        }
+
+        SignatureHelpContext ctx;
+        ctx.callee = callee;
+        ctx.activeParameter = activeParam;
+        return ctx;
+    }
+
+    std::string unqualified_callee_name(const std::string& callee) const
+    {
+        size_t pos = callee.rfind("::");
+        if(pos != std::string::npos)
+            return callee.substr(pos + 2);
+        pos = callee.rfind('.');
+        if(pos != std::string::npos)
+            return callee.substr(pos + 1);
+        return callee;
+    }
+
+    std::vector<std::string> signature_parameter_labels(const std::string& signature) const
+    {
+        std::vector<std::string> out;
+        size_t open = signature.find('(');
+        if(open == std::string::npos)
+            return out;
+
+        int depth = 0;
+        size_t close = std::string::npos;
+        for(size_t i = open; i < signature.size(); ++i)
+        {
+            char c = signature[i];
+            if(c == '(')
+                ++depth;
+            else if(c == ')')
+            {
+                --depth;
+                if(depth == 0)
+                {
+                    close = i;
+                    break;
+                }
+            }
+        }
+        if(close == std::string::npos || close <= open + 1)
+            return out;
+
+        std::string inside = signature.substr(open + 1, close - open - 1);
+        int angle = 0;
+        int paren = 0;
+        int bracket = 0;
+        int brace = 0;
+        size_t segStart = 0;
+
+        for(size_t i = 0; i <= inside.size(); ++i)
+        {
+            char c = i < inside.size() ? inside[i] : ',';
+            if(i < inside.size())
+            {
+                if(c == '<')
+                    ++angle;
+                else if(c == '>' && angle > 0)
+                    --angle;
+                else if(c == '(')
+                    ++paren;
+                else if(c == ')' && paren > 0)
+                    --paren;
+                else if(c == '[')
+                    ++bracket;
+                else if(c == ']' && bracket > 0)
+                    --bracket;
+                else if(c == '{')
+                    ++brace;
+                else if(c == '}' && brace > 0)
+                    --brace;
+            }
+
+            bool split = (c == ',' && angle == 0 && paren == 0 && bracket == 0 &&
+                          brace == 0) || (i == inside.size());
+            if(!split)
+                continue;
+
+            std::string part = trim(inside.substr(segStart, i - segStart));
+            if(!part.empty())
+                out.push_back(part);
+            segStart = i + 1;
+        }
+
+        return out;
+    }
+
+    llvm::json::Value make_signature_help_response(
+        const std::vector<llvm::json::Object>& signatures,
+        int activeSignature, int activeParameter)
+    {
+        if(signatures.empty())
+            return nullptr;
+
+        llvm::json::Array sigArray;
+        for(auto sig : signatures)
+            sigArray.push_back(llvm::json::Value(std::move(sig)));
+
+        llvm::json::Object out;
+        out["signatures"] = llvm::json::Value(std::move(sigArray));
+        out["activeSignature"] = std::max(0, activeSignature);
+        out["activeParameter"] = std::max(0, activeParameter);
+        return llvm::json::Value(std::move(out));
+    }
+
+    void add_signature_candidate(std::vector<llvm::json::Object>& out,
+                                 std::unordered_set<std::string>& seen,
+                                 FileInfo& info, FunctionInfo& fn,
+                                 const std::string& calleeName,
+                                 int activeParameter)
+    {
+        std::string fallback = "fn " + calleeName + "(...)";
+        if(!fn.returnType.empty())
+            fallback += " -> " + fn.returnType;
+
+        int sigLine = fn.startLine >= 0 ? fn.startLine : fn.loc.line;
+        std::string label = signature_from_line(info, sigLine, fallback);
+        std::string key = info.uri + ":" + std::to_string(fn.loc.line) + ":" + label;
+        if(!seen.insert(key).second)
+            return;
+
+        llvm::json::Object sig;
+        sig["label"] = label;
+
+        std::string docs = docs_before_line(info, fn.loc.line);
+        if(!docs.empty())
+        {
+            llvm::json::Object doc;
+            doc["kind"] = "markdown";
+            doc["value"] = docs;
+            sig["documentation"] = llvm::json::Value(std::move(doc));
+        }
+
+        auto params = signature_parameter_labels(label);
+        if(!params.empty())
+        {
+            llvm::json::Array p;
+            for(const auto& item : params)
+            {
+                llvm::json::Object pi;
+                pi["label"] = item;
+                p.push_back(llvm::json::Value(std::move(pi)));
+            }
+            sig["parameters"] = llvm::json::Value(std::move(p));
+
+            int maxParam = (int)params.size() - 1;
+            if(activeParameter > maxParam && maxParam >= 0)
+                activeParameter = maxParam;
+        }
+
+        out.push_back(std::move(sig));
+    }
+
+    llvm::json::Value handle_signature_help(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return nullptr;
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+
+        FileInfo& info = it->second;
+        if(*line < 0 || *line >= (int)info.lines.size())
+            return nullptr;
+
+        const std::string& lineText = info.lines[(size_t)*line];
+        auto ctx = parse_signature_help_context(lineText,
+                                                static_cast<int>(*character));
+        if(!ctx)
+            return nullptr;
+
+        std::string calleeName = unqualified_callee_name(ctx->callee);
+        if(calleeName.empty())
+            return nullptr;
+
+        std::vector<llvm::json::Object> signatures;
+        std::unordered_set<std::string> seen;
+
+        for(auto& [key, fn] : info.functions)
+        {
+            if(fn.name == calleeName || key == calleeName ||
+               (key.size() > calleeName.size() + 2 &&
+                key.compare(key.size() - calleeName.size(), calleeName.size(),
+                            calleeName) == 0 &&
+                key[key.size() - calleeName.size() - 2] == ':' &&
+                key[key.size() - calleeName.size() - 1] == ':'))
+            {
+                add_signature_candidate(signatures, seen, info, fn, calleeName,
+                                        ctx->activeParameter);
+            }
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            std::string modPath = resolve_module_path_for_file(info, imp.moduleName);
+            if(modPath.empty())
+                continue;
+            FileInfo* modInfo = get_or_index_file(modPath);
+            if(!modInfo)
+                continue;
+
+            for(auto& [key, fn] : modInfo->functions)
+            {
+                if(fn.name != calleeName && key != calleeName)
+                    continue;
+                add_signature_candidate(signatures, seen, *modInfo, fn,
+                                        calleeName, ctx->activeParameter);
+            }
+        }
+
+        for(auto& [_, finfo] : files)
+        {
+            for(auto& [key, fn] : finfo.functions)
+            {
+                if(fn.name != calleeName && key != calleeName)
+                    continue;
+                add_signature_candidate(signatures, seen, finfo, fn,
+                                        calleeName, ctx->activeParameter);
+            }
+        }
+
+        return make_signature_help_response(signatures, 0, ctx->activeParameter);
     }
 
     llvm::json::Value handle_completion(llvm::json::Object* params)
@@ -2287,12 +3223,8 @@ private:
         if(idx > (int)lineText.size())
             idx = (int)lineText.size();
 
-        int start = idx;
-        while(start > 0 &&
-              (std::isalnum((unsigned char)lineText[start - 1]) ||
-               lineText[start - 1] == '_'))
-            --start;
-        std::string prefix = lineText.substr(start, idx - start);
+        std::string prefix = mlang::ide::identifierPrefixAt(lineText, idx);
+        int start = idx - static_cast<int>(prefix.size());
 
         std::vector<CompletionCandidate> candidates;
         std::unordered_set<std::string> seen;
@@ -2443,6 +3375,93 @@ private:
         return llvm::json::Value(std::move(arr));
     }
 
+    llvm::json::Value handle_document_highlight(llvm::json::Object* params)
+    {
+        llvm::json::Array out;
+        if(!params)
+            return llvm::json::Value(std::move(out));
+
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return llvm::json::Value(std::move(out));
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return llvm::json::Value(std::move(out));
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return llvm::json::Value(std::move(out));
+
+        FileInfo& info = it->second;
+        mlang::Position queryPos;
+        queryPos.line = static_cast<int>(*line);
+        queryPos.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, queryPos);
+        if(!ident)
+            return llvm::json::Value(std::move(out));
+
+        std::unordered_set<std::string> writeKeys;
+        for(auto* fn : info.functionSpans)
+        {
+            for(const auto& [name, loc] : fn->paramDecls)
+            {
+                if(name != ident->text)
+                    continue;
+                writeKeys.insert(std::to_string(loc.line) + ":" +
+                                 std::to_string(loc.character));
+            }
+            for(const auto& [name, loc] : fn->varDecls)
+            {
+                if(name != ident->text)
+                    continue;
+                writeKeys.insert(std::to_string(loc.line) + ":" +
+                                 std::to_string(loc.character));
+            }
+        }
+
+        for(int ln = 0; ln < (int)info.lines.size(); ++ln)
+        {
+            auto matches = mlang::ide::findWholeWordMatches(
+                std::vector<std::string>{info.lines[(size_t)ln]}, ident->text);
+            if(matches.empty())
+                continue;
+
+            for(const auto& m : matches)
+            {
+                int start = m.start.character;
+                int end = m.end.character;
+                int kind = 2; // read
+
+                std::string key = std::to_string(ln) + ":" + std::to_string(start);
+                if(writeKeys.find(key) != writeKeys.end())
+                {
+                    kind = 3; // write
+                }
+                else
+                {
+                    const std::string& lineText = info.lines[(size_t)ln];
+                    size_t idx = (size_t)end;
+                    while(idx < lineText.size() &&
+                          std::isspace((unsigned char)lineText[idx]))
+                        ++idx;
+                    if(idx < lineText.size() && lineText[idx] == '=')
+                        kind = 3;
+                }
+
+                llvm::json::Object obj;
+                obj["range"] = make_range_value(ln, start, ln, end);
+                obj["kind"] = kind;
+                out.push_back(llvm::json::Value(std::move(obj)));
+            }
+        }
+
+        return llvm::json::Value(std::move(out));
+    }
+
     llvm::json::Value handle_references(llvm::json::Object* params)
     {
         if(!params)
@@ -2463,44 +3482,709 @@ private:
         auto& info = it->second;
         if(*line < 0 || *line >= (int)info.lines.size())
             return llvm::json::Array{};
-        const std::string& lineText = info.lines[*line];
-        int idx = (int)*character;
-        if(idx > (int)lineText.size())
-            idx = (int)lineText.size();
-        int left = idx;
-        while(left > 0 && (std::isalnum((unsigned char)lineText[left - 1]) ||
-                           lineText[left - 1] == '_'))
-            --left;
-        int right = idx;
-        while(right < (int)lineText.size() &&
-              (std::isalnum((unsigned char)lineText[right]) ||
-               lineText[right] == '_'))
-            ++right;
-        std::string word = lineText.substr(left, right - left);
-        if(word.empty())
+        mlang::Position queryPos;
+        queryPos.line = static_cast<int>(*line);
+        queryPos.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, queryPos);
+        if(!ident)
             return llvm::json::Array{};
 
         llvm::json::Array out;
-        std::regex rx("\\b" + word + "\\b");
         for(auto& [furi, finfo] : files)
         {
-            for(int i = 0; i < (int)finfo.lines.size(); ++i)
+            auto matches =
+                mlang::ide::findWholeWordMatches(finfo.lines, ident->text);
+            for(const auto& range : matches)
             {
-                auto& ln = finfo.lines[i];
-                auto begin = std::sregex_iterator(ln.begin(), ln.end(), rx);
-                auto end = std::sregex_iterator();
-                for(auto it2 = begin; it2 != end; ++it2)
-                {
-                    int col = (int)it2->position();
-                    llvm::json::Object loc;
-                    loc["uri"] = finfo.uri;
-                    loc["range"] =
-                        make_range_value(i, col, col + (int)word.size());
-                    out.push_back(llvm::json::Value(std::move(loc)));
-                }
+                llvm::json::Object loc;
+                loc["uri"] = finfo.uri;
+                loc["range"] = make_range_value(
+                    range.start.line, range.start.character,
+                    range.end.line, range.end.character);
+                out.push_back(llvm::json::Value(std::move(loc)));
             }
         }
         return llvm::json::Value(std::move(out));
+    }
+
+    static bool is_valid_identifier_name(const std::string& name)
+    {
+        if(name.empty())
+            return false;
+        unsigned char first = static_cast<unsigned char>(name[0]);
+        if(!(std::isalpha(first) || name[0] == '_'))
+            return false;
+        for(size_t i = 1; i < name.size(); ++i)
+        {
+            unsigned char c = static_cast<unsigned char>(name[i]);
+            if(!(std::isalnum(c) || name[i] == '_'))
+                return false;
+        }
+        return true;
+    }
+
+    bool is_rename_blocked_word(const std::string& word) const
+    {
+        if(std::find(mlang::constants::kLspKeywords.begin(),
+                      mlang::constants::kLspKeywords.end(),
+                      word) != mlang::constants::kLspKeywords.end())
+            return true;
+        if(std::find(mlang::constants::kRuntimeBuiltinFunctions.begin(),
+                      mlang::constants::kRuntimeBuiltinFunctions.end(),
+                      word) != mlang::constants::kRuntimeBuiltinFunctions.end())
+            return true;
+        if(std::find(mlang::constants::kRuntimeBuiltinTypes.begin(),
+                      mlang::constants::kRuntimeBuiltinTypes.end(),
+                      word) != mlang::constants::kRuntimeBuiltinTypes.end())
+            return true;
+        if(std::find(mlang::constants::kAttributeKeywords.begin(),
+                      mlang::constants::kAttributeKeywords.end(),
+                      word) != mlang::constants::kAttributeKeywords.end())
+            return true;
+        return false;
+    }
+
+    std::optional<mlang::ide::IdentifierMatch>
+    rename_target_at(FileInfo& info, int line, int character)
+    {
+        if(line < 0 || line >= (int)info.lines.size())
+            return std::nullopt;
+
+        mlang::Position pos;
+        pos.line = line;
+        pos.character = character;
+        auto ident = mlang::ide::identifierAt(info.lines, pos);
+        if(!ident)
+            return std::nullopt;
+        if(is_rename_blocked_word(ident->text))
+            return std::nullopt;
+
+        bool found = false;
+        if(auto fn = find_enclosing_function(info, line))
+        {
+            if(fn->varDecls.find(ident->text) != fn->varDecls.end() ||
+               fn->paramDecls.find(ident->text) != fn->paramDecls.end() ||
+               fn->varTypes.find(ident->text) != fn->varTypes.end())
+            {
+                found = true;
+            }
+        }
+
+        if(!found)
+        {
+            if(auto fit = info.functions.find(ident->text); fit != info.functions.end())
+                found = true;
+            if(auto sit = info.structs.find(ident->text); sit != info.structs.end())
+                found = true;
+            if(auto eit = info.enums.find(ident->text); eit != info.enums.end())
+                found = true;
+            if(find_symbol_in_workspace(ident->text).has_value())
+                found = true;
+        }
+
+        if(!found)
+            return std::nullopt;
+        return ident;
+    }
+
+    llvm::json::Value handle_prepare_rename(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return nullptr;
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+
+        auto ident = rename_target_at(it->second, (int)*line, (int)*character);
+        if(!ident)
+            return nullptr;
+
+        llvm::json::Object out;
+        out["range"] = make_range_value((int)*line, ident->startCharacter,
+                                        (int)*line, ident->endCharacter);
+        out["placeholder"] = ident->text;
+        return llvm::json::Value(std::move(out));
+    }
+
+    llvm::json::Value handle_rename(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        auto newName = params->getString("newName");
+        if(!textDoc || !pos || !newName)
+            return nullptr;
+
+        std::string newNameStr = newName->str();
+        if(!is_valid_identifier_name(newNameStr) ||
+           is_rename_blocked_word(newNameStr))
+        {
+            return nullptr;
+        }
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+
+        auto ident = rename_target_at(it->second, (int)*line, (int)*character);
+        if(!ident)
+            return nullptr;
+
+        llvm::json::Object changes;
+        for(auto& [furi, finfo] : files)
+        {
+            auto matches = mlang::ide::findWholeWordMatches(finfo.lines, ident->text);
+            if(matches.empty())
+                continue;
+
+            llvm::json::Array edits;
+            for(const auto& m : matches)
+            {
+                llvm::json::Object edit;
+                edit["range"] = make_range_value(m.start.line, m.start.character,
+                                                  m.end.line, m.end.character);
+                edit["newText"] = newNameStr;
+                edits.push_back(llvm::json::Value(std::move(edit)));
+            }
+            changes[furi] = llvm::json::Value(std::move(edits));
+        }
+
+        llvm::json::Object out;
+        out["changes"] = llvm::json::Value(std::move(changes));
+        return llvm::json::Value(std::move(out));
+    }
+
+    static int edit_distance_limited(const std::string& a,
+                                     const std::string& b,
+                                     int maxDistance = 3)
+    {
+        if(a == b)
+            return 0;
+        if(a.empty() || b.empty())
+            return (int)std::max(a.size(), b.size());
+
+        if(std::abs((int)a.size() - (int)b.size()) > maxDistance)
+            return maxDistance + 1;
+
+        std::vector<int> prev(b.size() + 1);
+        std::vector<int> cur(b.size() + 1);
+        for(size_t j = 0; j <= b.size(); ++j)
+            prev[j] = (int)j;
+
+        for(size_t i = 1; i <= a.size(); ++i)
+        {
+            cur[0] = (int)i;
+            int rowMin = cur[0];
+            for(size_t j = 1; j <= b.size(); ++j)
+            {
+                int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+                cur[j] = std::min({
+                    prev[j] + 1,
+                    cur[j - 1] + 1,
+                    prev[j - 1] + cost,
+                });
+                rowMin = std::min(rowMin, cur[j]);
+            }
+            if(rowMin > maxDistance)
+                return maxDistance + 1;
+            prev.swap(cur);
+        }
+
+        return prev[b.size()];
+    }
+
+    std::string extract_unknown_symbol_from_message(const std::string& msg) const
+    {
+        static const std::regex rx1("unknown\\s+(?:function|symbol|type)\\s*:\\s*'([A-Za-z_][A-Za-z0-9_]*)'",
+                                    std::regex::icase);
+        static const std::regex rx2("undeclared\\s+identifier\\s*:\\s*'([A-Za-z_][A-Za-z0-9_]*)'",
+                                    std::regex::icase);
+        std::smatch m;
+        if(std::regex_search(msg, m, rx1) && m.size() >= 2)
+            return m[1].str();
+        if(std::regex_search(msg, m, rx2) && m.size() >= 2)
+            return m[1].str();
+        return {};
+    }
+
+    std::vector<std::string> collect_workspace_symbol_names() const
+    {
+        std::unordered_set<std::string> names;
+        for(const auto& [_, info] : files)
+        {
+            for(const auto& [name, _] : info.functions)
+                names.insert(name);
+            for(const auto& [name, st] : info.structs)
+            {
+                names.insert(name);
+                for(const auto& [field, __] : st.fields)
+                    names.insert(field);
+                for(const auto& [method, __] : st.methods)
+                    names.insert(method);
+            }
+            for(const auto& [name, en] : info.enums)
+            {
+                names.insert(name);
+                for(const auto& [variant, __] : en.variants)
+                    names.insert(variant);
+            }
+        }
+
+        std::vector<std::string> out;
+        out.reserve(names.size());
+        for(const auto& n : names)
+            out.push_back(n);
+        return out;
+    }
+
+    std::optional<std::string>
+    best_symbol_correction(const std::string& unknown) const
+    {
+        auto names = collect_workspace_symbol_names();
+        int bestDist = 4;
+        std::string best;
+
+        for(const auto& name : names)
+        {
+            std::string probe = name;
+            size_t pos = probe.rfind("::");
+            if(pos != std::string::npos)
+                probe = probe.substr(pos + 2);
+
+            int dist = edit_distance_limited(unknown, probe, 3);
+            if(dist < bestDist)
+            {
+                bestDist = dist;
+                best = probe;
+            }
+        }
+
+        if(best.empty() || bestDist > 2)
+            return std::nullopt;
+        return best;
+    }
+
+    int preferred_import_insertion_line(const FileInfo& info) const
+    {
+        int line = 0;
+        for(; line < (int)info.lines.size(); ++line)
+        {
+            std::string t = trim(info.lines[(size_t)line]);
+            if(t.empty())
+                continue;
+            if(t.rfind("//", 0) == 0)
+                continue;
+            if(t.rfind("mod ", 0) == 0 || t.rfind("use ", 0) == 0)
+                continue;
+            break;
+        }
+        return line;
+    }
+
+    std::vector<std::pair<std::string, std::string>>
+    find_import_candidates(const FileInfo& current,
+                           const std::string& symbol) const
+    {
+        std::unordered_set<std::string> existing;
+        for(const auto& imp : current.imports)
+        {
+            if(!imp.moduleName.empty() && !imp.importAll && !imp.itemName.empty())
+                existing.insert(imp.moduleName + "::" + imp.itemName);
+        }
+
+        std::vector<std::pair<std::string, std::string>> out;
+        std::unordered_set<std::string> seen;
+
+        for(const auto& [_, info] : files)
+        {
+            std::string module = module_name_for_file(info);
+            if(module.empty())
+                continue;
+
+            bool hasSymbol = false;
+            if(info.functions.find(symbol) != info.functions.end())
+                hasSymbol = true;
+            if(info.structs.find(symbol) != info.structs.end())
+                hasSymbol = true;
+            if(info.enums.find(symbol) != info.enums.end())
+                hasSymbol = true;
+
+            if(!hasSymbol)
+                continue;
+
+            std::string qualified = module + "::" + symbol;
+            if(existing.find(qualified) != existing.end())
+                continue;
+            if(seen.insert(qualified).second)
+                out.emplace_back(module, symbol);
+        }
+
+        return out;
+    }
+
+    llvm::json::Value handle_code_action(llvm::json::Object* params)
+    {
+        llvm::json::Array out;
+        if(!params)
+            return llvm::json::Value(std::move(out));
+
+        auto* textDoc = params->getObject("textDocument");
+        auto* range = params->getObject("range");
+        auto* context = params->getObject("context");
+        if(!textDoc || !range || !context)
+            return llvm::json::Value(std::move(out));
+
+        auto uri = textDoc->getString("uri");
+        auto* diagnostics = context->getArray("diagnostics");
+        if(!uri || !diagnostics)
+            return llvm::json::Value(std::move(out));
+
+        auto fit = files.find(uri->str());
+        if(fit == files.end())
+            return llvm::json::Value(std::move(out));
+        FileInfo& current = fit->second;
+
+        for(const auto& d : *diagnostics)
+        {
+            auto* dobj = d.getAsObject();
+            if(!dobj)
+                continue;
+
+            auto msg = dobj->getString("message");
+            auto* drange = dobj->getObject("range");
+            if(!msg || !drange)
+                continue;
+
+            int dStartLine = -1;
+            int dStartChar = -1;
+            int dEndLine = -1;
+            int dEndChar = -1;
+            if(auto* start = drange->getObject("start"))
+            {
+                if(auto* end = drange->getObject("end"))
+                {
+                    auto sl = start->getInteger("line");
+                    auto sc = start->getInteger("character");
+                    auto el = end->getInteger("line");
+                    auto ec = end->getInteger("character");
+                    if(sl && sc && el && ec)
+                    {
+                        dStartLine = (int)*sl;
+                        dStartChar = (int)*sc;
+                        dEndLine = (int)*el;
+                        dEndChar = (int)*ec;
+                    }
+                }
+            }
+
+            std::string unknown = extract_unknown_symbol_from_message(msg->str());
+            if(unknown.empty() && dStartLine >= 0 && dStartLine == dEndLine)
+            {
+                int lineNo = dStartLine;
+                int startCh = dStartChar;
+                int endCh = dEndChar;
+                if(lineNo >= 0 && lineNo < (int)current.lines.size() &&
+                   startCh >= 0 && endCh >= startCh &&
+                   endCh <= (int)current.lines[(size_t)lineNo].size())
+                {
+                    unknown = current.lines[(size_t)lineNo].substr(
+                        (size_t)startCh,
+                        (size_t)(endCh - startCh));
+                }
+            }
+
+            if(unknown.empty())
+                continue;
+
+            if(auto replacement = best_symbol_correction(unknown))
+            {
+                llvm::json::Object action;
+                action["title"] = "Replace with '" + *replacement + "'";
+                action["kind"] = "quickfix";
+                llvm::json::Array diagArray;
+                diagArray.push_back(d);
+                action["diagnostics"] = llvm::json::Value(std::move(diagArray));
+
+                llvm::json::Object editObj;
+                llvm::json::Object changes;
+                llvm::json::Array edits;
+                llvm::json::Object edit;
+                if(dStartLine < 0 || dStartChar < 0 || dEndLine < 0 || dEndChar < 0)
+                    continue;
+                edit["range"] = make_range_value(dStartLine, dStartChar, dEndLine, dEndChar);
+                edit["newText"] = *replacement;
+                edits.push_back(llvm::json::Value(std::move(edit)));
+                changes[uri->str()] = llvm::json::Value(std::move(edits));
+                editObj["changes"] = llvm::json::Value(std::move(changes));
+                action["edit"] = llvm::json::Value(std::move(editObj));
+                out.push_back(llvm::json::Value(std::move(action)));
+            }
+
+            auto imports = find_import_candidates(current, unknown);
+            for(const auto& [module, symbol] : imports)
+            {
+                int insertLine = preferred_import_insertion_line(current);
+                llvm::json::Object action;
+                action["title"] = "Add import: use " + module + "::" + symbol + ";";
+                action["kind"] = "quickfix";
+                llvm::json::Array diagArray;
+                diagArray.push_back(d);
+                action["diagnostics"] = llvm::json::Value(std::move(diagArray));
+
+                llvm::json::Object editObj;
+                llvm::json::Object changes;
+                llvm::json::Array edits;
+                llvm::json::Object edit;
+                edit["range"] = make_range_value(insertLine, 0, insertLine, 0);
+                edit["newText"] = "use " + module + "::" + symbol + ";\n";
+                edits.push_back(llvm::json::Value(std::move(edit)));
+                changes[uri->str()] = llvm::json::Value(std::move(edits));
+                editObj["changes"] = llvm::json::Value(std::move(changes));
+                action["edit"] = llvm::json::Value(std::move(editObj));
+                out.push_back(llvm::json::Value(std::move(action)));
+            }
+        }
+
+        return llvm::json::Value(std::move(out));
+    }
+
+    std::optional<Location>
+    find_token_location(const FileInfo& info, const std::string& token) const
+    {
+        if(token.empty())
+            return std::nullopt;
+        for(int l = 0; l < (int)info.lines.size(); ++l)
+        {
+            const std::string& line = info.lines[(size_t)l];
+            size_t pos = line.find(token);
+            if(pos == std::string::npos)
+                continue;
+            Location loc;
+            loc.uri = info.uri;
+            loc.line = l;
+            loc.character = (int)pos;
+            return loc;
+        }
+        return std::nullopt;
+    }
+
+    static std::string stable_diag_id(const std::string& uri, int line,
+                                      int character,
+                                      const std::string& code,
+                                      const std::string& message)
+    {
+        std::string key = uri + "|" + std::to_string(line) + ":" +
+                          std::to_string(character) + "|" + code + "|" +
+                          message;
+        size_t h = std::hash<std::string>{}(key);
+        std::ostringstream os;
+        os << std::hex << h;
+        return os.str();
+    }
+
+    static llvm::json::Object make_diag_item(const std::string& uri,
+                                             int line,
+                                             int startChar,
+                                             int endChar,
+                                             int severity,
+                                             const std::string& code,
+                                             const std::string& message)
+    {
+        llvm::json::Object d;
+        llvm::json::Object range;
+        llvm::json::Object start;
+        start["line"] = line;
+        start["character"] = startChar;
+        llvm::json::Object end;
+        end["line"] = line;
+        end["character"] = endChar;
+        range["start"] = llvm::json::Value(std::move(start));
+        range["end"] = llvm::json::Value(std::move(end));
+
+        d["range"] = llvm::json::Value(std::move(range));
+        d["severity"] = severity;
+        d["source"] = "mlangd";
+        d["code"] = code;
+        d["message"] = message;
+
+        llvm::json::Object data;
+        data["id"] = stable_diag_id(uri, line, startChar, code, message);
+        d["data"] = llvm::json::Value(std::move(data));
+        return d;
+    }
+
+    static std::string compute_diagnostic_result_id(const llvm::json::Array& items)
+    {
+        std::string key;
+        key.reserve(items.size() * 64);
+        for(const auto& item : items)
+        {
+            const auto* obj = item.getAsObject();
+            if(!obj)
+                continue;
+            if(auto msg = obj->getString("message"))
+                key += msg->str();
+            if(auto code = obj->getString("code"))
+                key += code->str();
+            if(auto* data = obj->getObject("data"))
+            {
+                if(auto id = data->getString("id"))
+                    key += id->str();
+            }
+            key.push_back('\n');
+        }
+        size_t h = std::hash<std::string>{}(key);
+        std::ostringstream os;
+        os << std::hex << h;
+        return os.str();
+    }
+
+    llvm::json::Array collect_pull_diagnostics(const std::string& uri,
+                                               FileInfo& info)
+    {
+        llvm::json::Array out;
+
+        auto* doc = incrementalCompiler.getDocument(uri);
+        if(doc)
+        {
+            if(!doc->ast)
+            {
+                out.push_back(llvm::json::Value(make_diag_item(
+                    uri, 0, 0, 1, 1, "parser/failed",
+                    "Failed to parse document.")));
+                return out;
+            }
+
+            if(doc->usedRecovery)
+            {
+                if(doc->recoveryKind == mlang::ParseRecoveryKind::DelimiterClosure)
+                {
+                    out.push_back(llvm::json::Value(make_diag_item(
+                        uri, 0, 0, 1, 2, "parser/recovered-delimiters",
+                        "Parser recovered by auto-closing delimiters.")));
+                }
+                else if(doc->recoveryKind == mlang::ParseRecoveryKind::LastGoodAst)
+                {
+                    out.push_back(llvm::json::Value(make_diag_item(
+                        uri, 0, 0, 1, 2, "parser/using-last-good-ast",
+                        "Using last successful AST because current text has parse errors.")));
+                }
+            }
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            if(imp.moduleName.empty())
+                continue;
+
+            std::string modPath = resolve_module_path_for_file(info, imp.moduleName);
+            auto loc = find_token_location(info, imp.moduleName);
+            int line = loc ? loc->line : 0;
+            int ch = loc ? loc->character : 0;
+            int endCh = ch + (int)imp.moduleName.size();
+
+            if(modPath.empty())
+            {
+                out.push_back(llvm::json::Value(make_diag_item(
+                    uri, line, ch, endCh, 1, "import/module-not-found",
+                    "Cannot resolve module '" + imp.moduleName + "'.")));
+                continue;
+            }
+
+            if(imp.importAll || imp.itemName.empty())
+                continue;
+
+            FileInfo* modInfo = get_or_index_file(modPath);
+            if(!modInfo)
+                continue;
+            if(find_symbol_in_file(*modInfo, imp.itemName).has_value())
+                continue;
+
+            auto itemLoc = find_token_location(info, imp.itemName);
+            int il = itemLoc ? itemLoc->line : line;
+            int ic = itemLoc ? itemLoc->character : ch;
+            int ie = ic + (int)imp.itemName.size();
+
+            out.push_back(llvm::json::Value(make_diag_item(
+                uri, il, ic, ie, 1, "import/symbol-not-found",
+                "Module '" + imp.moduleName + "' has no symbol '" + imp.itemName + "'.")));
+        }
+
+        return out;
+    }
+
+    llvm::json::Value handle_document_diagnostic(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+
+        auto* textDoc = params->getObject("textDocument");
+        if(!textDoc)
+            return nullptr;
+
+        auto uri = textDoc->getString("uri");
+        if(!uri)
+            return nullptr;
+
+        std::string uriStr = uri->str();
+        auto it = files.find(uriStr);
+        if(it == files.end())
+        {
+            std::string path = uri_to_path(uriStr);
+            std::string content = read_file(path);
+            if(!content.empty())
+                index_document(uriStr, content);
+            it = files.find(uriStr);
+            if(it == files.end())
+            {
+                llvm::json::Object full;
+                full["kind"] = "full";
+                full["items"] = llvm::json::Array{};
+                full["resultId"] = "0";
+                return llvm::json::Value(std::move(full));
+            }
+        }
+
+        llvm::json::Array items = collect_pull_diagnostics(uriStr, it->second);
+        std::string resultId = compute_diagnostic_result_id(items);
+
+        std::string previous;
+        if(auto prev = params->getString("previousResultId"))
+            previous = prev->str();
+
+        if(!previous.empty() && previous == resultId)
+        {
+            llvm::json::Object unchanged;
+            unchanged["kind"] = "unchanged";
+            unchanged["resultId"] = resultId;
+            diagnosticResultIds[uriStr] = resultId;
+            return llvm::json::Value(std::move(unchanged));
+        }
+
+        llvm::json::Object full;
+        full["kind"] = "full";
+        full["resultId"] = resultId;
+        full["items"] = llvm::json::Value(std::move(items));
+        diagnosticResultIds[uriStr] = resultId;
+        return llvm::json::Value(std::move(full));
     }
 
     llvm::json::Value handle_document_symbols(llvm::json::Object* params)
@@ -2589,6 +4273,25 @@ private:
         };
 
         std::vector<SemanticTok> tokens;
+        std::unordered_set<std::string> seen;
+
+        auto push_tok = [&](int line, int start, int length, int type) {
+            if(line < 0 || start < 0 || length <= 0)
+                return;
+            std::string key = std::to_string(line) + ":" + std::to_string(start) +
+                              ":" + std::to_string(length) + ":" +
+                              std::to_string(type);
+            if(!seen.insert(key).second)
+                return;
+            SemanticTok tok;
+            tok.line = line;
+            tok.start = start;
+            tok.length = length;
+            tok.type = type;
+            tok.modifiers = 0;
+            tokens.push_back(tok);
+        };
+
         const auto& info = it->second;
         for(int lineNo = 0; lineNo < (int)info.lines.size(); ++lineNo)
         {
@@ -2607,21 +4310,12 @@ private:
                         if(pos == std::string::npos)
                             break;
                         if(pos + attrLen <= scanLimit)
-                        {
-                            SemanticTok tok;
-                            tok.line = lineNo;
-                            tok.start = (int)pos + keywordOffset;
-                            tok.length = keywordLen;
-                            tok.type = 0; // keyword
-                            tok.modifiers = 0;
-                            tokens.push_back(tok);
-                        }
+                            push_tok(lineNo, (int)pos + keywordOffset,
+                                     keywordLen, 0); // keyword
                         pos += attrLen;
                     }
                 };
 
-            // Highlight only the attribute names; many clients ignore punctuation
-            // spans like "#[...]" for semantic tokens.
             for(const auto& attrSpec : mlang::constants::kAttributeTokenSpecs)
             {
                 add_attr_keyword(attrSpec.text, attrSpec.keywordOffset,
@@ -2636,13 +4330,7 @@ private:
                     pos = line.find(tagText, pos);
                     if(pos == std::string::npos)
                         break;
-                    SemanticTok tok;
-                    tok.line = lineNo;
-                    tok.start = (int)pos;
-                    tok.length = (int)tagLen;
-                    tok.type = 1; // macro
-                    tok.modifiers = 0;
-                    tokens.push_back(tok);
+                    push_tok(lineNo, (int)pos, (int)tagLen, 1); // macro
                     pos += tagLen;
                 }
             };
@@ -2651,11 +4339,57 @@ private:
             add_doc_tag_token("@builtin_attribute");
         }
 
+        // Symbol-based semantic tokens.
+        for(const auto& [name, fn] : info.functions)
+        {
+            if(fn.loc.uri.empty())
+                continue;
+            if(name.empty())
+                continue;
+            std::string display = fn.name.empty() ? name : fn.name;
+            push_tok(fn.loc.line, fn.loc.character, (int)display.size(), 2); // function
+        }
+        for(auto* fn : info.functionSpans)
+        {
+            for(const auto& [name, loc] : fn->paramDecls)
+                push_tok(loc.line, loc.character, (int)name.size(), 3); // parameter
+            for(const auto& [name, loc] : fn->varDecls)
+                push_tok(loc.line, loc.character, (int)name.size(), 4); // variable
+        }
+        for(const auto& [name, st] : info.structs)
+        {
+            if(!st.loc.uri.empty())
+                push_tok(st.loc.line, st.loc.character, (int)name.size(), 5); // type
+            for(const auto& [fname, field] : st.fields)
+            {
+                if(!field.loc.uri.empty())
+                    push_tok(field.loc.line, field.loc.character, (int)fname.size(), 4);
+            }
+            for(const auto& [mname, method] : st.methods)
+            {
+                if(!method.loc.uri.empty())
+                    push_tok(method.loc.line, method.loc.character, (int)mname.size(), 2);
+            }
+        }
+        for(const auto& [name, en] : info.enums)
+        {
+            if(!en.loc.uri.empty())
+                push_tok(en.loc.line, en.loc.character, (int)name.size(), 5); // type
+            for(const auto& [vname, variant] : en.variants)
+            {
+                if(!variant.loc.uri.empty())
+                    push_tok(variant.loc.line, variant.loc.character,
+                             (int)vname.size(), 6); // enumMember
+            }
+        }
+
         std::sort(tokens.begin(), tokens.end(),
                   [](const SemanticTok& a, const SemanticTok& b) {
                       if(a.line != b.line)
                           return a.line < b.line;
-                      return a.start < b.start;
+                      if(a.start != b.start)
+                          return a.start < b.start;
+                      return a.type < b.type;
                   });
 
         llvm::json::Array data;
@@ -2681,6 +4415,7 @@ private:
         out["data"] = llvm::json::Value(std::move(data));
         return llvm::json::Value(std::move(out));
     }
+
 
     llvm::json::Value handle_workspace_symbols(llvm::json::Object* params)
     {
