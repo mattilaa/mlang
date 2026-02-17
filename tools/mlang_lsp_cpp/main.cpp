@@ -16,6 +16,7 @@
 #include <iostream>
 #include <optional>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -1298,6 +1299,7 @@ private:
             caps["textDocumentSync"] = llvm::json::Value(std::move(sync));
             caps["definitionProvider"] = true;
             caps["referencesProvider"] = true;
+            caps["hoverProvider"] = true;
             llvm::json::Array triggers;
             triggers.push_back(".");
             triggers.push_back(":");
@@ -1334,6 +1336,10 @@ private:
         else if(method == "textDocument/references")
         {
             send_response(id, handle_references(params));
+        }
+        else if(method == "textDocument/hover")
+        {
+            send_response(id, handle_hover(params));
         }
         else if(method == "textDocument/completion")
         {
@@ -2099,6 +2105,279 @@ private:
                 }
             }
         }
+    }
+
+    struct HoverEntry
+    {
+        std::string kind;
+        std::string name;
+        std::string typeName;
+        std::string signature;
+        std::string module;
+        std::string docs;
+    };
+
+    std::string module_name_for_file(const FileInfo& info) const
+    {
+        if(!info.moduleDecls.empty() && !info.moduleDecls.front().empty())
+            return info.moduleDecls.front();
+
+        std::filesystem::path p(info.path);
+        if(p.filename() == "mod.mla")
+            return p.parent_path().filename().string();
+        return p.stem().string();
+    }
+
+    std::string docs_before_line(const FileInfo& info, int line) const
+    {
+        if(line <= 0 || line > (int)info.lines.size())
+            return {};
+
+        std::vector<std::string> chunks;
+        for(int l = line - 1; l >= 0; --l)
+        {
+            std::string t = trim(info.lines[(size_t)l]);
+            if(t.empty())
+            {
+                if(chunks.empty())
+                    continue;
+                break;
+            }
+            if(t.rfind("//", 0) != 0)
+                break;
+            chunks.push_back(trim(t.substr(2)));
+        }
+        if(chunks.empty())
+            return {};
+
+        std::reverse(chunks.begin(), chunks.end());
+        std::ostringstream os;
+        for(size_t i = 0; i < chunks.size(); ++i)
+        {
+            if(i)
+                os << "\n";
+            os << chunks[i];
+        }
+        return os.str();
+    }
+
+    std::string signature_from_line(const FileInfo& info, int line,
+                                    const std::string& fallback) const
+    {
+        if(line < 0 || line >= (int)info.lines.size())
+            return fallback;
+        std::string sig = trim(info.lines[(size_t)line]);
+        if(sig.empty())
+            return fallback;
+        size_t brace = sig.find('{');
+        if(brace != std::string::npos)
+            sig = trim(sig.substr(0, brace));
+        if(sig.empty())
+            return fallback;
+        return sig;
+    }
+
+    std::optional<HoverEntry>
+    hover_entry_for_symbol(FileInfo& info, const std::string& word,
+                           int lineHint = -1)
+    {
+        if(word.empty())
+            return std::nullopt;
+
+        HoverEntry h;
+        h.name = word;
+        h.module = module_name_for_file(info);
+
+        if(lineHint >= 0)
+        {
+            if(auto* fn = find_enclosing_function(info, lineHint))
+            {
+                auto vit = fn->varTypes.find(word);
+                if(vit != fn->varTypes.end())
+                {
+                    h.kind = fn->paramDecls.count(word) ? "Parameter" : "Variable";
+                    h.typeName = vit->second;
+                    int docLine = lineHint;
+                    if(auto dit = fn->varDecls.find(word); dit != fn->varDecls.end())
+                        docLine = dit->second.line;
+                    if(auto pit = fn->paramDecls.find(word); pit != fn->paramDecls.end())
+                        docLine = pit->second.line;
+                    h.docs = docs_before_line(info, docLine);
+                    return h;
+                }
+            }
+        }
+
+        if(auto fit = info.functions.find(word); fit != info.functions.end())
+        {
+            h.kind = "Function";
+            h.typeName = fit->second.returnType;
+            std::string fallback = "fn " + word + "(...)";
+            if(!h.typeName.empty())
+                fallback += " -> " + h.typeName;
+            h.signature = signature_from_line(info, fit->second.startLine, fallback);
+            h.docs = docs_before_line(info, fit->second.loc.line);
+            return h;
+        }
+
+        if(auto sit = info.structs.find(word); sit != info.structs.end())
+        {
+            h.kind = "Struct";
+            h.signature = "struct " + word;
+            h.docs = docs_before_line(info, sit->second.loc.line);
+            return h;
+        }
+
+        if(auto eit = info.enums.find(word); eit != info.enums.end())
+        {
+            h.kind = "Enum";
+            h.signature = "enum " + word;
+            h.docs = docs_before_line(info, eit->second.loc.line);
+            return h;
+        }
+
+        for(auto& [sname, st] : info.structs)
+        {
+            if(auto itf = st.fields.find(word); itf != st.fields.end())
+            {
+                h.kind = "Field";
+                h.typeName = itf->second.typeName;
+                h.signature = sname + "." + word;
+                h.docs = docs_before_line(info, itf->second.loc.line);
+                return h;
+            }
+            if(auto itm = st.methods.find(word); itm != st.methods.end())
+            {
+                h.kind = "Method";
+                h.typeName = itm->second.returnType;
+                std::string fallback = "fn " + sname + "::" + word + "(...)";
+                if(!h.typeName.empty())
+                    fallback += " -> " + h.typeName;
+                h.signature = signature_from_line(info, itm->second.loc.line, fallback);
+                h.docs = docs_before_line(info, itm->second.loc.line);
+                return h;
+            }
+        }
+
+        for(auto& [ename, en] : info.enums)
+        {
+            if(auto itv = en.variants.find(word); itv != en.variants.end())
+            {
+                h.kind = "Enum Variant";
+                h.typeName = ename;
+                h.signature = ename + "::" + word;
+                h.docs = docs_before_line(info, itv->second.loc.line);
+                return h;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    llvm::json::Value hover_entry_to_json(const HoverEntry& h,
+                                          int line,
+                                          int startChar,
+                                          int endChar)
+    {
+        std::string md;
+        md += "**" + h.kind + "** `" + h.name + "`";
+        if(!h.typeName.empty())
+            md += "\n\nType: `" + h.typeName + "`";
+        if(!h.module.empty())
+            md += "\n\nModule: `" + h.module + "`";
+        if(!h.signature.empty())
+            md += "\n\n```mlang\n" + h.signature + "\n```";
+        if(!h.docs.empty())
+            md += "\n\n" + h.docs;
+
+        llvm::json::Object contents;
+        contents["kind"] = "markdown";
+        contents["value"] = md;
+
+        llvm::json::Object out;
+        out["contents"] = llvm::json::Value(std::move(contents));
+        out["range"] = make_range_value(line, startChar, line, endChar);
+        return llvm::json::Value(std::move(out));
+    }
+
+    llvm::json::Value handle_hover(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return nullptr;
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+        auto& info = it->second;
+        if(*line < 0 || *line >= (int)info.lines.size())
+            return nullptr;
+
+        mlang::Position queryPos;
+        queryPos.line = static_cast<int>(*line);
+        queryPos.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, queryPos);
+        if(!ident)
+            return nullptr;
+
+        if(auto local = hover_entry_for_symbol(info, ident->text,
+                                               static_cast<int>(*line)))
+        {
+            return hover_entry_to_json(*local, static_cast<int>(*line),
+                                       ident->startCharacter,
+                                       ident->endCharacter);
+        }
+
+        std::string modulePrefix =
+            find_module_prefix(info.lines[(size_t)*line], ident->startCharacter);
+        if(!modulePrefix.empty())
+        {
+            std::string modPath = resolve_module_path_for_file(info, modulePrefix);
+            if(!modPath.empty())
+            {
+                if(auto* modInfo = get_or_index_file(modPath))
+                {
+                    if(auto h = hover_entry_for_symbol(*modInfo, ident->text))
+                        return hover_entry_to_json(*h, static_cast<int>(*line),
+                                                   ident->startCharacter,
+                                                   ident->endCharacter);
+                }
+            }
+        }
+
+        for(const auto& imp : info.imports)
+        {
+            if(!imp.importAll && imp.itemName != ident->text)
+                continue;
+            std::string modPath = resolve_module_path_for_file(info, imp.moduleName);
+            if(modPath.empty())
+                continue;
+            if(auto* modInfo = get_or_index_file(modPath))
+            {
+                if(auto h = hover_entry_for_symbol(*modInfo, ident->text))
+                    return hover_entry_to_json(*h, static_cast<int>(*line),
+                                               ident->startCharacter,
+                                               ident->endCharacter);
+            }
+        }
+
+        for(auto& [_, finfo] : files)
+        {
+            if(auto h = hover_entry_for_symbol(finfo, ident->text))
+                return hover_entry_to_json(*h, static_cast<int>(*line),
+                                           ident->startCharacter,
+                                           ident->endCharacter);
+        }
+
+        return nullptr;
     }
 
     llvm::json::Value handle_definition(llvm::json::Object* params)
