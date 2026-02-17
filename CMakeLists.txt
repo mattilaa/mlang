@@ -85,6 +85,10 @@ set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h
     ${CMAKE_SOURCE_DIR}/include/ir.h
     ${CMAKE_SOURCE_DIR}/include/package_manager.h
+    ${CMAKE_SOURCE_DIR}/include/incremental_compiler.h
+    ${CMAKE_SOURCE_DIR}/include/ide_query.h
+    ${CMAKE_SOURCE_DIR}/include/workspace_graph.h
+    ${CMAKE_SOURCE_DIR}/include/runtime_concurrency.h
 )
 
 # Specify the full path to the lexer and parser files
@@ -140,6 +144,10 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/package_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/incremental_compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )
@@ -183,6 +191,10 @@ add_executable(mlangd
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/incremental_compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )

@@ -1,6 +1,10 @@
 #include "ast.h"
 #include "mlang_constants.h"
 #include "module.h"
+#include "incremental_compiler.h"
+#include "ide_query.h"
+#include "workspace_graph.h"
+#include "runtime_concurrency.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -21,14 +25,6 @@
 
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
-
-extern int yyparse();
-extern FILE* yyin;
-extern int yylineno;
-extern void yyrestart(FILE* input_file);
-extern "C" {
-    extern ASTNode* programRoot;
-}
 
 struct Location
 {
@@ -403,6 +399,9 @@ public:
 
 private:
     std::unordered_map<std::string, FileInfo> files;
+    mlang::IncrementalCompiler incrementalCompiler;
+    mlang::ide::WorkspaceGraph workspaceGraph;
+    mlang::runtime::RuntimeScheduler runtimeScheduler;
     std::unordered_map<std::string, std::string> functionReturns;
     std::string rootPath;
     std::string mlangCommandsPath;
@@ -818,34 +817,37 @@ private:
         if(!arr)
             return;
 
+        std::vector<std::string> paths;
+        std::unordered_set<std::string> seen;
+
         for(const auto& item : *arr)
         {
             if(auto s = item.getAsString())
             {
                 std::string filePath = s->str();
-                if(!filePath.empty())
+                if(filePath.empty())
+                    continue;
+
+                std::string abs = filePath;
+                if(!std::filesystem::path(filePath).is_absolute() &&
+                   !rootPath.empty())
                 {
-                    std::string abs = filePath;
-                    if(!std::filesystem::path(filePath).is_absolute() &&
-                       !rootPath.empty())
-                    {
-                        abs =
-                            (std::filesystem::path(rootPath) / filePath).string();
-                    }
-                    if(!is_mlang_source_path(std::filesystem::path(abs)))
-                        continue;
-                    std::string content = read_file(abs);
-                    if(!content.empty())
-                        index_document(path_to_uri(abs), content);
+                    abs = (std::filesystem::path(rootPath) / filePath).string();
                 }
+                if(!is_mlang_source_path(std::filesystem::path(abs)))
+                    continue;
+                if(seen.insert(abs).second)
+                    paths.push_back(abs);
                 continue;
             }
+
             auto* objItem = item.getAsObject();
             if(!objItem)
                 continue;
             auto fileVal = objItem->getString("file");
             if(!fileVal)
                 continue;
+
             std::string filePath = fileVal->str();
             auto dirVal = objItem->getString("directory");
             std::string abs = filePath;
@@ -858,10 +860,67 @@ private:
             }
             if(!is_mlang_source_path(std::filesystem::path(abs)))
                 continue;
-            std::string content = read_file(abs);
-            if(!content.empty())
-                index_document(path_to_uri(abs), content);
+            if(seen.insert(abs).second)
+                paths.push_back(abs);
         }
+
+        auto loaded = runtimeScheduler.loadFiles(paths);
+        for(const auto& file : loaded)
+        {
+            if(file.content.empty())
+                continue;
+            index_document(path_to_uri(file.path), file.content);
+        }
+    }
+
+    std::vector<std::string>
+    infer_provided_modules(const FileInfo& info) const
+    {
+        std::unordered_set<std::string> modules;
+        for(const auto& mod : info.moduleDecls)
+        {
+            if(!mod.empty())
+                modules.insert(mod);
+        }
+
+        std::filesystem::path path(info.path);
+        if(path.filename() == "mod.mla")
+        {
+            std::string parent = path.parent_path().filename().string();
+            if(!parent.empty())
+                modules.insert(parent);
+        }
+        else
+        {
+            std::string stem = path.stem().string();
+            if(!stem.empty())
+                modules.insert(stem);
+        }
+
+        std::vector<std::string> out;
+        out.reserve(modules.size());
+        for(const auto& mod : modules)
+            out.push_back(mod);
+        std::sort(out.begin(), out.end());
+        return out;
+    }
+
+    void update_workspace_graph_for_file(const FileInfo& info)
+    {
+        mlang::ide::WorkspaceDocumentNode node;
+        node.uri = info.uri;
+        node.path = info.path;
+        node.providedModules = infer_provided_modules(info);
+        node.imports.reserve(info.imports.size());
+        for(const auto& imp : info.imports)
+        {
+            mlang::ide::WorkspaceImport wi;
+            wi.moduleName = imp.moduleName;
+            wi.itemName = imp.itemName;
+            wi.importAll = imp.importAll;
+            node.imports.push_back(std::move(wi));
+        }
+        workspaceGraph.upsertDocument(node);
     }
 
     std::string resolve_module_path(const std::string& baseDir,
@@ -881,6 +940,18 @@ private:
     std::string resolve_module_path_for_file(const FileInfo& info,
                                              const std::string& moduleName) const
     {
+        auto providers = workspaceGraph.findProviderUris(moduleName);
+        for(const auto& providerUri : providers)
+        {
+            auto it = files.find(providerUri);
+            if(it != files.end() && !it->second.path.empty())
+                return it->second.path;
+
+            std::string providerPath = uri_to_path(providerUri);
+            if(!providerPath.empty())
+                return providerPath;
+        }
+
         std::filesystem::path base =
             std::filesystem::path(info.path).parent_path();
         std::string path = resolve_module_path(base.string(), moduleName);
@@ -1302,8 +1373,16 @@ private:
                 return;
             auto uri = textDoc->getString("uri");
             auto text = textDoc->getString("text");
-            if(uri && text)
-                index_document(uri->str(), text->str());
+            if(!uri || !text)
+                return;
+
+            std::string uriStr = uri->str();
+            std::string path = uri_to_path(uriStr);
+            int version = -1;
+            if(auto v = textDoc->getInteger("version"))
+                version = static_cast<int>(*v);
+            incrementalCompiler.openDocument(uriStr, path, text->str(), version);
+            reindex_incremental_document(uriStr);
         }
         else if(method == "textDocument/didChange")
         {
@@ -1314,12 +1393,70 @@ private:
             auto uri = textDoc->getString("uri");
             if(!uri)
                 return;
-            auto* last = changes->back().getAsObject();
-            if(!last)
-                return;
-            auto text = last->getString("text");
-            if(text)
-                index_document(uri->str(), text->str());
+
+            std::string uriStr = uri->str();
+            if(!incrementalCompiler.getDocument(uriStr))
+            {
+                std::string path = uri_to_path(uriStr);
+                std::string currentText = read_file(path);
+                incrementalCompiler.openDocument(uriStr, path, currentText);
+            }
+
+            std::vector<mlang::IncrementalTextChange> incrementalChanges;
+            incrementalChanges.reserve(changes->size());
+            for(const auto& item : *changes)
+            {
+                auto* changeObj = item.getAsObject();
+                if(!changeObj)
+                    continue;
+                auto text = changeObj->getString("text");
+                if(!text)
+                    continue;
+
+                mlang::IncrementalTextChange change;
+                change.text = text->str();
+                if(auto* range = changeObj->getObject("range"))
+                {
+                    auto* start = range->getObject("start");
+                    auto* end = range->getObject("end");
+                    if(start && end)
+                    {
+                        auto sl = start->getInteger("line");
+                        auto sc = start->getInteger("character");
+                        auto el = end->getInteger("line");
+                        auto ec = end->getInteger("character");
+                        if(sl && sc && el && ec)
+                        {
+                            mlang::Range range;
+                            range.start.line = static_cast<int>(*sl);
+                            range.start.character = static_cast<int>(*sc);
+                            range.end.line = static_cast<int>(*el);
+                            range.end.character = static_cast<int>(*ec);
+                            change.range = range;
+                        }
+                    }
+                }
+                incrementalChanges.push_back(std::move(change));
+            }
+
+            int version = -1;
+            if(auto v = textDoc->getInteger("version"))
+                version = static_cast<int>(*v);
+
+            if(incrementalCompiler.applyChanges(uriStr, incrementalChanges,
+                                                version))
+            {
+                reindex_incremental_document(uriStr);
+            }
+            else
+            {
+                auto* last = changes->back().getAsObject();
+                if(last)
+                {
+                    if(auto fullText = last->getString("text"))
+                        index_document(uriStr, fullText->str());
+                }
+            }
         }
         else if(method == "textDocument/didSave")
         {
@@ -1329,10 +1466,28 @@ private:
             auto uri = textDoc->getString("uri");
             if(!uri)
                 return;
-            std::string path = uri_to_path(uri->str());
+            std::string uriStr = uri->str();
+            std::string path = uri_to_path(uriStr);
             std::string text = read_file(path);
-            if(!text.empty())
-                index_document(uri->str(), text);
+            if(text.empty())
+                return;
+
+            if(incrementalCompiler.getDocument(uriStr))
+                incrementalCompiler.setDocumentText(uriStr, text);
+            else
+                incrementalCompiler.openDocument(uriStr, path, text);
+            reindex_incremental_document(uriStr);
+        }
+        else if(method == "textDocument/didClose")
+        {
+            auto* textDoc = params ? params->getObject("textDocument") : nullptr;
+            if(!textDoc)
+                return;
+            auto uri = textDoc->getString("uri");
+            if(!uri)
+                return;
+            std::string uriStr = uri->str();
+            incrementalCompiler.closeDocument(uriStr);
         }
     }
 
@@ -1373,6 +1528,7 @@ private:
 
     void scan_workspace(const std::string& root)
     {
+        std::vector<std::string> paths;
         std::error_code ec;
         for(auto it = std::filesystem::recursive_directory_iterator(
                 root, std::filesystem::directory_options::skip_permission_denied,
@@ -1393,45 +1549,40 @@ private:
                 continue;
             if(!is_mlang_source_path(it->path()))
                 continue;
-            std::string path = it->path().string();
-            std::string text = read_file(path);
-            if(text.empty())
+            paths.push_back(it->path().string());
+        }
+
+        auto loaded = runtimeScheduler.loadFiles(paths);
+        for(const auto& file : loaded)
+        {
+            if(file.content.empty())
                 continue;
-            index_document(path_to_uri(path), text);
+            index_document(path_to_uri(file.path), file.content);
         }
     }
 
-    ProgramNode* parse_file(const std::string& path)
+    void reindex_incremental_document(const std::string& uri)
     {
-        FILE* f = fopen(path.c_str(), "r");
-        if(!f)
-            return nullptr;
+        auto* doc = incrementalCompiler.getDocument(uri);
+        if(!doc)
+            return;
 
-        ASTNode* savedRoot = programRoot;
-        programRoot = nullptr;
-        yylineno = 1;
-        yyrestart(f);
-        yyin = f;
-        int result = yyparse();
-        fclose(f);
-        ProgramNode* parsed = nullptr;
-        if(result == 0 && programRoot)
-            parsed = dynamic_cast<ProgramNode*>(programRoot);
-        programRoot = savedRoot;
-        return parsed;
+        FileInfo info;
+        info.path = doc->path;
+        info.uri = uri;
+        info.text = doc->text;
+        info.lines = split_lines(doc->text);
+        info.ast = doc->ast;
+        collect_symbols(info);
+        files[uri] = std::move(info);
+        update_workspace_graph_for_file(files[uri]);
     }
 
     void index_document(const std::string& uri, const std::string& text)
     {
         std::string path = uri_to_path(uri);
-        FileInfo info;
-        info.path = path;
-        info.uri = uri;
-        info.text = text;
-        info.lines = split_lines(text);
-        info.ast = parse_file(path);
-        collect_symbols(info);
-        files[uri] = std::move(info);
+        incrementalCompiler.openDocument(uri, path, text);
+        reindex_incremental_document(uri);
     }
 
     void collect_symbols(FileInfo& info)
@@ -1974,16 +2125,11 @@ private:
         int idx = (int)*character;
         if(idx > (int)lineText.size())
             idx = (int)lineText.size();
-        int left = idx;
-        while(left > 0 && (std::isalnum((unsigned char)lineText[left - 1]) ||
-                           lineText[left - 1] == '_'))
-            --left;
-        int right = idx;
-        while(right < (int)lineText.size() &&
-              (std::isalnum((unsigned char)lineText[right]) ||
-               lineText[right] == '_'))
-            ++right;
-        std::string word = lineText.substr(left, right - left);
+
+        auto ident = mlang::ide::identifierAt(lineText, idx);
+        int left = ident ? ident->startCharacter : idx;
+        int right = ident ? ident->endCharacter : idx;
+        std::string word = ident ? ident->text : std::string{};
 
         auto cursor_in_attribute = [&](const char* attrText) -> bool {
             size_t attrLen = std::strlen(attrText);
@@ -2026,24 +2172,6 @@ private:
 
         if(auto typeLoc = find_c_type_location(word))
             return location_to_json(*typeLoc);
-
-        auto find_module_prefix = [&](int wordStart) -> std::string {
-            int j = wordStart - 1;
-            while(j >= 0 && std::isspace((unsigned char)lineText[j]))
-                --j;
-            if(j < 1 || lineText[j] != ':' || lineText[j - 1] != ':')
-                return {};
-            j -= 2;
-            while(j >= 0 && std::isspace((unsigned char)lineText[j]))
-                --j;
-            int end = j;
-            while(j >= 0 && (std::isalnum((unsigned char)lineText[j]) ||
-                             lineText[j] == '_'))
-                --j;
-            if(end < j + 1)
-                return {};
-            return lineText.substr(j + 1, end - j);
-        };
 
         // Jump from module declarations/usages first.
         static const std::regex modRx(
@@ -2111,7 +2239,7 @@ private:
             }
         }
 
-        std::string modulePrefix = find_module_prefix(left);
+        std::string modulePrefix = find_module_prefix(lineText, left);
         if(!modulePrefix.empty())
         {
             auto enumIt = info.enums.find(modulePrefix);
@@ -2287,12 +2415,8 @@ private:
         if(idx > (int)lineText.size())
             idx = (int)lineText.size();
 
-        int start = idx;
-        while(start > 0 &&
-              (std::isalnum((unsigned char)lineText[start - 1]) ||
-               lineText[start - 1] == '_'))
-            --start;
-        std::string prefix = lineText.substr(start, idx - start);
+        std::string prefix = mlang::ide::identifierPrefixAt(lineText, idx);
+        int start = idx - static_cast<int>(prefix.size());
 
         std::vector<CompletionCandidate> candidates;
         std::unordered_set<std::string> seen;
@@ -2463,41 +2587,26 @@ private:
         auto& info = it->second;
         if(*line < 0 || *line >= (int)info.lines.size())
             return llvm::json::Array{};
-        const std::string& lineText = info.lines[*line];
-        int idx = (int)*character;
-        if(idx > (int)lineText.size())
-            idx = (int)lineText.size();
-        int left = idx;
-        while(left > 0 && (std::isalnum((unsigned char)lineText[left - 1]) ||
-                           lineText[left - 1] == '_'))
-            --left;
-        int right = idx;
-        while(right < (int)lineText.size() &&
-              (std::isalnum((unsigned char)lineText[right]) ||
-               lineText[right] == '_'))
-            ++right;
-        std::string word = lineText.substr(left, right - left);
-        if(word.empty())
+        mlang::Position queryPos;
+        queryPos.line = static_cast<int>(*line);
+        queryPos.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, queryPos);
+        if(!ident)
             return llvm::json::Array{};
 
         llvm::json::Array out;
-        std::regex rx("\\b" + word + "\\b");
         for(auto& [furi, finfo] : files)
         {
-            for(int i = 0; i < (int)finfo.lines.size(); ++i)
+            auto matches =
+                mlang::ide::findWholeWordMatches(finfo.lines, ident->text);
+            for(const auto& range : matches)
             {
-                auto& ln = finfo.lines[i];
-                auto begin = std::sregex_iterator(ln.begin(), ln.end(), rx);
-                auto end = std::sregex_iterator();
-                for(auto it2 = begin; it2 != end; ++it2)
-                {
-                    int col = (int)it2->position();
-                    llvm::json::Object loc;
-                    loc["uri"] = finfo.uri;
-                    loc["range"] =
-                        make_range_value(i, col, col + (int)word.size());
-                    out.push_back(llvm::json::Value(std::move(loc)));
-                }
+                llvm::json::Object loc;
+                loc["uri"] = finfo.uri;
+                loc["range"] = make_range_value(
+                    range.start.line, range.start.character,
+                    range.end.line, range.end.character);
+                out.push_back(llvm::json::Value(std::move(loc)));
             }
         }
         return llvm::json::Value(std::move(out));
