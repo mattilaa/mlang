@@ -278,6 +278,13 @@ ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
     return node;
 }
 
+ASTNode* create_try_expression(ASTNode* expr, int line)
+{
+    auto* node = new TryExpressionNode(static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line)
 {
@@ -1148,6 +1155,11 @@ std::string TernaryNode::toString() const
 {
     return "(" + condition->toString() + " ? " + trueExpr->toString() + " : " +
            falseExpr->toString() + ")";
+}
+
+std::string TryExpressionNode::toString() const
+{
+    return expression->toString() + "?";
 }
 
 std::string FunctionCallNode::toString() const

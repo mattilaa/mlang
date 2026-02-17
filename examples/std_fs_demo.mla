@@ -4,22 +4,8 @@ use std::fs::BufReader;
 use std::fs::File;
 use std::fs::free_lines;
 
-fn main() -> i32 {
-    // Rust-style API target:
-    // let f = File::open("foo.txt")?;
-    // let reader = BufReader::new(f);
-    // for line in reader.lines() { println!("{}", line?); }
-    //
-    // Note: mlang currently does not support `?`, so this demo uses explicit
-    // Result handling.
-
-    let f_res: Result<File, string> = File::open("foo.txt");
-    if f_res.is_err(): {
-        println!("open failed");
-        return 1;
-    }
-
-    let f: File = f_res.unwrap();
+fn run_demo() -> Result<i32, string> {
+    let f: File = File::open("foo.txt")?;
     let reader: BufReader = BufReader::new(f);
     let lines: list<string> = reader.lines();
 
@@ -29,5 +15,14 @@ fn main() -> i32 {
 
     free_lines(lines);
     f.close();
-    return 0;
+    return Ok<i32, string>(0);
+}
+
+fn main() -> i32 {
+    let rc: Result<i32, string> = run_demo();
+    if rc.is_ok(): {
+        return rc.unwrap();
+    }
+    println!("open failed");
+    return 1;
 }

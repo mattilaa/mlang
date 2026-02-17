@@ -55,6 +55,7 @@ ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
+ASTNode* create_try_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* create_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
@@ -146,7 +147,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
 %token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
-%token QUESTION
+%token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH
 %token PUB IMPL
@@ -610,6 +611,10 @@ unary_expression
         { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
     | MULTIPLY unary_expression
         { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
+    | postfix_expression TRY_QUESTION
+        { $$ = create_try_expression($1, yylineno); }
+    | function_call TRY_QUESTION
+        { $$ = create_try_expression($1, yylineno); }
     | postfix_expression
     | function_call
     | cast_expression

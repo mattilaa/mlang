@@ -2409,6 +2409,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateTernaryExpression(ternary);
     }
+    else if(auto tryExpr = dynamic_cast<TryExpressionNode*>(node))
+    {
+        return generateTryExpression(tryExpr);
+    }
     else if(auto id = dynamic_cast<IdentifierNode*>(node))
     {
         return generateIdentifier(id);
@@ -2885,6 +2889,196 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     phi->addIncoming(thenVal, thenEnd);
     phi->addIncoming(elseVal, elseEnd);
     return phi;
+}
+
+llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
+{
+    if(!node || !node->expression)
+        return nullptr;
+
+    llvm::Value* resultValue = generateExpression(node->expression);
+    if(!resultValue)
+        return nullptr;
+
+    if(!resultValue->getType()->isStructTy())
+    {
+        reportError(node->line, "operator '?' expects Result<T, E> expression");
+        return nullptr;
+    }
+
+    auto* resultStructType = llvm::cast<llvm::StructType>(resultValue->getType());
+    std::string resultStructName = resultStructType->getName().str();
+    auto resultMembersIt = structMembers.find(resultStructName);
+    if(resultMembersIt == structMembers.end())
+    {
+        reportError(node->line, "operator '?' expects Result<T, E> expression");
+        return nullptr;
+    }
+
+    int resultIsOkIndex = -1;
+    int resultOkIndex = -1;
+    int resultErrIndex = -1;
+    TypeNode* resultOkType = nullptr;
+    TypeNode* resultErrType = nullptr;
+    for(size_t i = 0; i < resultMembersIt->second.size(); ++i)
+    {
+        const auto& mem = resultMembersIt->second[i];
+        if(mem.first == "is_ok")
+            resultIsOkIndex = static_cast<int>(i);
+        else if(mem.first == "ok")
+        {
+            resultOkIndex = static_cast<int>(i);
+            resultOkType = mem.second;
+        }
+        else if(mem.first == "err")
+        {
+            resultErrIndex = static_cast<int>(i);
+            resultErrType = mem.second;
+        }
+    }
+
+    if(resultIsOkIndex < 0 || resultOkIndex < 0 || resultErrIndex < 0)
+    {
+        reportError(node->line, "operator '?' expects Result<T, E> expression");
+        return nullptr;
+    }
+
+    llvm::Function* currentFunc = builder.GetInsertBlock()->getParent();
+    llvm::Type* expectedRetType = currentFunc->getReturnType();
+    if(!expectedRetType->isStructTy())
+    {
+        reportError(node->line,
+                    "operator '?' can only be used in functions returning Result<_, _>");
+        return nullptr;
+    }
+
+    auto* expectedStructType = llvm::cast<llvm::StructType>(expectedRetType);
+    std::string expectedStructName = expectedStructType->getName().str();
+    auto expectedMembersIt = structMembers.find(expectedStructName);
+    if(expectedMembersIt == structMembers.end())
+    {
+        reportError(node->line,
+                    "operator '?' can only be used in functions returning Result<_, _>");
+        return nullptr;
+    }
+
+    int expectedIsOkIndex = -1;
+    int expectedOkIndex = -1;
+    int expectedErrIndex = -1;
+    TypeNode* expectedErrType = nullptr;
+    for(size_t i = 0; i < expectedMembersIt->second.size(); ++i)
+    {
+        const auto& mem = expectedMembersIt->second[i];
+        if(mem.first == "is_ok")
+            expectedIsOkIndex = static_cast<int>(i);
+        else if(mem.first == "ok")
+            expectedOkIndex = static_cast<int>(i);
+        else if(mem.first == "err")
+        {
+            expectedErrIndex = static_cast<int>(i);
+            expectedErrType = mem.second;
+        }
+    }
+
+    if(expectedIsOkIndex < 0 || expectedOkIndex < 0 || expectedErrIndex < 0 ||
+       !expectedErrType)
+    {
+        reportError(node->line,
+                    "operator '?' can only be used in functions returning Result<_, _>");
+        return nullptr;
+    }
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* okBB = llvm::BasicBlock::Create(context, "try.ok", function);
+    llvm::BasicBlock* errBB = llvm::BasicBlock::Create(context, "try.err");
+    llvm::BasicBlock* contBB = llvm::BasicBlock::Create(context, "try.cont");
+
+    llvm::Value* isOkVal =
+        builder.CreateExtractValue(resultValue, resultIsOkIndex, "try.is_ok");
+    llvm::Type* okLlvmType = getLLVMTypeFromNode(resultOkType);
+    if(!okLlvmType)
+    {
+        reportError(node->line, "operator '?': failed to resolve Ok payload type");
+        return nullptr;
+    }
+    llvm::AllocaInst* okSlot =
+        builder.CreateAlloca(okLlvmType, nullptr, "try.ok.slot");
+
+    builder.CreateCondBr(isOkVal, okBB, errBB);
+
+    builder.SetInsertPoint(okBB);
+    llvm::Value* okPayload =
+        builder.CreateExtractValue(resultValue, resultOkIndex, "try.ok.payload");
+    builder.CreateStore(okPayload, okSlot);
+    builder.CreateBr(contBB);
+
+    errBB->insertInto(function);
+    builder.SetInsertPoint(errBB);
+    llvm::Value* errPayload =
+        builder.CreateExtractValue(resultValue, resultErrIndex, "try.err.payload");
+    llvm::Type* expectedErrLlvmType = getLLVMTypeFromNode(expectedErrType);
+    if(!expectedErrLlvmType)
+    {
+        reportError(node->line, "operator '?': failed to resolve Err payload type");
+        return nullptr;
+    }
+
+    if(errPayload->getType() != expectedErrLlvmType)
+    {
+        if(errPayload->getType()->isIntegerTy() && expectedErrLlvmType->isIntegerTy())
+        {
+            errPayload = builder.CreateIntCast(errPayload, expectedErrLlvmType, true,
+                                               "try.err.cast");
+        }
+        else if(errPayload->getType()->isIntegerTy() &&
+                expectedErrLlvmType->isFloatingPointTy())
+        {
+            errPayload =
+                builder.CreateSIToFP(errPayload, expectedErrLlvmType, "try.err.sitofp");
+        }
+        else if(errPayload->getType()->isFloatingPointTy() &&
+                expectedErrLlvmType->isFloatingPointTy())
+        {
+            errPayload =
+                builder.CreateFPCast(errPayload, expectedErrLlvmType, "try.err.fpcast");
+        }
+        else if(errPayload->getType()->isPointerTy() &&
+                expectedErrLlvmType->isPointerTy())
+        {
+            errPayload = builder.CreateBitCast(errPayload, expectedErrLlvmType,
+                                               "try.err.ptrcast");
+        }
+        else if(errPayload->getType()->isStructTy() &&
+                expectedErrLlvmType->isStructTy() &&
+                errPayload->getType() == expectedErrLlvmType)
+        {
+            // Same struct type, nothing to do.
+        }
+        else
+        {
+            reportError(node->line,
+                        "operator '?': Err type does not match function return type");
+            return nullptr;
+        }
+    }
+
+    llvm::Value* retResult = llvm::UndefValue::get(expectedRetType);
+    retResult = builder.CreateInsertValue(
+        retResult, llvm::ConstantInt::getFalse(context),
+        static_cast<unsigned>(expectedIsOkIndex), "try.ret.is_ok");
+    retResult = builder.CreateInsertValue(
+        retResult, llvm::Constant::getNullValue(expectedRetType->getStructElementType(
+                       static_cast<unsigned>(expectedOkIndex))),
+        static_cast<unsigned>(expectedOkIndex), "try.ret.ok");
+    retResult = builder.CreateInsertValue(retResult, errPayload,
+                                          static_cast<unsigned>(expectedErrIndex),
+                                          "try.ret.err");
+    emitAllActiveCleanups();
+    builder.CreateRet(retResult);
+
+    contBB->insertInto(function);
+    builder.SetInsertPoint(contBB);
+    return builder.CreateLoad(okLlvmType, okSlot, "try.ok");
 }
 
 void CodeGenerator::generateIfStatement(IfNode* node)

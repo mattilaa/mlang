@@ -124,6 +124,7 @@ Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
 Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
 `examples/std_fs_demo.mla`.
+`?` is supported for `Result` propagation (early-return on `Err`).
 
 ## Examples
 - Scope-exit destructor + owned resource cleanup:

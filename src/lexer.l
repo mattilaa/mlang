@@ -56,6 +56,31 @@ static int is_generic_struct_literal_start()
 
     return (saw_gt && saw_generic_tail) ? 1 : 0;
 }
+
+static int is_try_question_context()
+{
+    std::string buf;
+    buf.reserve(16);
+    int c = 0;
+
+    while((c = yyinput()) != 0)
+    {
+        buf.push_back((char)c);
+        if(c == ' ' || c == '\t')
+            continue;
+        break;
+    }
+
+    for(int i = (int)buf.size() - 1; i >= 0; --i)
+        yyunput(buf[(size_t)i], yytext);
+
+    if(c == 0 || c == ';' || c == ')' || c == ']' || c == '}' || c == ',' ||
+       c == '\n' || c == ':')
+    {
+        return 1;
+    }
+    return 0;
+}
 %}
 
 %option noyywrap
@@ -147,7 +172,7 @@ static int is_generic_struct_literal_start()
 "->"            { return ARROW; }
 "=>"            { return FAT_ARROW; }
 "..."           { return ELLIPSIS; }
-"?"             { return QUESTION; }
+"?"             { return is_try_question_context() ? TRY_QUESTION : QUESTION; }
 "..="           { return DOTDOTEQ; }
 ".."            { return DOTDOT; }
 "::"            { return COLONCOLON; }

@@ -1,0 +1,40 @@
+fn ok_num() -> Result<i32, string> {
+    return Ok<i32, string>(41);
+}
+
+fn err_num() -> Result<i32, string> {
+    return Err<i32, string>("boom");
+}
+
+fn add_one(x: i32) -> Result<i32, string> {
+    return Ok<i32, string>(x + 1);
+}
+
+fn chain_ok() -> Result<i32, string> {
+    let a: i32 = ok_num()?;
+    let b: i32 = add_one(a)?;
+    return Ok<i32, string>(b);
+}
+
+fn chain_err() -> Result<i32, string> {
+    let a: i32 = err_num()?;
+    return Ok<i32, string>(a);
+}
+
+#[test]
+fn test_try_ok_path() -> i32 {
+    let r: Result<i32, string> = chain_ok();
+    if r.is_err(): {
+        return 1;
+    }
+    return r.unwrap() == 42 ? 0 : 1;
+}
+
+#[test]
+fn test_try_err_propagation() -> i32 {
+    let r: Result<i32, string> = chain_err();
+    if r.is_err(): {
+        return 0;
+    }
+    return 1;
+}

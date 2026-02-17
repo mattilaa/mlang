@@ -198,6 +198,7 @@ private:
     llvm::Value* generateExpression(ExpressionNode* node);
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
+    llvm::Value* generateTryExpression(TryExpressionNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateUnaryOp(UnaryOpNode* node);
     llvm::Value* generateIntLiteral(IntLiteralNode* node);

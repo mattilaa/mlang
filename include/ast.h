@@ -283,6 +283,15 @@ public:
     std::string toString() const override;
 };
 
+class TryExpressionNode : public ExpressionNode
+{
+public:
+    ExpressionNode* expression;
+
+    TryExpressionNode(ExpressionNode* expr) : expression(expr) {}
+    std::string toString() const override;
+};
+
 class FunctionCallNode : public ExpressionNode
 {
 public:
@@ -1094,6 +1103,7 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_unary_op(int op, ASTNode* operand);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
                                    int line);
+ASTNode* create_try_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
