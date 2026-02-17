@@ -17,12 +17,12 @@ ${MLANG}           ./build/mlang
 ...    examples/main.mla
 ...    examples/map_iteration.mla
 ...    examples/map_list.mla
-...    examples/math.mla
+...    examples/std_math_demo.mla
 ...    examples/pointer_access.mla
 ...    examples/print_test.mla
 ...    examples/result_match.mla
 ...    examples/result_usage.mla
-...    examples/rust_attributes.mla
+...    examples/mlang_attributes.mla
 ...    examples/str_types.mla
 ...    examples/thread_basic.mla
 ...    examples/thread_multi.mla
