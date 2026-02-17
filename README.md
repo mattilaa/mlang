@@ -120,10 +120,14 @@ Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
 The example uses `var user_input` directly (no `&mut` required) and trims with
 `trim(user_input)`.
+Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
+`examples/std_io_traits_demo.mla`.
 
 ## Examples
 - Scope-exit destructor + owned resource cleanup:
   `examples/scope_exit_drop_demo.mla`
+- Trait-like IO (`Read`/`Write`/`Seek`/`BufRead`) using in-memory cursor:
+  `examples/std_io_traits_demo.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

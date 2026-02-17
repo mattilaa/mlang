@@ -17,6 +17,13 @@ extern fn __mlang_std_io_stdout_try_lock() -> int;
 extern fn __mlang_std_io_stdout_write(s: string) -> i64;
 extern fn __mlang_std_io_stdout_writeln(s: string) -> i64;
 extern fn __mlang_std_io_stdin_read_line(buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_new(capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_free(handle: i64) -> void;
+extern fn __mlang_std_io_cursor_read(handle: i64, buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_write(handle: i64, s: string) -> i64;
+extern fn __mlang_std_io_cursor_seek(handle: i64, offset: i64, whence: int) -> i64;
+extern fn __mlang_std_io_cursor_read_line(handle: i64, buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_to_string(handle: i64) -> string;
 
 pub struct Stdin {
     var _tag: i32;
@@ -29,6 +36,42 @@ pub struct Stdout {
 pub struct StdoutLock {
     var _tag: i32;
 };
+
+/// @brief In-memory byte stream cursor (owned resource).
+pub struct Cursor {
+    var handle: i64;
+};
+
+/// @brief Trait-like read handle.
+/// kind: 0 = Cursor, 1 = Stdin.
+pub struct Read {
+    var kind: i32;
+    var cursor: Cursor;
+};
+
+/// @brief Trait-like write handle.
+/// kind: 0 = Cursor, 1 = Stdout.
+pub struct Write {
+    var kind: i32;
+    var cursor: Cursor;
+};
+
+/// @brief Trait-like seek handle (Cursor-backed).
+pub struct Seek {
+    var cursor: Cursor;
+};
+
+/// @brief Trait-like buffered reader handle.
+/// kind: 0 = Cursor, 1 = Stdin.
+pub struct BufRead {
+    var kind: i32;
+    var cursor: Cursor;
+};
+
+/// @brief Seek constants (same semantics as C stdio).
+pub fn seek_set() -> int { return 0; }
+pub fn seek_cur() -> int { return 1; }
+pub fn seek_end() -> int { return 2; }
 
 /// @brief Return stdin handle.
 pub fn stdin() -> Stdin {
@@ -47,6 +90,25 @@ pub fn stdout() -> Stdout {
 /// @return bytes read (without trailing newline), or -1 on EOF/error.
 pub fn read_line(input: Stdin, buf: string, capacity: i64) -> i64 {
     return __mlang_std_io_stdin_read_line(buf, capacity);
+}
+
+/// @brief Create in-memory cursor with initial capacity.
+pub fn cursor_with_capacity(capacity: i64) -> Cursor {
+    let h = __mlang_std_io_cursor_new(capacity);
+    return Cursor { handle: h };
+}
+
+/// @brief Build a cursor initialized with `s` and reset to start.
+pub fn cursor_from_string(s: string) -> Cursor {
+    let c = cursor_with_capacity(16);
+    __mlang_std_io_cursor_write(c.handle, s);
+    __mlang_std_io_cursor_seek(c.handle, 0, seek_set());
+    return c;
+}
+
+/// @brief Free a cursor resource.
+pub fn cursor_free(c: Cursor) -> void {
+    __mlang_std_io_cursor_free(c.handle);
 }
 
 /// @brief Read one line into a newly allocated buffer.
@@ -75,10 +137,45 @@ pub fn write(out: Stdout, s: string) -> i64 {
     return __mlang_std_io_stdout_write(s);
 }
 
+/// @brief Adapt Stdin to trait-like Read.
+pub fn as_read(input: Stdin) -> Read {
+    return Read { kind: 1, cursor: Cursor { handle: 0 } };
+}
+
+/// @brief Adapt Cursor to trait-like Read.
+pub fn as_read(c: Cursor) -> Read {
+    return Read { kind: 0, cursor: c };
+}
+
 /// @brief Write text + newline to stdout.
 /// @param out stdout handle.
 pub fn writeln(out: Stdout, s: string) -> i64 {
     return __mlang_std_io_stdout_writeln(s);
+}
+
+/// @brief Adapt Stdout to trait-like Write.
+pub fn as_write(out: Stdout) -> Write {
+    return Write { kind: 1, cursor: Cursor { handle: 0 } };
+}
+
+/// @brief Adapt Cursor to trait-like Write.
+pub fn as_write(c: Cursor) -> Write {
+    return Write { kind: 0, cursor: c };
+}
+
+/// @brief Adapt Stdin to trait-like BufRead.
+pub fn as_buf_read(input: Stdin) -> BufRead {
+    return BufRead { kind: 1, cursor: Cursor { handle: 0 } };
+}
+
+/// @brief Adapt Cursor to trait-like BufRead.
+pub fn as_buf_read(c: Cursor) -> BufRead {
+    return BufRead { kind: 0, cursor: c };
+}
+
+/// @brief Adapt Cursor to trait-like Seek.
+pub fn as_seek(c: Cursor) -> Seek {
+    return Seek { cursor: c };
 }
 
 /// @brief Write text while holding stdout lock.
@@ -118,6 +215,41 @@ pub fn writeln_sync(out: Stdout, s: string) -> i64 {
     let n = writeln_locked(lk, s);
     unlock(lk);
     return n;
+}
+
+/// @brief Trait-like read.
+/// Stdin backend currently reads one logical line.
+pub fn read(reader: Read, buf: string, capacity: i64) -> i64 {
+    if reader.kind == 1: {
+        return __mlang_std_io_stdin_read_line(buf, capacity);
+    }
+    return __mlang_std_io_cursor_read(reader.cursor.handle, buf, capacity);
+}
+
+/// @brief Trait-like write.
+pub fn write(writer: Write, s: string) -> i64 {
+    if writer.kind == 1: {
+        return __mlang_std_io_stdout_write(s);
+    }
+    return __mlang_std_io_cursor_write(writer.cursor.handle, s);
+}
+
+/// @brief Trait-like buffered read line.
+pub fn read_line(reader: BufRead, buf: string, capacity: i64) -> i64 {
+    if reader.kind == 1: {
+        return __mlang_std_io_stdin_read_line(buf, capacity);
+    }
+    return __mlang_std_io_cursor_read_line(reader.cursor.handle, buf, capacity);
+}
+
+/// @brief Trait-like seek.
+pub fn seek(seeker: Seek, offset: i64, whence: int) -> i64 {
+    return __mlang_std_io_cursor_seek(seeker.cursor.handle, offset, whence);
+}
+
+/// @brief Read full cursor contents as a newly allocated string.
+pub fn to_string(c: Cursor) -> string {
+    return __mlang_std_io_cursor_to_string(c.handle);
 }
 
 /// @brief Compiler-recognized scope-exit destructor for StdoutLock.
