@@ -212,8 +212,39 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
 )
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
+
+# RapidJSON for std::json backend (header-only).
+include(FetchContent)
+find_path(RAPIDJSON_INCLUDE_DIR rapidjson/document.h
+    PATH_SUFFIXES include
+    PATHS
+        /opt/homebrew/opt/rapidjson
+        /usr/local/opt/rapidjson
+        /opt/homebrew
+        /usr/local
+        /usr
+)
+if(NOT RAPIDJSON_INCLUDE_DIR)
+    message(STATUS "RapidJSON not found in system paths; fetching v1.1.0")
+    FetchContent_Declare(
+        rapidjson
+        GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+        GIT_TAG v1.1.0
+        GIT_PROGRESS TRUE
+    )
+    FetchContent_GetProperties(rapidjson)
+    if(NOT rapidjson_POPULATED)
+        if(POLICY CMP0169)
+            cmake_policy(SET CMP0169 OLD)
+        endif()
+        FetchContent_Populate(rapidjson)
+    endif()
+    set(RAPIDJSON_INCLUDE_DIR ${rapidjson_SOURCE_DIR}/include)
+endif()
+target_include_directories(mlang_std PRIVATE ${RAPIDJSON_INCLUDE_DIR})
 
 # Print debug information
 message(STATUS "LEXER_OUT: ${LEXER_OUT}")

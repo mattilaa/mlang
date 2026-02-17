@@ -1,0 +1,246 @@
+mod std::json;
+mod std::fs;
+mod std::strbuf;
+
+use std::fs::File;
+use std::json::JsonArrayIter;
+use std::json::JsonDoc;
+use std::json::JsonObjectIter;
+use std::json::JsonValue;
+use std::strbuf::contains;
+
+fn main() -> i32 {
+    let src = "{\"name\":\"mlang\",\"ok\":true,\"nums\":[1,2,3]}";
+
+    let parsed: Result<JsonDoc, string> = JsonDoc::parse(src);
+    if parsed.is_err(): {
+        println!("parse failed: {}", parsed.unwrap_err());
+        return 1;
+    }
+
+    let doc: JsonDoc = parsed.unwrap();
+    let root_r: Result<JsonValue, string> = doc.root();
+    if root_r.is_err(): {
+        println!("root failed: {}", root_r.unwrap_err());
+        doc.free();
+        return 1;
+    }
+    let root: JsonValue = root_r.unwrap();
+
+    let name_r: Result<JsonValue, string> = root.get("name");
+    if name_r.is_err(): {
+        println!("name get failed: {}", name_r.unwrap_err());
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let name_v: JsonValue = name_r.unwrap();
+    let name_s: Result<string, string> = name_v.as_string();
+    if name_s.is_err(): {
+        println!("name type failed: {}", name_s.unwrap_err());
+        name_v.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    println!("name={}", name_s.unwrap());
+    name_v.free();
+
+    let nums_r: Result<JsonValue, string> = root.get("nums");
+    if nums_r.is_err(): {
+        println!("nums get failed: {}", nums_r.unwrap_err());
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let nums: JsonValue = nums_r.unwrap();
+    let second_r: Result<JsonValue, string> = nums.index(1);
+    if second_r.is_err(): {
+        println!("nums[1] failed: {}", second_r.unwrap_err());
+        nums.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let second: JsonValue = second_r.unwrap();
+    let n: Result<i64, string> = second.as_i64();
+    if n.is_err(): {
+        println!("nums[1] type failed: {}", n.unwrap_err());
+        second.free();
+        nums.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    println!("nums[1]={}", n.unwrap());
+    second.free();
+
+    let arr_it_r: Result<JsonArrayIter, string> = nums.iter_array();
+    if arr_it_r.is_err(): {
+        nums.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    var arr_it: JsonArrayIter = arr_it_r.unwrap();
+    var sum: i64 = 0;
+    if arr_it.has_next() == 1: {
+        let item_r: Result<JsonValue, string> = arr_it.current();
+        if item_r.is_err(): {
+            nums.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let item: JsonValue = item_r.unwrap();
+        let iv_r: Result<i64, string> = item.as_i64();
+        if iv_r.is_err(): {
+            item.free();
+            nums.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        sum = sum + iv_r.unwrap();
+        item.free();
+        arr_it = arr_it.advance();
+    }
+    if arr_it.has_next() == 1: {
+        let item_r: Result<JsonValue, string> = arr_it.current();
+        if item_r.is_err(): {
+            nums.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let item: JsonValue = item_r.unwrap();
+        let iv_r: Result<i64, string> = item.as_i64();
+        if iv_r.is_err(): {
+            item.free();
+            nums.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        sum = sum + iv_r.unwrap();
+        item.free();
+        arr_it = arr_it.advance();
+    }
+    println!("nums sum={}", sum);
+    nums.free();
+
+    let obj_it_r: Result<JsonObjectIter, string> = root.iter_object();
+    if obj_it_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    var obj_it: JsonObjectIter = obj_it_r.unwrap();
+    if obj_it.has_next() == 1: {
+        let key_r: Result<string, string> = obj_it.current_key();
+        if key_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let key: string = key_r.unwrap();
+        println!("obj key={}", key);
+        String::free(key);
+        obj_it = obj_it.advance();
+    }
+    if obj_it.has_next() == 1: {
+        let key_r: Result<string, string> = obj_it.current_key();
+        if key_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let key: string = key_r.unwrap();
+        println!("obj key={}", key);
+        String::free(key);
+        obj_it = obj_it.advance();
+    }
+    if obj_it.has_next() == 1: {
+        let key_r: Result<string, string> = obj_it.current_key();
+        if key_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let key: string = key_r.unwrap();
+        println!("obj key={}", key);
+        String::free(key);
+        obj_it = obj_it.advance();
+    }
+
+    let pretty: Result<string, string> = doc.stringify_pretty();
+    if pretty.is_err(): {
+        println!("stringify failed: {}", pretty.unwrap_err());
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let pretty_s: string = pretty.unwrap();
+    if contains(pretty_s, "\"name\"") == 1: {
+        println!("pretty json ok");
+    }
+
+    let path: string = "/tmp/mlang_std_json_demo_file.json";
+    let create_r: Result<File, string> = File::create(path);
+    if create_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let f: File = create_r.unwrap();
+    let wr: Result<i64, string> = f.write("{\"from_file\":123}");
+    if wr.is_err(): {
+        f.close();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    f.close();
+
+    let doc2_r: Result<JsonDoc, string> = JsonDoc::from_file(path);
+    if doc2_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let doc2: JsonDoc = doc2_r.unwrap();
+    let root2_r: Result<JsonValue, string> = doc2.root();
+    if root2_r.is_err(): {
+        doc2.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let root2: JsonValue = root2_r.unwrap();
+    let ff_r: Result<JsonValue, string> = root2.get("from_file");
+    if ff_r.is_err(): {
+        root2.free();
+        doc2.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let ff: JsonValue = ff_r.unwrap();
+    let ff_n: Result<i64, string> = ff.as_i64();
+    if ff_n.is_err(): {
+        ff.free();
+        root2.free();
+        doc2.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    println!("from_file={}", ff_n.unwrap());
+    ff.free();
+    root2.free();
+    doc2.free();
+
+    root.free();
+    doc.free();
+    return 0;
+}

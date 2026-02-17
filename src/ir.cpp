@@ -9994,8 +9994,8 @@ bool Backend::linkExecutable(const std::string& objectFile,
                              const std::string& outputFile,
                              const std::vector<std::string>& linkArgs)
 {
-    // Use system linker (cc/clang/gcc)
-    std::string command = "cc -o " + outputFile + " " + objectFile;
+    // Use C++ driver so C++ stdlib symbols from native stdlib objects resolve.
+    std::string command = "c++ -o " + outputFile + " " + objectFile;
     for(const auto& arg : linkArgs)
     {
         command += " " + arg;
