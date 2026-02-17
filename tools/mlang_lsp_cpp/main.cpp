@@ -1312,6 +1312,9 @@ private:
             sigTriggers.push_back(",");
             signatureHelp["triggerCharacters"] = llvm::json::Value(std::move(sigTriggers));
             caps["signatureHelpProvider"] = llvm::json::Value(std::move(signatureHelp));
+            llvm::json::Object renameProvider;
+            renameProvider["prepareProvider"] = true;
+            caps["renameProvider"] = llvm::json::Value(std::move(renameProvider));
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
             caps["documentFormattingProvider"] = true;
@@ -1354,6 +1357,14 @@ private:
         else if(method == "textDocument/signatureHelp")
         {
             send_response(id, handle_signature_help(params));
+        }
+        else if(method == "textDocument/prepareRename")
+        {
+            send_response(id, handle_prepare_rename(params));
+        }
+        else if(method == "textDocument/rename")
+        {
+            send_response(id, handle_rename(params));
         }
         else if(method == "textDocument/documentSymbol")
         {
@@ -3247,6 +3258,171 @@ private:
                 out.push_back(llvm::json::Value(std::move(loc)));
             }
         }
+        return llvm::json::Value(std::move(out));
+    }
+
+    static bool is_valid_identifier_name(const std::string& name)
+    {
+        if(name.empty())
+            return false;
+        unsigned char first = static_cast<unsigned char>(name[0]);
+        if(!(std::isalpha(first) || name[0] == '_'))
+            return false;
+        for(size_t i = 1; i < name.size(); ++i)
+        {
+            unsigned char c = static_cast<unsigned char>(name[i]);
+            if(!(std::isalnum(c) || name[i] == '_'))
+                return false;
+        }
+        return true;
+    }
+
+    bool is_rename_blocked_word(const std::string& word) const
+    {
+        if(std::find(mlang::constants::kLspKeywords.begin(),
+                      mlang::constants::kLspKeywords.end(),
+                      word) != mlang::constants::kLspKeywords.end())
+            return true;
+        if(std::find(mlang::constants::kRuntimeBuiltinFunctions.begin(),
+                      mlang::constants::kRuntimeBuiltinFunctions.end(),
+                      word) != mlang::constants::kRuntimeBuiltinFunctions.end())
+            return true;
+        if(std::find(mlang::constants::kRuntimeBuiltinTypes.begin(),
+                      mlang::constants::kRuntimeBuiltinTypes.end(),
+                      word) != mlang::constants::kRuntimeBuiltinTypes.end())
+            return true;
+        if(std::find(mlang::constants::kAttributeKeywords.begin(),
+                      mlang::constants::kAttributeKeywords.end(),
+                      word) != mlang::constants::kAttributeKeywords.end())
+            return true;
+        return false;
+    }
+
+    std::optional<mlang::ide::IdentifierMatch>
+    rename_target_at(FileInfo& info, int line, int character)
+    {
+        if(line < 0 || line >= (int)info.lines.size())
+            return std::nullopt;
+
+        mlang::Position pos;
+        pos.line = line;
+        pos.character = character;
+        auto ident = mlang::ide::identifierAt(info.lines, pos);
+        if(!ident)
+            return std::nullopt;
+        if(is_rename_blocked_word(ident->text))
+            return std::nullopt;
+
+        bool found = false;
+        if(auto fn = find_enclosing_function(info, line))
+        {
+            if(fn->varDecls.find(ident->text) != fn->varDecls.end() ||
+               fn->paramDecls.find(ident->text) != fn->paramDecls.end() ||
+               fn->varTypes.find(ident->text) != fn->varTypes.end())
+            {
+                found = true;
+            }
+        }
+
+        if(!found)
+        {
+            if(auto fit = info.functions.find(ident->text); fit != info.functions.end())
+                found = true;
+            if(auto sit = info.structs.find(ident->text); sit != info.structs.end())
+                found = true;
+            if(auto eit = info.enums.find(ident->text); eit != info.enums.end())
+                found = true;
+            if(find_symbol_in_workspace(ident->text).has_value())
+                found = true;
+        }
+
+        if(!found)
+            return std::nullopt;
+        return ident;
+    }
+
+    llvm::json::Value handle_prepare_rename(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return nullptr;
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+
+        auto ident = rename_target_at(it->second, (int)*line, (int)*character);
+        if(!ident)
+            return nullptr;
+
+        llvm::json::Object out;
+        out["range"] = make_range_value((int)*line, ident->startCharacter,
+                                        (int)*line, ident->endCharacter);
+        out["placeholder"] = ident->text;
+        return llvm::json::Value(std::move(out));
+    }
+
+    llvm::json::Value handle_rename(llvm::json::Object* params)
+    {
+        if(!params)
+            return nullptr;
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        auto newName = params->getString("newName");
+        if(!textDoc || !pos || !newName)
+            return nullptr;
+
+        std::string newNameStr = newName->str();
+        if(!is_valid_identifier_name(newNameStr) ||
+           is_rename_blocked_word(newNameStr))
+        {
+            return nullptr;
+        }
+
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return nullptr;
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return nullptr;
+
+        auto ident = rename_target_at(it->second, (int)*line, (int)*character);
+        if(!ident)
+            return nullptr;
+
+        llvm::json::Object changes;
+        for(auto& [furi, finfo] : files)
+        {
+            auto matches = mlang::ide::findWholeWordMatches(finfo.lines, ident->text);
+            if(matches.empty())
+                continue;
+
+            llvm::json::Array edits;
+            for(const auto& m : matches)
+            {
+                llvm::json::Object edit;
+                edit["range"] = make_range_value(m.start.line, m.start.character,
+                                                  m.end.line, m.end.character);
+                edit["newText"] = newNameStr;
+                edits.push_back(llvm::json::Value(std::move(edit)));
+            }
+            changes[furi] = llvm::json::Value(std::move(edits));
+        }
+
+        llvm::json::Object out;
+        out["changes"] = llvm::json::Value(std::move(changes));
         return llvm::json::Value(std::move(out));
     }
 
