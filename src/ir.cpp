@@ -2224,6 +2224,19 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         {
             auto* paramNode = node->parameters->parameters[paramIdx];
             variableTypes[std::string(arg.getName())] = paramNode->type->kind;
+            if(auto* structType =
+                   dynamic_cast<StructTypeRefNode*>(paramNode->type))
+            {
+                structVariableTypes[std::string(arg.getName())] =
+                    structType->structName;
+            }
+            if(auto* genStructType =
+                   dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
+            {
+                std::string mangled = getOrCreateMonomorphizedStruct(
+                    genStructType->structName, genStructType->typeArgs);
+                structVariableTypes[std::string(arg.getName())] = mangled;
+            }
             if(auto* genListType =
                    dynamic_cast<GenericListTypeNode*>(paramNode->type))
             {
@@ -5587,10 +5600,23 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
         }
 
         auto typeIt = structVariableTypes.find(id->name);
+        std::string inferredStructName;
         if(typeIt == structVariableTypes.end())
         {
-            reportError(line, "variable '" + id->name + "' is not a struct");
-            return {nullptr, ""};
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr))
+            {
+                llvm::Type* at = alloca->getAllocatedType();
+                if(at && at->isStructTy())
+                {
+                    auto* st = llvm::cast<llvm::StructType>(at);
+                    inferredStructName = st->getName().str();
+                }
+            }
+            if(inferredStructName.empty())
+            {
+                reportError(line, "variable '" + id->name + "' is not a struct");
+                return {nullptr, ""};
+            }
         }
 
         // Handle self pointer (alloca containing pointer)
@@ -5605,7 +5631,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             }
         }
 
-        return {actualPtr, typeIt->second};
+        return {actualPtr,
+                typeIt != structVariableTypes.end() ? typeIt->second
+                                                    : inferredStructName};
     }
 
     // Case 2: Field access (e.g., "a.b" in "a.b.c")
@@ -5786,11 +5814,27 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
         auto typeIt = structVariableTypes.find(node->structName);
         if(typeIt == structVariableTypes.end())
         {
-            reportError(node->line,
-                        "variable '" + node->structName + "' is not a struct");
-            return nullptr;
+            if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
+            {
+                llvm::Type* at = alloca->getAllocatedType();
+                if(at && at->isStructTy())
+                {
+                    auto* st = llvm::cast<llvm::StructType>(at);
+                    structTypeName = st->getName().str();
+                }
+            }
+            if(structTypeName.empty())
+            {
+                reportError(node->line,
+                            "variable '" + node->structName +
+                                "' is not a struct");
+                return nullptr;
+            }
         }
-        structTypeName = typeIt->second;
+        else
+        {
+            structTypeName = typeIt->second;
+        }
 
         // Handle self pointer (alloca containing pointer)
         if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
@@ -7288,6 +7332,19 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                     method->parameters->parameters[methodParamIdx];
                 variableTypes[std::string(arg.getName())] =
                     paramNode->type->kind;
+                if(auto* structType =
+                       dynamic_cast<StructTypeRefNode*>(paramNode->type))
+                {
+                    structVariableTypes[std::string(arg.getName())] =
+                        structType->structName;
+                }
+                if(auto* genStructType =
+                       dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
+                {
+                    std::string mangled = getOrCreateMonomorphizedStruct(
+                        genStructType->structName, genStructType->typeArgs);
+                    structVariableTypes[std::string(arg.getName())] = mangled;
+                }
                 if(auto* genListType =
                        dynamic_cast<GenericListTypeNode*>(paramNode->type))
                 {
