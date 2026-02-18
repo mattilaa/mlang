@@ -1,0 +1,168 @@
+mod std::compiler;
+mod std::strbuf;
+
+use std::compiler::Session;
+use std::compiler::DocumentSymbol;
+use std::compiler::DefinitionLocation;
+use std::compiler::SyntaxDiagnostic;
+use std::compiler::session_create;
+use std::strbuf::contains;
+
+#[test]
+fn test_compiler_open_change_close() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://open_change_close.mla";
+    let src1: string = "fn main() -> i32 { return 0; }";
+    let src2: string = "fn main() -> i32 { return 1; }";
+
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src1, 1);
+    if o.is_err(): { return 1; }
+
+    let c: Result<i32, string> = s.change_document(uri, src2, 2);
+    if c.is_err(): { return 1; }
+
+    let cl: Result<i32, string> = s.close_document(uri);
+    if cl.is_err(): { return 1; }
+
+    let d: Result<i32, string> = s.destroy();
+    if d.is_err(): { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_compiler_syntax_diag_get() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://diag_get.mla";
+    let src: string = "fn main() -> i32 { if (1 > 0) { return 0; ";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return 1; }
+    let count: i32 = cr.unwrap();
+    if count <= 0: { return 1; }
+
+    let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, 0);
+    if dr.is_err(): { return 1; }
+    let d: SyntaxDiagnostic = dr.unwrap();
+    if d.line <= 0: { return 1; }
+    if d.column <= 0: { return 1; }
+    if contains(d.message, "unclosed delimiter") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_hover_and_completion() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://hover_completion.mla";
+    let src: string = "fn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  let al\n  return alpha;\n}";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let hr: Result<string, string> = s.hover(uri, 3, 8);
+    if hr.is_err(): { return 1; }
+    let h: string = hr.unwrap();
+    if contains(h, "alpha") == 0: { return 1; }
+
+    let ccr: Result<i32, string> = s.completion_count(uri, 4, 9);
+    if ccr.is_err(): { return 1; }
+    let cc: i32 = ccr.unwrap();
+    if cc <= 0: { return 1; }
+
+    var mut_found: i32 = 0;
+    for i in 0..cc {
+        let ir: Result<string, string> = s.completion_get(uri, 4, 9, i);
+        if ir.is_err(): { return 1; }
+        let item: string = ir.unwrap();
+        if contains(item, "alpha") == 1: {
+            mut_found = 1;
+        }
+    }
+    if mut_found != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_document_symbols_and_definition() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://symbols_definition.mla";
+    let src: string = "mod std::io;\nstruct Box { var value: i32; };\nfn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  return alpha;\n}";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return 1; }
+    let count: i32 = cr.unwrap();
+    if count <= 0: { return 1; }
+
+    var saw_main: i32 = 0;
+    var saw_alpha: i32 = 0;
+    for i in 0..count {
+        let sym_r: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sym_r.is_err(): { return 1; }
+        let sym: DocumentSymbol = sym_r.unwrap();
+        if contains(sym.name, "main") == 1: {
+            saw_main = 1;
+        }
+        if contains(sym.name, "alpha") == 1: {
+            saw_alpha = 1;
+        }
+    }
+    if saw_main != 1: { return 1; }
+    if saw_alpha != 1: { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(uri, 6, 11);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "alpha") == 0: { return 1; }
+    if def.line != 5: { return 1; }
+    if contains(def.uri, "symbols_definition.mla") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_cross_document_mod() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/util.mla";
+    let main_uri: string = "file:///ws/main.mla";
+
+    let util_src: string = "fn util_value() -> i32 { return 7; }";
+    let main_src: string = "mod lib::util;\nfn main() -> i32 {\n  let x: i32 = util_value();\n  return x;\n}";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 3, 18);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "util_value") == 0: { return 1; }
+    if contains(def.uri, "lib/util.mla") == 0: { return 1; }
+    if def.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}

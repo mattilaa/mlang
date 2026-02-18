@@ -1,0 +1,238 @@
+/// \file compiler.mla
+/// \brief Incremental parse/query APIs for MLang tooling (std::compiler).
+///
+/// This module exposes compiler session/document/query APIs to MLang code.
+/// It wraps the compiler C ABI with MLang-friendly handles and Result values.
+
+extern pub fn __mlang_std_compiler_last_error() -> string;
+extern pub fn __mlang_std_compiler_last_status() -> int;
+extern pub fn __mlang_std_compiler_status_name(status: i32) -> string;
+extern pub fn __mlang_std_compiler_session_create() -> i64;
+extern pub fn __mlang_std_compiler_session_destroy(handle: i64) -> i32;
+extern pub fn __mlang_std_compiler_document_open(handle: i64, uri: string, language_id: string, text: string, version: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_change(handle: i64, uri: string, text: string, version: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_close(handle: i64, uri: string) -> i32;
+extern pub fn __mlang_std_compiler_document_syntax_diagnostic_count(handle: i64, uri: string) -> i32;
+extern pub fn __mlang_std_compiler_document_syntax_diagnostic_line(handle: i64, uri: string, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_syntax_diagnostic_column(handle: i64, uri: string, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_syntax_diagnostic_message(handle: i64, uri: string, index: i32) -> string;
+extern pub fn __mlang_std_compiler_document_hover(handle: i64, uri: string, line: i32, column: i32) -> string;
+extern pub fn __mlang_std_compiler_document_completion_count(handle: i64, uri: string, line: i32, column: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_completion_get(handle: i64, uri: string, line: i32, column: i32, index: i32) -> string;
+extern pub fn __mlang_std_compiler_document_symbol_count(handle: i64, uri: string) -> i32;
+extern pub fn __mlang_std_compiler_document_symbol_name(handle: i64, uri: string, index: i32) -> string;
+extern pub fn __mlang_std_compiler_document_symbol_kind(handle: i64, uri: string, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_symbol_line(handle: i64, uri: string, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_symbol_column(handle: i64, uri: string, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_definition_line(handle: i64, uri: string, line: i32, column: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_definition_column(handle: i64, uri: string, line: i32, column: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_definition_name(handle: i64, uri: string, line: i32, column: i32) -> string;
+extern pub fn __mlang_std_compiler_document_definition_uri(handle: i64, uri: string, line: i32, column: i32) -> string;
+
+/// @brief Opaque compiler session handle.
+pub struct Session {
+    var handle: i64;
+};
+
+/// @brief Syntax diagnostic record for a document.
+pub struct SyntaxDiagnostic {
+    var line: i32;
+    var column: i32;
+    var message: string;
+};
+
+/// @brief Declared symbol in a document.
+pub struct DocumentSymbol {
+    var name: string;
+    var kind: i32;
+    var line: i32;
+    var column: i32;
+};
+
+/// @brief Definition location in the same document.
+pub struct DefinitionLocation {
+    var name: string;
+    var uri: string;
+    var line: i32;
+    var column: i32;
+};
+
+/// @brief Return last backend status code.
+pub fn last_status() -> i32 {
+    return __mlang_std_compiler_last_status();
+}
+
+/// @brief Return last backend status name.
+pub fn status_name(status: i32) -> string {
+    return __mlang_std_compiler_status_name(status);
+}
+
+/// @brief Return last backend error/status text.
+pub fn last_error() -> string {
+    return __mlang_std_compiler_last_error();
+}
+
+/// @brief Create a new compiler session.
+pub fn session_create() -> Result<Session, string> {
+    let h: i64 = __mlang_std_compiler_session_create();
+    if h == 0: {
+        return Err<Session, string>(last_error());
+    }
+    return Ok<Session, string>(Session { handle: h });
+}
+
+impl Session {
+    /// @brief Destroy compiler session and release associated document state.
+    pub fn destroy(self: Session) -> Result<i32, string> {
+        let st: i32 = __mlang_std_compiler_session_destroy(self.handle);
+        if st != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Open or replace a document in this session.
+    pub fn open_document(self: Session, uri: string, language_id: string, text: string, version: i32) -> Result<i32, string> {
+        let st: i32 = __mlang_std_compiler_document_open(self.handle, uri, language_id, text, version);
+        if st != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Replace full text for an already-open document, enforcing monotonic version.
+    pub fn change_document(self: Session, uri: string, text: string, version: i32) -> Result<i32, string> {
+        let st: i32 = __mlang_std_compiler_document_change(self.handle, uri, text, version);
+        if st != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Close and forget a document in this session.
+    pub fn close_document(self: Session, uri: string) -> Result<i32, string> {
+        let st: i32 = __mlang_std_compiler_document_close(self.handle, uri);
+        if st != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Return number of syntax diagnostics for a document.
+    pub fn syntax_diagnostic_count(self: Session, uri: string) -> Result<i32, string> {
+        let count: i32 = __mlang_std_compiler_document_syntax_diagnostic_count(self.handle, uri);
+        if count < 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(count);
+    }
+
+    /// @brief Fetch one syntax diagnostic by index.
+    pub fn syntax_diagnostic_get(self: Session, uri: string, index: i32) -> Result<SyntaxDiagnostic, string> {
+        let line: i32 = __mlang_std_compiler_document_syntax_diagnostic_line(self.handle, uri, index);
+        if line < 0: {
+            return Err<SyntaxDiagnostic, string>(last_error());
+        }
+        let column: i32 = __mlang_std_compiler_document_syntax_diagnostic_column(self.handle, uri, index);
+        if column < 0: {
+            return Err<SyntaxDiagnostic, string>(last_error());
+        }
+        let msg: string = __mlang_std_compiler_document_syntax_diagnostic_message(self.handle, uri, index);
+        if last_status() != 0: {
+            return Err<SyntaxDiagnostic, string>(last_error());
+        }
+        return Ok<SyntaxDiagnostic, string>(SyntaxDiagnostic {
+            line: line,
+            column: column,
+            message: msg
+        });
+    }
+
+    /// @brief Return hover text at 1-based line/column.
+    pub fn hover(self: Session, uri: string, line: i32, column: i32) -> Result<string, string> {
+        let msg: string = __mlang_std_compiler_document_hover(self.handle, uri, line, column);
+        if last_status() != 0: {
+            return Err<string, string>(last_error());
+        }
+        return Ok<string, string>(msg);
+    }
+
+    /// @brief Return completion item count at 1-based line/column.
+    pub fn completion_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string> {
+        let count: i32 = __mlang_std_compiler_document_completion_count(self.handle, uri, line, column);
+        if count < 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(count);
+    }
+
+    /// @brief Fetch completion item by index for 1-based line/column.
+    pub fn completion_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<string, string> {
+        let item: string = __mlang_std_compiler_document_completion_get(self.handle, uri, line, column, index);
+        if last_status() != 0: {
+            return Err<string, string>(last_error());
+        }
+        return Ok<string, string>(item);
+    }
+
+    /// @brief Return declared symbol count for a document.
+    pub fn document_symbol_count(self: Session, uri: string) -> Result<i32, string> {
+        let count: i32 = __mlang_std_compiler_document_symbol_count(self.handle, uri);
+        if count < 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(count);
+    }
+
+    /// @brief Fetch one declared symbol by index.
+    pub fn document_symbol_get(self: Session, uri: string, index: i32) -> Result<DocumentSymbol, string> {
+        let line: i32 = __mlang_std_compiler_document_symbol_line(self.handle, uri, index);
+        if line < 0: {
+            return Err<DocumentSymbol, string>(last_error());
+        }
+        let column: i32 = __mlang_std_compiler_document_symbol_column(self.handle, uri, index);
+        if column < 0: {
+            return Err<DocumentSymbol, string>(last_error());
+        }
+        let kind: i32 = __mlang_std_compiler_document_symbol_kind(self.handle, uri, index);
+        if kind < 0: {
+            return Err<DocumentSymbol, string>(last_error());
+        }
+        let name: string = __mlang_std_compiler_document_symbol_name(self.handle, uri, index);
+        if last_status() != 0: {
+            return Err<DocumentSymbol, string>(last_error());
+        }
+        return Ok<DocumentSymbol, string>(DocumentSymbol {
+            name: name,
+            kind: kind,
+            line: line,
+            column: column
+        });
+    }
+
+    /// @brief Resolve definition for symbol under cursor (same document scope).
+    pub fn definition(self: Session, uri: string, line: i32, column: i32) -> Result<DefinitionLocation, string> {
+        let def_line: i32 = __mlang_std_compiler_document_definition_line(self.handle, uri, line, column);
+        if def_line < 0: {
+            return Err<DefinitionLocation, string>(last_error());
+        }
+        let def_column: i32 = __mlang_std_compiler_document_definition_column(self.handle, uri, line, column);
+        if def_column < 0: {
+            return Err<DefinitionLocation, string>(last_error());
+        }
+        let def_name: string = __mlang_std_compiler_document_definition_name(self.handle, uri, line, column);
+        if last_status() != 0: {
+            return Err<DefinitionLocation, string>(last_error());
+        }
+        let def_uri: string = __mlang_std_compiler_document_definition_uri(self.handle, uri, line, column);
+        if last_status() != 0: {
+            return Err<DefinitionLocation, string>(last_error());
+        }
+        return Ok<DefinitionLocation, string>(DefinitionLocation {
+            name: def_name,
+            uri: def_uri,
+            line: def_line,
+            column: def_column
+        });
+    }
+}

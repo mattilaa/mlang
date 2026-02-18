@@ -38,6 +38,18 @@ struct SyntaxDiagnostic {
     std::string message;
 };
 
+struct DocumentSymbol {
+    std::string name;
+    int kind = 0;
+    int line = 0;
+    int column = 0;
+};
+
+struct DefinitionResult {
+    std::string uri;
+    DocumentSymbol symbol;
+};
+
 static bool isIdentStart(char c) {
     const unsigned char uc = static_cast<unsigned char>(c);
     return std::isalpha(uc) != 0 || c == '_';
@@ -164,6 +176,227 @@ static std::vector<std::string> extractDeclaredSymbols(std::string_view text) {
         }
     }
     return symbols;
+}
+
+static std::vector<std::string_view> splitLines(std::string_view text) {
+    std::vector<std::string_view> lines;
+    size_t start = 0;
+    while (start <= text.size()) {
+        const size_t nl = text.find('\n', start);
+        if (nl == std::string_view::npos) {
+            lines.push_back(text.substr(start));
+            break;
+        }
+        lines.push_back(text.substr(start, nl - start));
+        start = nl + 1;
+    }
+    return lines;
+}
+
+static std::optional<DocumentSymbol> parseDeclarationLine(std::string_view lineText, int lineNo) {
+    size_t i = 0;
+    while (i < lineText.size() && (lineText[i] == ' ' || lineText[i] == '\t')) {
+        ++i;
+    }
+    if (i >= lineText.size()) {
+        return std::nullopt;
+    }
+
+    struct PrefixKind {
+        std::string_view prefix;
+        int kind;
+    };
+    static constexpr PrefixKind kDecls[] = {
+        {"fn ", 1},
+        {"let ", 2},
+        {"var ", 2},
+        {"struct ", 3},
+        {"mod ", 4},
+    };
+
+    int kind = 0;
+    size_t nameStart = 0;
+    for (const PrefixKind& d : kDecls) {
+        if (startsWith(lineText.substr(i), d.prefix)) {
+            kind = d.kind;
+            nameStart = i + d.prefix.size();
+            break;
+        }
+    }
+    if (kind == 0 || nameStart >= lineText.size() || !isIdentStart(lineText[nameStart])) {
+        return std::nullopt;
+    }
+
+    size_t nameEnd = nameStart + 1;
+    while (nameEnd < lineText.size() && isIdentContinue(lineText[nameEnd])) {
+        ++nameEnd;
+    }
+
+    DocumentSymbol sym;
+    sym.name = std::string(lineText.substr(nameStart, nameEnd - nameStart));
+    sym.kind = kind;
+    sym.line = lineNo;
+    sym.column = static_cast<int>(nameStart) + 1;
+    return sym;
+}
+
+static std::vector<DocumentSymbol> computeDocumentSymbols(std::string_view text) {
+    std::vector<DocumentSymbol> out;
+    const std::vector<std::string_view> lines = splitLines(text);
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::optional<DocumentSymbol> decl =
+            parseDeclarationLine(lines[i], static_cast<int>(i) + 1);
+        if (decl.has_value()) {
+            out.push_back(*decl);
+        }
+    }
+    return out;
+}
+
+static std::optional<DocumentSymbol> findDefinition(std::string_view text, int line, int column) {
+    const std::optional<size_t> offset = offsetFromLineColumn(text, line, column);
+    if (!offset.has_value()) {
+        return std::nullopt;
+    }
+    const std::optional<std::string> token = tokenAtOffset(text, *offset);
+    if (!token.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::vector<DocumentSymbol> symbols = computeDocumentSymbols(text);
+    for (const DocumentSymbol& sym : symbols) {
+        if (sym.name == *token) {
+            return sym;
+        }
+    }
+    return std::nullopt;
+}
+
+static std::string uriToPath(std::string_view uri) {
+    const size_t pos = uri.find("://");
+    if (pos == std::string_view::npos) {
+        return std::string(uri);
+    }
+    return std::string(uri.substr(pos + 3));
+}
+
+static bool endsWith(std::string_view s, std::string_view suffix) {
+    return s.size() >= suffix.size() &&
+           s.substr(s.size() - suffix.size()) == suffix;
+}
+
+static std::string modulePathFromName(std::string_view modName) {
+    std::string out;
+    out.reserve(modName.size() + 4);
+    for (size_t i = 0; i < modName.size();) {
+        if (i + 1 < modName.size() && modName[i] == ':' && modName[i + 1] == ':') {
+            out.push_back('/');
+            i += 2;
+            continue;
+        }
+        out.push_back(modName[i]);
+        ++i;
+    }
+    out += ".mla";
+    return out;
+}
+
+static std::string moduleLeafFromName(std::string_view modName) {
+    const size_t pos = modName.rfind("::");
+    if (pos == std::string_view::npos) {
+        return std::string(modName);
+    }
+    return std::string(modName.substr(pos + 2));
+}
+
+static std::vector<std::string> parseModDeclarations(std::string_view text) {
+    std::vector<std::string> mods;
+    const auto lines = splitLines(text);
+    for (const std::string_view line : lines) {
+        size_t i = 0;
+        while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) {
+            ++i;
+        }
+        if (i + 4 > line.size() || line.substr(i, 4) != "mod ") {
+            continue;
+        }
+        i += 4;
+        size_t start = i;
+        while (i < line.size()) {
+            const char ch = line[i];
+            const bool ident = isIdentContinue(ch);
+            const bool sep = (ch == ':' && i + 1 < line.size() && line[i + 1] == ':');
+            if (ident) {
+                ++i;
+                continue;
+            }
+            if (sep) {
+                i += 2;
+                continue;
+            }
+            break;
+        }
+        if (i > start) {
+            mods.emplace_back(line.substr(start, i - start));
+        }
+    }
+    return mods;
+}
+
+static bool uriMatchesModule(std::string_view uri, std::string_view modName) {
+    const std::string path = uriToPath(uri);
+    const std::string modPath = modulePathFromName(modName);
+    if (endsWith(path, "/" + modPath) || endsWith(path, modPath)) {
+        return true;
+    }
+    const std::string leaf = moduleLeafFromName(modName);
+    return endsWith(path, "/" + leaf + ".mla") || endsWith(path, leaf + ".mla");
+}
+
+static std::optional<DefinitionResult> findDefinitionAcrossDocuments(
+    std::string_view current_uri,
+    std::string_view current_text,
+    const std::vector<DocumentState>& all_docs,
+    int line,
+    int column) {
+    const std::optional<size_t> offset = offsetFromLineColumn(current_text, line, column);
+    if (!offset.has_value()) {
+        return std::nullopt;
+    }
+    const std::optional<std::string> token = tokenAtOffset(current_text, *offset);
+    if (!token.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::vector<DocumentSymbol> local = computeDocumentSymbols(current_text);
+    for (const DocumentSymbol& sym : local) {
+        if (sym.name == *token) {
+            return DefinitionResult{std::string(current_uri), sym};
+        }
+    }
+
+    const std::vector<std::string> mods = parseModDeclarations(current_text);
+    if (!mods.empty()) {
+        for (const std::string& mod : mods) {
+            for (const DocumentState& doc : all_docs) {
+                if (doc.uri == current_uri) {
+                    continue;
+                }
+                if (!uriMatchesModule(doc.uri, mod)) {
+                    continue;
+                }
+                const std::vector<DocumentSymbol> syms =
+                    computeDocumentSymbols(doc.text);
+                for (const DocumentSymbol& sym : syms) {
+                    if (sym.name == *token) {
+                        return DefinitionResult{doc.uri, sym};
+                    }
+                }
+            }
+        }
+    }
+
+    return std::nullopt;
 }
 
 static std::string completionPrefixAtOffset(std::string_view text, size_t offset) {
@@ -331,6 +564,16 @@ public:
         return it->second.text;
     }
 
+    std::vector<DocumentState> snapshotDocuments() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<DocumentState> out;
+        out.reserve(documents_.size());
+        for (const auto& kv : documents_) {
+            out.push_back(kv.second);
+        }
+        return out;
+    }
+
 private:
     std::mutex mutex_;
     std::unordered_map<std::string, DocumentState> documents_;
@@ -377,6 +620,19 @@ extern "C" {
 struct mlang_compiler_session {
     std::uint64_t id;
 };
+
+int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            int* out_line,
+                                            int* out_column,
+                                            char* out_name,
+                                            int out_name_capacity,
+                                            int* out_name_length,
+                                            char* out_uri,
+                                            int out_uri_capacity,
+                                            int* out_uri_length);
 
 int __mlang_compiler_session_create(mlang_compiler_session** out_session) {
     if (out_session == nullptr) {
@@ -634,6 +890,149 @@ int __mlang_compiler_document_completion_get(mlang_compiler_session* session,
         std::memcpy(out_item, item.data(), copy_len);
     }
     out_item[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_symbol_count(mlang_compiler_session* session,
+                                           const char* uri,
+                                           int* out_count) {
+    if (session == nullptr || uri == nullptr || out_count == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const auto symbols = mlang::compiler_api::computeDocumentSymbols(*text);
+    *out_count = static_cast<int>(symbols.size());
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_symbol_get(mlang_compiler_session* session,
+                                         const char* uri,
+                                         int index,
+                                         char* out_name,
+                                         int out_name_capacity,
+                                         int* out_name_length,
+                                         int* out_kind,
+                                         int* out_line,
+                                         int* out_column) {
+    if (session == nullptr || uri == nullptr || out_name == nullptr || out_name_capacity <= 0 ||
+        out_name_length == nullptr || out_kind == nullptr || out_line == nullptr ||
+        out_column == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const auto symbols = mlang::compiler_api::computeDocumentSymbols(*text);
+    if (index < 0 || static_cast<size_t>(index) >= symbols.size()) {
+        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    }
+
+    const mlang::compiler_api::DocumentSymbol& sym =
+        symbols[static_cast<size_t>(index)];
+    *out_kind = sym.kind;
+    *out_line = sym.line;
+    *out_column = sym.column;
+    *out_name_length = static_cast<int>(sym.name.size());
+
+    const size_t copy_len =
+        std::min(static_cast<size_t>(out_name_capacity - 1), sym.name.size());
+    if (copy_len > 0) {
+        std::memcpy(out_name, sym.name.data(), copy_len);
+    }
+    out_name[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_definition(mlang_compiler_session* session,
+                                         const char* uri,
+                                         int line,
+                                         int column,
+                                         int* out_line,
+                                         int* out_column,
+                                         char* out_name,
+                                         int out_name_capacity,
+                                         int* out_name_length) {
+    char out_uri_dummy[2] = {0, 0};
+    int out_uri_length_dummy = 0;
+    return __mlang_compiler_document_definition_ex(
+        session, uri, line, column, out_line, out_column, out_name, out_name_capacity,
+        out_name_length, out_uri_dummy, 2, &out_uri_length_dummy);
+}
+
+int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            int* out_line,
+                                            int* out_column,
+                                            char* out_name,
+                                            int out_name_capacity,
+                                            int* out_name_length,
+                                            char* out_uri,
+                                            int out_uri_capacity,
+                                            int* out_uri_length) {
+    if (session == nullptr || uri == nullptr || out_line == nullptr ||
+        out_column == nullptr || out_name == nullptr || out_name_capacity <= 0 ||
+        out_name_length == nullptr || out_uri == nullptr || out_uri_capacity <= 0 ||
+        out_uri_length == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    const std::optional<mlang::compiler_api::DefinitionResult> def =
+        mlang::compiler_api::findDefinitionAcrossDocuments(uri, *text, docs, line, column);
+    if (!def.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    }
+
+    *out_line = def->symbol.line;
+    *out_column = def->symbol.column;
+    *out_name_length = static_cast<int>(def->symbol.name.size());
+    const size_t copy_len =
+        std::min(static_cast<size_t>(out_name_capacity - 1), def->symbol.name.size());
+    if (copy_len > 0) {
+        std::memcpy(out_name, def->symbol.name.data(), copy_len);
+    }
+    out_name[copy_len] = '\0';
+
+    *out_uri_length = static_cast<int>(def->uri.size());
+    const size_t uri_copy_len =
+        std::min(static_cast<size_t>(out_uri_capacity - 1), def->uri.size());
+    if (uri_copy_len > 0) {
+        std::memcpy(out_uri, def->uri.data(), uri_copy_len);
+    }
+    out_uri[uri_copy_len] = '\0';
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 

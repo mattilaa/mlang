@@ -131,6 +131,8 @@ non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
+Incremental parse/query API for tooling (`std::compiler::Session`, open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via `mod` files) example:
+`examples/std_compiler_demo.mla`.
 `?` is supported for `Result` propagation (early-return on `Err`).
 
 ## Examples
