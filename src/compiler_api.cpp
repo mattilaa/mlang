@@ -5,6 +5,10 @@
 #include <cctype>
 #include <cstring>
 #include <cstdint>
+#include <cstdlib>
+#include <deque>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -12,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 extern int yyparse();
@@ -210,6 +215,247 @@ static std::string moduleLeafFromName(std::string_view modName) {
         return std::string(modName);
     }
     return std::string(modName.substr(pos + 2));
+}
+
+static std::string trimWs(std::string_view s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start])) != 0) {
+        ++start;
+    }
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1])) != 0) {
+        --end;
+    }
+    return std::string(s.substr(start, end - start));
+}
+
+static std::string unquote(std::string_view v) {
+    std::string t = trimWs(v);
+    if (t.size() >= 2 && t.front() == '"' && t.back() == '"') {
+        return t.substr(1, t.size() - 2);
+    }
+    return t;
+}
+
+static std::vector<std::string> splitTomlArray(std::string_view input) {
+    std::vector<std::string> out;
+    std::string cur;
+    bool in_quotes = false;
+    for (char c : input) {
+        if (c == '"') {
+            in_quotes = !in_quotes;
+            cur.push_back(c);
+            continue;
+        }
+        if (c == ',' && !in_quotes) {
+            out.push_back(trimWs(cur));
+            cur.clear();
+            continue;
+        }
+        cur.push_back(c);
+    }
+    if (!cur.empty()) {
+        out.push_back(trimWs(cur));
+    }
+    return out;
+}
+
+static std::vector<std::string> parseModulePathsFromToml(
+    const std::filesystem::path& manifest_path) {
+    std::ifstream in(manifest_path, std::ios::binary);
+    if (!in) {
+        return {};
+    }
+
+    std::vector<std::string> out;
+    std::string line;
+    std::string section;
+    while (std::getline(in, line)) {
+        std::string t = trimWs(line);
+        if (t.empty() || t[0] == '#') {
+            continue;
+        }
+        if (t.front() == '[' && t.back() == ']') {
+            section = t.substr(1, t.size() - 2);
+            continue;
+        }
+        if (section != "package" && section != "tool.mlang") {
+            continue;
+        }
+        const size_t eq = t.find('=');
+        if (eq == std::string::npos) {
+            continue;
+        }
+        const std::string key = trimWs(t.substr(0, eq));
+        if (key != "module_paths") {
+            continue;
+        }
+        const std::string value = trimWs(t.substr(eq + 1));
+        if (value.empty()) {
+            continue;
+        }
+        if (value.front() == '[' && value.back() == ']') {
+            std::string inner = value.substr(1, value.size() - 2);
+            for (const auto& part : splitTomlArray(inner)) {
+                std::string v = unquote(part);
+                if (!v.empty()) {
+                    out.push_back(v);
+                }
+            }
+        } else {
+            std::string v = unquote(value);
+            if (!v.empty()) {
+                out.push_back(v);
+            }
+        }
+    }
+    return out;
+}
+
+static std::optional<std::filesystem::path> findManifestPath(
+    std::filesystem::path start_dir) {
+    std::error_code ec;
+    start_dir = std::filesystem::absolute(start_dir, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+
+    std::filesystem::path cur = start_dir;
+    while (!cur.empty()) {
+        const auto candidate = cur / "mlang.toml";
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+        const auto parent = cur.parent_path();
+        if (parent == cur) {
+            break;
+        }
+        cur = parent;
+    }
+    return std::nullopt;
+}
+
+static std::vector<std::string> defaultStdlibPaths() {
+    std::vector<std::string> paths;
+    if (const char* env = std::getenv("MLANG_STDLIB_PATH")) {
+        paths.emplace_back(env);
+    }
+#ifdef MLANG_STDLIB_SOURCE_DIR
+    {
+        std::error_code ec;
+        if (std::filesystem::exists(MLANG_STDLIB_SOURCE_DIR, ec)) {
+            paths.emplace_back(MLANG_STDLIB_SOURCE_DIR);
+        }
+    }
+#endif
+    if (const char* xdg = std::getenv("XDG_DATA_HOME")) {
+        paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
+    }
+    if (const char* home = std::getenv("HOME")) {
+        paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
+    }
+#ifdef MLANG_STDLIB_INSTALL_DIR
+    paths.emplace_back(MLANG_STDLIB_INSTALL_DIR);
+#endif
+    paths.emplace_back("/usr/local/share/mlang/stdlib");
+    paths.emplace_back("/usr/share/mlang/stdlib");
+    return paths;
+}
+
+static void appendStdlibPaths(std::vector<std::string>& module_paths) {
+    std::unordered_set<std::string> seen(module_paths.begin(), module_paths.end());
+    for (const auto& p : defaultStdlibPaths()) {
+        if (!p.empty() && seen.insert(p).second) {
+            module_paths.push_back(p);
+        }
+    }
+}
+
+static std::vector<std::string> moduleSearchPathsForUri(std::string_view uri) {
+    namespace fs = std::filesystem;
+
+    std::vector<std::string> out;
+    std::error_code ec;
+    fs::path p = fs::path(uriToPath(uri));
+    fs::path base = p.parent_path();
+    if (base.empty()) {
+        base = ".";
+    }
+    fs::path base_abs = fs::absolute(base, ec);
+    if (!ec) {
+        out.push_back(base_abs.lexically_normal().string());
+    } else {
+        out.push_back(base.string());
+    }
+
+    if (const auto manifest = findManifestPath(base); manifest.has_value()) {
+        std::vector<std::string> manifest_paths = parseModulePathsFromToml(*manifest);
+        const fs::path manifest_dir = manifest->parent_path();
+        for (auto& mp : manifest_paths) {
+            fs::path path_mp = fs::path(mp);
+            if (!path_mp.is_absolute()) {
+                path_mp = manifest_dir / path_mp;
+            }
+            std::error_code path_ec;
+            fs::path abs = fs::absolute(path_mp, path_ec);
+            if (!path_ec) {
+                out.push_back(abs.lexically_normal().string());
+            }
+        }
+    }
+
+    appendStdlibPaths(out);
+    return out;
+}
+
+static std::optional<std::string> resolveModuleFilePath(std::string_view requester_uri,
+                                                        std::string_view module_name) {
+    namespace fs = std::filesystem;
+    const std::vector<std::string> roots = moduleSearchPathsForUri(requester_uri);
+    const std::string rel_file = modulePathFromName(module_name);
+
+    std::string rel_dir = std::string(module_name);
+    for (size_t i = 0; i + 1 < rel_dir.size();) {
+        if (rel_dir[i] == ':' && rel_dir[i + 1] == ':') {
+            rel_dir.replace(i, 2, "/");
+            ++i;
+            continue;
+        }
+        ++i;
+    }
+
+    for (const auto& root : roots) {
+        std::error_code ec;
+        fs::path p1 = fs::path(root) / rel_file;
+        if (fs::exists(p1, ec)) {
+            fs::path abs = fs::absolute(p1, ec);
+            if (!ec) {
+                return abs.lexically_normal().string();
+            }
+            return p1.string();
+        }
+        ec.clear();
+        fs::path p2 = fs::path(root) / rel_dir / "mod.mla";
+        if (fs::exists(p2, ec)) {
+            fs::path abs = fs::absolute(p2, ec);
+            if (!ec) {
+                return abs.lexically_normal().string();
+            }
+            return p2.string();
+        }
+    }
+    return std::nullopt;
+}
+
+static std::string fileUriFromPath(const std::string& path) {
+    std::error_code ec;
+    std::filesystem::path abs = std::filesystem::absolute(path, ec);
+    const std::string p = (!ec ? abs.lexically_normal().generic_string()
+                               : std::filesystem::path(path).generic_string());
+    if (!p.empty() && p[0] == '/') {
+        return "file://" + p;
+    }
+    return "file:///" + p;
 }
 
 static std::vector<int> computeLineDepths(std::string_view text) {
@@ -560,6 +806,93 @@ static const DocumentSemantic* findSemanticDoc(
         }
     }
     return nullptr;
+}
+
+static bool uriMatchesModule(std::string_view uri, std::string_view modName);
+
+static bool hasModuleProvider(const std::vector<DocumentSemantic>& docs,
+                              std::string_view module_name) {
+    for (const auto& doc : docs) {
+        if (uriMatchesModule(doc.uri, module_name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static std::optional<DocumentSemantic> loadFilesystemSemanticDocument(
+    const std::string& file_path) {
+    std::ifstream in(file_path, std::ios::binary);
+    if (!in) {
+        return std::nullopt;
+    }
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    DocumentState doc;
+    doc.uri = fileUriFromPath(file_path);
+    doc.language_id = "mlang";
+    doc.text = std::move(text);
+    doc.version = 0;
+
+    return buildDocumentSemanticFromAst(doc);
+}
+
+static void enqueueDocModules(const DocumentSemantic& doc,
+                              std::deque<std::pair<std::string, std::string>>& q) {
+    for (const auto& use : doc.uses) {
+        if (!use.module.empty()) {
+            q.push_back({doc.uri, use.module});
+        }
+    }
+    for (const auto& mod : doc.mods) {
+        if (!mod.empty()) {
+            q.push_back({doc.uri, mod});
+        }
+    }
+}
+
+static void hydrateFilesystemModulesFor(std::string_view root_uri,
+                                        std::vector<DocumentSemantic>& docs) {
+    const DocumentSemantic* root = findSemanticDoc(docs, root_uri);
+    if (!root || !root->ast_valid) {
+        return;
+    }
+
+    std::deque<std::pair<std::string, std::string>> queue;
+    enqueueDocModules(*root, queue);
+    std::unordered_set<std::string> visited;
+
+    while (!queue.empty()) {
+        auto [requester_uri, module_name] = queue.front();
+        queue.pop_front();
+        if (module_name.empty()) {
+            continue;
+        }
+        const std::string visit_key = requester_uri + "\n" + module_name;
+        if (!visited.insert(visit_key).second) {
+            continue;
+        }
+        if (hasModuleProvider(docs, module_name)) {
+            continue;
+        }
+
+        const auto file_path = resolveModuleFilePath(requester_uri, module_name);
+        if (!file_path.has_value()) {
+            continue;
+        }
+
+        const std::string uri = fileUriFromPath(*file_path);
+        if (findSemanticDoc(docs, uri)) {
+            continue;
+        }
+
+        const auto loaded = loadFilesystemSemanticDocument(*file_path);
+        if (!loaded.has_value() || !loaded->ast_valid) {
+            continue;
+        }
+        docs.push_back(*loaded);
+        enqueueDocModules(docs.back(), queue);
+    }
 }
 
 static bool uriMatchesModule(std::string_view uri, std::string_view modName) {
@@ -1150,8 +1483,9 @@ int __mlang_compiler_document_hover(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
         mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
     const mlang::compiler_api::DocumentSemantic* current =
         mlang::compiler_api::findSemanticDoc(sem_docs, uri);
     if (!current) {
@@ -1214,8 +1548,9 @@ int __mlang_compiler_document_completion_count(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
         mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
     const mlang::compiler_api::DocumentSemantic* current =
         mlang::compiler_api::findSemanticDoc(sem_docs, uri);
     if (!current) {
@@ -1256,8 +1591,9 @@ int __mlang_compiler_document_completion_get(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
         mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
     const mlang::compiler_api::DocumentSemantic* current =
         mlang::compiler_api::findSemanticDoc(sem_docs, uri);
     if (!current) {
@@ -1302,8 +1638,9 @@ int __mlang_compiler_document_symbol_count(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
         mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
     const mlang::compiler_api::DocumentSemantic* current =
         mlang::compiler_api::findSemanticDoc(sem_docs, uri);
     if (!current) {
@@ -1344,8 +1681,9 @@ int __mlang_compiler_document_symbol_get(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
         mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
     const mlang::compiler_api::DocumentSemantic* current =
         mlang::compiler_api::findSemanticDoc(sem_docs, uri);
     if (!current) {
@@ -1422,8 +1760,9 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
         mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
     const mlang::compiler_api::DocumentSemantic* current =
         mlang::compiler_api::findSemanticDoc(sem_docs, uri);
     if (!current) {

@@ -219,3 +219,25 @@ fn test_compiler_semantic_scope_and_use_import() -> i32 {
     let _ = s.destroy();
     return 0;
 }
+
+#[test]
+fn test_compiler_definition_from_workspace_module_paths() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let main_uri: string = "workspace_cfg/app/main_cfg.mla";
+    let main_src: string = "use lib::util_cfg::util_cfg;\nfn main() -> i32 {\n  return util_cfg();\n}";
+    let o: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 3, 10);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "util_cfg") == 0: { return 1; }
+    if contains(def.uri, "workspace_cfg/modules/lib/util_cfg.mla") == 0: { return 1; }
+    if def.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
