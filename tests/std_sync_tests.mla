@@ -1,0 +1,78 @@
+mod std::sync;
+mod std::strbuf;
+
+use std::strbuf::contains;
+use std::sync::Channel;
+use std::sync::Condvar;
+use std::sync::Mutex;
+
+#[test]
+fn test_mutex_lock_unlock() -> i32 {
+    let mr: Result<Mutex, string> = Mutex::new();
+    if mr.is_err(): { return 1; }
+    let m: Mutex = mr.unwrap();
+    let l: Result<i32, string> = m.lock();
+    if l.is_err(): {
+        m.close();
+        return 1;
+    }
+    let u: Result<i32, string> = m.unlock();
+    m.close();
+    if u.is_err(): { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_condvar_wait_timeout() -> i32 {
+    let mr: Result<Mutex, string> = Mutex::new();
+    let cr: Result<Condvar, string> = Condvar::new();
+    if mr.is_err(): { return 1; }
+    if cr.is_err(): { return 1; }
+    let m: Mutex = mr.unwrap();
+    let c: Condvar = cr.unwrap();
+
+    let l: Result<i32, string> = m.lock();
+    if l.is_err(): {
+        c.close();
+        m.close();
+        return 1;
+    }
+    let wr: Result<i32, string> = c.wait_timeout_ms(m, 20);
+    let u: Result<i32, string> = m.unlock();
+    c.close();
+    m.close();
+    if wr.is_err(): { return 1; }
+    if u.is_err(): { return 1; }
+    return wr.unwrap() == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_channel_send_recv_try_recv() -> i32 {
+    let cr: Result<Channel, string> = Channel::new(2);
+    if cr.is_err(): { return 1; }
+    let ch: Channel = cr.unwrap();
+
+    let s1: Result<i32, string> = ch.send("hello-sync");
+    if s1.is_err(): {
+        ch.free();
+        return 1;
+    }
+
+    var buf = String::with_capacity(128);
+    let rr: Result<i64, string> = ch.recv(buf, 128);
+    if rr.is_err(): {
+        String::free(buf);
+        ch.free();
+        return 1;
+    }
+    let ok: i32 = contains(buf, "hello-sync") == 1 ? 1 : 0;
+
+    let tr: Result<i64, string> = ch.try_recv(buf, 128);
+    String::free(buf);
+    ch.close();
+    ch.free();
+    if tr.is_err(): { return 1; }
+    // empty non-closed try_recv uses -2
+    if tr.unwrap() != -2: { return 1; }
+    return ok == 1 ? 0 : 1;
+}

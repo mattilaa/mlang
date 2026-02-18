@@ -48,6 +48,14 @@ For child process integration, see:
   (`spawn`, `spawn_inherit`, child stdin/stdout/stderr pipes,
    `wait`, `ExitStatus::success/code/signaled`).
 
+For timing helpers, see:
+- `stdlib/std/time.mla`
+  (`now_ms`, `now_ns`, `sleep_ms`, `Timer::after/reset/wait/elapsed`).
+
+For synchronization primitives, see:
+- `stdlib/std/sync.mla`
+  (`Mutex`, `Condvar`, `Channel` with send/recv/try_recv/close).
+
 For filesystem helpers, see:
 - `stdlib/std/fs.mla`
   (`File::open/create/close/write/write_line`,
@@ -66,7 +74,7 @@ See also:
 - `docs/language_reference.h` for Doxygen groups covering language builtins
   (types, keywords, macros, attributes).
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
-  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::thread`).
+  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`).
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
 - `docs/language_attributes.mlastub` for syntax-highlighted, LSP-indexed

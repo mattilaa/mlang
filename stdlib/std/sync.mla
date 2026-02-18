@@ -1,0 +1,184 @@
+/// \file sync.mla
+/// \brief Synchronization primitives for MLang (std::sync).
+///
+/// Provides:
+/// - Mutex
+/// - Condvar
+/// - Channel (string message queue)
+
+extern pub fn __mlang_std_sync_last_error() -> string;
+extern pub fn __mlang_std_sync_mutex_new() -> i64;
+extern pub fn __mlang_std_sync_mutex_lock(handle: i64) -> int;
+extern pub fn __mlang_std_sync_mutex_unlock(handle: i64) -> int;
+extern pub fn __mlang_std_sync_mutex_free(handle: i64) -> int;
+extern pub fn __mlang_std_sync_condvar_new() -> i64;
+extern pub fn __mlang_std_sync_condvar_wait(cond_handle: i64, mutex_handle: i64) -> int;
+extern pub fn __mlang_std_sync_condvar_wait_timeout_ms(cond_handle: i64, mutex_handle: i64, timeout_ms: i64) -> int;
+extern pub fn __mlang_std_sync_condvar_notify_one(cond_handle: i64) -> int;
+extern pub fn __mlang_std_sync_condvar_notify_all(cond_handle: i64) -> int;
+extern pub fn __mlang_std_sync_condvar_free(cond_handle: i64) -> int;
+extern pub fn __mlang_std_sync_channel_new(capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_send(channel_handle: i64, s: string) -> int;
+extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_try_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_close(channel_handle: i64) -> int;
+extern pub fn __mlang_std_sync_channel_free(channel_handle: i64) -> int;
+
+/// @brief Mutex handle.
+pub struct Mutex {
+    var handle: i64;
+};
+
+/// @brief Condition variable handle.
+pub struct Condvar {
+    var handle: i64;
+};
+
+/// @brief String channel handle.
+pub struct Channel {
+    var handle: i64;
+};
+
+/// @brief Return last std::sync backend error string.
+pub fn last_error() -> string {
+    return __mlang_std_sync_last_error();
+}
+
+impl Mutex {
+    /// @brief Create a new mutex.
+    pub fn new() -> Result<Mutex, string> {
+        let h: i64 = __mlang_std_sync_mutex_new();
+        if h == 0: {
+            return Err<Mutex, string>(last_error());
+        }
+        return Ok<Mutex, string>(Mutex { handle: h });
+    }
+
+    /// @brief Lock mutex.
+    pub fn lock(self: Mutex) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_mutex_lock(self.handle);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Unlock mutex.
+    pub fn unlock(self: Mutex) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_mutex_unlock(self.handle);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Free mutex handle.
+    pub fn close(self: Mutex) -> i32 {
+        return __mlang_std_sync_mutex_free(self.handle);
+    }
+}
+
+impl Condvar {
+    /// @brief Create a new condition variable.
+    pub fn new() -> Result<Condvar, string> {
+        let h: i64 = __mlang_std_sync_condvar_new();
+        if h == 0: {
+            return Err<Condvar, string>(last_error());
+        }
+        return Ok<Condvar, string>(Condvar { handle: h });
+    }
+
+    /// @brief Wait for notification. Caller must hold `mutex`.
+    pub fn wait(self: Condvar, mutex: Mutex) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_condvar_wait(self.handle, mutex.handle);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Wait with timeout (ms). Returns 0 when notified, 1 when timed out.
+    pub fn wait_timeout_ms(self: Condvar, mutex: Mutex, timeout_ms: i64) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_condvar_wait_timeout_ms(self.handle, mutex.handle, timeout_ms);
+        if rc < 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(rc);
+    }
+
+    /// @brief Wake one waiting thread.
+    pub fn notify_one(self: Condvar) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_condvar_notify_one(self.handle);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Wake all waiting threads.
+    pub fn notify_all(self: Condvar) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_condvar_notify_all(self.handle);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Free condvar handle.
+    pub fn close(self: Condvar) -> i32 {
+        return __mlang_std_sync_condvar_free(self.handle);
+    }
+}
+
+impl Channel {
+    /// @brief Create string channel with bounded capacity (`<=0` => default).
+    pub fn new(capacity: i64) -> Result<Channel, string> {
+        let h: i64 = __mlang_std_sync_channel_new(capacity);
+        if h == 0: {
+            return Err<Channel, string>(last_error());
+        }
+        return Ok<Channel, string>(Channel { handle: h });
+    }
+
+    /// @brief Send message to channel (blocks when full).
+    pub fn send(self: Channel, s: string) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_channel_send(self.handle, s);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Receive message into `buf`.
+    /// Returns bytes copied. `0` means channel is closed and drained.
+    pub fn recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_sync_channel_recv(self.handle, buf, capacity);
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Non-blocking receive into `buf`.
+    /// Returns bytes copied (>0), `0` when closed+drained, `-2` when empty.
+    pub fn try_recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_sync_channel_try_recv(self.handle, buf, capacity);
+        if n < -1: {
+            return Ok<i64, string>(n);
+        }
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Close channel. Wakes blocked senders/receivers.
+    pub fn close(self: Channel) -> i32 {
+        return __mlang_std_sync_channel_close(self.handle);
+    }
+
+    /// @brief Free channel handle.
+    pub fn free(self: Channel) -> i32 {
+        return __mlang_std_sync_channel_free(self.handle);
+    }
+}

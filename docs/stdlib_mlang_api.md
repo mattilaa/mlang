@@ -9,6 +9,8 @@ mod std::json;
 mod std::math;
 mod std::net;
 mod std::process;
+mod std::sync;
+mod std::time;
 mod std::fs;
 mod std::strbuf;
 mod std::thread;
@@ -21,6 +23,8 @@ The source-of-truth implementation files are:
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
+- `stdlib/std/sync.mla`
+- `stdlib/std/time.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/thread.mla`
 
@@ -254,6 +258,54 @@ Module file: `stdlib/std/process.mla`
 - `ExitStatus::code(self: ExitStatus) -> i32`
 - `ExitStatus::signaled(self: ExitStatus) -> int`
 - `ExitStatus::signal(self: ExitStatus) -> i32`
+
+## std::sync
+
+Module file: `stdlib/std/sync.mla`
+
+### Types
+- `Mutex`
+- `Condvar`
+- `Channel`
+
+### Mutex
+- `Mutex::new() -> Result<Mutex, string>`
+- `Mutex::lock(self: Mutex) -> Result<i32, string>`
+- `Mutex::unlock(self: Mutex) -> Result<i32, string>`
+- `Mutex::close(self: Mutex) -> i32`
+
+### Condvar
+- `Condvar::new() -> Result<Condvar, string>`
+- `Condvar::wait(self: Condvar, mutex: Mutex) -> Result<i32, string>`
+- `Condvar::wait_timeout_ms(self: Condvar, mutex: Mutex, timeout_ms: i64) -> Result<i32, string>`
+- `Condvar::notify_one(self: Condvar) -> Result<i32, string>`
+- `Condvar::notify_all(self: Condvar) -> Result<i32, string>`
+- `Condvar::close(self: Condvar) -> i32`
+
+### Channel (string)
+- `Channel::new(capacity: i64) -> Result<Channel, string>`
+- `Channel::send(self: Channel, s: string) -> Result<i32, string>`
+- `Channel::recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
+- `Channel::try_recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
+- `Channel::close(self: Channel) -> i32`
+- `Channel::free(self: Channel) -> i32`
+
+## std::time
+
+Module file: `stdlib/std/time.mla`
+
+### Clock
+- `now_ms() -> i64`
+- `now_ns() -> i64`
+- `sleep_ms(ms: i64) -> void`
+
+### Timer
+- `Timer::after(timeout_ms: i64) -> Result<Timer, string>`
+- `Timer::reset(self: Timer, timeout_ms: i64) -> i32`
+- `Timer::elapsed(self: Timer) -> int`
+- `Timer::remaining_ms(self: Timer) -> i64`
+- `Timer::wait(self: Timer) -> i32`
+- `Timer::close(self: Timer) -> i32`
 
 ## std::strbuf
 
