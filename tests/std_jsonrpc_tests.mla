@@ -1,0 +1,74 @@
+mod std::jsonrpc;
+mod std::strbuf;
+
+use std::jsonrpc::*;
+use std::strbuf::contains;
+
+#[test]
+fn test_jsonrpc_build_and_parse_frame() -> i32 {
+    let payload: string = "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\"}";
+    let frame: string = build_frame(payload);
+    if contains(frame, "Content-Length: ") != 1: {
+        String::free(frame);
+        return 1;
+    }
+
+    var out = String::with_capacity(256);
+    let parsed: Result<i64, string> = parse_frame(frame, out, 256);
+    String::free(frame);
+    if parsed.is_err(): {
+        String::free(out);
+        return 1;
+    }
+    let ok: i32 = contains(out, "\"method\":\"ping\"") == 1 ? 1 : 0;
+    String::free(out);
+    return ok == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_jsonrpc_cancel_registry() -> i32 {
+    if cancel_clear_all() != 0: { return 1; }
+    let mr: Result<i32, string> = cancel_mark(42);
+    if mr.is_err(): { return 1; }
+    if cancel_is_marked(42) != 1: { return 1; }
+    if cancel_take(42) != 1: { return 1; }
+    if cancel_is_marked(42) != 0: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_jsonrpc_register_cancel_from_payload() -> i32 {
+    cancel_clear_all();
+    let payload: string = "{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\",\"params\":{\"id\":99}}";
+    let rr: Result<i32, string> = register_cancel_from_payload(payload);
+    if rr.is_err(): { return 1; }
+    if rr.unwrap() != 1: { return 1; }
+    if cancel_is_marked(99) != 1: { return 1; }
+    return cancel_take(99) == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_jsonrpc_runtime_queue_roundtrip() -> i32 {
+    let rt_r: Result<Runtime, string> = Runtime::new(4);
+    if rt_r.is_err(): { return 1; }
+    let rt: Runtime = rt_r.unwrap();
+
+    let push_r: Result<i32, string> = rt.push_outbound("{\"jsonrpc\":\"2.0\",\"id\":1}");
+    if push_r.is_err(): {
+        rt.close();
+        return 1;
+    }
+
+    var scratch = String::with_capacity(128);
+    let pop_r: Result<i64, string> = rt.try_pop_outbound(scratch, 128);
+    if pop_r.is_err(): {
+        String::free(scratch);
+        rt.close();
+        return 1;
+    }
+
+    let ok: i32 = contains(scratch, "\"id\":1") == 1 ? 1 : 0;
+    String::free(scratch);
+    rt.close();
+    return ok == 1 ? 0 : 1;
+}

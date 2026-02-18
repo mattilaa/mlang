@@ -6,6 +6,7 @@ These are the APIs you import in Mlang source via:
 ```mla
 mod std::io;
 mod std::json;
+mod std::jsonrpc;
 mod std::math;
 mod std::net;
 mod std::process;
@@ -20,6 +21,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/fs.mla`
 - `stdlib/std/io.mla`
 - `stdlib/std/json.mla`
+- `stdlib/std/jsonrpc.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
@@ -166,6 +168,47 @@ Module file: `stdlib/std/json.mla`
 - `JsonObjectIter::current_key(self: JsonObjectIter) -> Result<string, string>`
 - `JsonObjectIter::current_value(self: JsonObjectIter) -> Result<JsonValue, string>`
 - `JsonObjectIter::advance(self: JsonObjectIter) -> JsonObjectIter`
+
+## std::jsonrpc
+
+Module file: `stdlib/std/jsonrpc.mla`
+
+### Types
+- `StdioTransport`
+- `Runtime`
+
+### Transport API
+- `stdio() -> StdioTransport`
+- `StdioTransport::read_frame(self, buf: string, capacity: i64) -> Result<i64, string>`
+- `StdioTransport::read_frame_timeout(self, buf: string, capacity: i64, timeout_ms: i64) -> Result<i64, string>`
+- `StdioTransport::write_frame(self, payload: string) -> Result<i32, string>`
+- `build_frame(payload: string) -> string`
+- `parse_frame(frame: string, out: string, capacity: i64) -> Result<i64, string>`
+- `last_error() -> string`
+
+### Runtime queues
+- `Runtime::new(queue_capacity: i64) -> Result<Runtime, string>`
+- `Runtime::push_inbound(self, payload: string) -> Result<i32, string>`
+- `Runtime::try_pop_inbound(self, buf: string, capacity: i64) -> Result<i64, string>`
+- `Runtime::push_outbound(self, payload: string) -> Result<i32, string>`
+- `Runtime::try_pop_outbound(self, buf: string, capacity: i64) -> Result<i64, string>`
+- `Runtime::close(self) -> void`
+- `flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: string, capacity: i64) -> Result<i32, string>`
+- `run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, string>`
+
+### Cancellation API
+- `cancel_mark(request_id: i64) -> Result<i32, string>`
+- `cancel_is_marked(request_id: i64) -> int`
+- `cancel_take(request_id: i64) -> int`
+- `cancel_clear(request_id: i64) -> int`
+- `cancel_clear_all() -> i32`
+- `register_cancel_from_payload(payload: string) -> Result<i32, string>`
+- `is_timeout_error(err: string) -> int`
+
+### Runtime Dispatch Hook
+- `__mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string`
+- Provided as a weak default in `libmlang_std` (returns empty response).
+- Override this symbol in your server program to implement method dispatch.
 
 ## std::net
 

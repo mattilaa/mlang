@@ -131,6 +131,10 @@ non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
+JSON-RPC/LSP transport runtime (`std::jsonrpc` Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
+`examples/std_jsonrpc_runtime_demo.mla`.
+Manual stdio JSON-RPC worker runtime demo (`run_stdio_loop`, built-in `$/cancelRequest` routing):
+`examples/std_jsonrpc_stdio_loop_demo.mla` (manual run, not part of Robot suite).
 Incremental parse/query API for tooling (`std::compiler::Session`, open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via `mod` files) example:
 `examples/std_compiler_demo.mla`.
 `?` is supported for `Result` propagation (early-return on `Err`).
@@ -146,6 +150,10 @@ Incremental parse/query API for tooling (`std::compiler::Session`, open/change/c
   `examples/std_net_demo.mla`
 - JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):
   `examples/std_json_demo.mla`
+- JSON-RPC/LSP stdio transport + cancellation/runtime queues (`std::jsonrpc`):
+  `examples/std_jsonrpc_runtime_demo.mla`
+- JSON-RPC stdio worker runtime loop (`std::jsonrpc::run_stdio_loop`):
+  `examples/std_jsonrpc_stdio_loop_demo.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:
