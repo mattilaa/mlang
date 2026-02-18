@@ -9,17 +9,19 @@ extern pub fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
 extern pub fn __mlang_std_fs_read_all_lines(handle: i64) -> list<string>;
 extern pub fn __mlang_std_fs_free_lines(lines: list<string>) -> void;
 
+/// @brief Owned file handle.
 pub struct File {
     var handle: i64;
 };
 
+/// @brief Buffered line reader over a file handle.
 pub struct BufReader {
     var file: File;
     var line_capacity: i64;
 };
 
 impl File {
-    /// Open existing file for reading.
+    ///  Open existing file for reading.
     pub fn open(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_read(path);
         if h == 0: {
@@ -28,7 +30,7 @@ impl File {
         return Ok<File, string>(File { handle: h });
     }
 
-    /// Create/truncate file for writing.
+    ///  Create/truncate file for writing.
     pub fn create(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_write(path);
         if h == 0: {
@@ -37,7 +39,8 @@ impl File {
         return Ok<File, string>(File { handle: h });
     }
 
-    /// Close file handle.
+    ///  Close file handle.
+    /// Returns `0` on success.
     pub fn close(self: File) -> i32 {
         if self.handle == 0: {
             return 0;
@@ -45,7 +48,8 @@ impl File {
         return __mlang_std_fs_close(self.handle);
     }
 
-    /// Write text into file.
+    ///  Write text into file.
+    /// Returns bytes written.
     pub fn write(self: File, s: string) -> Result<i64, string> {
         let n = __mlang_std_fs_write(self.handle, s);
         if n < 0: {
@@ -54,7 +58,7 @@ impl File {
         return Ok<i64, string>(n);
     }
 
-    /// Write text followed by '\n'.
+    ///  Write text followed by newline.
     pub fn write_line(self: File, s: string) -> Result<i64, string> {
         let n1: Result<i64, string> = self.write(s);
         if n1.is_err(): {
@@ -69,17 +73,18 @@ impl File {
 }
 
 impl BufReader {
-    /// Construct buffered reader with default capacity.
+    ///  Construct buffered reader with default capacity.
     pub fn new(file: File) -> BufReader {
         return BufReader { file: file, line_capacity: 4096 };
     }
 
-    /// Construct buffered reader with custom line buffer size.
+    ///  Construct buffered reader with custom line buffer size.
     pub fn with_capacity(file: File, capacity: i64) -> BufReader {
         return BufReader { file: file, line_capacity: capacity };
     }
 
-    /// Read one line into caller-owned buffer.
+    ///  Read one line into caller-owned buffer.
+    /// Returns bytes read.
     pub fn read_line(self: BufReader, buf: string) -> Result<i64, string> {
         let n = __mlang_std_fs_read_line(self.file.handle, buf, self.line_capacity);
         if n < 0: {
@@ -88,13 +93,13 @@ impl BufReader {
         return Ok<i64, string>(n);
     }
 
-    /// Read all lines into list<string>.
+    ///  Read all lines into `list<string>`.
     pub fn lines(self: BufReader) -> list<string> {
         return __mlang_std_fs_read_all_lines(self.file.handle);
     }
 }
 
-/// Free list returned by BufReader::lines().
+/// @brief Free list returned by `BufReader::lines()`.
 pub fn free_lines(lines: list<string>) -> void {
     __mlang_std_fs_free_lines(lines);
 }

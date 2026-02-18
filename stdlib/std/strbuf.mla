@@ -8,8 +8,6 @@
 ///
 /// Additional utility helpers are backed by libmlang_std.
 
-// std::strbuf - allocation-focused helpers
-
 extern fn __mlang_std_strbuf_len(s: string) -> i64;
 extern fn __mlang_std_strbuf_is_empty(s: string) -> int;
 extern fn __mlang_std_strbuf_clone(s: string) -> string;
@@ -29,21 +27,17 @@ extern fn __mlang_std_strbuf_utf8_to_utf16(s: string) -> str16;
 extern fn __mlang_std_strbuf_utf16_to_utf8(s: str16) -> string;
 extern fn __mlang_std_strbuf_free_str16(s: str16) -> void;
 
-/// @brief Allocate an empty string buffer (1 byte, NUL-terminated).
-/// @return Newly allocated string buffer.
+/// @brief Allocate an empty string buffer (NUL-terminated).
 pub fn new() -> string {
     return String::new();
 }
 
-/// @brief Allocate a string buffer with capacity bytes (+1 for NUL terminator).
-/// @param capacity requested byte capacity.
-/// @return Newly allocated string buffer.
+/// @brief Allocate a string buffer with requested capacity in bytes.
 pub fn with_capacity(capacity: i64) -> string {
     return String::with_capacity(capacity);
 }
 
 /// @brief Free a string buffer allocated by std::strbuf helpers.
-/// @param buf string buffer pointer.
 pub fn free(buf: string) -> void {
     String::free(buf);
 }
@@ -53,58 +47,60 @@ pub fn len(s: string) -> i64 {
     return __mlang_std_strbuf_len(s);
 }
 
-/// @brief Return 1 when empty, 0 otherwise.
+/// @brief Return `1` when empty, `0` otherwise.
 pub fn is_empty(s: string) -> int {
     return __mlang_std_strbuf_is_empty(s);
 }
 
-/// @brief Clone a string into new allocated memory.
+/// @brief Clone a string into newly allocated memory.
 pub fn clone(s: string) -> string {
     return __mlang_std_strbuf_clone(s);
 }
 
-/// @brief Compare two strings for equality (1 true, 0 false).
+/// @brief Compare two strings for equality (`1` true, `0` false).
 pub fn eq(a: string, b: string) -> int {
     return __mlang_std_strbuf_eq(a, b);
 }
 
-/// @brief Compare two strings (like strcmp).
-/// @return 0 if equal, <0 if a<b, >0 if a>b.
+/// @brief Compare two strings (like `strcmp`).
+/// Returns `0` if equal, `<0` if `a<b`, `>0` if `a>b`.
 pub fn compare(a: string, b: string) -> i64 {
     return __mlang_std_strbuf_compare(a, b);
 }
 
-/// @brief Return 1 if s starts with prefix.
+/// @brief Return `1` if `s` starts with `prefix`.
 pub fn starts_with(s: string, prefix: string) -> int {
     return __mlang_std_strbuf_starts_with(s, prefix);
 }
 
-/// @brief Return 1 if s ends with suffix.
+/// @brief Return `1` if `s` ends with `suffix`.
 pub fn ends_with(s: string, suffix: string) -> int {
     return __mlang_std_strbuf_ends_with(s, suffix);
 }
 
-/// @brief Return 1 if s contains needle.
+/// @brief Return `1` if `s` contains `needle`.
 pub fn contains(s: string, needle: string) -> int {
     return __mlang_std_strbuf_contains(s, needle);
 }
 
-/// @brief Find first index of needle in s. Returns -1 when not found.
+/// @brief Find first index of `needle` in `s`.
+/// Returns `-1` when not found.
 pub fn find(s: string, needle: string) -> i64 {
     return __mlang_std_strbuf_find(s, needle);
 }
 
-/// @brief Find last index of needle in s. Returns -1 when not found.
+/// @brief Find last index of `needle` in `s`.
+/// Returns `-1` when not found.
 pub fn rfind(s: string, needle: string) -> i64 {
     return __mlang_std_strbuf_rfind(s, needle);
 }
 
-/// @brief Concatenate two strings into new allocated memory.
+/// @brief Concatenate two strings into newly allocated memory.
 pub fn concat(a: string, b: string) -> string {
     return __mlang_std_strbuf_concat(a, b);
 }
 
-/// @brief Repeat s count times into newly allocated string.
+/// @brief Repeat `s` `count` times into a newly allocated string.
 pub fn repeat(s: string, count: i64) -> string {
     return __mlang_std_strbuf_repeat(s, count);
 }
@@ -124,22 +120,22 @@ pub fn rtrim(s: string) -> string {
     return __mlang_std_strbuf_rtrim(s);
 }
 
-/// @brief Convert UTF-8 (string) to UTF-16 (str16).
+/// @brief Convert UTF-8 (`string`) to UTF-16 (`str16`).
 pub fn to_utf16(s: string) -> str16 {
     return __mlang_std_strbuf_utf8_to_utf16(s);
 }
 
-/// @brief Convert UTF-16 (str16) to UTF-8 (string).
+/// @brief Convert UTF-16 (`str16`) to UTF-8 (`string`).
 pub fn from_utf16(s: str16) -> string {
     return __mlang_std_strbuf_utf16_to_utf8(s);
 }
 
-/// @brief Alias for from_utf16 to mirror explicit UTF target naming.
+/// @brief Alias for `from_utf16` to mirror explicit UTF target naming.
 pub fn to_utf8(s: str16) -> string {
     return from_utf16(s);
 }
 
-/// @brief Free UTF-16 buffer allocated by to_utf16.
+/// @brief Free UTF-16 buffer allocated by `to_utf16`.
 pub fn free_utf16(s: str16) -> void {
     __mlang_std_strbuf_free_str16(s);
 }

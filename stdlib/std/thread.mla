@@ -5,75 +5,57 @@
 /// Note: `thread_spawn(...)` is a compiler intrinsic and should be called
 /// directly.
 
-// std::thread - concurrency helpers
-
 /// @brief Join a spawned thread handle.
-/// @param handle thread handle returned by thread_spawn.
-/// @return Thread exit status.
+/// Returns thread exit status.
 pub fn join(handle: Handle<Thread>) -> int {
     return thread_join(handle);
 }
 
-/// @brief Create a mutex handle.
-/// @return A new mutex handle.
+/// @brief Create a new mutex handle.
 pub fn mutex_new() -> Handle<Mutex> {
     return mutex_create();
 }
 
 /// @brief Lock a mutex.
-/// @param handle mutex handle.
-/// @return 0 on success.
+/// Returns `0` on success.
 pub fn mutex_lock_handle(handle: Handle<Mutex>) -> int {
     return mutex_lock(handle);
 }
 
 /// @brief Unlock a mutex.
-/// @param handle mutex handle.
-/// @return 0 on success.
+/// Returns `0` on success.
 pub fn mutex_unlock_handle(handle: Handle<Mutex>) -> int {
     return mutex_unlock(handle);
 }
 
 /// @brief Destroy a mutex.
-/// @param handle mutex handle.
-/// @return 0 on success.
+/// Returns `0` on success.
 pub fn mutex_free(handle: Handle<Mutex>) -> int {
     return mutex_destroy(handle);
 }
 
 /// @brief Create a 64-bit atomic counter.
-/// @param initial initial value.
-/// @return Atomic handle.
 pub fn atomic_new(initial: i64) -> Handle<Atomic64> {
     return atomic_i64_new(initial);
 }
 
 /// @brief Load atomic value.
-/// @param handle atomic handle.
-/// @return Current value.
 pub fn atomic_load_value(handle: Handle<Atomic64>) -> i64 {
     return atomic_i64_load(handle);
 }
 
-/// @brief Store atomic value.
-/// @param handle atomic handle.
-/// @param value value to store.
-/// @return Stored value.
+/// @brief Store atomic value and return stored value.
 pub fn atomic_store_value(handle: Handle<Atomic64>, value: i64) -> i64 {
     return atomic_i64_store(handle, value);
 }
 
-/// @brief Add delta to atomic value.
-/// @param handle atomic handle.
-/// @param delta value to add.
-/// @return Previous value.
+/// @brief Add `delta` to atomic value.
+/// Returns the previous value.
 pub fn atomic_add_value(handle: Handle<Atomic64>, delta: i64) -> i64 {
     return atomic_i64_add(handle, delta);
 }
 
 /// @brief Free atomic handle.
-/// @param handle atomic handle.
 pub fn atomic_free_handle(handle: Handle<Atomic64>) -> void {
     atomic_i64_free(handle);
 }
-

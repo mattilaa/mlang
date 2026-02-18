@@ -1,8 +1,11 @@
-/// \file json.mla
-/// \brief JSON parse/stringify/navigation helpers for MLang (std::json).
-///
-/// Backed by RapidJSON in libmlang_std.
+/**
+ * \file json.mla
+ * @brief JSON parse/stringify/navigation helpers for MLang (std::json).
+ *
+ * Backed by RapidJSON in libmlang_std.
+ */
 
+/// \cond INTERNAL_IMPORTS
 mod std::fs;
 mod std::strbuf;
 
@@ -10,6 +13,7 @@ use std::fs::BufReader;
 use std::fs::File;
 use std::fs::free_lines;
 use std::strbuf::concat;
+/// \endcond
 
 extern pub fn __mlang_std_json_parse(text: string) -> i64;
 extern pub fn __mlang_std_json_doc_free(doc_handle: i64) -> void;
