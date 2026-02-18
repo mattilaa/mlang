@@ -24,10 +24,17 @@ extern pub fn __mlang_std_compiler_document_symbol_name(handle: i64, uri: string
 extern pub fn __mlang_std_compiler_document_symbol_kind(handle: i64, uri: string, index: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_symbol_line(handle: i64, uri: string, index: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_symbol_column(handle: i64, uri: string, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_symbol_id(handle: i64, uri: string, index: i32) -> string;
 extern pub fn __mlang_std_compiler_document_definition_line(handle: i64, uri: string, line: i32, column: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_definition_column(handle: i64, uri: string, line: i32, column: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_definition_name(handle: i64, uri: string, line: i32, column: i32) -> string;
 extern pub fn __mlang_std_compiler_document_definition_uri(handle: i64, uri: string, line: i32, column: i32) -> string;
+extern pub fn __mlang_std_compiler_document_definition_id(handle: i64, uri: string, line: i32, column: i32) -> string;
+extern pub fn __mlang_std_compiler_document_reference_count(handle: i64, uri: string, line: i32, column: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_reference_uri(handle: i64, uri: string, line: i32, column: i32, index: i32) -> string;
+extern pub fn __mlang_std_compiler_document_reference_line(handle: i64, uri: string, line: i32, column: i32, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_reference_column(handle: i64, uri: string, line: i32, column: i32, index: i32) -> i32;
+extern pub fn __mlang_std_compiler_document_rename_is_safe(handle: i64, uri: string, line: i32, column: i32, new_name: string) -> i32;
 
 /// @brief Opaque compiler session handle.
 pub struct Session {
@@ -43,6 +50,7 @@ pub struct SyntaxDiagnostic {
 
 /// @brief Declared symbol in a document.
 pub struct DocumentSymbol {
+    var id: string;
     var name: string;
     var kind: i32;
     var line: i32;
@@ -51,7 +59,15 @@ pub struct DocumentSymbol {
 
 /// @brief Definition location in the same document.
 pub struct DefinitionLocation {
+    var id: string;
     var name: string;
+    var uri: string;
+    var line: i32;
+    var column: i32;
+};
+
+/// @brief One reference location for a symbol.
+pub struct ReferenceLocation {
     var uri: string;
     var line: i32;
     var column: i32;
@@ -198,11 +214,16 @@ impl Session {
         if kind < 0: {
             return Err<DocumentSymbol, string>(last_error());
         }
+        let id: string = __mlang_std_compiler_document_symbol_id(self.handle, uri, index);
+        if last_status() != 0: {
+            return Err<DocumentSymbol, string>(last_error());
+        }
         let name: string = __mlang_std_compiler_document_symbol_name(self.handle, uri, index);
         if last_status() != 0: {
             return Err<DocumentSymbol, string>(last_error());
         }
         return Ok<DocumentSymbol, string>(DocumentSymbol {
+            id: id,
             name: name,
             kind: kind,
             line: line,
@@ -228,11 +249,55 @@ impl Session {
         if last_status() != 0: {
             return Err<DefinitionLocation, string>(last_error());
         }
+        let def_id: string = __mlang_std_compiler_document_definition_id(self.handle, uri, line, column);
+        if last_status() != 0: {
+            return Err<DefinitionLocation, string>(last_error());
+        }
         return Ok<DefinitionLocation, string>(DefinitionLocation {
+            id: def_id,
             name: def_name,
             uri: def_uri,
             line: def_line,
             column: def_column
         });
+    }
+
+    /// @brief Count references to symbol under cursor across loaded/workspace-resolved documents.
+    pub fn references_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string> {
+        let count: i32 = __mlang_std_compiler_document_reference_count(self.handle, uri, line, column);
+        if count < 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(count);
+    }
+
+    /// @brief Fetch one reference location by index.
+    pub fn reference_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, string> {
+        let ref_line: i32 = __mlang_std_compiler_document_reference_line(self.handle, uri, line, column, index);
+        if ref_line < 0: {
+            return Err<ReferenceLocation, string>(last_error());
+        }
+        let ref_col: i32 = __mlang_std_compiler_document_reference_column(self.handle, uri, line, column, index);
+        if ref_col < 0: {
+            return Err<ReferenceLocation, string>(last_error());
+        }
+        let ref_uri: string = __mlang_std_compiler_document_reference_uri(self.handle, uri, line, column, index);
+        if last_status() != 0: {
+            return Err<ReferenceLocation, string>(last_error());
+        }
+        return Ok<ReferenceLocation, string>(ReferenceLocation {
+            uri: ref_uri,
+            line: ref_line,
+            column: ref_col
+        });
+    }
+
+    /// @brief Conservative rename safety check (1 safe, 0 unsafe).
+    pub fn rename_is_safe(self: Session, uri: string, line: i32, column: i32, new_name: string) -> Result<i32, string> {
+        let safe: i32 = __mlang_std_compiler_document_rename_is_safe(self.handle, uri, line, column, new_name);
+        if safe < 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(safe);
     }
 }

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstring>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
@@ -62,6 +63,7 @@ struct SyntaxDiagnostic {
 struct SemanticSymbol {
     std::string name;
     int kind = 0; // 1 fn, 2 var/let, 3 struct, 4 mod
+    std::string stable_id;
     std::string uri;
     int line = 0;
     int column = 0;
@@ -87,6 +89,36 @@ struct DocumentSemantic {
 };
 
 static std::vector<SyntaxDiagnostic> computeSyntaxDiagnostics(std::string_view text);
+
+static std::string stableSymbolId(const SemanticSymbol& sym) {
+    std::string key;
+    key.reserve(sym.uri.size() + sym.name.size() + sym.signature.size() + sym.type_info.size() + 64);
+    key += sym.uri;
+    key += "|";
+    key += std::to_string(sym.kind);
+    key += "|";
+    key += sym.name;
+    key += "|";
+    key += sym.signature;
+    key += "|";
+    key += sym.type_info;
+    key += "|";
+    key += std::to_string(sym.depth);
+    key += "|";
+    key += std::to_string(sym.line);
+    key += "|";
+    key += std::to_string(sym.column);
+
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char c : key) {
+        hash ^= static_cast<std::uint64_t>(c);
+        hash *= 1099511628211ULL;
+    }
+
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(hash));
+    return "sym_" + std::string(hex);
+}
 
 static bool isIdentStart(char c) {
     const unsigned char uc = static_cast<unsigned char>(c);
@@ -632,6 +664,7 @@ static void addSemanticSymbol(DocumentSemantic& out,
     } else {
         s.column = 1;
     }
+    s.stable_id = stableSymbolId(s);
     out.symbols.push_back(std::move(s));
 }
 
@@ -1049,6 +1082,113 @@ static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
     return std::nullopt;
 }
 
+struct ReferenceLocation {
+    std::string uri;
+    int line = 0;
+    int column = 0;
+};
+
+static std::vector<ReferenceLocation> collectReferencesForSymbol(
+    const SemanticSymbol& target,
+    const std::vector<DocumentSemantic>& all_docs) {
+    std::vector<ReferenceLocation> refs;
+    std::unordered_set<std::string> seen;
+
+    for (const DocumentSemantic& doc : all_docs) {
+        if (!doc.ast_valid) {
+            continue;
+        }
+        int line = 1;
+        int col = 1;
+        for (size_t i = 0; i < doc.text.size(); ++i) {
+            const char ch = doc.text[i];
+            if (ch == '\n') {
+                ++line;
+                col = 1;
+                continue;
+            }
+            if (!isIdentStart(ch) || (i > 0 && isIdentContinue(doc.text[i - 1]))) {
+                ++col;
+                continue;
+            }
+
+            size_t j = i + 1;
+            while (j < doc.text.size() && isIdentContinue(doc.text[j])) {
+                ++j;
+            }
+            const std::string_view token = std::string_view(doc.text).substr(i, j - i);
+            if (token == target.name) {
+                const auto resolved = resolveSymbolAtPosition(doc, all_docs, line, col);
+                if (resolved.has_value() &&
+                    resolved->symbol.stable_id == target.stable_id) {
+                    const std::string key = doc.uri + ":" + std::to_string(line) + ":" +
+                                            std::to_string(col);
+                    if (seen.insert(key).second) {
+                        refs.push_back({doc.uri, line, col});
+                    }
+                }
+            }
+            col += static_cast<int>(j - i);
+            i = j - 1;
+        }
+    }
+
+    std::sort(refs.begin(), refs.end(), [](const ReferenceLocation& a, const ReferenceLocation& b) {
+        if (a.uri != b.uri) {
+            return a.uri < b.uri;
+        }
+        if (a.line != b.line) {
+            return a.line < b.line;
+        }
+        return a.column < b.column;
+    });
+    return refs;
+}
+
+static bool isRenameSafeForSymbol(const SemanticSymbol& target,
+                                  std::string_view new_name,
+                                  const std::vector<DocumentSemantic>& all_docs) {
+    if (new_name.empty() || !isIdentStart(new_name.front())) {
+        return false;
+    }
+    for (char c : new_name) {
+        if (!isIdentContinue(c)) {
+            return false;
+        }
+    }
+
+    const std::vector<ReferenceLocation> refs = collectReferencesForSymbol(target, all_docs);
+    for (const auto& ref : refs) {
+        const DocumentSemantic* doc = findSemanticDoc(all_docs, ref.uri);
+        if (!doc) {
+            continue;
+        }
+        const int query_depth = lineDepthAt(*doc, ref.line);
+
+        for (const auto& sym : doc->symbols) {
+            if (sym.stable_id == target.stable_id || sym.name != new_name) {
+                continue;
+            }
+            if (sym.kind == 2) {
+                const int sym_depth = lineDepthAt(*doc, sym.line);
+                if (sym.line <= ref.line && sym_depth <= query_depth) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        const std::vector<SemanticSymbol> imported = collectImportedSymbols(*doc, all_docs);
+        for (const auto& sym : imported) {
+            if (sym.stable_id != target.stable_id && sym.name == new_name) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static std::string completionPrefixAtOffset(std::string_view text, size_t offset);
 
 static std::vector<std::string> computeSemanticCompletions(
@@ -1319,6 +1459,40 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
                                             char* out_uri,
                                             int out_uri_capacity,
                                             int* out_uri_length);
+int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            char* out_id,
+                                            int out_id_capacity,
+                                            int* out_id_length);
+int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int index,
+                                            char* out_id,
+                                            int out_id_capacity,
+                                            int* out_id_length);
+int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
+                                              const char* uri,
+                                              int line,
+                                              int column,
+                                              int* out_count);
+int __mlang_compiler_document_reference_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            int index,
+                                            char* out_ref_uri,
+                                            int out_ref_uri_capacity,
+                                            int* out_ref_uri_length,
+                                            int* out_ref_line,
+                                            int* out_ref_column);
+int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             const char* new_name,
+                                             int* out_is_safe);
 
 int __mlang_compiler_session_create(mlang_compiler_session** out_session) {
     if (out_session == nullptr) {
@@ -1713,6 +1887,55 @@ int __mlang_compiler_document_symbol_get(mlang_compiler_session* session,
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 
+int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int index,
+                                            char* out_id,
+                                            int out_id_capacity,
+                                            int* out_id_length) {
+    if (session == nullptr || uri == nullptr || out_id == nullptr || out_id_capacity <= 0 ||
+        out_id_length == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
+        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    }
+
+    const std::string& id = current->symbols[static_cast<size_t>(index)].stable_id;
+    *out_id_length = static_cast<int>(id.size());
+    const size_t copy_len = std::min(static_cast<size_t>(out_id_capacity - 1), id.size());
+    if (copy_len > 0) {
+        std::memcpy(out_id, id.data(), copy_len);
+    }
+    out_id[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
 int __mlang_compiler_document_definition(mlang_compiler_session* session,
                                          const char* uri,
                                          int line,
@@ -1795,6 +2018,207 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
         std::memcpy(out_uri, def->symbol.uri.data(), uri_copy_len);
     }
     out_uri[uri_copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            char* out_id,
+                                            int out_id_capacity,
+                                            int* out_id_length) {
+    if (session == nullptr || uri == nullptr || out_id == nullptr || out_id_capacity <= 0 ||
+        out_id_length == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    const auto def = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    if (!def.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    }
+
+    const std::string& id = def->symbol.stable_id;
+    *out_id_length = static_cast<int>(id.size());
+    const size_t copy_len = std::min(static_cast<size_t>(out_id_capacity - 1), id.size());
+    if (copy_len > 0) {
+        std::memcpy(out_id, id.data(), copy_len);
+    }
+    out_id[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
+                                              const char* uri,
+                                              int line,
+                                              int column,
+                                              int* out_count) {
+    if (session == nullptr || uri == nullptr || out_count == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    const auto target = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    if (!target.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    }
+
+    const auto refs = mlang::compiler_api::collectReferencesForSymbol(target->symbol, sem_docs);
+    *out_count = static_cast<int>(refs.size());
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_reference_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            int index,
+                                            char* out_ref_uri,
+                                            int out_ref_uri_capacity,
+                                            int* out_ref_uri_length,
+                                            int* out_ref_line,
+                                            int* out_ref_column) {
+    if (session == nullptr || uri == nullptr || out_ref_uri == nullptr ||
+        out_ref_uri_capacity <= 0 || out_ref_uri_length == nullptr ||
+        out_ref_line == nullptr || out_ref_column == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    const auto target = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    if (!target.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    }
+    const auto refs = mlang::compiler_api::collectReferencesForSymbol(target->symbol, sem_docs);
+    if (index < 0 || static_cast<size_t>(index) >= refs.size()) {
+        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    }
+
+    const auto& ref = refs[static_cast<size_t>(index)];
+    *out_ref_line = ref.line;
+    *out_ref_column = ref.column;
+    *out_ref_uri_length = static_cast<int>(ref.uri.size());
+    const size_t copy_len = std::min(static_cast<size_t>(out_ref_uri_capacity - 1), ref.uri.size());
+    if (copy_len > 0) {
+        std::memcpy(out_ref_uri, ref.uri.data(), copy_len);
+    }
+    out_ref_uri[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             const char* new_name,
+                                             int* out_is_safe) {
+    if (session == nullptr || uri == nullptr || new_name == nullptr || out_is_safe == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+
+    const std::optional<std::string> text = store->documentText(uri);
+    if (!text.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    const auto target = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    if (!target.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    }
+
+    *out_is_safe = mlang::compiler_api::isRenameSafeForSymbol(
+                       target->symbol, std::string_view(new_name), sem_docs)
+                       ? 1
+                       : 0;
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 

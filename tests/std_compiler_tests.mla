@@ -4,6 +4,7 @@ mod std::strbuf;
 use std::compiler::Session;
 use std::compiler::DocumentSymbol;
 use std::compiler::DefinitionLocation;
+use std::compiler::ReferenceLocation;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
 use std::strbuf::contains;
@@ -237,6 +238,72 @@ fn test_compiler_definition_from_workspace_module_paths() -> i32 {
     if contains(def.name, "util_cfg") == 0: { return 1; }
     if contains(def.uri, "workspace_cfg/modules/lib/util_cfg.mla") == 0: { return 1; }
     if def.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_stable_symbol_id_and_references() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/id_refs_util.mla";
+    let main_uri: string = "file:///ws/id_refs_main.mla";
+    let util_src: string = "fn util_ref() -> i32 { return 9; }";
+    let main_src: string = "use lib::id_refs_util::util_ref;\nfn main() -> i32 {\n  let a: i32 = util_ref();\n  let b: i32 = util_ref();\n  return a + b;\n}";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 3, 17);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.id, "sym_") == 0: { return 1; }
+
+    let rc_r: Result<i32, string> = s.references_count(main_uri, 3, 17);
+    if rc_r.is_err(): { return 1; }
+    let rc: i32 = rc_r.unwrap();
+    if rc < 3: { return 1; }
+
+    var found_util_def: i32 = 0;
+    for i in 0..rc {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(main_uri, 3, 17, i);
+        if rr.is_err(): { return 1; }
+        let r: ReferenceLocation = rr.unwrap();
+        if contains(r.uri, "id_refs_util.mla") == 1: {
+            if r.line == 1: {
+                found_util_def = 1;
+            }
+        }
+    }
+    if found_util_def != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_rename_safety() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://rename_safety.mla";
+    let src: string = "fn main() -> i32 {\n  let alpha: i32 = 1;\n  let beta: i32 = alpha + 1;\n  return beta;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    let safe1_r: Result<i32, string> = s.rename_is_safe(uri, 3, 19, "gamma");
+    if safe1_r.is_err(): { return 1; }
+    if safe1_r.unwrap() != 1: { return 1; }
+
+    let safe2_r: Result<i32, string> = s.rename_is_safe(uri, 3, 19, "beta");
+    if safe2_r.is_err(): { return 1; }
+    if safe2_r.unwrap() != 0: { return 1; }
 
     let _ = s.destroy();
     return 0;

@@ -85,6 +85,40 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
                                             char* out_uri,
                                             int out_uri_capacity,
                                             int* out_uri_length);
+int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            char* out_id,
+                                            int out_id_capacity,
+                                            int* out_id_length);
+int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int index,
+                                            char* out_id,
+                                            int out_id_capacity,
+                                            int* out_id_length);
+int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
+                                              const char* uri,
+                                              int line,
+                                              int column,
+                                              int* out_count);
+int __mlang_compiler_document_reference_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            int index,
+                                            char* out_ref_uri,
+                                            int out_ref_uri_capacity,
+                                            int* out_ref_uri_length,
+                                            int* out_ref_line,
+                                            int* out_ref_column);
+int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             const char* new_name,
+                                             int* out_is_safe);
 }
 
 namespace {
@@ -529,6 +563,26 @@ int __mlang_std_compiler_document_symbol_column(std::int64_t handle,
     return column;
 }
 
+char* __mlang_std_compiler_document_symbol_id(std::int64_t handle,
+                                              const char* uri,
+                                              int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    int id_len = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_symbol_id_get(
+        session, uri, index, buffer, kBufferCap, &id_len);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(std::string(buffer));
+}
+
 int __mlang_std_compiler_document_definition_line(std::int64_t handle,
                                                   const char* uri,
                                                   int line,
@@ -635,6 +689,147 @@ char* __mlang_std_compiler_document_definition_uri(std::int64_t handle,
     if(status != static_cast<int>(CompilerStatus::Ok))
         return nullptr;
     return dup_string(std::string(uri_buffer));
+}
+
+char* __mlang_std_compiler_document_definition_id(std::int64_t handle,
+                                                  const char* uri,
+                                                  int line,
+                                                  int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    int id_len = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_definition_id(
+        session, uri, line, column, buffer, kBufferCap, &id_len);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(std::string(buffer));
+}
+
+int __mlang_std_compiler_document_reference_count(std::int64_t handle,
+                                                  const char* uri,
+                                                  int line,
+                                                  int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+
+    int count = 0;
+    const int status =
+        __mlang_compiler_document_reference_count(session, uri, line, column, &count);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return count;
+}
+
+char* __mlang_std_compiler_document_reference_uri(std::int64_t handle,
+                                                  const char* uri,
+                                                  int line,
+                                                  int column,
+                                                  int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+
+    int ref_uri_len = 0;
+    int ref_line = 0;
+    int ref_col = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_reference_get(
+        session, uri, line, column, index, buffer, kBufferCap, &ref_uri_len,
+        &ref_line, &ref_col);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(std::string(buffer));
+}
+
+int __mlang_std_compiler_document_reference_line(std::int64_t handle,
+                                                 const char* uri,
+                                                 int line,
+                                                 int column,
+                                                 int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+
+    int ref_uri_len = 0;
+    int ref_line = 0;
+    int ref_col = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_reference_get(
+        session, uri, line, column, index, buffer, kBufferCap, &ref_uri_len,
+        &ref_line, &ref_col);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return ref_line;
+}
+
+int __mlang_std_compiler_document_reference_column(std::int64_t handle,
+                                                   const char* uri,
+                                                   int line,
+                                                   int column,
+                                                   int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+
+    int ref_uri_len = 0;
+    int ref_line = 0;
+    int ref_col = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_reference_get(
+        session, uri, line, column, index, buffer, kBufferCap, &ref_uri_len,
+        &ref_line, &ref_col);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return ref_col;
+}
+
+int __mlang_std_compiler_document_rename_is_safe(std::int64_t handle,
+                                                 const char* uri,
+                                                 int line,
+                                                 int column,
+                                                 const char* new_name)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+    int safe = 0;
+    const int status = __mlang_compiler_document_rename_is_safe(
+        session, uri, line, column, new_name, &safe);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return safe;
 }
 
 } // extern "C"
