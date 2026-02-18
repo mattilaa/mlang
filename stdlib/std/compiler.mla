@@ -35,6 +35,8 @@ extern pub fn __mlang_std_compiler_document_reference_uri(handle: i64, uri: stri
 extern pub fn __mlang_std_compiler_document_reference_line(handle: i64, uri: string, line: i32, column: i32, index: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_reference_column(handle: i64, uri: string, line: i32, column: i32, index: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_rename_is_safe(handle: i64, uri: string, line: i32, column: i32, new_name: string) -> i32;
+extern pub fn __mlang_std_compiler_semantic_cache_warm(handle: i64, uri: string) -> i32;
+extern pub fn __mlang_std_compiler_semantic_cache_clear(handle: i64) -> i32;
 
 /// @brief Opaque compiler session handle.
 pub struct Session {
@@ -299,5 +301,23 @@ impl Session {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(safe);
+    }
+
+    /// @brief Warm semantic cache for a document + workspace graph rooted from it.
+    pub fn semantic_cache_warm(self: Session, uri: string) -> Result<i32, string> {
+        let st: i32 = __mlang_std_compiler_semantic_cache_warm(self.handle, uri);
+        if st != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Clear cached semantic snapshots for this session.
+    pub fn semantic_cache_clear(self: Session) -> Result<i32, string> {
+        let st: i32 = __mlang_std_compiler_semantic_cache_clear(self.handle);
+        if st != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
     }
 }

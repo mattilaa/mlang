@@ -308,3 +308,39 @@ fn test_compiler_rename_safety() -> i32 {
     let _ = s.destroy();
     return 0;
 }
+
+#[test]
+fn test_compiler_semantic_cache_api() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/cache_api_util.mla";
+    let main_uri: string = "file:///ws/cache_api_main.mla";
+    let util_src: string = "fn util_cache() -> i32 { return 5; }";
+    let main_src: string = "use lib::cache_api_util::util_cache;\nfn main() -> i32 { return util_cache(); }";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let warm_r: Result<i32, string> = s.semantic_cache_warm(main_uri);
+    if warm_r.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 2, 27);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "util_cache") == 0: { return 1; }
+
+    let clr_r: Result<i32, string> = s.semantic_cache_clear();
+    if clr_r.is_err(): { return 1; }
+
+    let def2_r: Result<DefinitionLocation, string> = s.definition(main_uri, 2, 27);
+    if def2_r.is_err(): { return 1; }
+    let def2: DefinitionLocation = def2_r.unwrap();
+    if contains(def2.name, "util_cache") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}

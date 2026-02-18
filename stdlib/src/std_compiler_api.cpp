@@ -119,6 +119,9 @@ int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
                                              int column,
                                              const char* new_name,
                                              int* out_is_safe);
+int __mlang_compiler_semantic_cache_warm(mlang_compiler_session* session,
+                                         const char* uri);
+int __mlang_compiler_semantic_cache_clear(mlang_compiler_session* session);
 }
 
 namespace {
@@ -830,6 +833,33 @@ int __mlang_std_compiler_document_rename_is_safe(std::int64_t handle,
     if(status != static_cast<int>(CompilerStatus::Ok))
         return -1;
     return safe;
+}
+
+int __mlang_std_compiler_semantic_cache_warm(std::int64_t handle,
+                                             const char* uri)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return g_last_status;
+    }
+    const int status = __mlang_compiler_semantic_cache_warm(session, uri);
+    set_last_status(status);
+    return status;
+}
+
+int __mlang_std_compiler_semantic_cache_clear(std::int64_t handle)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return g_last_status;
+    }
+    const int status = __mlang_compiler_semantic_cache_clear(session);
+    set_last_status(status);
+    return status;
 }
 
 } // extern "C"

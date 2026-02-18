@@ -12,6 +12,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <optional>
 #include <set>
 #include <string>
@@ -1338,6 +1339,7 @@ public:
         doc.language_id.assign(language_id.data(), language_id.size());
         doc.text.assign(text.data(), text.size());
         doc.version = version;
+        invalidateSemanticCacheLocked();
         return true;
     }
 
@@ -1359,6 +1361,7 @@ public:
 
         doc.text.assign(text.data(), text.size());
         doc.version = version;
+        invalidateSemanticCacheLocked();
         return Status::Ok;
     }
 
@@ -1374,6 +1377,7 @@ public:
         }
 
         documents_.erase(it);
+        invalidateSemanticCacheLocked();
         return Status::Ok;
     }
 
@@ -1400,9 +1404,90 @@ public:
         return out;
     }
 
+    Status semanticSnapshotForUri(std::string_view uri,
+                                  std::vector<DocumentSemantic>& out_docs,
+                                  const DocumentSemantic** out_current) {
+        if (uri.empty() || out_current == nullptr) {
+            return Status::InvalidArgument;
+        }
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (documents_.find(std::string(uri)) == documents_.end()) {
+            return Status::DocumentNotFound;
+        }
+
+        ensureBaseSemanticCacheLocked();
+        const std::string key(uri);
+        auto it = hydrated_semantic_cache_.find(key);
+        if (it == hydrated_semantic_cache_.end() ||
+            it->second.generation != semantic_generation_) {
+            HydratedSemanticSnapshot snap;
+            snap.generation = semantic_generation_;
+            snap.docs = base_semantic_docs_;
+            hydrateFilesystemModulesFor(key, snap.docs);
+            for (size_t i = 0; i < snap.docs.size(); ++i) {
+                snap.uri_to_index[snap.docs[i].uri] = i;
+            }
+            it = hydrated_semantic_cache_.insert_or_assign(key, std::move(snap)).first;
+        }
+
+        out_docs = it->second.docs;
+        const auto idx_it = it->second.uri_to_index.find(key);
+        if (idx_it == it->second.uri_to_index.end()) {
+            return Status::DocumentNotFound;
+        }
+        *out_current = &out_docs[idx_it->second];
+        return Status::Ok;
+    }
+
+    Status clearSemanticCache() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        base_semantic_generation_ = std::numeric_limits<std::uint64_t>::max();
+        base_semantic_docs_.clear();
+        hydrated_semantic_cache_.clear();
+        return Status::Ok;
+    }
+
+    Status warmSemanticCacheForUri(std::string_view uri) {
+        std::vector<DocumentSemantic> docs;
+        const DocumentSemantic* current = nullptr;
+        return semanticSnapshotForUri(uri, docs, &current);
+    }
+
 private:
+    struct HydratedSemanticSnapshot {
+        std::uint64_t generation = 0;
+        std::vector<DocumentSemantic> docs;
+        std::unordered_map<std::string, size_t> uri_to_index;
+    };
+
+    void invalidateSemanticCacheLocked() {
+        ++semantic_generation_;
+        base_semantic_generation_ = std::numeric_limits<std::uint64_t>::max();
+        base_semantic_docs_.clear();
+        hydrated_semantic_cache_.clear();
+    }
+
+    void ensureBaseSemanticCacheLocked() {
+        if (base_semantic_generation_ == semantic_generation_) {
+            return;
+        }
+        std::vector<DocumentState> snapshot;
+        snapshot.reserve(documents_.size());
+        for (const auto& kv : documents_) {
+            snapshot.push_back(kv.second);
+        }
+        base_semantic_docs_ = buildSemanticSnapshot(snapshot);
+        base_semantic_generation_ = semantic_generation_;
+        hydrated_semantic_cache_.clear();
+    }
+
     std::mutex mutex_;
     std::unordered_map<std::string, DocumentState> documents_;
+    std::uint64_t semantic_generation_ = 1;
+    std::uint64_t base_semantic_generation_ = std::numeric_limits<std::uint64_t>::max();
+    std::vector<DocumentSemantic> base_semantic_docs_;
+    std::unordered_map<std::string, HydratedSemanticSnapshot> hydrated_semantic_cache_;
 };
 
 class GlobalStore {
@@ -1493,6 +1578,32 @@ int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
                                              int column,
                                              const char* new_name,
                                              int* out_is_safe);
+int __mlang_compiler_semantic_cache_warm(mlang_compiler_session* session,
+                                         const char* uri);
+int __mlang_compiler_semantic_cache_clear(mlang_compiler_session* session);
+
+static int prepare_semantic_query(mlang_compiler_session* session,
+                                  const char* uri,
+                                  std::shared_ptr<mlang::compiler_api::SessionStore>& out_store,
+                                  std::vector<mlang::compiler_api::DocumentSemantic>& out_docs,
+                                  const mlang::compiler_api::DocumentSemantic** out_current) {
+    if (session == nullptr || uri == nullptr || out_current == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+    out_store = mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!out_store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+    const mlang::compiler_api::Status st =
+        out_store->semanticSnapshotForUri(uri, out_docs, out_current);
+    if (st != mlang::compiler_api::Status::Ok) {
+        return static_cast<int>(st);
+    }
+    if (*out_current == nullptr || !(*out_current)->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
 
 int __mlang_compiler_session_create(mlang_compiler_session** out_session) {
     if (out_session == nullptr) {
@@ -1645,28 +1756,12 @@ int __mlang_compiler_document_hover(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const std::optional<mlang::compiler_api::ResolvedQuerySymbol> resolved =
@@ -1710,28 +1805,12 @@ int __mlang_compiler_document_completion_count(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const auto completions =
@@ -1753,28 +1832,12 @@ int __mlang_compiler_document_completion_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const auto completions =
@@ -1800,28 +1863,12 @@ int __mlang_compiler_document_symbol_count(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     *out_count = static_cast<int>(current->symbols.size());
@@ -1843,28 +1890,12 @@ int __mlang_compiler_document_symbol_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
@@ -1898,28 +1929,12 @@ int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
@@ -1971,28 +1986,12 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const std::optional<mlang::compiler_api::ResolvedQuerySymbol> def =
@@ -2033,28 +2032,12 @@ int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const auto def = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
@@ -2081,28 +2064,12 @@ int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const auto target = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
@@ -2131,28 +2098,12 @@ int __mlang_compiler_document_reference_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const auto target = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
@@ -2186,28 +2137,12 @@ int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store =
-        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
-    if (!store) {
-        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
-    }
-
-    const std::optional<std::string> text = store->documentText(uri);
-    if (!text.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-
-    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
-        mlang::compiler_api::buildSemanticSnapshot(docs);
-    mlang::compiler_api::hydrateFilesystemModulesFor(uri, sem_docs);
-    const mlang::compiler_api::DocumentSemantic* current =
-        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
-    if (!current) {
-        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
-    }
-    if (!current->ast_valid) {
-        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
     }
 
     const auto target = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
@@ -2220,6 +2155,35 @@ int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
                        ? 1
                        : 0;
     return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_semantic_cache_warm(mlang_compiler_session* session,
+                                         const char* uri) {
+    if (session == nullptr || uri == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+    const mlang::compiler_api::Status status = store->warmSemanticCacheForUri(uri);
+    return static_cast<int>(status);
+}
+
+int __mlang_compiler_semantic_cache_clear(mlang_compiler_session* session) {
+    if (session == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
+    }
+    const mlang::compiler_api::Status status = store->clearSemanticCache();
+    return static_cast<int>(status);
 }
 
 }  // extern "C"
