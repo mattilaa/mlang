@@ -3063,6 +3063,27 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     }
 
     llvm::Value* retResult = llvm::UndefValue::get(expectedRetType);
+    // For Result<_, string>, append call-site context on every `?` propagation.
+    if(expectedErrType &&
+       (expectedErrType->kind == TypeNode::TYPE_STRING ||
+        expectedErrType->kind == TypeNode::TYPE_STR8))
+    {
+        llvm::Type* charPtrTy = getLLVMType(TypeNode::TYPE_STRING);
+        llvm::FunctionCallee addContextFn = module->getOrInsertFunction(
+            "__mlang_error_add_context",
+            llvm::FunctionType::get(charPtrTy, {charPtrTy, charPtrTy}, false));
+        std::string fnLabel = function->getName().str();
+        size_t mangledPos = fnLabel.rfind("__");
+        if(mangledPos != std::string::npos && mangledPos > 0)
+            fnLabel = fnLabel.substr(0, mangledPos);
+        if(fnLabel == "__mlang_user_main")
+            fnLabel = "main";
+        std::string tryContext = fnLabel + ":" + std::to_string(node->line);
+        llvm::Value* ctxStr = builder.CreateGlobalStringPtr(tryContext, "try.ctx");
+        errPayload = builder.CreateCall(addContextFn, {errPayload, ctxStr},
+                                        "try.err.withctx");
+    }
+
     retResult = builder.CreateInsertValue(
         retResult, llvm::ConstantInt::getFalse(context),
         static_cast<unsigned>(expectedIsOkIndex), "try.ret.is_ok");

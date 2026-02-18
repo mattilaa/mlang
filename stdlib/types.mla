@@ -72,6 +72,8 @@
 //   - unwrap() -> T (warning: may panic on Err)
 //   - unwrap_err() -> E
 // Prefer match or is_ok/is_err checks before unwrap().
+// The `?` operator propagates Err values and, for Result<_, string>, appends
+// call-site context (`function:line`) to build an error stack.
 
 // @builtin Ok
 // Result constructor: Ok<T, E>(value).
