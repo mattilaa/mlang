@@ -120,6 +120,8 @@ Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
 The example uses `var user_input` directly (no `&mut` required) and trims with
 `trim(user_input)`.
+`std::io` now also supports stderr writes, stream buffering configuration
+(`set_*_buffering`), and non-blocking stdin polling (`read_line_nonblocking`).
 Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
 Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
