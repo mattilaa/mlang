@@ -1,3 +1,5 @@
+#include "ast.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -11,6 +13,20 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+
+extern int yyparse();
+extern int yylineno;
+extern "C"
+{
+    extern ASTNode* programRoot;
+    extern bool parseHadError;
+}
+
+typedef size_t yy_size_t;
+struct yy_buffer_state;
+typedef yy_buffer_state* YY_BUFFER_STATE;
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 namespace mlang::compiler_api {
 
@@ -38,17 +54,34 @@ struct SyntaxDiagnostic {
     std::string message;
 };
 
-struct DocumentSymbol {
+struct SemanticSymbol {
     std::string name;
-    int kind = 0;
+    int kind = 0; // 1 fn, 2 var/let, 3 struct, 4 mod
+    std::string uri;
     int line = 0;
     int column = 0;
+    int depth = 0;
+    std::string type_info;
+    std::string signature;
 };
 
-struct DefinitionResult {
-    std::string uri;
-    DocumentSymbol symbol;
+struct UseDecl {
+    std::string module;
+    std::string item;
+    bool wildcard = false;
 };
+
+struct DocumentSemantic {
+    std::string uri;
+    std::string text;
+    std::vector<int> line_depths;
+    std::vector<SemanticSymbol> symbols;
+    std::vector<std::string> mods;
+    std::vector<UseDecl> uses;
+    bool ast_valid = false;
+};
+
+static std::vector<SyntaxDiagnostic> computeSyntaxDiagnostics(std::string_view text);
 
 static bool isIdentStart(char c) {
     const unsigned char uc = static_cast<unsigned char>(c);
@@ -127,57 +160,6 @@ static bool startsWith(std::string_view value, std::string_view prefix) {
 #endif
 }
 
-static bool containsDeclForSymbol(std::string_view text, std::string_view symbol) {
-    if (symbol.empty()) {
-        return false;
-    }
-
-    const std::string patterns[] = {
-        "fn " + std::string(symbol),
-        "let " + std::string(symbol),
-        "var " + std::string(symbol),
-        "struct " + std::string(symbol),
-        "mod " + std::string(symbol),
-    };
-
-    for (const std::string& p : patterns) {
-        if (text.find(p) != std::string_view::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static std::vector<std::string> extractDeclaredSymbols(std::string_view text) {
-    std::vector<std::string> symbols;
-
-    const std::string_view decls[] = {"fn ", "let ", "var ", "struct ", "mod "};
-    for (std::string_view decl : decls) {
-        size_t pos = 0;
-        while (true) {
-            pos = text.find(decl, pos);
-            if (pos == std::string_view::npos) {
-                break;
-            }
-            const size_t name_start = pos + decl.size();
-            if (name_start >= text.size()) {
-                break;
-            }
-            if (!isIdentStart(text[name_start])) {
-                pos = name_start;
-                continue;
-            }
-            size_t end = name_start + 1;
-            while (end < text.size() && isIdentContinue(text[end])) {
-                ++end;
-            }
-            symbols.emplace_back(text.substr(name_start, end - name_start));
-            pos = end;
-        }
-    }
-    return symbols;
-}
-
 static std::vector<std::string_view> splitLines(std::string_view text) {
     std::vector<std::string_view> lines;
     size_t start = 0;
@@ -191,85 +173,6 @@ static std::vector<std::string_view> splitLines(std::string_view text) {
         start = nl + 1;
     }
     return lines;
-}
-
-static std::optional<DocumentSymbol> parseDeclarationLine(std::string_view lineText, int lineNo) {
-    size_t i = 0;
-    while (i < lineText.size() && (lineText[i] == ' ' || lineText[i] == '\t')) {
-        ++i;
-    }
-    if (i >= lineText.size()) {
-        return std::nullopt;
-    }
-
-    struct PrefixKind {
-        std::string_view prefix;
-        int kind;
-    };
-    static constexpr PrefixKind kDecls[] = {
-        {"fn ", 1},
-        {"let ", 2},
-        {"var ", 2},
-        {"struct ", 3},
-        {"mod ", 4},
-    };
-
-    int kind = 0;
-    size_t nameStart = 0;
-    for (const PrefixKind& d : kDecls) {
-        if (startsWith(lineText.substr(i), d.prefix)) {
-            kind = d.kind;
-            nameStart = i + d.prefix.size();
-            break;
-        }
-    }
-    if (kind == 0 || nameStart >= lineText.size() || !isIdentStart(lineText[nameStart])) {
-        return std::nullopt;
-    }
-
-    size_t nameEnd = nameStart + 1;
-    while (nameEnd < lineText.size() && isIdentContinue(lineText[nameEnd])) {
-        ++nameEnd;
-    }
-
-    DocumentSymbol sym;
-    sym.name = std::string(lineText.substr(nameStart, nameEnd - nameStart));
-    sym.kind = kind;
-    sym.line = lineNo;
-    sym.column = static_cast<int>(nameStart) + 1;
-    return sym;
-}
-
-static std::vector<DocumentSymbol> computeDocumentSymbols(std::string_view text) {
-    std::vector<DocumentSymbol> out;
-    const std::vector<std::string_view> lines = splitLines(text);
-    for (size_t i = 0; i < lines.size(); ++i) {
-        const std::optional<DocumentSymbol> decl =
-            parseDeclarationLine(lines[i], static_cast<int>(i) + 1);
-        if (decl.has_value()) {
-            out.push_back(*decl);
-        }
-    }
-    return out;
-}
-
-static std::optional<DocumentSymbol> findDefinition(std::string_view text, int line, int column) {
-    const std::optional<size_t> offset = offsetFromLineColumn(text, line, column);
-    if (!offset.has_value()) {
-        return std::nullopt;
-    }
-    const std::optional<std::string> token = tokenAtOffset(text, *offset);
-    if (!token.has_value()) {
-        return std::nullopt;
-    }
-
-    const std::vector<DocumentSymbol> symbols = computeDocumentSymbols(text);
-    for (const DocumentSymbol& sym : symbols) {
-        if (sym.name == *token) {
-            return sym;
-        }
-    }
-    return std::nullopt;
 }
 
 static std::string uriToPath(std::string_view uri) {
@@ -309,38 +212,354 @@ static std::string moduleLeafFromName(std::string_view modName) {
     return std::string(modName.substr(pos + 2));
 }
 
-static std::vector<std::string> parseModDeclarations(std::string_view text) {
-    std::vector<std::string> mods;
-    const auto lines = splitLines(text);
-    for (const std::string_view line : lines) {
-        size_t i = 0;
-        while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) {
-            ++i;
-        }
-        if (i + 4 > line.size() || line.substr(i, 4) != "mod ") {
-            continue;
-        }
-        i += 4;
-        size_t start = i;
-        while (i < line.size()) {
-            const char ch = line[i];
-            const bool ident = isIdentContinue(ch);
-            const bool sep = (ch == ':' && i + 1 < line.size() && line[i + 1] == ':');
-            if (ident) {
-                ++i;
-                continue;
+static std::vector<int> computeLineDepths(std::string_view text) {
+    std::vector<int> depths;
+    depths.push_back(0); // line 1 depth
+    int depth = 0;
+    bool in_string = false;
+
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char ch = text[i];
+        if (ch == '"' && (i == 0 || text[i - 1] != '\\')) {
+            in_string = !in_string;
+        } else if (!in_string) {
+            if (ch == '{') {
+                ++depth;
+            } else if (ch == '}') {
+                depth = std::max(0, depth - 1);
             }
-            if (sep) {
-                i += 2;
-                continue;
-            }
-            break;
         }
-        if (i > start) {
-            mods.emplace_back(line.substr(start, i - start));
+
+        if (ch == '\n') {
+            depths.push_back(depth);
         }
     }
-    return mods;
+    return depths;
+}
+
+static int findIdentifierColumn(std::string_view line, std::string_view name) {
+    if (name.empty()) {
+        return 1;
+    }
+    size_t pos = 0;
+    while (true) {
+        pos = line.find(name, pos);
+        if (pos == std::string_view::npos) {
+            return 1;
+        }
+        const bool left_ok =
+            pos == 0 || !isIdentContinue(line[pos - 1]);
+        const size_t end = pos + name.size();
+        const bool right_ok =
+            end >= line.size() || !isIdentContinue(line[end]);
+        if (left_ok && right_ok) {
+            return static_cast<int>(pos) + 1;
+        }
+        ++pos;
+    }
+}
+
+static std::string typeToString(TypeNode* type) {
+    if (!type) {
+        return {};
+    }
+    return type->toString();
+}
+
+static std::string functionSignatureFromAst(FunctionDefNode* fn) {
+    if (!fn) {
+        return {};
+    }
+    std::string sig = "fn " + fn->name + "(";
+    if (fn->parameters) {
+        for (size_t i = 0; i < fn->parameters->parameters.size(); ++i) {
+            if (i > 0) {
+                sig += ", ";
+            }
+            ParameterNode* p = fn->parameters->parameters[i];
+            sig += p ? p->name : "_";
+            sig += ": ";
+            sig += (p && p->type) ? p->type->toString() : "_";
+        }
+    }
+    sig += ") -> ";
+    sig += fn->returnType ? fn->returnType->toString() : "void";
+    return sig;
+}
+
+static ProgramNode* parseProgramFromText(std::string_view text) {
+    ASTNode* saved_root = programRoot;
+    programRoot = nullptr;
+
+    yylineno = 1;
+    parseHadError = false;
+
+    YY_BUFFER_STATE buffer =
+        yy_scan_bytes(text.data(), static_cast<yy_size_t>(text.size()));
+    const int result = yyparse();
+    yy_delete_buffer(buffer);
+
+    ProgramNode* parsed = nullptr;
+    if (result == 0 && !parseHadError && programRoot) {
+        parsed = dynamic_cast<ProgramNode*>(programRoot);
+    }
+
+    programRoot = saved_root;
+    return parsed;
+}
+
+static void addSemanticSymbol(DocumentSemantic& out,
+                              const std::vector<std::string_view>& lines,
+                              std::string name,
+                              int kind,
+                              int line_no,
+                              int depth,
+                              std::string type_info,
+                              std::string signature) {
+    SemanticSymbol s;
+    s.name = std::move(name);
+    s.kind = kind;
+    s.uri = out.uri;
+    auto guess_line = [&]() -> int {
+        if (s.name.empty()) {
+            return 1;
+        }
+        int best_line = -1;
+        int best_depth_delta = 1 << 30;
+        int best_line_delta = 1 << 30;
+        for (size_t i = 0; i < lines.size(); ++i) {
+            const std::string_view line = lines[i];
+            bool kind_match = false;
+            switch (kind) {
+            case 1:
+                kind_match = line.find("fn " + s.name) != std::string_view::npos;
+                break;
+            case 2:
+                kind_match = line.find("let " + s.name) != std::string_view::npos ||
+                             line.find("var " + s.name) != std::string_view::npos;
+                if (!kind_match) {
+                    kind_match = findIdentifierColumn(line, s.name) > 0;
+                }
+                break;
+            case 3:
+                kind_match = line.find("struct " + s.name) != std::string_view::npos;
+                break;
+            case 4:
+                kind_match = line.find("mod " + s.name) != std::string_view::npos;
+                break;
+            default:
+                kind_match = line.find(s.name) != std::string_view::npos;
+                break;
+            }
+            if (!kind_match) {
+                continue;
+            }
+            int depth_here = 0;
+            if (i < out.line_depths.size()) {
+                depth_here = out.line_depths[i];
+            }
+            const int depth_delta = std::abs(depth_here - depth);
+            const int line_here = static_cast<int>(i) + 1;
+            const int line_delta = (line_no > 1) ? std::abs(line_here - line_no) : 0;
+            if (best_line == -1 || depth_delta < best_depth_delta ||
+                (depth_delta == best_depth_delta && line_delta < best_line_delta) ||
+                (depth_delta == best_depth_delta && line_delta == best_line_delta &&
+                 line_here < best_line)) {
+                best_line = line_here;
+                best_depth_delta = depth_delta;
+                best_line_delta = line_delta;
+            }
+        }
+        if (best_line > 0) {
+            return best_line;
+        }
+        return line_no > 0 ? line_no : 1;
+    };
+
+    s.line = guess_line();
+    s.depth = depth;
+    s.type_info = std::move(type_info);
+    s.signature = std::move(signature);
+
+    if (s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size()) {
+        s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)], s.name);
+    } else {
+        s.column = 1;
+    }
+    out.symbols.push_back(std::move(s));
+}
+
+static void collectStatementSymbols(DocumentSemantic& out,
+                                    const std::vector<std::string_view>& lines,
+                                    StatementListNode* list,
+                                    int depth);
+
+static void collectIfSymbols(DocumentSemantic& out,
+                             const std::vector<std::string_view>& lines,
+                             IfNode* node,
+                             int depth) {
+    if (!node) {
+        return;
+    }
+    collectStatementSymbols(out, lines, node->thenBranch, depth + 1);
+    if (node->elseIfBranch) {
+        collectIfSymbols(out, lines, node->elseIfBranch, depth + 1);
+    }
+    if (node->elseBranch) {
+        collectStatementSymbols(out, lines, node->elseBranch, depth + 1);
+    }
+}
+
+static void collectStatementSymbols(DocumentSemantic& out,
+                                    const std::vector<std::string_view>& lines,
+                                    StatementListNode* list,
+                                    int depth) {
+    if (!list) {
+        return;
+    }
+    for (StatementNode* stmt : list->statements) {
+        if (!stmt) {
+            continue;
+        }
+        const int line_no = stmt->line > 0 ? stmt->line : 1;
+        if (auto* let_decl = dynamic_cast<LetDeclNode*>(stmt)) {
+            addSemanticSymbol(out, lines, let_decl->name, 2, line_no, depth,
+                              typeToString(let_decl->type), {});
+            continue;
+        }
+        if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
+            addSemanticSymbol(out, lines, var_decl->name, 2, line_no, depth,
+                              typeToString(var_decl->type), {});
+            continue;
+        }
+        if (auto* init = dynamic_cast<StructInitNode*>(stmt)) {
+            addSemanticSymbol(out, lines, init->varName, 2, line_no, depth,
+                              init->typeName, {});
+            continue;
+        }
+        if (auto* for_node = dynamic_cast<ForNode*>(stmt)) {
+            addSemanticSymbol(out, lines, for_node->varName, 2, line_no,
+                              depth + 1, {}, {});
+            collectStatementSymbols(out, lines, for_node->body, depth + 1);
+            continue;
+        }
+        if (auto* if_node = dynamic_cast<IfNode*>(stmt)) {
+            collectIfSymbols(out, lines, if_node, depth);
+            continue;
+        }
+        if (auto* block = dynamic_cast<BlockStatementNode*>(stmt)) {
+            collectStatementSymbols(out, lines, block->statements, depth + 1);
+            continue;
+        }
+    }
+}
+
+static std::optional<DocumentSemantic>
+buildDocumentSemanticFromAst(const DocumentState& doc) {
+    ProgramNode* program = parseProgramFromText(doc.text);
+    if (!program) {
+        return std::nullopt;
+    }
+
+    DocumentSemantic out;
+    out.uri = doc.uri;
+    out.text = doc.text;
+    out.line_depths = computeLineDepths(doc.text);
+    const std::vector<std::string_view> lines = splitLines(doc.text);
+
+    if (program->modules.size() > 0) {
+        for (ModDeclNode* mod : program->modules) {
+            if (!mod) {
+                continue;
+            }
+            out.mods.push_back(mod->moduleName);
+            addSemanticSymbol(out, lines, mod->moduleName, 4,
+                              mod->line > 0 ? mod->line : 1, 0, {}, {});
+        }
+    }
+
+    if (program->imports.size() > 0) {
+        for (UseDeclNode* use : program->imports) {
+            if (!use) {
+                continue;
+            }
+            UseDecl u;
+            u.module = use->moduleName;
+            u.item = use->itemName;
+            u.wildcard = use->importAll;
+            out.uses.push_back(std::move(u));
+        }
+    }
+
+    if (program->structList) {
+        for (StructDefNode* st : program->structList->structs) {
+            if (!st) {
+                continue;
+            }
+            addSemanticSymbol(out, lines, st->name, 3,
+                              st->line > 0 ? st->line : 1, 0, {}, {});
+        }
+    }
+
+    if (program->functionList) {
+        for (FunctionDefNode* fn : program->functionList->functions) {
+            if (!fn || fn->isExtern) {
+                continue;
+            }
+            const int fn_line = fn->line > 0 ? fn->line : 1;
+            addSemanticSymbol(out, lines, fn->name, 1, fn_line, 0,
+                              typeToString(fn->returnType),
+                              functionSignatureFromAst(fn));
+
+            if (fn->parameters) {
+                for (ParameterNode* p : fn->parameters->parameters) {
+                    if (!p) {
+                        continue;
+                    }
+                    addSemanticSymbol(out, lines, p->name, 2, fn_line, 1,
+                                      typeToString(p->type), {});
+                }
+            }
+            collectStatementSymbols(out, lines, fn->body, 1);
+        }
+    }
+
+    delete program;
+    out.ast_valid = true;
+    return out;
+}
+
+static DocumentSemantic buildDocumentSemantic(const DocumentState& doc) {
+    if (const auto ast_sem = buildDocumentSemanticFromAst(doc); ast_sem.has_value()) {
+        return *ast_sem;
+    }
+
+    DocumentSemantic out;
+    out.uri = doc.uri;
+    out.text = doc.text;
+    out.line_depths = computeLineDepths(doc.text);
+    return out;
+}
+
+static std::vector<DocumentSemantic>
+buildSemanticSnapshot(const std::vector<DocumentState>& docs) {
+    std::vector<DocumentSemantic> out;
+    out.reserve(docs.size());
+    for (const DocumentState& doc : docs) {
+        out.push_back(buildDocumentSemantic(doc));
+    }
+    return out;
+}
+
+static const DocumentSemantic* findSemanticDoc(
+    const std::vector<DocumentSemantic>& docs,
+    std::string_view uri) {
+    for (const DocumentSemantic& doc : docs) {
+        if (doc.uri == uri) {
+            return &doc;
+        }
+    }
+    return nullptr;
 }
 
 static bool uriMatchesModule(std::string_view uri, std::string_view modName) {
@@ -353,50 +572,213 @@ static bool uriMatchesModule(std::string_view uri, std::string_view modName) {
     return endsWith(path, "/" + leaf + ".mla") || endsWith(path, leaf + ".mla");
 }
 
-static std::optional<DefinitionResult> findDefinitionAcrossDocuments(
-    std::string_view current_uri,
-    std::string_view current_text,
-    const std::vector<DocumentState>& all_docs,
+static int lineDepthAt(const DocumentSemantic& doc, int line) {
+    if (line <= 0 || doc.line_depths.empty()) {
+        return 0;
+    }
+    const size_t idx = static_cast<size_t>(line - 1);
+    if (idx < doc.line_depths.size()) {
+        return doc.line_depths[idx];
+    }
+    return doc.line_depths.back();
+}
+
+static std::vector<SemanticSymbol> collectImportedSymbols(
+    const DocumentSemantic& current,
+    const std::vector<DocumentSemantic>& all_docs) {
+    std::vector<SemanticSymbol> imported;
+
+    auto append_from_module = [&](std::string_view module_name,
+                                  std::string_view specific_name,
+                                  bool wildcard) {
+        for (const DocumentSemantic& doc : all_docs) {
+            if (doc.uri == current.uri) {
+                continue;
+            }
+            if (!uriMatchesModule(doc.uri, module_name)) {
+                continue;
+            }
+            for (const SemanticSymbol& sym : doc.symbols) {
+                if (lineDepthAt(doc, sym.line) != 0) {
+                    continue;
+                }
+                if (sym.kind == 2) {
+                    continue;
+                }
+                if (!wildcard && sym.name != specific_name) {
+                    continue;
+                }
+                imported.push_back(sym);
+            }
+        }
+    };
+
+    for (const UseDecl& use : current.uses) {
+        append_from_module(use.module, use.item, use.wildcard);
+    }
+
+    for (const std::string& mod : current.mods) {
+        append_from_module(mod, "", true);
+    }
+
+    return imported;
+}
+
+struct ResolvedQuerySymbol {
+    SemanticSymbol symbol;
+    int overload_count = 1;
+    bool from_current_document = false;
+};
+
+static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
+    const DocumentSemantic& current,
+    const std::vector<DocumentSemantic>& all_docs,
     int line,
     int column) {
-    const std::optional<size_t> offset = offsetFromLineColumn(current_text, line, column);
+    const std::optional<size_t> offset =
+        offsetFromLineColumn(current.text, line, column);
     if (!offset.has_value()) {
         return std::nullopt;
     }
-    const std::optional<std::string> token = tokenAtOffset(current_text, *offset);
+    const std::optional<std::string> token =
+        tokenAtOffset(current.text, *offset);
     if (!token.has_value()) {
         return std::nullopt;
     }
 
-    const std::vector<DocumentSymbol> local = computeDocumentSymbols(current_text);
-    for (const DocumentSymbol& sym : local) {
-        if (sym.name == *token) {
-            return DefinitionResult{std::string(current_uri), sym};
+    const int query_depth = lineDepthAt(current, line);
+
+    // Prefer closest visible local variable declaration.
+    const SemanticSymbol* best_local_var = nullptr;
+    for (const SemanticSymbol& sym : current.symbols) {
+        if (sym.name != *token || sym.kind != 2) {
+            continue;
+        }
+        const int sym_depth = lineDepthAt(current, sym.line);
+        if (sym.line > line || sym_depth > query_depth) {
+            continue;
+        }
+        const int best_depth =
+            best_local_var ? lineDepthAt(current, best_local_var->line) : -1;
+        if (!best_local_var ||
+            sym_depth > best_depth ||
+            (sym_depth == best_depth && sym.line > best_local_var->line)) {
+            best_local_var = &sym;
         }
     }
+    if (best_local_var) {
+        return ResolvedQuerySymbol{*best_local_var, 1, true};
+    }
 
-    const std::vector<std::string> mods = parseModDeclarations(current_text);
-    if (!mods.empty()) {
-        for (const std::string& mod : mods) {
-            for (const DocumentState& doc : all_docs) {
-                if (doc.uri == current_uri) {
-                    continue;
-                }
-                if (!uriMatchesModule(doc.uri, mod)) {
-                    continue;
-                }
-                const std::vector<DocumentSymbol> syms =
-                    computeDocumentSymbols(doc.text);
-                for (const DocumentSymbol& sym : syms) {
-                    if (sym.name == *token) {
-                        return DefinitionResult{doc.uri, sym};
-                    }
-                }
-            }
+    // Then global-like declarations in current document.
+    const SemanticSymbol* first_local = nullptr;
+    int overload_count = 0;
+    for (const SemanticSymbol& sym : current.symbols) {
+        if (sym.name != *token) {
+            continue;
         }
+        if (!first_local) {
+            first_local = &sym;
+        }
+        if (sym.kind == 1) {
+            ++overload_count;
+        }
+    }
+    if (first_local) {
+        if (overload_count == 0) {
+            overload_count = 1;
+        }
+        return ResolvedQuerySymbol{*first_local, overload_count, true};
+    }
+
+    const std::vector<SemanticSymbol> imported =
+        collectImportedSymbols(current, all_docs);
+    const SemanticSymbol* first_imported = nullptr;
+    int imported_overloads = 0;
+    for (const SemanticSymbol& sym : imported) {
+        if (sym.name != *token) {
+            continue;
+        }
+        if (!first_imported) {
+            first_imported = &sym;
+        }
+        if (sym.kind == 1) {
+            ++imported_overloads;
+        }
+    }
+    if (first_imported) {
+        if (imported_overloads == 0) {
+            imported_overloads = 1;
+        }
+        return ResolvedQuerySymbol{*first_imported, imported_overloads, false};
     }
 
     return std::nullopt;
+}
+
+static std::string completionPrefixAtOffset(std::string_view text, size_t offset);
+
+static std::vector<std::string> computeSemanticCompletions(
+    const DocumentSemantic& current,
+    const std::vector<DocumentSemantic>& all_docs,
+    int line,
+    int column) {
+    static constexpr std::string_view kKeywords[] = {
+        "fn", "let", "var", "struct", "mod", "use", "if", "else", "while",
+        "for", "return",
+    };
+
+    const std::optional<size_t> offset =
+        offsetFromLineColumn(current.text, line, column);
+    if (!offset.has_value()) {
+        return {};
+    }
+    const std::string prefix = completionPrefixAtOffset(current.text, *offset);
+
+    std::set<std::string> dedup;
+    auto consider = [&](std::string_view candidate) {
+        if (prefix.empty() || startsWith(candidate, prefix)) {
+            dedup.insert(std::string(candidate));
+        }
+    };
+
+    for (const std::string_view kw : kKeywords) {
+        consider(kw);
+    }
+
+    const int query_depth = lineDepthAt(current, line);
+    for (const SemanticSymbol& sym : current.symbols) {
+        if (sym.kind == 2) {
+            if (sym.line <= line && lineDepthAt(current, sym.line) <= query_depth) {
+                consider(sym.name);
+            }
+            continue;
+        }
+        consider(sym.name);
+    }
+
+    const std::vector<SemanticSymbol> imported =
+        collectImportedSymbols(current, all_docs);
+    for (const SemanticSymbol& sym : imported) {
+        consider(sym.name);
+    }
+
+    return std::vector<std::string>(dedup.begin(), dedup.end());
+}
+
+static const char* symbolKindName(int kind) {
+    switch (kind) {
+    case 1:
+        return "fn";
+    case 2:
+        return "var";
+    case 3:
+        return "struct";
+    case 4:
+        return "mod";
+    default:
+        return "symbol";
+    }
 }
 
 static std::string completionPrefixAtOffset(std::string_view text, size_t offset) {
@@ -408,35 +790,6 @@ static std::string completionPrefixAtOffset(std::string_view text, size_t offset
         --start;
     }
     return std::string(text.substr(start, offset - start));
-}
-
-static std::vector<std::string> computeCompletions(std::string_view text, size_t offset) {
-    static constexpr std::string_view kKeywords[] = {
-        "fn", "let", "var", "struct", "mod", "if", "else", "while", "for", "return",
-    };
-
-    const std::string prefix = completionPrefixAtOffset(text, offset);
-    std::set<std::string> dedup;
-
-    for (std::string_view kw : kKeywords) {
-        if (prefix.empty() || startsWith(kw, prefix)) {
-            dedup.insert(std::string(kw));
-        }
-    }
-
-    const std::vector<std::string> symbols = extractDeclaredSymbols(text);
-    for (const std::string& sym : symbols) {
-        if (prefix.empty() || startsWith(sym, prefix)) {
-            dedup.insert(sym);
-        }
-    }
-
-    std::vector<std::string> out;
-    out.reserve(dedup.size());
-    for (const std::string& item : dedup) {
-        out.push_back(item);
-    }
-    return out;
 }
 
 static std::vector<SyntaxDiagnostic> computeSyntaxDiagnostics(std::string_view text) {
@@ -796,19 +1149,40 @@ int __mlang_compiler_document_hover(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
     }
 
-    const std::optional<size_t> offset = mlang::compiler_api::offsetFromLineColumn(*text, line, column);
-    if (!offset.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
     }
 
-    const std::optional<std::string> token = mlang::compiler_api::tokenAtOffset(*text, *offset);
-    if (!token.has_value()) {
+    const std::optional<mlang::compiler_api::ResolvedQuerySymbol> resolved =
+        mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    if (!resolved.has_value()) {
         return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
     }
 
-    const bool declared_here = mlang::compiler_api::containsDeclForSymbol(*text, *token);
-    std::string hover = declared_here ? ("symbol: " + *token + " (declared in document)")
-                                      : ("symbol: " + *token);
+    std::string hover = "symbol: " + resolved->symbol.name;
+    hover += " [" + std::string(mlang::compiler_api::symbolKindName(resolved->symbol.kind)) + "]";
+    if (!resolved->symbol.type_info.empty()) {
+        hover += " : " + resolved->symbol.type_info;
+    }
+    if (!resolved->symbol.signature.empty()) {
+        hover += " | " + resolved->symbol.signature;
+    }
+    if (resolved->overload_count > 1) {
+        hover += " | overloads=" + std::to_string(resolved->overload_count);
+    }
+    if (resolved->symbol.uri == uri) {
+        hover += " (declared in document)";
+    } else {
+        hover += " (declared in " + resolved->symbol.uri + ")";
+    }
 
     *out_message_length = static_cast<int>(hover.size());
     const size_t copy_len = std::min(static_cast<size_t>(out_message_capacity - 1), hover.size());
@@ -839,12 +1213,20 @@ int __mlang_compiler_document_completion_count(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
     }
 
-    const std::optional<size_t> offset = mlang::compiler_api::offsetFromLineColumn(*text, line, column);
-    if (!offset.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
     }
 
-    const auto completions = mlang::compiler_api::computeCompletions(*text, *offset);
+    const auto completions =
+        mlang::compiler_api::computeSemanticCompletions(*current, sem_docs, line, column);
     *out_count = static_cast<int>(completions.size());
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
@@ -873,12 +1255,20 @@ int __mlang_compiler_document_completion_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
     }
 
-    const std::optional<size_t> offset = mlang::compiler_api::offsetFromLineColumn(*text, line, column);
-    if (!offset.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
     }
 
-    const auto completions = mlang::compiler_api::computeCompletions(*text, *offset);
+    const auto completions =
+        mlang::compiler_api::computeSemanticCompletions(*current, sem_docs, line, column);
     if (index < 0 || static_cast<size_t>(index) >= completions.size()) {
         return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
     }
@@ -911,8 +1301,19 @@ int __mlang_compiler_document_symbol_count(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
     }
 
-    const auto symbols = mlang::compiler_api::computeDocumentSymbols(*text);
-    *out_count = static_cast<int>(symbols.size());
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    *out_count = static_cast<int>(current->symbols.size());
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 
@@ -942,13 +1343,24 @@ int __mlang_compiler_document_symbol_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
     }
 
-    const auto symbols = mlang::compiler_api::computeDocumentSymbols(*text);
-    if (index < 0 || static_cast<size_t>(index) >= symbols.size()) {
+    const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
+    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
         return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
     }
 
-    const mlang::compiler_api::DocumentSymbol& sym =
-        symbols[static_cast<size_t>(index)];
+    const mlang::compiler_api::SemanticSymbol& sym =
+        current->symbols[static_cast<size_t>(index)];
     *out_kind = sym.kind;
     *out_line = sym.line;
     *out_column = sym.column;
@@ -1010,8 +1422,19 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
     }
 
     const std::vector<mlang::compiler_api::DocumentState> docs = store->snapshotDocuments();
-    const std::optional<mlang::compiler_api::DefinitionResult> def =
-        mlang::compiler_api::findDefinitionAcrossDocuments(uri, *text, docs, line, column);
+    const std::vector<mlang::compiler_api::DocumentSemantic> sem_docs =
+        mlang::compiler_api::buildSemanticSnapshot(docs);
+    const mlang::compiler_api::DocumentSemantic* current =
+        mlang::compiler_api::findSemanticDoc(sem_docs, uri);
+    if (!current) {
+        return static_cast<int>(mlang::compiler_api::Status::DocumentNotFound);
+    }
+    if (!current->ast_valid) {
+        return static_cast<int>(mlang::compiler_api::Status::Unsupported);
+    }
+
+    const std::optional<mlang::compiler_api::ResolvedQuerySymbol> def =
+        mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
     if (!def.has_value()) {
         return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
     }
@@ -1026,11 +1449,11 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
     }
     out_name[copy_len] = '\0';
 
-    *out_uri_length = static_cast<int>(def->uri.size());
+    *out_uri_length = static_cast<int>(def->symbol.uri.size());
     const size_t uri_copy_len =
-        std::min(static_cast<size_t>(out_uri_capacity - 1), def->uri.size());
+        std::min(static_cast<size_t>(out_uri_capacity - 1), def->symbol.uri.size());
     if (uri_copy_len > 0) {
-        std::memcpy(out_uri, def->uri.data(), uri_copy_len);
+        std::memcpy(out_uri, def->symbol.uri.data(), uri_copy_len);
     }
     out_uri[uri_copy_len] = '\0';
     return static_cast<int>(mlang::compiler_api::Status::Ok);

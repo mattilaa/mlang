@@ -213,6 +213,10 @@ target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mlangd ${llvm_libs})
 
 add_library(mlang_std STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${LEXER_OUT}
+    ${PARSER_OUT}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
@@ -226,6 +230,10 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
 )
+add_dependencies(mlang_std ParserTarget LexerTarget)
+target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
 
 # RapidJSON for std::json backend (header-only).

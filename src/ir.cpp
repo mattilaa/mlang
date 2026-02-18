@@ -1810,6 +1810,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
 void CodeGenerator::generateTestMain(
     const std::vector<FunctionDefNode*>& tests)
 {
+    initializeStdioFunctions();
+
     llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
     llvm::FunctionType* mainType =
         llvm::FunctionType::get(i32Type, {}, false);
@@ -1824,6 +1826,23 @@ void CodeGenerator::generateTestMain(
     llvm::AllocaInst* failures =
         builder.CreateAlloca(i32Type, nullptr, "failures");
     builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), failures);
+    llvm::AllocaInst* totalTests =
+        builder.CreateAlloca(i32Type, nullptr, "total_tests");
+    builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), totalTests);
+
+    auto make_cstr = [&](const std::string& s, const char* name) -> llvm::Value*
+    {
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString(s, name);
+#else
+        return builder.CreateGlobalStringPtr(s, name);
+#endif
+    };
+
+    llvm::Value* passFmt = make_cstr("[PASS] %s\n", "test.pass.fmt");
+    llvm::Value* failFmt = make_cstr("[FAIL] %s (rc=%d)\n", "test.fail.fmt");
+    llvm::Value* summaryFmt =
+        make_cstr("[SUMMARY] total=%d pass=%d fail=%d\n", "test.summary.fmt");
 
     for(auto* testFn : tests)
     {
@@ -1833,21 +1852,74 @@ void CodeGenerator::generateTestMain(
             module->getFunction(functionSymbolName(testFn));
         if(!callee)
             continue;
+
+        llvm::Value* totalCur =
+            builder.CreateLoad(i32Type, totalTests, "tests.cur");
+        llvm::Value* totalNext =
+            builder.CreateAdd(totalCur, llvm::ConstantInt::get(i32Type, 1),
+                              "tests.next");
+        builder.CreateStore(totalNext, totalTests);
+
+        llvm::Value* testName = make_cstr(testFn->name, "test.name");
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
+        {
+            builder.CreateCall(printfFunc, {passFmt, testName});
             continue;
+        }
+
+        llvm::Value* resultI32 = result;
+        if(resultI32->getType() != i32Type)
+        {
+            if(resultI32->getType()->isIntegerTy())
+            {
+                resultI32 = builder.CreateIntCast(resultI32, i32Type, true,
+                                                  "test.rc.cast");
+            }
+            else
+            {
+                resultI32 = llvm::ConstantInt::get(i32Type, 1);
+            }
+        }
+
         llvm::Value* isFail = builder.CreateICmpNE(
-            result, llvm::ConstantInt::get(i32Type, 0), "testfail");
+            resultI32, llvm::ConstantInt::get(i32Type, 0), "testfail");
         llvm::Value* failInc =
             builder.CreateZExt(isFail, i32Type, "failinc");
         llvm::Value* cur =
             builder.CreateLoad(i32Type, failures, "failures.cur");
         llvm::Value* next = builder.CreateAdd(cur, failInc, "failures.next");
         builder.CreateStore(next, failures);
+
+        llvm::BasicBlock* passBB =
+            llvm::BasicBlock::Create(context, "test.pass", mainFn);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, "test.fail");
+        llvm::BasicBlock* contBB =
+            llvm::BasicBlock::Create(context, "test.cont");
+        builder.CreateCondBr(isFail, failBB, passBB);
+
+        builder.SetInsertPoint(passBB);
+        builder.CreateCall(printfFunc, {passFmt, testName});
+        builder.CreateBr(contBB);
+
+        failBB->insertInto(mainFn);
+        builder.SetInsertPoint(failBB);
+        builder.CreateCall(printfFunc, {failFmt, testName, resultI32});
+        builder.CreateBr(contBB);
+
+        contBB->insertInto(mainFn);
+        builder.SetInsertPoint(contBB);
     }
 
     llvm::Value* total =
         builder.CreateLoad(i32Type, failures, "failures.total");
+    llvm::Value* totalCount =
+        builder.CreateLoad(i32Type, totalTests, "tests.total");
+    llvm::Value* passCount =
+        builder.CreateSub(totalCount, total, "tests.pass");
+    builder.CreateCall(printfFunc, {summaryFmt, totalCount, passCount, total});
+
     builder.CreateRet(total);
 }
 

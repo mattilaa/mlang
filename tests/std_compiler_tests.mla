@@ -66,7 +66,7 @@ fn test_compiler_hover_and_completion() -> i32 {
     let s: Session = sr.unwrap();
 
     let uri: string = "mem://hover_completion.mla";
-    let src: string = "fn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  let al\n  return alpha;\n}";
+    let src: string = "fn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  let al: i32 = alpha;\n  return alpha;\n}";
 
     let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
     if od.is_err(): { return 1; }
@@ -91,6 +91,27 @@ fn test_compiler_hover_and_completion() -> i32 {
         }
     }
     if mut_found != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_semantic_queries_require_ast_parse() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://invalid_semantic_doc.mla";
+    let src: string = "fn main() -> i32 { let x: i32 = ; }";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let hr: Result<string, string> = s.hover(uri, 1, 21);
+    if hr.is_ok(): { return 1; }
+
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 1, 21);
+    if dr.is_ok(): { return 1; }
 
     let _ = s.destroy();
     return 0;
@@ -162,6 +183,38 @@ fn test_compiler_definition_cross_document_mod() -> i32 {
     if contains(def.name, "util_value") == 0: { return 1; }
     if contains(def.uri, "lib/util.mla") == 0: { return 1; }
     if def.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_semantic_scope_and_use_import() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/util2.mla";
+    let main_uri: string = "file:///ws/main2.mla";
+    let util_src: string = "fn util_call() -> i32 { return 11; }";
+    let main_src: string = "use lib::util2::util_call;\nfn main() -> i32 {\n  let x: i32 = 1;\n  if x == 1: {\n    let x: i32 = util_call();\n    return x;\n  }\n  return x;\n}";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let d1r: Result<DefinitionLocation, string> = s.definition(main_uri, 6, 12);
+    if d1r.is_err(): { return 1; }
+    let d1: DefinitionLocation = d1r.unwrap();
+    if contains(d1.name, "x") == 0: { return 1; }
+    if d1.line != 5: { return 1; }
+
+    let d2r: Result<DefinitionLocation, string> = s.definition(main_uri, 5, 18);
+    if d2r.is_err(): { return 1; }
+    let d2: DefinitionLocation = d2r.unwrap();
+    if contains(d2.name, "util_call") == 0: { return 1; }
+    if contains(d2.uri, "lib/util2.mla") == 0: { return 1; }
 
     let _ = s.destroy();
     return 0;
