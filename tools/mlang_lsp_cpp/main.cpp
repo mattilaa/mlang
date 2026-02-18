@@ -142,7 +142,7 @@ static std::string uri_to_path(const std::string& uri)
 {
     std::string out = uri;
     const std::string prefix = "file://";
-    if(out.rfind(prefix, 0) == 0)
+    if(out.starts_with(prefix))
         out = out.substr(prefix.size());
     std::string decoded;
     decoded.reserve(out.size());
@@ -505,7 +505,7 @@ private:
             line = trim(line);
             if(line.empty() || line[0] == '#')
                 continue;
-            if(line.rfind("-I", 0) == 0)
+            if(line.starts_with("-I"))
             {
                 std::string dir = trim(line.substr(2));
                 if(!dir.empty())
@@ -515,21 +515,21 @@ private:
             const std::string includePrefix = "include_dir:";
             const std::string headerPrefix = "header:";
             const std::string typeMapPrefix = "type_map:";
-            if(line.rfind(includePrefix, 0) == 0)
+            if(line.starts_with(includePrefix))
             {
                 std::string dir = trim(line.substr(includePrefix.size()));
                 if(!dir.empty())
                     cIncludeDirs.push_back(dir);
                 continue;
             }
-            if(line.rfind(headerPrefix, 0) == 0)
+            if(line.starts_with(headerPrefix))
             {
                 std::string hdr = trim(line.substr(headerPrefix.size()));
                 if(!hdr.empty())
                     cHeaderNames.push_back(hdr);
                 continue;
             }
-            if(line.rfind(typeMapPrefix, 0) == 0)
+            if(line.starts_with(typeMapPrefix))
             {
                 std::string maps = trim(line.substr(typeMapPrefix.size()));
                 size_t start = 0;
@@ -840,7 +840,7 @@ private:
                 line.pop_back();
             if(line.empty())
                 break;
-            if(line.rfind("Content-Length:", 0) == 0)
+            if(line.starts_with("Content-Length:"))
             {
                 contentLength = std::stoul(line.substr(15));
             }
@@ -2414,7 +2414,7 @@ private:
                     continue;
                 break;
             }
-            if(t.rfind("//", 0) != 0)
+            if(!t.starts_with("//"))
                 break;
             chunks.push_back(trim(t.substr(2)));
         }
@@ -3895,9 +3895,9 @@ private:
             std::string t = trim(info.lines[(size_t)line]);
             if(t.empty())
                 continue;
-            if(t.rfind("//", 0) == 0)
+            if(t.starts_with("//"))
                 continue;
-            if(t.rfind("mod ", 0) == 0 || t.rfind("use ", 0) == 0)
+            if(t.starts_with("mod ") || t.starts_with("use "))
                 continue;
             break;
         }

@@ -108,7 +108,11 @@ static std::optional<std::string> tokenAtOffset(std::string_view text, size_t of
 }
 
 static bool startsWith(std::string_view value, std::string_view prefix) {
+#if __cplusplus >= 202002L
+    return value.starts_with(prefix);
+#else
     return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
+#endif
 }
 
 static bool containsDeclForSymbol(std::string_view text, std::string_view symbol) {

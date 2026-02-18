@@ -202,6 +202,11 @@ add_executable(mlangd
 )
 
 add_dependencies(mlangd ParserTarget LexerTarget)
+target_compile_features(mlangd PRIVATE cxx_std_20)
+set_target_properties(mlangd PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
 target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
