@@ -25,3 +25,6 @@ Currently provided:
   (`JsonDoc::parse/from_file`, `JsonDoc::stringify`,
    `JsonValue::get/index/as_*`, `iter_array`, `iter_object`),
   backed by RapidJSON.
+- `std/net.mla`: TCP client/server over libc sockets
+  (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
+   `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`).

@@ -1,0 +1,131 @@
+mod std::net;
+mod std::strbuf;
+
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::strbuf::eq;
+
+fn main() -> i32 {
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    if listener_r.is_err(): {
+        println!("bind failed: {}", listener_r.unwrap_err());
+        return 1;
+    }
+    let listener: TcpListener = listener_r.unwrap();
+
+    let port_r: Result<i64, string> = listener.local_port();
+    if port_r.is_err(): {
+        println!("local_port failed: {}", port_r.unwrap_err());
+        listener.close();
+        return 1;
+    }
+    let port: i64 = port_r.unwrap();
+
+    let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    if client_r.is_err(): {
+        println!("connect failed: {}", client_r.unwrap_err());
+        listener.close();
+        return 1;
+    }
+    let client: TcpStream = client_r.unwrap();
+
+    let server_r: Result<TcpStream, string> = listener.accept();
+    if server_r.is_err(): {
+        println!("accept failed: {}", server_r.unwrap_err());
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let server: TcpStream = server_r.unwrap();
+
+    let nb: Result<i32, string> = client.set_nonblocking(1);
+    if nb.is_err(): {
+        println!("set_nonblocking failed: {}", nb.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let rt: Result<i32, string> = server.set_read_timeout_ms(500);
+    if rt.is_err(): {
+        println!("set_read_timeout_ms failed: {}", rt.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let wt: Result<i32, string> = server.set_write_timeout_ms(500);
+    if wt.is_err(): {
+        println!("set_write_timeout_ms failed: {}", wt.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    let w1: Result<i64, string> = client.write("ping");
+    if w1.is_err(): {
+        println!("client write failed: {}", w1.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    var in1 = String::with_capacity(32);
+    let r1: Result<i64, string> = server.read(in1, 32);
+    if r1.is_err(): {
+        println!("server read failed: {}", r1.unwrap_err());
+        String::free(in1);
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    if eq(in1, "ping") != 1: {
+        println!("unexpected payload: {}", in1);
+        String::free(in1);
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    String::free(in1);
+
+    let w2: Result<i64, string> = server.write("pong");
+    if w2.is_err(): {
+        println!("server write failed: {}", w2.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    // Switch back to blocking mode for straightforward request/response read.
+    let nb_off: Result<i32, string> = client.set_nonblocking(0);
+    if nb_off.is_err(): {
+        println!("set_nonblocking(0) failed: {}", nb_off.unwrap_err());
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    var in2 = String::with_capacity(32);
+    let r2: Result<i64, string> = client.read(in2, 32);
+    if r2.is_err(): {
+        println!("client read failed: {}", r2.unwrap_err());
+        String::free(in2);
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    println!("client got: {}", in2);
+    String::free(in2);
+
+    server.close();
+    client.close();
+    listener.close();
+    return 0;
+}

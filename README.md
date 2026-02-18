@@ -126,6 +126,9 @@ Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
 Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
 `examples/std_fs_demo.mla`.
+TCP networking API (`std::net::TcpListener`, `std::net::TcpStream`,
+non-blocking mode, read/write timeouts) example:
+`examples/std_net_demo.mla`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
 `?` is supported for `Result` propagation (early-return on `Err`).
@@ -137,6 +140,8 @@ JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterator
   `examples/std_io_traits_demo.mla`
 - Filesystem read-lines flow (`File::open`, `BufReader::new`, `lines`):
   `examples/std_fs_demo.mla`
+- TCP loopback client/server over libc sockets:
+  `examples/std_net_demo.mla`
 - JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):
   `examples/std_json_demo.mla`
 
