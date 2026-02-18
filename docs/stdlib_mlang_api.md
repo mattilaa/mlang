@@ -8,6 +8,7 @@ mod std::io;
 mod std::json;
 mod std::math;
 mod std::net;
+mod std::process;
 mod std::fs;
 mod std::strbuf;
 mod std::thread;
@@ -19,6 +20,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/json.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
+- `stdlib/std/process.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/thread.mla`
 
@@ -215,6 +217,43 @@ Module file: `stdlib/std/math.mla`
 ### Integer-specific
 - `sum_range(start: int, end: int) -> int`
 - `factorial(n: int) -> int`
+
+## std::process
+
+Module file: `stdlib/std/process.mla`
+
+### Types
+- `Child`
+- `ChildStdin`
+- `ChildStdout`
+- `ChildStderr`
+- `ExitStatus`
+
+### Spawn
+- `spawn(program: string, args: list<string>) -> Result<Child, string>`
+- `spawn_inherit(program: string, args: list<string>) -> Result<Child, string>`
+- `last_error() -> string`
+
+### Child and pipe API
+- `Child::stdin(self: Child) -> Result<ChildStdin, string>`
+- `Child::stdout(self: Child) -> Result<ChildStdout, string>`
+- `Child::stderr(self: Child) -> Result<ChildStderr, string>`
+- `Child::wait(self: Child) -> Result<ExitStatus, string>`
+- `Child::kill(self: Child, sig: i32) -> Result<i32, string>`
+- `Child::close(self: Child) -> i32`
+- `ChildStdin::write(self: ChildStdin, s: string) -> Result<i64, string>`
+- `ChildStdin::close(self: ChildStdin) -> i32`
+- `ChildStdout::read(self: ChildStdout, buf: string, capacity: i64) -> Result<i64, string>`
+- `ChildStdout::close(self: ChildStdout) -> i32`
+- `ChildStderr::read(self: ChildStderr, buf: string, capacity: i64) -> Result<i64, string>`
+- `ChildStderr::close(self: ChildStderr) -> i32`
+
+### Exit status
+- `ExitStatus::success(self: ExitStatus) -> int`
+- `ExitStatus::exited(self: ExitStatus) -> int`
+- `ExitStatus::code(self: ExitStatus) -> i32`
+- `ExitStatus::signaled(self: ExitStatus) -> int`
+- `ExitStatus::signal(self: ExitStatus) -> i32`
 
 ## std::strbuf
 

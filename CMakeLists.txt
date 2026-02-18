@@ -217,6 +217,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
 )

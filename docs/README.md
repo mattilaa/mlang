@@ -43,6 +43,11 @@ For TCP networking, see:
   (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
   `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`).
 
+For child process integration, see:
+- `stdlib/std/process.mla`
+  (`spawn`, `spawn_inherit`, child stdin/stdout/stderr pipes,
+   `wait`, `ExitStatus::success/code/signaled`).
+
 For filesystem helpers, see:
 - `stdlib/std/fs.mla`
   (`File::open/create/close/write/write_line`,
@@ -61,7 +66,7 @@ See also:
 - `docs/language_reference.h` for Doxygen groups covering language builtins
   (types, keywords, macros, attributes).
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
-  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::strbuf`, `std::thread`).
+  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::thread`).
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
 - `docs/language_attributes.mlastub` for syntax-highlighted, LSP-indexed

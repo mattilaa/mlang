@@ -1,0 +1,201 @@
+/// \file process.mla
+/// \brief Child process spawning helpers for MLang (std::process).
+///
+/// This module provides:
+/// - spawning a child process (`spawn`)
+/// - optional stdin/stdout/stderr pipe access
+/// - wait + exit status decoding
+
+extern pub fn __mlang_std_process_last_error() -> string;
+extern pub fn __mlang_std_process_spawn(program: string, args: list<string>, pipe_stdin: int, pipe_stdout: int, pipe_stderr: int) -> i64;
+extern pub fn __mlang_std_process_take_stdin(child_handle: i64) -> i64;
+extern pub fn __mlang_std_process_take_stdout(child_handle: i64) -> i64;
+extern pub fn __mlang_std_process_take_stderr(child_handle: i64) -> i64;
+extern pub fn __mlang_std_process_pipe_write(pipe_handle: i64, s: string) -> i64;
+extern pub fn __mlang_std_process_pipe_read(pipe_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_process_pipe_close(pipe_handle: i64) -> int;
+extern pub fn __mlang_std_process_wait_raw(child_handle: i64) -> int;
+extern pub fn __mlang_std_process_status_exited(raw_status: int) -> int;
+extern pub fn __mlang_std_process_status_code(raw_status: int) -> int;
+extern pub fn __mlang_std_process_status_signaled(raw_status: int) -> int;
+extern pub fn __mlang_std_process_status_signal(raw_status: int) -> int;
+extern pub fn __mlang_std_process_kill(child_handle: i64, sig: int) -> int;
+extern pub fn __mlang_std_process_child_close(child_handle: i64) -> int;
+
+/// @brief Child process handle.
+pub struct Child {
+    var handle: i64;
+};
+
+/// @brief Writable child stdin pipe.
+pub struct ChildStdin {
+    var handle: i64;
+};
+
+/// @brief Readable child stdout pipe.
+pub struct ChildStdout {
+    var handle: i64;
+};
+
+/// @brief Readable child stderr pipe.
+pub struct ChildStderr {
+    var handle: i64;
+};
+
+/// @brief Process exit status wrapper.
+pub struct ExitStatus {
+    var raw: i32;
+};
+
+/// @brief Return last backend process error.
+pub fn last_error() -> string {
+    return __mlang_std_process_last_error();
+}
+
+/// @brief Spawn a child process with stdin/stdout/stderr pipes enabled.
+pub fn spawn(program: string, args: list<string>) -> Result<Child, string> {
+    let h: i64 = __mlang_std_process_spawn(program, args, 1, 1, 1);
+    if h == 0: {
+        return Err<Child, string>(last_error());
+    }
+    return Ok<Child, string>(Child { handle: h });
+}
+
+/// @brief Spawn a child process inheriting parent stdio.
+pub fn spawn_inherit(program: string, args: list<string>) -> Result<Child, string> {
+    let h: i64 = __mlang_std_process_spawn(program, args, 0, 0, 0);
+    if h == 0: {
+        return Err<Child, string>(last_error());
+    }
+    return Ok<Child, string>(Child { handle: h });
+}
+
+impl Child {
+    /// @brief Take writable child stdin pipe.
+    pub fn stdin(self: Child) -> Result<ChildStdin, string> {
+        let h: i64 = __mlang_std_process_take_stdin(self.handle);
+        if h == 0: {
+            return Err<ChildStdin, string>(last_error());
+        }
+        return Ok<ChildStdin, string>(ChildStdin { handle: h });
+    }
+
+    /// @brief Take readable child stdout pipe.
+    pub fn stdout(self: Child) -> Result<ChildStdout, string> {
+        let h: i64 = __mlang_std_process_take_stdout(self.handle);
+        if h == 0: {
+            return Err<ChildStdout, string>(last_error());
+        }
+        return Ok<ChildStdout, string>(ChildStdout { handle: h });
+    }
+
+    /// @brief Take readable child stderr pipe.
+    pub fn stderr(self: Child) -> Result<ChildStderr, string> {
+        let h: i64 = __mlang_std_process_take_stderr(self.handle);
+        if h == 0: {
+            return Err<ChildStderr, string>(last_error());
+        }
+        return Ok<ChildStderr, string>(ChildStderr { handle: h });
+    }
+
+    /// @brief Wait for child completion and return exit status.
+    pub fn wait(self: Child) -> Result<ExitStatus, string> {
+        let raw: i32 = __mlang_std_process_wait_raw(self.handle);
+        if raw < 0: {
+            return Err<ExitStatus, string>(last_error());
+        }
+        return Ok<ExitStatus, string>(ExitStatus { raw: raw });
+    }
+
+    /// @brief Send signal `sig` to child process.
+    pub fn kill(self: Child, sig: i32) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_process_kill(self.handle, sig);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Close child handle and owned OS resources.
+    pub fn close(self: Child) -> i32 {
+        return __mlang_std_process_child_close(self.handle);
+    }
+}
+
+impl ExitStatus {
+    /// @brief Return 1 when process exited normally.
+    pub fn exited(self: ExitStatus) -> int {
+        return __mlang_std_process_status_exited(self.raw);
+    }
+
+    /// @brief Return exit code, or -1 when not exited.
+    pub fn code(self: ExitStatus) -> i32 {
+        return __mlang_std_process_status_code(self.raw);
+    }
+
+    /// @brief Return 1 when process terminated by signal.
+    pub fn signaled(self: ExitStatus) -> int {
+        return __mlang_std_process_status_signaled(self.raw);
+    }
+
+    /// @brief Return terminating signal, or -1 when not signaled.
+    pub fn signal(self: ExitStatus) -> i32 {
+        return __mlang_std_process_status_signal(self.raw);
+    }
+
+    /// @brief Return 1 on successful exit code 0.
+    pub fn success(self: ExitStatus) -> int {
+        if self.exited() != 1: {
+            return 0;
+        }
+        return self.code() == 0 ? 1 : 0;
+    }
+}
+
+impl ChildStdin {
+    /// @brief Write bytes to child stdin pipe.
+    pub fn write(self: ChildStdin, s: string) -> Result<i64, string> {
+        let n: i64 = __mlang_std_process_pipe_write(self.handle, s);
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Close child stdin pipe.
+    pub fn close(self: ChildStdin) -> i32 {
+        return __mlang_std_process_pipe_close(self.handle);
+    }
+}
+
+impl ChildStdout {
+    /// @brief Read up to `capacity-1` bytes into `buf` (NUL-terminated).
+    pub fn read(self: ChildStdout, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_process_pipe_read(self.handle, buf, capacity);
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Close child stdout pipe.
+    pub fn close(self: ChildStdout) -> i32 {
+        return __mlang_std_process_pipe_close(self.handle);
+    }
+}
+
+impl ChildStderr {
+    /// @brief Read up to `capacity-1` bytes into `buf` (NUL-terminated).
+    pub fn read(self: ChildStderr, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_process_pipe_read(self.handle, buf, capacity);
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Close child stderr pipe.
+    pub fn close(self: ChildStderr) -> i32 {
+        return __mlang_std_process_pipe_close(self.handle);
+    }
+}
