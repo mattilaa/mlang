@@ -56,6 +56,19 @@ python -m pip install -r tests/requirements.txt
 ./tests/run_examples_robot.sh
 ```
 
+### Option 1c: LSP End-to-End Transcript Test
+
+This runs a JSON-RPC integration script against `mlangd --stdio` and checks:
+- `textDocument/implementation`
+- `textDocument/references`
+- rename safety (`textDocument/rename` blocked on unsafe rename)
+- `codeAction` organize imports
+- range formatting hook endpoint (`textDocument/rangeFormatting`)
+
+```bash
+python3 tests/lsp_integration_transcript.py --mlangd build/mlangd
+```
+
 ### Option 2: Manual CMake Build
 
 ```bash
