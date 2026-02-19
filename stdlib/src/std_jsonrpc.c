@@ -537,6 +537,115 @@ static const char* skip_ws(const char* p)
     return p;
 }
 
+static const char* find_key_after(const char* start, const char* key)
+{
+    if(!start || !key)
+        return NULL;
+    char pat[128];
+    int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+    if(n <= 0 || (size_t)n >= sizeof(pat))
+        return NULL;
+    return strstr(start, pat);
+}
+
+static char* json_decode_string(const char* q1, const char** out_next)
+{
+    if(!q1 || *q1 != '"')
+        return NULL;
+    const char* p = q1 + 1;
+    size_t cap = strlen(q1) + 1u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return NULL;
+    size_t w = 0u;
+    while(*p && *p != '"')
+    {
+        if(*p != '\\')
+        {
+            out[w++] = *p++;
+            continue;
+        }
+        ++p;
+        if(!*p)
+            break;
+        switch(*p)
+        {
+            case '"': out[w++] = '"'; break;
+            case '\\': out[w++] = '\\'; break;
+            case '/': out[w++] = '/'; break;
+            case 'b': out[w++] = '\b'; break;
+            case 'f': out[w++] = '\f'; break;
+            case 'n': out[w++] = '\n'; break;
+            case 'r': out[w++] = '\r'; break;
+            case 't': out[w++] = '\t'; break;
+            case 'u':
+                /* Minimal handling: keep unicode escape as '?' for now. */
+                out[w++] = '?';
+                if(p[1]) ++p;
+                if(p[1]) ++p;
+                if(p[1]) ++p;
+                if(p[1]) ++p;
+                break;
+            default:
+                out[w++] = *p;
+                break;
+        }
+        ++p;
+    }
+    if(*p != '"')
+    {
+        free(out);
+        return NULL;
+    }
+    out[w] = '\0';
+    if(out_next)
+        *out_next = p + 1;
+    return out;
+}
+
+static char* extract_string_field_in(const char* obj_start, const char* key)
+{
+    const char* k = find_key_after(obj_start, key);
+    if(!k)
+        return NULL;
+    const char* colon = strchr(k, ':');
+    if(!colon)
+        return NULL;
+    const char* v = skip_ws(colon + 1);
+    if(!v || *v != '"')
+        return NULL;
+    return json_decode_string(v, NULL);
+}
+
+static int64_t extract_int_field_in(const char* obj_start, const char* key,
+                                    int64_t fallback)
+{
+    const char* k = find_key_after(obj_start, key);
+    if(!k)
+        return fallback;
+    const char* colon = strchr(k, ':');
+    if(!colon)
+        return fallback;
+    const char* v = skip_ws(colon + 1);
+    if(!v)
+        return fallback;
+    int sign = 1;
+    if(*v == '-')
+    {
+        sign = -1;
+        ++v;
+    }
+    if(!isdigit((unsigned char)*v))
+        return fallback;
+    int64_t out = 0;
+    while(isdigit((unsigned char)*v))
+    {
+        out = out * 10 + (int64_t)(*v - '0');
+        ++v;
+    }
+    return out * (int64_t)sign;
+}
+
 int64_t __mlang_std_jsonrpc_extract_cancel_id(const char* payload)
 {
     if(!payload)
@@ -641,6 +750,128 @@ int64_t __mlang_std_jsonrpc_extract_request_id(const char* payload)
     if(in_quotes && *id_val != '"')
         return -1;
     return out * (int64_t)sign;
+}
+
+char* __mlang_std_jsonrpc_extract_method(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    char* s = extract_string_field_in(payload, "method");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+char* __mlang_std_jsonrpc_extract_text_document_uri(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    const char* td = find_key_after(params, "textDocument");
+    if(!td)
+        return dup_cstr("");
+    char* s = extract_string_field_in(td, "uri");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+int64_t __mlang_std_jsonrpc_extract_position_line(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* pos = find_key_after(params, "position");
+    if(!pos)
+        return -1;
+    return extract_int_field_in(pos, "line", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_position_character(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* pos = find_key_after(params, "position");
+    if(!pos)
+        return -1;
+    return extract_int_field_in(pos, "character", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_text_document_version(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* td = find_key_after(params, "textDocument");
+    if(!td)
+        return -1;
+    return extract_int_field_in(td, "version", -1);
+}
+
+char* __mlang_std_jsonrpc_extract_text_document_language_id(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    const char* td = find_key_after(params, "textDocument");
+    if(!td)
+        return dup_cstr("");
+    char* s = extract_string_field_in(td, "languageId");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+char* __mlang_std_jsonrpc_extract_text_document_text(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    const char* td = find_key_after(params, "textDocument");
+    if(!td)
+        return dup_cstr("");
+    char* s = extract_string_field_in(td, "text");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+char* __mlang_std_jsonrpc_extract_first_change_text(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    const char* changes = find_key_after(params, "contentChanges");
+    if(!changes)
+        return dup_cstr("");
+    const char* text_key = find_key_after(changes, "text");
+    if(!text_key)
+        return dup_cstr("");
+    const char* colon = strchr(text_key, ':');
+    if(!colon)
+        return dup_cstr("");
+    const char* v = skip_ws(colon + 1);
+    if(!v || *v != '"')
+        return dup_cstr("");
+    char* s = json_decode_string(v, NULL);
+    if(!s)
+        return dup_cstr("");
+    return s;
 }
 
 __attribute__((weak)) char*

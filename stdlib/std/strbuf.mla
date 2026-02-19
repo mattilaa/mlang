@@ -26,6 +26,7 @@ extern fn __mlang_std_strbuf_rtrim(s: string) -> string;
 extern fn __mlang_std_strbuf_utf8_to_utf16(s: string) -> str16;
 extern fn __mlang_std_strbuf_utf16_to_utf8(s: str16) -> string;
 extern fn __mlang_std_strbuf_free_str16(s: str16) -> void;
+extern fn __mlang_std_strbuf_json_escape(s: string) -> string;
 
 /// @brief Allocate an empty string buffer (NUL-terminated).
 pub fn new() -> string {
@@ -138,4 +139,9 @@ pub fn to_utf8(s: str16) -> string {
 /// @brief Free UTF-16 buffer allocated by `to_utf16`.
 pub fn free_utf16(s: str16) -> void {
     __mlang_std_strbuf_free_str16(s);
+}
+
+/// @brief Escape a string for JSON string literal embedding.
+pub fn json_escape(s: string) -> string {
+    return __mlang_std_strbuf_json_escape(s);
 }

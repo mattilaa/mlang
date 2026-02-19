@@ -8,10 +8,8 @@
 /// - Channel-backed runtime queues for concurrent request/response pipelines
 
 /// \cond INTERNAL_IMPORTS
-mod std::strbuf;
-
-use std::strbuf::contains;
-use std::strbuf::len;
+extern pub fn __mlang_std_strbuf_contains(s: string, needle: string) -> int;
+extern pub fn __mlang_std_strbuf_len(s: string) -> i64;
 /// \endcond
 
 extern pub fn __mlang_std_jsonrpc_last_error() -> string;
@@ -27,6 +25,14 @@ extern pub fn __mlang_std_jsonrpc_cancel_clear(request_id: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_cancel_clear_all() -> int;
 extern pub fn __mlang_std_jsonrpc_extract_cancel_id(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_request_id(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_method(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_uri(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_position_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_position_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_version(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_language_id(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> string;
 extern pub fn __mlang_std_sync_channel_new(capacity: i64) -> i64;
 extern pub fn __mlang_std_sync_channel_send(channel_handle: i64, s: string) -> int;
 extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
@@ -219,6 +225,46 @@ pub fn extract_request_id(payload: string) -> i64 {
     return __mlang_std_jsonrpc_extract_request_id(payload);
 }
 
+/// @brief Extract JSON-RPC method name from payload.
+pub fn extract_method(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_method(payload);
+}
+
+/// @brief Extract `params.textDocument.uri` from payload.
+pub fn extract_text_document_uri(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_text_document_uri(payload);
+}
+
+/// @brief Extract `params.position.line` from payload.
+pub fn extract_position_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_position_line(payload);
+}
+
+/// @brief Extract `params.position.character` from payload.
+pub fn extract_position_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_position_character(payload);
+}
+
+/// @brief Extract `params.textDocument.version` from payload.
+pub fn extract_text_document_version(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_text_document_version(payload);
+}
+
+/// @brief Extract `params.textDocument.languageId` from payload.
+pub fn extract_text_document_language_id(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_text_document_language_id(payload);
+}
+
+/// @brief Extract `params.textDocument.text` from payload (didOpen).
+pub fn extract_text_document_text(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_text_document_text(payload);
+}
+
+/// @brief Extract `params.contentChanges[0].text` from payload (didChange).
+pub fn extract_first_change_text(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_first_change_text(payload);
+}
+
 /// @brief Parse a JSON-RPC payload and register `$/cancelRequest` ids.
 /// Returns:
 /// - `1` when a cancel request id was registered
@@ -263,7 +309,7 @@ pub fn flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: strin
 
 /// @brief Classify read errors that represent timeout/no-data.
 pub fn is_timeout_error(err: string) -> int {
-    return contains(err, "timeout");
+    return __mlang_std_strbuf_contains(err, "timeout");
 }
 
 fn __jsonrpc_reader_thread(inbound_handle: i64, done_handle: i64, frame_capacity: i64) -> i32 {
@@ -311,7 +357,7 @@ fn __jsonrpc_worker_thread(inbound_handle: i64, done_handle: i64, request_capaci
         }
 
         let response_payload: string = __mlang_std_jsonrpc_runtime_dispatch(request_buf);
-        if len(response_payload) <= 0: {
+        if __mlang_std_strbuf_len(response_payload) <= 0: {
             String::free(response_payload);
             continue;
         }

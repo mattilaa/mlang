@@ -425,3 +425,71 @@ void __mlang_std_strbuf_free_str16(uint16_t* s)
 {
     free(s);
 }
+
+char* __mlang_std_strbuf_json_escape(const char* s)
+{
+    if(!s)
+        return NULL;
+
+    size_t in_len = strlen(s);
+    size_t out_cap = (in_len * 6u) + 1u;
+    char* out = (char*)malloc(out_cap);
+    if(!out)
+        return NULL;
+
+    size_t w = 0;
+    for(size_t i = 0; i < in_len; ++i)
+    {
+        const unsigned char c = (unsigned char)s[i];
+        switch(c)
+        {
+            case '\"':
+                out[w++] = '\\';
+                out[w++] = '\"';
+                break;
+            case '\\':
+                out[w++] = '\\';
+                out[w++] = '\\';
+                break;
+            case '\b':
+                out[w++] = '\\';
+                out[w++] = 'b';
+                break;
+            case '\f':
+                out[w++] = '\\';
+                out[w++] = 'f';
+                break;
+            case '\n':
+                out[w++] = '\\';
+                out[w++] = 'n';
+                break;
+            case '\r':
+                out[w++] = '\\';
+                out[w++] = 'r';
+                break;
+            case '\t':
+                out[w++] = '\\';
+                out[w++] = 't';
+                break;
+            default:
+                if(c < 0x20u)
+                {
+                    static const char hex[] = "0123456789abcdef";
+                    out[w++] = '\\';
+                    out[w++] = 'u';
+                    out[w++] = '0';
+                    out[w++] = '0';
+                    out[w++] = hex[(c >> 4) & 0x0Fu];
+                    out[w++] = hex[c & 0x0Fu];
+                }
+                else
+                {
+                    out[w++] = (char)c;
+                }
+                break;
+        }
+    }
+
+    out[w] = '\0';
+    return out;
+}

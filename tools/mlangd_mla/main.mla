@@ -1,37 +1,53 @@
+mod std::compiler;
 mod std::jsonrpc;
 mod std::strbuf;
 
+use std::compiler::DefinitionLocation;
+use std::compiler::ReferenceLocation;
+use std::compiler::Session;
+use std::compiler::session_create;
+use std::jsonrpc::extract_first_change_text;
+use std::jsonrpc::extract_method;
+use std::jsonrpc::extract_position_character;
+use std::jsonrpc::extract_position_line;
 use std::jsonrpc::extract_request_id;
+use std::jsonrpc::extract_text_document_language_id;
+use std::jsonrpc::extract_text_document_text;
+use std::jsonrpc::extract_text_document_uri;
+use std::jsonrpc::extract_text_document_version;
 use std::jsonrpc::run_stdio_loop;
 use std::strbuf::concat;
-use std::strbuf::contains;
+use std::strbuf::eq;
+use std::strbuf::json_escape;
 use std::strbuf::len;
 
-fn has_method(payload: string, method: string) -> i32 {
-    let p1: string = format!("\"method\":\"{}\"", method);
-    let p2: string = format!("\"method\": \"{}\"", method);
-    var ok: i32 = 0;
-    if contains(payload, p1) == 1: {
-        ok = 1;
+var g_session_ready: i32 = 0;
+var g_session_handle: i64 = 0;
+
+fn current_session() -> Session {
+    return Session { handle: g_session_handle };
+}
+
+fn ensure_session() -> i32 {
+    if g_session_ready == 1: {
+        return 0;
     }
-    if contains(payload, p2) == 1: {
-        ok = 1;
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): {
+        return 1;
     }
-    String::free(p1);
-    String::free(p2);
-    return ok;
+    let s: Session = sr.unwrap();
+    g_session_handle = s.handle;
+    g_session_ready = 1;
+    return 0;
 }
 
 fn make_result_response(id: i64, result_json: string) -> string {
     let id_s: string = format!("{}", id);
     let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
-    String::free(id_s);
     let p2: string = concat(p1, ",\"result\":");
-    String::free(p1);
     let p3: string = concat(p2, result_json);
-    String::free(p2);
     let out: string = concat(p3, "}");
-    String::free(p3);
     return out;
 }
 
@@ -39,59 +55,252 @@ fn make_error_response(id: i64, code: i32, message: string) -> string {
     let id_s: string = format!("{}", id);
     let code_s: string = format!("{}", code);
     let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
-    String::free(id_s);
     let p2: string = concat(p1, ",\"error\":{\"code\":");
-    String::free(p1);
     let p3: string = concat(p2, code_s);
-    String::free(code_s);
-    String::free(p2);
     let p4: string = concat(p3, ",\"message\":\"");
-    String::free(p3);
     let p5: string = concat(p4, message);
-    String::free(p4);
     let out: string = concat(p5, "\"}}");
-    String::free(p5);
+    return out;
+}
+
+fn lsp_line(v: i32) -> i32 {
+    if v > 0: {
+        return v - 1;
+    }
+    return 0;
+}
+
+fn lsp_col(v: i32) -> i32 {
+    if v > 0: {
+        return v - 1;
+    }
+    return 0;
+}
+
+fn location_json(uri: string, line1: i32, col1: i32) -> string {
+    let euri: string = json_escape(uri);
+    let out: string = format!(
+        "{{\"uri\":\"{}\",\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}}}",
+        euri, lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
+    );
+    return out;
+}
+
+fn handle_did_open(payload: string) -> i32 {
+    if ensure_session() != 0: {
+        return 1;
+    }
+    let uri: string = extract_text_document_uri(payload);
+    let lang: string = extract_text_document_language_id(payload);
+    let text: string = extract_text_document_text(payload);
+    let version: i64 = extract_text_document_version(payload);
+    if len(uri) == 0: { return 1; }
+    if len(lang) == 0: { return 1; }
+    let s: Session = current_session();
+    let r: Result<i32, string> = s.open_document(uri, lang, text, version);
+    if r.is_err(): {
+        return 1;
+    }
+    return 0;
+}
+
+fn handle_did_change(payload: string) -> i32 {
+    if ensure_session() != 0: {
+        return 1;
+    }
+    let uri: string = extract_text_document_uri(payload);
+    let text: string = extract_first_change_text(payload);
+    let version: i64 = extract_text_document_version(payload);
+    if len(uri) == 0: { return 1; }
+    let s: Session = current_session();
+    let r: Result<i32, string> = s.change_document(uri, text, version);
+    if r.is_err(): {
+        return 1;
+    }
+    return 0;
+}
+
+fn handle_did_close(payload: string) -> i32 {
+    if ensure_session() != 0: {
+        return 1;
+    }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return 1; }
+    let s: Session = current_session();
+    let r: Result<i32, string> = s.close_document(uri);
+    if r.is_err(): {
+        return 1;
+    }
+    return 0;
+}
+
+fn handle_definition(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let dr: Result<DefinitionLocation, string> =
+        s.definition(uri, line + 1, col + 1);
+    if dr.is_err(): { return "[]"; }
+
+    let d: DefinitionLocation = dr.unwrap();
+    let loc: string = location_json(d.uri, d.line, d.column);
+    let out: string = format!("[{}]", loc);
+    return out;
+}
+
+fn handle_references(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = cr.unwrap();
+
+    var out: string = String::new();
+    let p0: string = concat(out, "[");
+    out = p0;
+
+    for i in 0..n {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        if rr.is_err(): { continue; }
+        let r: ReferenceLocation = rr.unwrap();
+        let loc: string = location_json(r.uri, r.line, r.column);
+        let prev: string = out;
+        if i > 0: {
+            out = format!("{},{}", out, loc);
+        } else: {
+            out = format!("{}{}", out, loc);
+        }
+    }
+
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_hover(payload: string) -> string {
+    if ensure_session() != 0: { return "null"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "null"; }
+    if line < 0: { return "null"; }
+    if col < 0: { return "null"; }
+
+    let s: Session = current_session();
+    let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
+    if hr.is_err(): { return "null"; }
+    let h: string = hr.unwrap();
+    let esc: string = json_escape(h);
+    let out: string = format!(
+        "{{\"contents\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
+        esc
+    );
+    return out;
+}
+
+fn handle_completion(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.completion_count(uri, line + 1, col + 1);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = cr.unwrap();
+
+    var out: string = String::new();
+    let p0: string = concat(out, "[");
+    out = p0;
+
+    for i in 0..n {
+        let ir: Result<string, string> = s.completion_get(uri, line + 1, col + 1, i);
+        if ir.is_err(): { continue; }
+        let label_raw: string = ir.unwrap();
+        let label: string = json_escape(label_raw);
+        let item: string = format!(
+            "{{\"label\":\"{}\",\"kind\":6}}",
+            label
+        );
+        let prev: string = out;
+        if i > 0: {
+            out = format!("{},{}", out, item);
+        } else: {
+            out = format!("{}{}", out, item);
+        }
+    }
+
+    let prev2: string = out;
+    out = concat(out, "]");
     return out;
 }
 
 fn dispatch_result_json(payload: string) -> string {
-    if has_method(payload, "initialize") == 1: {
+    let method: string = extract_method(payload);
+
+    if eq(method, "initialize") == 1: {
+        let _ = ensure_session();
         return "{\"capabilities\":{\"textDocumentSync\":{\"openClose\":true,\"change\":1},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{\"triggerCharacters\":[\".\",\":\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"renameProvider\":{\"prepareProvider\":true},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{\"interFileDependencies\":false,\"workspaceDiagnostics\":false},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[]},\"full\":true}}}";
     }
-    if has_method(payload, "shutdown") == 1: {
+    if eq(method, "shutdown") == 1: {
         return "null";
     }
-    if has_method(payload, "textDocument/definition") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/implementation") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/references") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/hover") == 1: { return "null"; }
-    if has_method(payload, "textDocument/documentHighlight") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/completion") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/signatureHelp") == 1: { return "null"; }
-    if has_method(payload, "textDocument/prepareRename") == 1: { return "null"; }
-    if has_method(payload, "textDocument/rename") == 1: { return "null"; }
-    if has_method(payload, "textDocument/documentSymbol") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/formatting") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/rangeFormatting") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/codeAction") == 1: { return "[]"; }
-    if has_method(payload, "textDocument/diagnostic") == 1: { return "{\"kind\":\"full\",\"items\":[]}"; }
-    if has_method(payload, "textDocument/semanticTokens/full") == 1: { return "{\"data\":[]}"; }
-    if has_method(payload, "workspace/symbol") == 1: { return "[]"; }
+    if eq(method, "textDocument/didOpen") == 1: {
+        let _ = handle_did_open(payload);
+        return "";
+    }
+    if eq(method, "textDocument/didChange") == 1: {
+        let _ = handle_did_change(payload);
+        return "";
+    }
+    if eq(method, "textDocument/didClose") == 1: {
+        let _ = handle_did_close(payload);
+        return "";
+    }
+    if eq(method, "textDocument/definition") == 1: {
+        return handle_definition(payload);
+    }
+    if eq(method, "textDocument/references") == 1: {
+        return handle_references(payload);
+    }
+    if eq(method, "textDocument/hover") == 1: {
+        return handle_hover(payload);
+    }
+    if eq(method, "textDocument/completion") == 1: {
+        return handle_completion(payload);
+    }
+
+
     return "";
 }
 
 /// Dispatcher hook consumed by std::jsonrpc::run_stdio_loop.
 fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
     let id: i64 = extract_request_id(request_payload);
+    let result_json: string = dispatch_result_json(request_payload);
     if id < 0: {
         return String::new();
     }
 
-    let result_json: string = dispatch_result_json(request_payload);
     if len(result_json) > 0: {
         return make_result_response(id, result_json);
     }
-
     return make_error_response(id, -32601, "Method not found");
 }
 
