@@ -117,6 +117,8 @@ Runs both focused `mlangd_mla` transcript checks in one command:
 - rename `documentChanges` + cross-document edits
 - quickfix codeAction for missing semicolon diagnostics
 - document/range formatting edit behavior
+- semantic tokens typed output + modifier bits
+- multi-file implementation/references edge cases
 
 ```bash
 ./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla

@@ -26,6 +26,8 @@ def main() -> int:
     run_step([py, "tests/lsp_mlangd_mla_rename_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd_mla_quickfix_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd_mla_formatting_transcript.py", "--mlangd", str(mlangd)])
+    run_step([py, "tests/lsp_mlangd_mla_semantic_tokens_transcript.py", "--mlangd", str(mlangd)])
+    run_step([py, "tests/lsp_mlangd_mla_multifile_transcript.py", "--mlangd", str(mlangd)])
     print("PASS: mlangd_mla transcript suite")
     return 0
 

@@ -870,6 +870,19 @@ fn handle_workspace_symbol(payload: string) -> string {
 }
 
 fn semantic_token_type(sym: DocumentSymbol) -> i32 {
+    let kind_lsp: i32 = symbol_kind_lsp(sym);
+    if kind_lsp == 12: {
+        return 2; // function
+    }
+    if kind_lsp == 23: {
+        return 5; // type
+    }
+    if kind_lsp == 10: {
+        return 5; // type
+    }
+    if kind_lsp == 2: {
+        return 0; // keyword/module
+    }
     if contains(sym.signature, "fn ") == 1: {
         return 2; // function
     }
@@ -883,6 +896,20 @@ fn semantic_token_type(sym: DocumentSymbol) -> i32 {
         return 0; // keyword
     }
     return 4; // variable
+}
+
+fn semantic_token_modifiers(sym: DocumentSymbol) -> i32 {
+    // bit 0: declaration
+    // bit 1: static
+    // bit 2: readonly
+    var mods: i32 = 1;
+    if contains(sym.signature, "static ") == 1: {
+        mods = mods + 2;
+    }
+    if contains(sym.signature, "let ") == 1: {
+        mods = mods + 4;
+    }
+    return mods;
 }
 
 fn handle_semantic_tokens_full(payload: string) -> string {
@@ -931,7 +958,8 @@ fn handle_semantic_tokens_full(payload: string) -> string {
         }
         let tlen: i32 = len(sym.name);
         let ttype: i32 = semantic_token_type(sym);
-        let chunk: string = format!("{},{},{},{},0", dl, ds, tlen, ttype);
+        let tmods: i32 = semantic_token_modifiers(sym);
+        let chunk: string = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
         if j > 0: {
             data = format!("{},{}", data, chunk);
         } else: {
@@ -1041,7 +1069,7 @@ fn dispatch_result_json(payload: string) -> string {
                 let _ = text_store_upsert(g_text_store_handle, "__mlang_root_uri__", root_uri);
             }
         }
-        return "{\"capabilities\":{\"textDocumentSync\":{\"openClose\":true,\"change\":1},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{\"triggerCharacters\":[\".\",\":\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"renameProvider\":{\"prepareProvider\":true},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{\"interFileDependencies\":false,\"workspaceDiagnostics\":false},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[]},\"full\":true}}}";
+        return "{\"capabilities\":{\"textDocumentSync\":{\"openClose\":true,\"change\":1},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{\"triggerCharacters\":[\".\",\":\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"renameProvider\":{\"prepareProvider\":true},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{\"interFileDependencies\":false,\"workspaceDiagnostics\":false},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]},\"full\":true}}}";
     }
     if eq(method, "shutdown") == 1: {
         return "null";
