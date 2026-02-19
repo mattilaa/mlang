@@ -115,6 +115,8 @@ python3 tests/lsp_mlangd_mla_rename_transcript.py --mlangd /tmp/mlangd_mla
 Runs both focused `mlangd_mla` transcript checks in one command:
 - organizeImports codeAction lifecycle
 - rename `documentChanges` + cross-document edits
+- quickfix codeAction for missing semicolon diagnostics
+- document/range formatting edit behavior
 
 ```bash
 ./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla

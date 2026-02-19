@@ -869,6 +869,70 @@ int64_t __mlang_std_jsonrpc_extract_position_character(const char* payload)
     return extract_int_field_in(pos, "character", -1);
 }
 
+int64_t __mlang_std_jsonrpc_extract_range_start_line(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* range = find_key_after(params, "range");
+    if(!range)
+        return -1;
+    const char* start = find_key_after(range, "start");
+    if(!start)
+        return -1;
+    return extract_int_field_in(start, "line", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_range_start_character(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* range = find_key_after(params, "range");
+    if(!range)
+        return -1;
+    const char* start = find_key_after(range, "start");
+    if(!start)
+        return -1;
+    return extract_int_field_in(start, "character", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_range_end_line(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* range = find_key_after(params, "range");
+    if(!range)
+        return -1;
+    const char* end = find_key_after(range, "end");
+    if(!end)
+        return -1;
+    return extract_int_field_in(end, "line", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_range_end_character(const char* payload)
+{
+    if(!payload)
+        return -1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return -1;
+    const char* range = find_key_after(params, "range");
+    if(!range)
+        return -1;
+    const char* end = find_key_after(range, "end");
+    if(!end)
+        return -1;
+    return extract_int_field_in(end, "character", -1);
+}
+
 int64_t __mlang_std_jsonrpc_extract_text_document_version(const char* payload)
 {
     if(!payload)
@@ -1638,6 +1702,111 @@ static int line_starts_with_use(const char* s, size_t n)
         return 0;
     return s[i] == 'u' && s[i + 1u] == 's' && s[i + 2u] == 'e' &&
            s[i + 3u] == ' ';
+}
+
+int64_t __mlang_std_jsonrpc_line_count(const char* text)
+{
+    if(!text || *text == '\0')
+        return 1;
+    int64_t lines = 1;
+    const char* p = text;
+    while(*p)
+    {
+        if(*p == '\n')
+            ++lines;
+        ++p;
+    }
+    return lines;
+}
+
+int64_t __mlang_std_jsonrpc_line_length(const char* text, int64_t line0)
+{
+    if(!text || line0 < 0)
+        return 0;
+    const char* ls = NULL;
+    const char* le = NULL;
+    line_bounds_at(text, line0, &ls, &le);
+    if(!ls || !le || le < ls)
+        return 0;
+    return (int64_t)(le - ls);
+}
+
+char* __mlang_std_jsonrpc_extract_lines_text(const char* text, int64_t start_line,
+                                             int64_t end_line)
+{
+    if(!text || start_line < 0 || end_line < start_line)
+        return dup_cstr("");
+    const char* ss = NULL;
+    const char* se = NULL;
+    const char* es = NULL;
+    const char* ee = NULL;
+    line_bounds_at(text, start_line, &ss, &se);
+    line_bounds_at(text, end_line, &es, &ee);
+    if(!ss || !se || !es || !ee || ee < es || es < ss)
+        return dup_cstr("");
+    const char* out_end = ee;
+    if(*out_end == '\n')
+        ++out_end;
+    size_t n = (size_t)(out_end - ss);
+    char* out = (char*)malloc(n + 1u);
+    if(!out)
+        return dup_cstr("");
+    if(n > 0u)
+        memcpy(out, ss, n);
+    out[n] = '\0';
+    return out;
+}
+
+char* __mlang_std_jsonrpc_format_text_basic(const char* text)
+{
+    if(!text)
+        return dup_cstr("");
+    size_t in_n = strlen(text);
+    size_t cap = in_n * 4u + 8u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return dup_cstr("");
+
+    size_t w = 0u;
+    const char* p = text;
+    while(*p)
+    {
+        const char* ls = p;
+        while(*p && *p != '\n')
+            ++p;
+        const char* le = p;
+        while(le > ls && (le[-1] == ' ' || le[-1] == '\t' || le[-1] == '\r'))
+            --le;
+
+        for(const char* q = ls; q < le; ++q)
+        {
+            if(*q == '\t')
+            {
+                if(w + 4u >= cap)
+                    break;
+                out[w++] = ' ';
+                out[w++] = ' ';
+                out[w++] = ' ';
+                out[w++] = ' ';
+            }
+            else
+            {
+                if(w + 1u >= cap)
+                    break;
+                out[w++] = *q;
+            }
+        }
+        if(*p == '\n')
+        {
+            if(w + 1u >= cap)
+                break;
+            out[w++] = '\n';
+            ++p;
+        }
+    }
+
+    out[w] = '\0';
+    return out;
 }
 
 static int cmp_cstr_ptr(const void* a, const void* b)

@@ -29,6 +29,10 @@ extern pub fn __mlang_std_jsonrpc_extract_method(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_uri(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_position_line(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_position_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_start_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_start_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_end_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_end_character(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_version(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_language_id(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) -> string;
@@ -49,6 +53,10 @@ extern pub fn __mlang_std_jsonrpc_text_store_free(handle: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_text_store_upsert(handle: i64, key: string, value: string) -> int;
 extern pub fn __mlang_std_jsonrpc_text_store_remove(handle: i64, key: string) -> int;
 extern pub fn __mlang_std_jsonrpc_text_store_get(handle: i64, key: string) -> string;
+extern pub fn __mlang_std_jsonrpc_line_count(text: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_line_length(text: string, line: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_lines_text(text: string, start_line: i64, end_line: i64) -> string;
+extern pub fn __mlang_std_jsonrpc_format_text_basic(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64;
@@ -270,6 +278,26 @@ pub fn extract_position_character(payload: string) -> i64 {
     return __mlang_std_jsonrpc_extract_position_character(payload);
 }
 
+/// @brief Extract `params.range.start.line` from payload.
+pub fn extract_range_start_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_start_line(payload);
+}
+
+/// @brief Extract `params.range.start.character` from payload.
+pub fn extract_range_start_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_start_character(payload);
+}
+
+/// @brief Extract `params.range.end.line` from payload.
+pub fn extract_range_end_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_end_line(payload);
+}
+
+/// @brief Extract `params.range.end.character` from payload.
+pub fn extract_range_end_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_end_character(payload);
+}
+
 /// @brief Extract `params.textDocument.version` from payload.
 pub fn extract_text_document_version(payload: string) -> i64 {
     return __mlang_std_jsonrpc_extract_text_document_version(payload);
@@ -368,6 +396,26 @@ pub fn text_store_remove(handle: i64, key: string) -> i32 {
 /// @brief Get text by URI, empty string when missing.
 pub fn text_store_get(handle: i64, key: string) -> string {
     return __mlang_std_jsonrpc_text_store_get(handle, key);
+}
+
+/// @brief Count lines in text (empty text = 1 line).
+pub fn line_count(text: string) -> i64 {
+    return __mlang_std_jsonrpc_line_count(text);
+}
+
+/// @brief Return length of line `line` (0-indexed).
+pub fn line_length(text: string, line: i64) -> i64 {
+    return __mlang_std_jsonrpc_line_length(text, line);
+}
+
+/// @brief Extract inclusive line range [start_line..end_line] text.
+pub fn extract_lines_text(text: string, start_line: i64, end_line: i64) -> string {
+    return __mlang_std_jsonrpc_extract_lines_text(text, start_line, end_line);
+}
+
+/// @brief Basic formatter: trims trailing whitespace and normalizes tabs.
+pub fn format_text_basic(text: string) -> string {
+    return __mlang_std_jsonrpc_format_text_basic(text);
 }
 
 /// @brief Count leading import lines (`use ...`) at file top.
