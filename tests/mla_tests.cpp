@@ -1120,6 +1120,19 @@ TEST_F(MLATest, TernaryPrecedence)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+TEST_F(MLATest, TernaryWithFunctionCallCondition)
+{
+    std::string code = R"(
+        mod std::strbuf;
+        use std::strbuf::eq;
+        fn main() -> i32 {
+            let s: string = "ok";
+            return eq(s, "ok") == 1 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, ResultIsOkAndUnwrap)
 {
     std::string code = R"(
