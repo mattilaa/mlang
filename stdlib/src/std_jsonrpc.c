@@ -901,6 +901,19 @@ int __mlang_std_jsonrpc_extract_include_declaration(const char* payload)
     return extract_bool_field_in(context, "includeDeclaration", 1);
 }
 
+char* __mlang_std_jsonrpc_extract_previous_result_id(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    char* s = extract_string_field_in(params, "previousResultId");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
 int64_t __mlang_std_jsonrpc_extract_range_start_line(const char* payload)
 {
     if(!payload)

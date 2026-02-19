@@ -22,6 +22,7 @@ use std::jsonrpc::extract_method;
 use std::jsonrpc::extract_new_name;
 use std::jsonrpc::extract_position_character;
 use std::jsonrpc::extract_position_line;
+use std::jsonrpc::extract_previous_result_id;
 use std::jsonrpc::extract_range_end_character;
 use std::jsonrpc::extract_range_end_line;
 use std::jsonrpc::extract_range_start_character;
@@ -801,6 +802,7 @@ fn handle_diagnostic(payload: string) -> string {
     if ensure_session() != 0: { return "{\"kind\":\"full\",\"items\":[]}"; }
     let uri: string = extract_text_document_uri(payload);
     if len(uri) == 0: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let previous_result_id: string = extract_previous_result_id(payload);
     let s: Session = current_session();
     let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
     if cr.is_err(): { return "{\"kind\":\"full\",\"items\":[]}"; }
@@ -810,6 +812,7 @@ fn handle_diagnostic(payload: string) -> string {
     };
     var items: string = String::new();
     items = concat(items, "[");
+    var result_id: string = format!("v1|{}", n);
     var j: i32 = 0;
     for i in 0..n {
         let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
@@ -825,6 +828,7 @@ fn handle_diagnostic(payload: string) -> string {
             "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
             sl, sc, sl, sc, msg
         );
+        result_id = format!("{}|{}:{}:{}", result_id, d.line, d.column, d.message);
         if j > 0: {
             items = format!("{},{}", items, item);
         } else: {
@@ -833,9 +837,19 @@ fn handle_diagnostic(payload: string) -> string {
         j = j + 1;
     }
     items = concat(items, "]");
+    if len(previous_result_id) > 0: {
+        if eq(previous_result_id, result_id) == 1: {
+            let result_id_e: string = json_escape(result_id);
+            return format!(
+                "{{\"kind\":\"unchanged\",\"resultId\":\"{}\"}}",
+                result_id_e
+            );
+        }
+    }
+    let result_id_e: string = json_escape(result_id);
     return format!(
-        "{{\"kind\":\"full\",\"items\":{}}}",
-        items
+        "{{\"kind\":\"full\",\"resultId\":\"{}\",\"items\":{}}}",
+        result_id_e, items
     );
 }
 

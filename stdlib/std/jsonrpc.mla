@@ -30,6 +30,7 @@ extern pub fn __mlang_std_jsonrpc_extract_text_document_uri(payload: string) -> 
 extern pub fn __mlang_std_jsonrpc_extract_position_line(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_position_character(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_include_declaration(payload: string) -> int;
+extern pub fn __mlang_std_jsonrpc_extract_previous_result_id(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_range_start_line(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_range_start_character(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_range_end_line(payload: string) -> i64;
@@ -286,6 +287,11 @@ pub fn extract_position_character(payload: string) -> i64 {
 /// @brief Extract `params.context.includeDeclaration` for references request.
 pub fn extract_include_declaration(payload: string) -> int {
     return __mlang_std_jsonrpc_extract_include_declaration(payload);
+}
+
+/// @brief Extract `params.previousResultId` from diagnostic pull payload.
+pub fn extract_previous_result_id(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_previous_result_id(payload);
 }
 
 /// @brief Extract `params.range.start.line` from payload.
