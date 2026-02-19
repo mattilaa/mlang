@@ -113,3 +113,65 @@ int __mlang_std_time_timer_free(int64_t handle)
     free(t);
     return 0;
 }
+
+const char* __mlang_std_time_local_datetime(void)
+{
+    static char buf[32];
+    time_t t = time(NULL);
+    struct tm tmv;
+#if defined(_WIN32)
+    if(localtime_s(&tmv, &t) != 0)
+    {
+        strcpy(buf, "01/01/1970 00:00:00");
+        return buf;
+    }
+#else
+    if(localtime_r(&t, &tmv) == NULL)
+    {
+        strcpy(buf, "01/01/1970 00:00:00");
+        return buf;
+    }
+#endif
+
+    if(strftime(buf, sizeof(buf), "%m/%d/%Y %H:%M:%S", &tmv) == 0)
+        strcpy(buf, "01/01/1970 00:00:00");
+    return buf;
+}
+
+const char* __mlang_std_time_log_level_tag(int level, int color)
+{
+    if(!color)
+    {
+        switch(level)
+        {
+            case 0:
+                return "[ERROR]";
+            case 1:
+                return "[WARN]";
+            case 2:
+                return "[INFO]";
+            case 3:
+                return "[DEBUG]";
+            case 4:
+                return "[VERBOSE]";
+            default:
+                return "[INFO]";
+        }
+    }
+
+    switch(level)
+    {
+        case 0:
+            return "\x1b[31m[ERROR]\x1b[0m";
+        case 1:
+            return "\x1b[33m[WARN]\x1b[0m";
+        case 2:
+            return "\x1b[32m[INFO]\x1b[0m";
+        case 3:
+            return "\x1b[37m[DEBUG]\x1b[0m";
+        case 4:
+            return "\x1b[37m[VERBOSE]\x1b[0m";
+        default:
+            return "\x1b[32m[INFO]\x1b[0m";
+    }
+}

@@ -59,15 +59,200 @@ use std::jsonrpc::run_stdio_loop;
 use std::strbuf::concat;
 use std::strbuf::contains;
 use std::strbuf::eq;
+use std::strbuf::ends_with;
 use std::strbuf::json_escape;
 use std::strbuf::len;
+use std::strbuf::starts_with;
 
 extern fn strcmp(a: str8, b: str8) -> i32;
+extern fn __mlang_std_fs_open_write(path: string) -> i64;
+extern fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
+extern fn __mlang_std_fs_close(handle: i64) -> int;
+extern fn __mlang_std_time_local_datetime() -> string;
+extern fn __mlang_std_time_log_level_tag(level: i32, color: i32) -> string;
 
 var g_session_ready: i32 = 0;
 var g_session_handle: i64 = 0;
 var g_uri_store_handle: i64 = 0;
 var g_text_store_handle: i64 = 0;
+var g_log_enabled: i32 = 0;
+var g_log_level: i32 = 2;
+var g_log_handle: i64 = 0;
+var g_log_color: i32 = 0;
+
+fn log_level_error() -> i32 { return 0; }
+fn log_level_warn() -> i32 { return 1; }
+fn log_level_info() -> i32 { return 2; }
+fn log_level_debug() -> i32 { return 3; }
+fn log_level_verbose() -> i32 { return 4; }
+
+fn log_level_name(level: i32) -> string {
+    if level == log_level_error(): { return "ERROR"; }
+    if level == log_level_warn(): { return "WARN"; }
+    if level == log_level_info(): { return "INFO"; }
+    if level == log_level_debug(): { return "DEBUG"; }
+    if level == log_level_verbose(): { return "VERBOSE"; }
+    return "INFO";
+}
+
+fn parse_log_level(level_raw: str8) -> i32 {
+    if strcmp(level_raw, "ERROR") == 0: {
+        return log_level_error();
+    }
+    if strcmp(level_raw, "error") == 0: {
+        return log_level_error();
+    }
+    if strcmp(level_raw, "WARN") == 0: {
+        return log_level_warn();
+    }
+    if strcmp(level_raw, "warn") == 0: {
+        return log_level_warn();
+    }
+    if strcmp(level_raw, "INFO") == 0: {
+        return log_level_info();
+    }
+    if strcmp(level_raw, "info") == 0: {
+        return log_level_info();
+    }
+    if strcmp(level_raw, "DEBUG") == 0: {
+        return log_level_debug();
+    }
+    if strcmp(level_raw, "debug") == 0: {
+        return log_level_debug();
+    }
+    if strcmp(level_raw, "VERBOSE") == 0: {
+        return log_level_verbose();
+    }
+    if strcmp(level_raw, "verbose") == 0: {
+        return log_level_verbose();
+    }
+    return -1;
+}
+
+fn should_log(level: i32) -> bool {
+    if g_log_enabled == 0: { return false; }
+    if g_log_handle == 0: { return false; }
+    if level <= g_log_level: { return true; }
+    return false;
+}
+
+fn log_level_tag(level: i32) -> string {
+    return __mlang_std_time_log_level_tag(level, g_log_color);
+}
+
+fn log_write(level: i32, message: string) -> void {
+    if should_log(level) == false: {
+        return;
+    }
+    let ts: string = __mlang_std_time_local_datetime();
+    let tag: string = log_level_tag(level);
+    let line: string = format!("{} {} {}", ts, tag, message);
+    let _ = __mlang_std_fs_write(g_log_handle, line);
+    let _ = __mlang_std_fs_write(g_log_handle, "\n");
+}
+
+fn log_path_for_dir(dir: string) -> string {
+    if len(dir) == 0: {
+        return "/tmp/mlangd-mla.log";
+    }
+    if ends_with(dir, "/") == 1: {
+        return concat(dir, "mlangd-mla.log");
+    }
+    return concat(dir, "/mlangd-mla.log");
+}
+
+fn setup_logging(args: list<str8>) -> i32 {
+    var seen_prog: bool = false;
+    var expect_level: bool = false;
+    var expect_dir: bool = false;
+    var enable_log: bool = false;
+    var log_dir: string = "/tmp";
+    var chosen_level: i32 = log_level_info();
+    var use_color: bool = false;
+
+    for arg in args {
+        if seen_prog == false: {
+            seen_prog = true;
+            continue;
+        }
+        if expect_level: {
+            let parsed_level: i32 = parse_log_level(arg);
+            if parsed_level < 0: {
+                eprintln!("mlangd_mla: invalid --log-level '{}'; expected DEBUG|INFO|ERROR|WARN|VERBOSE", arg);
+                return 1;
+            }
+            chosen_level = parsed_level;
+            enable_log = true;
+            expect_level = false;
+            continue;
+        }
+        if expect_dir: {
+            log_dir = format!("{}", arg);
+            enable_log = true;
+            expect_dir = false;
+            continue;
+        }
+        if strcmp(arg, "--enable-log") == 0: {
+            enable_log = true;
+            continue;
+        }
+        if strcmp(arg, "--log-color") == 0: {
+            enable_log = true;
+            use_color = true;
+            continue;
+        }
+        if strcmp(arg, "--log-level") == 0: {
+            expect_level = true;
+            continue;
+        }
+        if strcmp(arg, "--log-dir") == 0: {
+            expect_dir = true;
+            continue;
+        }
+
+        let arg_s: string = format!("{}", arg);
+        if starts_with(arg_s, "--log-level=") == 1: {
+            eprintln!("mlangd_mla: use '--log-level <LEVEL>' (space form), not --log-level=<LEVEL>");
+            return 1;
+        }
+        if starts_with(arg_s, "--log-dir=") == 1: {
+            eprintln!("mlangd_mla: use '--log-dir <DIR>' (space form), not --log-dir=<DIR>");
+            return 1;
+        }
+        if starts_with(arg_s, "--log-color=") == 1: {
+            eprintln!("mlangd_mla: use '--log-color' (flag form), not --log-color=<...>");
+            return 1;
+        }
+    }
+
+    if expect_level: {
+        eprintln!("mlangd_mla: missing value after --log-level");
+        return 1;
+    }
+    if expect_dir: {
+        eprintln!("mlangd_mla: missing value after --log-dir");
+        return 1;
+    }
+    if enable_log == false: {
+        return 0;
+    }
+
+    let path: string = log_path_for_dir(log_dir);
+    let handle: i64 = __mlang_std_fs_open_write(path);
+    if handle == 0: {
+        eprintln!("mlangd_mla: failed to open log file: {}", path);
+        return 1;
+    }
+
+    g_log_handle = handle;
+    g_log_level = chosen_level;
+    g_log_enabled = 1;
+    if use_color: {
+        g_log_color = 1;
+    }
+    log_write(log_level_info(), format!("logging enabled path={} level={} color={}", path, log_level_name(g_log_level), g_log_color));
+    return 0;
+}
 
 fn current_session() -> Session {
     return Session { handle: g_session_handle };
@@ -208,6 +393,7 @@ fn handle_did_open(payload: string) -> i32 {
     if text_store_upsert(g_text_store_handle, uri, text) != 0: {
         return 1;
     }
+    log_write(log_level_debug(), format!("didOpen uri={}", uri));
     return 0;
 }
 
@@ -230,6 +416,7 @@ fn handle_did_change(payload: string) -> i32 {
     if text_store_upsert(g_text_store_handle, uri, text) != 0: {
         return 1;
     }
+    log_write(log_level_debug(), format!("didChange uri={}", uri));
     return 0;
 }
 
@@ -250,6 +437,7 @@ fn handle_did_close(payload: string) -> i32 {
     if g_text_store_handle != 0: {
         let _ = text_store_remove(g_text_store_handle, uri);
     }
+    log_write(log_level_debug(), format!("didClose uri={}", uri));
     return 0;
 }
 
@@ -1119,6 +1307,7 @@ fn handle_range_formatting(payload: string) -> string {
 
 fn dispatch_result_json(payload: string) -> string {
     let method: string = extract_method(payload);
+    log_write(log_level_verbose(), format!("request method={}", method));
 
     if eq(method, "initialize") == 1: {
         let _ = ensure_session();
@@ -1197,12 +1386,14 @@ fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
     let id: i64 = extract_request_id(request_payload);
     let result_json: string = dispatch_result_json(request_payload);
     if id < 0: {
+        log_write(log_level_verbose(), "notification handled");
         return String::new();
     }
 
     if len(result_json) > 0: {
         return make_result_response(id, result_json);
     }
+    log_write(log_level_warn(), format!("method not found id={}", id));
     return make_error_response(id, -32601, "Method not found");
 }
 
@@ -1230,9 +1421,21 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             return 0;
         }
     }
+    if setup_logging(args) != 0: {
+        return 1;
+    }
+    log_write(log_level_info(), format!("mlangd_mla {} starting stdio loop", version()));
     let r: Result<i32, string> = run_stdio_loop(1, 262144, 262144);
     if r.is_err(): {
+        log_write(log_level_error(), format!("stdio loop error: {}", r.unwrap_err()));
+        if g_log_handle != 0: {
+            let _ = __mlang_std_fs_close(g_log_handle);
+        }
         return 1;
+    }
+    log_write(log_level_info(), "mlangd_mla stdio loop exited");
+    if g_log_handle != 0: {
+        let _ = __mlang_std_fs_close(g_log_handle);
     }
     return 0;
 }
