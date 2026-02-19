@@ -29,11 +29,14 @@ extern pub fn __mlang_std_jsonrpc_extract_method(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_uri(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_position_line(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_position_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_include_declaration(payload: string) -> int;
 extern pub fn __mlang_std_jsonrpc_extract_range_start_line(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_range_start_character(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_range_end_line(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_range_end_character(payload: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_version(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_format_tab_size(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_format_insert_spaces(payload: string) -> int;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_language_id(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> string;
@@ -58,6 +61,7 @@ extern pub fn __mlang_std_jsonrpc_line_length(text: string, line: i64) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_lines_text(text: string, start_line: i64, end_line: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_range_text(text: string, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_format_text_basic(text: string) -> string;
+extern pub fn __mlang_std_jsonrpc_format_text_with_options(text: string, tab_size: i64, insert_spaces: int) -> string;
 extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64;
@@ -279,6 +283,11 @@ pub fn extract_position_character(payload: string) -> i64 {
     return __mlang_std_jsonrpc_extract_position_character(payload);
 }
 
+/// @brief Extract `params.context.includeDeclaration` for references request.
+pub fn extract_include_declaration(payload: string) -> int {
+    return __mlang_std_jsonrpc_extract_include_declaration(payload);
+}
+
 /// @brief Extract `params.range.start.line` from payload.
 pub fn extract_range_start_line(payload: string) -> i64 {
     return __mlang_std_jsonrpc_extract_range_start_line(payload);
@@ -302,6 +311,16 @@ pub fn extract_range_end_character(payload: string) -> i64 {
 /// @brief Extract `params.textDocument.version` from payload.
 pub fn extract_text_document_version(payload: string) -> i64 {
     return __mlang_std_jsonrpc_extract_text_document_version(payload);
+}
+
+/// @brief Extract `params.options.tabSize` from formatting payload.
+pub fn extract_format_tab_size(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_format_tab_size(payload);
+}
+
+/// @brief Extract `params.options.insertSpaces` from formatting payload.
+pub fn extract_format_insert_spaces(payload: string) -> int {
+    return __mlang_std_jsonrpc_extract_format_insert_spaces(payload);
 }
 
 /// @brief Extract `params.textDocument.languageId` from payload.
@@ -422,6 +441,11 @@ pub fn extract_range_text(text: string, start_line: i64, start_char: i64, end_li
 /// @brief Basic formatter: trims trailing whitespace and normalizes tabs.
 pub fn format_text_basic(text: string) -> string {
     return __mlang_std_jsonrpc_format_text_basic(text);
+}
+
+/// @brief Formatter with explicit tab size + insert-spaces options.
+pub fn format_text_with_options(text: string, tab_size: i64, insert_spaces: int) -> string {
+    return __mlang_std_jsonrpc_format_text_with_options(text, tab_size, insert_spaces);
 }
 
 /// @brief Count leading import lines (`use ...`) at file top.

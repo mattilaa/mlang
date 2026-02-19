@@ -62,11 +62,23 @@ def main() -> int:
             assert "    let x: i32 = 1;\n" in new_text, f"expected tab normalization in formatting output: {first!r}"
             assert "return x; \n" not in new_text, f"expected trailing whitespace trimmed: {first!r}"
 
+            fmt_tabs = client.request(
+                "textDocument/formatting",
+                {
+                    "textDocument": {"uri": uri},
+                    "options": {"tabSize": 4, "insertSpaces": False},
+                },
+            )
+            assert isinstance(fmt_tabs, list) and fmt_tabs, f"formatting(insertSpaces=false) should return edits: {fmt_tabs!r}"
+            tabs_text = fmt_tabs[0].get("newText", "")
+            assert "\tlet x: i32 = 1;\n" in tabs_text, f"expected tabs preserved when insertSpaces=false: {fmt_tabs!r}"
+            assert "let x: i32 = 1;   " not in tabs_text, f"expected trailing spaces trimmed with insertSpaces=false: {fmt_tabs!r}"
+
             rfmt = client.request(
                 "textDocument/rangeFormatting",
                 {
                     "textDocument": {"uri": uri},
-                    "range": {"start": {"line": 1, "character": 0}, "end": {"line": 2, "character": 0}},
+                    "range": {"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 19}},
                     "options": {"tabSize": 4, "insertSpaces": True},
                 },
             )
@@ -75,6 +87,12 @@ def main() -> int:
             rfirst = rfmt[0]
             rnew = rfirst.get("newText", "")
             assert "\t" not in rnew, f"expected tab normalization in range formatting output: {rfirst!r}"
+            rr = rfirst.get("range", {})
+            rs = rr.get("start", {})
+            re = rr.get("end", {})
+            assert rs.get("line") == 1 and rs.get("character") == 0, f"rangeFormatting start mismatch: {rfirst!r}"
+            assert re.get("line") == 1 and re.get("character") == 19, f"rangeFormatting end mismatch: {rfirst!r}"
+            assert rnew.endswith(";"), f"expected trailing spaces trimmed in range formatting output: {rfirst!r}"
         finally:
             client.close()
 

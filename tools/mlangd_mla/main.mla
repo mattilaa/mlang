@@ -15,6 +15,9 @@ use std::jsonrpc::extract_first_diagnostic_end_line;
 use std::jsonrpc::extract_first_diagnostic_message;
 use std::jsonrpc::extract_first_diagnostic_start_character;
 use std::jsonrpc::extract_first_diagnostic_start_line;
+use std::jsonrpc::extract_format_insert_spaces;
+use std::jsonrpc::extract_format_tab_size;
+use std::jsonrpc::extract_include_declaration;
 use std::jsonrpc::extract_method;
 use std::jsonrpc::extract_new_name;
 use std::jsonrpc::extract_position_character;
@@ -33,6 +36,7 @@ use std::jsonrpc::extract_workspace_query;
 use std::jsonrpc::extract_range_text;
 use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::format_text_basic;
+use std::jsonrpc::format_text_with_options;
 use std::jsonrpc::line_count;
 use std::jsonrpc::line_length;
 use std::jsonrpc::organize_imports_line_count;
@@ -296,11 +300,19 @@ fn handle_code_action(payload: string) -> string {
                 if sc >= 0: {
                     if el >= 0: {
                         if ec >= 0: {
-                            if sl == el: {
-                                if should_insert_semicolon(text, el, ec) == 1: {
+                            var target_line: i64 = el;
+                            var target_char: i64 = ec;
+                            if ec == 0: {
+                                if el > sl: {
+                                    target_line = el - 1;
+                                    target_char = line_length(text, target_line);
+                                }
+                            }
+                            if target_line >= 0: {
+                                if should_insert_semicolon(text, target_line, target_char) == 1: {
                                     let action_qf: string = format!(
                                         "{{\"title\":\"Insert ';'\",\"kind\":\"quickfix\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\";\"}}]}}}}}}",
-                                        uri_e, el, ec, el, ec
+                                        uri_e, target_line, target_char, target_line, target_char
                                     );
                                     if j > 0: {
                                         out = format!("{},{}", out, action_qf);
@@ -356,14 +368,31 @@ fn handle_references(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err(): { return "[]"; }
+    let include_decl: int = extract_include_declaration(payload);
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
+    var def_uri: string = String::new();
+    var def_line: i32 = -1;
+    var def_col: i32 = -1;
+    if include_decl == 0: {
+        let dr: Result<DefinitionLocation, string> = s.definition(uri, line + 1, col + 1);
+        if dr.is_ok(): {
+            let d: DefinitionLocation = match dr {
+                Ok(v) => v,
+                Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: -1, column: -1 }
+            };
+            def_uri = d.uri;
+            def_line = d.line;
+            def_col = d.column;
+        }
+    }
 
     var out: string = String::new();
     let p0: string = concat(out, "[");
     out = p0;
+    var j: i32 = 0;
 
     for i in 0..n {
         let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
@@ -372,13 +401,22 @@ fn handle_references(payload: string) -> string {
             Ok(v) => v,
             Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
         };
+        if include_decl == 0: {
+            if eq(r.uri, def_uri) == 1: {
+                if r.line == def_line: {
+                    if r.column == def_col: {
+                        continue;
+                    }
+                }
+            }
+        }
         let loc: string = location_json(r.uri, r.line, r.column);
-        let prev: string = out;
-        if i > 0: {
+        if j > 0: {
             out = format!("{},{}", out, loc);
         } else: {
             out = format!("{}{}", out, loc);
         }
+        j = j + 1;
     }
 
     let prev2: string = out;
@@ -1021,7 +1059,9 @@ fn handle_formatting(payload: string) -> string {
     if len(uri) == 0: { return "[]"; }
     let text: string = text_store_get(g_text_store_handle, uri);
     if len(text) == 0: { return "[]"; }
-    let formatted: string = format_text_basic(text);
+    let tab_size: i64 = extract_format_tab_size(payload);
+    let insert_spaces: int = extract_format_insert_spaces(payload);
+    let formatted: string = format_text_with_options(text, tab_size, insert_spaces);
     if eq(formatted, text) == 1: { return "[]"; }
     let lc: i64 = line_count(text);
     var end_line: i64 = lc - 1;
@@ -1049,7 +1089,9 @@ fn handle_range_formatting(payload: string) -> string {
     let text: string = text_store_get(g_text_store_handle, uri);
     if len(text) == 0: { return "[]"; }
     let raw: string = extract_range_text(text, start_line, start_char, end_line, end_char);
-    let formatted: string = format_text_basic(raw);
+    let tab_size: i64 = extract_format_tab_size(payload);
+    let insert_spaces: int = extract_format_insert_spaces(payload);
+    let formatted: string = format_text_with_options(raw, tab_size, insert_spaces);
     if eq(formatted, raw) == 1: { return "[]"; }
     let fmt_e: string = json_escape(formatted);
     return format!(

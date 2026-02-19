@@ -119,6 +119,20 @@ def main() -> int:
             assert to_uri(refs_util) in uris, f"references missing definition uri: {uris!r}"
             assert to_uri(refs_main) in uris, f"references missing main uri: {uris!r}"
             assert to_uri(refs_other) in uris, f"references missing second-file uri: {uris!r}"
+
+            refs_no_decl = client.request(
+                "textDocument/references",
+                {
+                    "textDocument": {"uri": to_uri(refs_main)},
+                    "position": {"line": refs_line, "character": refs_char},
+                    "context": {"includeDeclaration": False},
+                },
+            )
+            assert isinstance(refs_no_decl, list) and refs_no_decl, f"unexpected references(includeDeclaration=false): {refs_no_decl!r}"
+            uris_no_decl = {item.get("uri") for item in refs_no_decl if isinstance(item, dict)}
+            assert to_uri(refs_util) not in uris_no_decl, f"definition uri should be excluded when includeDeclaration=false: {uris_no_decl!r}"
+            assert to_uri(refs_main) in uris_no_decl, f"main references missing when includeDeclaration=false: {uris_no_decl!r}"
+            assert to_uri(refs_other) in uris_no_decl, f"second-file references missing when includeDeclaration=false: {uris_no_decl!r}"
         finally:
             client.close()
 

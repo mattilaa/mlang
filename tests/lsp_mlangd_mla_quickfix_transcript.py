@@ -82,6 +82,34 @@ def main() -> int:
             assert start.get("character") == end.get("character"), f"expected point insertion range: {edit!r}"
             assert start.get("line") == line, f"unexpected insertion line: {edit!r}"
             assert start.get("character") >= one_char + 1, f"insertion should occur after expression: {edit!r}"
+
+            semicolon_diag_next_line = {
+                "range": {
+                    "start": {"line": line, "character": one_char + 1},
+                    "end": {"line": line + 1, "character": 0},
+                },
+                "severity": 1,
+                "message": "expected ';' before newline",
+            }
+            ca2 = client.request(
+                "textDocument/codeAction",
+                {
+                    "textDocument": {"uri": uri},
+                    "range": semicolon_diag_next_line["range"],
+                    "context": {"diagnostics": [semicolon_diag_next_line], "only": ["quickfix"]},
+                },
+            )
+            assert isinstance(ca2, list) and ca2, f"expected quickfix list for next-line diagnostic: {ca2!r}"
+            quickfix2 = next((a for a in ca2 if a.get("kind") == "quickfix"), None)
+            assert quickfix2 is not None, f"quickfix action missing for next-line diagnostic: {ca2!r}"
+            edits2 = quickfix2.get("edit", {}).get("changes", {}).get(uri, [])
+            assert edits2, f"quickfix2 has no edits: {quickfix2!r}"
+            edit2 = edits2[0]
+            assert edit2.get("newText") == ";", f"expected semicolon insertion edit2, got: {edit2!r}"
+            start2 = edit2.get("range", {}).get("start", {})
+            end2 = edit2.get("range", {}).get("end", {})
+            assert start2.get("line") == line and end2.get("line") == line, f"edit2 should target previous line: {edit2!r}"
+            assert start2.get("character") == end2.get("character"), f"edit2 should be point insertion: {edit2!r}"
         finally:
             client.close()
 

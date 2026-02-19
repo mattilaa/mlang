@@ -711,6 +711,25 @@ static int64_t extract_int_field_in(const char* obj_start, const char* key,
     return out * (int64_t)sign;
 }
 
+static int extract_bool_field_in(const char* obj_start, const char* key,
+                                 int fallback)
+{
+    const char* k = find_key_after(obj_start, key);
+    if(!k)
+        return fallback;
+    const char* colon = strchr(k, ':');
+    if(!colon)
+        return fallback;
+    const char* v = skip_ws(colon + 1);
+    if(!v)
+        return fallback;
+    if(strncmp(v, "true", 4u) == 0)
+        return 1;
+    if(strncmp(v, "false", 5u) == 0)
+        return 0;
+    return fallback;
+}
+
 int64_t __mlang_std_jsonrpc_extract_cancel_id(const char* payload)
 {
     if(!payload)
@@ -869,6 +888,19 @@ int64_t __mlang_std_jsonrpc_extract_position_character(const char* payload)
     return extract_int_field_in(pos, "character", -1);
 }
 
+int __mlang_std_jsonrpc_extract_include_declaration(const char* payload)
+{
+    if(!payload)
+        return 1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return 1;
+    const char* context = find_key_after(params, "context");
+    if(!context)
+        return 1;
+    return extract_bool_field_in(context, "includeDeclaration", 1);
+}
+
 int64_t __mlang_std_jsonrpc_extract_range_start_line(const char* payload)
 {
     if(!payload)
@@ -944,6 +976,37 @@ int64_t __mlang_std_jsonrpc_extract_text_document_version(const char* payload)
     if(!td)
         return -1;
     return extract_int_field_in(td, "version", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_format_tab_size(const char* payload)
+{
+    if(!payload)
+        return 4;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return 4;
+    const char* opts = find_key_after(params, "options");
+    if(!opts)
+        return 4;
+    int64_t tab = extract_int_field_in(opts, "tabSize", 4);
+    if(tab <= 0)
+        tab = 4;
+    if(tab > 16)
+        tab = 16;
+    return tab;
+}
+
+int __mlang_std_jsonrpc_extract_format_insert_spaces(const char* payload)
+{
+    if(!payload)
+        return 1;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return 1;
+    const char* opts = find_key_after(params, "options");
+    if(!opts)
+        return 1;
+    return extract_bool_field_in(opts, "insertSpaces", 1);
 }
 
 char* __mlang_std_jsonrpc_extract_text_document_language_id(const char* payload)
@@ -1829,6 +1892,63 @@ char* __mlang_std_jsonrpc_format_text_basic(const char* text)
                 out[w++] = ' ';
                 out[w++] = ' ';
                 out[w++] = ' ';
+            }
+            else
+            {
+                if(w + 1u >= cap)
+                    break;
+                out[w++] = *q;
+            }
+        }
+        if(*p == '\n')
+        {
+            if(w + 1u >= cap)
+                break;
+            out[w++] = '\n';
+            ++p;
+        }
+    }
+
+    out[w] = '\0';
+    return out;
+}
+
+char* __mlang_std_jsonrpc_format_text_with_options(const char* text,
+                                                   int64_t tab_size,
+                                                   int insert_spaces)
+{
+    if(!text)
+        return dup_cstr("");
+    if(tab_size <= 0)
+        tab_size = 4;
+    if(tab_size > 16)
+        tab_size = 16;
+
+    size_t in_n = strlen(text);
+    size_t cap = in_n * (size_t)(tab_size + 1) + 8u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return dup_cstr("");
+
+    size_t w = 0u;
+    const char* p = text;
+    while(*p)
+    {
+        const char* ls = p;
+        while(*p && *p != '\n')
+            ++p;
+        const char* le = p;
+        while(le > ls && (le[-1] == ' ' || le[-1] == '\t' || le[-1] == '\r'))
+            --le;
+
+        for(const char* q = ls; q < le; ++q)
+        {
+            if(*q == '\t' && insert_spaces == 1)
+            {
+                if(w + (size_t)tab_size >= cap)
+                    break;
+                for(int64_t i = 0; i < tab_size; ++i)
+                    out[w++] = ' ';
             }
             else
             {
