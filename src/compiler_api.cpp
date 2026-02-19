@@ -618,7 +618,8 @@ static std::string methodSignatureFromAst(const std::string& owner,
     return sig;
 }
 
-static ProgramNode* parseProgramFromText(std::string_view text) {
+static ProgramNode* parseProgramFromText(std::string_view text,
+                                         int* out_error_line = nullptr) {
     ASTNode* saved_root = programRoot;
     programRoot = nullptr;
 
@@ -633,10 +634,63 @@ static ProgramNode* parseProgramFromText(std::string_view text) {
     ProgramNode* parsed = nullptr;
     if (result == 0 && !parseHadError && programRoot) {
         parsed = dynamic_cast<ProgramNode*>(programRoot);
+    } else if (out_error_line != nullptr) {
+        *out_error_line = yylineno > 0 ? yylineno : 1;
     }
 
     programRoot = saved_root;
     return parsed;
+}
+
+static std::string closeOpenBracesForRecovery(std::string_view text) {
+    int balance = 0;
+    bool in_string = false;
+    bool escape = false;
+    bool line_comment = false;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char ch = text[i];
+        if (line_comment) {
+            if (ch == '\n') {
+                line_comment = false;
+            }
+            continue;
+        }
+        if (in_string) {
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escape = true;
+                continue;
+            }
+            if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (ch == '/' && i + 1 < text.size() && text[i + 1] == '/') {
+            line_comment = true;
+            ++i;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = true;
+            continue;
+        }
+        if (ch == '{') {
+            ++balance;
+        } else if (ch == '}' && balance > 0) {
+            --balance;
+        }
+    }
+
+    std::string out(text);
+    for (int i = 0; i < balance; ++i) {
+        out.append("\n}");
+    }
+    out.push_back('\n');
+    return out;
 }
 
 static void addSemanticSymbol(DocumentSemantic& out,
@@ -862,7 +916,30 @@ static void collectStatementSymbols(DocumentSemantic& out,
 
 static std::optional<DocumentSemantic>
 buildDocumentSemanticFromAst(const DocumentState& doc) {
-    ProgramNode* program = parseProgramFromText(doc.text);
+    int parse_error_line = 0;
+    ProgramNode* program = parseProgramFromText(doc.text, &parse_error_line);
+    std::string parsed_text;
+    parsed_text = doc.text;
+    if (!program && parse_error_line > 1) {
+        // Error-tolerant fallback: parse document prefix before the first
+        // syntax error so semantic queries above the error still work.
+        const std::vector<std::string_view> all_lines = splitLines(doc.text);
+        const int keep_lines = std::min(parse_error_line - 1, static_cast<int>(all_lines.size()));
+        if (keep_lines > 0) {
+            std::string prefix;
+            for (int i = 0; i < keep_lines; ++i) {
+                prefix.append(all_lines[static_cast<size_t>(i)]);
+                if (i + 1 < keep_lines) {
+                    prefix.push_back('\n');
+                }
+            }
+            std::string recovered_prefix = closeOpenBracesForRecovery(prefix);
+            program = parseProgramFromText(recovered_prefix);
+            if (program) {
+                parsed_text = std::move(recovered_prefix);
+            }
+        }
+    }
     if (!program) {
         return std::nullopt;
     }
@@ -871,7 +948,7 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
     out.uri = doc.uri;
     out.text = doc.text;
     out.line_depths = computeLineDepths(doc.text);
-    const std::vector<std::string_view> lines = splitLines(doc.text);
+    const std::vector<std::string_view> lines = splitLines(parsed_text);
 
     if (program->modules.size() > 0) {
         for (ModDeclNode* mod : program->modules) {
@@ -1364,6 +1441,217 @@ struct ResolvedQuerySymbol {
     int overload_count = 1;
     bool from_current_document = false;
 };
+
+struct TextDefinitionFallback {
+    int line = 0;
+    int column = 0;
+    std::string name;
+};
+
+static bool parseSelfTypeFromSignatureLine(std::string_view line,
+                                           std::string& out_type) {
+    const size_t fn_pos = line.find("fn ");
+    if (fn_pos == std::string_view::npos) {
+        return false;
+    }
+    const size_t lp = line.find('(', fn_pos + 3);
+    const size_t rp = (lp == std::string_view::npos) ? std::string_view::npos
+                                                      : line.find(')', lp + 1);
+    if (lp == std::string_view::npos || rp == std::string_view::npos || rp <= lp) {
+        return false;
+    }
+    const std::string_view params = line.substr(lp + 1, rp - lp - 1);
+    const size_t self_pos = params.find("self");
+    if (self_pos == std::string_view::npos) {
+        return false;
+    }
+    const size_t colon = params.find(':', self_pos + 4);
+    if (colon == std::string_view::npos) {
+        return false;
+    }
+    size_t start = colon + 1;
+    while (start < params.size() &&
+           std::isspace(static_cast<unsigned char>(params[start])) != 0) {
+        ++start;
+    }
+    if (start >= params.size()) {
+        return false;
+    }
+    size_t end = start;
+    while (end < params.size() &&
+           params[end] != ',' &&
+           params[end] != ')' &&
+           std::isspace(static_cast<unsigned char>(params[end])) == 0) {
+        ++end;
+    }
+    std::string ty(params.substr(start, end - start));
+    const size_t generic = ty.find('<');
+    if (generic != std::string::npos) {
+        ty = ty.substr(0, generic);
+    }
+    const size_t mod_sep = ty.rfind("::");
+    if (mod_sep != std::string::npos && mod_sep + 2 < ty.size()) {
+        ty = ty.substr(mod_sep + 2);
+    }
+    if (ty.empty()) {
+        return false;
+    }
+    out_type = std::move(ty);
+    return true;
+}
+
+static bool findStructFieldDeclaration(std::string_view text,
+                                       std::string_view struct_name,
+                                       std::string_view field_name,
+                                       int& out_line,
+                                       int& out_col) {
+    const std::vector<std::string_view> lines = splitLines(text);
+    bool in_target_struct = false;
+    int brace_depth = 0;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string_view line = lines[i];
+        if (!in_target_struct) {
+            std::string needle = "struct " + std::string(struct_name);
+            if (line.find(needle) == std::string_view::npos &&
+                line.find("pub " + needle) == std::string_view::npos) {
+                continue;
+            }
+            in_target_struct = true;
+        }
+
+        for (char ch : line) {
+            if (ch == '{') ++brace_depth;
+            else if (ch == '}') --brace_depth;
+        }
+
+        const std::string field_needle = "var " + std::string(field_name);
+        const size_t pos = line.find(field_needle);
+        if (pos != std::string_view::npos) {
+            const size_t after = pos + field_needle.size();
+            if (after < line.size() && line[after] == ':') {
+                out_line = static_cast<int>(i) + 1;
+                out_col = static_cast<int>(pos + 5);
+                return true;
+            }
+        }
+
+        if (in_target_struct && brace_depth <= 0) {
+            in_target_struct = false;
+        }
+    }
+    return false;
+}
+
+static bool findParameterInNearestFunction(std::string_view text,
+                                           int query_line,
+                                           std::string_view name,
+                                           int& out_line,
+                                           int& out_col) {
+    const std::vector<std::string_view> lines = splitLines(text);
+    for (int y = std::min(query_line - 1, static_cast<int>(lines.size()) - 1);
+         y >= 0; --y) {
+        const std::string_view line = lines[static_cast<size_t>(y)];
+        const size_t fn_pos = line.find("fn ");
+        const size_t lp = line.find('(');
+        const size_t rp = line.find(')');
+        if (fn_pos == std::string_view::npos || lp == std::string_view::npos ||
+            rp == std::string_view::npos || rp <= lp) {
+            continue;
+        }
+        const std::string_view params = line.substr(lp + 1, rp - lp - 1);
+        const size_t pos = params.find(name);
+        if (pos == std::string_view::npos) {
+            continue;
+        }
+        const size_t global = lp + 1 + pos;
+        const bool left_ok = (global == 0) || !isIdentContinue(line[global - 1]);
+        const size_t end = global + name.size();
+        const bool right_ok = (end >= line.size()) || !isIdentContinue(line[end]);
+        if (!left_ok || !right_ok) {
+            continue;
+        }
+        size_t p = end;
+        while (p < line.size() &&
+               std::isspace(static_cast<unsigned char>(line[p])) != 0) {
+            ++p;
+        }
+        if (p < line.size() && line[p] == ':') {
+            out_line = y + 1;
+            out_col = static_cast<int>(global) + 1;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemantic& current,
+                                       int line,
+                                       int column,
+                                       TextDefinitionFallback& out) {
+    const std::optional<size_t> offset = offsetFromLineColumn(current.text, line, column);
+    if (!offset.has_value()) {
+        return false;
+    }
+    const std::optional<TokenSpan> token_span = tokenSpanAtOffset(current.text, *offset);
+    if (!token_span.has_value()) {
+        return false;
+    }
+    out.name = token_span->token;
+
+    bool member_access = false;
+    std::string member_object;
+    if (token_span->start > 0) {
+        size_t p = token_span->start;
+        while (p > 0 &&
+               std::isspace(static_cast<unsigned char>(current.text[p - 1])) != 0) {
+            --p;
+        }
+        if (p > 0 && current.text[p - 1] == '.') {
+            size_t q = p - 1;
+            while (q > 0 &&
+                   std::isspace(static_cast<unsigned char>(current.text[q - 1])) != 0) {
+                --q;
+            }
+            const size_t end = q;
+            while (q > 0 && isIdentContinue(current.text[q - 1])) {
+                --q;
+            }
+            if (q < end && isIdentStart(current.text[q])) {
+                member_object = std::string(current.text.substr(q, end - q));
+                member_access = true;
+            }
+        }
+    }
+
+    if (member_access && member_object == "self") {
+        const std::vector<std::string_view> lines = splitLines(current.text);
+        std::string owner;
+        for (int y = std::min(line - 1, static_cast<int>(lines.size()) - 1);
+             y >= 0; --y) {
+            if (parseSelfTypeFromSignatureLine(lines[static_cast<size_t>(y)], owner)) {
+                break;
+            }
+        }
+        if (!owner.empty()) {
+            int def_line = 0;
+            int def_col = 0;
+            if (findStructFieldDeclaration(current.text, owner, out.name, def_line, def_col)) {
+                out.line = def_line;
+                out.column = def_col;
+                return true;
+            }
+        }
+    }
+
+    int def_line = 0;
+    int def_col = 0;
+    if (findParameterInNearestFunction(current.text, line, out.name, def_line, def_col)) {
+        out.line = def_line;
+        out.column = def_col;
+        return true;
+    }
+    return false;
+}
 
 static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
     const DocumentSemantic& current,
@@ -2006,7 +2294,7 @@ static int prepare_semantic_query(mlang_compiler_session* session,
     if (st != mlang::compiler_api::Status::Ok) {
         return static_cast<int>(st);
     }
-    if (*out_current == nullptr || !(*out_current)->ast_valid) {
+    if (*out_current == nullptr) {
         return static_cast<int>(mlang::compiler_api::Status::Unsupported);
     }
     return static_cast<int>(mlang::compiler_api::Status::Ok);
@@ -2572,7 +2860,27 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
     const std::optional<mlang::compiler_api::ResolvedQuerySymbol> def =
         mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
     if (!def.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+        mlang::compiler_api::TextDefinitionFallback fb;
+        if (!mlang::compiler_api::fallbackDefinitionFromText(*current, line, column, fb)) {
+            return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+        }
+        *out_line = fb.line;
+        *out_column = fb.column;
+        *out_name_length = static_cast<int>(fb.name.size());
+        const size_t copy_len =
+            std::min(static_cast<size_t>(out_name_capacity - 1), fb.name.size());
+        if (copy_len > 0) {
+            std::memcpy(out_name, fb.name.data(), copy_len);
+        }
+        out_name[copy_len] = '\0';
+        *out_uri_length = static_cast<int>(current->uri.size());
+        const size_t uri_copy_len =
+            std::min(static_cast<size_t>(out_uri_capacity - 1), current->uri.size());
+        if (uri_copy_len > 0) {
+            std::memcpy(out_uri, current->uri.data(), uri_copy_len);
+        }
+        out_uri[uri_copy_len] = '\0';
+        return static_cast<int>(mlang::compiler_api::Status::Ok);
     }
 
     *out_line = def->symbol.line;
