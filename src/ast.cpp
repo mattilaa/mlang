@@ -225,6 +225,9 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
     case DIVIDE:
         opType = BinaryOpNode::OP_DIVIDE;
         break;
+    case MODULO:
+        opType = BinaryOpNode::OP_MODULO;
+        break;
     case LT:
         opType = BinaryOpNode::OP_LT;
         break;

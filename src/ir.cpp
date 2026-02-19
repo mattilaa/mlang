@@ -2789,12 +2789,17 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 return nullptr;
             }
         }
+        if(auto* constFP = llvm::dyn_cast<llvm::ConstantFP>(R))
+        {
+            if(constFP->isZero())
+            {
+                reportError(node->line, "modulo by zero");
+                return nullptr;
+            }
+        }
         if(isFloat)
         {
-            reportError(
-                node->line,
-                "modulo operator not supported for floating-point types");
-            return nullptr;
+            return builder.CreateFRem(L, R, "modtmp");
         }
         return builder.CreateSRem(L, R, "modtmp");
     }

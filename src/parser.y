@@ -159,7 +159,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
-%token PLUS MINUS MULTIPLY DIVIDE ASSIGN AMP
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -192,7 +192,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
-%left MULTIPLY DIVIDE
+%left MULTIPLY DIVIDE MODULO
 
 %start program
 
@@ -697,6 +697,7 @@ match_binary_expression
     | match_target MINUS match_target { $$ = create_binary_op(MINUS, $1, $3); }
     | match_target MULTIPLY match_target { $$ = create_binary_op(MULTIPLY, $1, $3); }
     | match_target DIVIDE match_target { $$ = create_binary_op(DIVIDE, $1, $3); }
+    | match_target MODULO match_target { $$ = create_binary_op(MODULO, $1, $3); }
     | match_target LT match_target { $$ = create_binary_op(LT, $1, $3); }
     | match_target GT match_target { $$ = create_binary_op(GT, $1, $3); }
     | match_target LE match_target { $$ = create_binary_op(LE, $1, $3); }
@@ -789,6 +790,7 @@ binary_expression
     | expression MINUS expression { $$ = create_binary_op(MINUS, $1, $3); }
     | expression MULTIPLY expression { $$ = create_binary_op(MULTIPLY, $1, $3); }
     | expression DIVIDE expression { $$ = create_binary_op(DIVIDE, $1, $3); }
+    | expression MODULO expression { $$ = create_binary_op(MODULO, $1, $3); }
     | expression LT expression { $$ = create_binary_op(LT, $1, $3); }
     | expression GT expression { $$ = create_binary_op(GT, $1, $3); }
     | expression LE expression { $$ = create_binary_op(LE, $1, $3); }
