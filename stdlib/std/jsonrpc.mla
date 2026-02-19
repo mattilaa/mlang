@@ -35,6 +35,7 @@ extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) ->
 extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_new_name(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_workspace_query(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_signature_help_callee(text: string, line: i64, column: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_text_store_new() -> i64;
 extern pub fn __mlang_std_jsonrpc_text_store_free(handle: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_text_store_upsert(handle: i64, key: string, value: string) -> int;
@@ -289,6 +290,11 @@ pub fn extract_new_name(payload: string) -> string {
 /// @brief Extract `params.query` from payload (workspace/symbol).
 pub fn extract_workspace_query(payload: string) -> string {
     return __mlang_std_jsonrpc_extract_workspace_query(payload);
+}
+
+/// @brief Extract call-site callee identifier for signature help at line/column.
+pub fn signature_help_callee(text: string, line: i64, column: i64) -> string {
+    return __mlang_std_jsonrpc_signature_help_callee(text, line, column);
 }
 
 /// @brief Create text store for URI->document text mapping.

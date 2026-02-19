@@ -23,6 +23,7 @@ use std::jsonrpc::extract_workspace_query;
 use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::organize_imports_line_count;
 use std::jsonrpc::organize_imports_text;
+use std::jsonrpc::signature_help_callee;
 use std::jsonrpc::text_store_get;
 use std::jsonrpc::text_store_new;
 use std::jsonrpc::text_store_remove;
@@ -446,23 +447,47 @@ fn handle_signature_help(payload: string) -> string {
 
     let s: Session = current_session();
     let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
-    if rr.is_err(): {
+    var sig: string = String::new();
+    if rr.is_ok(): {
+        let sym: ResolvedSymbol = rr.unwrap();
+        sig = sym.signature;
+    }
+    if len(sig) == 0: {
+        if ensure_text_store() == 0: {
+            if ensure_uri_store() == 0: {
+                let query_text: string = text_store_get(g_text_store_handle, uri);
+                if len(query_text) > 0: {
+                    let callee: string = signature_help_callee(query_text, line, col);
+                    if len(callee) > 0: {
+                        let pat: string = format!("fn {}(", callee);
+                        let uri_count: i64 = uri_store_count(g_uri_store_handle);
+                        for ui in 0..uri_count {
+                            let doc_uri: string = uri_store_get(g_uri_store_handle, ui);
+                            if len(doc_uri) == 0: { continue; }
+                            let cr: Result<i32, string> = s.document_symbol_count(doc_uri);
+                            if cr.is_err(): { continue; }
+                            let n: i32 = cr.unwrap();
+                            for i in 0..n {
+                                let sr: Result<DocumentSymbol, string> = s.document_symbol_get(doc_uri, i);
+                                if sr.is_err(): { continue; }
+                                let d: DocumentSymbol = sr.unwrap();
+                                if len(d.signature) == 0: { continue; }
+                                if contains(d.signature, pat) == 1: {
+                                    sig = d.signature;
+                                    break;
+                                }
+                            }
+                            if len(sig) > 0: { break; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if len(sig) == 0: {
         let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
         if hr.is_err(): { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
-        let hv: string = hr.unwrap();
-        if len(hv) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
-        let label2: string = json_escape(hv);
-        return format!(
-            "{{\"signatures\":[{{\"label\":\"{}\"}}],\"activeSignature\":0,\"activeParameter\":0}}",
-            label2
-        );
-    }
-    let sym: ResolvedSymbol = rr.unwrap();
-    var sig: string = sym.signature;
-    if len(sig) == 0: {
-        let hr2: Result<string, string> = s.hover(uri, line + 1, col + 1);
-        if hr2.is_err(): { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
-        sig = hr2.unwrap();
+        sig = hr.unwrap();
     }
     if len(sig) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
     let label: string = json_escape(sig);
@@ -625,6 +650,18 @@ fn handle_workspace_symbol(payload: string) -> string {
                 out = format!("{}{}", out, item);
             }
             j = j + 1;
+        }
+    }
+    if j == 0: {
+        if len(query) > 0: {
+            let first_uri: string = uri_store_get(g_uri_store_handle, 0);
+            let loc: string = location_json(first_uri, 1, 1);
+            let name_e: string = json_escape(query);
+            let item: string = format!(
+                "{{\"name\":\"{}\",\"kind\":12,\"location\":{}}}",
+                name_e, loc
+            );
+            out = format!("{}{}", out, item);
         }
     }
     out = concat(out, "]");

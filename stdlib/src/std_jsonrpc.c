@@ -76,6 +76,11 @@ static char* dup_cstr(const char* s)
     return out;
 }
 
+static int is_ident_start_char(char c);
+static int is_ident_char(char c);
+static void line_bounds_at(const char* text, int64_t line0,
+                           const char** out_start, const char** out_end);
+
 static int starts_with_ci(const char* text, const char* prefix)
 {
     if(!text || !prefix)
@@ -955,6 +960,62 @@ char* __mlang_std_jsonrpc_extract_workspace_query(const char* payload)
     if(!s)
         return dup_cstr("");
     return s;
+}
+
+char* __mlang_std_jsonrpc_signature_help_callee(const char* text,
+                                                int64_t line0,
+                                                int64_t column0)
+{
+    if(!text || line0 < 0)
+        return dup_cstr("");
+    const char* ls = NULL;
+    const char* le = NULL;
+    line_bounds_at(text, line0, &ls, &le);
+    if(!ls || !le || le <= ls)
+        return dup_cstr("");
+    int64_t n = (int64_t)(le - ls);
+    int64_t pos = column0;
+    if(pos < 0)
+        pos = 0;
+    if(pos > n)
+        pos = n;
+    int depth = 0;
+    for(int64_t i = pos - 1; i >= 0; --i)
+    {
+        char ch = ls[i];
+        if(ch == ')')
+        {
+            depth++;
+            continue;
+        }
+        if(ch == '(')
+        {
+            if(depth > 0)
+            {
+                depth--;
+                continue;
+            }
+            int64_t j = i - 1;
+            while(j >= 0 && isspace((unsigned char)ls[j]))
+                --j;
+            if(j < 0 || !is_ident_char(ls[j]))
+                return dup_cstr("");
+            int64_t end = j + 1;
+            while(j >= 0 && is_ident_char(ls[j]))
+                --j;
+            int64_t start = j + 1;
+            if(start >= end || !is_ident_start_char(ls[start]))
+                return dup_cstr("");
+            size_t len = (size_t)(end - start);
+            char* out = (char*)malloc(len + 1u);
+            if(!out)
+                return dup_cstr("");
+            memcpy(out, ls + start, len);
+            out[len] = '\0';
+            return out;
+        }
+    }
+    return dup_cstr("");
 }
 
 int64_t __mlang_std_jsonrpc_text_store_new(void)
