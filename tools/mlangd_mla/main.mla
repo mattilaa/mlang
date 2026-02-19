@@ -201,6 +201,11 @@ fn setup_logging(args: list<str8>) -> i32 {
             use_color = true;
             continue;
         }
+        if strcmp(arg, "--log-colors") == 0: {
+            enable_log = true;
+            use_color = true;
+            continue;
+        }
         if strcmp(arg, "--log-level") == 0: {
             expect_level = true;
             continue;
@@ -220,7 +225,11 @@ fn setup_logging(args: list<str8>) -> i32 {
             return 1;
         }
         if starts_with(arg_s, "--log-color=") == 1: {
-            eprintln!("mlangd_mla: use '--log-color' (flag form), not --log-color=<...>");
+            eprintln!("mlangd_mla: use '--log-colors' (flag form), not --log-colors=<...>");
+            return 1;
+        }
+        if starts_with(arg_s, "--log-colors=") == 1: {
+            eprintln!("mlangd_mla: use '--log-colors' (flag form), not --log-colors=<...>");
             return 1;
         }
     }
