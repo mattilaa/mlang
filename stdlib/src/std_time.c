@@ -114,6 +114,69 @@ int __mlang_std_time_timer_free(int64_t handle)
     return 0;
 }
 
+static int load_local_tm(struct tm* out)
+{
+    if(!out)
+        return -1;
+    time_t t = time(NULL);
+#if defined(_WIN32)
+    if(localtime_s(out, &t) != 0)
+        return -1;
+#else
+    if(localtime_r(&t, out) == NULL)
+        return -1;
+#endif
+    return 0;
+}
+
+int __mlang_std_date_now_year(void)
+{
+    struct tm tmv;
+    if(load_local_tm(&tmv) != 0)
+        return 1970;
+    return tmv.tm_year + 1900;
+}
+
+int __mlang_std_date_now_month(void)
+{
+    struct tm tmv;
+    if(load_local_tm(&tmv) != 0)
+        return 1;
+    return tmv.tm_mon + 1;
+}
+
+int __mlang_std_date_now_day(void)
+{
+    struct tm tmv;
+    if(load_local_tm(&tmv) != 0)
+        return 1;
+    return tmv.tm_mday;
+}
+
+int __mlang_std_date_now_hour(void)
+{
+    struct tm tmv;
+    if(load_local_tm(&tmv) != 0)
+        return 0;
+    return tmv.tm_hour;
+}
+
+int __mlang_std_date_now_minute(void)
+{
+    struct tm tmv;
+    if(load_local_tm(&tmv) != 0)
+        return 0;
+    return tmv.tm_min;
+}
+
+int __mlang_std_date_now_second(void)
+{
+    struct tm tmv;
+    if(load_local_tm(&tmv) != 0)
+        return 0;
+    return tmv.tm_sec;
+}
+
 const char* __mlang_std_time_local_datetime(void)
 {
     static char buf[32];

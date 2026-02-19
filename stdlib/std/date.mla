@@ -1,0 +1,56 @@
+/// \file date.mla
+/// \brief Wall-clock date/time helpers for MLang (std::date).
+
+extern pub fn __mlang_std_date_now_year() -> int;
+extern pub fn __mlang_std_date_now_month() -> int;
+extern pub fn __mlang_std_date_now_day() -> int;
+extern pub fn __mlang_std_date_now_hour() -> int;
+extern pub fn __mlang_std_date_now_minute() -> int;
+extern pub fn __mlang_std_date_now_second() -> int;
+
+/// @brief Local date-time components.
+pub struct DateTime {
+    var year: i32;
+    var month: i32;
+    var day: i32;
+    var hour: i32;
+    var minute: i32;
+    var second: i32;
+};
+
+/// @brief Return current local date-time.
+pub fn now() -> DateTime {
+    return DateTime {
+        year: __mlang_std_date_now_year(),
+        month: __mlang_std_date_now_month(),
+        day: __mlang_std_date_now_day(),
+        hour: __mlang_std_date_now_hour(),
+        minute: __mlang_std_date_now_minute(),
+        second: __mlang_std_date_now_second()
+    };
+}
+
+/// @brief Format as `YYYY-MM-DDTHH:MM:SS`.
+pub fn format_iso8601(dt: DateTime) -> string {
+    let mm: string = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
+    let dd: string = dt.day < 10 ? format!("0{}", dt.day) : format!("{}", dt.day);
+    let hh: string = dt.hour < 10 ? format!("0{}", dt.hour) : format!("{}", dt.hour);
+    let mi: string = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
+    let ss: string = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
+    return format!("{}-{}-{}T{}:{}:{}", dt.year, mm, dd, hh, mi, ss);
+}
+
+/// @brief Format as `MM/DD/YYYY`.
+pub fn format_date(dt: DateTime) -> string {
+    let mm: string = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
+    let dd: string = dt.day < 10 ? format!("0{}", dt.day) : format!("{}", dt.day);
+    return format!("{}/{}/{}", mm, dd, dt.year);
+}
+
+/// @brief Format as `HH:MM:SS`.
+pub fn format_time(dt: DateTime) -> string {
+    let hh: string = dt.hour < 10 ? format!("0{}", dt.hour) : format!("{}", dt.hour);
+    let mi: string = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
+    let ss: string = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
+    return format!("{}:{}:{}", hh, mi, ss);
+}

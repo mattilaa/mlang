@@ -1,0 +1,60 @@
+mod std::date;
+mod std::strbuf;
+
+use std::date::DateTime;
+use std::date::format_date;
+use std::date::format_iso8601;
+use std::date::format_time;
+use std::date::now;
+use std::strbuf::eq;
+use std::strbuf::len;
+
+#[test]
+fn test_now_components_in_valid_ranges() -> i32 {
+    let dt: DateTime = now();
+    if dt.year < 1970: { return 1; }
+    if dt.month < 1: { return 1; }
+    if dt.month > 12: { return 1; }
+    if dt.day < 1: { return 1; }
+    if dt.day > 31: { return 1; }
+    if dt.hour < 0: { return 1; }
+    if dt.hour > 23: { return 1; }
+    if dt.minute < 0: { return 1; }
+    if dt.minute > 59: { return 1; }
+    if dt.second < 0: { return 1; }
+    if dt.second > 60: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_format_date_shape() -> i32 {
+    let dt: DateTime = DateTime {
+        year: 2026, month: 2, day: 9, hour: 21, minute: 11, second: 6
+    };
+    let s: string = format_date(dt);
+    if len(s) != 10: { return 1; }
+    if eq(s, "02/09/2026") == 1: { return 0; }
+    return 1;
+}
+
+#[test]
+fn test_format_time_shape() -> i32 {
+    let dt: DateTime = DateTime {
+        year: 2026, month: 2, day: 9, hour: 3, minute: 4, second: 5
+    };
+    let s: string = format_time(dt);
+    if len(s) != 8: { return 1; }
+    if eq(s, "03:04:05") == 1: { return 0; }
+    return 1;
+}
+
+#[test]
+fn test_format_iso8601_shape() -> i32 {
+    let dt: DateTime = DateTime {
+        year: 2026, month: 12, day: 31, hour: 23, minute: 59, second: 58
+    };
+    let s: string = format_iso8601(dt);
+    if len(s) != 19: { return 1; }
+    if eq(s, "2026-12-31T23:59:58") == 1: { return 0; }
+    return 1;
+}

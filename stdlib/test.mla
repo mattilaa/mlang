@@ -7,6 +7,23 @@
 
 // @builtin_fn test::run_all
 // Placeholder for test runner. Prefer: mlang test
+//
+// std::time
+// @builtin_fn std::time::now_ms
+// @builtin_fn std::time::now_ns
+// @builtin_fn std::time::sleep_ms
+// @builtin_fn std::time::Timer::after
+// @builtin_fn std::time::Timer::reset
+// @builtin_fn std::time::Timer::elapsed
+// @builtin_fn std::time::Timer::remaining_ms
+// @builtin_fn std::time::Timer::wait
+// @builtin_fn std::time::Timer::close
+//
+// std::date
+// @builtin_fn std::date::now
+// @builtin_fn std::date::format_iso8601
+// @builtin_fn std::date::format_date
+// @builtin_fn std::date::format_time
 
 pub fn assert(cond: bool) -> i32 {
     if cond: {
