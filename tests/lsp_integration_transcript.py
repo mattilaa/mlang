@@ -105,7 +105,12 @@ def main() -> int:
         refs_main = root / "refs_main.mla"
         rename_file = root / "rename_case.mla"
         imports_file = root / "imports_case.mla"
+        cfg_main = root / "app" / "cfg_main.mla"
+        cfg_util = root / "modules" / "lib" / "util_cfg.mla"
+        manifest = root / "mlang.toml"
         refs_util.parent.mkdir(parents=True, exist_ok=True)
+        cfg_main.parent.mkdir(parents=True, exist_ok=True)
+        cfg_util.parent.mkdir(parents=True, exist_ok=True)
 
         impl_text = (
             "struct Base {\n"
@@ -137,12 +142,26 @@ def main() -> int:
             "use a::a;\n"
             "fn main() -> i32 { return 0; }\n"
         )
+        cfg_main_text = (
+            "use lib::util_cfg::util_cfg;\n"
+            "fn main() -> i32 {\n"
+            "  return util_cfg();\n"
+            "}\n"
+        )
+        cfg_util_text = "fn util_cfg() -> i32 { return 7; }\n"
+        manifest_text = (
+            "[tool.mlang]\n"
+            "module_paths = [\"modules\"]\n"
+        )
 
         impl_file.write_text(impl_text)
         refs_util.write_text(refs_util_text)
         refs_main.write_text(refs_main_text)
         rename_file.write_text(rename_text)
         imports_file.write_text(imports_text)
+        cfg_main.write_text(cfg_main_text)
+        cfg_util.write_text(cfg_util_text)
+        manifest.write_text(manifest_text)
 
         client = JsonRpcClient([str(mlangd), "--stdio"])
         try:
@@ -163,6 +182,7 @@ def main() -> int:
                 (refs_main, refs_main_text),
                 (rename_file, rename_text),
                 (imports_file, imports_text),
+                (cfg_main, cfg_main_text),
             ]:
                 client.notify(
                     "textDocument/didOpen",
@@ -247,6 +267,21 @@ def main() -> int:
             assert edits, f"organizeImports returned no edits: {organize!r}"
             new_text = edits[0].get("newText", "")
             assert new_text == "use a::a;\nuse z::z;\n", f"unexpected organizeImports text: {new_text!r}"
+
+            cfg_line, cfg_char = position_of(cfg_main_text, "util_cfg();")
+            cfg_def = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(cfg_main)},
+                    "position": {"line": cfg_line, "character": cfg_char},
+                },
+            )
+            assert isinstance(cfg_def, list) and cfg_def, f"cfg definition result empty: {cfg_def!r}"
+            assert any(
+                item.get("uri") == to_uri(cfg_util)
+                and item.get("range", {}).get("start", {}).get("line") == 0
+                for item in cfg_def
+            ), f"expected cfg module definition in {cfg_def!r}"
 
             print("LSP integration transcript checks passed.")
         finally:
