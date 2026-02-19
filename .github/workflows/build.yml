@@ -20,4 +20,7 @@ jobs:
           cmake -S . -B build -DMLANG_VERSION_BUILD=${BUILD_NUMBER}
       - name: Build
         run: |
-          cmake --build build --target mlang mlang-lsp
+          cmake --build build --target mlang mlangd
+      - name: LSP parity E2E
+        run: |
+          python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 180

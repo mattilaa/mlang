@@ -23,6 +23,24 @@ Use with UVim:
 uvim --mlang-lsp --mlang-lsp-path ./build/mlangd
 ```
 
+Enable LSP debug telemetry (`cache clears`, `active docs`, `evictions`):
+
+```sh
+MLANG_LSP_DEBUG=1 ./build/mlangd --stdio
+```
+
+Write debug output to a file:
+
+```sh
+MLANG_LSP_DEBUG=1 MLANG_LSP_DEBUG_LOG=/tmp/mlangd_telemetry.log ./build/mlangd --stdio
+```
+
+Tune semantic cache clear cadence for long-running sessions:
+
+```sh
+MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 ./build/mlangd --stdio
+```
+
 `mlang` emits `mlang_commands.json` for editor tooling. You can add module
 search paths in `mlang.toml`:
 

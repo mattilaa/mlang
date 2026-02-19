@@ -69,6 +69,24 @@ This runs a JSON-RPC integration script against `mlangd --stdio` and checks:
 python3 tests/lsp_integration_transcript.py --mlangd build/mlangd
 ```
 
+### Option 1d: LSP Parity End-to-End (All Methods + Large Workspace)
+
+This runs a broader JSON-RPC parity suite against `mlangd --stdio`, covering:
+- all currently advertised request methods (`definition`, `implementation`,
+  `references`, `hover`, `documentHighlight`, `completion`, `signatureHelp`,
+  `prepareRename`, `rename`, `documentSymbol`, `formatting`,
+  `rangeFormatting`, `codeAction`, `diagnostic`, `semanticTokens/full`,
+  `workspace/symbol`)
+- notification lifecycle (`didOpen`, `didChange`, `didSave`, `didClose`)
+- large workspace scan scenario (hundreds of `.mla` files)
+- module resolution via `mlang.toml` `module_paths`
+
+```bash
+python3 tests/lsp_parity_e2e.py --mlangd build/mlangd
+# Optional: tune large workspace size
+python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 400
+```
+
 ### Option 2: Manual CMake Build
 
 ```bash
