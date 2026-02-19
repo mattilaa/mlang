@@ -30,6 +30,20 @@ typedef struct
     size_t cap;
 } uri_store_t;
 
+typedef struct
+{
+    char* key;
+    char* value;
+} text_entry_t;
+
+typedef struct
+{
+    pthread_mutex_t mutex;
+    text_entry_t* entries;
+    size_t len;
+    size_t cap;
+} text_store_t;
+
 static void set_error(const char* msg)
 {
     const char* text = msg ? msg : "std::jsonrpc: unknown error";
@@ -454,6 +468,24 @@ static int ensure_uri_store_capacity(uri_store_t* st, size_t need)
     if(!mem)
         return -1;
     st->uris = mem;
+    st->cap = next;
+    return 0;
+}
+
+static int ensure_text_store_capacity(text_store_t* st, size_t need)
+{
+    if(!st)
+        return -1;
+    if(st->cap >= need)
+        return 0;
+    size_t next = st->cap == 0u ? 8u : st->cap;
+    while(next < need)
+        next *= 2u;
+    text_entry_t* mem =
+        (text_entry_t*)realloc(st->entries, next * sizeof(text_entry_t));
+    if(!mem)
+        return -1;
+    st->entries = mem;
     st->cap = next;
     return 0;
 }
@@ -923,6 +955,281 @@ char* __mlang_std_jsonrpc_extract_workspace_query(const char* payload)
     if(!s)
         return dup_cstr("");
     return s;
+}
+
+int64_t __mlang_std_jsonrpc_text_store_new(void)
+{
+    text_store_t* st = (text_store_t*)malloc(sizeof(text_store_t));
+    if(!st)
+        return 0;
+    st->entries = NULL;
+    st->len = 0u;
+    st->cap = 0u;
+    if(pthread_mutex_init(&st->mutex, NULL) != 0)
+    {
+        free(st);
+        return 0;
+    }
+    return (int64_t)(intptr_t)st;
+}
+
+int __mlang_std_jsonrpc_text_store_free(int64_t handle)
+{
+    text_store_t* st = (text_store_t*)(intptr_t)handle;
+    if(!st)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    for(size_t i = 0; i < st->len; ++i)
+    {
+        free(st->entries[i].key);
+        free(st->entries[i].value);
+    }
+    free(st->entries);
+    st->entries = NULL;
+    st->len = 0u;
+    st->cap = 0u;
+    (void)pthread_mutex_unlock(&st->mutex);
+    (void)pthread_mutex_destroy(&st->mutex);
+    free(st);
+    return 0;
+}
+
+int __mlang_std_jsonrpc_text_store_upsert(int64_t handle, const char* key,
+                                          const char* value)
+{
+    text_store_t* st = (text_store_t*)(intptr_t)handle;
+    if(!st || !key || !value)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    for(size_t i = 0; i < st->len; ++i)
+    {
+        if(strcmp(st->entries[i].key, key) == 0)
+        {
+            char* nv = dup_cstr(value);
+            if(!nv)
+            {
+                (void)pthread_mutex_unlock(&st->mutex);
+                return -1;
+            }
+            free(st->entries[i].value);
+            st->entries[i].value = nv;
+            (void)pthread_mutex_unlock(&st->mutex);
+            return 0;
+        }
+    }
+    if(ensure_text_store_capacity(st, st->len + 1u) != 0)
+    {
+        (void)pthread_mutex_unlock(&st->mutex);
+        return -1;
+    }
+    char* nk = dup_cstr(key);
+    char* nv = dup_cstr(value);
+    if(!nk || !nv)
+    {
+        free(nk);
+        free(nv);
+        (void)pthread_mutex_unlock(&st->mutex);
+        return -1;
+    }
+    st->entries[st->len].key = nk;
+    st->entries[st->len].value = nv;
+    st->len++;
+    (void)pthread_mutex_unlock(&st->mutex);
+    return 0;
+}
+
+int __mlang_std_jsonrpc_text_store_remove(int64_t handle, const char* key)
+{
+    text_store_t* st = (text_store_t*)(intptr_t)handle;
+    if(!st || !key)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    for(size_t i = 0; i < st->len; ++i)
+    {
+        if(strcmp(st->entries[i].key, key) == 0)
+        {
+            free(st->entries[i].key);
+            free(st->entries[i].value);
+            size_t remain = st->len - i - 1u;
+            if(remain > 0u)
+            {
+                (void)memmove(&st->entries[i], &st->entries[i + 1u],
+                              remain * sizeof(text_entry_t));
+            }
+            st->len--;
+            (void)pthread_mutex_unlock(&st->mutex);
+            return 0;
+        }
+    }
+    (void)pthread_mutex_unlock(&st->mutex);
+    return 0;
+}
+
+char* __mlang_std_jsonrpc_text_store_get(int64_t handle, const char* key)
+{
+    text_store_t* st = (text_store_t*)(intptr_t)handle;
+    if(!st || !key)
+        return dup_cstr("");
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return dup_cstr("");
+    for(size_t i = 0; i < st->len; ++i)
+    {
+        if(strcmp(st->entries[i].key, key) == 0)
+        {
+            char* out = dup_cstr(st->entries[i].value);
+            (void)pthread_mutex_unlock(&st->mutex);
+            if(!out)
+                return dup_cstr("");
+            return out;
+        }
+    }
+    (void)pthread_mutex_unlock(&st->mutex);
+    return dup_cstr("");
+}
+
+static int line_is_blank(const char* s, size_t n)
+{
+    for(size_t i = 0; i < n; ++i)
+    {
+        if(!(s[i] == ' ' || s[i] == '\t' || s[i] == '\r'))
+            return 0;
+    }
+    return 1;
+}
+
+static int line_starts_with_use(const char* s, size_t n)
+{
+    size_t i = 0u;
+    while(i < n && (s[i] == ' ' || s[i] == '\t'))
+        ++i;
+    if(i + 4u > n)
+        return 0;
+    return s[i] == 'u' && s[i + 1u] == 's' && s[i + 2u] == 'e' &&
+           s[i + 3u] == ' ';
+}
+
+static int cmp_cstr_ptr(const void* a, const void* b)
+{
+    const char* const* sa = (const char* const*)a;
+    const char* const* sb = (const char* const*)b;
+    return strcmp(*sa, *sb);
+}
+
+int64_t __mlang_std_jsonrpc_organize_imports_line_count(const char* text)
+{
+    if(!text)
+        return 0;
+    const char* p = text;
+    int64_t lines = 0;
+    while(*p)
+    {
+        const char* start = p;
+        while(*p && *p != '\n')
+            ++p;
+        size_t n = (size_t)(p - start);
+        if(line_starts_with_use(start, n))
+        {
+            lines++;
+        }
+        else if(line_is_blank(start, n))
+        {
+            /* keep scanning */
+        }
+        else
+        {
+            break;
+        }
+        if(*p == '\n')
+            ++p;
+    }
+    return lines;
+}
+
+char* __mlang_std_jsonrpc_organize_imports_text(const char* text)
+{
+    if(!text)
+        return dup_cstr("");
+    const char* p = text;
+    char** imports = NULL;
+    size_t ilen = 0u, icap = 0u;
+    while(*p)
+    {
+        const char* start = p;
+        while(*p && *p != '\n')
+            ++p;
+        size_t n = (size_t)(p - start);
+        if(line_starts_with_use(start, n))
+        {
+            if(ilen == icap)
+            {
+                size_t next = icap == 0u ? 8u : icap * 2u;
+                char** mem = (char**)realloc(imports, next * sizeof(char*));
+                if(!mem)
+                    goto fail;
+                imports = mem;
+                icap = next;
+            }
+            char* line = (char*)malloc(n + 2u);
+            if(!line)
+                goto fail;
+            memcpy(line, start, n);
+            line[n] = '\n';
+            line[n + 1u] = '\0';
+            imports[ilen++] = line;
+        }
+        else if(line_is_blank(start, n))
+        {
+            /* continue */
+        }
+        else
+        {
+            break;
+        }
+        if(*p == '\n')
+            ++p;
+    }
+    if(ilen == 0u)
+    {
+        free(imports);
+        return dup_cstr("");
+    }
+    qsort(imports, ilen, sizeof(char*), cmp_cstr_ptr);
+    size_t uniq = 0u;
+    for(size_t i = 0; i < ilen; ++i)
+    {
+        if(i == 0 || strcmp(imports[i], imports[i - 1u]) != 0)
+            imports[uniq++] = imports[i];
+        else
+            free(imports[i]);
+    }
+    size_t total = 0u;
+    for(size_t i = 0; i < uniq; ++i)
+        total += strlen(imports[i]);
+    char* out = (char*)malloc(total + 1u);
+    if(!out)
+        goto fail;
+    size_t w = 0u;
+    for(size_t i = 0; i < uniq; ++i)
+    {
+        size_t n = strlen(imports[i]);
+        memcpy(out + w, imports[i], n);
+        w += n;
+        free(imports[i]);
+    }
+    out[w] = '\0';
+    free(imports);
+    return out;
+fail:
+    if(imports)
+    {
+        for(size_t i = 0; i < ilen; ++i)
+            free(imports[i]);
+        free(imports);
+    }
+    return dup_cstr("");
 }
 
 int64_t __mlang_std_jsonrpc_uri_store_new(void)

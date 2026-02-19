@@ -35,6 +35,13 @@ extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) ->
 extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_new_name(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_workspace_query(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_text_store_new() -> i64;
+extern pub fn __mlang_std_jsonrpc_text_store_free(handle: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_text_store_upsert(handle: i64, key: string, value: string) -> int;
+extern pub fn __mlang_std_jsonrpc_text_store_remove(handle: i64, key: string) -> int;
+extern pub fn __mlang_std_jsonrpc_text_store_get(handle: i64, key: string) -> string;
+extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_uri_store_new() -> i64;
 extern pub fn __mlang_std_jsonrpc_uri_store_free(handle: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_uri_store_add(handle: i64, uri: string) -> int;
@@ -281,6 +288,41 @@ pub fn extract_new_name(payload: string) -> string {
 /// @brief Extract `params.query` from payload (workspace/symbol).
 pub fn extract_workspace_query(payload: string) -> string {
     return __mlang_std_jsonrpc_extract_workspace_query(payload);
+}
+
+/// @brief Create text store for URI->document text mapping.
+pub fn text_store_new() -> i64 {
+    return __mlang_std_jsonrpc_text_store_new();
+}
+
+/// @brief Free text store.
+pub fn text_store_free(handle: i64) -> i32 {
+    return __mlang_std_jsonrpc_text_store_free(handle);
+}
+
+/// @brief Upsert URI->text entry.
+pub fn text_store_upsert(handle: i64, key: string, value: string) -> i32 {
+    return __mlang_std_jsonrpc_text_store_upsert(handle, key, value);
+}
+
+/// @brief Remove URI from text store.
+pub fn text_store_remove(handle: i64, key: string) -> i32 {
+    return __mlang_std_jsonrpc_text_store_remove(handle, key);
+}
+
+/// @brief Get text by URI, empty string when missing.
+pub fn text_store_get(handle: i64, key: string) -> string {
+    return __mlang_std_jsonrpc_text_store_get(handle, key);
+}
+
+/// @brief Count leading import lines (`use ...`) at file top.
+pub fn organize_imports_line_count(text: string) -> i64 {
+    return __mlang_std_jsonrpc_organize_imports_line_count(text);
+}
+
+/// @brief Return sorted+deduplicated leading import block text.
+pub fn organize_imports_text(text: string) -> string {
+    return __mlang_std_jsonrpc_organize_imports_text(text);
 }
 
 /// @brief Create URI store for tracking open documents.

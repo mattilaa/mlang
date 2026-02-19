@@ -20,6 +20,12 @@ use std::jsonrpc::extract_text_document_text;
 use std::jsonrpc::extract_text_document_uri;
 use std::jsonrpc::extract_text_document_version;
 use std::jsonrpc::extract_workspace_query;
+use std::jsonrpc::organize_imports_line_count;
+use std::jsonrpc::organize_imports_text;
+use std::jsonrpc::text_store_get;
+use std::jsonrpc::text_store_new;
+use std::jsonrpc::text_store_remove;
+use std::jsonrpc::text_store_upsert;
 use std::jsonrpc::uri_store_add;
 use std::jsonrpc::uri_store_count;
 use std::jsonrpc::uri_store_get;
@@ -35,6 +41,7 @@ use std::strbuf::len;
 var g_session_ready: i32 = 0;
 var g_session_handle: i64 = 0;
 var g_uri_store_handle: i64 = 0;
+var g_text_store_handle: i64 = 0;
 
 fn current_session() -> Session {
     return Session { handle: g_session_handle };
@@ -63,6 +70,18 @@ fn ensure_uri_store() -> i32 {
         return 1;
     }
     g_uri_store_handle = h;
+    return 0;
+}
+
+fn ensure_text_store() -> i32 {
+    if g_text_store_handle != 0: {
+        return 0;
+    }
+    let h: i64 = text_store_new();
+    if h == 0: {
+        return 1;
+    }
+    g_text_store_handle = h;
     return 0;
 }
 
@@ -140,6 +159,9 @@ fn handle_did_open(payload: string) -> i32 {
     if ensure_uri_store() != 0: {
         return 1;
     }
+    if ensure_text_store() != 0: {
+        return 1;
+    }
     let uri: string = extract_text_document_uri(payload);
     let lang: string = extract_text_document_language_id(payload);
     let text: string = extract_text_document_text(payload);
@@ -154,11 +176,17 @@ fn handle_did_open(payload: string) -> i32 {
     if uri_store_add(g_uri_store_handle, uri) != 0: {
         return 1;
     }
+    if text_store_upsert(g_text_store_handle, uri, text) != 0: {
+        return 1;
+    }
     return 0;
 }
 
 fn handle_did_change(payload: string) -> i32 {
     if ensure_session() != 0: {
+        return 1;
+    }
+    if ensure_text_store() != 0: {
         return 1;
     }
     let uri: string = extract_text_document_uri(payload);
@@ -168,6 +196,9 @@ fn handle_did_change(payload: string) -> i32 {
     let s: Session = current_session();
     let r: Result<i32, string> = s.change_document(uri, text, version);
     if r.is_err(): {
+        return 1;
+    }
+    if text_store_upsert(g_text_store_handle, uri, text) != 0: {
         return 1;
     }
     return 0;
@@ -187,7 +218,30 @@ fn handle_did_close(payload: string) -> i32 {
     if g_uri_store_handle != 0: {
         let _ = uri_store_remove(g_uri_store_handle, uri);
     }
+    if g_text_store_handle != 0: {
+        let _ = text_store_remove(g_text_store_handle, uri);
+    }
     return 0;
+}
+
+fn handle_code_action(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    if contains(payload, "source.organizeImports") != 1: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let text: string = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0: { return "[]"; }
+    let import_lines: i64 = organize_imports_line_count(text);
+    if import_lines <= 0: { return "[]"; }
+    let new_block_raw: string = organize_imports_text(text);
+    if len(new_block_raw) == 0: { return "[]"; }
+    let new_block: string = json_escape(new_block_raw);
+    let uri_e: string = json_escape(uri);
+    let action: string = format!(
+        "[{{\"title\":\"Organize Imports\",\"kind\":\"source.organizeImports\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":0}}}},\"newText\":\"{}\"}}]}}}}}}]",
+        uri_e, import_lines, new_block
+    );
+    return action;
 }
 
 fn handle_definition(payload: string) -> string {
@@ -635,7 +689,7 @@ fn dispatch_result_json(payload: string) -> string {
     if eq(method, "textDocument/implementation") == 1: { return "[]"; }
     if eq(method, "textDocument/formatting") == 1: { return "[]"; }
     if eq(method, "textDocument/rangeFormatting") == 1: { return "[]"; }
-    if eq(method, "textDocument/codeAction") == 1: { return "[]"; }
+    if eq(method, "textDocument/codeAction") == 1: { return handle_code_action(payload); }
     if eq(method, "textDocument/semanticTokens/full") == 1: { return "{\"data\":[]}"; }
 
     return "";
