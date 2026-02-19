@@ -119,6 +119,7 @@ static int is_try_question_context()
 }
 "pub"           { return PUB; }
 "extern"        { return EXTERN; }
+"static"        { return STATIC; }
 "fn"            { return FUNCTION; }
 "impl"          { return IMPL; }
 "return"        { return RETURN; }

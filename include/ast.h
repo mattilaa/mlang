@@ -604,6 +604,8 @@ public:
     TypeNode* type;
     std::string name;
     ExpressionNode* initExpr;
+    bool isStaticStorage = false;
+    bool isGlobalStorage = false;
 
     VarDeclNode(TypeNode* t, const std::string& n, ExpressionNode* e)
         : type(t), name(n), initExpr(e)
@@ -1065,6 +1067,7 @@ public:
     EnumListNode* enumList = nullptr;
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
+    std::vector<VarDeclNode*> globalVars;
 
     std::string toString() const override;
 };

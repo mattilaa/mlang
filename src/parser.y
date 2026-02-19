@@ -152,6 +152,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %token MATCH
 %token PUB IMPL
 %token EXTERN
+%token STATIC
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
@@ -182,6 +183,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
 %type <ast> print_statement argument_list assert_eq_statement
+%type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
@@ -216,6 +218,7 @@ top_level_item
     | mod_declaration
     | use_declaration
     | impl_block
+    | global_var_statement
     ;
 
 module_path
@@ -426,6 +429,7 @@ statement_list
 statement
     : let_statement
     | var_statement
+    | static_var_statement
     | assignment_statement
     | expression_statement
     | return_statement
@@ -453,6 +457,48 @@ var_statement
         { $$ = create_var_declaration(NULL, $2, $4); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = create_var_declaration($4, $2, NULL); }
+    ;
+
+global_var_statement
+    : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration($4, $2, $6);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    | VAR IDENTIFIER ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration(NULL, $2, $4);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    | VAR IDENTIFIER COLON type SEMICOLON
+        {
+            $$ = create_var_declaration($4, $2, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    ;
+
+static_var_statement
+    : STATIC VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration($5, $3, $7);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
+    | STATIC VAR IDENTIFIER ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration(NULL, $3, $5);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
+    | STATIC VAR IDENTIFIER COLON type SEMICOLON
+        {
+            $$ = create_var_declaration($5, $3, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
     ;
 
 assignment_statement

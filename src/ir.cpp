@@ -1345,6 +1345,11 @@ llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
 
 void CodeGenerator::generateCode(ProgramNode* program)
 {
+    globalNamedValues.clear();
+    globalConstantVariables.clear();
+    globalVariableTypes.clear();
+    globalStructVariableTypes.clear();
+
     ensureHandleBuiltin(program);
     ensureThreadBuiltin(program);
     ensureMutexBuiltin(program);
@@ -1485,6 +1490,16 @@ void CodeGenerator::generateCode(ProgramNode* program)
             {
                 typeDefs[st->name] = {"struct", st->line};
             }
+        }
+    }
+
+    if(!program->globalVars.empty())
+    {
+        for(auto* gv : program->globalVars)
+        {
+            if(!gv)
+                continue;
+            generateGlobalVarDeclaration(gv);
         }
     }
 
@@ -2243,6 +2258,130 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     return function;
 }
 
+void CodeGenerator::seedFunctionScopeWithGlobals()
+{
+    for(const auto& it : globalNamedValues)
+        namedValues[it.first] = it.second;
+    for(const auto& it : globalVariableTypes)
+        variableTypes[it.first] = it.second;
+    for(const auto& it : globalStructVariableTypes)
+        structVariableTypes[it.first] = it.second;
+    for(const auto& n : globalConstantVariables)
+        constantVariables.insert(n);
+}
+
+void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
+{
+    if(!node)
+        return;
+    if(globalNamedValues.find(node->name) != globalNamedValues.end())
+    {
+        reportError(node->line, "duplicate global variable: '" + node->name +
+                                    "'");
+        return;
+    }
+
+    TypeNode::TypeKind kind = TypeNode::TYPE_INT;
+    if(node->type)
+        kind = node->type->kind;
+    else if(node->initExpr)
+    {
+        if(dynamic_cast<BoolLiteralNode*>(node->initExpr))
+            kind = TypeNode::TYPE_BOOL;
+        else if(dynamic_cast<FloatLiteralNode*>(node->initExpr))
+            kind = TypeNode::TYPE_FLOAT;
+        else if(dynamic_cast<DoubleLiteralNode*>(node->initExpr))
+            kind = TypeNode::TYPE_DOUBLE;
+        else if(dynamic_cast<StringLiteralNode*>(node->initExpr))
+            kind = TypeNode::TYPE_STRING;
+    }
+
+    llvm::Type* llvmTy = node->type ? getLLVMTypeFromNode(node->type)
+                                    : getLLVMType(kind);
+    if(!llvmTy)
+    {
+        reportError(node->line, "invalid global variable type for '" +
+                                    node->name + "'");
+        return;
+    }
+
+    llvm::Constant* init = llvm::Constant::getNullValue(llvmTy);
+    if(node->initExpr)
+    {
+        if(auto* i = dynamic_cast<IntLiteralNode*>(node->initExpr))
+        {
+            if(!llvmTy->isIntegerTy())
+            {
+                reportError(node->line, "global integer initializer type mismatch for '" +
+                                            node->name + "'");
+                return;
+            }
+            init = llvm::ConstantInt::get(llvmTy, i->value, true);
+        }
+        else if(auto* b = dynamic_cast<BoolLiteralNode*>(node->initExpr))
+        {
+            if(!llvmTy->isIntegerTy(1))
+            {
+                reportError(node->line, "global bool initializer type mismatch for '" +
+                                            node->name + "'");
+                return;
+            }
+            init = llvm::ConstantInt::get(llvmTy, b->value ? 1 : 0, false);
+        }
+        else if(auto* f = dynamic_cast<FloatLiteralNode*>(node->initExpr))
+        {
+            if(!llvmTy->isFloatTy())
+            {
+                reportError(node->line, "global float initializer type mismatch for '" +
+                                            node->name + "'");
+                return;
+            }
+            init = llvm::ConstantFP::get(llvmTy, f->value);
+        }
+        else if(auto* d = dynamic_cast<DoubleLiteralNode*>(node->initExpr))
+        {
+            if(!llvmTy->isDoubleTy())
+            {
+                reportError(node->line, "global double initializer type mismatch for '" +
+                                            node->name + "'");
+                return;
+            }
+            init = llvm::ConstantFP::get(llvmTy, d->value);
+        }
+        else if(auto* s = dynamic_cast<StringLiteralNode*>(node->initExpr))
+        {
+            if(!llvmTy->isPointerTy())
+            {
+                reportError(node->line, "global string initializer type mismatch for '" +
+                                            node->name + "'");
+                return;
+            }
+#if LLVM_VERSION_MAJOR >= 21
+            auto* gstr = builder.CreateGlobalString(s->value, node->name + ".gstr");
+            init = llvm::dyn_cast<llvm::Constant>(gstr);
+#else
+            auto* gstr = builder.CreateGlobalStringPtr(s->value, node->name + ".gstr");
+            init = llvm::dyn_cast<llvm::Constant>(gstr);
+#endif
+            if(!init)
+                init = llvm::ConstantPointerNull::get(
+                    llvm::cast<llvm::PointerType>(llvmTy));
+        }
+        else
+        {
+            reportError(node->line,
+                        "global initializer must be a literal constant");
+            return;
+        }
+    }
+
+    auto* gv = new llvm::GlobalVariable(
+        *module, llvmTy, false, llvm::GlobalValue::InternalLinkage, init,
+        "__mlang_global_" + node->name);
+    globalNamedValues[node->name] = gv;
+    globalVariableTypes[node->name] = kind;
+}
+
 llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
 {
     std::string symbolName = functionSymbolName(node);
@@ -2278,7 +2417,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     namedValues.clear();
     constantVariables.clear();
     variableTypes.clear();
+    structVariableTypes.clear();
     cleanupScopes.clear();
+    seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
     // Set up parameters
@@ -4181,6 +4322,10 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
         return builder.CreateLoad(alloca->getAllocatedType(), alloca,
                                   node->name);
     }
+    if(llvm::GlobalVariable* global = llvm::dyn_cast<llvm::GlobalVariable>(value))
+    {
+        return builder.CreateLoad(global->getValueType(), global, node->name);
+    }
 
     return value;
 }
@@ -4959,6 +5104,165 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    if(node->isStaticStorage || node->isGlobalStorage)
+    {
+        std::string storageName = node->name;
+        if(node->isStaticStorage)
+        {
+            llvm::Function* fn = builder.GetInsertBlock()
+                                     ? builder.GetInsertBlock()->getParent()
+                                     : nullptr;
+            const std::string owner = fn ? fn->getName().str() : "global";
+            storageName = "__mlang_static_" + owner + "_" + node->name;
+        }
+        else
+        {
+            storageName = "__mlang_global_" + node->name;
+        }
+
+        TypeNode::TypeKind kind = TypeNode::TYPE_INT;
+        llvm::Type* targetType = nullptr;
+        std::string structTypeName;
+        if(node->type)
+        {
+            kind = node->type->kind;
+            targetType = getLLVMTypeFromNode(node->type);
+            if(auto* sr = dynamic_cast<StructTypeRefNode*>(node->type))
+            {
+                kind = TypeNode::TYPE_STRUCT;
+                structTypeName = sr->structName;
+            }
+            else if(auto* gsr =
+                        dynamic_cast<GenericStructTypeRefNode*>(node->type))
+            {
+                kind = TypeNode::TYPE_STRUCT;
+                structTypeName = getOrCreateMonomorphizedStruct(
+                    gsr->structName, gsr->typeArgs);
+            }
+        }
+
+        if(!targetType)
+        {
+            if(!node->initExpr)
+            {
+                reportError(node->line,
+                            "static/global var declaration without type requires initializer");
+                return;
+            }
+            llvm::Value* initValue = generateExpression(node->initExpr);
+            if(!initValue)
+                return;
+            targetType = initValue->getType();
+            if(targetType->isIntegerTy(1))
+                kind = TypeNode::TYPE_BOOL;
+            else if(targetType->isFloatTy())
+                kind = TypeNode::TYPE_FLOAT;
+            else if(targetType->isDoubleTy())
+                kind = TypeNode::TYPE_DOUBLE;
+            else if(targetType->isPointerTy())
+                kind = TypeNode::TYPE_PTR;
+            else
+                kind = TypeNode::TYPE_INT;
+        }
+
+        auto* gv = module->getGlobalVariable(storageName);
+        if(!gv)
+        {
+            gv = new llvm::GlobalVariable(*module, targetType, false,
+                                          llvm::GlobalValue::InternalLinkage,
+                                          llvm::Constant::getNullValue(targetType),
+                                          storageName);
+        }
+
+        if(node->initExpr)
+        {
+            if(node->isStaticStorage)
+            {
+                std::string guardName = storageName + "__inited";
+                auto* guard = module->getGlobalVariable(guardName);
+                if(!guard)
+                {
+                    guard = new llvm::GlobalVariable(
+                        *module, llvm::Type::getInt1Ty(context), false,
+                        llvm::GlobalValue::InternalLinkage,
+                        llvm::ConstantInt::getFalse(context), guardName);
+                }
+
+                llvm::Function* fn = builder.GetInsertBlock()->getParent();
+                auto* initBB = llvm::BasicBlock::Create(context, "static.init", fn);
+                auto* contBB = llvm::BasicBlock::Create(context, "static.cont", fn);
+                llvm::Value* isInit =
+                    builder.CreateLoad(guard->getValueType(), guard, "static.inited");
+                builder.CreateCondBr(isInit, contBB, initBB);
+
+                builder.SetInsertPoint(initBB);
+                llvm::Value* initValue = generateExpression(node->initExpr);
+                if(!initValue)
+                    return;
+                if(initValue->getType() != targetType)
+                {
+                    if(initValue->getType()->isIntegerTy() && targetType->isIntegerTy())
+                        initValue = builder.CreateSExtOrTrunc(initValue, targetType, "static.cast");
+                    else if(initValue->getType()->isIntegerTy() && targetType->isFloatingPointTy())
+                        initValue = builder.CreateSIToFP(initValue, targetType, "static.sitofp");
+                    else if(initValue->getType()->isFloatingPointTy() && targetType->isIntegerTy())
+                        initValue = builder.CreateFPToSI(initValue, targetType, "static.fptosi");
+                    else if(initValue->getType()->isFloatingPointTy() && targetType->isFloatingPointTy())
+                        initValue = builder.CreateFPCast(initValue, targetType, "static.fpcast");
+                    else
+                    {
+                        reportError(node->line, "type mismatch in static initializer for '" + node->name + "'");
+                        return;
+                    }
+                }
+                builder.CreateStore(initValue, gv);
+                builder.CreateStore(llvm::ConstantInt::getTrue(context), guard);
+                builder.CreateBr(contBB);
+                builder.SetInsertPoint(contBB);
+            }
+            else if(auto* cinit = llvm::dyn_cast<llvm::Constant>(generateExpression(node->initExpr)))
+            {
+                gv->setInitializer(cinit);
+            }
+            else
+            {
+                llvm::Value* initValue = generateExpression(node->initExpr);
+                if(!initValue)
+                    return;
+                if(initValue->getType() != targetType)
+                {
+                    if(initValue->getType()->isIntegerTy() && targetType->isIntegerTy())
+                        initValue = builder.CreateSExtOrTrunc(initValue, targetType, "global.cast");
+                    else if(initValue->getType()->isIntegerTy() && targetType->isFloatingPointTy())
+                        initValue = builder.CreateSIToFP(initValue, targetType, "global.sitofp");
+                    else if(initValue->getType()->isFloatingPointTy() && targetType->isIntegerTy())
+                        initValue = builder.CreateFPToSI(initValue, targetType, "global.fptosi");
+                    else if(initValue->getType()->isFloatingPointTy() && targetType->isFloatingPointTy())
+                        initValue = builder.CreateFPCast(initValue, targetType, "global.fpcast");
+                    else
+                    {
+                        reportError(node->line, "type mismatch in global initializer for '" + node->name + "'");
+                        return;
+                    }
+                }
+                builder.CreateStore(initValue, gv);
+            }
+        }
+
+        namedValues[node->name] = gv;
+        variableTypes[node->name] = kind;
+        if(!structTypeName.empty())
+            structVariableTypes[node->name] = structTypeName;
+        if(node->isGlobalStorage)
+        {
+            globalNamedValues[node->name] = gv;
+            globalVariableTypes[node->name] = kind;
+            if(!structTypeName.empty())
+                globalStructVariableTypes[node->name] = structTypeName;
+        }
+        return;
+    }
+
     if(!node->type)
     {
         if(!node->initExpr)
@@ -5504,87 +5808,62 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     if(!value)
         return;
 
-    if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(variable))
+    llvm::Type* targetType = nullptr;
+    llvm::AllocaInst* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(variable);
+    llvm::GlobalVariable* targetGlobal =
+        llvm::dyn_cast<llvm::GlobalVariable>(variable);
+    if(targetAlloca)
+        targetType = targetAlloca->getAllocatedType();
+    else if(targetGlobal)
+        targetType = targetGlobal->getValueType();
+    else
     {
-        llvm::Type* targetType = alloca->getAllocatedType();
-        llvm::Type* valueType = value->getType();
+        reportError(node->line, "assignment target is not addressable: '" +
+                                    node->name + "'");
+        return;
+    }
 
-        // Convert value to target type if necessary
-        if(valueType != targetType)
+    llvm::Type* valueType = value->getType();
+
+    // Convert value to target type if necessary
+    if(valueType != targetType)
+    {
+        if(valueType->isIntegerTy() && targetType->isIntegerTy())
         {
-            if(valueType->isIntegerTy() && targetType->isIntegerTy())
+            unsigned valueBits = valueType->getIntegerBitWidth();
+            unsigned targetBits = targetType->getIntegerBitWidth();
+            if(valueBits > targetBits)
             {
-                unsigned valueBits = valueType->getIntegerBitWidth();
-                unsigned targetBits = targetType->getIntegerBitWidth();
-                if(valueBits > targetBits)
-                {
-                    value = builder.CreateTrunc(value, targetType, "trunc");
-                }
-                else if(valueBits < targetBits)
-                {
-                    value = builder.CreateSExt(value, targetType, "sext");
-                }
+                value = builder.CreateTrunc(value, targetType, "trunc");
             }
-            else if(valueType->isIntegerTy() && targetType->isFloatingPointTy())
+            else if(valueBits < targetBits)
             {
-                value = builder.CreateSIToFP(value, targetType, "sitofp");
-            }
-            else if(valueType->isFloatingPointTy() && targetType->isIntegerTy())
-            {
-                value = builder.CreateFPToSI(value, targetType, "fptosi");
-            }
-            else if(valueType->isFloatingPointTy() &&
-                    targetType->isFloatingPointTy())
-            {
-                value = builder.CreateFPCast(value, targetType, "fpcast");
-            }
-            else
-            {
-                // Incompatible types
-                std::string valueTypeStr, targetTypeStr;
-
-                if(valueType->isIntegerTy())
-                    valueTypeStr =
-                        "i" + std::to_string(valueType->getIntegerBitWidth());
-                else if(valueType->isFloatTy())
-                    valueTypeStr = "float";
-                else if(valueType->isDoubleTy())
-                    valueTypeStr = "double";
-                else if(valueType->isPointerTy())
-                    valueTypeStr = "pointer/string";
-                else if(valueType->isStructTy())
-                    valueTypeStr = valueType->getStructName().str().empty()
-                                       ? "struct"
-                                       : valueType->getStructName().str();
-                else
-                    valueTypeStr = "unknown";
-
-                if(targetType->isIntegerTy())
-                    targetTypeStr =
-                        "i" + std::to_string(targetType->getIntegerBitWidth());
-                else if(targetType->isFloatTy())
-                    targetTypeStr = "float";
-                else if(targetType->isDoubleTy())
-                    targetTypeStr = "double";
-                else if(targetType->isPointerTy())
-                    targetTypeStr = "pointer/string";
-                else if(targetType->isStructTy())
-                    targetTypeStr = targetType->getStructName().str().empty()
-                                        ? "struct"
-                                        : targetType->getStructName().str();
-                else
-                    targetTypeStr = "unknown";
-
-                reportError(node->line,
-                            "type mismatch in assignment to variable '" +
-                                node->name + "': expected '" + targetTypeStr +
-                                "', got '" + valueTypeStr + "'");
-                return;
+                value = builder.CreateSExt(value, targetType, "sext");
             }
         }
-
-        builder.CreateStore(value, alloca);
+        else if(valueType->isIntegerTy() && targetType->isFloatingPointTy())
+        {
+            value = builder.CreateSIToFP(value, targetType, "sitofp");
+        }
+        else if(valueType->isFloatingPointTy() && targetType->isIntegerTy())
+        {
+            value = builder.CreateFPToSI(value, targetType, "fptosi");
+        }
+        else if(valueType->isFloatingPointTy() &&
+                targetType->isFloatingPointTy())
+        {
+            value = builder.CreateFPCast(value, targetType, "fpcast");
+        }
+        else
+        {
+            reportError(node->line,
+                        "type mismatch in assignment to variable '" +
+                            node->name + "'");
+            return;
+        }
     }
+
+    builder.CreateStore(value, variable);
 }
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
@@ -7759,7 +8038,9 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     namedValues.clear();
     constantVariables.clear();
     variableTypes.clear();
+    structVariableTypes.clear();
     cleanupScopes.clear();
+    seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
     // Set up self parameter and other parameters
