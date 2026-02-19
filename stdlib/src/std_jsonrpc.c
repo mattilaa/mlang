@@ -1033,12 +1033,19 @@ char* __mlang_std_jsonrpc_signature_help_callee(const char* text,
 
 typedef struct
 {
-    int found;
+    char* name;
     int line1;
     int col1;
     int kind;
     char path[PATH_MAX];
-} ws_symbol_match_t;
+} ws_symbol_item_t;
+
+typedef struct
+{
+    ws_symbol_item_t* items;
+    size_t len;
+    size_t cap;
+} ws_symbol_list_t;
 
 static void uri_to_path(const char* uri, char* out, size_t out_cap)
 {
@@ -1063,11 +1070,12 @@ static int ends_with_mla(const char* path)
     return n >= 4u && strcmp(path + n - 4u, ".mla") == 0;
 }
 
-static int match_decl_line(const char* line, const char* query, int* out_kind,
-                           int* out_col0)
+static int parse_decl_line(const char* line, char* out_name,
+                           size_t out_name_cap, int* out_kind, int* out_col0)
 {
-    if(!line || !query || query[0] == '\0')
+    if(!line || !out_name || out_name_cap == 0u)
         return 0;
+    out_name[0] = '\0';
     const struct
     {
         const char* kw;
@@ -1078,7 +1086,6 @@ static int match_decl_line(const char* line, const char* query, int* out_kind,
     for(size_t r = 0; r < sizeof(rules) / sizeof(rules[0]); ++r)
     {
         const char* p = line;
-        size_t qn = strlen(query);
         while((p = strstr(p, rules[r].kw)) != NULL)
         {
             if(p > line && is_ident_char(*(p - 1)))
@@ -1099,17 +1106,18 @@ static int match_decl_line(const char* line, const char* query, int* out_kind,
                 ++p;
                 continue;
             }
-            if(strncmp(k_end, query, qn) != 0)
+            const char* name_start = k_end;
+            while(*k_end && is_ident_char(*k_end))
+                ++k_end;
+            size_t name_len = (size_t)(k_end - name_start);
+            if(name_len == 0u || name_len + 1u > out_name_cap)
             {
                 ++p;
                 continue;
             }
-            if(is_ident_char(k_end[qn]))
-            {
-                ++p;
-                continue;
-            }
-            const char* after = k_end + qn;
+            memcpy(out_name, name_start, name_len);
+            out_name[name_len] = '\0';
+            const char* after = k_end;
             while(*after && isspace((unsigned char)*after))
                 ++after;
             if(rules[r].paren_required && *after != '(')
@@ -1120,17 +1128,125 @@ static int match_decl_line(const char* line, const char* query, int* out_kind,
             if(out_kind)
                 *out_kind = rules[r].kind;
             if(out_col0)
-                *out_col0 = (int)(k_end - line);
+                *out_col0 = (int)(name_start - line);
             return 1;
         }
     }
     return 0;
 }
 
-static void search_file_for_symbol(const char* path, const char* query,
-                                   ws_symbol_match_t* out)
+static int ensure_ws_symbol_capacity(ws_symbol_list_t* out, size_t need)
 {
-    if(!path || !query || !out || out->found)
+    if(!out)
+        return -1;
+    if(out->cap >= need)
+        return 0;
+    size_t next = out->cap == 0u ? 16u : out->cap;
+    while(next < need)
+        next *= 2u;
+    ws_symbol_item_t* mem =
+        (ws_symbol_item_t*)realloc(out->items, next * sizeof(ws_symbol_item_t));
+    if(!mem)
+        return -1;
+    out->items = mem;
+    out->cap = next;
+    return 0;
+}
+
+static void push_ws_symbol(ws_symbol_list_t* out, const char* path,
+                           const char* name, int line1, int col1, int kind)
+{
+    if(!out || !path || !name || name[0] == '\0')
+        return;
+    if(ensure_ws_symbol_capacity(out, out->len + 1u) != 0)
+        return;
+    ws_symbol_item_t* it = &out->items[out->len];
+    it->name = dup_cstr(name);
+    if(!it->name)
+        return;
+    it->line1 = line1;
+    it->col1 = col1;
+    it->kind = kind;
+    snprintf(it->path, sizeof(it->path), "%s", path);
+    out->len++;
+}
+
+static void free_ws_symbol_list(ws_symbol_list_t* list)
+{
+    if(!list)
+        return;
+    for(size_t i = 0; i < list->len; ++i)
+        free(list->items[i].name);
+    free(list->items);
+    list->items = NULL;
+    list->len = 0u;
+    list->cap = 0u;
+}
+
+static int ws_symbol_item_cmp(const void* a, const void* b)
+{
+    const ws_symbol_item_t* ia = (const ws_symbol_item_t*)a;
+    const ws_symbol_item_t* ib = (const ws_symbol_item_t*)b;
+    int c = strcmp(ia->name ? ia->name : "", ib->name ? ib->name : "");
+    if(c != 0)
+        return c;
+    c = strcmp(ia->path, ib->path);
+    if(c != 0)
+        return c;
+    if(ia->line1 != ib->line1)
+        return ia->line1 - ib->line1;
+    return ia->col1 - ib->col1;
+}
+
+static char* json_escape_cstr(const char* s)
+{
+    if(!s)
+        return dup_cstr("");
+    size_t n = strlen(s);
+    size_t cap = n * 2u + 16u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return dup_cstr("");
+    size_t w = 0u;
+    for(size_t i = 0; i < n; ++i)
+    {
+        char ch = s[i];
+        if(ch == '"' || ch == '\\')
+        {
+            if(w + 2u >= cap)
+                break;
+            out[w++] = '\\';
+            out[w++] = ch;
+        }
+        else if(ch == '\n')
+        {
+            if(w + 2u >= cap)
+                break;
+            out[w++] = '\\';
+            out[w++] = 'n';
+        }
+        else if(ch == '\r')
+        {
+            if(w + 2u >= cap)
+                break;
+            out[w++] = '\\';
+            out[w++] = 'r';
+        }
+        else
+        {
+            if(w + 1u >= cap)
+                break;
+            out[w++] = ch;
+        }
+    }
+    out[w] = '\0';
+    return out;
+}
+
+static void search_file_for_symbol(const char* path, const char* query,
+                                   ws_symbol_list_t* out)
+{
+    if(!path || !query || !out)
         return;
     FILE* f = fopen(path, "rb");
     if(!f)
@@ -1139,16 +1255,13 @@ static void search_file_for_symbol(const char* path, const char* query,
     int line1 = 1;
     while(fgets(line, (int)sizeof(line), f) != NULL)
     {
+        char name[256];
         int kind = 0;
         int col0 = 0;
-        if(match_decl_line(line, query, &kind, &col0))
+        if(parse_decl_line(line, name, sizeof(name), &kind, &col0))
         {
-            out->found = 1;
-            out->line1 = line1;
-            out->col1 = col0 + 1;
-            out->kind = kind;
-            snprintf(out->path, sizeof(out->path), "%s", path);
-            break;
+            if(strstr(name, query) != NULL)
+                push_ws_symbol(out, path, name, line1, col0 + 1, kind);
         }
         line1++;
     }
@@ -1156,9 +1269,9 @@ static void search_file_for_symbol(const char* path, const char* query,
 }
 
 static void search_dir_for_symbol(const char* root, const char* query,
-                                  ws_symbol_match_t* out)
+                                  ws_symbol_list_t* out)
 {
-    if(!root || !query || !out || out->found)
+    if(!root || !query || !out)
         return;
     DIR* dir = opendir(root);
     if(!dir)
@@ -1166,8 +1279,6 @@ static void search_dir_for_symbol(const char* root, const char* query,
     struct dirent* ent = NULL;
     while((ent = readdir(dir)) != NULL)
     {
-        if(out->found)
-            break;
         if(strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
         char full[PATH_MAX];
@@ -1201,22 +1312,56 @@ char* __mlang_std_jsonrpc_workspace_symbol_search(const char* root_uri,
     uri_to_path(root_uri, root, sizeof(root));
     if(root[0] == '\0')
         return dup_cstr("[]");
-    ws_symbol_match_t m;
-    memset(&m, 0, sizeof(m));
-    m.kind = 12;
-    search_dir_for_symbol(root, query, &m);
-    if(!m.found)
+    ws_symbol_list_t matches;
+    memset(&matches, 0, sizeof(matches));
+    search_dir_for_symbol(root, query, &matches);
+    if(matches.len == 0u)
+    {
+        free_ws_symbol_list(&matches);
         return dup_cstr("[]");
-    char uri[PATH_MAX + 8];
-    snprintf(uri, sizeof(uri), "file://%s", m.path);
-    char out[PATH_MAX + 320];
-    snprintf(out, sizeof(out),
-             "[{\"name\":\"%s\",\"kind\":%d,\"location\":{\"uri\":\"%s\","
-             "\"range\":{\"start\":{\"line\":%d,\"character\":%d},"
-             "\"end\":{\"line\":%d,\"character\":%d}}}}]",
-             query, m.kind, uri, m.line1 - 1, m.col1 - 1, m.line1 - 1,
-             m.col1 - 1);
-    return dup_cstr(out);
+    }
+    qsort(matches.items, matches.len, sizeof(ws_symbol_item_t), ws_symbol_item_cmp);
+    size_t cap = matches.len * (PATH_MAX + 256u) + 32u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+    {
+        free_ws_symbol_list(&matches);
+        return dup_cstr("[]");
+    }
+    size_t w = 0u;
+    out[w++] = '[';
+    for(size_t i = 0; i < matches.len; ++i)
+    {
+        ws_symbol_item_t* m = &matches.items[i];
+        char uri[PATH_MAX + 8];
+        snprintf(uri, sizeof(uri), "file://%s", m->path);
+        char* name_e = json_escape_cstr(m->name);
+        char* uri_e = json_escape_cstr(uri);
+        int wrote = snprintf(
+            out + w, cap - w,
+            "%s{\"name\":\"%s\",\"kind\":%d,\"location\":{\"uri\":\"%s\","
+            "\"range\":{\"start\":{\"line\":%d,\"character\":%d},"
+            "\"end\":{\"line\":%d,\"character\":%d}}}}",
+            (i == 0u ? "" : ","), name_e ? name_e : "", m->kind,
+            uri_e ? uri_e : "", m->line1 - 1, m->col1 - 1, m->line1 - 1,
+            m->col1 - 1);
+        free(name_e);
+        free(uri_e);
+        if(wrote <= 0 || (size_t)wrote >= cap - w)
+            break;
+        w += (size_t)wrote;
+    }
+    if(w + 2u <= cap)
+    {
+        out[w++] = ']';
+        out[w] = '\0';
+    }
+    else
+    {
+        out[cap - 1u] = '\0';
+    }
+    free_ws_symbol_list(&matches);
+    return out;
 }
 
 int64_t __mlang_std_jsonrpc_text_store_new(void)
