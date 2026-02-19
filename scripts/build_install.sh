@@ -147,8 +147,8 @@ if $build_all; then
   cmake --build "$build_dir" --target mlang mlangd mlang_std
 fi
 
-# Build mlangd_mla with the freshly built compiler/runtime.
-"$build_dir/mlang" "tools/mlangd_mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd_mla"
+# Build mlangd-mla with the freshly built compiler/runtime.
+"$build_dir/mlang" "tools/mlangd-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd-mla"
 
 if $run_unit_tests; then
   ./tests/run_tests.sh --output-on-failure
@@ -169,17 +169,17 @@ if $install_after_build; then
     cmake --install "$build_dir" --prefix "$prefix"
   fi
 
-  # Install mlangd_mla binary explicitly to the selected bin dir.
+  # Install mlangd-mla binary explicitly to the selected bin dir.
   if $use_sudo; then
     sudo mkdir -p "$bin_dir"
-    sudo cp -f "$build_dir/mlangd_mla" "$bin_dir/mlangd_mla"
-    sudo chmod +x "$bin_dir/mlangd_mla"
+    sudo cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
+    sudo chmod +x "$bin_dir/mlangd-mla"
   else
     mkdir -p "$bin_dir"
-    cp -f "$build_dir/mlangd_mla" "$bin_dir/mlangd_mla"
-    chmod +x "$bin_dir/mlangd_mla"
+    cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
+    chmod +x "$bin_dir/mlangd-mla"
   fi
-  echo "installed mlangd_mla: $bin_dir/mlangd_mla"
+  echo "installed mlangd-mla: $bin_dir/mlangd-mla"
 
   stdlib_dir="$prefix/share/mlang/stdlib"
   stdlib_lib_dir="$prefix/lib"

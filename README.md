@@ -42,21 +42,21 @@ MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 ./build/mlangd --stdio
 ```
 
 ## Mlangd (Mlang Scaffold)
-Initial Mlang implementation scaffold lives at `tools/mlangd_mla/main.mla`.
+Initial Mlang implementation scaffold lives at `tools/mlangd-mla/main.mla`.
 It uses `std::jsonrpc::run_stdio_loop(...)` and a Mlang dispatcher hook:
 `__mlang_std_jsonrpc_runtime_dispatch(...)`.
 
 Build object:
 
 ```sh
-./build/mlang -c tools/mlangd_mla/main.mla -L ./build -lmlang_std
+./build/mlang -c tools/mlangd-mla/main.mla -L ./build -lmlang_std
 ```
 
 Build executable:
 
 ```sh
-./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
-/tmp/mlangd_mla --stdio
+./build/mlang tools/mlangd-mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd-mla
+/tmp/mlangd-mla --stdio
 ```
 
 `mlang` emits `mlang_commands.json` for editor tooling. You can add module

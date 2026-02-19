@@ -178,7 +178,7 @@ fn setup_logging(args: list<str8>) -> i32 {
         if expect_level: {
             let parsed_level: i32 = parse_log_level(arg);
             if parsed_level < 0: {
-                eprintln!("mlangd_mla: invalid --log-level '{}'; expected DEBUG|INFO|ERROR|WARN|VERBOSE", arg);
+                eprintln!("mlangd-mla: invalid --log-level '{}'; expected DEBUG|INFO|ERROR|WARN|VERBOSE", arg);
                 return 1;
             }
             chosen_level = parsed_level;
@@ -217,29 +217,29 @@ fn setup_logging(args: list<str8>) -> i32 {
 
         let arg_s: string = format!("{}", arg);
         if starts_with(arg_s, "--log-level=") == 1: {
-            eprintln!("mlangd_mla: use '--log-level <LEVEL>' (space form), not --log-level=<LEVEL>");
+            eprintln!("mlangd-mla: use '--log-level <LEVEL>' (space form), not --log-level=<LEVEL>");
             return 1;
         }
         if starts_with(arg_s, "--log-dir=") == 1: {
-            eprintln!("mlangd_mla: use '--log-dir <DIR>' (space form), not --log-dir=<DIR>");
+            eprintln!("mlangd-mla: use '--log-dir <DIR>' (space form), not --log-dir=<DIR>");
             return 1;
         }
         if starts_with(arg_s, "--log-color=") == 1: {
-            eprintln!("mlangd_mla: use '--log-colors' (flag form), not --log-colors=<...>");
+            eprintln!("mlangd-mla: use '--log-colors' (flag form), not --log-colors=<...>");
             return 1;
         }
         if starts_with(arg_s, "--log-colors=") == 1: {
-            eprintln!("mlangd_mla: use '--log-colors' (flag form), not --log-colors=<...>");
+            eprintln!("mlangd-mla: use '--log-colors' (flag form), not --log-colors=<...>");
             return 1;
         }
     }
 
     if expect_level: {
-        eprintln!("mlangd_mla: missing value after --log-level");
+        eprintln!("mlangd-mla: missing value after --log-level");
         return 1;
     }
     if expect_dir: {
-        eprintln!("mlangd_mla: missing value after --log-dir");
+        eprintln!("mlangd-mla: missing value after --log-dir");
         return 1;
     }
     if enable_log == false: {
@@ -249,7 +249,7 @@ fn setup_logging(args: list<str8>) -> i32 {
     let path: string = log_path_for_dir(log_dir);
     let handle: i64 = __mlang_std_fs_open_write(path);
     if handle == 0: {
-        eprintln!("mlangd_mla: failed to open log file: {}", path);
+        eprintln!("mlangd-mla: failed to open log file: {}", path);
         return 1;
     }
 
@@ -1328,7 +1328,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd_mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -1426,14 +1426,14 @@ fn has_version_flag(args: list<str8>) -> bool {
 fn main(argc: i32, args: list<str8>) -> i32 {
     if argc > 1: {
         if has_version_flag(args): {
-            println!("mlangd_mla {}", version());
+            println!("mlangd-mla {}", version());
             return 0;
         }
     }
     if setup_logging(args) != 0: {
         return 1;
     }
-    log_write(log_level_info(), format!("mlangd_mla {} starting stdio loop", version()));
+    log_write(log_level_info(), format!("mlangd-mla {} starting stdio loop", version()));
     let r: Result<i32, string> = run_stdio_loop(1, 262144, 262144);
     if r.is_err(): {
         log_write(log_level_error(), format!("stdio loop error: {}", r.unwrap_err()));
@@ -1442,7 +1442,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         return 1;
     }
-    log_write(log_level_info(), "mlangd_mla stdio loop exited");
+    log_write(log_level_info(), "mlangd-mla stdio loop exited");
     if g_log_handle != 0: {
         let _ = __mlang_std_fs_close(g_log_handle);
     }

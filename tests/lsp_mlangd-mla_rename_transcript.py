@@ -10,14 +10,14 @@ from lsp_testlib import to_uri
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mlangd", default="/tmp/mlangd_mla")
+    ap.add_argument("--mlangd", default="/tmp/mlangd-mla")
     args = ap.parse_args()
 
     mlangd = Path(args.mlangd)
     if not mlangd.exists():
-        raise SystemExit(f"mlangd_mla not found: {mlangd}")
+        raise SystemExit(f"mlangd-mla not found: {mlangd}")
 
-    with tempfile.TemporaryDirectory(prefix="mlangd_mla_rename_") as td:
+    with tempfile.TemporaryDirectory(prefix="mlangd-mla_rename_") as td:
         root = Path(td)
         defs_file = root / "rename_defs.mla"
         use_file = root / "rename_use.mla"
@@ -104,7 +104,7 @@ def main() -> int:
         finally:
             client.close()
 
-    print("PASS: mlangd_mla rename transcript (documentChanges + cross-document edits)")
+    print("PASS: mlangd-mla rename transcript (documentChanges + cross-document edits)")
     return 0
 
 

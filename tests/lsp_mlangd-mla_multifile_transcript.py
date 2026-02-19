@@ -24,14 +24,14 @@ def open_doc(client: JsonRpcClient, path: Path, text: str, version: int = 1) -> 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mlangd", default="/tmp/mlangd_mla")
+    ap.add_argument("--mlangd", default="/tmp/mlangd-mla")
     args = ap.parse_args()
 
     mlangd = Path(args.mlangd)
     if not mlangd.exists():
-        raise SystemExit(f"mlangd_mla not found: {mlangd}")
+        raise SystemExit(f"mlangd-mla not found: {mlangd}")
 
-    with tempfile.TemporaryDirectory(prefix="mlangd_mla_multifile_") as td:
+    with tempfile.TemporaryDirectory(prefix="mlangd-mla_multifile_") as td:
         root = Path(td)
         (root / "lib").mkdir(parents=True, exist_ok=True)
         (root / "app").mkdir(parents=True, exist_ok=True)
@@ -136,7 +136,7 @@ def main() -> int:
         finally:
             client.close()
 
-    print("PASS: mlangd_mla multi-file transcript (implementation + references)")
+    print("PASS: mlangd-mla multi-file transcript (implementation + references)")
     return 0
 
 

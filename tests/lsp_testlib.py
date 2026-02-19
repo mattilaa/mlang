@@ -66,7 +66,7 @@ class JsonRpcClient:
         while True:
             msg = self._read()
             if msg is None:
-                raise AssertionError("mlangd_mla closed stdout while waiting for response")
+                raise AssertionError("mlangd-mla closed stdout while waiting for response")
             if msg.get("id") == req_id:
                 if "error" in msg:
                     raise AssertionError(f"LSP error for {method}: {msg['error']}")

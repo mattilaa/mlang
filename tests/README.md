@@ -87,32 +87,32 @@ python3 tests/lsp_parity_e2e.py --mlangd build/mlangd
 python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 400
 ```
 
-### Option 1e: mlangd_mla organizeImports Transcript (CodeAction)
+### Option 1e: mlangd-mla organizeImports Transcript (CodeAction)
 
-This is a focused end-to-end JSON-RPC transcript for `tools/mlangd_mla` that
+This is a focused end-to-end JSON-RPC transcript for `tools/mlangd-mla` that
 locks:
 - `textDocument/codeAction` with `source.organizeImports`
 - state updates across `didOpen` / `didChange` / `didClose`
 
 ```bash
-./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
-python3 tests/lsp_mlangd_mla_codeaction_transcript.py --mlangd /tmp/mlangd_mla
+./build/mlang tools/mlangd-mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd-mla
+python3 tests/lsp_mlangd-mla_codeaction_transcript.py --mlangd /tmp/mlangd-mla
 ```
 
-### Option 1f: mlangd_mla Rename Transcript (WorkspaceEdit documentChanges)
+### Option 1f: mlangd-mla Rename Transcript (WorkspaceEdit documentChanges)
 
-This focused end-to-end JSON-RPC transcript for `tools/mlangd_mla` locks:
+This focused end-to-end JSON-RPC transcript for `tools/mlangd-mla` locks:
 - `textDocument/rename` returns `WorkspaceEdit.documentChanges` (not legacy `changes`)
 - rename edits include both definition and cross-document references
 
 ```bash
-./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
-python3 tests/lsp_mlangd_mla_rename_transcript.py --mlangd /tmp/mlangd_mla
+./build/mlang tools/mlangd-mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd-mla
+python3 tests/lsp_mlangd-mla_rename_transcript.py --mlangd /tmp/mlangd-mla
 ```
 
-### Option 1g: mlangd_mla Transcript Suite (Consolidated Runner)
+### Option 1g: mlangd-mla Transcript Suite (Consolidated Runner)
 
-Runs both focused `mlangd_mla` transcript checks in one command:
+Runs both focused `mlangd-mla` transcript checks in one command:
 - organizeImports codeAction lifecycle
 - rename `documentChanges` + cross-document edits
 - quickfix codeAction for missing semicolon diagnostics
@@ -122,8 +122,8 @@ Runs both focused `mlangd_mla` transcript checks in one command:
 - multi-file implementation/references edge cases
 
 ```bash
-./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
-python3 tests/lsp_mlangd_mla_transcripts.py --mlangd /tmp/mlangd_mla
+./build/mlang tools/mlangd-mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd-mla
+python3 tests/lsp_mlangd-mla_transcripts.py --mlangd /tmp/mlangd-mla
 ```
 
 ### Option 2: Manual CMake Build

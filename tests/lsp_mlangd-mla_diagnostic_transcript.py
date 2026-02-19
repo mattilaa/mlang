@@ -27,14 +27,14 @@ def require_unchanged(res: object, expected_rid: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mlangd", default="/tmp/mlangd_mla")
+    ap.add_argument("--mlangd", default="/tmp/mlangd-mla")
     args = ap.parse_args()
 
     mlangd = Path(args.mlangd)
     if not mlangd.exists():
-        raise SystemExit(f"mlangd_mla not found: {mlangd}")
+        raise SystemExit(f"mlangd-mla not found: {mlangd}")
 
-    with tempfile.TemporaryDirectory(prefix="mlangd_mla_diag_") as td:
+    with tempfile.TemporaryDirectory(prefix="mlangd-mla_diag_") as td:
         root = Path(td)
         file_path = root / "diag_case.mla"
         uri = to_uri(file_path)
@@ -97,7 +97,7 @@ def main() -> int:
         finally:
             client.close()
 
-    print("PASS: mlangd_mla diagnostic transcript (resultId + unchanged)")
+    print("PASS: mlangd-mla diagnostic transcript (resultId + unchanged)")
     return 0
 
 

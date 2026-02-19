@@ -9,14 +9,14 @@ from lsp_testlib import to_uri
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mlangd", default="/tmp/mlangd_mla")
+    ap.add_argument("--mlangd", default="/tmp/mlangd-mla")
     args = ap.parse_args()
 
     mlangd = Path(args.mlangd)
     if not mlangd.exists():
-        raise SystemExit(f"mlangd_mla not found: {mlangd}")
+        raise SystemExit(f"mlangd-mla not found: {mlangd}")
 
-    with tempfile.TemporaryDirectory(prefix="mlangd_mla_formatting_") as td:
+    with tempfile.TemporaryDirectory(prefix="mlangd-mla_formatting_") as td:
         root = Path(td)
         file_path = root / "format_case.mla"
         uri = to_uri(file_path)
@@ -96,7 +96,7 @@ def main() -> int:
         finally:
             client.close()
 
-    print("PASS: mlangd_mla formatting transcript (document + range)")
+    print("PASS: mlangd-mla formatting transcript (document + range)")
     return 0
 
 
