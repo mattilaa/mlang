@@ -5,6 +5,7 @@ use std::compiler::Session;
 use std::compiler::DocumentSymbol;
 use std::compiler::DefinitionLocation;
 use std::compiler::ReferenceLocation;
+use std::compiler::ResolvedSymbol;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
 use std::strbuf::contains;
@@ -340,6 +341,70 @@ fn test_compiler_semantic_cache_api() -> i32 {
     if def2_r.is_err(): { return 1; }
     let def2: DefinitionLocation = def2_r.unwrap();
     if contains(def2.name, "util_cache") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_symbol_typed_metadata() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://typed_symbol_meta.mla";
+    let src: string = "fn helper(x: i32) -> i32 { return x; }\nfn main() -> i32 {\n  let alpha: i32 = helper(1);\n  return alpha;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return 1; }
+    let count: i32 = cr.unwrap();
+    if count <= 0: { return 1; }
+
+    var saw_helper_signature: i32 = 0;
+    var saw_alpha_type: i32 = 0;
+    for i in 0..count {
+        let sym_r: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sym_r.is_err(): { return 1; }
+        let sym: DocumentSymbol = sym_r.unwrap();
+        if contains(sym.name, "helper") == 1: {
+            if contains(sym.signature, "helper") == 1: {
+                saw_helper_signature = 1;
+            }
+        }
+        if contains(sym.name, "alpha") == 1: {
+            if contains(sym.type_info, "i32") == 1: {
+                saw_alpha_type = 1;
+            }
+        }
+    }
+
+    if saw_helper_signature != 1: { return 1; }
+    if saw_alpha_type != 1: { return 1; }
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_resolve_symbol_overload_metadata() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://resolve_overload_meta.mla";
+    let src: string = "fn foo(x: i32) -> i32 { return x; }\nfn foo(x: i64) -> i64 { return x; }\nfn main() -> i32 {\n  let y: i32 = foo(1);\n  return y;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, 4, 16);
+    if rr.is_err(): { return 1; }
+    let rs: ResolvedSymbol = rr.unwrap();
+    if contains(rs.name, "foo") == 0: { return 1; }
+    if rs.overload_count < 2: { return 1; }
+    if rs.kind != 1: { return 1; }
+    if rs.from_current_document != 1: { return 1; }
+    if contains(rs.signature, "foo") == 0: { return 1; }
 
     let _ = s.destroy();
     return 0;

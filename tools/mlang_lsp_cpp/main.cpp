@@ -42,6 +42,30 @@ int __mlang_compiler_document_change(mlang_compiler_session* session,
                                      int version);
 int __mlang_compiler_document_close(mlang_compiler_session* session,
                                     const char* uri);
+int __mlang_compiler_document_resolve_symbol(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             char* out_name,
+                                             int out_name_capacity,
+                                             int* out_name_length,
+                                             int* out_kind,
+                                             int* out_line,
+                                             int* out_column,
+                                             char* out_uri,
+                                             int out_uri_capacity,
+                                             int* out_uri_length,
+                                             char* out_id,
+                                             int out_id_capacity,
+                                             int* out_id_length,
+                                             char* out_type,
+                                             int out_type_capacity,
+                                             int* out_type_length,
+                                             char* out_signature,
+                                             int out_signature_capacity,
+                                             int* out_signature_length,
+                                             int* out_overload_count,
+                                             int* out_from_current_document);
 int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
                                               const char* uri,
                                               int line,
@@ -544,6 +568,82 @@ private:
             return;
         __mlang_compiler_document_close(compilerSession, uri.c_str());
         compilerDocVersions.erase(uri);
+    }
+
+    struct ResolvedSemanticSymbol
+    {
+        std::string name;
+        std::string uri;
+        std::string id;
+        std::string typeInfo;
+        std::string signature;
+        int kind = 0;
+        int line0 = 0;
+        int column0 = 0;
+        int overloadCount = 1;
+        bool fromCurrentDocument = false;
+    };
+
+    static const char* semantic_kind_name(int kind)
+    {
+        switch(kind)
+        {
+        case 1:
+            return "Function";
+        case 2:
+            return "Variable";
+        case 3:
+            return "Struct";
+        case 4:
+            return "Module";
+        default:
+            return "Symbol";
+        }
+    }
+
+    std::optional<ResolvedSemanticSymbol> resolve_semantic_symbol(
+        const std::string& uri, int line0, int column0)
+    {
+        if(!compilerSession)
+            return std::nullopt;
+
+        char nameBuf[4096];
+        char uriBuf[4096];
+        char idBuf[4096];
+        char typeBuf[4096];
+        char sigBuf[4096];
+        int nameLen = 0;
+        int uriLen = 0;
+        int idLen = 0;
+        int typeLen = 0;
+        int sigLen = 0;
+        int kind = 0;
+        int line1 = 0;
+        int col1 = 0;
+        int overloadCount = 1;
+        int fromCurrentDoc = 0;
+
+        int st = __mlang_compiler_document_resolve_symbol(
+            compilerSession, uri.c_str(), line0 + 1, column0 + 1, nameBuf,
+            sizeof(nameBuf), &nameLen, &kind, &line1, &col1, uriBuf,
+            sizeof(uriBuf), &uriLen, idBuf, sizeof(idBuf), &idLen, typeBuf,
+            sizeof(typeBuf), &typeLen, sigBuf, sizeof(sigBuf), &sigLen,
+            &overloadCount, &fromCurrentDoc);
+        if(st != 0)
+            return std::nullopt;
+
+        ResolvedSemanticSymbol out;
+        out.name = nameBuf;
+        out.uri = uriBuf;
+        out.id = idBuf;
+        out.typeInfo = typeBuf;
+        out.signature = sigBuf;
+        out.kind = kind;
+        out.line0 = std::max(0, line1 - 1);
+        out.column0 = std::max(0, col1 - 1);
+        out.overloadCount = std::max(1, overloadCount);
+        out.fromCurrentDocument = fromCurrentDoc != 0;
+        return out;
     }
 
     void load_c_header_config()
@@ -2720,6 +2820,39 @@ private:
         if(!ident)
             return nullptr;
 
+        if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                              static_cast<int>(*character)))
+        {
+            std::string md;
+            md += "**";
+            md += semantic_kind_name(sem->kind);
+            md += "** `";
+            md += sem->name;
+            md += "`";
+            if(!sem->typeInfo.empty())
+                md += "\n\nType: `" + sem->typeInfo + "`";
+            if(!sem->signature.empty())
+                md += "\n\n```mlang\n" + sem->signature + "\n```";
+            if(sem->overloadCount > 1)
+                md += "\n\nOverloads: `" + std::to_string(sem->overloadCount) + "`";
+            md += "\n\nStable ID: `" + sem->id + "`";
+            md += "\n\nDefined at: `" + sem->uri + ":" +
+                  std::to_string(sem->line0 + 1) + ":" +
+                  std::to_string(sem->column0 + 1) + "`";
+
+            llvm::json::Object contents;
+            contents["kind"] = "markdown";
+            contents["value"] = md;
+
+            llvm::json::Object out;
+            out["contents"] = llvm::json::Value(std::move(contents));
+            out["range"] = make_range_value(static_cast<int>(*line),
+                                            ident->startCharacter,
+                                            static_cast<int>(*line),
+                                            ident->endCharacter);
+            return llvm::json::Value(std::move(out));
+        }
+
         if(auto local = hover_entry_for_symbol(info, ident->text,
                                                static_cast<int>(*line)))
         {
@@ -2923,6 +3056,16 @@ private:
                     return location_to_json(loc);
                 }
             }
+        }
+
+        if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                              static_cast<int>(*character)))
+        {
+            Location loc;
+            loc.uri = sem->uri;
+            loc.line = sem->line0;
+            loc.character = sem->column0;
+            return location_to_json(loc);
         }
 
         if(!modulePrefix.empty())
@@ -3177,6 +3320,8 @@ private:
     {
         std::string callee;
         int activeParameter = 0;
+        int calleeStartCharacter = 0;
+        int calleeEndCharacter = 0;
     };
 
     std::optional<SignatureHelpContext>
@@ -3288,6 +3433,8 @@ private:
         SignatureHelpContext ctx;
         ctx.callee = callee;
         ctx.activeParameter = activeParam;
+        ctx.calleeStartCharacter = j + 1;
+        ctx.calleeEndCharacter = end + 1;
         return ctx;
     }
 
@@ -3472,6 +3619,57 @@ private:
         std::string calleeName = unqualified_callee_name(ctx->callee);
         if(calleeName.empty())
             return nullptr;
+
+        if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                              ctx->calleeStartCharacter))
+        {
+            std::string label = sem->signature;
+            if(label.empty())
+            {
+                label = "fn " + sem->name + "(...)";
+                if(!sem->typeInfo.empty())
+                    label += " -> " + sem->typeInfo;
+            }
+
+            llvm::json::Object sig;
+            sig["label"] = label;
+            auto paramsLabels = signature_parameter_labels(label);
+            if(!paramsLabels.empty())
+            {
+                llvm::json::Array p;
+                for(const auto& item : paramsLabels)
+                {
+                    llvm::json::Object pi;
+                    pi["label"] = item;
+                    p.push_back(llvm::json::Value(std::move(pi)));
+                }
+                sig["parameters"] = llvm::json::Value(std::move(p));
+            }
+
+            std::string doc = "kind: ";
+            doc += semantic_kind_name(sem->kind);
+            if(!sem->typeInfo.empty())
+                doc += "\nreturn/type: " + sem->typeInfo;
+            if(sem->overloadCount > 1)
+                doc += "\noverloads: " + std::to_string(sem->overloadCount);
+            llvm::json::Object docObj;
+            docObj["kind"] = "markdown";
+            docObj["value"] = doc;
+            sig["documentation"] = llvm::json::Value(std::move(docObj));
+
+            llvm::json::Array sigArray;
+            sigArray.push_back(llvm::json::Value(std::move(sig)));
+
+            int activeParam = std::max(0, ctx->activeParameter);
+            if(!paramsLabels.empty())
+                activeParam = std::min(activeParam, (int)paramsLabels.size() - 1);
+
+            llvm::json::Object out;
+            out["signatures"] = llvm::json::Value(std::move(sigArray));
+            out["activeSignature"] = 0;
+            out["activeParameter"] = activeParam;
+            return llvm::json::Value(std::move(out));
+        }
 
         std::vector<llvm::json::Object> signatures;
         std::unordered_set<std::string> seen;
@@ -3802,35 +4000,38 @@ private:
 
         if(compilerSession)
         {
-            int count = 0;
-            int st = __mlang_compiler_document_reference_count(
-                compilerSession, uri->str().c_str(),
-                static_cast<int>(*line) + 1, static_cast<int>(*character) + 1,
-                &count);
-            if(st == 0)
+            if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                                  static_cast<int>(*character)))
             {
-                llvm::json::Array out;
-                for(int i = 0; i < count; ++i)
+                int count = 0;
+                int st = __mlang_compiler_document_reference_count(
+                    compilerSession, sem->uri.c_str(), sem->line0 + 1,
+                    sem->column0 + 1, &count);
+                if(st == 0)
                 {
-                    char refUriBuf[4096];
-                    int refUriLen = 0;
-                    int refLine1 = 0;
-                    int refCol1 = 0;
-                    int gst = __mlang_compiler_document_reference_get(
-                        compilerSession, uri->str().c_str(),
-                        static_cast<int>(*line) + 1, static_cast<int>(*character) + 1,
-                        i, refUriBuf, sizeof(refUriBuf), &refUriLen, &refLine1, &refCol1);
-                    if(gst != 0)
-                        continue;
+                    llvm::json::Array out;
+                    for(int i = 0; i < count; ++i)
+                    {
+                        char refUriBuf[4096];
+                        int refUriLen = 0;
+                        int refLine1 = 0;
+                        int refCol1 = 0;
+                        int gst = __mlang_compiler_document_reference_get(
+                            compilerSession, sem->uri.c_str(), sem->line0 + 1,
+                            sem->column0 + 1, i, refUriBuf, sizeof(refUriBuf),
+                            &refUriLen, &refLine1, &refCol1);
+                        if(gst != 0)
+                            continue;
 
-                    int l0 = std::max(0, refLine1 - 1);
-                    int c0 = std::max(0, refCol1 - 1);
-                    llvm::json::Object loc;
-                    loc["uri"] = std::string(refUriBuf);
-                    loc["range"] = make_range_value(l0, c0, l0, c0 + 1);
-                    out.push_back(llvm::json::Value(std::move(loc)));
+                        int l0 = std::max(0, refLine1 - 1);
+                        int c0 = std::max(0, refCol1 - 1);
+                        llvm::json::Object loc;
+                        loc["uri"] = std::string(refUriBuf);
+                        loc["range"] = make_range_value(l0, c0, l0, c0 + 1);
+                        out.push_back(llvm::json::Value(std::move(loc)));
+                    }
+                    return llvm::json::Value(std::move(out));
                 }
-                return llvm::json::Value(std::move(out));
             }
         }
 

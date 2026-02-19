@@ -98,6 +98,42 @@ int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
                                             char* out_id,
                                             int out_id_capacity,
                                             int* out_id_length);
+int __mlang_compiler_document_symbol_type_get(mlang_compiler_session* session,
+                                              const char* uri,
+                                              int index,
+                                              char* out_type,
+                                              int out_type_capacity,
+                                              int* out_type_length);
+int __mlang_compiler_document_symbol_signature_get(mlang_compiler_session* session,
+                                                   const char* uri,
+                                                   int index,
+                                                   char* out_signature,
+                                                   int out_signature_capacity,
+                                                   int* out_signature_length);
+int __mlang_compiler_document_resolve_symbol(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             char* out_name,
+                                             int out_name_capacity,
+                                             int* out_name_length,
+                                             int* out_kind,
+                                             int* out_line,
+                                             int* out_column,
+                                             char* out_uri,
+                                             int out_uri_capacity,
+                                             int* out_uri_length,
+                                             char* out_id,
+                                             int out_id_capacity,
+                                             int* out_id_length,
+                                             char* out_type,
+                                             int out_type_capacity,
+                                             int* out_type_length,
+                                             char* out_signature,
+                                             int out_signature_capacity,
+                                             int* out_signature_length,
+                                             int* out_overload_count,
+                                             int* out_from_current_document);
 int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
                                               const char* uri,
                                               int line,
@@ -197,6 +233,53 @@ mlang_compiler_session* session_from_handle(std::int64_t handle)
 }
 
 constexpr int kBufferCap = 4096;
+
+struct ResolvedSymbolFields
+{
+    int kind = 0;
+    int line = 0;
+    int column = 0;
+    int overload_count = 0;
+    int from_current_document = 0;
+    std::string name;
+    std::string uri;
+    std::string id;
+    std::string type_info;
+    std::string signature;
+};
+
+int resolve_symbol_fields(mlang_compiler_session* session,
+                          const char* uri,
+                          int line,
+                          int column,
+                          ResolvedSymbolFields& out)
+{
+    int name_len = 0;
+    int uri_len = 0;
+    int id_len = 0;
+    int type_len = 0;
+    int signature_len = 0;
+    char name_buf[kBufferCap];
+    char uri_buf[kBufferCap];
+    char id_buf[kBufferCap];
+    char type_buf[kBufferCap];
+    char signature_buf[kBufferCap];
+
+    const int status = __mlang_compiler_document_resolve_symbol(
+        session, uri, line, column, name_buf, kBufferCap, &name_len, &out.kind,
+        &out.line, &out.column, uri_buf, kBufferCap, &uri_len, id_buf, kBufferCap,
+        &id_len, type_buf, kBufferCap, &type_len, signature_buf, kBufferCap,
+        &signature_len, &out.overload_count, &out.from_current_document);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return status;
+
+    out.name.assign(name_buf);
+    out.uri.assign(uri_buf);
+    out.id.assign(id_buf);
+    out.type_info.assign(type_buf);
+    out.signature.assign(signature_buf);
+    return status;
+}
 
 } // namespace
 
@@ -586,6 +669,46 @@ char* __mlang_std_compiler_document_symbol_id(std::int64_t handle,
     return dup_string(std::string(buffer));
 }
 
+char* __mlang_std_compiler_document_symbol_type(std::int64_t handle,
+                                                const char* uri,
+                                                int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    int type_len = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_symbol_type_get(
+        session, uri, index, buffer, kBufferCap, &type_len);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(std::string(buffer));
+}
+
+char* __mlang_std_compiler_document_symbol_signature(std::int64_t handle,
+                                                     const char* uri,
+                                                     int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    int signature_len = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_symbol_signature_get(
+        session, uri, index, buffer, kBufferCap, &signature_len);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(std::string(buffer));
+}
+
 int __mlang_std_compiler_document_definition_line(std::int64_t handle,
                                                   const char* uri,
                                                   int line,
@@ -713,6 +836,196 @@ char* __mlang_std_compiler_document_definition_id(std::int64_t handle,
     if(status != static_cast<int>(CompilerStatus::Ok))
         return nullptr;
     return dup_string(std::string(buffer));
+}
+
+char* __mlang_std_compiler_resolve_symbol_name(std::int64_t handle,
+                                               const char* uri,
+                                               int line,
+                                               int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(fields.name);
+}
+
+int __mlang_std_compiler_resolve_symbol_kind(std::int64_t handle,
+                                             const char* uri,
+                                             int line,
+                                             int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return fields.kind;
+}
+
+int __mlang_std_compiler_resolve_symbol_line(std::int64_t handle,
+                                             const char* uri,
+                                             int line,
+                                             int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return fields.line;
+}
+
+int __mlang_std_compiler_resolve_symbol_column(std::int64_t handle,
+                                               const char* uri,
+                                               int line,
+                                               int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return fields.column;
+}
+
+char* __mlang_std_compiler_resolve_symbol_uri(std::int64_t handle,
+                                              const char* uri,
+                                              int line,
+                                              int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(fields.uri);
+}
+
+char* __mlang_std_compiler_resolve_symbol_id(std::int64_t handle,
+                                             const char* uri,
+                                             int line,
+                                             int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(fields.id);
+}
+
+char* __mlang_std_compiler_resolve_symbol_type(std::int64_t handle,
+                                               const char* uri,
+                                               int line,
+                                               int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(fields.type_info);
+}
+
+char* __mlang_std_compiler_resolve_symbol_signature(std::int64_t handle,
+                                                    const char* uri,
+                                                    int line,
+                                                    int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(fields.signature);
+}
+
+int __mlang_std_compiler_resolve_symbol_overload_count(std::int64_t handle,
+                                                       const char* uri,
+                                                       int line,
+                                                       int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return fields.overload_count;
+}
+
+int __mlang_std_compiler_resolve_symbol_from_current_document(std::int64_t handle,
+                                                              const char* uri,
+                                                              int line,
+                                                              int column)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return -1;
+    }
+    ResolvedSymbolFields fields;
+    const int status = resolve_symbol_fields(session, uri, line, column, fields);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return -1;
+    return fields.from_current_document;
 }
 
 int __mlang_std_compiler_document_reference_count(std::int64_t handle,

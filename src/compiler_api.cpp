@@ -1951,6 +1951,174 @@ int __mlang_compiler_document_symbol_id_get(mlang_compiler_session* session,
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 
+int __mlang_compiler_document_symbol_type_get(mlang_compiler_session* session,
+                                              const char* uri,
+                                              int index,
+                                              char* out_type,
+                                              int out_type_capacity,
+                                              int* out_type_length) {
+    if (session == nullptr || uri == nullptr || out_type == nullptr ||
+        out_type_capacity <= 0 || out_type_length == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
+    }
+
+    if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
+        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    }
+
+    const std::string& type_info = current->symbols[static_cast<size_t>(index)].type_info;
+    *out_type_length = static_cast<int>(type_info.size());
+    const size_t copy_len =
+        std::min(static_cast<size_t>(out_type_capacity - 1), type_info.size());
+    if (copy_len > 0) {
+        std::memcpy(out_type, type_info.data(), copy_len);
+    }
+    out_type[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_symbol_signature_get(mlang_compiler_session* session,
+                                                   const char* uri,
+                                                   int index,
+                                                   char* out_signature,
+                                                   int out_signature_capacity,
+                                                   int* out_signature_length) {
+    if (session == nullptr || uri == nullptr || out_signature == nullptr ||
+        out_signature_capacity <= 0 || out_signature_length == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
+    }
+
+    if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
+        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    }
+
+    const std::string& signature = current->symbols[static_cast<size_t>(index)].signature;
+    *out_signature_length = static_cast<int>(signature.size());
+    const size_t copy_len =
+        std::min(static_cast<size_t>(out_signature_capacity - 1), signature.size());
+    if (copy_len > 0) {
+        std::memcpy(out_signature, signature.data(), copy_len);
+    }
+    out_signature[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_resolve_symbol(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             char* out_name,
+                                             int out_name_capacity,
+                                             int* out_name_length,
+                                             int* out_kind,
+                                             int* out_line,
+                                             int* out_column,
+                                             char* out_uri,
+                                             int out_uri_capacity,
+                                             int* out_uri_length,
+                                             char* out_id,
+                                             int out_id_capacity,
+                                             int* out_id_length,
+                                             char* out_type,
+                                             int out_type_capacity,
+                                             int* out_type_length,
+                                             char* out_signature,
+                                             int out_signature_capacity,
+                                             int* out_signature_length,
+                                             int* out_overload_count,
+                                             int* out_from_current_document) {
+    if (session == nullptr || uri == nullptr || out_name == nullptr ||
+        out_name_capacity <= 0 || out_name_length == nullptr || out_kind == nullptr ||
+        out_line == nullptr || out_column == nullptr || out_uri == nullptr ||
+        out_uri_capacity <= 0 || out_uri_length == nullptr || out_id == nullptr ||
+        out_id_capacity <= 0 || out_id_length == nullptr || out_type == nullptr ||
+        out_type_capacity <= 0 || out_type_length == nullptr ||
+        out_signature == nullptr || out_signature_capacity <= 0 ||
+        out_signature_length == nullptr || out_overload_count == nullptr ||
+        out_from_current_document == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
+    }
+
+    const auto resolved =
+        mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    if (!resolved.has_value()) {
+        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    }
+
+    const auto& sym = resolved->symbol;
+    *out_kind = sym.kind;
+    *out_line = sym.line;
+    *out_column = sym.column;
+    *out_overload_count = resolved->overload_count;
+    *out_from_current_document = resolved->from_current_document ? 1 : 0;
+
+    *out_name_length = static_cast<int>(sym.name.size());
+    const size_t name_copy_len =
+        std::min(static_cast<size_t>(out_name_capacity - 1), sym.name.size());
+    if (name_copy_len > 0) {
+        std::memcpy(out_name, sym.name.data(), name_copy_len);
+    }
+    out_name[name_copy_len] = '\0';
+
+    *out_uri_length = static_cast<int>(sym.uri.size());
+    const size_t uri_copy_len =
+        std::min(static_cast<size_t>(out_uri_capacity - 1), sym.uri.size());
+    if (uri_copy_len > 0) {
+        std::memcpy(out_uri, sym.uri.data(), uri_copy_len);
+    }
+    out_uri[uri_copy_len] = '\0';
+
+    *out_id_length = static_cast<int>(sym.stable_id.size());
+    const size_t id_copy_len =
+        std::min(static_cast<size_t>(out_id_capacity - 1), sym.stable_id.size());
+    if (id_copy_len > 0) {
+        std::memcpy(out_id, sym.stable_id.data(), id_copy_len);
+    }
+    out_id[id_copy_len] = '\0';
+
+    *out_type_length = static_cast<int>(sym.type_info.size());
+    const size_t type_copy_len =
+        std::min(static_cast<size_t>(out_type_capacity - 1), sym.type_info.size());
+    if (type_copy_len > 0) {
+        std::memcpy(out_type, sym.type_info.data(), type_copy_len);
+    }
+    out_type[type_copy_len] = '\0';
+
+    *out_signature_length = static_cast<int>(sym.signature.size());
+    const size_t sig_copy_len =
+        std::min(static_cast<size_t>(out_signature_capacity - 1), sym.signature.size());
+    if (sig_copy_len > 0) {
+        std::memcpy(out_signature, sym.signature.data(), sig_copy_len);
+    }
+    out_signature[sig_copy_len] = '\0';
+
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
 int __mlang_compiler_document_definition(mlang_compiler_session* session,
                                          const char* uri,
                                          int line,
