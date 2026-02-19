@@ -3560,6 +3560,7 @@ private:
         std::unordered_set<std::string> bases;
         std::string symbol = ident->text;
         bool queryLooksLikeMethodDecl = false;
+        std::string explicitOwner;
 
         if(info.structs.find(symbol) != info.structs.end())
             bases.insert(symbol);
@@ -3586,7 +3587,10 @@ private:
                 if(auto pos = owner.rfind("::"); pos != std::string::npos)
                     owner = owner.substr(pos + 2);
                 if(!owner.empty())
+                {
                     bases.insert(owner);
+                    explicitOwner = owner;
+                }
             }
             if(std::regex_search(
                    lineText,
@@ -3606,7 +3610,11 @@ private:
             if(mit == st.methods.end())
                 continue;
             if(mit->second.loc.line == *line)
+            {
                 bases.insert(sname);
+                if(explicitOwner.empty())
+                    explicitOwner = sname;
+            }
         }
 
         std::vector<Location> out_impls;
@@ -3649,11 +3657,31 @@ private:
         if(out_impls.empty() && queryLooksLikeMethodDecl)
         {
             // Fallback: method declaration site but derivation chain was not
-            // resolved; return other struct methods with the same name.
+            // resolved. When owner is known, keep this constrained to derived
+            // structs only; otherwise fall back to same-name methods.
             for(const auto& [_, finfo] : files)
             {
                 for(const auto& [sname, st] : finfo.structs)
                 {
+                    if(!explicitOwner.empty())
+                    {
+                        std::string cur = st.baseName;
+                        bool derives = false;
+                        while(!cur.empty())
+                        {
+                            if(cur == explicitOwner)
+                            {
+                                derives = true;
+                                break;
+                            }
+                            auto itCur = finfo.structs.find(cur);
+                            if(itCur == finfo.structs.end())
+                                break;
+                            cur = itCur->second.baseName;
+                        }
+                        if(!derives)
+                            continue;
+                    }
                     auto mit = st.methods.find(symbol);
                     if(mit == st.methods.end() || mit->second.loc.uri.empty())
                         continue;
