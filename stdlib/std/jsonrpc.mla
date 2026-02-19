@@ -408,7 +408,10 @@ pub fn flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: strin
     if recv_r.is_err(): {
         return Err<i32, string>(recv_r.unwrap_err());
     }
-    let n: i64 = recv_r.unwrap();
+    let n: i64 = match recv_r {
+        Ok(v) => v,
+        Err(_e) => -1
+    };
     if n == -2: {
         return Ok<i32, string>(0);
     }
@@ -438,7 +441,11 @@ fn __jsonrpc_reader_thread(inbound_handle: i64, done_handle: i64, frame_capacity
         }
         let cr: Result<i32, string> = register_cancel_from_payload(frame);
         if cr.is_ok(): {
-            if cr.unwrap() == 1: {
+            let c: i32 = match cr {
+                Ok(v) => v,
+                Err(_e) => 0
+            };
+            if c == 1: {
                 continue;
             }
         }
@@ -533,7 +540,10 @@ pub fn run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity:
     if rt_r.is_err(): {
         return Err<i32, string>(rt_r.unwrap_err());
     }
-    let rt: Runtime = rt_r.unwrap();
+    let rt: Runtime = match rt_r {
+        Ok(v) => v,
+        Err(_e) => Runtime { inbound_handle: 0, outbound_handle: 0 }
+    };
 
     let done_handle: i64 = __mlang_std_sync_channel_new(workers + 1);
     if done_handle == 0: {

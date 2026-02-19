@@ -59,7 +59,10 @@ fn ensure_session() -> i32 {
     if sr.is_err(): {
         return 1;
     }
-    let s: Session = sr.unwrap();
+    let s: Session = match sr {
+        Ok(v) => v,
+        Err(_e) => Session { handle: 0 }
+    };
     g_session_handle = s.handle;
     g_session_ready = 1;
     return 0;
@@ -262,7 +265,10 @@ fn handle_definition(payload: string) -> string {
         s.definition(uri, line + 1, col + 1);
     if dr.is_err(): { return "[]"; }
 
-    let d: DefinitionLocation = dr.unwrap();
+    let d: DefinitionLocation = match dr {
+        Ok(v) => v,
+        Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
+    };
     let loc: string = location_json(d.uri, d.line, d.column);
     let out: string = format!("[{}]", loc);
     return out;
@@ -280,7 +286,10 @@ fn handle_references(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err(): { return "[]"; }
-    let n: i32 = cr.unwrap();
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
 
     var out: string = String::new();
     let p0: string = concat(out, "[");
@@ -289,7 +298,10 @@ fn handle_references(payload: string) -> string {
     for i in 0..n {
         let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err(): { continue; }
-        let r: ReferenceLocation = rr.unwrap();
+        let r: ReferenceLocation = match rr {
+            Ok(v) => v,
+            Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
+        };
         let loc: string = location_json(r.uri, r.line, r.column);
         let prev: string = out;
         if i > 0: {
@@ -316,7 +328,10 @@ fn handle_hover(payload: string) -> string {
     let s: Session = current_session();
     let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
     if hr.is_err(): { return "null"; }
-    let h: string = hr.unwrap();
+    let h: string = match hr {
+        Ok(v) => v,
+        Err(_e) => String::new()
+    };
     let esc: string = json_escape(h);
     let out: string = format!(
         "{{\"contents\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
@@ -337,7 +352,10 @@ fn handle_completion(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.completion_count(uri, line + 1, col + 1);
     if cr.is_err(): { return "[]"; }
-    let n: i32 = cr.unwrap();
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
 
     var out: string = String::new();
     let p0: string = concat(out, "[");
@@ -346,7 +364,10 @@ fn handle_completion(payload: string) -> string {
     for i in 0..n {
         let ir: Result<string, string> = s.completion_get(uri, line + 1, col + 1, i);
         if ir.is_err(): { continue; }
-        let label_raw: string = ir.unwrap();
+        let label_raw: string = match ir {
+            Ok(v) => v,
+            Err(_e) => String::new()
+        };
         let label: string = json_escape(label_raw);
         let item: string = format!(
             "{{\"label\":\"{}\",\"kind\":6}}",
@@ -372,13 +393,27 @@ fn handle_document_symbol(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.document_symbol_count(uri);
     if cr.is_err(): { return "[]"; }
-    let n: i32 = cr.unwrap();
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
     var out: string = String::new();
     out = concat(out, "[");
     for i in 0..n {
         let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
         if sr.is_err(): { continue; }
-        let sym: DocumentSymbol = sr.unwrap();
+        let sym: DocumentSymbol = match sr {
+            Ok(v) => v,
+            Err(_e) => DocumentSymbol {
+                id: String::new(),
+                name: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0
+            }
+        };
         let name_e: string = json_escape(sym.name);
         let range: string = range_json(sym.line, sym.column);
         let kind: i32 = symbol_kind_lsp(sym);
@@ -410,7 +445,10 @@ fn handle_document_highlight(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err(): { return "[]"; }
-    let n: i32 = cr.unwrap();
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
 
     var out: string = String::new();
     out = concat(out, "[");
@@ -418,7 +456,10 @@ fn handle_document_highlight(payload: string) -> string {
     for i in 0..n {
         let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err(): { continue; }
-        let r: ReferenceLocation = rr.unwrap();
+        let r: ReferenceLocation = match rr {
+            Ok(v) => v,
+            Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
+        };
         if eq(r.uri, uri) != 1: { continue; }
         let range: string = range_json(r.line, r.column);
         let item: string = format!(
@@ -451,7 +492,21 @@ fn handle_signature_help(payload: string) -> string {
     let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
     var sig: string = String::new();
     if rr.is_ok(): {
-        let sym: ResolvedSymbol = rr.unwrap();
+        let sym: ResolvedSymbol = match rr {
+            Ok(v) => v,
+            Err(_e) => ResolvedSymbol {
+                id: String::new(),
+                name: String::new(),
+                uri: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0,
+                overload_count: 0,
+                from_current_document: 0
+            }
+        };
         sig = sym.signature;
     }
     if len(sig) == 0: {
@@ -468,11 +523,25 @@ fn handle_signature_help(payload: string) -> string {
                             if len(doc_uri) == 0: { continue; }
                             let cr: Result<i32, string> = s.document_symbol_count(doc_uri);
                             if cr.is_err(): { continue; }
-                            let n: i32 = cr.unwrap();
+                            let n: i32 = match cr {
+                                Ok(v) => v,
+                                Err(_e) => 0
+                            };
                             for i in 0..n {
                                 let sr: Result<DocumentSymbol, string> = s.document_symbol_get(doc_uri, i);
                                 if sr.is_err(): { continue; }
-                                let d: DocumentSymbol = sr.unwrap();
+                                let d: DocumentSymbol = match sr {
+                                    Ok(v) => v,
+                                    Err(_e) => DocumentSymbol {
+                                        id: String::new(),
+                                        name: String::new(),
+                                        type_info: String::new(),
+                                        signature: String::new(),
+                                        kind: 0,
+                                        line: 0,
+                                        column: 0
+                                    }
+                                };
                                 if len(d.signature) == 0: { continue; }
                                 if contains(d.signature, pat) == 1: {
                                     sig = d.signature;
@@ -489,7 +558,10 @@ fn handle_signature_help(payload: string) -> string {
     if len(sig) == 0: {
         let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
         if hr.is_err(): { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
-        sig = hr.unwrap();
+        sig = match hr {
+            Ok(v) => v,
+            Err(_e) => String::new()
+        };
     }
     if len(sig) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
     let label: string = json_escape(sig);
@@ -510,7 +582,21 @@ fn handle_prepare_rename(payload: string) -> string {
     let s: Session = current_session();
     let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
     if rr.is_err(): { return "null"; }
-    let sym: ResolvedSymbol = rr.unwrap();
+    let sym: ResolvedSymbol = match rr {
+        Ok(v) => v,
+        Err(_e) => ResolvedSymbol {
+            id: String::new(),
+            name: String::new(),
+            uri: String::new(),
+            type_info: String::new(),
+            signature: String::new(),
+            kind: 0,
+            line: 0,
+            column: 0,
+            overload_count: 0,
+            from_current_document: 0
+        }
+    };
     if len(sym.name) == 0: { return "null"; }
     let start_line: i32 = lsp_line(sym.line);
     let start_col: i32 = lsp_col(sym.column);
@@ -535,46 +621,71 @@ fn handle_rename(payload: string) -> string {
     let s: Session = current_session();
     let safe_r: Result<i32, string> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
     if safe_r.is_err(): { return "null"; }
-    if safe_r.unwrap() != 1: { return "null"; }
+    let safe: i32 = match safe_r {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    if safe != 1: { return "null"; }
 
     let sym_r: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
     if sym_r.is_err(): { return "null"; }
-    let sym: ResolvedSymbol = sym_r.unwrap();
+    let sym: ResolvedSymbol = match sym_r {
+        Ok(v) => v,
+        Err(_e) => ResolvedSymbol {
+            id: String::new(),
+            name: String::new(),
+            uri: String::new(),
+            type_info: String::new(),
+            signature: String::new(),
+            kind: 0,
+            line: 0,
+            column: 0,
+            overload_count: 0,
+            from_current_document: 0
+        }
+    };
     let old_len: i32 = len(sym.name);
     if old_len <= 0: { return "null"; }
 
     let refs_r: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
     if refs_r.is_err(): { return "null"; }
-    let n: i32 = refs_r.unwrap();
+    let n: i32 = match refs_r {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
 
-    var edits: string = String::new();
-    edits = concat(edits, "[");
+    var changes: string = String::new();
+    changes = concat(changes, "[");
     var j: i32 = 0;
     let new_e: string = json_escape(new_name);
     for i in 0..n {
         let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err(): { continue; }
-        let r: ReferenceLocation = rr.unwrap();
-        if eq(r.uri, uri) != 1: { continue; }
+        let r: ReferenceLocation = match rr {
+            Ok(v) => v,
+            Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
+        };
+        if len(r.uri) == 0: { continue; }
         let sl: i32 = lsp_line(r.line);
         let sc: i32 = lsp_col(r.column);
         let ec: i32 = sc + old_len;
-        let edit: string = format!(
-            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}",
-            sl, sc, sl, ec, new_e
+        let uri_e: string = json_escape(r.uri);
+        let change: string = format!(
+            "{{\"textDocument\":{{\"uri\":\"{}\",\"version\":null}},\"edits\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]}}",
+            uri_e, sl, sc, sl, ec, new_e
         );
         if j > 0: {
-            edits = format!("{},{}", edits, edit);
+            changes = format!("{},{}", changes, change);
         } else: {
-            edits = format!("{}{}", edits, edit);
+            changes = format!("{}{}", changes, change);
         }
         j = j + 1;
     }
-    edits = concat(edits, "]");
-    let uri_e: string = json_escape(uri);
+    changes = concat(changes, "]");
+    if j <= 0: { return "null"; }
     return format!(
-        "{{\"changes\":{{\"{}\":{}}}}}",
-        uri_e, edits
+        "{{\"documentChanges\":{}}}",
+        changes
     );
 }
 
@@ -585,14 +696,20 @@ fn handle_diagnostic(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
     if cr.is_err(): { return "{\"kind\":\"full\",\"items\":[]}"; }
-    let n: i32 = cr.unwrap();
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
     var items: string = String::new();
     items = concat(items, "[");
     var j: i32 = 0;
     for i in 0..n {
         let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
         if dr.is_err(): { continue; }
-        let d: SyntaxDiagnostic = dr.unwrap();
+        let d: SyntaxDiagnostic = match dr {
+            Ok(v) => v,
+            Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
+        };
         let msg: string = json_escape(d.message);
         let sl: i32 = lsp_line(d.line);
         let sc: i32 = lsp_col(d.column);
@@ -631,11 +748,25 @@ fn handle_workspace_symbol(payload: string) -> string {
         if len(uri) == 0: { continue; }
         let cr: Result<i32, string> = s.document_symbol_count(uri);
         if cr.is_err(): { continue; }
-        let n: i32 = cr.unwrap();
+        let n: i32 = match cr {
+            Ok(v) => v,
+            Err(_e) => 0
+        };
         for i in 0..n {
             let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
             if sr.is_err(): { continue; }
-            let sym: DocumentSymbol = sr.unwrap();
+            let sym: DocumentSymbol = match sr {
+                Ok(v) => v,
+                Err(_e) => DocumentSymbol {
+                    id: String::new(),
+                    name: String::new(),
+                    type_info: String::new(),
+                    signature: String::new(),
+                    kind: 0,
+                    line: 0,
+                    column: 0
+                }
+            };
             if len(query) > 0: {
                 if contains(sym.name, query) != 1: { continue; }
             }
@@ -666,6 +797,83 @@ fn handle_workspace_symbol(payload: string) -> string {
     }
     out = concat(out, "]");
     return out;
+}
+
+fn semantic_token_type(sym: DocumentSymbol) -> i32 {
+    if contains(sym.signature, "fn ") == 1: {
+        return 2; // function
+    }
+    if contains(sym.signature, "struct ") == 1: {
+        return 5; // type
+    }
+    if contains(sym.signature, "enum ") == 1: {
+        return 5; // type
+    }
+    if contains(sym.signature, "mod ") == 1: {
+        return 0; // keyword
+    }
+    return 4; // variable
+}
+
+fn handle_semantic_tokens_full(payload: string) -> string {
+    if ensure_session() != 0: { return "{\"data\":[]}"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "{\"data\":[]}"; }
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return "{\"data\":[]}"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    if n <= 0: { return "{\"data\":[]}"; }
+
+    var data: string = String::new();
+    data = concat(data, "[");
+    var j: i32 = 0;
+    var prev_line: i32 = 0;
+    var prev_col: i32 = 0;
+
+    for i in 0..n {
+        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sr.is_err(): { continue; }
+        let sym: DocumentSymbol = match sr {
+            Ok(v) => v,
+            Err(_e) => DocumentSymbol {
+                id: String::new(),
+                name: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0
+            }
+        };
+        if len(sym.name) <= 0: { continue; }
+        let line0: i32 = lsp_line(sym.line);
+        let col0: i32 = lsp_col(sym.column);
+        if line0 < 0: { continue; }
+        if col0 < 0: { continue; }
+        let dl: i32 = line0 - prev_line;
+        var ds: i32 = col0;
+        if dl == 0: {
+            ds = col0 - prev_col;
+        }
+        let tlen: i32 = len(sym.name);
+        let ttype: i32 = semantic_token_type(sym);
+        let chunk: string = format!("{},{},{},{},0", dl, ds, tlen, ttype);
+        if j > 0: {
+            data = format!("{},{}", data, chunk);
+        } else: {
+            data = format!("{}{}", data, chunk);
+        }
+        prev_line = line0;
+        prev_col = col0;
+        j = j + 1;
+    }
+
+    data = concat(data, "]");
+    return format!("{{\"data\":{}}}", data);
 }
 
 fn handle_implementation(payload: string) -> string {
@@ -775,7 +983,7 @@ fn dispatch_result_json(payload: string) -> string {
     if eq(method, "textDocument/formatting") == 1: { return "[]"; }
     if eq(method, "textDocument/rangeFormatting") == 1: { return "[]"; }
     if eq(method, "textDocument/codeAction") == 1: { return handle_code_action(payload); }
-    if eq(method, "textDocument/semanticTokens/full") == 1: { return "{\"data\":[]}"; }
+    if eq(method, "textDocument/semanticTokens/full") == 1: { return handle_semantic_tokens_full(payload); }
 
     return "";
 }
