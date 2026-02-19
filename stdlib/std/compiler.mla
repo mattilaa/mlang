@@ -7,6 +7,7 @@
 extern pub fn __mlang_std_compiler_last_error() -> string;
 extern pub fn __mlang_std_compiler_last_status() -> int;
 extern pub fn __mlang_std_compiler_status_name(status: i32) -> string;
+extern pub fn __mlang_std_compiler_version() -> string;
 extern pub fn __mlang_std_compiler_session_create() -> i64;
 extern pub fn __mlang_std_compiler_session_destroy(handle: i64) -> i32;
 extern pub fn __mlang_std_compiler_document_open(handle: i64, uri: string, language_id: string, text: string, version: i32) -> i32;
@@ -111,6 +112,11 @@ pub fn last_status() -> i32 {
 /// @brief Return last backend status name.
 pub fn status_name(status: i32) -> string {
     return __mlang_std_compiler_status_name(status);
+}
+
+/// @brief Return compiler/stdlib build version string.
+pub fn version() -> string {
+    return __mlang_std_compiler_version();
 }
 
 /// @brief Return last backend error/status text.

@@ -457,3 +457,65 @@ fn test_compiler_resolve_struct_member_self_access() -> i32 {
     let _ = s.destroy();
     return 0;
 }
+
+#[test]
+fn test_compiler_definition_struct_member_self_access() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://member_definition_self.mla";
+    let src: string = "struct Counter {\n  var value: i32;\n  fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n};";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "value" in "self.value".
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 34);
+    if dr.is_err(): { return 1; }
+    let d: DefinitionLocation = dr.unwrap();
+
+    if contains(d.name, "value") == 0: { return 1; }
+    if d.line != 2: { return 1; }
+    if d.column <= 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_method_params_and_member_access() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://method_params_member_access.mla";
+    let src: string = "struct Counter {\n  var value: i32;\n  pub fn add(self: Counter, amount: i32) -> Counter {\n    return Counter { value: self.value + amount };\n  }\n};";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "value" in "self.value" should resolve to the struct field.
+    let value_dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 34);
+    if value_dr.is_err(): { return 1; }
+    let value_def: DefinitionLocation = value_dr.unwrap();
+    if contains(value_def.name, "value") == 0: { return 1; }
+    if value_def.line != 2: { return 1; }
+
+    // Cursor on "amount" usage should resolve to parameter declaration.
+    let amount_dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 42);
+    if amount_dr.is_err(): { return 1; }
+    let amount_def: DefinitionLocation = amount_dr.unwrap();
+    if contains(amount_def.name, "amount") == 0: { return 1; }
+    if amount_def.line != 3: { return 1; }
+
+    // Cursor on "self" usage should resolve to method parameter declaration.
+    let self_dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 29);
+    if self_dr.is_err(): { return 1; }
+    let self_def: DefinitionLocation = self_dr.unwrap();
+    if contains(self_def.name, "self") == 0: { return 1; }
+    if self_def.line != 3: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}

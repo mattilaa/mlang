@@ -747,7 +747,38 @@ static void addSemanticSymbolAtLine(DocumentSemantic& out,
         s.column = 0;
     }
     if (s.column <= 0) {
-        s.column = 1;
+        int best_line = -1;
+        int best_depth_delta = 1 << 30;
+        int best_line_delta = 1 << 30;
+        int best_col = 0;
+        for (size_t i = 0; i < lines.size(); ++i) {
+            const int col_here = findIdentifierColumn(lines[i], s.name);
+            if (col_here <= 0) {
+                continue;
+            }
+            int depth_here = 0;
+            if (i < out.line_depths.size()) {
+                depth_here = out.line_depths[i];
+            }
+            const int depth_delta = std::abs(depth_here - depth);
+            const int line_here = static_cast<int>(i) + 1;
+            const int line_delta = (line_no > 1) ? std::abs(line_here - line_no) : 0;
+            if (best_line == -1 || depth_delta < best_depth_delta ||
+                (depth_delta == best_depth_delta && line_delta < best_line_delta) ||
+                (depth_delta == best_depth_delta && line_delta == best_line_delta &&
+                 line_here < best_line)) {
+                best_line = line_here;
+                best_depth_delta = depth_delta;
+                best_line_delta = line_delta;
+                best_col = col_here;
+            }
+        }
+        if (best_line > 0) {
+            s.line = best_line;
+            s.column = best_col;
+        } else {
+            s.column = 1;
+        }
     }
     s.stable_id = stableSymbolId(s);
     out.symbols.push_back(std::move(s));
@@ -892,16 +923,21 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                     }
                     const int method_line = method->line > 0 ? method->line
                                                              : (st->line > 0 ? st->line : 1);
+                    const size_t method_sym_idx = out.symbols.size();
                     addSemanticSymbol(out, lines, method->name, 1, method_line, 1,
                                       typeToString(method->returnType),
                                       methodSignatureFromAst(st->name, method));
+                    int method_decl_line = method_line;
+                    if (out.symbols.size() > method_sym_idx) {
+                        method_decl_line = out.symbols.back().line;
+                    }
                     if (method->parameters) {
                         for (ParameterNode* p : method->parameters->parameters) {
                             if (!p) {
                                 continue;
                             }
-                            addSemanticSymbol(out, lines, p->name, 2, method_line, 2,
-                                              typeToString(p->type), {});
+                            addSemanticSymbolAtLine(out, lines, p->name, 2, method_decl_line, 2,
+                                                    typeToString(p->type), {});
                         }
                     }
                     collectStatementSymbols(out, lines, method->body, 2);
@@ -921,16 +957,21 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                 }
                 const int method_line = method->line > 0 ? method->line
                                                          : (impl->line > 0 ? impl->line : 1);
+                const size_t method_sym_idx = out.symbols.size();
                 addSemanticSymbol(out, lines, method->name, 1, method_line, 1,
                                   typeToString(method->returnType),
                                   methodSignatureFromAst(impl->structName, method));
+                int method_decl_line = method_line;
+                if (out.symbols.size() > method_sym_idx) {
+                    method_decl_line = out.symbols.back().line;
+                }
                 if (method->parameters) {
                     for (ParameterNode* p : method->parameters->parameters) {
                         if (!p) {
                             continue;
                         }
-                        addSemanticSymbol(out, lines, p->name, 2, method_line, 2,
-                                          typeToString(p->type), {});
+                        addSemanticSymbolAtLine(out, lines, p->name, 2, method_decl_line, 2,
+                                                typeToString(p->type), {});
                     }
                 }
                 collectStatementSymbols(out, lines, method->body, 2);
@@ -944,17 +985,22 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                 continue;
             }
             const int fn_line = fn->line > 0 ? fn->line : 1;
+            const size_t fn_sym_idx = out.symbols.size();
             addSemanticSymbol(out, lines, fn->name, 1, fn_line, 0,
                               typeToString(fn->returnType),
                               functionSignatureFromAst(fn));
+            int fn_decl_line = fn_line;
+            if (out.symbols.size() > fn_sym_idx) {
+                fn_decl_line = out.symbols.back().line;
+            }
 
             if (fn->parameters) {
                 for (ParameterNode* p : fn->parameters->parameters) {
                     if (!p) {
                         continue;
                     }
-                    addSemanticSymbol(out, lines, p->name, 2, fn_line, 1,
-                                      typeToString(p->type), {});
+                    addSemanticSymbolAtLine(out, lines, p->name, 2, fn_decl_line, 1,
+                                            typeToString(p->type), {});
                 }
             }
             collectStatementSymbols(out, lines, fn->body, 1);
@@ -1132,17 +1178,63 @@ static int lineDepthAt(const DocumentSemantic& doc, int line) {
     return doc.line_depths.back();
 }
 
+static bool isLikelyVarDeclarationSymbol(const DocumentSemantic& current,
+                                         const SemanticSymbol& sym) {
+    if (sym.kind != 2 || sym.line <= 0) {
+        return false;
+    }
+    const size_t idx = static_cast<size_t>(sym.line - 1);
+    if (idx >= splitLines(current.text).size()) {
+        return false;
+    }
+    const std::vector<std::string_view> lines = splitLines(current.text);
+    const std::string_view line = lines[idx];
+    if (line.find("let " + sym.name) != std::string_view::npos ||
+        line.find("var " + sym.name) != std::string_view::npos ||
+        line.find("for " + sym.name) != std::string_view::npos) {
+        return true;
+    }
+    if (line.find("fn ") != std::string_view::npos) {
+        const int col = findIdentifierColumn(line, sym.name);
+        if (col > 0) {
+            size_t pos = static_cast<size_t>(col - 1) + sym.name.size();
+            while (pos < line.size() &&
+                   std::isspace(static_cast<unsigned char>(line[pos])) != 0) {
+                ++pos;
+            }
+            if (pos < line.size() && line[pos] == ':') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static const SemanticSymbol* findVisibleVarByName(const DocumentSemantic& current,
                                                   std::string_view name,
                                                   int query_line,
                                                   int query_depth) {
     const SemanticSymbol* best_local_var = nullptr;
+    const SemanticSymbol* best_fallback_var = nullptr;
     for (const SemanticSymbol& sym : current.symbols) {
         if (sym.kind != 2 || sym.name != name) {
             continue;
         }
         const int sym_depth = lineDepthAt(current, sym.line);
         if (sym.line > query_line || sym_depth > query_depth) {
+            continue;
+        }
+        const bool is_decl = isLikelyVarDeclarationSymbol(current, sym);
+        if (!is_decl) {
+            const int best_fallback_depth = best_fallback_var
+                                                ? lineDepthAt(current, best_fallback_var->line)
+                                                : -1;
+            if (!best_fallback_var ||
+                sym_depth > best_fallback_depth ||
+                (sym_depth == best_fallback_depth &&
+                 sym.line > best_fallback_var->line)) {
+                best_fallback_var = &sym;
+            }
             continue;
         }
         const int best_depth =
@@ -1153,7 +1245,10 @@ static const SemanticSymbol* findVisibleVarByName(const DocumentSemantic& curren
             best_local_var = &sym;
         }
     }
-    return best_local_var;
+    if (best_local_var) {
+        return best_local_var;
+    }
+    return best_fallback_var;
 }
 
 static std::string ownerTypeFromMethodSignature(std::string_view signature) {

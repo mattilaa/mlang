@@ -1,7 +1,30 @@
 cmake_minimum_required(VERSION 3.20)
 set(MLANG_VERSION_MAJOR 0)
 set(MLANG_VERSION_MINOR 1)
+option(MLANG_AUTO_INCREMENT_BUILD "Auto-increment build number on each CMake configure" ON)
 set(MLANG_VERSION_BUILD 0 CACHE STRING "Build number")
+set(MLANG_BUILD_NUMBER_FILE "${CMAKE_BINARY_DIR}/.mlang_build_number" CACHE FILEPATH
+    "Path to persisted auto-increment build number")
+
+if(MLANG_AUTO_INCREMENT_BUILD)
+    set(_mlang_seed "${MLANG_VERSION_BUILD}")
+    if(EXISTS "${MLANG_BUILD_NUMBER_FILE}")
+        file(READ "${MLANG_BUILD_NUMBER_FILE}" _mlang_build_raw)
+        string(STRIP "${_mlang_build_raw}" _mlang_build_raw)
+        if(_mlang_build_raw MATCHES "^[0-9]+$")
+            set(_mlang_seed "${_mlang_build_raw}")
+        endif()
+    endif()
+
+    if(NOT _mlang_seed MATCHES "^[0-9]+$")
+        set(_mlang_seed 0)
+    endif()
+
+    math(EXPR MLANG_VERSION_BUILD "${_mlang_seed} + 1")
+    set(MLANG_VERSION_BUILD "${MLANG_VERSION_BUILD}" CACHE STRING "Build number" FORCE)
+    file(WRITE "${MLANG_BUILD_NUMBER_FILE}" "${MLANG_VERSION_BUILD}\n")
+endif()
+
 project(MLang VERSION ${MLANG_VERSION_MAJOR}.${MLANG_VERSION_MINOR}.${MLANG_VERSION_BUILD})
 
 set(CMAKE_CXX_STANDARD 17)
@@ -211,6 +234,7 @@ target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mlangd ${llvm_libs})
+target_compile_definitions(mlangd PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
@@ -236,6 +260,7 @@ target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
+target_compile_definitions(mlang_std PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 
 # RapidJSON for std::json backend (header-only).
 include(FetchContent)

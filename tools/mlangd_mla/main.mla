@@ -9,6 +9,7 @@ use std::compiler::ResolvedSymbol;
 use std::compiler::Session;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
+use std::compiler::version;
 use std::jsonrpc::extract_first_change_text;
 use std::jsonrpc::extract_first_diagnostic_end_character;
 use std::jsonrpc::extract_first_diagnostic_end_line;
@@ -60,6 +61,8 @@ use std::strbuf::contains;
 use std::strbuf::eq;
 use std::strbuf::json_escape;
 use std::strbuf::len;
+
+extern fn strcmp(a: str8, b: str8) -> i32;
 
 var g_session_ready: i32 = 0;
 var g_session_handle: i64 = 0;
@@ -1125,7 +1128,11 @@ fn dispatch_result_json(payload: string) -> string {
                 let _ = text_store_upsert(g_text_store_handle, "__mlang_root_uri__", root_uri);
             }
         }
-        return "{\"capabilities\":{\"textDocumentSync\":{\"openClose\":true,\"change\":1},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{\"triggerCharacters\":[\".\",\":\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"renameProvider\":{\"prepareProvider\":true},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{\"interFileDependencies\":false,\"workspaceDiagnostics\":false},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]},\"full\":true}}}";
+        let ver_e: string = json_escape(version());
+        return format!(
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd_mla\",\"version\":\"{}\"}}}}",
+            ver_e
+        );
     }
     if eq(method, "shutdown") == 1: {
         return "null";
@@ -1199,7 +1206,30 @@ fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
     return make_error_response(id, -32601, "Method not found");
 }
 
-fn main() -> i32 {
+fn has_version_flag(args: list<str8>) -> bool {
+    var seen_prog: bool = false;
+    for arg in args {
+        if seen_prog == false: {
+            seen_prog = true;
+            continue;
+        }
+        if strcmp(arg, "--version") == 0: {
+            return true;
+        }
+        if strcmp(arg, "-v") == 0: {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    if argc > 1: {
+        if has_version_flag(args): {
+            println!("mlangd_mla {}", version());
+            return 0;
+        }
+    }
     let r: Result<i32, string> = run_stdio_loop(1, 262144, 262144);
     if r.is_err(): {
         return 1;

@@ -5,6 +5,10 @@
 #include <string>
 #include <unordered_map>
 
+#ifndef MLANG_VERSION
+#define MLANG_VERSION "0.1.0"
+#endif
+
 extern "C" {
 
 struct mlang_compiler_session;
@@ -298,6 +302,11 @@ int __mlang_std_compiler_last_status()
 char* __mlang_std_compiler_status_name(int status)
 {
     return dup_string(status_name(status));
+}
+
+char* __mlang_std_compiler_version()
+{
+    return dup_string(MLANG_VERSION);
 }
 
 std::int64_t __mlang_std_compiler_session_create()
