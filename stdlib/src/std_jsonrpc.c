@@ -22,6 +22,14 @@ typedef struct
 
 static cancel_registry_t g_cancel_registry = {NULL, 0u, 0u};
 
+typedef struct
+{
+    pthread_mutex_t mutex;
+    char** uris;
+    size_t len;
+    size_t cap;
+} uri_store_t;
+
 static void set_error(const char* msg)
 {
     const char* text = msg ? msg : "std::jsonrpc: unknown error";
@@ -430,6 +438,23 @@ static int ensure_cancel_capacity(size_t need)
         return -1;
     g_cancel_registry.ids = mem;
     g_cancel_registry.cap = next;
+    return 0;
+}
+
+static int ensure_uri_store_capacity(uri_store_t* st, size_t need)
+{
+    if(!st)
+        return -1;
+    if(st->cap >= need)
+        return 0;
+    size_t next = st->cap == 0u ? 8u : st->cap;
+    while(next < need)
+        next *= 2u;
+    char** mem = (char**)realloc(st->uris, next * sizeof(char*));
+    if(!mem)
+        return -1;
+    st->uris = mem;
+    st->cap = next;
     return 0;
 }
 
@@ -872,6 +897,157 @@ char* __mlang_std_jsonrpc_extract_first_change_text(const char* payload)
     if(!s)
         return dup_cstr("");
     return s;
+}
+
+char* __mlang_std_jsonrpc_extract_new_name(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    char* s = extract_string_field_in(params, "newName");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+char* __mlang_std_jsonrpc_extract_workspace_query(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return dup_cstr("");
+    char* s = extract_string_field_in(params, "query");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+int64_t __mlang_std_jsonrpc_uri_store_new(void)
+{
+    uri_store_t* st = (uri_store_t*)malloc(sizeof(uri_store_t));
+    if(!st)
+        return 0;
+    st->uris = NULL;
+    st->len = 0u;
+    st->cap = 0u;
+    if(pthread_mutex_init(&st->mutex, NULL) != 0)
+    {
+        free(st);
+        return 0;
+    }
+    return (int64_t)(intptr_t)st;
+}
+
+int __mlang_std_jsonrpc_uri_store_free(int64_t handle)
+{
+    uri_store_t* st = (uri_store_t*)(intptr_t)handle;
+    if(!st)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    for(size_t i = 0; i < st->len; ++i)
+        free(st->uris[i]);
+    free(st->uris);
+    st->uris = NULL;
+    st->len = 0u;
+    st->cap = 0u;
+    (void)pthread_mutex_unlock(&st->mutex);
+    (void)pthread_mutex_destroy(&st->mutex);
+    free(st);
+    return 0;
+}
+
+int __mlang_std_jsonrpc_uri_store_add(int64_t handle, const char* uri)
+{
+    uri_store_t* st = (uri_store_t*)(intptr_t)handle;
+    if(!st || !uri)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    for(size_t i = 0; i < st->len; ++i)
+    {
+        if(strcmp(st->uris[i], uri) == 0)
+        {
+            (void)pthread_mutex_unlock(&st->mutex);
+            return 0;
+        }
+    }
+    if(ensure_uri_store_capacity(st, st->len + 1u) != 0)
+    {
+        (void)pthread_mutex_unlock(&st->mutex);
+        return -1;
+    }
+    char* copy = dup_cstr(uri);
+    if(!copy)
+    {
+        (void)pthread_mutex_unlock(&st->mutex);
+        return -1;
+    }
+    st->uris[st->len++] = copy;
+    (void)pthread_mutex_unlock(&st->mutex);
+    return 0;
+}
+
+int __mlang_std_jsonrpc_uri_store_remove(int64_t handle, const char* uri)
+{
+    uri_store_t* st = (uri_store_t*)(intptr_t)handle;
+    if(!st || !uri)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    for(size_t i = 0; i < st->len; ++i)
+    {
+        if(strcmp(st->uris[i], uri) == 0)
+        {
+            free(st->uris[i]);
+            size_t remain = st->len - i - 1u;
+            if(remain > 0u)
+            {
+                (void)memmove(&st->uris[i], &st->uris[i + 1u],
+                              remain * sizeof(char*));
+            }
+            st->len--;
+            (void)pthread_mutex_unlock(&st->mutex);
+            return 0;
+        }
+    }
+    (void)pthread_mutex_unlock(&st->mutex);
+    return 0;
+}
+
+int64_t __mlang_std_jsonrpc_uri_store_count(int64_t handle)
+{
+    uri_store_t* st = (uri_store_t*)(intptr_t)handle;
+    if(!st)
+        return -1;
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return -1;
+    int64_t out = (int64_t)st->len;
+    (void)pthread_mutex_unlock(&st->mutex);
+    return out;
+}
+
+char* __mlang_std_jsonrpc_uri_store_get(int64_t handle, int64_t index)
+{
+    uri_store_t* st = (uri_store_t*)(intptr_t)handle;
+    if(!st || index < 0)
+        return dup_cstr("");
+    if(pthread_mutex_lock(&st->mutex) != 0)
+        return dup_cstr("");
+    size_t i = (size_t)index;
+    if(i >= st->len)
+    {
+        (void)pthread_mutex_unlock(&st->mutex);
+        return dup_cstr("");
+    }
+    char* out = dup_cstr(st->uris[i]);
+    (void)pthread_mutex_unlock(&st->mutex);
+    if(!out)
+        return dup_cstr("");
+    return out;
 }
 
 __attribute__((weak)) char*

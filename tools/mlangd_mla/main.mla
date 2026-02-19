@@ -7,9 +7,11 @@ use std::compiler::DocumentSymbol;
 use std::compiler::ReferenceLocation;
 use std::compiler::ResolvedSymbol;
 use std::compiler::Session;
+use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
 use std::jsonrpc::extract_first_change_text;
 use std::jsonrpc::extract_method;
+use std::jsonrpc::extract_new_name;
 use std::jsonrpc::extract_position_character;
 use std::jsonrpc::extract_position_line;
 use std::jsonrpc::extract_request_id;
@@ -17,6 +19,12 @@ use std::jsonrpc::extract_text_document_language_id;
 use std::jsonrpc::extract_text_document_text;
 use std::jsonrpc::extract_text_document_uri;
 use std::jsonrpc::extract_text_document_version;
+use std::jsonrpc::extract_workspace_query;
+use std::jsonrpc::uri_store_add;
+use std::jsonrpc::uri_store_count;
+use std::jsonrpc::uri_store_get;
+use std::jsonrpc::uri_store_new;
+use std::jsonrpc::uri_store_remove;
 use std::jsonrpc::run_stdio_loop;
 use std::strbuf::concat;
 use std::strbuf::contains;
@@ -26,6 +34,7 @@ use std::strbuf::len;
 
 var g_session_ready: i32 = 0;
 var g_session_handle: i64 = 0;
+var g_uri_store_handle: i64 = 0;
 
 fn current_session() -> Session {
     return Session { handle: g_session_handle };
@@ -42,6 +51,18 @@ fn ensure_session() -> i32 {
     let s: Session = sr.unwrap();
     g_session_handle = s.handle;
     g_session_ready = 1;
+    return 0;
+}
+
+fn ensure_uri_store() -> i32 {
+    if g_uri_store_handle != 0: {
+        return 0;
+    }
+    let h: i64 = uri_store_new();
+    if h == 0: {
+        return 1;
+    }
+    g_uri_store_handle = h;
     return 0;
 }
 
@@ -116,6 +137,9 @@ fn handle_did_open(payload: string) -> i32 {
     if ensure_session() != 0: {
         return 1;
     }
+    if ensure_uri_store() != 0: {
+        return 1;
+    }
     let uri: string = extract_text_document_uri(payload);
     let lang: string = extract_text_document_language_id(payload);
     let text: string = extract_text_document_text(payload);
@@ -125,6 +149,9 @@ fn handle_did_open(payload: string) -> i32 {
     let s: Session = current_session();
     let r: Result<i32, string> = s.open_document(uri, lang, text, version);
     if r.is_err(): {
+        return 1;
+    }
+    if uri_store_add(g_uri_store_handle, uri) != 0: {
         return 1;
     }
     return 0;
@@ -156,6 +183,9 @@ fn handle_did_close(payload: string) -> i32 {
     let r: Result<i32, string> = s.close_document(uri);
     if r.is_err(): {
         return 1;
+    }
+    if g_uri_store_handle != 0: {
+        let _ = uri_store_remove(g_uri_store_handle, uri);
     }
     return 0;
 }
@@ -387,6 +417,165 @@ fn handle_signature_help(payload: string) -> string {
     );
 }
 
+fn handle_prepare_rename(payload: string) -> string {
+    if ensure_session() != 0: { return "null"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "null"; }
+    if line < 0: { return "null"; }
+    if col < 0: { return "null"; }
+    let s: Session = current_session();
+    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    if rr.is_err(): { return "null"; }
+    let sym: ResolvedSymbol = rr.unwrap();
+    if len(sym.name) == 0: { return "null"; }
+    let start_line: i32 = lsp_line(sym.line);
+    let start_col: i32 = lsp_col(sym.column);
+    let end_col: i32 = start_col + len(sym.name);
+    return format!(
+        "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}}}",
+        start_line, start_col, start_line, end_col
+    );
+}
+
+fn handle_rename(payload: string) -> string {
+    if ensure_session() != 0: { return "null"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    let new_name: string = extract_new_name(payload);
+    if len(uri) == 0: { return "null"; }
+    if line < 0: { return "null"; }
+    if col < 0: { return "null"; }
+    if len(new_name) == 0: { return "null"; }
+
+    let s: Session = current_session();
+    let safe_r: Result<i32, string> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
+    if safe_r.is_err(): { return "null"; }
+    if safe_r.unwrap() != 1: { return "null"; }
+
+    let sym_r: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    if sym_r.is_err(): { return "null"; }
+    let sym: ResolvedSymbol = sym_r.unwrap();
+    let old_len: i32 = len(sym.name);
+    if old_len <= 0: { return "null"; }
+
+    let refs_r: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    if refs_r.is_err(): { return "null"; }
+    let n: i32 = refs_r.unwrap();
+
+    var edits: string = String::new();
+    edits = concat(edits, "[");
+    var j: i32 = 0;
+    let new_e: string = json_escape(new_name);
+    for i in 0..n {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        if rr.is_err(): { continue; }
+        let r: ReferenceLocation = rr.unwrap();
+        if eq(r.uri, uri) != 1: { continue; }
+        let sl: i32 = lsp_line(r.line);
+        let sc: i32 = lsp_col(r.column);
+        let ec: i32 = sc + old_len;
+        let edit: string = format!(
+            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}",
+            sl, sc, sl, ec, new_e
+        );
+        if j > 0: {
+            edits = format!("{},{}", edits, edit);
+        } else: {
+            edits = format!("{}{}", edits, edit);
+        }
+        j = j + 1;
+    }
+    edits = concat(edits, "]");
+    let uri_e: string = json_escape(uri);
+    return format!(
+        "{{\"changes\":{{\"{}\":{}}}}}",
+        uri_e, edits
+    );
+}
+
+fn handle_diagnostic(payload: string) -> string {
+    if ensure_session() != 0: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let n: i32 = cr.unwrap();
+    var items: string = String::new();
+    items = concat(items, "[");
+    var j: i32 = 0;
+    for i in 0..n {
+        let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
+        if dr.is_err(): { continue; }
+        let d: SyntaxDiagnostic = dr.unwrap();
+        let msg: string = json_escape(d.message);
+        let sl: i32 = lsp_line(d.line);
+        let sc: i32 = lsp_col(d.column);
+        let item: string = format!(
+            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
+            sl, sc, sl, sc, msg
+        );
+        if j > 0: {
+            items = format!("{},{}", items, item);
+        } else: {
+            items = format!("{}{}", items, item);
+        }
+        j = j + 1;
+    }
+    items = concat(items, "]");
+    return format!(
+        "{{\"kind\":\"full\",\"items\":{}}}",
+        items
+    );
+}
+
+fn handle_workspace_symbol(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    if ensure_uri_store() != 0: { return "[]"; }
+    let query: string = extract_workspace_query(payload);
+    let uri_count: i64 = uri_store_count(g_uri_store_handle);
+    if uri_count <= 0: { return "[]"; }
+
+    let s: Session = current_session();
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    for ui in 0..uri_count {
+        let uri: string = uri_store_get(g_uri_store_handle, ui);
+        if len(uri) == 0: { continue; }
+        let cr: Result<i32, string> = s.document_symbol_count(uri);
+        if cr.is_err(): { continue; }
+        let n: i32 = cr.unwrap();
+        for i in 0..n {
+            let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+            if sr.is_err(): { continue; }
+            let sym: DocumentSymbol = sr.unwrap();
+            if len(query) > 0: {
+                if contains(sym.name, query) != 1: { continue; }
+            }
+            let kind: i32 = symbol_kind_lsp(sym);
+            let name_e: string = json_escape(sym.name);
+            let loc: string = location_json(uri, sym.line, sym.column);
+            let item: string = format!(
+                "{{\"name\":\"{}\",\"kind\":{},\"location\":{}}}",
+                name_e, kind, loc
+            );
+            if j > 0: {
+                out = format!("{},{}", out, item);
+            } else: {
+                out = format!("{}{}", out, item);
+            }
+            j = j + 1;
+        }
+    }
+    out = concat(out, "]");
+    return out;
+}
+
 fn dispatch_result_json(payload: string) -> string {
     let method: string = extract_method(payload);
 
@@ -430,16 +619,24 @@ fn dispatch_result_json(payload: string) -> string {
     if eq(method, "textDocument/signatureHelp") == 1: {
         return handle_signature_help(payload);
     }
+    if eq(method, "textDocument/prepareRename") == 1: {
+        return handle_prepare_rename(payload);
+    }
+    if eq(method, "textDocument/rename") == 1: {
+        return handle_rename(payload);
+    }
+    if eq(method, "textDocument/diagnostic") == 1: {
+        return handle_diagnostic(payload);
+    }
+    if eq(method, "workspace/symbol") == 1: {
+        return handle_workspace_symbol(payload);
+    }
 
     if eq(method, "textDocument/implementation") == 1: { return "[]"; }
-    if eq(method, "textDocument/prepareRename") == 1: { return "null"; }
-    if eq(method, "textDocument/rename") == 1: { return "null"; }
     if eq(method, "textDocument/formatting") == 1: { return "[]"; }
     if eq(method, "textDocument/rangeFormatting") == 1: { return "[]"; }
     if eq(method, "textDocument/codeAction") == 1: { return "[]"; }
-    if eq(method, "textDocument/diagnostic") == 1: { return "{\"kind\":\"full\",\"items\":[]}"; }
     if eq(method, "textDocument/semanticTokens/full") == 1: { return "{\"data\":[]}"; }
-    if eq(method, "workspace/symbol") == 1: { return "[]"; }
 
     return "";
 }

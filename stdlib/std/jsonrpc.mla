@@ -33,6 +33,14 @@ extern pub fn __mlang_std_jsonrpc_extract_text_document_version(payload: string)
 extern pub fn __mlang_std_jsonrpc_extract_text_document_language_id(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_new_name(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_workspace_query(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_uri_store_new() -> i64;
+extern pub fn __mlang_std_jsonrpc_uri_store_free(handle: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_uri_store_add(handle: i64, uri: string) -> int;
+extern pub fn __mlang_std_jsonrpc_uri_store_remove(handle: i64, uri: string) -> int;
+extern pub fn __mlang_std_jsonrpc_uri_store_count(handle: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_uri_store_get(handle: i64, index: i64) -> string;
 extern pub fn __mlang_std_sync_channel_new(capacity: i64) -> i64;
 extern pub fn __mlang_std_sync_channel_send(channel_handle: i64, s: string) -> int;
 extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
@@ -263,6 +271,46 @@ pub fn extract_text_document_text(payload: string) -> string {
 /// @brief Extract `params.contentChanges[0].text` from payload (didChange).
 pub fn extract_first_change_text(payload: string) -> string {
     return __mlang_std_jsonrpc_extract_first_change_text(payload);
+}
+
+/// @brief Extract `params.newName` from payload (rename).
+pub fn extract_new_name(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_new_name(payload);
+}
+
+/// @brief Extract `params.query` from payload (workspace/symbol).
+pub fn extract_workspace_query(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_workspace_query(payload);
+}
+
+/// @brief Create URI store for tracking open documents.
+pub fn uri_store_new() -> i64 {
+    return __mlang_std_jsonrpc_uri_store_new();
+}
+
+/// @brief Free URI store.
+pub fn uri_store_free(handle: i64) -> i32 {
+    return __mlang_std_jsonrpc_uri_store_free(handle);
+}
+
+/// @brief Add URI into store (deduplicated).
+pub fn uri_store_add(handle: i64, uri: string) -> i32 {
+    return __mlang_std_jsonrpc_uri_store_add(handle, uri);
+}
+
+/// @brief Remove URI from store.
+pub fn uri_store_remove(handle: i64, uri: string) -> i32 {
+    return __mlang_std_jsonrpc_uri_store_remove(handle, uri);
+}
+
+/// @brief Return number of stored URIs.
+pub fn uri_store_count(handle: i64) -> i64 {
+    return __mlang_std_jsonrpc_uri_store_count(handle);
+}
+
+/// @brief Get URI at index or empty string.
+pub fn uri_store_get(handle: i64, index: i64) -> string {
+    return __mlang_std_jsonrpc_uri_store_get(handle, index);
 }
 
 /// @brief Parse a JSON-RPC payload and register `$/cancelRequest` ids.
