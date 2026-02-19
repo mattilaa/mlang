@@ -27,6 +27,69 @@
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
 
+extern "C" {
+struct mlang_compiler_session;
+int __mlang_compiler_session_create(mlang_compiler_session** out_session);
+int __mlang_compiler_session_destroy(mlang_compiler_session* session);
+int __mlang_compiler_document_open(mlang_compiler_session* session,
+                                   const char* uri,
+                                   const char* language_id,
+                                   const char* text,
+                                   int version);
+int __mlang_compiler_document_change(mlang_compiler_session* session,
+                                     const char* uri,
+                                     const char* text,
+                                     int version);
+int __mlang_compiler_document_close(mlang_compiler_session* session,
+                                    const char* uri);
+int __mlang_compiler_document_resolve_symbol(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             char* out_name,
+                                             int out_name_capacity,
+                                             int* out_name_length,
+                                             int* out_kind,
+                                             int* out_line,
+                                             int* out_column,
+                                             char* out_uri,
+                                             int out_uri_capacity,
+                                             int* out_uri_length,
+                                             char* out_id,
+                                             int out_id_capacity,
+                                             int* out_id_length,
+                                             char* out_type,
+                                             int out_type_capacity,
+                                             int* out_type_length,
+                                             char* out_signature,
+                                             int out_signature_capacity,
+                                             int* out_signature_length,
+                                             int* out_overload_count,
+                                             int* out_from_current_document);
+int __mlang_compiler_document_reference_count(mlang_compiler_session* session,
+                                              const char* uri,
+                                              int line,
+                                              int column,
+                                              int* out_count);
+int __mlang_compiler_document_reference_get(mlang_compiler_session* session,
+                                            const char* uri,
+                                            int line,
+                                            int column,
+                                            int index,
+                                            char* out_ref_uri,
+                                            int out_ref_uri_capacity,
+                                            int* out_ref_uri_length,
+                                            int* out_ref_line,
+                                            int* out_ref_column);
+int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
+                                             const char* uri,
+                                             int line,
+                                             int column,
+                                             const char* new_name,
+                                             int* out_is_safe);
+int __mlang_compiler_semantic_cache_clear(mlang_compiler_session* session);
+}
+
 struct Location
 {
     std::string uri;
@@ -142,7 +205,7 @@ static std::string uri_to_path(const std::string& uri)
 {
     std::string out = uri;
     const std::string prefix = "file://";
-    if(out.rfind(prefix, 0) == 0)
+    if(out.starts_with(prefix))
         out = out.substr(prefix.size());
     std::string decoded;
     decoded.reserve(out.size());
@@ -375,6 +438,13 @@ static std::string type_name(TypeNode* node)
 class LspServer
 {
 public:
+    ~LspServer()
+    {
+        if(compilerSession)
+            __mlang_compiler_session_destroy(compilerSession);
+        compilerSession = nullptr;
+    }
+
     void run()
     {
         for(;;)
@@ -414,9 +484,16 @@ private:
     std::unordered_map<std::string, std::string> cTypeMap;
     std::unordered_map<std::string, Location> cSymbolCache;
     std::unordered_map<std::string, std::string> diagnosticResultIds;
+    std::unordered_map<std::string, int> compilerDocVersions;
+    std::unordered_set<std::string> openDocumentUris;
+    mlang_compiler_session* compilerSession = nullptr;
     bool cHeadersLoaded = false;
     bool cHeaderDebug = false;
     std::string cHeaderDebugLog;
+    int compilerMutationCount = 0;
+    int compilerCacheClearInterval = 256;
+    std::uint64_t telemetryCacheClears = 0;
+    std::uint64_t telemetryEvictions = 0;
 
     llvm::json::Value make_position_value(int line, int character)
     {
@@ -453,6 +530,209 @@ private:
         while(end > start && is_space((unsigned char)s[end - 1]))
             --end;
         return s.substr(start, end - start);
+    }
+
+    bool ensure_compiler_session()
+    {
+        if(compilerSession)
+            return true;
+        return __mlang_compiler_session_create(&compilerSession) == 0 &&
+               compilerSession != nullptr;
+    }
+
+    static bool is_file_uri(std::string_view uri)
+    {
+        return uri.rfind("file://", 0) == 0;
+    }
+
+    bool is_path_under_root(const std::string& path) const
+    {
+        if(rootPath.empty() || path.empty())
+            return false;
+        std::error_code ec;
+        std::filesystem::path rp = std::filesystem::weakly_canonical(rootPath, ec);
+        if(ec)
+            return false;
+        std::filesystem::path p = std::filesystem::weakly_canonical(path, ec);
+        if(ec)
+            return false;
+
+        const auto rootItEnd = rp.end();
+        auto rootIt = rp.begin();
+        auto pathIt = p.begin();
+        for(; rootIt != rootItEnd; ++rootIt, ++pathIt)
+        {
+            if(pathIt == p.end() || *pathIt != *rootIt)
+                return false;
+        }
+        return true;
+    }
+
+    void maybe_clear_compiler_semantic_cache()
+    {
+        if(!compilerSession)
+            return;
+        if(compilerCacheClearInterval <= 0)
+            return;
+        if((compilerMutationCount % compilerCacheClearInterval) != 0)
+            return;
+        if(__mlang_compiler_semantic_cache_clear(compilerSession) == 0)
+        {
+            ++telemetryCacheClears;
+            log_runtime_telemetry("cache_clear");
+        }
+    }
+
+    void mark_compiler_mutation()
+    {
+        ++compilerMutationCount;
+        maybe_clear_compiler_semantic_cache();
+    }
+
+    void prune_closed_document_indexes(const std::string& uri)
+    {
+        auto it = files.find(uri);
+        if(it == files.end())
+            return;
+
+        const std::string path = uri_to_path(uri);
+        bool keepIndexed = false;
+        if(is_file_uri(uri))
+        {
+            std::error_code ec;
+            if(!path.empty() && std::filesystem::exists(path, ec) && !ec &&
+               is_path_under_root(path))
+            {
+                keepIndexed = true;
+            }
+        }
+
+        if(keepIndexed)
+            return;
+
+        workspaceGraph.removeDocument(uri);
+        files.erase(it);
+        ++telemetryEvictions;
+        log_runtime_telemetry("evict_closed_doc", uri);
+    }
+
+    void compiler_open_or_update(const std::string& uri,
+                                 const std::string& text,
+                                 std::optional<int> explicitVersion)
+    {
+        if(!ensure_compiler_session())
+            return;
+
+        int version = explicitVersion.has_value() ? *explicitVersion : 1;
+        auto it = compilerDocVersions.find(uri);
+        if(it == compilerDocVersions.end())
+        {
+            if(version <= 0)
+                version = 1;
+            int status = __mlang_compiler_document_open(
+                compilerSession, uri.c_str(), "mlang", text.c_str(), version);
+            if(status == 0)
+            {
+                compilerDocVersions[uri] = version;
+                mark_compiler_mutation();
+            }
+            return;
+        }
+
+        if(version <= it->second)
+            version = it->second + 1;
+        int status = __mlang_compiler_document_change(
+            compilerSession, uri.c_str(), text.c_str(), version);
+        if(status == 0)
+        {
+            compilerDocVersions[uri] = version;
+            mark_compiler_mutation();
+        }
+    }
+
+    void compiler_close(const std::string& uri)
+    {
+        if(!compilerSession)
+            return;
+        __mlang_compiler_document_close(compilerSession, uri.c_str());
+        compilerDocVersions.erase(uri);
+        mark_compiler_mutation();
+    }
+
+    struct ResolvedSemanticSymbol
+    {
+        std::string name;
+        std::string uri;
+        std::string id;
+        std::string typeInfo;
+        std::string signature;
+        int kind = 0;
+        int line0 = 0;
+        int column0 = 0;
+        int overloadCount = 1;
+        bool fromCurrentDocument = false;
+    };
+
+    static const char* semantic_kind_name(int kind)
+    {
+        switch(kind)
+        {
+        case 1:
+            return "Function";
+        case 2:
+            return "Variable";
+        case 3:
+            return "Struct";
+        case 4:
+            return "Module";
+        default:
+            return "Symbol";
+        }
+    }
+
+    std::optional<ResolvedSemanticSymbol> resolve_semantic_symbol(
+        const std::string& uri, int line0, int column0)
+    {
+        if(!compilerSession)
+            return std::nullopt;
+
+        char nameBuf[4096];
+        char uriBuf[4096];
+        char idBuf[4096];
+        char typeBuf[4096];
+        char sigBuf[4096];
+        int nameLen = 0;
+        int uriLen = 0;
+        int idLen = 0;
+        int typeLen = 0;
+        int sigLen = 0;
+        int kind = 0;
+        int line1 = 0;
+        int col1 = 0;
+        int overloadCount = 1;
+        int fromCurrentDoc = 0;
+
+        int st = __mlang_compiler_document_resolve_symbol(
+            compilerSession, uri.c_str(), line0 + 1, column0 + 1, nameBuf,
+            sizeof(nameBuf), &nameLen, &kind, &line1, &col1, uriBuf,
+            sizeof(uriBuf), &uriLen, idBuf, sizeof(idBuf), &idLen, typeBuf,
+            sizeof(typeBuf), &typeLen, sigBuf, sizeof(sigBuf), &sigLen,
+            &overloadCount, &fromCurrentDoc);
+        if(st != 0)
+            return std::nullopt;
+
+        ResolvedSemanticSymbol out;
+        out.name = nameBuf;
+        out.uri = uriBuf;
+        out.id = idBuf;
+        out.typeInfo = typeBuf;
+        out.signature = sigBuf;
+        out.kind = kind;
+        out.line0 = std::max(0, line1 - 1);
+        out.column0 = std::max(0, col1 - 1);
+        out.overloadCount = std::max(1, overloadCount);
+        out.fromCurrentDocument = fromCurrentDoc != 0;
+        return out;
     }
 
     void load_c_header_config()
@@ -505,7 +785,7 @@ private:
             line = trim(line);
             if(line.empty() || line[0] == '#')
                 continue;
-            if(line.rfind("-I", 0) == 0)
+            if(line.starts_with("-I"))
             {
                 std::string dir = trim(line.substr(2));
                 if(!dir.empty())
@@ -515,21 +795,21 @@ private:
             const std::string includePrefix = "include_dir:";
             const std::string headerPrefix = "header:";
             const std::string typeMapPrefix = "type_map:";
-            if(line.rfind(includePrefix, 0) == 0)
+            if(line.starts_with(includePrefix))
             {
                 std::string dir = trim(line.substr(includePrefix.size()));
                 if(!dir.empty())
                     cIncludeDirs.push_back(dir);
                 continue;
             }
-            if(line.rfind(headerPrefix, 0) == 0)
+            if(line.starts_with(headerPrefix))
             {
                 std::string hdr = trim(line.substr(headerPrefix.size()));
                 if(!hdr.empty())
                     cHeaderNames.push_back(hdr);
                 continue;
             }
-            if(line.rfind(typeMapPrefix, 0) == 0)
+            if(line.starts_with(typeMapPrefix))
             {
                 std::string maps = trim(line.substr(typeMapPrefix.size()));
                 size_t start = 0;
@@ -741,6 +1021,23 @@ private:
             f << msg << "\n";
     }
 
+    void log_runtime_telemetry(const char* event,
+                               const std::string& uri = std::string()) const
+    {
+        if(!cHeaderDebug)
+            return;
+        std::string msg = "[mlangd-telemetry] event=";
+        msg += event ? event : "unknown";
+        msg += " active_docs=" + std::to_string(openDocumentUris.size());
+        msg += " indexed_files=" + std::to_string(files.size());
+        msg += " compiler_docs=" + std::to_string(compilerDocVersions.size());
+        msg += " cache_clears=" + std::to_string(telemetryCacheClears);
+        msg += " evictions=" + std::to_string(telemetryEvictions);
+        if(!uri.empty())
+            msg += " uri=" + uri;
+        debug_log(msg);
+    }
+
     std::optional<Location> find_c_symbol_location(const std::string& name)
     {
         if(!cHeadersLoaded)
@@ -840,7 +1137,7 @@ private:
                 line.pop_back();
             if(line.empty())
                 break;
-            if(line.rfind("Content-Length:", 0) == 0)
+            if(line.starts_with("Content-Length:"))
             {
                 contentLength = std::stoul(line.substr(15));
             }
@@ -989,6 +1286,247 @@ private:
         return out;
     }
 
+    static std::string trim_ws(std::string_view s)
+    {
+        size_t start = 0;
+        while(start < s.size() &&
+              std::isspace(static_cast<unsigned char>(s[start])) != 0)
+            ++start;
+        size_t end = s.size();
+        while(end > start &&
+              std::isspace(static_cast<unsigned char>(s[end - 1])) != 0)
+            --end;
+        return std::string(s.substr(start, end - start));
+    }
+
+    static std::string unquote(std::string_view v)
+    {
+        std::string t = trim_ws(v);
+        if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
+            return t.substr(1, t.size() - 2);
+        return t;
+    }
+
+    static std::vector<std::string> split_toml_array(std::string_view input)
+    {
+        std::vector<std::string> out;
+        std::string cur;
+        bool inQuotes = false;
+        for(char c : input)
+        {
+            if(c == '"')
+            {
+                inQuotes = !inQuotes;
+                cur.push_back(c);
+                continue;
+            }
+            if(c == ',' && !inQuotes)
+            {
+                out.push_back(trim_ws(cur));
+                cur.clear();
+                continue;
+            }
+            cur.push_back(c);
+        }
+        if(!cur.empty())
+            out.push_back(trim_ws(cur));
+        return out;
+    }
+
+    static std::optional<std::filesystem::path>
+    find_manifest_path(std::filesystem::path startDir)
+    {
+        std::error_code ec;
+        startDir = std::filesystem::absolute(startDir, ec);
+        if(ec)
+            return std::nullopt;
+
+        std::filesystem::path cur = startDir;
+        while(!cur.empty())
+        {
+            const auto candidate = cur / "mlang.toml";
+            if(std::filesystem::exists(candidate))
+                return candidate;
+            const auto parent = cur.parent_path();
+            if(parent == cur)
+                break;
+            cur = parent;
+        }
+        return std::nullopt;
+    }
+
+    static std::vector<std::string>
+    parse_module_paths_from_toml(const std::filesystem::path& manifestPath)
+    {
+        std::ifstream in(manifestPath, std::ios::binary);
+        if(!in)
+            return {};
+
+        std::vector<std::string> out;
+        std::string line;
+        std::string section;
+        while(std::getline(in, line))
+        {
+            std::string t = trim_ws(line);
+            if(t.empty() || t[0] == '#')
+                continue;
+            if(t.front() == '[' && t.back() == ']')
+            {
+                section = t.substr(1, t.size() - 2);
+                continue;
+            }
+            if(section != "package" && section != "tool.mlang")
+                continue;
+            const size_t eq = t.find('=');
+            if(eq == std::string::npos)
+                continue;
+            const std::string key = trim_ws(t.substr(0, eq));
+            if(key != "module_paths")
+                continue;
+            const std::string value = trim_ws(t.substr(eq + 1));
+            if(value.empty())
+                continue;
+            if(value.front() == '[' && value.back() == ']')
+            {
+                std::string inner = value.substr(1, value.size() - 2);
+                for(const auto& part : split_toml_array(inner))
+                {
+                    std::string v = unquote(part);
+                    if(!v.empty())
+                        out.push_back(v);
+                }
+            }
+            else
+            {
+                std::string v = unquote(value);
+                if(!v.empty())
+                    out.push_back(v);
+            }
+        }
+        return out;
+    }
+
+    std::vector<std::string> default_stdlib_paths() const
+    {
+        std::vector<std::string> paths;
+        if(const char* env = std::getenv("MLANG_STDLIB_PATH"))
+            paths.emplace_back(env);
+        if(!rootPath.empty())
+            paths.emplace_back((std::filesystem::path(rootPath) / "stdlib").string());
+        if(const char* xdg = std::getenv("XDG_DATA_HOME"))
+            paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
+        if(const char* home = std::getenv("HOME"))
+            paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
+        paths.emplace_back("/usr/local/share/mlang/stdlib");
+        paths.emplace_back("/usr/share/mlang/stdlib");
+        return paths;
+    }
+
+    std::vector<std::string> module_search_paths_for_file(const FileInfo& info) const
+    {
+        namespace fs = std::filesystem;
+        std::vector<std::string> out;
+        std::unordered_set<std::string> seen;
+
+        std::error_code ec;
+        fs::path base = fs::path(info.path).parent_path();
+        if(base.empty())
+            base = ".";
+        fs::path baseAbs = fs::absolute(base, ec);
+        std::string baseStr = (!ec ? baseAbs.lexically_normal().string() : base.string());
+        if(seen.insert(baseStr).second)
+            out.push_back(baseStr);
+
+        if(const auto manifest = find_manifest_path(base); manifest.has_value())
+        {
+            std::vector<std::string> mps = parse_module_paths_from_toml(*manifest);
+            const fs::path manifestDir = manifest->parent_path();
+            for(auto& mp : mps)
+            {
+                fs::path p = fs::path(mp);
+                if(!p.is_absolute())
+                    p = manifestDir / p;
+                std::error_code pec;
+                fs::path abs = fs::absolute(p, pec);
+                std::string v = (!pec ? abs.lexically_normal().string() : p.string());
+                if(seen.insert(v).second)
+                    out.push_back(v);
+            }
+        }
+
+        for(const auto& p : default_stdlib_paths())
+        {
+            if(!p.empty() && seen.insert(p).second)
+                out.push_back(p);
+        }
+
+        if(!rootPath.empty())
+        {
+            std::string rp = fs::path(rootPath).lexically_normal().string();
+            if(seen.insert(rp).second)
+                out.push_back(rp);
+        }
+        return out;
+    }
+
+    std::vector<std::filesystem::path>
+    search_base_paths_for_lookup(const FileInfo* contextFile) const
+    {
+        std::vector<std::filesystem::path> out;
+        std::unordered_set<std::string> seen;
+
+        auto add_path = [&](std::filesystem::path p) {
+            if(p.empty())
+                return;
+            std::error_code ec;
+            p = std::filesystem::absolute(p, ec);
+            if(ec)
+                return;
+            p = p.lexically_normal();
+            std::string key = p.string();
+            if(seen.insert(key).second)
+                out.push_back(p);
+        };
+
+        if(contextFile && !contextFile->path.empty())
+        {
+            for(const auto& root : module_search_paths_for_file(*contextFile))
+                add_path(root);
+        }
+
+        for(const auto& [_, info] : files)
+        {
+            if(info.path.empty())
+                continue;
+            for(const auto& root : module_search_paths_for_file(info))
+                add_path(root);
+        }
+
+        if(!rootPath.empty())
+            add_path(rootPath);
+        add_path(std::filesystem::current_path());
+        return out;
+    }
+
+    static std::string module_name_to_rel_dir(const std::string& moduleName)
+    {
+        std::string rel;
+        rel.reserve(moduleName.size() + 2);
+        for(size_t i = 0; i < moduleName.size();)
+        {
+            if(i + 1 < moduleName.size() && moduleName[i] == ':' &&
+               moduleName[i + 1] == ':')
+            {
+                rel.push_back('/');
+                i += 2;
+                continue;
+            }
+            rel.push_back(moduleName[i]);
+            ++i;
+        }
+        return rel;
+    }
+
     void update_workspace_graph_for_file(const FileInfo& info)
     {
         mlang::ide::WorkspaceDocumentNode node;
@@ -1011,13 +1549,21 @@ private:
                                     const std::string& moduleName) const
     {
         std::filesystem::path base(baseDir);
-        std::filesystem::path direct = base / (moduleName + ".mla");
+        std::string relDir = module_name_to_rel_dir(moduleName);
+        std::filesystem::path direct = base / (relDir + ".mla");
         std::error_code ec;
         if(std::filesystem::exists(direct, ec) && !ec)
             return direct.string();
-        std::filesystem::path dirMod = base / moduleName / "mod.mla";
+        std::filesystem::path dirMod = base / relDir / "mod.mla";
         if(std::filesystem::exists(dirMod, ec) && !ec)
             return dirMod.string();
+        // Backward compatible single-segment fallback.
+        std::filesystem::path legacyDirect = base / (moduleName + ".mla");
+        if(std::filesystem::exists(legacyDirect, ec) && !ec)
+            return legacyDirect.string();
+        std::filesystem::path legacyDirMod = base / moduleName / "mod.mla";
+        if(std::filesystem::exists(legacyDirMod, ec) && !ec)
+            return legacyDirMod.string();
         return {};
     }
 
@@ -1035,14 +1581,12 @@ private:
             if(!providerPath.empty())
                 return providerPath;
         }
-
-        std::filesystem::path base =
-            std::filesystem::path(info.path).parent_path();
-        std::string path = resolve_module_path(base.string(), moduleName);
-        if(!path.empty())
-            return path;
-        if(!rootPath.empty())
-            return resolve_module_path(rootPath, moduleName);
+        for(const auto& root : module_search_paths_for_file(info))
+        {
+            std::string path = resolve_module_path(root, moduleName);
+            if(!path.empty())
+                return path;
+        }
         return {};
     }
 
@@ -1113,44 +1657,11 @@ private:
             return std::nullopt;
         };
 
-        if(!rootPath.empty())
+        for(const auto& base : search_base_paths_for_lookup(contextFile))
         {
-            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+            if(auto p = try_from_base(base))
                 return p;
         }
-
-        if(contextFile && !contextFile->path.empty())
-        {
-            std::filesystem::path dir = std::filesystem::path(contextFile->path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        for(const auto& [_, info] : files)
-        {
-            if(info.path.empty())
-                continue;
-            std::filesystem::path dir = std::filesystem::path(info.path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        if(auto p = try_from_base(std::filesystem::current_path()))
-            return p;
 
         return std::nullopt;
     }
@@ -1214,57 +1725,32 @@ private:
     std::optional<std::filesystem::path>
     resolve_std_strbuf_module_path(const FileInfo* contextFile) const
     {
-        auto try_from_base = [](const std::filesystem::path& base)
+        auto try_from_base = [&](const std::filesystem::path& base)
             -> std::optional<std::filesystem::path> {
             if(base.empty())
                 return std::nullopt;
             std::error_code ec;
-            std::filesystem::path cand = base / "stdlib" / "std" / "strbuf.mla";
-            if(std::filesystem::exists(cand, ec) && !ec)
-                return cand;
+            std::filesystem::path cand1 = base / "stdlib" / "std" / "strbuf.mla";
+            if(std::filesystem::exists(cand1, ec) && !ec)
+                return cand1;
+            std::filesystem::path cand2 = base / "std" / "strbuf.mla";
+            if(std::filesystem::exists(cand2, ec) && !ec)
+                return cand2;
+            std::string resolved = resolve_module_path(base.string(), "std::strbuf");
+            if(!resolved.empty())
+            {
+                std::filesystem::path cand3 = resolved;
+                if(std::filesystem::exists(cand3, ec) && !ec)
+                    return cand3;
+            }
             return std::nullopt;
         };
 
-        if(!rootPath.empty())
+        for(const auto& base : search_base_paths_for_lookup(contextFile))
         {
-            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+            if(auto p = try_from_base(base))
                 return p;
         }
-
-        if(contextFile && !contextFile->path.empty())
-        {
-            std::filesystem::path dir =
-                std::filesystem::path(contextFile->path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        for(const auto& [_, info] : files)
-        {
-            if(info.path.empty())
-                continue;
-            std::filesystem::path dir =
-                std::filesystem::path(info.path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        if(auto p = try_from_base(std::filesystem::current_path()))
-            return p;
 
         return std::nullopt;
     }
@@ -1525,6 +2011,7 @@ private:
             llvm::json::Object caps;
             caps["textDocumentSync"] = llvm::json::Value(std::move(sync));
             caps["definitionProvider"] = true;
+            caps["implementationProvider"] = true;
             caps["referencesProvider"] = true;
             caps["hoverProvider"] = true;
             caps["documentHighlightProvider"] = true;
@@ -1546,6 +2033,7 @@ private:
             caps["documentSymbolProvider"] = true;
             caps["workspaceSymbolProvider"] = true;
             caps["documentFormattingProvider"] = true;
+            caps["documentRangeFormattingProvider"] = true;
             caps["codeActionProvider"] = true;
             llvm::json::Object diagnosticProvider;
             diagnosticProvider["interFileDependencies"] = false;
@@ -1580,6 +2068,10 @@ private:
         {
             send_response(id, handle_definition(params));
         }
+        else if(method == "textDocument/implementation")
+        {
+            send_response(id, handle_implementation(params));
+        }
         else if(method == "textDocument/references")
         {
             send_response(id, handle_references(params));
@@ -1613,6 +2105,10 @@ private:
             send_response(id, handle_document_symbols(params));
         }
         else if(method == "textDocument/formatting")
+        {
+            send_response(id, handle_formatting(params));
+        }
+        else if(method == "textDocument/rangeFormatting")
         {
             send_response(id, handle_formatting(params));
         }
@@ -1658,8 +2154,13 @@ private:
             int version = -1;
             if(auto v = textDoc->getInteger("version"))
                 version = static_cast<int>(*v);
+            openDocumentUris.insert(uriStr);
             incrementalCompiler.openDocument(uriStr, path, text->str(), version);
+            compiler_open_or_update(
+                uriStr, text->str(),
+                version >= 0 ? std::optional<int>(version + 1) : std::nullopt);
             reindex_incremental_document(uriStr);
+            log_runtime_telemetry("didOpen", uriStr);
         }
         else if(method == "textDocument/didChange")
         {
@@ -1672,6 +2173,7 @@ private:
                 return;
 
             std::string uriStr = uri->str();
+            openDocumentUris.insert(uriStr);
             if(!incrementalCompiler.getDocument(uriStr))
             {
                 std::string path = uri_to_path(uriStr);
@@ -1723,7 +2225,15 @@ private:
             if(incrementalCompiler.applyChanges(uriStr, incrementalChanges,
                                                 version))
             {
+                if(auto doc = incrementalCompiler.getDocument(uriStr))
+                {
+                    compiler_open_or_update(
+                        uriStr, doc->text,
+                        version >= 0 ? std::optional<int>(version + 1)
+                                     : std::nullopt);
+                }
                 reindex_incremental_document(uriStr);
+                log_runtime_telemetry("didChange", uriStr);
             }
             else
             {
@@ -1731,7 +2241,15 @@ private:
                 if(last)
                 {
                     if(auto fullText = last->getString("text"))
+                    {
+                        compiler_open_or_update(
+                            uriStr, fullText->str(),
+                            version >= 0 ? std::optional<int>(version + 1)
+                                         : std::nullopt);
                         index_document(uriStr, fullText->str());
+                        log_runtime_telemetry("didChange_fallback_full_reindex",
+                                              uriStr);
+                    }
                 }
             }
         }
@@ -1753,7 +2271,9 @@ private:
                 incrementalCompiler.setDocumentText(uriStr, text);
             else
                 incrementalCompiler.openDocument(uriStr, path, text);
+            compiler_open_or_update(uriStr, text, std::nullopt);
             reindex_incremental_document(uriStr);
+            log_runtime_telemetry("didSave", uriStr);
         }
         else if(method == "textDocument/didClose")
         {
@@ -1764,7 +2284,11 @@ private:
             if(!uri)
                 return;
             std::string uriStr = uri->str();
+            openDocumentUris.erase(uriStr);
             incrementalCompiler.closeDocument(uriStr);
+            compiler_close(uriStr);
+            prune_closed_document_indexes(uriStr);
+            log_runtime_telemetry("didClose", uriStr);
         }
     }
 
@@ -1781,6 +2305,13 @@ private:
         if(root.empty())
             root = std::filesystem::current_path().string();
         rootPath = root;
+        if(const char* env = std::getenv("MLANGD_COMPILER_CACHE_CLEAR_INTERVAL"))
+        {
+            int v = std::atoi(env);
+            if(v > 0)
+                compilerCacheClearInterval = v;
+        }
+        ensure_compiler_session();
         scan_workspace(rootPath);
 
         std::filesystem::path docsPath =
@@ -1859,6 +2390,7 @@ private:
     {
         std::string path = uri_to_path(uri);
         incrementalCompiler.openDocument(uri, path, text);
+        compiler_open_or_update(uri, text, std::nullopt);
         reindex_incremental_document(uri);
     }
 
@@ -2414,7 +2946,7 @@ private:
                     continue;
                 break;
             }
-            if(t.rfind("//", 0) != 0)
+            if(!t.starts_with("//"))
                 break;
             chunks.push_back(trim(t.substr(2)));
         }
@@ -2598,6 +3130,39 @@ private:
         auto ident = mlang::ide::identifierAt(info.lines, queryPos);
         if(!ident)
             return nullptr;
+
+        if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                              static_cast<int>(*character)))
+        {
+            std::string md;
+            md += "**";
+            md += semantic_kind_name(sem->kind);
+            md += "** `";
+            md += sem->name;
+            md += "`";
+            if(!sem->typeInfo.empty())
+                md += "\n\nType: `" + sem->typeInfo + "`";
+            if(!sem->signature.empty())
+                md += "\n\n```mlang\n" + sem->signature + "\n```";
+            if(sem->overloadCount > 1)
+                md += "\n\nOverloads: `" + std::to_string(sem->overloadCount) + "`";
+            md += "\n\nStable ID: `" + sem->id + "`";
+            md += "\n\nDefined at: `" + sem->uri + ":" +
+                  std::to_string(sem->line0 + 1) + ":" +
+                  std::to_string(sem->column0 + 1) + "`";
+
+            llvm::json::Object contents;
+            contents["kind"] = "markdown";
+            contents["value"] = md;
+
+            llvm::json::Object out;
+            out["contents"] = llvm::json::Value(std::move(contents));
+            out["range"] = make_range_value(static_cast<int>(*line),
+                                            ident->startCharacter,
+                                            static_cast<int>(*line),
+                                            ident->endCharacter);
+            return llvm::json::Value(std::move(out));
+        }
 
         if(auto local = hover_entry_for_symbol(info, ident->text,
                                                static_cast<int>(*line)))
@@ -2804,6 +3369,16 @@ private:
             }
         }
 
+        if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                              static_cast<int>(*character)))
+        {
+            Location loc;
+            loc.uri = sem->uri;
+            loc.line = sem->line0;
+            loc.character = sem->column0;
+            return location_to_json(loc);
+        }
+
         if(!modulePrefix.empty())
         {
             auto enumIt = info.enums.find(modulePrefix);
@@ -2954,10 +3529,197 @@ private:
         return nullptr;
     }
 
+    llvm::json::Value handle_implementation(llvm::json::Object* params)
+    {
+        if(!params)
+            return llvm::json::Array{};
+        auto* textDoc = params->getObject("textDocument");
+        auto* pos = params->getObject("position");
+        if(!textDoc || !pos)
+            return llvm::json::Array{};
+        auto uri = textDoc->getString("uri");
+        auto line = pos->getInteger("line");
+        auto character = pos->getInteger("character");
+        if(!uri || !line || !character)
+            return llvm::json::Array{};
+
+        auto it = files.find(uri->str());
+        if(it == files.end())
+            return llvm::json::Array{};
+        auto& info = it->second;
+        if(*line < 0 || *line >= (int)info.lines.size())
+            return llvm::json::Array{};
+
+        mlang::Position p;
+        p.line = static_cast<int>(*line);
+        p.character = static_cast<int>(*character);
+        auto ident = mlang::ide::identifierAt(info.lines, p);
+        if(!ident)
+            return llvm::json::Array{};
+
+        std::unordered_set<std::string> bases;
+        std::string symbol = ident->text;
+        bool queryLooksLikeMethodDecl = false;
+        std::string explicitOwner;
+
+        if(info.structs.find(symbol) != info.structs.end())
+            bases.insert(symbol);
+
+        if(auto fn = find_enclosing_function(info, static_cast<int>(*line)))
+        {
+            if(!fn->ownerStruct.empty())
+                bases.insert(fn->ownerStruct);
+        }
+
+        // Prefer direct owner inference at the query site for methods.
+        // This avoids ambiguous owner mapping when multiple structs define
+        // methods with the same name (e.g. Base::run and Derived::run).
+        if(*line >= 0 && *line < (int)info.lines.size())
+        {
+            const std::string& lineText = info.lines[(size_t)*line];
+            std::smatch sigMatch;
+            if(std::regex_search(
+                   lineText, sigMatch,
+                   std::regex("\\bfn\\s+" + symbol +
+                              "\\s*\\([^\\)]*\\bself\\s*:\\s*([A-Za-z_][A-Za-z0-9_:]*)")))
+            {
+                std::string owner = sigMatch[1].str();
+                if(auto pos = owner.rfind("::"); pos != std::string::npos)
+                    owner = owner.substr(pos + 2);
+                if(!owner.empty())
+                {
+                    bases.insert(owner);
+                    explicitOwner = owner;
+                }
+            }
+            if(std::regex_search(
+                   lineText,
+                   std::regex("\\bfn\\s+" + symbol + "\\s*\\(")))
+            {
+                queryLooksLikeMethodDecl = true;
+            }
+        }
+
+        for(const auto& [sname, st] : info.structs)
+        {
+            if(st.startLine < 0 || st.endLine < 0)
+                continue;
+            if(*line < st.startLine || *line > st.endLine)
+                continue;
+            auto mit = st.methods.find(symbol);
+            if(mit == st.methods.end())
+                continue;
+            if(mit->second.loc.line == *line)
+            {
+                bases.insert(sname);
+                if(explicitOwner.empty())
+                    explicitOwner = sname;
+            }
+        }
+
+        std::vector<Location> out_impls;
+        auto gather_impl_for_base = [&](const std::string& baseName) {
+            for(const auto& [_, finfo] : files)
+            {
+                for(const auto& [sname, st] : finfo.structs)
+                {
+                    if(sname == baseName)
+                        continue;
+                    std::string cur = st.baseName;
+                    bool derives = false;
+                    while(!cur.empty())
+                    {
+                        if(cur == baseName)
+                        {
+                            derives = true;
+                            break;
+                        }
+                        auto itCur = finfo.structs.find(cur);
+                        if(itCur == finfo.structs.end())
+                            break;
+                        cur = itCur->second.baseName;
+                    }
+                    if(!derives)
+                        continue;
+
+                    auto mit = st.methods.find(symbol);
+                    if(mit == st.methods.end() || mit->second.loc.uri.empty())
+                        continue;
+                    out_impls.push_back(mit->second.loc);
+                }
+            }
+        };
+
+        std::unordered_set<std::string> seen;
+        for(const auto& base : bases)
+            gather_impl_for_base(base);
+
+        if(out_impls.empty() && queryLooksLikeMethodDecl)
+        {
+            // Fallback: method declaration site but derivation chain was not
+            // resolved. When owner is known, keep this constrained to derived
+            // structs only; otherwise fall back to same-name methods.
+            for(const auto& [_, finfo] : files)
+            {
+                for(const auto& [sname, st] : finfo.structs)
+                {
+                    if(!explicitOwner.empty())
+                    {
+                        std::string cur = st.baseName;
+                        bool derives = false;
+                        while(!cur.empty())
+                        {
+                            if(cur == explicitOwner)
+                            {
+                                derives = true;
+                                break;
+                            }
+                            auto itCur = finfo.structs.find(cur);
+                            if(itCur == finfo.structs.end())
+                                break;
+                            cur = itCur->second.baseName;
+                        }
+                        if(!derives)
+                            continue;
+                    }
+                    auto mit = st.methods.find(symbol);
+                    if(mit == st.methods.end() || mit->second.loc.uri.empty())
+                        continue;
+                    const auto& loc = mit->second.loc;
+                    if(loc.uri == info.uri && loc.line == *line)
+                        continue;
+                    out_impls.push_back(loc);
+                }
+            }
+        }
+
+        if(out_impls.empty())
+            return handle_definition(params);
+
+        llvm::json::Array out;
+        for(const auto& loc : out_impls)
+        {
+            std::string key =
+                loc.uri + ":" + std::to_string(loc.line) + ":" + std::to_string(loc.character);
+            if(!seen.insert(key).second)
+                continue;
+            llvm::json::Object obj;
+            obj["uri"] = loc.uri;
+            obj["range"] = make_range_value(loc.line, loc.character,
+                                            loc.character + 1);
+            out.push_back(llvm::json::Value(std::move(obj)));
+        }
+        if(out.empty())
+            return handle_definition(params);
+        return llvm::json::Value(std::move(out));
+    }
+
     struct SignatureHelpContext
     {
         std::string callee;
         int activeParameter = 0;
+        int calleeStartCharacter = 0;
+        int calleeEndCharacter = 0;
     };
 
     std::optional<SignatureHelpContext>
@@ -3069,6 +3831,8 @@ private:
         SignatureHelpContext ctx;
         ctx.callee = callee;
         ctx.activeParameter = activeParam;
+        ctx.calleeStartCharacter = j + 1;
+        ctx.calleeEndCharacter = end + 1;
         return ctx;
     }
 
@@ -3253,6 +4017,57 @@ private:
         std::string calleeName = unqualified_callee_name(ctx->callee);
         if(calleeName.empty())
             return nullptr;
+
+        if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                              ctx->calleeStartCharacter))
+        {
+            std::string label = sem->signature;
+            if(label.empty())
+            {
+                label = "fn " + sem->name + "(...)";
+                if(!sem->typeInfo.empty())
+                    label += " -> " + sem->typeInfo;
+            }
+
+            llvm::json::Object sig;
+            sig["label"] = label;
+            auto paramsLabels = signature_parameter_labels(label);
+            if(!paramsLabels.empty())
+            {
+                llvm::json::Array p;
+                for(const auto& item : paramsLabels)
+                {
+                    llvm::json::Object pi;
+                    pi["label"] = item;
+                    p.push_back(llvm::json::Value(std::move(pi)));
+                }
+                sig["parameters"] = llvm::json::Value(std::move(p));
+            }
+
+            std::string doc = "kind: ";
+            doc += semantic_kind_name(sem->kind);
+            if(!sem->typeInfo.empty())
+                doc += "\nreturn/type: " + sem->typeInfo;
+            if(sem->overloadCount > 1)
+                doc += "\noverloads: " + std::to_string(sem->overloadCount);
+            llvm::json::Object docObj;
+            docObj["kind"] = "markdown";
+            docObj["value"] = doc;
+            sig["documentation"] = llvm::json::Value(std::move(docObj));
+
+            llvm::json::Array sigArray;
+            sigArray.push_back(llvm::json::Value(std::move(sig)));
+
+            int activeParam = std::max(0, ctx->activeParameter);
+            if(!paramsLabels.empty())
+                activeParam = std::min(activeParam, (int)paramsLabels.size() - 1);
+
+            llvm::json::Object out;
+            out["signatures"] = llvm::json::Value(std::move(sigArray));
+            out["activeSignature"] = 0;
+            out["activeParameter"] = activeParam;
+            return llvm::json::Value(std::move(out));
+        }
 
         std::vector<llvm::json::Object> signatures;
         std::unordered_set<std::string> seen;
@@ -3581,6 +4396,43 @@ private:
         if(!uri || !line || !character)
             return llvm::json::Array{};
 
+        if(compilerSession)
+        {
+            if(auto sem = resolve_semantic_symbol(uri->str(), static_cast<int>(*line),
+                                                  static_cast<int>(*character)))
+            {
+                int count = 0;
+                int st = __mlang_compiler_document_reference_count(
+                    compilerSession, sem->uri.c_str(), sem->line0 + 1,
+                    sem->column0 + 1, &count);
+                if(st == 0)
+                {
+                    llvm::json::Array out;
+                    for(int i = 0; i < count; ++i)
+                    {
+                        char refUriBuf[4096];
+                        int refUriLen = 0;
+                        int refLine1 = 0;
+                        int refCol1 = 0;
+                        int gst = __mlang_compiler_document_reference_get(
+                            compilerSession, sem->uri.c_str(), sem->line0 + 1,
+                            sem->column0 + 1, i, refUriBuf, sizeof(refUriBuf),
+                            &refUriLen, &refLine1, &refCol1);
+                        if(gst != 0)
+                            continue;
+
+                        int l0 = std::max(0, refLine1 - 1);
+                        int c0 = std::max(0, refCol1 - 1);
+                        llvm::json::Object loc;
+                        loc["uri"] = std::string(refUriBuf);
+                        loc["range"] = make_range_value(l0, c0, l0, c0 + 1);
+                        out.push_back(llvm::json::Value(std::move(loc)));
+                    }
+                    return llvm::json::Value(std::move(out));
+                }
+            }
+        }
+
         auto it = files.find(uri->str());
         if(it == files.end())
             return llvm::json::Array{};
@@ -3753,6 +4605,16 @@ private:
         if(!ident)
             return nullptr;
 
+        if(compilerSession)
+        {
+            int isSafe = 0;
+            int st = __mlang_compiler_document_rename_is_safe(
+                compilerSession, uri->str().c_str(), (int)*line + 1,
+                (int)*character + 1, newNameStr.c_str(), &isSafe);
+            if(st != 0 || isSafe == 0)
+                return nullptr;
+        }
+
         llvm::json::Object changes;
         for(auto& [furi, finfo] : files)
         {
@@ -3895,9 +4757,9 @@ private:
             std::string t = trim(info.lines[(size_t)line]);
             if(t.empty())
                 continue;
-            if(t.rfind("//", 0) == 0)
+            if(t.starts_with("//"))
                 continue;
-            if(t.rfind("mod ", 0) == 0 || t.rfind("use ", 0) == 0)
+            if(t.starts_with("mod ") || t.starts_with("use "))
                 continue;
             break;
         }
@@ -3966,6 +4828,75 @@ private:
         if(fit == files.end())
             return llvm::json::Value(std::move(out));
         FileInfo& current = fit->second;
+
+        bool wantQuickFix = true;
+        bool wantOrganizeImports = true;
+        if(auto* only = context->getArray("only"))
+        {
+            wantQuickFix = false;
+            wantOrganizeImports = false;
+            for(const auto& entry : *only)
+            {
+                auto kind = entry.getAsString();
+                if(!kind)
+                    continue;
+                if(kind->str() == "quickfix")
+                    wantQuickFix = true;
+                if(kind->str() == "source.organizeImports")
+                    wantOrganizeImports = true;
+            }
+        }
+
+        if(wantOrganizeImports)
+        {
+            int firstUse = -1;
+            int lastUse = -1;
+            std::vector<std::string> imports;
+            for(int i = 0; i < (int)current.lines.size(); ++i)
+            {
+                std::string t = trim(current.lines[(size_t)i]);
+                if(!t.starts_with("use "))
+                    continue;
+                if(firstUse < 0)
+                    firstUse = i;
+                lastUse = i;
+                imports.push_back(t);
+            }
+            if(firstUse >= 0 && lastUse >= firstUse)
+            {
+                std::sort(imports.begin(), imports.end());
+                imports.erase(std::unique(imports.begin(), imports.end()),
+                              imports.end());
+                std::string newText;
+                for(const auto& imp : imports)
+                    newText += imp + "\n";
+
+                std::string oldText;
+                for(int i = firstUse; i <= lastUse; ++i)
+                    oldText += current.lines[(size_t)i] + "\n";
+
+                if(newText != oldText)
+                {
+                    llvm::json::Object action;
+                    action["title"] = "Organize imports";
+                    action["kind"] = "source.organizeImports";
+                    llvm::json::Object editObj;
+                    llvm::json::Object changes;
+                    llvm::json::Array edits;
+                    llvm::json::Object edit;
+                    edit["range"] = make_range_value(firstUse, 0, lastUse + 1, 0);
+                    edit["newText"] = newText;
+                    edits.push_back(llvm::json::Value(std::move(edit)));
+                    changes[uri->str()] = llvm::json::Value(std::move(edits));
+                    editObj["changes"] = llvm::json::Value(std::move(changes));
+                    action["edit"] = llvm::json::Value(std::move(editObj));
+                    out.push_back(llvm::json::Value(std::move(action)));
+                }
+            }
+        }
+
+        if(!wantQuickFix)
+            return llvm::json::Value(std::move(out));
 
         for(const auto& d : *diagnostics)
         {
@@ -4405,6 +5336,35 @@ private:
             if(auto commentPos = line.find("//"); commentPos != std::string::npos)
                 scanLimit = commentPos;
 
+            auto push_whole_word = [&](std::string_view word, int type) {
+                if(word.empty())
+                    return;
+                size_t pos = 0;
+                while(true)
+                {
+                    pos = line.find(word, pos);
+                    if(pos == std::string::npos)
+                        break;
+                    size_t end = pos + word.size();
+                    if(end > scanLimit)
+                        break;
+                    bool leftOk =
+                        pos == 0 ||
+                        !(std::isalnum((unsigned char)line[pos - 1]) || line[pos - 1] == '_');
+                    bool rightOk =
+                        end >= line.size() ||
+                        !(std::isalnum((unsigned char)line[end]) || line[end] == '_');
+                    if(leftOk && rightOk)
+                        push_tok(lineNo, (int)pos, (int)word.size(), type);
+                    pos = end;
+                }
+            };
+
+            for(const auto& kw : mlang::constants::kLspKeywords)
+                push_whole_word(kw, 0);
+            for(const auto& ty : mlang::constants::kRuntimeBuiltinTypes)
+                push_whole_word(ty, 5);
+
             auto add_attr_keyword =
                 [&](const char* attrText, int keywordOffset, int keywordLen) {
                     size_t attrLen = std::strlen(attrText);
@@ -4598,6 +5558,29 @@ private:
             return {};
         tmpFile << info.text;
         tmpFile.close();
+
+        if(const char* formatterHook = std::getenv("MLANGD_FORMATTER"))
+        {
+            std::string cmd = formatterHook;
+            const std::string placeholder = "{file}";
+            if(auto pos = cmd.find(placeholder); pos != std::string::npos)
+            {
+                cmd.replace(pos, placeholder.size(), "\"" + tmpPath.string() + "\"");
+            }
+            else
+            {
+                cmd += " \"" + tmpPath.string() + "\"";
+            }
+            int result = std::system(cmd.c_str());
+            if(result != 0)
+            {
+                std::filesystem::remove(tmpPath);
+                return {};
+            }
+            std::string formatted = read_file(tmpPath.string());
+            std::filesystem::remove(tmpPath);
+            return formatted;
+        }
 
         std::filesystem::path script =
             std::filesystem::path(rootPath) / "tools" / "mlang_format" /

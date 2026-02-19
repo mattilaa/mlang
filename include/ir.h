@@ -42,6 +42,7 @@ private:
     llvm::IRBuilder<>& builder;
     std::unique_ptr<llvm::Module>& module;
     std::map<std::string, llvm::Value*> namedValues;
+    std::map<std::string, llvm::Value*> globalNamedValues;
     std::map<std::string, llvm::Type*> structTypes;
     // Store struct member info: struct name -> vector of (member name, member
     // type)
@@ -50,7 +51,9 @@ private:
     // Track struct inheritance: derived struct name -> base struct name
     std::map<std::string, std::string> structBases;
     std::set<std::string> constantVariables;
+    std::set<std::string> globalConstantVariables;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
+    std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
     // Track element types for generic lists and maps
     std::map<std::string, TypeNode*> listElementTypes;
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
@@ -60,6 +63,7 @@ private:
     std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
     // Track struct variable types (var name -> struct type name)
     std::map<std::string, std::string> structVariableTypes;
+    std::map<std::string, std::string> globalStructVariableTypes;
     // Track enum variants: enum name -> variant name -> value
     std::map<std::string, std::map<std::string, int64_t>> enumValues;
     std::set<std::string> debugStructs;
@@ -173,6 +177,8 @@ private:
     llvm::Function* generateFunctionDeclaration(FunctionDefNode* node);
     llvm::Function* generateFunctionDefinition(FunctionDefNode* node);
     void generateStructDefinition(StructDefNode* node);
+    void generateGlobalVarDeclaration(VarDeclNode* node);
+    void seedFunctionScopeWithGlobals();
 
     void generateStatement(StatementNode* node);
     void generateReturnStatement(ReturnNode* node);

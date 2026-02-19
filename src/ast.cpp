@@ -50,6 +50,10 @@ ASTNode* create_program(ASTNode* top_level_list)
             }
             program->enumList->addEnum(enumDef);
         }
+        else if(auto* varDecl = dynamic_cast<VarDeclNode*>(item))
+        {
+            program->globalVars.push_back(varDecl);
+        }
     }
 
     return program;
@@ -220,6 +224,9 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
         break;
     case DIVIDE:
         opType = BinaryOpNode::OP_DIVIDE;
+        break;
+    case MODULO:
+        opType = BinaryOpNode::OP_MODULO;
         break;
     case LT:
         opType = BinaryOpNode::OP_LT;
@@ -1268,7 +1275,10 @@ std::string LetDeclNode::toString() const
 
 std::string VarDeclNode::toString() const
 {
-    std::string result = "var " + name;
+    std::string result;
+    if(isStaticStorage)
+        result += "static ";
+    result += "var " + name;
     if(type)
         result += ": " + type->toString();
     if(initExpr)

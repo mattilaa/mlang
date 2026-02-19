@@ -1,0 +1,29 @@
+mod std::io;
+mod std::jsonrpc;
+mod std::strbuf;
+
+use std::io::stderr;
+use std::io::writeln;
+use std::jsonrpc::run_stdio_loop;
+use std::strbuf::contains;
+
+/// Application-provided dispatcher hook consumed by std::jsonrpc runtime.
+fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
+    if contains(request_payload, "\"method\":\"initialize\"") == 1: {
+        return "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{}}}";
+    }
+    if contains(request_payload, "\"method\":\"shutdown\"") == 1: {
+        return "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}";
+    }
+    return "";
+}
+
+/// Manual stdio server demo. Not part of automated robot run.
+fn main() -> i32 {
+    let r: Result<i32, string> = run_stdio_loop(4, 262144, 262144);
+    if r.is_err(): {
+        writeln(stderr(), r.unwrap_err());
+        return 1;
+    }
+    return 0;
+}

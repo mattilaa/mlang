@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
+Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
                         [--unit-tests] [--robot-tests] [--tests] [--no-tests]
                         [--install-if-tests-pass]
 
@@ -13,6 +13,7 @@ Options:
   --install          Install after build (default)
   --no-install       Skip install step
   --prefix <path>    Install prefix (default: $HOME/.local)
+  --bin-dir <path>   Binary install dir (default: <prefix>/bin, i.e. $HOME/.local/bin)
   --system           Install to /usr/local (implies --sudo)
   --sudo             Use sudo for install step
   --build-dir <dir>  Build directory (default: build)
@@ -38,6 +39,7 @@ USAGE
 
 install_after_build=true
 prefix="${HOME}/.local"
+bin_dir=""
 use_sudo=false
 build_dir="build"
 generator="Ninja"
@@ -67,6 +69,14 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       prefix="$2"
+      shift 2
+      ;;
+    --bin-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --bin-dir requires a value" >&2
+        exit 1
+      fi
+      bin_dir="$2"
       shift 2
       ;;
     --system)
@@ -128,10 +138,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$bin_dir" ]]; then
+  bin_dir="${prefix}/bin"
+fi
+
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 if $build_all; then
   cmake --build "$build_dir" --target mlang mlangd mlang_std
 fi
+
+# Build mlangd_mla with the freshly built compiler/runtime.
+"$build_dir/mlang" "tools/mlangd_mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd_mla"
 
 if $run_unit_tests; then
   ./tests/run_tests.sh --output-on-failure
@@ -151,6 +168,18 @@ if $install_after_build; then
   else
     cmake --install "$build_dir" --prefix "$prefix"
   fi
+
+  # Install mlangd_mla binary explicitly to the selected bin dir.
+  if $use_sudo; then
+    sudo mkdir -p "$bin_dir"
+    sudo cp -f "$build_dir/mlangd_mla" "$bin_dir/mlangd_mla"
+    sudo chmod +x "$bin_dir/mlangd_mla"
+  else
+    mkdir -p "$bin_dir"
+    cp -f "$build_dir/mlangd_mla" "$bin_dir/mlangd_mla"
+    chmod +x "$bin_dir/mlangd_mla"
+  fi
+  echo "installed mlangd_mla: $bin_dir/mlangd_mla"
 
   stdlib_dir="$prefix/share/mlang/stdlib"
   stdlib_lib_dir="$prefix/lib"

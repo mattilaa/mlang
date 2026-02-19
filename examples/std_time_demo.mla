@@ -1,0 +1,24 @@
+mod std::time;
+
+use std::time::Timer;
+use std::time::now_ms;
+use std::time::sleep_ms;
+
+fn main() -> i32 {
+    let t1: i64 = now_ms();
+    sleep_ms(25);
+    let t2: i64 = now_ms();
+    println!("slept delta={}ms", t2 - t1);
+
+    let tr: Result<Timer, string> = Timer::after(40);
+    if tr.is_err(): {
+        println!("timer create failed");
+        return 1;
+    }
+    let timer: Timer = tr.unwrap();
+    println!("timer remaining={}ms", timer.remaining_ms());
+    timer.wait();
+    println!("timer elapsed={}", timer.elapsed());
+    timer.close();
+    return 0;
+}

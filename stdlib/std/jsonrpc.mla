@@ -1,0 +1,687 @@
+/// \file jsonrpc.mla
+/// \brief JSON-RPC/LSP stdio transport runtime helpers for MLang (std::jsonrpc).
+///
+/// Features:
+/// - Content-Length framed stdio read/write
+/// - Timeout-aware framed reads
+/// - Thread-safe cancellation registry (for `$/cancelRequest`)
+/// - Channel-backed runtime queues for concurrent request/response pipelines
+
+/// \cond INTERNAL_IMPORTS
+extern pub fn __mlang_std_strbuf_contains(s: string, needle: string) -> int;
+extern pub fn __mlang_std_strbuf_len(s: string) -> i64;
+/// \endcond
+
+extern pub fn __mlang_std_jsonrpc_last_error() -> string;
+extern pub fn __mlang_std_jsonrpc_stdio_read_frame(buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_stdio_read_frame_timeout(buf: string, capacity: i64, timeout_ms: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_stdio_write_frame(payload: string) -> int;
+extern pub fn __mlang_std_jsonrpc_build_frame(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_parse_frame(frame: string, out: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_cancel_mark(request_id: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_cancel_is_marked(request_id: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_cancel_take(request_id: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_cancel_clear(request_id: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_cancel_clear_all() -> int;
+extern pub fn __mlang_std_jsonrpc_extract_cancel_id(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_request_id(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_method(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_uri(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_position_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_position_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_include_declaration(payload: string) -> int;
+extern pub fn __mlang_std_jsonrpc_extract_previous_result_id(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_range_start_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_start_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_end_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_range_end_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_version(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_format_tab_size(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_format_insert_spaces(payload: string) -> int;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_language_id(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_text_document_text(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_new_name(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_workspace_query(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_root_uri(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_message(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_start_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_start_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_should_insert_semicolon(text: string, line: i64, column: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_signature_help_callee(text: string, line: i64, column: i64) -> string;
+extern pub fn __mlang_std_jsonrpc_workspace_symbol_search(root_uri: string, query: string) -> string;
+extern pub fn __mlang_std_jsonrpc_text_store_new() -> i64;
+extern pub fn __mlang_std_jsonrpc_text_store_free(handle: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_text_store_upsert(handle: i64, key: string, value: string) -> int;
+extern pub fn __mlang_std_jsonrpc_text_store_remove(handle: i64, key: string) -> int;
+extern pub fn __mlang_std_jsonrpc_text_store_get(handle: i64, key: string) -> string;
+extern pub fn __mlang_std_jsonrpc_line_count(text: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_line_length(text: string, line: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_lines_text(text: string, start_line: i64, end_line: i64) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_range_text(text: string, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> string;
+extern pub fn __mlang_std_jsonrpc_format_text_basic(text: string) -> string;
+extern pub fn __mlang_std_jsonrpc_format_text_with_options(text: string, tab_size: i64, insert_spaces: int) -> string;
+extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
+extern pub fn __mlang_std_jsonrpc_find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_uri_store_new() -> i64;
+extern pub fn __mlang_std_jsonrpc_uri_store_free(handle: i64) -> int;
+extern pub fn __mlang_std_jsonrpc_uri_store_add(handle: i64, uri: string) -> int;
+extern pub fn __mlang_std_jsonrpc_uri_store_remove(handle: i64, uri: string) -> int;
+extern pub fn __mlang_std_jsonrpc_uri_store_count(handle: i64) -> i64;
+extern pub fn __mlang_std_jsonrpc_uri_store_get(handle: i64, index: i64) -> string;
+extern pub fn __mlang_std_sync_channel_new(capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_send(channel_handle: i64, s: string) -> int;
+extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_try_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_channel_close(channel_handle: i64) -> int;
+extern pub fn __mlang_std_sync_channel_free(channel_handle: i64) -> int;
+extern pub fn __mlang_std_sync_last_error() -> string;
+extern pub fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string;
+
+/// @brief Stdio transport marker.
+pub struct StdioTransport {
+    var _tag: i32;
+};
+
+/// @brief Channel-backed runtime queues for concurrent pipelines.
+pub struct Runtime {
+    var inbound_handle: i64;
+    var outbound_handle: i64;
+};
+
+pub fn last_error() -> string {
+    return __mlang_std_jsonrpc_last_error();
+}
+
+/// @brief Return stdio JSON-RPC transport handle.
+pub fn stdio() -> StdioTransport {
+    return StdioTransport { _tag: 0 };
+}
+
+impl StdioTransport {
+    /// @brief Blocking framed read from stdin.
+    /// Returns frame payload bytes copied to `buf`.
+    pub fn read_frame(self: StdioTransport, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_jsonrpc_stdio_read_frame(buf, capacity);
+        if n == -2: {
+            return Err<i64, string>("std::jsonrpc read_frame timeout");
+        }
+        if n == -3: {
+            return Err<i64, string>("std::jsonrpc read_frame payload too large for buffer");
+        }
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Timeout-aware framed read from stdin.
+    /// `timeout_ms` >= 0, returns timeout error if no data arrives in time.
+    pub fn read_frame_timeout(self: StdioTransport, buf: string, capacity: i64, timeout_ms: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_jsonrpc_stdio_read_frame_timeout(buf, capacity, timeout_ms);
+        if n == -2: {
+            return Err<i64, string>("std::jsonrpc read_frame timeout");
+        }
+        if n == -3: {
+            return Err<i64, string>("std::jsonrpc read_frame payload too large for buffer");
+        }
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Write one JSON payload as a framed `Content-Length` message.
+    pub fn write_frame(self: StdioTransport, payload: string) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_jsonrpc_stdio_write_frame(payload);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+}
+
+impl Runtime {
+    /// @brief Build runtime queues with bounded channel capacity.
+    pub fn new(queue_capacity: i64) -> Result<Runtime, string> {
+        let in_h: i64 = __mlang_std_sync_channel_new(queue_capacity);
+        if in_h == 0: {
+            return Err<Runtime, string>(__mlang_std_sync_last_error());
+        }
+        let out_h: i64 = __mlang_std_sync_channel_new(queue_capacity);
+        if out_h == 0: {
+            __mlang_std_sync_channel_free(in_h);
+            return Err<Runtime, string>(__mlang_std_sync_last_error());
+        }
+        return Ok<Runtime, string>(Runtime {
+            inbound_handle: in_h,
+            outbound_handle: out_h
+        });
+    }
+
+    /// @brief Push parsed inbound request/notification payload.
+    pub fn push_inbound(self: Runtime, payload: string) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_channel_send(self.inbound_handle, payload);
+        if rc != 0: {
+            return Err<i32, string>(__mlang_std_sync_last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Non-blocking inbound poll.
+    /// Returns copied bytes (>0), `-2` empty, `0` closed+drained.
+    pub fn try_pop_inbound(self: Runtime, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_sync_channel_try_recv(self.inbound_handle, buf, capacity);
+        if n < -1: {
+            return Ok<i64, string>(n);
+        }
+        if n < 0: {
+            return Err<i64, string>(__mlang_std_sync_last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Queue outbound payload.
+    pub fn push_outbound(self: Runtime, payload: string) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_channel_send(self.outbound_handle, payload);
+        if rc != 0: {
+            return Err<i32, string>(__mlang_std_sync_last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Non-blocking outbound poll.
+    /// Returns copied bytes (>0), `-2` empty, `0` closed+drained.
+    pub fn try_pop_outbound(self: Runtime, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_sync_channel_try_recv(self.outbound_handle, buf, capacity);
+        if n < -1: {
+            return Ok<i64, string>(n);
+        }
+        if n < 0: {
+            return Err<i64, string>(__mlang_std_sync_last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// @brief Close + free queue resources.
+    pub fn close(self: Runtime) -> void {
+        __mlang_std_sync_channel_close(self.inbound_handle);
+        __mlang_std_sync_channel_close(self.outbound_handle);
+        __mlang_std_sync_channel_free(self.inbound_handle);
+        __mlang_std_sync_channel_free(self.outbound_handle);
+    }
+}
+
+/// @brief Build one raw `Content-Length` frame string from payload.
+pub fn build_frame(payload: string) -> string {
+    return __mlang_std_jsonrpc_build_frame(payload);
+}
+
+/// @brief Parse one raw frame string into `out` payload buffer.
+pub fn parse_frame(frame: string, out: string, capacity: i64) -> Result<i64, string> {
+    let n: i64 = __mlang_std_jsonrpc_parse_frame(frame, out, capacity);
+    if n < 0: {
+        return Err<i64, string>(last_error());
+    }
+    return Ok<i64, string>(n);
+}
+
+/// @brief Mark request id as cancelled.
+pub fn cancel_mark(request_id: i64) -> Result<i32, string> {
+    let rc: i32 = __mlang_std_jsonrpc_cancel_mark(request_id);
+    if rc != 0: {
+        return Err<i32, string>(last_error());
+    }
+    return Ok<i32, string>(0);
+}
+
+/// @brief Check whether request id is currently cancelled.
+pub fn cancel_is_marked(request_id: i64) -> int {
+    return __mlang_std_jsonrpc_cancel_is_marked(request_id);
+}
+
+/// @brief One-shot cancel consume: returns 1 if removed, 0 otherwise.
+pub fn cancel_take(request_id: i64) -> int {
+    return __mlang_std_jsonrpc_cancel_take(request_id);
+}
+
+/// @brief Clear one cancel marker.
+pub fn cancel_clear(request_id: i64) -> int {
+    return __mlang_std_jsonrpc_cancel_clear(request_id);
+}
+
+/// @brief Clear all cancel markers.
+pub fn cancel_clear_all() -> i32 {
+    return __mlang_std_jsonrpc_cancel_clear_all();
+}
+
+/// @brief Extract numeric request id from payload.
+/// Returns -1 when id is absent/invalid.
+pub fn extract_request_id(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_request_id(payload);
+}
+
+/// @brief Extract JSON-RPC method name from payload.
+pub fn extract_method(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_method(payload);
+}
+
+/// @brief Extract `params.textDocument.uri` from payload.
+pub fn extract_text_document_uri(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_text_document_uri(payload);
+}
+
+/// @brief Extract `params.position.line` from payload.
+pub fn extract_position_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_position_line(payload);
+}
+
+/// @brief Extract `params.position.character` from payload.
+pub fn extract_position_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_position_character(payload);
+}
+
+/// @brief Extract `params.context.includeDeclaration` for references request.
+pub fn extract_include_declaration(payload: string) -> int {
+    return __mlang_std_jsonrpc_extract_include_declaration(payload);
+}
+
+/// @brief Extract `params.previousResultId` from diagnostic pull payload.
+pub fn extract_previous_result_id(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_previous_result_id(payload);
+}
+
+/// @brief Extract `params.range.start.line` from payload.
+pub fn extract_range_start_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_start_line(payload);
+}
+
+/// @brief Extract `params.range.start.character` from payload.
+pub fn extract_range_start_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_start_character(payload);
+}
+
+/// @brief Extract `params.range.end.line` from payload.
+pub fn extract_range_end_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_end_line(payload);
+}
+
+/// @brief Extract `params.range.end.character` from payload.
+pub fn extract_range_end_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_range_end_character(payload);
+}
+
+/// @brief Extract `params.textDocument.version` from payload.
+pub fn extract_text_document_version(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_text_document_version(payload);
+}
+
+/// @brief Extract `params.options.tabSize` from formatting payload.
+pub fn extract_format_tab_size(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_format_tab_size(payload);
+}
+
+/// @brief Extract `params.options.insertSpaces` from formatting payload.
+pub fn extract_format_insert_spaces(payload: string) -> int {
+    return __mlang_std_jsonrpc_extract_format_insert_spaces(payload);
+}
+
+/// @brief Extract `params.textDocument.languageId` from payload.
+pub fn extract_text_document_language_id(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_text_document_language_id(payload);
+}
+
+/// @brief Extract `params.textDocument.text` from payload (didOpen).
+pub fn extract_text_document_text(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_text_document_text(payload);
+}
+
+/// @brief Extract `params.contentChanges[0].text` from payload (didChange).
+pub fn extract_first_change_text(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_first_change_text(payload);
+}
+
+/// @brief Extract `params.newName` from payload (rename).
+pub fn extract_new_name(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_new_name(payload);
+}
+
+/// @brief Extract `params.query` from payload (workspace/symbol).
+pub fn extract_workspace_query(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_workspace_query(payload);
+}
+
+/// @brief Extract top-level `rootUri` from initialize payload.
+pub fn extract_root_uri(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_root_uri(payload);
+}
+
+/// @brief Extract first `params.context.diagnostics[0].message` from payload.
+pub fn extract_first_diagnostic_message(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_message(payload);
+}
+
+/// @brief Extract first diagnostic start line from payload.
+pub fn extract_first_diagnostic_start_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_start_line(payload);
+}
+
+/// @brief Extract first diagnostic start character from payload.
+pub fn extract_first_diagnostic_start_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_start_character(payload);
+}
+
+/// @brief Extract first diagnostic end line from payload.
+pub fn extract_first_diagnostic_end_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_end_line(payload);
+}
+
+/// @brief Extract first diagnostic end character from payload.
+pub fn extract_first_diagnostic_end_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_end_character(payload);
+}
+
+/// @brief Return 1 if inserting `;` at line/column is considered safe.
+pub fn should_insert_semicolon(text: string, line: i64, column: i64) -> int {
+    return __mlang_std_jsonrpc_should_insert_semicolon(text, line, column);
+}
+
+/// @brief Extract call-site callee identifier for signature help at line/column.
+pub fn signature_help_callee(text: string, line: i64, column: i64) -> string {
+    return __mlang_std_jsonrpc_signature_help_callee(text, line, column);
+}
+
+/// @brief Search workspace filesystem for one symbol declaration by exact name.
+pub fn workspace_symbol_search(root_uri: string, query: string) -> string {
+    return __mlang_std_jsonrpc_workspace_symbol_search(root_uri, query);
+}
+
+/// @brief Create text store for URI->document text mapping.
+pub fn text_store_new() -> i64 {
+    return __mlang_std_jsonrpc_text_store_new();
+}
+
+/// @brief Free text store.
+pub fn text_store_free(handle: i64) -> i32 {
+    return __mlang_std_jsonrpc_text_store_free(handle);
+}
+
+/// @brief Upsert URI->text entry.
+pub fn text_store_upsert(handle: i64, key: string, value: string) -> i32 {
+    return __mlang_std_jsonrpc_text_store_upsert(handle, key, value);
+}
+
+/// @brief Remove URI from text store.
+pub fn text_store_remove(handle: i64, key: string) -> i32 {
+    return __mlang_std_jsonrpc_text_store_remove(handle, key);
+}
+
+/// @brief Get text by URI, empty string when missing.
+pub fn text_store_get(handle: i64, key: string) -> string {
+    return __mlang_std_jsonrpc_text_store_get(handle, key);
+}
+
+/// @brief Count lines in text (empty text = 1 line).
+pub fn line_count(text: string) -> i64 {
+    return __mlang_std_jsonrpc_line_count(text);
+}
+
+/// @brief Return length of line `line` (0-indexed).
+pub fn line_length(text: string, line: i64) -> i64 {
+    return __mlang_std_jsonrpc_line_length(text, line);
+}
+
+/// @brief Extract inclusive line range [start_line..end_line] text.
+pub fn extract_lines_text(text: string, start_line: i64, end_line: i64) -> string {
+    return __mlang_std_jsonrpc_extract_lines_text(text, start_line, end_line);
+}
+
+/// @brief Extract exact range text [start_line:start_char .. end_line:end_char).
+pub fn extract_range_text(text: string, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> string {
+    return __mlang_std_jsonrpc_extract_range_text(text, start_line, start_char, end_line, end_char);
+}
+
+/// @brief Basic formatter: trims trailing whitespace and normalizes tabs.
+pub fn format_text_basic(text: string) -> string {
+    return __mlang_std_jsonrpc_format_text_basic(text);
+}
+
+/// @brief Formatter with explicit tab size + insert-spaces options.
+pub fn format_text_with_options(text: string, tab_size: i64, insert_spaces: int) -> string {
+    return __mlang_std_jsonrpc_format_text_with_options(text, tab_size, insert_spaces);
+}
+
+/// @brief Count leading import lines (`use ...`) at file top.
+pub fn organize_imports_line_count(text: string) -> i64 {
+    return __mlang_std_jsonrpc_organize_imports_line_count(text);
+}
+
+/// @brief Return sorted+deduplicated leading import block text.
+pub fn organize_imports_text(text: string) -> string {
+    return __mlang_std_jsonrpc_organize_imports_text(text);
+}
+
+/// @brief Find method implementation position as packed `(line1<<32)|column1`.
+/// Returns `0` when no implementation match is found.
+pub fn find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64 {
+    return __mlang_std_jsonrpc_find_implementation_pos(query_text, line, column, candidate_text);
+}
+
+/// @brief Create URI store for tracking open documents.
+pub fn uri_store_new() -> i64 {
+    return __mlang_std_jsonrpc_uri_store_new();
+}
+
+/// @brief Free URI store.
+pub fn uri_store_free(handle: i64) -> i32 {
+    return __mlang_std_jsonrpc_uri_store_free(handle);
+}
+
+/// @brief Add URI into store (deduplicated).
+pub fn uri_store_add(handle: i64, uri: string) -> i32 {
+    return __mlang_std_jsonrpc_uri_store_add(handle, uri);
+}
+
+/// @brief Remove URI from store.
+pub fn uri_store_remove(handle: i64, uri: string) -> i32 {
+    return __mlang_std_jsonrpc_uri_store_remove(handle, uri);
+}
+
+/// @brief Return number of stored URIs.
+pub fn uri_store_count(handle: i64) -> i64 {
+    return __mlang_std_jsonrpc_uri_store_count(handle);
+}
+
+/// @brief Get URI at index or empty string.
+pub fn uri_store_get(handle: i64, index: i64) -> string {
+    return __mlang_std_jsonrpc_uri_store_get(handle, index);
+}
+
+/// @brief Parse a JSON-RPC payload and register `$/cancelRequest` ids.
+/// Returns:
+/// - `1` when a cancel request id was registered
+/// - `0` when payload is not a cancel notification
+pub fn register_cancel_from_payload(payload: string) -> Result<i32, string> {
+    let request_id: i64 = __mlang_std_jsonrpc_extract_cancel_id(payload);
+    if request_id == -1: {
+        return Ok<i32, string>(0);
+    }
+    if request_id == -2: {
+        return Err<i32, string>("std::jsonrpc cancel payload missing/invalid params.id");
+    }
+    let mark_r: Result<i32, string> = cancel_mark(request_id);
+    if mark_r.is_err(): {
+        return Err<i32, string>(mark_r.unwrap_err());
+    }
+    return Ok<i32, string>(1);
+}
+
+/// @brief Drain one outbound frame from runtime queue and write it.
+/// Returns:
+/// - `1` when one message was flushed
+/// - `0` when queue was empty
+pub fn flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: string, capacity: i64) -> Result<i32, string> {
+    let recv_r: Result<i64, string> = rt.try_pop_outbound(scratch, capacity);
+    if recv_r.is_err(): {
+        return Err<i32, string>(recv_r.unwrap_err());
+    }
+    let n: i64 = match recv_r {
+        Ok(v) => v,
+        Err(_e) => -1
+    };
+    if n == -2: {
+        return Ok<i32, string>(0);
+    }
+    if n <= 0: {
+        return Ok<i32, string>(0);
+    }
+    let wr: Result<i32, string> = transport.write_frame(scratch);
+    if wr.is_err(): {
+        return Err<i32, string>(wr.unwrap_err());
+    }
+    return Ok<i32, string>(1);
+}
+
+/// @brief Classify read errors that represent timeout/no-data.
+pub fn is_timeout_error(err: string) -> int {
+    return __mlang_std_strbuf_contains(err, "timeout");
+}
+
+fn __jsonrpc_reader_thread(inbound_handle: i64, done_handle: i64, frame_capacity: i64) -> i32 {
+    let transport: StdioTransport = stdio();
+    var frame = String::with_capacity(frame_capacity);
+
+    for _i in 0..2147483647 {
+        let rr: Result<i64, string> = transport.read_frame(frame, frame_capacity);
+        if rr.is_err(): {
+            break;
+        }
+        let cr: Result<i32, string> = register_cancel_from_payload(frame);
+        if cr.is_ok(): {
+            let c: i32 = match cr {
+                Ok(v) => v,
+                Err(_e) => 0
+            };
+            if c == 1: {
+                continue;
+            }
+        }
+        let rc: i32 = __mlang_std_sync_channel_send(inbound_handle, frame);
+        if rc != 0: {
+            break;
+        }
+    }
+
+    __mlang_std_sync_channel_close(inbound_handle);
+    __mlang_std_sync_channel_send(done_handle, "reader_done");
+    String::free(frame);
+    return 0;
+}
+
+fn __jsonrpc_worker_thread(inbound_handle: i64, done_handle: i64, request_capacity: i64, response_capacity: i64) -> i32 {
+    let transport: StdioTransport = stdio();
+    var request_buf = String::with_capacity(request_capacity);
+
+    for _i in 0..2147483647 {
+        let n: i64 = __mlang_std_sync_channel_recv(inbound_handle, request_buf, request_capacity);
+        if n <= 0: {
+            break;
+        }
+
+        let request_id: i64 = __mlang_std_jsonrpc_extract_request_id(request_buf);
+        if request_id >= 0: {
+            if cancel_take(request_id) == 1: {
+                continue;
+            }
+        }
+
+        let response_payload: string = __mlang_std_jsonrpc_runtime_dispatch(request_buf);
+        if __mlang_std_strbuf_len(response_payload) <= 0: {
+            String::free(response_payload);
+            continue;
+        }
+
+        if request_id >= 0: {
+            if cancel_take(request_id) == 1: {
+                String::free(response_payload);
+                continue;
+            }
+        }
+
+        let wr: Result<i32, string> = transport.write_frame(response_payload);
+        String::free(response_payload);
+        if wr.is_err(): {
+            break;
+        }
+    }
+
+    __mlang_std_sync_channel_send(done_handle, "worker_done");
+    String::free(request_buf);
+    return 0;
+}
+
+fn __jsonrpc_spawn_workers(remaining: i32, rt: Runtime, done_handle: i64, request_capacity: i64, response_capacity: i64) -> i32 {
+    if remaining <= 0: {
+        return 0;
+    }
+    thread_spawn(__jsonrpc_worker_thread, rt.inbound_handle, done_handle, request_capacity, response_capacity);
+    return __jsonrpc_spawn_workers(remaining - 1, rt, done_handle, request_capacity, response_capacity);
+}
+
+/// @brief Run full stdio JSON-RPC loop with worker-thread dispatch.
+///
+/// Behavior:
+/// - reader thread consumes framed stdin messages
+/// - built-in `$/cancelRequest` messages are handled immediately
+/// - non-cancel payloads are queued to worker threads
+/// - workers call `__mlang_std_jsonrpc_runtime_dispatch(...)`
+/// - non-empty responses are written as framed stdout messages
+///
+/// `__mlang_std_jsonrpc_runtime_dispatch` has a weak default implementation
+/// in libmlang_std (returns no response). Servers should override it.
+pub fn run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, string> {
+    var workers: i32 = worker_count;
+    if workers <= 0: {
+        workers = 1;
+    }
+    var req_cap: i64 = frame_capacity;
+    if req_cap < 1024: {
+        req_cap = 1024;
+    }
+    var resp_cap: i64 = response_capacity;
+    if resp_cap < 1024: {
+        resp_cap = 1024;
+    }
+
+    let rt_r: Result<Runtime, string> = Runtime::new(256);
+    if rt_r.is_err(): {
+        return Err<i32, string>(rt_r.unwrap_err());
+    }
+    let rt: Runtime = match rt_r {
+        Ok(v) => v,
+        Err(_e) => Runtime { inbound_handle: 0, outbound_handle: 0 }
+    };
+
+    let done_handle: i64 = __mlang_std_sync_channel_new(workers + 1);
+    if done_handle == 0: {
+        rt.close();
+        return Err<i32, string>(__mlang_std_sync_last_error());
+    }
+
+    thread_spawn(__jsonrpc_reader_thread, rt.inbound_handle, done_handle, req_cap);
+    __jsonrpc_spawn_workers(workers, rt, done_handle, req_cap, resp_cap);
+
+    var done_buf = String::with_capacity(32);
+    for _i in 0..(workers + 1) {
+        let _n: i64 = __mlang_std_sync_channel_recv(done_handle, done_buf, 32);
+    }
+
+    String::free(done_buf);
+    __mlang_std_sync_channel_close(done_handle);
+    __mlang_std_sync_channel_free(done_handle);
+    rt.close();
+    return Ok<i32, string>(0);
+}

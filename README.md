@@ -23,6 +23,42 @@ Use with UVim:
 uvim --mlang-lsp --mlang-lsp-path ./build/mlangd
 ```
 
+Enable LSP debug telemetry (`cache clears`, `active docs`, `evictions`):
+
+```sh
+MLANG_LSP_DEBUG=1 ./build/mlangd --stdio
+```
+
+Write debug output to a file:
+
+```sh
+MLANG_LSP_DEBUG=1 MLANG_LSP_DEBUG_LOG=/tmp/mlangd_telemetry.log ./build/mlangd --stdio
+```
+
+Tune semantic cache clear cadence for long-running sessions:
+
+```sh
+MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 ./build/mlangd --stdio
+```
+
+## Mlangd (Mlang Scaffold)
+Initial Mlang implementation scaffold lives at `tools/mlangd_mla/main.mla`.
+It uses `std::jsonrpc::run_stdio_loop(...)` and a Mlang dispatcher hook:
+`__mlang_std_jsonrpc_runtime_dispatch(...)`.
+
+Build object:
+
+```sh
+./build/mlang -c tools/mlangd_mla/main.mla -L ./build -lmlang_std
+```
+
+Build executable:
+
+```sh
+./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
+/tmp/mlangd_mla --stdio
+```
+
 `mlang` emits `mlang_commands.json` for editor tooling. You can add module
 search paths in `mlang.toml`:
 
@@ -120,10 +156,23 @@ Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
 The example uses `var user_input` directly (no `&mut` required) and trims with
 `trim(user_input)`.
+`std::io` now also supports stderr writes, stream buffering configuration
+(`set_*_buffering`), and non-blocking stdin polling (`read_line_nonblocking`).
 Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
 Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
 `examples/std_fs_demo.mla`.
+TCP networking API (`std::net::TcpListener`, `std::net::TcpStream`,
+non-blocking mode, read/write timeouts) example:
+`examples/std_net_demo.mla`.
+JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
+`examples/std_json_demo.mla`.
+JSON-RPC/LSP transport runtime (`std::jsonrpc` Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
+`examples/std_jsonrpc_runtime_demo.mla`.
+Manual stdio JSON-RPC worker runtime demo (`run_stdio_loop`, built-in `$/cancelRequest` routing):
+`examples/std_jsonrpc_stdio_loop_demo.mla` (manual run, not part of Robot suite).
+Incremental parse/query API for tooling (`std::compiler::Session`, open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via `mod` files) example:
+`examples/std_compiler_demo.mla`.
 `?` is supported for `Result` propagation (early-return on `Err`).
 
 ## Examples
@@ -133,6 +182,14 @@ Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
   `examples/std_io_traits_demo.mla`
 - Filesystem read-lines flow (`File::open`, `BufReader::new`, `lines`):
   `examples/std_fs_demo.mla`
+- TCP loopback client/server over libc sockets:
+  `examples/std_net_demo.mla`
+- JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):
+  `examples/std_json_demo.mla`
+- JSON-RPC/LSP stdio transport + cancellation/runtime queues (`std::jsonrpc`):
+  `examples/std_jsonrpc_runtime_demo.mla`
+- JSON-RPC stdio worker runtime loop (`std::jsonrpc::run_stdio_loop`):
+  `examples/std_jsonrpc_stdio_loop_demo.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

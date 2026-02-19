@@ -1,0 +1,70 @@
+/// \file time.mla
+/// \brief Time helpers for MLang (std::time).
+///
+/// Provides monotonic clocks, sleeping, and one-shot timers.
+
+extern pub fn __mlang_std_time_now_ms() -> i64;
+extern pub fn __mlang_std_time_now_ns() -> i64;
+extern pub fn __mlang_std_time_sleep_ms(ms: i64) -> void;
+extern pub fn __mlang_std_time_timer_new(timeout_ms: i64) -> i64;
+extern pub fn __mlang_std_time_timer_reset(handle: i64, timeout_ms: i64) -> int;
+extern pub fn __mlang_std_time_timer_elapsed(handle: i64) -> int;
+extern pub fn __mlang_std_time_timer_remaining_ms(handle: i64) -> i64;
+extern pub fn __mlang_std_time_timer_wait(handle: i64) -> int;
+extern pub fn __mlang_std_time_timer_free(handle: i64) -> int;
+
+/// @brief One-shot monotonic timer.
+pub struct Timer {
+    var handle: i64;
+};
+
+/// @brief Monotonic milliseconds since unspecified epoch.
+pub fn now_ms() -> i64 {
+    return __mlang_std_time_now_ms();
+}
+
+/// @brief Monotonic nanoseconds since unspecified epoch.
+pub fn now_ns() -> i64 {
+    return __mlang_std_time_now_ns();
+}
+
+/// @brief Sleep current thread for at least `ms` milliseconds.
+pub fn sleep_ms(ms: i64) -> void {
+    __mlang_std_time_sleep_ms(ms);
+}
+
+impl Timer {
+    /// @brief Create timer that elapses after `timeout_ms`.
+    pub fn after(timeout_ms: i64) -> Result<Timer, string> {
+        let h: i64 = __mlang_std_time_timer_new(timeout_ms);
+        if h == 0: {
+            return Err<Timer, string>("std::time Timer::after failed");
+        }
+        return Ok<Timer, string>(Timer { handle: h });
+    }
+
+    /// @brief Reset timer deadline to now + `timeout_ms`.
+    pub fn reset(self: Timer, timeout_ms: i64) -> i32 {
+        return __mlang_std_time_timer_reset(self.handle, timeout_ms);
+    }
+
+    /// @brief Return `1` when timer deadline has passed.
+    pub fn elapsed(self: Timer) -> int {
+        return __mlang_std_time_timer_elapsed(self.handle);
+    }
+
+    /// @brief Return remaining time in ms (0 when elapsed).
+    pub fn remaining_ms(self: Timer) -> i64 {
+        return __mlang_std_time_timer_remaining_ms(self.handle);
+    }
+
+    /// @brief Block current thread until timer elapses.
+    pub fn wait(self: Timer) -> i32 {
+        return __mlang_std_time_timer_wait(self.handle);
+    }
+
+    /// @brief Free timer handle.
+    pub fn close(self: Timer) -> i32 {
+        return __mlang_std_time_timer_free(self.handle);
+    }
+}

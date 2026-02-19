@@ -1,0 +1,46 @@
+mod std::time;
+
+use std::time::Timer;
+use std::time::now_ms;
+use std::time::sleep_ms;
+
+#[test]
+fn test_now_ms_increases() -> i32 {
+    let t1: i64 = now_ms();
+    sleep_ms(10);
+    let t2: i64 = now_ms();
+    return t2 >= t1 ? 0 : 1;
+}
+
+#[test]
+fn test_timer_wait_and_elapsed() -> i32 {
+    let tr: Result<Timer, string> = Timer::after(20);
+    if tr.is_err(): { return 1; }
+    let t: Timer = tr.unwrap();
+    if t.elapsed() == 1: {
+        t.close();
+        return 1;
+    }
+    if t.wait() != 0: {
+        t.close();
+        return 1;
+    }
+    let ok: i32 = t.elapsed() == 1 ? 1 : 0;
+    t.close();
+    return ok == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_timer_reset_changes_remaining() -> i32 {
+    let tr: Result<Timer, string> = Timer::after(100);
+    if tr.is_err(): { return 1; }
+    let t: Timer = tr.unwrap();
+    if t.reset(10) != 0: {
+        t.close();
+        return 1;
+    }
+    let rem: i64 = t.remaining_ms();
+    t.close();
+    if rem < 0: { return 1; }
+    return rem <= 20 ? 0 : 1;
+}

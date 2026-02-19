@@ -1,0 +1,305 @@
+mod std::json;
+mod std::fs;
+mod std::strbuf;
+
+use std::fs::File;
+use std::json::JsonDoc;
+use std::json::JsonArrayIter;
+use std::json::JsonObjectIter;
+use std::json::JsonValue;
+use std::strbuf::contains;
+use std::strbuf::eq;
+
+#[test]
+fn test_parse_and_navigate() -> i32 {
+    let doc_r: Result<JsonDoc, string> = JsonDoc::parse("{\"a\":1,\"arr\":[10,20],\"s\":\"ok\"}");
+    if doc_r.is_err(): { return 1; }
+    let doc: JsonDoc = doc_r.unwrap();
+
+    let root_r: Result<JsonValue, string> = doc.root();
+    if root_r.is_err(): {
+        doc.free();
+        return 1;
+    }
+    let root: JsonValue = root_r.unwrap();
+
+    let a_r: Result<JsonValue, string> = root.get("a");
+    if a_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let a: JsonValue = a_r.unwrap();
+    let av: Result<i64, string> = a.as_i64();
+    if av.is_err(): {
+        a.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    if av.unwrap() != 1: {
+        a.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    a.free();
+
+    let arr_r: Result<JsonValue, string> = root.get("arr");
+    if arr_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let arr: JsonValue = arr_r.unwrap();
+    let i1_r: Result<JsonValue, string> = arr.index(1);
+    if i1_r.is_err(): {
+        arr.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let i1: JsonValue = i1_r.unwrap();
+    let iv: Result<i64, string> = i1.as_i64();
+    if iv.is_err(): {
+        i1.free();
+        arr.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    if iv.unwrap() != 20: {
+        i1.free();
+        arr.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    i1.free();
+    arr.free();
+
+    let s_r: Result<JsonValue, string> = root.get("s");
+    if s_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let s: JsonValue = s_r.unwrap();
+    let sv: Result<string, string> = s.as_string();
+    if sv.is_err(): {
+        s.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    if eq(sv.unwrap(), "ok") != 1: {
+        s.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    s.free();
+
+    root.free();
+    doc.free();
+    return 0;
+}
+
+#[test]
+fn test_stringify_and_parse_error() -> i32 {
+    let bad: Result<JsonDoc, string> = JsonDoc::parse("{\"a\":");
+    if bad.is_err(): {
+        let ok_flag: i32 = 0;
+    } else: {
+        return 1;
+    }
+
+    let ok: Result<JsonDoc, string> = JsonDoc::parse("{\"x\":42}");
+    if ok.is_err(): { return 1; }
+    let doc: JsonDoc = ok.unwrap();
+    let out: Result<string, string> = doc.stringify();
+    if out.is_err(): {
+        doc.free();
+        return 1;
+    }
+    out.unwrap();
+    doc.free();
+    return 0;
+}
+
+#[test]
+fn test_iterators_and_from_file() -> i32 {
+    let path: string = "/tmp/mlang_std_json_iter_test.json";
+    let create_r: Result<File, string> = File::create(path);
+    if create_r.is_err(): { return 1; }
+    let f: File = create_r.unwrap();
+    let w1: Result<i64, string> = f.write("{\"a\":1,\"arr\":[10,20],\"name\":\"x\"}");
+    if w1.is_err(): {
+        f.close();
+        return 1;
+    }
+    if f.close() != 0: { return 1; }
+
+    let doc_r: Result<JsonDoc, string> = JsonDoc::from_file(path);
+    if doc_r.is_err(): { return 1; }
+    let doc: JsonDoc = doc_r.unwrap();
+    let root_r: Result<JsonValue, string> = doc.root();
+    if root_r.is_err(): {
+        doc.free();
+        return 1;
+    }
+    let root: JsonValue = root_r.unwrap();
+
+    let obj_it_r: Result<JsonObjectIter, string> = root.iter_object();
+    if obj_it_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    var obj_it: JsonObjectIter = obj_it_r.unwrap();
+    var saw_a: i32 = 0;
+    var saw_arr: i32 = 0;
+    if obj_it.has_next() == 1: {
+        let key_r: Result<string, string> = obj_it.current_key();
+        if key_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let key: string = key_r.unwrap();
+        if eq(key, "a") == 1: { saw_a = 1; }
+        if eq(key, "arr") == 1: { saw_arr = 1; }
+        String::free(key);
+
+        let val_r: Result<JsonValue, string> = obj_it.current_value();
+        if val_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let val: JsonValue = val_r.unwrap();
+        val.free();
+
+        obj_it = obj_it.advance();
+    }
+    if obj_it.has_next() == 1: {
+        let key_r: Result<string, string> = obj_it.current_key();
+        if key_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let key: string = key_r.unwrap();
+        if eq(key, "a") == 1: { saw_a = 1; }
+        if eq(key, "arr") == 1: { saw_arr = 1; }
+        String::free(key);
+
+        let val_r: Result<JsonValue, string> = obj_it.current_value();
+        if val_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let val: JsonValue = val_r.unwrap();
+        val.free();
+
+        obj_it = obj_it.advance();
+    }
+    if obj_it.has_next() == 1: {
+        let key_r: Result<string, string> = obj_it.current_key();
+        if key_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let key: string = key_r.unwrap();
+        if eq(key, "a") == 1: { saw_a = 1; }
+        if eq(key, "arr") == 1: { saw_arr = 1; }
+        String::free(key);
+
+        let val_r: Result<JsonValue, string> = obj_it.current_value();
+        if val_r.is_err(): {
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let val: JsonValue = val_r.unwrap();
+        val.free();
+
+        obj_it = obj_it.advance();
+    }
+    if saw_a != 1: {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    if saw_arr != 1: {
+        root.free();
+        doc.free();
+        return 1;
+    }
+
+    let arr_r: Result<JsonValue, string> = root.get("arr");
+    if arr_r.is_err(): {
+        root.free();
+        doc.free();
+        return 1;
+    }
+    let arr: JsonValue = arr_r.unwrap();
+    let arr_it_r: Result<JsonArrayIter, string> = arr.iter_array();
+    if arr_it_r.is_err(): {
+        arr.free();
+        root.free();
+        doc.free();
+        return 1;
+    }
+    var arr_it: JsonArrayIter = arr_it_r.unwrap();
+    var sum: i64 = 0;
+    if arr_it.has_next() == 1: {
+        let item_r: Result<JsonValue, string> = arr_it.current();
+        if item_r.is_err(): {
+            arr.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let item: JsonValue = item_r.unwrap();
+        let n_r: Result<i64, string> = item.as_i64();
+        if n_r.is_err(): {
+            item.free();
+            arr.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        sum = sum + n_r.unwrap();
+        item.free();
+        arr_it = arr_it.advance();
+    }
+    if arr_it.has_next() == 1: {
+        let item_r: Result<JsonValue, string> = arr_it.current();
+        if item_r.is_err(): {
+            arr.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        let item: JsonValue = item_r.unwrap();
+        let n_r: Result<i64, string> = item.as_i64();
+        if n_r.is_err(): {
+            item.free();
+            arr.free();
+            root.free();
+            doc.free();
+            return 1;
+        }
+        sum = sum + n_r.unwrap();
+        item.free();
+        arr_it = arr_it.advance();
+    }
+
+    arr.free();
+    root.free();
+    doc.free();
+    return sum == 30 ? 0 : 1;
+}

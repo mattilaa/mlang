@@ -1,0 +1,59 @@
+mod std::process;
+mod std::strbuf;
+
+use std::process::Child;
+use std::process::ChildStdout;
+use std::process::ExitStatus;
+use std::process::spawn;
+use std::strbuf::contains;
+
+fn main() -> i32 {
+    let child_r: Result<Child, string> = spawn("/bin/echo", ["hello from std::process"]);
+    if child_r.is_err(): {
+        println!("spawn failed: {}", child_r.unwrap_err());
+        return 1;
+    }
+    let child: Child = child_r.unwrap();
+
+    let out_r: Result<ChildStdout, string> = child.stdout();
+    if out_r.is_err(): {
+        println!("stdout pipe failed: {}", out_r.unwrap_err());
+        child.close();
+        return 1;
+    }
+    let out: ChildStdout = out_r.unwrap();
+
+    var buf = String::with_capacity(256);
+    let n_r: Result<i64, string> = out.read(buf, 256);
+    if n_r.is_err(): {
+        println!("stdout read failed: {}", n_r.unwrap_err());
+        String::free(buf);
+        out.close();
+        child.close();
+        return 1;
+    }
+    if contains(buf, "hello from std::process") != 1: {
+        println!("unexpected output: {}", buf);
+        String::free(buf);
+        out.close();
+        child.close();
+        return 1;
+    }
+    println!("child output: {}", buf);
+    String::free(buf);
+    out.close();
+
+    let st_r: Result<ExitStatus, string> = child.wait();
+    if st_r.is_err(): {
+        println!("wait failed: {}", st_r.unwrap_err());
+        child.close();
+        return 1;
+    }
+    let st: ExitStatus = st_r.unwrap();
+    child.close();
+    if st.success() != 1: {
+        println!("child failed, code={}", st.code());
+        return 1;
+    }
+    return 0;
+}

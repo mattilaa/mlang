@@ -1,0 +1,295 @@
+/**
+ * \file json.mla
+ * @brief JSON parse/stringify/navigation helpers for MLang (std::json).
+ *
+ * Backed by RapidJSON in libmlang_std.
+ */
+
+/// \cond INTERNAL_IMPORTS
+mod std::fs;
+mod std::strbuf;
+
+use std::fs::BufReader;
+use std::fs::File;
+use std::fs::free_lines;
+use std::strbuf::concat;
+/// \endcond
+
+extern pub fn __mlang_std_json_parse(text: string) -> i64;
+extern pub fn __mlang_std_json_doc_free(doc_handle: i64) -> void;
+extern pub fn __mlang_std_json_last_error() -> string;
+extern pub fn __mlang_std_json_doc_root(doc_handle: i64) -> i64;
+extern pub fn __mlang_std_json_value_free(value_handle: i64) -> void;
+extern pub fn __mlang_std_json_value_kind(value_handle: i64) -> int;
+extern pub fn __mlang_std_json_value_size(value_handle: i64) -> i64;
+extern pub fn __mlang_std_json_object_get(value_handle: i64, key: string) -> i64;
+extern pub fn __mlang_std_json_array_get(value_handle: i64, index: i64) -> i64;
+extern pub fn __mlang_std_json_value_as_bool(value_handle: i64) -> int;
+extern pub fn __mlang_std_json_value_as_i64(value_handle: i64) -> i64;
+extern pub fn __mlang_std_json_value_as_f64(value_handle: i64) -> double;
+extern pub fn __mlang_std_json_value_as_string(value_handle: i64) -> string;
+extern pub fn __mlang_std_json_stringify(doc_handle: i64, pretty: int) -> string;
+extern pub fn __mlang_std_json_object_key_at(value_handle: i64, index: i64) -> string;
+
+pub struct JsonDoc {
+    var handle: i64;
+};
+
+pub struct JsonValue {
+    var handle: i64;
+};
+
+pub struct JsonArrayIter {
+    var array: JsonValue;
+    var index: i64;
+    var len: i64;
+};
+
+pub struct JsonObjectIter {
+    var object: JsonValue;
+    var index: i64;
+    var len: i64;
+};
+
+pub fn kind_invalid() -> int { return 0; }
+pub fn kind_null() -> int { return 1; }
+pub fn kind_bool() -> int { return 2; }
+pub fn kind_number() -> int { return 3; }
+pub fn kind_string() -> int { return 4; }
+pub fn kind_array() -> int { return 5; }
+pub fn kind_object() -> int { return 6; }
+
+pub fn last_error() -> string {
+    return __mlang_std_json_last_error();
+}
+
+impl JsonDoc {
+    /// Parse a JSON document into an owned handle.
+    pub fn parse(text: string) -> Result<JsonDoc, string> {
+        let h: i64 = __mlang_std_json_parse(text);
+        if h == 0: {
+            return Err<JsonDoc, string>(last_error());
+        }
+        return Ok<JsonDoc, string>(JsonDoc { handle: h });
+    }
+
+    /// Parse JSON from a file using std::fs.
+    pub fn from_file(path: string) -> Result<JsonDoc, string> {
+        let opened: Result<File, string> = File::open(path);
+        if opened.is_err(): {
+            return Err<JsonDoc, string>(opened.unwrap_err());
+        }
+        let file: File = opened.unwrap();
+        let reader: BufReader = BufReader::new(file);
+        let lines: list<string> = reader.lines();
+
+        var text: string = String::new();
+        for line in lines {
+            let t1: string = concat(text, line);
+            String::free(text);
+            text = t1;
+            let t2: string = concat(text, "\n");
+            String::free(text);
+            text = t2;
+        }
+
+        free_lines(lines);
+        file.close();
+
+        let parsed: Result<JsonDoc, string> = JsonDoc::parse(text);
+        String::free(text);
+        return parsed;
+    }
+
+    /// Return root value of this document.
+    pub fn root(self: JsonDoc) -> Result<JsonValue, string> {
+        let h: i64 = __mlang_std_json_doc_root(self.handle);
+        if h == 0: {
+            return Err<JsonValue, string>(last_error());
+        }
+        return Ok<JsonValue, string>(JsonValue { handle: h });
+    }
+
+    /// Stringify JSON document without whitespace formatting.
+    pub fn stringify(self: JsonDoc) -> Result<string, string> {
+        let s: string = __mlang_std_json_stringify(self.handle, 0);
+        return Ok<string, string>(s);
+    }
+
+    /// Pretty stringify with indentation/newlines.
+    pub fn stringify_pretty(self: JsonDoc) -> Result<string, string> {
+        let s: string = __mlang_std_json_stringify(self.handle, 1);
+        return Ok<string, string>(s);
+    }
+
+    /// Explicitly free document handle.
+    pub fn free(self: JsonDoc) -> void {
+        if self.handle != 0: {
+            __mlang_std_json_doc_free(self.handle);
+        }
+    }
+}
+
+impl JsonValue {
+    /// Returns one of kind_*() constants.
+    pub fn kind(self: JsonValue) -> int {
+        return __mlang_std_json_value_kind(self.handle);
+    }
+
+    /// For arrays/objects: element/member count. Otherwise Err.
+    pub fn size(self: JsonValue) -> Result<i64, string> {
+        let n = __mlang_std_json_value_size(self.handle);
+        if n < 0: {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(n);
+    }
+
+    /// Object field lookup by key.
+    pub fn get(self: JsonValue, key: string) -> Result<JsonValue, string> {
+        let h: i64 = __mlang_std_json_object_get(self.handle, key);
+        if h == 0: {
+            return Err<JsonValue, string>(last_error());
+        }
+        return Ok<JsonValue, string>(JsonValue { handle: h });
+    }
+
+    /// Array element lookup by index.
+    pub fn index(self: JsonValue, i: i64) -> Result<JsonValue, string> {
+        let h: i64 = __mlang_std_json_array_get(self.handle, i);
+        if h == 0: {
+            return Err<JsonValue, string>(last_error());
+        }
+        return Ok<JsonValue, string>(JsonValue { handle: h });
+    }
+
+    pub fn as_bool(self: JsonValue) -> Result<int, string> {
+        if self.kind() != kind_bool(): {
+            return Err<int, string>("std::json as_bool: value is not bool");
+        }
+        return Ok<int, string>(__mlang_std_json_value_as_bool(self.handle));
+    }
+
+    pub fn as_i64(self: JsonValue) -> Result<i64, string> {
+        if self.kind() != kind_number(): {
+            return Err<i64, string>("std::json as_i64: value is not number");
+        }
+        return Ok<i64, string>(__mlang_std_json_value_as_i64(self.handle));
+    }
+
+    pub fn as_f64(self: JsonValue) -> Result<double, string> {
+        if self.kind() != kind_number(): {
+            return Err<double, string>("std::json as_f64: value is not number");
+        }
+        return Ok<double, string>(__mlang_std_json_value_as_f64(self.handle));
+    }
+
+    pub fn as_string(self: JsonValue) -> Result<string, string> {
+        if self.kind() != kind_string(): {
+            return Err<string, string>("std::json as_string: value is not string");
+        }
+        let s: string = __mlang_std_json_value_as_string(self.handle);
+        return Ok<string, string>(s);
+    }
+
+    /// Object key name at index, preserving object iteration order.
+    pub fn key_at(self: JsonValue, i: i64) -> Result<string, string> {
+        let s: string = __mlang_std_json_object_key_at(self.handle, i);
+        return Ok<string, string>(s);
+    }
+
+    /// Create an array iterator from this value.
+    pub fn iter_array(self: JsonValue) -> Result<JsonArrayIter, string> {
+        if self.kind() != kind_array(): {
+            return Err<JsonArrayIter, string>("std::json iter_array: value is not array");
+        }
+        let n: Result<i64, string> = self.size();
+        if n.is_err(): {
+            return Err<JsonArrayIter, string>(n.unwrap_err());
+        }
+        return Ok<JsonArrayIter, string>(JsonArrayIter {
+            array: JsonValue { handle: self.handle },
+            index: 0,
+            len: n.unwrap()
+        });
+    }
+
+    /// Create an object iterator from this value.
+    pub fn iter_object(self: JsonValue) -> Result<JsonObjectIter, string> {
+        if self.kind() != kind_object(): {
+            return Err<JsonObjectIter, string>("std::json iter_object: value is not object");
+        }
+        let n: Result<i64, string> = self.size();
+        if n.is_err(): {
+            return Err<JsonObjectIter, string>(n.unwrap_err());
+        }
+        return Ok<JsonObjectIter, string>(JsonObjectIter {
+            object: JsonValue { handle: self.handle },
+            index: 0,
+            len: n.unwrap()
+        });
+    }
+
+    /// Explicitly free value handle.
+    pub fn free(self: JsonValue) -> void {
+        if self.handle != 0: {
+            __mlang_std_json_value_free(self.handle);
+        }
+    }
+}
+
+impl JsonArrayIter {
+    pub fn has_next(self: JsonArrayIter) -> int {
+        return self.index < self.len ? 1 : 0;
+    }
+
+    pub fn current(self: JsonArrayIter) -> Result<JsonValue, string> {
+        if self.has_next() != 1: {
+            return Err<JsonValue, string>("std::json array iter: out of range");
+        }
+        return self.array.index(self.index);
+    }
+
+    pub fn advance(self: JsonArrayIter) -> JsonArrayIter {
+        return JsonArrayIter {
+            array: JsonValue { handle: self.array.handle },
+            index: self.index + 1,
+            len: self.len
+        };
+    }
+}
+
+impl JsonObjectIter {
+    pub fn has_next(self: JsonObjectIter) -> int {
+        return self.index < self.len ? 1 : 0;
+    }
+
+    pub fn current_key(self: JsonObjectIter) -> Result<string, string> {
+        if self.has_next() != 1: {
+            return Err<string, string>("std::json object iter: out of range");
+        }
+        return self.object.key_at(self.index);
+    }
+
+    pub fn current_value(self: JsonObjectIter) -> Result<JsonValue, string> {
+        if self.has_next() != 1: {
+            return Err<JsonValue, string>("std::json object iter: out of range");
+        }
+        let key_r: Result<string, string> = self.current_key();
+        if key_r.is_err(): {
+            return Err<JsonValue, string>(key_r.unwrap_err());
+        }
+        let key: string = key_r.unwrap();
+        let out: Result<JsonValue, string> = self.object.get(key);
+        String::free(key);
+        return out;
+    }
+
+    pub fn advance(self: JsonObjectIter) -> JsonObjectIter {
+        return JsonObjectIter {
+            object: JsonValue { handle: self.object.handle },
+            index: self.index + 1,
+            len: self.len
+        };
+    }
+}

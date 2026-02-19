@@ -1,0 +1,54 @@
+mod std::sync;
+mod std::strbuf;
+
+use std::strbuf::contains;
+use std::sync::Channel;
+use std::sync::Condvar;
+use std::sync::Mutex;
+
+fn main() -> i32 {
+    let mr: Result<Mutex, string> = Mutex::new();
+    let cr: Result<Condvar, string> = Condvar::new();
+    if mr.is_err(): {
+        println!("mutex/condvar create failed");
+        return 1;
+    }
+    if cr.is_err(): {
+        println!("mutex/condvar create failed");
+        return 1;
+    }
+    let m: Mutex = mr.unwrap();
+    let c: Condvar = cr.unwrap();
+    m.lock();
+    let w: Result<i32, string> = c.wait_timeout_ms(m, 10);
+    m.unlock();
+    c.close();
+    m.close();
+    if w.is_err(): {
+        println!("condvar wait failed");
+        return 1;
+    }
+    println!("condvar timeout result={}", w.unwrap());
+
+    let chr: Result<Channel, string> = Channel::new(4);
+    if chr.is_err(): {
+        println!("channel create failed");
+        return 1;
+    }
+    let ch: Channel = chr.unwrap();
+    ch.send("sync-message");
+    var buf = String::with_capacity(128);
+    let rr: Result<i64, string> = ch.recv(buf, 128);
+    if rr.is_err(): {
+        println!("channel recv failed");
+        String::free(buf);
+        ch.free();
+        return 1;
+    }
+    println!("channel recv bytes={} value={}", rr.unwrap(), buf);
+    let ok: i32 = contains(buf, "sync-message") == 1 ? 1 : 0;
+    String::free(buf);
+    ch.close();
+    ch.free();
+    return ok == 1 ? 0 : 1;
+}

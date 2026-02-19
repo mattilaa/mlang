@@ -1,0 +1,1450 @@
+mod std::compiler;
+mod std::jsonrpc;
+mod std::strbuf;
+
+use std::compiler::DefinitionLocation;
+use std::compiler::DocumentSymbol;
+use std::compiler::ReferenceLocation;
+use std::compiler::ResolvedSymbol;
+use std::compiler::Session;
+use std::compiler::SyntaxDiagnostic;
+use std::compiler::session_create;
+use std::compiler::version;
+use std::jsonrpc::extract_first_change_text;
+use std::jsonrpc::extract_first_diagnostic_end_character;
+use std::jsonrpc::extract_first_diagnostic_end_line;
+use std::jsonrpc::extract_first_diagnostic_message;
+use std::jsonrpc::extract_first_diagnostic_start_character;
+use std::jsonrpc::extract_first_diagnostic_start_line;
+use std::jsonrpc::extract_format_insert_spaces;
+use std::jsonrpc::extract_format_tab_size;
+use std::jsonrpc::extract_include_declaration;
+use std::jsonrpc::extract_method;
+use std::jsonrpc::extract_new_name;
+use std::jsonrpc::extract_position_character;
+use std::jsonrpc::extract_position_line;
+use std::jsonrpc::extract_previous_result_id;
+use std::jsonrpc::extract_range_end_character;
+use std::jsonrpc::extract_range_end_line;
+use std::jsonrpc::extract_range_start_character;
+use std::jsonrpc::extract_range_start_line;
+use std::jsonrpc::extract_root_uri;
+use std::jsonrpc::extract_request_id;
+use std::jsonrpc::extract_text_document_language_id;
+use std::jsonrpc::extract_text_document_text;
+use std::jsonrpc::extract_text_document_uri;
+use std::jsonrpc::extract_text_document_version;
+use std::jsonrpc::extract_workspace_query;
+use std::jsonrpc::extract_range_text;
+use std::jsonrpc::find_implementation_pos;
+use std::jsonrpc::format_text_basic;
+use std::jsonrpc::format_text_with_options;
+use std::jsonrpc::line_count;
+use std::jsonrpc::line_length;
+use std::jsonrpc::organize_imports_line_count;
+use std::jsonrpc::organize_imports_text;
+use std::jsonrpc::should_insert_semicolon;
+use std::jsonrpc::signature_help_callee;
+use std::jsonrpc::text_store_get;
+use std::jsonrpc::text_store_new;
+use std::jsonrpc::text_store_remove;
+use std::jsonrpc::text_store_upsert;
+use std::jsonrpc::uri_store_add;
+use std::jsonrpc::uri_store_count;
+use std::jsonrpc::uri_store_get;
+use std::jsonrpc::uri_store_new;
+use std::jsonrpc::uri_store_remove;
+use std::jsonrpc::workspace_symbol_search;
+use std::jsonrpc::run_stdio_loop;
+use std::strbuf::concat;
+use std::strbuf::contains;
+use std::strbuf::eq;
+use std::strbuf::ends_with;
+use std::strbuf::json_escape;
+use std::strbuf::len;
+use std::strbuf::starts_with;
+
+extern fn strcmp(a: str8, b: str8) -> i32;
+extern fn __mlang_std_fs_open_write(path: string) -> i64;
+extern fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
+extern fn __mlang_std_fs_close(handle: i64) -> int;
+extern fn __mlang_std_time_local_datetime() -> string;
+extern fn __mlang_std_time_log_level_tag(level: i32, color: i32) -> string;
+
+var g_session_ready: i32 = 0;
+var g_session_handle: i64 = 0;
+var g_uri_store_handle: i64 = 0;
+var g_text_store_handle: i64 = 0;
+var g_log_enabled: i32 = 0;
+var g_log_level: i32 = 2;
+var g_log_handle: i64 = 0;
+var g_log_color: i32 = 0;
+
+fn log_level_error() -> i32 { return 0; }
+fn log_level_warn() -> i32 { return 1; }
+fn log_level_info() -> i32 { return 2; }
+fn log_level_debug() -> i32 { return 3; }
+fn log_level_verbose() -> i32 { return 4; }
+
+fn log_level_name(level: i32) -> string {
+    if level == log_level_error(): { return "ERROR"; }
+    if level == log_level_warn(): { return "WARN"; }
+    if level == log_level_info(): { return "INFO"; }
+    if level == log_level_debug(): { return "DEBUG"; }
+    if level == log_level_verbose(): { return "VERBOSE"; }
+    return "INFO";
+}
+
+fn parse_log_level(level_raw: str8) -> i32 {
+    if strcmp(level_raw, "ERROR") == 0: {
+        return log_level_error();
+    }
+    if strcmp(level_raw, "error") == 0: {
+        return log_level_error();
+    }
+    if strcmp(level_raw, "WARN") == 0: {
+        return log_level_warn();
+    }
+    if strcmp(level_raw, "warn") == 0: {
+        return log_level_warn();
+    }
+    if strcmp(level_raw, "INFO") == 0: {
+        return log_level_info();
+    }
+    if strcmp(level_raw, "info") == 0: {
+        return log_level_info();
+    }
+    if strcmp(level_raw, "DEBUG") == 0: {
+        return log_level_debug();
+    }
+    if strcmp(level_raw, "debug") == 0: {
+        return log_level_debug();
+    }
+    if strcmp(level_raw, "VERBOSE") == 0: {
+        return log_level_verbose();
+    }
+    if strcmp(level_raw, "verbose") == 0: {
+        return log_level_verbose();
+    }
+    return -1;
+}
+
+fn should_log(level: i32) -> bool {
+    if g_log_enabled == 0: { return false; }
+    if g_log_handle == 0: { return false; }
+    if level <= g_log_level: { return true; }
+    return false;
+}
+
+fn log_level_tag(level: i32) -> string {
+    return __mlang_std_time_log_level_tag(level, g_log_color);
+}
+
+fn log_write(level: i32, message: string) -> void {
+    if should_log(level) == false: {
+        return;
+    }
+    let ts: string = __mlang_std_time_local_datetime();
+    let tag: string = log_level_tag(level);
+    let line: string = format!("{} {} {}", ts, tag, message);
+    let _ = __mlang_std_fs_write(g_log_handle, line);
+    let _ = __mlang_std_fs_write(g_log_handle, "\n");
+}
+
+fn log_path_for_dir(dir: string) -> string {
+    if len(dir) == 0: {
+        return "/tmp/mlangd-mla.log";
+    }
+    if ends_with(dir, "/") == 1: {
+        return concat(dir, "mlangd-mla.log");
+    }
+    return concat(dir, "/mlangd-mla.log");
+}
+
+fn setup_logging(args: list<str8>) -> i32 {
+    var seen_prog: bool = false;
+    var expect_level: bool = false;
+    var expect_dir: bool = false;
+    var enable_log: bool = false;
+    var log_dir: string = "/tmp";
+    var chosen_level: i32 = log_level_info();
+    var use_color: bool = false;
+
+    for arg in args {
+        if seen_prog == false: {
+            seen_prog = true;
+            continue;
+        }
+        if expect_level: {
+            let parsed_level: i32 = parse_log_level(arg);
+            if parsed_level < 0: {
+                eprintln!("mlangd_mla: invalid --log-level '{}'; expected DEBUG|INFO|ERROR|WARN|VERBOSE", arg);
+                return 1;
+            }
+            chosen_level = parsed_level;
+            enable_log = true;
+            expect_level = false;
+            continue;
+        }
+        if expect_dir: {
+            log_dir = format!("{}", arg);
+            enable_log = true;
+            expect_dir = false;
+            continue;
+        }
+        if strcmp(arg, "--enable-log") == 0: {
+            enable_log = true;
+            continue;
+        }
+        if strcmp(arg, "--log-color") == 0: {
+            enable_log = true;
+            use_color = true;
+            continue;
+        }
+        if strcmp(arg, "--log-colors") == 0: {
+            enable_log = true;
+            use_color = true;
+            continue;
+        }
+        if strcmp(arg, "--log-level") == 0: {
+            expect_level = true;
+            continue;
+        }
+        if strcmp(arg, "--log-dir") == 0: {
+            expect_dir = true;
+            continue;
+        }
+
+        let arg_s: string = format!("{}", arg);
+        if starts_with(arg_s, "--log-level=") == 1: {
+            eprintln!("mlangd_mla: use '--log-level <LEVEL>' (space form), not --log-level=<LEVEL>");
+            return 1;
+        }
+        if starts_with(arg_s, "--log-dir=") == 1: {
+            eprintln!("mlangd_mla: use '--log-dir <DIR>' (space form), not --log-dir=<DIR>");
+            return 1;
+        }
+        if starts_with(arg_s, "--log-color=") == 1: {
+            eprintln!("mlangd_mla: use '--log-colors' (flag form), not --log-colors=<...>");
+            return 1;
+        }
+        if starts_with(arg_s, "--log-colors=") == 1: {
+            eprintln!("mlangd_mla: use '--log-colors' (flag form), not --log-colors=<...>");
+            return 1;
+        }
+    }
+
+    if expect_level: {
+        eprintln!("mlangd_mla: missing value after --log-level");
+        return 1;
+    }
+    if expect_dir: {
+        eprintln!("mlangd_mla: missing value after --log-dir");
+        return 1;
+    }
+    if enable_log == false: {
+        return 0;
+    }
+
+    let path: string = log_path_for_dir(log_dir);
+    let handle: i64 = __mlang_std_fs_open_write(path);
+    if handle == 0: {
+        eprintln!("mlangd_mla: failed to open log file: {}", path);
+        return 1;
+    }
+
+    g_log_handle = handle;
+    g_log_level = chosen_level;
+    g_log_enabled = 1;
+    if use_color: {
+        g_log_color = 1;
+    }
+    log_write(log_level_info(), format!("logging enabled path={} level={} color={}", path, log_level_name(g_log_level), g_log_color));
+    return 0;
+}
+
+fn current_session() -> Session {
+    return Session { handle: g_session_handle };
+}
+
+fn ensure_session() -> i32 {
+    if g_session_ready == 1: {
+        return 0;
+    }
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): {
+        return 1;
+    }
+    let s: Session = match sr {
+        Ok(v) => v,
+        Err(_e) => Session { handle: 0 }
+    };
+    g_session_handle = s.handle;
+    g_session_ready = 1;
+    return 0;
+}
+
+fn ensure_uri_store() -> i32 {
+    if g_uri_store_handle != 0: {
+        return 0;
+    }
+    let h: i64 = uri_store_new();
+    if h == 0: {
+        return 1;
+    }
+    g_uri_store_handle = h;
+    return 0;
+}
+
+fn ensure_text_store() -> i32 {
+    if g_text_store_handle != 0: {
+        return 0;
+    }
+    let h: i64 = text_store_new();
+    if h == 0: {
+        return 1;
+    }
+    g_text_store_handle = h;
+    return 0;
+}
+
+fn make_result_response(id: i64, result_json: string) -> string {
+    let id_s: string = format!("{}", id);
+    let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
+    let p2: string = concat(p1, ",\"result\":");
+    let p3: string = concat(p2, result_json);
+    let out: string = concat(p3, "}");
+    return out;
+}
+
+fn make_error_response(id: i64, code: i32, message: string) -> string {
+    let id_s: string = format!("{}", id);
+    let code_s: string = format!("{}", code);
+    let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
+    let p2: string = concat(p1, ",\"error\":{\"code\":");
+    let p3: string = concat(p2, code_s);
+    let p4: string = concat(p3, ",\"message\":\"");
+    let p5: string = concat(p4, message);
+    let out: string = concat(p5, "\"}}");
+    return out;
+}
+
+fn lsp_line(v: i32) -> i32 {
+    if v > 0: {
+        return v - 1;
+    }
+    return 0;
+}
+
+fn lsp_col(v: i32) -> i32 {
+    if v > 0: {
+        return v - 1;
+    }
+    return 0;
+}
+
+fn location_json(uri: string, line1: i32, col1: i32) -> string {
+    let euri: string = json_escape(uri);
+    let out: string = format!(
+        "{{\"uri\":\"{}\",\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}}}",
+        euri, lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
+    );
+    return out;
+}
+
+fn range_json(line1: i32, col1: i32) -> string {
+    return format!(
+        "{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}",
+        lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
+    );
+}
+
+fn symbol_kind_lsp(sym: DocumentSymbol) -> i32 {
+    if contains(sym.signature, "fn ") == 1: {
+        return 12;
+    }
+    if contains(sym.signature, "struct ") == 1: {
+        return 23;
+    }
+    if contains(sym.signature, "enum ") == 1: {
+        return 10;
+    }
+    if contains(sym.signature, "mod ") == 1: {
+        return 2;
+    }
+    return 13;
+}
+
+fn handle_did_open(payload: string) -> i32 {
+    if ensure_session() != 0: {
+        return 1;
+    }
+    if ensure_uri_store() != 0: {
+        return 1;
+    }
+    if ensure_text_store() != 0: {
+        return 1;
+    }
+    let uri: string = extract_text_document_uri(payload);
+    let lang: string = extract_text_document_language_id(payload);
+    let text: string = extract_text_document_text(payload);
+    let version: i64 = extract_text_document_version(payload);
+    if len(uri) == 0: { return 1; }
+    if len(lang) == 0: { return 1; }
+    let s: Session = current_session();
+    let r: Result<i32, string> = s.open_document(uri, lang, text, version);
+    if r.is_err(): {
+        return 1;
+    }
+    if uri_store_add(g_uri_store_handle, uri) != 0: {
+        return 1;
+    }
+    if text_store_upsert(g_text_store_handle, uri, text) != 0: {
+        return 1;
+    }
+    log_write(log_level_debug(), format!("didOpen uri={}", uri));
+    return 0;
+}
+
+fn handle_did_change(payload: string) -> i32 {
+    if ensure_session() != 0: {
+        return 1;
+    }
+    if ensure_text_store() != 0: {
+        return 1;
+    }
+    let uri: string = extract_text_document_uri(payload);
+    let text: string = extract_first_change_text(payload);
+    let version: i64 = extract_text_document_version(payload);
+    if len(uri) == 0: { return 1; }
+    let s: Session = current_session();
+    let r: Result<i32, string> = s.change_document(uri, text, version);
+    if r.is_err(): {
+        return 1;
+    }
+    if text_store_upsert(g_text_store_handle, uri, text) != 0: {
+        return 1;
+    }
+    log_write(log_level_debug(), format!("didChange uri={}", uri));
+    return 0;
+}
+
+fn handle_did_close(payload: string) -> i32 {
+    if ensure_session() != 0: {
+        return 1;
+    }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return 1; }
+    let s: Session = current_session();
+    let r: Result<i32, string> = s.close_document(uri);
+    if r.is_err(): {
+        return 1;
+    }
+    if g_uri_store_handle != 0: {
+        let _ = uri_store_remove(g_uri_store_handle, uri);
+    }
+    if g_text_store_handle != 0: {
+        let _ = text_store_remove(g_text_store_handle, uri);
+    }
+    log_write(log_level_debug(), format!("didClose uri={}", uri));
+    return 0;
+}
+
+fn handle_code_action(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let text: string = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0: { return "[]"; }
+    let uri_e: string = json_escape(uri);
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    if contains(payload, "source.organizeImports") == 1: {
+        let import_lines: i64 = organize_imports_line_count(text);
+        if import_lines > 0: {
+            let new_block_raw: string = organize_imports_text(text);
+            if len(new_block_raw) > 0: {
+                let new_block: string = json_escape(new_block_raw);
+                let action_oi: string = format!(
+                    "{{\"title\":\"Organize Imports\",\"kind\":\"source.organizeImports\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":0}}}},\"newText\":\"{}\"}}]}}}}}}",
+                    uri_e, import_lines, new_block
+                );
+                if j > 0: {
+                    out = format!("{},{}", out, action_oi);
+                } else: {
+                    out = format!("{}{}", out, action_oi);
+                }
+                j = j + 1;
+            }
+        }
+    }
+
+    if contains(payload, "quickfix") == 1: {
+        let msg: string = extract_first_diagnostic_message(payload);
+        let sl: i64 = extract_first_diagnostic_start_line(payload);
+        let sc: i64 = extract_first_diagnostic_start_character(payload);
+        let el: i64 = extract_first_diagnostic_end_line(payload);
+        let ec: i64 = extract_first_diagnostic_end_character(payload);
+        var semicolon_hint: i32 = 0;
+        if contains(msg, "semicolon") == 1: {
+            semicolon_hint = 1;
+        } else: {
+            if contains(msg, "expected ';'") == 1: {
+                semicolon_hint = 1;
+            }
+        }
+        if semicolon_hint == 1: {
+            if sl >= 0: {
+                if sc >= 0: {
+                    if el >= 0: {
+                        if ec >= 0: {
+                            var target_line: i64 = el;
+                            var target_char: i64 = ec;
+                            if ec == 0: {
+                                if el > sl: {
+                                    target_line = el - 1;
+                                    target_char = line_length(text, target_line);
+                                }
+                            }
+                            if target_line >= 0: {
+                                if should_insert_semicolon(text, target_line, target_char) == 1: {
+                                    let action_qf: string = format!(
+                                        "{{\"title\":\"Insert ';'\",\"kind\":\"quickfix\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\";\"}}]}}}}}}",
+                                        uri_e, target_line, target_char, target_line, target_char
+                                    );
+                                    if j > 0: {
+                                        out = format!("{},{}", out, action_qf);
+                                    } else: {
+                                        out = format!("{}{}", out, action_qf);
+                                    }
+                                    j = j + 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_definition(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let dr: Result<DefinitionLocation, string> =
+        s.definition(uri, line + 1, col + 1);
+    if dr.is_err(): { return "[]"; }
+
+    let d: DefinitionLocation = match dr {
+        Ok(v) => v,
+        Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
+    };
+    let loc: string = location_json(d.uri, d.line, d.column);
+    let out: string = format!("[{}]", loc);
+    return out;
+}
+
+fn handle_references(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    if cr.is_err(): { return "[]"; }
+    let include_decl: int = extract_include_declaration(payload);
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    var def_uri: string = String::new();
+    var def_line: i32 = -1;
+    var def_col: i32 = -1;
+    if include_decl == 0: {
+        let dr: Result<DefinitionLocation, string> = s.definition(uri, line + 1, col + 1);
+        if dr.is_ok(): {
+            let d: DefinitionLocation = match dr {
+                Ok(v) => v,
+                Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: -1, column: -1 }
+            };
+            def_uri = d.uri;
+            def_line = d.line;
+            def_col = d.column;
+        }
+    }
+
+    var out: string = String::new();
+    let p0: string = concat(out, "[");
+    out = p0;
+    var j: i32 = 0;
+
+    for i in 0..n {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        if rr.is_err(): { continue; }
+        let r: ReferenceLocation = match rr {
+            Ok(v) => v,
+            Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
+        };
+        if include_decl == 0: {
+            if eq(r.uri, def_uri) == 1: {
+                if r.line == def_line: {
+                    if r.column == def_col: {
+                        continue;
+                    }
+                }
+            }
+        }
+        let loc: string = location_json(r.uri, r.line, r.column);
+        if j > 0: {
+            out = format!("{},{}", out, loc);
+        } else: {
+            out = format!("{}{}", out, loc);
+        }
+        j = j + 1;
+    }
+
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_hover(payload: string) -> string {
+    if ensure_session() != 0: { return "null"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "null"; }
+    if line < 0: { return "null"; }
+    if col < 0: { return "null"; }
+
+    let s: Session = current_session();
+    let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
+    if hr.is_err(): { return "null"; }
+    let h: string = match hr {
+        Ok(v) => v,
+        Err(_e) => String::new()
+    };
+    let esc: string = json_escape(h);
+    let out: string = format!(
+        "{{\"contents\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
+        esc
+    );
+    return out;
+}
+
+fn handle_completion(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.completion_count(uri, line + 1, col + 1);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+
+    var out: string = String::new();
+    let p0: string = concat(out, "[");
+    out = p0;
+
+    for i in 0..n {
+        let ir: Result<string, string> = s.completion_get(uri, line + 1, col + 1, i);
+        if ir.is_err(): { continue; }
+        let label_raw: string = match ir {
+            Ok(v) => v,
+            Err(_e) => String::new()
+        };
+        let label: string = json_escape(label_raw);
+        let item: string = format!(
+            "{{\"label\":\"{}\",\"kind\":6}}",
+            label
+        );
+        let prev: string = out;
+        if i > 0: {
+            out = format!("{},{}", out, item);
+        } else: {
+            out = format!("{}{}", out, item);
+        }
+    }
+
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_document_symbol(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    var out: string = String::new();
+    out = concat(out, "[");
+    for i in 0..n {
+        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sr.is_err(): { continue; }
+        let sym: DocumentSymbol = match sr {
+            Ok(v) => v,
+            Err(_e) => DocumentSymbol {
+                id: String::new(),
+                name: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0
+            }
+        };
+        let name_e: string = json_escape(sym.name);
+        let range: string = range_json(sym.line, sym.column);
+        let kind: i32 = symbol_kind_lsp(sym);
+        let item: string = format!(
+            "{{\"name\":\"{}\",\"kind\":{},\"range\":{},\"selectionRange\":{}}}",
+            name_e, kind, range, range
+        );
+        let prev: string = out;
+        if i > 0: {
+            out = format!("{},{}", out, item);
+        } else: {
+            out = format!("{}{}", out, item);
+        }
+    }
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_document_highlight(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+    for i in 0..n {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        if rr.is_err(): { continue; }
+        let r: ReferenceLocation = match rr {
+            Ok(v) => v,
+            Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
+        };
+        if eq(r.uri, uri) != 1: { continue; }
+        let range: string = range_json(r.line, r.column);
+        let item: string = format!(
+            "{{\"range\":{},\"kind\":1}}",
+            range
+        );
+        let prev: string = out;
+        if j > 0: {
+            out = format!("{},{}", out, item);
+        } else: {
+            out = format!("{}{}", out, item);
+        }
+        j = j + 1;
+    }
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_signature_help(payload: string) -> string {
+    if ensure_session() != 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    if line < 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    if col < 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+
+    let s: Session = current_session();
+    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    var sig: string = String::new();
+    if rr.is_ok(): {
+        let sym: ResolvedSymbol = match rr {
+            Ok(v) => v,
+            Err(_e) => ResolvedSymbol {
+                id: String::new(),
+                name: String::new(),
+                uri: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0,
+                overload_count: 0,
+                from_current_document: 0
+            }
+        };
+        sig = sym.signature;
+    }
+    if len(sig) == 0: {
+        if ensure_text_store() == 0: {
+            if ensure_uri_store() == 0: {
+                let query_text: string = text_store_get(g_text_store_handle, uri);
+                if len(query_text) > 0: {
+                    let callee: string = signature_help_callee(query_text, line, col);
+                    if len(callee) > 0: {
+                        let pat: string = format!("fn {}(", callee);
+                        let uri_count: i64 = uri_store_count(g_uri_store_handle);
+                        for ui in 0..uri_count {
+                            let doc_uri: string = uri_store_get(g_uri_store_handle, ui);
+                            if len(doc_uri) == 0: { continue; }
+                            let cr: Result<i32, string> = s.document_symbol_count(doc_uri);
+                            if cr.is_err(): { continue; }
+                            let n: i32 = match cr {
+                                Ok(v) => v,
+                                Err(_e) => 0
+                            };
+                            for i in 0..n {
+                                let sr: Result<DocumentSymbol, string> = s.document_symbol_get(doc_uri, i);
+                                if sr.is_err(): { continue; }
+                                let d: DocumentSymbol = match sr {
+                                    Ok(v) => v,
+                                    Err(_e) => DocumentSymbol {
+                                        id: String::new(),
+                                        name: String::new(),
+                                        type_info: String::new(),
+                                        signature: String::new(),
+                                        kind: 0,
+                                        line: 0,
+                                        column: 0
+                                    }
+                                };
+                                if len(d.signature) == 0: { continue; }
+                                if contains(d.signature, pat) == 1: {
+                                    sig = d.signature;
+                                    break;
+                                }
+                            }
+                            if len(sig) > 0: { break; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if len(sig) == 0: {
+        let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
+        if hr.is_err(): { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+        sig = match hr {
+            Ok(v) => v,
+            Err(_e) => String::new()
+        };
+    }
+    if len(sig) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    let label: string = json_escape(sig);
+    return format!(
+        "{{\"signatures\":[{{\"label\":\"{}\"}}],\"activeSignature\":0,\"activeParameter\":0}}",
+        label
+    );
+}
+
+fn handle_prepare_rename(payload: string) -> string {
+    if ensure_session() != 0: { return "null"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "null"; }
+    if line < 0: { return "null"; }
+    if col < 0: { return "null"; }
+    let s: Session = current_session();
+    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    if rr.is_err(): { return "null"; }
+    let sym: ResolvedSymbol = match rr {
+        Ok(v) => v,
+        Err(_e) => ResolvedSymbol {
+            id: String::new(),
+            name: String::new(),
+            uri: String::new(),
+            type_info: String::new(),
+            signature: String::new(),
+            kind: 0,
+            line: 0,
+            column: 0,
+            overload_count: 0,
+            from_current_document: 0
+        }
+    };
+    if len(sym.name) == 0: { return "null"; }
+    let start_line: i32 = lsp_line(sym.line);
+    let start_col: i32 = lsp_col(sym.column);
+    let end_col: i32 = start_col + len(sym.name);
+    return format!(
+        "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}}}",
+        start_line, start_col, start_line, end_col
+    );
+}
+
+fn handle_rename(payload: string) -> string {
+    if ensure_session() != 0: { return "null"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    let new_name: string = extract_new_name(payload);
+    if len(uri) == 0: { return "null"; }
+    if line < 0: { return "null"; }
+    if col < 0: { return "null"; }
+    if len(new_name) == 0: { return "null"; }
+
+    let s: Session = current_session();
+    let safe_r: Result<i32, string> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
+    if safe_r.is_err(): { return "null"; }
+    let safe: i32 = match safe_r {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    if safe != 1: { return "null"; }
+
+    let sym_r: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    if sym_r.is_err(): { return "null"; }
+    let sym: ResolvedSymbol = match sym_r {
+        Ok(v) => v,
+        Err(_e) => ResolvedSymbol {
+            id: String::new(),
+            name: String::new(),
+            uri: String::new(),
+            type_info: String::new(),
+            signature: String::new(),
+            kind: 0,
+            line: 0,
+            column: 0,
+            overload_count: 0,
+            from_current_document: 0
+        }
+    };
+    let old_len: i32 = len(sym.name);
+    if old_len <= 0: { return "null"; }
+
+    let refs_r: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    if refs_r.is_err(): { return "null"; }
+    let n: i32 = match refs_r {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+
+    var changes: string = String::new();
+    changes = concat(changes, "[");
+    var j: i32 = 0;
+    let new_e: string = json_escape(new_name);
+    for i in 0..n {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        if rr.is_err(): { continue; }
+        let r: ReferenceLocation = match rr {
+            Ok(v) => v,
+            Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
+        };
+        if len(r.uri) == 0: { continue; }
+        let sl: i32 = lsp_line(r.line);
+        let sc: i32 = lsp_col(r.column);
+        let ec: i32 = sc + old_len;
+        let uri_e: string = json_escape(r.uri);
+        let change: string = format!(
+            "{{\"textDocument\":{{\"uri\":\"{}\",\"version\":null}},\"edits\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]}}",
+            uri_e, sl, sc, sl, ec, new_e
+        );
+        if j > 0: {
+            changes = format!("{},{}", changes, change);
+        } else: {
+            changes = format!("{}{}", changes, change);
+        }
+        j = j + 1;
+    }
+    changes = concat(changes, "]");
+    if j <= 0: { return "null"; }
+    return format!(
+        "{{\"documentChanges\":{}}}",
+        changes
+    );
+}
+
+fn handle_diagnostic(payload: string) -> string {
+    if ensure_session() != 0: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let previous_result_id: string = extract_previous_result_id(payload);
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return "{\"kind\":\"full\",\"items\":[]}"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    var items: string = String::new();
+    items = concat(items, "[");
+    var result_id: string = format!("v1|{}", n);
+    var j: i32 = 0;
+    for i in 0..n {
+        let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
+        if dr.is_err(): { continue; }
+        let d: SyntaxDiagnostic = match dr {
+            Ok(v) => v,
+            Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
+        };
+        let msg: string = json_escape(d.message);
+        let sl: i32 = lsp_line(d.line);
+        let sc: i32 = lsp_col(d.column);
+        let item: string = format!(
+            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
+            sl, sc, sl, sc, msg
+        );
+        result_id = format!("{}|{}:{}:{}", result_id, d.line, d.column, d.message);
+        if j > 0: {
+            items = format!("{},{}", items, item);
+        } else: {
+            items = format!("{}{}", items, item);
+        }
+        j = j + 1;
+    }
+    items = concat(items, "]");
+    if len(previous_result_id) > 0: {
+        if eq(previous_result_id, result_id) == 1: {
+            let result_id_e: string = json_escape(result_id);
+            return format!(
+                "{{\"kind\":\"unchanged\",\"resultId\":\"{}\"}}",
+                result_id_e
+            );
+        }
+    }
+    let result_id_e: string = json_escape(result_id);
+    return format!(
+        "{{\"kind\":\"full\",\"resultId\":\"{}\",\"items\":{}}}",
+        result_id_e, items
+    );
+}
+
+fn handle_workspace_symbol(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    if ensure_uri_store() != 0: { return "[]"; }
+    let query: string = extract_workspace_query(payload);
+    let uri_count: i64 = uri_store_count(g_uri_store_handle);
+    if uri_count <= 0: { return "[]"; }
+
+    let s: Session = current_session();
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    for ui in 0..uri_count {
+        let uri: string = uri_store_get(g_uri_store_handle, ui);
+        if len(uri) == 0: { continue; }
+        let cr: Result<i32, string> = s.document_symbol_count(uri);
+        if cr.is_err(): { continue; }
+        let n: i32 = match cr {
+            Ok(v) => v,
+            Err(_e) => 0
+        };
+        for i in 0..n {
+            let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+            if sr.is_err(): { continue; }
+            let sym: DocumentSymbol = match sr {
+                Ok(v) => v,
+                Err(_e) => DocumentSymbol {
+                    id: String::new(),
+                    name: String::new(),
+                    type_info: String::new(),
+                    signature: String::new(),
+                    kind: 0,
+                    line: 0,
+                    column: 0
+                }
+            };
+            if len(query) > 0: {
+                if contains(sym.name, query) != 1: { continue; }
+            }
+            let kind: i32 = symbol_kind_lsp(sym);
+            let name_e: string = json_escape(sym.name);
+            let loc: string = location_json(uri, sym.line, sym.column);
+            let item: string = format!(
+                "{{\"name\":\"{}\",\"kind\":{},\"location\":{}}}",
+                name_e, kind, loc
+            );
+            if j > 0: {
+                out = format!("{},{}", out, item);
+            } else: {
+                out = format!("{}{}", out, item);
+            }
+            j = j + 1;
+        }
+    }
+    if j == 0: {
+        if len(query) > 0: {
+            if ensure_text_store() == 0: {
+                let root_uri: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                if len(root_uri) > 0: {
+                    return workspace_symbol_search(root_uri, query);
+                }
+            }
+        }
+    }
+    out = concat(out, "]");
+    return out;
+}
+
+fn semantic_token_type(sym: DocumentSymbol) -> i32 {
+    let kind_lsp: i32 = symbol_kind_lsp(sym);
+    if kind_lsp == 12: {
+        return 2; // function
+    }
+    if kind_lsp == 23: {
+        return 5; // type
+    }
+    if kind_lsp == 10: {
+        return 5; // type
+    }
+    if kind_lsp == 2: {
+        return 0; // keyword/module
+    }
+    if contains(sym.signature, "fn ") == 1: {
+        return 2; // function
+    }
+    if contains(sym.signature, "struct ") == 1: {
+        return 5; // type
+    }
+    if contains(sym.signature, "enum ") == 1: {
+        return 5; // type
+    }
+    if contains(sym.signature, "mod ") == 1: {
+        return 0; // keyword
+    }
+    return 4; // variable
+}
+
+fn semantic_token_modifiers(sym: DocumentSymbol) -> i32 {
+    // bit 0: declaration
+    // bit 1: static
+    // bit 2: readonly
+    var mods: i32 = 1;
+    if contains(sym.signature, "static ") == 1: {
+        mods = mods + 2;
+    }
+    if contains(sym.signature, "let ") == 1: {
+        mods = mods + 4;
+    }
+    return mods;
+}
+
+fn handle_semantic_tokens_full(payload: string) -> string {
+    if ensure_session() != 0: { return "{\"data\":[]}"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "{\"data\":[]}"; }
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return "{\"data\":[]}"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    if n <= 0: { return "{\"data\":[]}"; }
+
+    var data: string = String::new();
+    data = concat(data, "[");
+    var j: i32 = 0;
+    var prev_line: i32 = 0;
+    var prev_col: i32 = 0;
+
+    for i in 0..n {
+        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sr.is_err(): { continue; }
+        let sym: DocumentSymbol = match sr {
+            Ok(v) => v,
+            Err(_e) => DocumentSymbol {
+                id: String::new(),
+                name: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0
+            }
+        };
+        if len(sym.name) <= 0: { continue; }
+        let line0: i32 = lsp_line(sym.line);
+        let col0: i32 = lsp_col(sym.column);
+        if line0 < 0: { continue; }
+        if col0 < 0: { continue; }
+        let dl: i32 = line0 - prev_line;
+        var ds: i32 = col0;
+        if dl == 0: {
+            ds = col0 - prev_col;
+        }
+        let tlen: i32 = len(sym.name);
+        let ttype: i32 = semantic_token_type(sym);
+        let tmods: i32 = semantic_token_modifiers(sym);
+        let chunk: string = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
+        if j > 0: {
+            data = format!("{},{}", data, chunk);
+        } else: {
+            data = format!("{}{}", data, chunk);
+        }
+        prev_line = line0;
+        prev_col = col0;
+        j = j + 1;
+    }
+
+    data = concat(data, "]");
+    return format!("{{\"data\":{}}}", data);
+}
+
+fn handle_implementation(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    if ensure_uri_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let query_text: string = text_store_get(g_text_store_handle, uri);
+    if len(query_text) == 0: { return "[]"; }
+
+    let uri_count: i64 = uri_store_count(g_uri_store_handle);
+    if uri_count <= 0: { return "[]"; }
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    for ui in 0..uri_count {
+        let doc_uri: string = uri_store_get(g_uri_store_handle, ui);
+        if len(doc_uri) == 0: { continue; }
+        let candidate_text: string = text_store_get(g_text_store_handle, doc_uri);
+        if len(candidate_text) == 0: { continue; }
+        let packed: i64 = find_implementation_pos(query_text, line, col, candidate_text);
+        if packed <= 0: { continue; }
+        let line1: i32 = packed / 4294967296;
+        let col1: i32 = packed%4294967296;
+        let loc: string = location_json(doc_uri, line1, col1);
+        if j > 0: {
+            out = format!("{},{}", out, loc);
+        } else: {
+            out = format!("{}{}", out, loc);
+        }
+        j = j + 1;
+    }
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_formatting(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let text: string = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0: { return "[]"; }
+    let tab_size: i64 = extract_format_tab_size(payload);
+    let insert_spaces: int = extract_format_insert_spaces(payload);
+    let formatted: string = format_text_with_options(text, tab_size, insert_spaces);
+    if eq(formatted, text) == 1: { return "[]"; }
+    let lc: i64 = line_count(text);
+    var end_line: i64 = lc - 1;
+    if end_line < 0: { end_line = 0; }
+    let end_char: i64 = line_length(text, end_line);
+    let fmt_e: string = json_escape(formatted);
+    return format!(
+        "[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
+        end_line, end_char, fmt_e
+    );
+}
+
+fn handle_range_formatting(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let start_line: i64 = extract_range_start_line(payload);
+    let start_char: i64 = extract_range_start_character(payload);
+    let end_line: i64 = extract_range_end_line(payload);
+    let end_char: i64 = extract_range_end_character(payload);
+    if start_line < 0: { return "[]"; }
+    if start_char < 0: { return "[]"; }
+    if end_line < start_line: { return "[]"; }
+    if end_char < 0: { return "[]"; }
+    let text: string = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0: { return "[]"; }
+    let raw: string = extract_range_text(text, start_line, start_char, end_line, end_char);
+    let tab_size: i64 = extract_format_tab_size(payload);
+    let insert_spaces: int = extract_format_insert_spaces(payload);
+    let formatted: string = format_text_with_options(raw, tab_size, insert_spaces);
+    if eq(formatted, raw) == 1: { return "[]"; }
+    let fmt_e: string = json_escape(formatted);
+    return format!(
+        "[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
+        start_line, start_char, end_line, end_char, fmt_e
+    );
+}
+
+fn dispatch_result_json(payload: string) -> string {
+    let method: string = extract_method(payload);
+    log_write(log_level_verbose(), format!("request method={}", method));
+
+    if eq(method, "initialize") == 1: {
+        let _ = ensure_session();
+        if ensure_text_store() == 0: {
+            let root_uri: string = extract_root_uri(payload);
+            if len(root_uri) > 0: {
+                let _ = text_store_upsert(g_text_store_handle, "__mlang_root_uri__", root_uri);
+            }
+        }
+        let ver_e: string = json_escape(version());
+        return format!(
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd_mla\",\"version\":\"{}\"}}}}",
+            ver_e
+        );
+    }
+    if eq(method, "shutdown") == 1: {
+        return "null";
+    }
+    if eq(method, "textDocument/didOpen") == 1: {
+        let _ = handle_did_open(payload);
+        return "";
+    }
+    if eq(method, "textDocument/didChange") == 1: {
+        let _ = handle_did_change(payload);
+        return "";
+    }
+    if eq(method, "textDocument/didClose") == 1: {
+        let _ = handle_did_close(payload);
+        return "";
+    }
+    if eq(method, "textDocument/definition") == 1: {
+        return handle_definition(payload);
+    }
+    if eq(method, "textDocument/references") == 1: {
+        return handle_references(payload);
+    }
+    if eq(method, "textDocument/hover") == 1: {
+        return handle_hover(payload);
+    }
+    if eq(method, "textDocument/completion") == 1: {
+        return handle_completion(payload);
+    }
+    if eq(method, "textDocument/documentSymbol") == 1: {
+        return handle_document_symbol(payload);
+    }
+    if eq(method, "textDocument/documentHighlight") == 1: {
+        return handle_document_highlight(payload);
+    }
+    if eq(method, "textDocument/signatureHelp") == 1: {
+        return handle_signature_help(payload);
+    }
+    if eq(method, "textDocument/prepareRename") == 1: {
+        return handle_prepare_rename(payload);
+    }
+    if eq(method, "textDocument/rename") == 1: {
+        return handle_rename(payload);
+    }
+    if eq(method, "textDocument/diagnostic") == 1: {
+        return handle_diagnostic(payload);
+    }
+    if eq(method, "workspace/symbol") == 1: {
+        return handle_workspace_symbol(payload);
+    }
+
+    if eq(method, "textDocument/implementation") == 1: { return handle_implementation(payload); }
+    if eq(method, "textDocument/formatting") == 1: { return handle_formatting(payload); }
+    if eq(method, "textDocument/rangeFormatting") == 1: { return handle_range_formatting(payload); }
+    if eq(method, "textDocument/codeAction") == 1: { return handle_code_action(payload); }
+    if eq(method, "textDocument/semanticTokens/full") == 1: { return handle_semantic_tokens_full(payload); }
+
+    return "";
+}
+
+/// Dispatcher hook consumed by std::jsonrpc::run_stdio_loop.
+fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
+    let id: i64 = extract_request_id(request_payload);
+    let result_json: string = dispatch_result_json(request_payload);
+    if id < 0: {
+        log_write(log_level_verbose(), "notification handled");
+        return String::new();
+    }
+
+    if len(result_json) > 0: {
+        return make_result_response(id, result_json);
+    }
+    log_write(log_level_warn(), format!("method not found id={}", id));
+    return make_error_response(id, -32601, "Method not found");
+}
+
+fn has_version_flag(args: list<str8>) -> bool {
+    var seen_prog: bool = false;
+    for arg in args {
+        if seen_prog == false: {
+            seen_prog = true;
+            continue;
+        }
+        if strcmp(arg, "--version") == 0: {
+            return true;
+        }
+        if strcmp(arg, "-v") == 0: {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    if argc > 1: {
+        if has_version_flag(args): {
+            println!("mlangd_mla {}", version());
+            return 0;
+        }
+    }
+    if setup_logging(args) != 0: {
+        return 1;
+    }
+    log_write(log_level_info(), format!("mlangd_mla {} starting stdio loop", version()));
+    let r: Result<i32, string> = run_stdio_loop(1, 262144, 262144);
+    if r.is_err(): {
+        log_write(log_level_error(), format!("stdio loop error: {}", r.unwrap_err()));
+        if g_log_handle != 0: {
+            let _ = __mlang_std_fs_close(g_log_handle);
+        }
+        return 1;
+    }
+    log_write(log_level_info(), "mlangd_mla stdio loop exited");
+    if g_log_handle != 0: {
+        let _ = __mlang_std_fs_close(g_log_handle);
+    }
+    return 0;
+}

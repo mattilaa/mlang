@@ -21,6 +21,11 @@ ${MLANG}           ./build/mlang
 ...    examples/std_string_demo.mla
 ...    examples/std_thread_demo.mla
 ...    examples/std_fs_demo.mla
+...    examples/std_net_demo.mla
+...    examples/std_json_demo.mla
+...    examples/std_process_demo.mla
+...    examples/std_time_demo.mla
+...    examples/std_sync_demo.mla
 ...    examples/pointer_access.mla
 ...    examples/print_test.mla
 ...    examples/result_match.mla

@@ -1,0 +1,521 @@
+mod std::compiler;
+mod std::strbuf;
+
+use std::compiler::Session;
+use std::compiler::DocumentSymbol;
+use std::compiler::DefinitionLocation;
+use std::compiler::ReferenceLocation;
+use std::compiler::ResolvedSymbol;
+use std::compiler::SyntaxDiagnostic;
+use std::compiler::session_create;
+use std::strbuf::contains;
+
+#[test]
+fn test_compiler_open_change_close() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://open_change_close.mla";
+    let src1: string = "fn main() -> i32 { return 0; }";
+    let src2: string = "fn main() -> i32 { return 1; }";
+
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src1, 1);
+    if o.is_err(): { return 1; }
+
+    let c: Result<i32, string> = s.change_document(uri, src2, 2);
+    if c.is_err(): { return 1; }
+
+    let cl: Result<i32, string> = s.close_document(uri);
+    if cl.is_err(): { return 1; }
+
+    let d: Result<i32, string> = s.destroy();
+    if d.is_err(): { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_compiler_syntax_diag_get() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://diag_get.mla";
+    let src: string = "fn main() -> i32 { if (1 > 0) { return 0; ";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return 1; }
+    let count: i32 = cr.unwrap();
+    if count <= 0: { return 1; }
+
+    let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, 0);
+    if dr.is_err(): { return 1; }
+    let d: SyntaxDiagnostic = dr.unwrap();
+    if d.line <= 0: { return 1; }
+    if d.column <= 0: { return 1; }
+    if contains(d.message, "unclosed delimiter") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_hover_and_completion() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://hover_completion.mla";
+    let src: string = "fn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  let al: i32 = alpha;\n  return alpha;\n}";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let hr: Result<string, string> = s.hover(uri, 3, 8);
+    if hr.is_err(): { return 1; }
+    let h: string = hr.unwrap();
+    if contains(h, "alpha") == 0: { return 1; }
+
+    let ccr: Result<i32, string> = s.completion_count(uri, 4, 9);
+    if ccr.is_err(): { return 1; }
+    let cc: i32 = ccr.unwrap();
+    if cc <= 0: { return 1; }
+
+    var mut_found: i32 = 0;
+    for i in 0..cc {
+        let ir: Result<string, string> = s.completion_get(uri, 4, 9, i);
+        if ir.is_err(): { return 1; }
+        let item: string = ir.unwrap();
+        if contains(item, "alpha") == 1: {
+            mut_found = 1;
+        }
+    }
+    if mut_found != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_semantic_queries_require_ast_parse() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://invalid_semantic_doc.mla";
+    let src: string = "fn main() -> i32 { let x: i32 = ; }";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let hr: Result<string, string> = s.hover(uri, 1, 21);
+    if hr.is_ok(): { return 1; }
+
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 1, 21);
+    if dr.is_ok(): { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_document_symbols_and_definition() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://symbols_definition.mla";
+    let src: string = "mod std::io;\nstruct Box { var value: i32; };\nfn helper() -> i32 { return 1; }\nfn main() -> i32 {\n  let alpha: i32 = helper();\n  return alpha;\n}";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return 1; }
+    let count: i32 = cr.unwrap();
+    if count <= 0: { return 1; }
+
+    var saw_main: i32 = 0;
+    var saw_alpha: i32 = 0;
+    for i in 0..count {
+        let sym_r: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sym_r.is_err(): { return 1; }
+        let sym: DocumentSymbol = sym_r.unwrap();
+        if contains(sym.name, "main") == 1: {
+            saw_main = 1;
+        }
+        if contains(sym.name, "alpha") == 1: {
+            saw_alpha = 1;
+        }
+    }
+    if saw_main != 1: { return 1; }
+    if saw_alpha != 1: { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(uri, 6, 11);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "alpha") == 0: { return 1; }
+    if def.line != 5: { return 1; }
+    if contains(def.uri, "symbols_definition.mla") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_cross_document_mod() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/util.mla";
+    let main_uri: string = "file:///ws/main.mla";
+
+    let util_src: string = "fn util_value() -> i32 { return 7; }";
+    let main_src: string = "mod lib::util;\nfn main() -> i32 {\n  let x: i32 = util_value();\n  return x;\n}";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 3, 18);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "util_value") == 0: { return 1; }
+    if contains(def.uri, "lib/util.mla") == 0: { return 1; }
+    if def.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_semantic_scope_and_use_import() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/util2.mla";
+    let main_uri: string = "file:///ws/main2.mla";
+    let util_src: string = "fn util_call() -> i32 { return 11; }";
+    let main_src: string = "use lib::util2::util_call;\nfn main() -> i32 {\n  let x: i32 = 1;\n  if x == 1: {\n    let x: i32 = util_call();\n    return x;\n  }\n  return x;\n}";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let d1r: Result<DefinitionLocation, string> = s.definition(main_uri, 6, 12);
+    if d1r.is_err(): { return 1; }
+    let d1: DefinitionLocation = d1r.unwrap();
+    if contains(d1.name, "x") == 0: { return 1; }
+    if d1.line != 5: { return 1; }
+
+    let d2r: Result<DefinitionLocation, string> = s.definition(main_uri, 5, 18);
+    if d2r.is_err(): { return 1; }
+    let d2: DefinitionLocation = d2r.unwrap();
+    if contains(d2.name, "util_call") == 0: { return 1; }
+    if contains(d2.uri, "lib/util2.mla") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_from_workspace_module_paths() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let main_uri: string = "workspace_cfg/app/main_cfg.mla";
+    let main_src: string = "use lib::util_cfg::util_cfg;\nfn main() -> i32 {\n  return util_cfg();\n}";
+    let o: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 3, 10);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "util_cfg") == 0: { return 1; }
+    if contains(def.uri, "workspace_cfg/modules/lib/util_cfg.mla") == 0: { return 1; }
+    if def.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_stable_symbol_id_and_references() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/id_refs_util.mla";
+    let main_uri: string = "file:///ws/id_refs_main.mla";
+    let util_src: string = "fn util_ref() -> i32 { return 9; }";
+    let main_src: string = "use lib::id_refs_util::util_ref;\nfn main() -> i32 {\n  let a: i32 = util_ref();\n  let b: i32 = util_ref();\n  return a + b;\n}";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 3, 17);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.id, "sym_") == 0: { return 1; }
+
+    let rc_r: Result<i32, string> = s.references_count(main_uri, 3, 17);
+    if rc_r.is_err(): { return 1; }
+    let rc: i32 = rc_r.unwrap();
+    if rc < 3: { return 1; }
+
+    var found_util_def: i32 = 0;
+    for i in 0..rc {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(main_uri, 3, 17, i);
+        if rr.is_err(): { return 1; }
+        let r: ReferenceLocation = rr.unwrap();
+        if contains(r.uri, "id_refs_util.mla") == 1: {
+            if r.line == 1: {
+                found_util_def = 1;
+            }
+        }
+    }
+    if found_util_def != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_rename_safety() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://rename_safety.mla";
+    let src: string = "fn main() -> i32 {\n  let alpha: i32 = 1;\n  let beta: i32 = alpha + 1;\n  return beta;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    let safe1_r: Result<i32, string> = s.rename_is_safe(uri, 3, 19, "gamma");
+    if safe1_r.is_err(): { return 1; }
+    if safe1_r.unwrap() != 1: { return 1; }
+
+    let safe2_r: Result<i32, string> = s.rename_is_safe(uri, 3, 19, "beta");
+    if safe2_r.is_err(): { return 1; }
+    if safe2_r.unwrap() != 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_semantic_cache_api() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let util_uri: string = "file:///ws/lib/cache_api_util.mla";
+    let main_uri: string = "file:///ws/cache_api_main.mla";
+    let util_src: string = "fn util_cache() -> i32 { return 5; }";
+    let main_src: string = "use lib::cache_api_util::util_cache;\nfn main() -> i32 { return util_cache(); }";
+
+    let o1: Result<i32, string> = s.open_document(util_uri, "mlang", util_src, 1);
+    if o1.is_err(): { return 1; }
+    let o2: Result<i32, string> = s.open_document(main_uri, "mlang", main_src, 1);
+    if o2.is_err(): { return 1; }
+
+    let warm_r: Result<i32, string> = s.semantic_cache_warm(main_uri);
+    if warm_r.is_err(): { return 1; }
+
+    let def_r: Result<DefinitionLocation, string> = s.definition(main_uri, 2, 27);
+    if def_r.is_err(): { return 1; }
+    let def: DefinitionLocation = def_r.unwrap();
+    if contains(def.name, "util_cache") == 0: { return 1; }
+
+    let clr_r: Result<i32, string> = s.semantic_cache_clear();
+    if clr_r.is_err(): { return 1; }
+
+    let def2_r: Result<DefinitionLocation, string> = s.definition(main_uri, 2, 27);
+    if def2_r.is_err(): { return 1; }
+    let def2: DefinitionLocation = def2_r.unwrap();
+    if contains(def2.name, "util_cache") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_symbol_typed_metadata() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://typed_symbol_meta.mla";
+    let src: string = "fn helper(x: i32) -> i32 { return x; }\nfn main() -> i32 {\n  let alpha: i32 = helper(1);\n  return alpha;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return 1; }
+    let count: i32 = cr.unwrap();
+    if count <= 0: { return 1; }
+
+    var saw_helper_signature: i32 = 0;
+    var saw_alpha_type: i32 = 0;
+    for i in 0..count {
+        let sym_r: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sym_r.is_err(): { return 1; }
+        let sym: DocumentSymbol = sym_r.unwrap();
+        if contains(sym.name, "helper") == 1: {
+            if contains(sym.signature, "helper") == 1: {
+                saw_helper_signature = 1;
+            }
+        }
+        if contains(sym.name, "alpha") == 1: {
+            if contains(sym.type_info, "i32") == 1: {
+                saw_alpha_type = 1;
+            }
+        }
+    }
+
+    if saw_helper_signature != 1: { return 1; }
+    if saw_alpha_type != 1: { return 1; }
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_resolve_symbol_overload_metadata() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://resolve_overload_meta.mla";
+    let src: string = "fn foo(x: i32) -> i32 { return x; }\nfn foo(x: i64) -> i64 { return x; }\nfn main() -> i32 {\n  let y: i32 = foo(1);\n  return y;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, 4, 16);
+    if rr.is_err(): { return 1; }
+    let rs: ResolvedSymbol = rr.unwrap();
+    if contains(rs.name, "foo") == 0: { return 1; }
+    if rs.overload_count < 2: { return 1; }
+    if rs.kind != 1: { return 1; }
+    if rs.from_current_document != 1: { return 1; }
+    if contains(rs.signature, "foo") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_resolve_struct_member_self_access() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://resolve_self_field.mla";
+    let src: string = "struct Counter { var value: i32; };\nimpl Counter {\n  fn increment(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let n: Counter = c.increment();\n  return n.value;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    var resolved_col: i32 = 0;
+    var rs: ResolvedSymbol = ResolvedSymbol {
+        id: String::new(),
+        name: String::new(),
+        uri: String::new(),
+        type_info: String::new(),
+        signature: String::new(),
+        kind: 0,
+        line: 0,
+        column: 0,
+        overload_count: 0,
+        from_current_document: 0
+    };
+    for c in 30..40 {
+        let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, 4, c);
+        if rr.is_err(): { continue; }
+        let candidate: ResolvedSymbol = rr.unwrap();
+        if contains(candidate.signature, "field Counter::value") == 1: {
+            resolved_col = c;
+            rs = candidate;
+            break;
+        }
+    }
+    if resolved_col == 0: { return 1; }
+    if rs.kind != 2: { return 1; }
+    if contains(rs.name, "value") == 0: { return 1; }
+
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 4, resolved_col);
+    if dr.is_err(): { return 1; }
+    let def: DefinitionLocation = dr.unwrap();
+    if contains(def.name, "value") == 0: { return 1; }
+    if def.line <= 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_struct_member_self_access() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://member_definition_self.mla";
+    let src: string = "struct Counter {\n  var value: i32;\n  fn inc(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n};";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "value" in "self.value".
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 34);
+    if dr.is_err(): { return 1; }
+    let d: DefinitionLocation = dr.unwrap();
+
+    if contains(d.name, "value") == 0: { return 1; }
+    if d.line != 2: { return 1; }
+    if d.column <= 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_method_params_and_member_access() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://method_params_member_access.mla";
+    let src: string = "struct Counter {\n  var value: i32;\n  pub fn add(self: Counter, amount: i32) -> Counter {\n    return Counter { value: self.value + amount };\n  }\n};";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "value" in "self.value" should resolve to the struct field.
+    let value_dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 34);
+    if value_dr.is_err(): { return 1; }
+    let value_def: DefinitionLocation = value_dr.unwrap();
+    if contains(value_def.name, "value") == 0: { return 1; }
+    if value_def.line != 2: { return 1; }
+
+    // Cursor on "amount" usage should resolve to parameter declaration.
+    let amount_dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 42);
+    if amount_dr.is_err(): { return 1; }
+    let amount_def: DefinitionLocation = amount_dr.unwrap();
+    if contains(amount_def.name, "amount") == 0: { return 1; }
+    if amount_def.line != 3: { return 1; }
+
+    // Cursor on "self" usage should resolve to method parameter declaration.
+    let self_dr: Result<DefinitionLocation, string> = s.definition(uri, 4, 29);
+    if self_dr.is_err(): { return 1; }
+    let self_def: DefinitionLocation = self_dr.unwrap();
+    if contains(self_def.name, "self") == 0: { return 1; }
+    if self_def.line != 3: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}

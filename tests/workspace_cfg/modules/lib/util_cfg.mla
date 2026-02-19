@@ -1,0 +1,1 @@
+fn util_cfg() -> i32 { return 42; }

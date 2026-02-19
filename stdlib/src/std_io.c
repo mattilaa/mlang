@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 static pthread_mutex_t g_stdout_mutex;
 static pthread_once_t g_stdout_once = PTHREAD_ONCE_INIT;
@@ -57,6 +60,37 @@ int64_t __mlang_std_io_stdout_writeln(const char* s)
     return (int64_t)(w1 + w2);
 }
 
+int64_t __mlang_std_io_stderr_write(const char* s)
+{
+    if(!s)
+        return -1;
+    size_t n = strlen(s);
+    size_t w = fwrite(s, 1, n, stderr);
+    fflush(stderr);
+    return (int64_t)w;
+}
+
+int64_t __mlang_std_io_stderr_writeln(const char* s)
+{
+    if(!s)
+        return -1;
+    size_t n = strlen(s);
+    size_t w1 = fwrite(s, 1, n, stderr);
+    size_t w2 = fwrite("\n", 1, 1, stderr);
+    fflush(stderr);
+    return (int64_t)(w1 + w2);
+}
+
+int __mlang_std_io_stdout_flush(void)
+{
+    return fflush(stdout);
+}
+
+int __mlang_std_io_stderr_flush(void)
+{
+    return fflush(stderr);
+}
+
 int64_t __mlang_std_io_stdin_read_line(char* buf, int64_t capacity)
 {
     if(!buf || capacity <= 1)
@@ -72,6 +106,97 @@ int64_t __mlang_std_io_stdin_read_line(char* buf, int64_t capacity)
         --n;
     }
     return (int64_t)n;
+}
+
+// mode: 0=unbuffered, 1=line buffered, 2=fully buffered.
+static int set_stream_buffering(FILE* fp, int mode, int64_t size)
+{
+    if(!fp)
+        return -1;
+    int c_mode = _IONBF;
+    if(mode == 1)
+        c_mode = _IOLBF;
+    else if(mode == 2)
+        c_mode = _IOFBF;
+
+    size_t cap = (size > 0) ? (size_t)size : 0;
+    return setvbuf(fp, NULL, c_mode, cap);
+}
+
+int __mlang_std_io_set_stdin_buffering(int mode, int64_t size)
+{
+    return set_stream_buffering(stdin, mode, size);
+}
+
+int __mlang_std_io_set_stdout_buffering(int mode, int64_t size)
+{
+    return set_stream_buffering(stdout, mode, size);
+}
+
+int __mlang_std_io_set_stderr_buffering(int mode, int64_t size)
+{
+    return set_stream_buffering(stderr, mode, size);
+}
+
+// Returns:
+//  >0 bytes read (newline stripped)
+//   0 no data currently available (would block)
+//  -1 EOF/error
+int64_t __mlang_std_io_stdin_read_line_nonblocking(char* buf, int64_t capacity)
+{
+    if(!buf || capacity <= 1)
+        return -1;
+
+    int fd = fileno(stdin);
+    if(fd < 0)
+        return -1;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if(flags < 0)
+        return -1;
+    if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0)
+        return -1;
+
+    int64_t out_n = 0;
+    int saw_any = 0;
+    while(out_n < (capacity - 1))
+    {
+        unsigned char ch = 0;
+        ssize_t n = read(fd, &ch, 1);
+        if(n == 1)
+        {
+            saw_any = 1;
+            if(ch == '\n')
+                break;
+            if(ch == '\r')
+                continue;
+            buf[out_n++] = (char)ch;
+            continue;
+        }
+        if(n == 0)
+        {
+            (void)fcntl(fd, F_SETFL, flags);
+            if(!saw_any)
+                return -1;
+            break;
+        }
+        if(errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            (void)fcntl(fd, F_SETFL, flags);
+            if(!saw_any)
+            {
+                buf[0] = '\0';
+                return 0;
+            }
+            break;
+        }
+        (void)fcntl(fd, F_SETFL, flags);
+        return -1;
+    }
+
+    (void)fcntl(fd, F_SETFL, flags);
+    buf[out_n] = '\0';
+    return out_n;
 }
 
 typedef int64_t (*mlang_fn0_i64_t)(void);

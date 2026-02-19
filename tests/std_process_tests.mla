@@ -1,0 +1,143 @@
+mod std::process;
+mod std::strbuf;
+
+use std::process::Child;
+use std::process::ChildStderr;
+use std::process::ChildStdin;
+use std::process::ChildStdout;
+use std::process::ExitStatus;
+use std::process::spawn;
+use std::strbuf::contains;
+
+#[test]
+fn test_spawn_echo_and_capture_stdout() -> i32 {
+    let child_r: Result<Child, string> = spawn("/bin/echo", ["hello-process"]);
+    if child_r.is_err(): { return 1; }
+    let child: Child = child_r.unwrap();
+
+    let out_r: Result<ChildStdout, string> = child.stdout();
+    if out_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    let out: ChildStdout = out_r.unwrap();
+
+    var buf = String::with_capacity(256);
+    let n_r: Result<i64, string> = out.read(buf, 256);
+    if n_r.is_err(): {
+        String::free(buf);
+        out.close();
+        child.close();
+        return 1;
+    }
+    let n: i64 = n_r.unwrap();
+    let ok: i32 = n > 0 ? 1 : 0;
+    if ok == 1: {
+        if contains(buf, "hello-process") != 1: {
+            String::free(buf);
+            out.close();
+            child.close();
+            return 1;
+        }
+    }
+    String::free(buf);
+    out.close();
+
+    let st_r: Result<ExitStatus, string> = child.wait();
+    if st_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    let st: ExitStatus = st_r.unwrap();
+    child.close();
+    if ok != 1: { return 1; }
+    return st.success() == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_spawn_sh_stderr_and_exit_code() -> i32 {
+    let child_r: Result<Child, string> = spawn("/bin/sh", ["-c", "echo process-error 1>&2; exit 7"]);
+    if child_r.is_err(): { return 1; }
+    let child: Child = child_r.unwrap();
+
+    let err_r: Result<ChildStderr, string> = child.stderr();
+    if err_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    let errp: ChildStderr = err_r.unwrap();
+
+    var buf = String::with_capacity(256);
+    let n_r: Result<i64, string> = errp.read(buf, 256);
+    if n_r.is_err(): {
+        String::free(buf);
+        errp.close();
+        child.close();
+        return 1;
+    }
+    let saw_err: i32 = contains(buf, "process-error") == 1 ? 1 : 0;
+    String::free(buf);
+    errp.close();
+
+    let st_r: Result<ExitStatus, string> = child.wait();
+    if st_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    let st: ExitStatus = st_r.unwrap();
+    child.close();
+    if saw_err != 1: { return 1; }
+    if st.exited() != 1: { return 1; }
+    return st.code() == 7 ? 0 : 1;
+}
+
+#[test]
+fn test_stdin_stdout_pipe_roundtrip() -> i32 {
+    let child_r: Result<Child, string> = spawn("/bin/cat", []);
+    if child_r.is_err(): { return 1; }
+    let child: Child = child_r.unwrap();
+
+    let in_r: Result<ChildStdin, string> = child.stdin();
+    let out_r: Result<ChildStdout, string> = child.stdout();
+    if in_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    if out_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    let inp: ChildStdin = in_r.unwrap();
+    let out: ChildStdout = out_r.unwrap();
+
+    let w_r: Result<i64, string> = inp.write("cat-roundtrip\n");
+    if w_r.is_err(): {
+        inp.close();
+        out.close();
+        child.close();
+        return 1;
+    }
+    inp.close();
+
+    var buf = String::with_capacity(256);
+    let r_r: Result<i64, string> = out.read(buf, 256);
+    if r_r.is_err(): {
+        String::free(buf);
+        out.close();
+        child.close();
+        return 1;
+    }
+    let ok: i32 = contains(buf, "cat-roundtrip") == 1 ? 1 : 0;
+    String::free(buf);
+    out.close();
+
+    let st_r: Result<ExitStatus, string> = child.wait();
+    if st_r.is_err(): {
+        child.close();
+        return 1;
+    }
+    let st: ExitStatus = st_r.unwrap();
+    child.close();
+    if ok != 1: { return 1; }
+    return st.success() == 1 ? 0 : 1;
+}

@@ -200,10 +200,6 @@ static std::vector<std::string> default_stdlib_paths()
     std::vector<std::string> paths;
     if(const char* env = std::getenv("MLANG_STDLIB_PATH"))
         paths.emplace_back(env);
-    if(const char* xdg = std::getenv("XDG_DATA_HOME"))
-        paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
-    if(const char* home = std::getenv("HOME"))
-        paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
 #ifdef MLANG_STDLIB_SOURCE_DIR
     {
         std::error_code ec;
@@ -211,6 +207,10 @@ static std::vector<std::string> default_stdlib_paths()
             paths.emplace_back(MLANG_STDLIB_SOURCE_DIR);
     }
 #endif
+    if(const char* xdg = std::getenv("XDG_DATA_HOME"))
+        paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
+    if(const char* home = std::getenv("HOME"))
+        paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
 #ifdef MLANG_STDLIB_INSTALL_DIR
     paths.emplace_back(MLANG_STDLIB_INSTALL_DIR);
 #endif

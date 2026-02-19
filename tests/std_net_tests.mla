@@ -1,0 +1,142 @@
+mod std::net;
+mod std::strbuf;
+
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::strbuf::eq;
+
+#[test]
+fn test_tcp_loopback_ping_pong() -> i32 {
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    if listener_r.is_err(): { return 1; }
+    let listener: TcpListener = listener_r.unwrap();
+
+    let port_r: Result<i64, string> = listener.local_port();
+    if port_r.is_err(): {
+        listener.close();
+        return 1;
+    }
+    let port: i64 = port_r.unwrap();
+
+    let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    if client_r.is_err(): {
+        listener.close();
+        return 1;
+    }
+    let client: TcpStream = client_r.unwrap();
+
+    let server_r: Result<TcpStream, string> = listener.accept();
+    if server_r.is_err(): {
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let server: TcpStream = server_r.unwrap();
+
+    let cw: Result<i64, string> = client.write("ping");
+    if cw.is_err(): {
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    var in1 = String::with_capacity(16);
+    let sr: Result<i64, string> = server.read(in1, 16);
+    if sr.is_err(): {
+        String::free(in1);
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    if eq(in1, "ping") != 1: {
+        String::free(in1);
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    String::free(in1);
+
+    let sw: Result<i64, string> = server.write("pong");
+    if sw.is_err(): {
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    var in2 = String::with_capacity(16);
+    let cr: Result<i64, string> = client.read(in2, 16);
+    if cr.is_err(): {
+        String::free(in2);
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let ok: i32 = eq(in2, "pong");
+    String::free(in2);
+
+    server.close();
+    client.close();
+    listener.close();
+    return ok == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_tcp_stream_nonblocking_and_timeouts() -> i32 {
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    if listener_r.is_err(): { return 1; }
+    let listener: TcpListener = listener_r.unwrap();
+
+    let port_r: Result<i64, string> = listener.local_port();
+    if port_r.is_err(): {
+        listener.close();
+        return 1;
+    }
+    let port: i64 = port_r.unwrap();
+
+    let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    if client_r.is_err(): {
+        listener.close();
+        return 1;
+    }
+    let client: TcpStream = client_r.unwrap();
+
+    let server_r: Result<TcpStream, string> = listener.accept();
+    if server_r.is_err(): {
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let server: TcpStream = server_r.unwrap();
+
+    let nb: Result<i32, string> = client.set_nonblocking(1);
+    if nb.is_err(): {
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let rt: Result<i32, string> = server.set_read_timeout_ms(200);
+    if rt.is_err(): {
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+    let wt: Result<i32, string> = server.set_write_timeout_ms(200);
+    if wt.is_err(): {
+        server.close();
+        client.close();
+        listener.close();
+        return 1;
+    }
+
+    server.close();
+    client.close();
+    listener.close();
+    return 0;
+}

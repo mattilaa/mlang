@@ -581,16 +581,54 @@ TEST_F(MLATest, Division)
     EXPECT_EQ(compileAndRun(code), "5\n");
 }
 
-TEST_F(MLATest, ComplexExpression)
+TEST_F(MLATest, Modulo)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let result: i32 = (10 + 5) * 2 - 6 / 2;
+            let result: i32 = 20 % 6;
             println!("{}", result);
             return 0;
         }
     )";
-    EXPECT_EQ(compileAndRun(code), "27\n");
+    EXPECT_EQ(compileAndRun(code), "2\n");
+}
+
+TEST_F(MLATest, FloatModulo)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let result: float = 5.5f % 2.0f;
+            if result < 1.49f: { return 1; }
+            if result > 1.51f: { return 2; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, DoubleModulo)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let result: double = 5.5 % 2.0;
+            if result < 1.49: { return 1; }
+            if result > 1.51: { return 2; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, ComplexExpression)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let result: i32 = (10 + 5) * 2 - 6 / 2 + 7 % 4;
+            println!("{}", result);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "30\n");
 }
 
 TEST_F(MLATest, OperatorPrecedence)
@@ -1082,6 +1120,19 @@ TEST_F(MLATest, TernaryPrecedence)
     EXPECT_EQ(compileAndRunExitCode(code), 4);
 }
 
+TEST_F(MLATest, TernaryWithFunctionCallCondition)
+{
+    std::string code = R"(
+        mod std::strbuf;
+        use std::strbuf::eq;
+        fn main() -> i32 {
+            let s: string = "ok";
+            return eq(s, "ok") == 1 ? 0 : 1;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 TEST_F(MLATest, ResultIsOkAndUnwrap)
 {
     std::string code = R"(
@@ -1113,6 +1164,21 @@ TEST_F(MLATest, ResultUnwrapWarns)
     std::string out = compileCapture(rc);
     EXPECT_EQ(rc, 0);
     EXPECT_NE(out.find("Result.unwrap() may panic"), std::string::npos);
+}
+
+TEST_F(MLATest, FloatModuloByZeroReportsError)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: float = 5.5f % 0.0f;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("modulo by zero"), std::string::npos);
 }
 
 // ============================================================================

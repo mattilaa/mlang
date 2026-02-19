@@ -6,10 +6,16 @@ use std::strbuf::*;
 
 fn main() -> i32 {
     let out: Stdout = stdout();
+    let err: Stderr = stderr();
+
+    set_stdout_buffering(buffering_line(), 1024);
+    set_stderr_buffering(buffering_unbuffered(), 0);
+    set_stdin_buffering(buffering_full(), 1024);
 
     writeln(out, "std::io demo");
     write(out, "plain write");
     writeln(out, "");
+    writeln(err, "stderr write");
 
     let lk: StdoutLock = lock(out);
     writeln_locked(lk, "locked write 1");
@@ -17,6 +23,16 @@ fn main() -> i32 {
     unlock(lk);
 
     writeln_sync(out, "sync write with implicit lock/unlock");
+
+    var poll_buf = with_capacity(128);
+    let input_handle: Stdin = stdin();
+    let polled = read_line_nonblocking(input_handle, poll_buf, 128);
+    if polled > 0: {
+        writeln(out, poll_buf);
+    }
+    free(poll_buf);
+    flush(out);
+    flush(err);
 
     // Optional stdin sample:
     // let input = with_capacity(128);

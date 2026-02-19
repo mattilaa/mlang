@@ -36,3 +36,36 @@ fn test_scope_exit_drop_unlocks() -> i32 {
     if lock_and_return() != 0: { return 1; }
     return try_lock(out) == 1 ? 0 : 1;
 }
+
+#[test]
+fn test_stderr_and_flush() -> i32 {
+    let err: Stderr = stderr();
+    let n1: i64 = write(err, "std_io_stderr_test");
+    let n2: i64 = writeln(err, "");
+    let f: i32 = flush(err);
+    if n1 <= 0: { return 1; }
+    if n2 <= 0: { return 1; }
+    return f == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_buffering_configuration() -> i32 {
+    let rc1: i32 = set_stdout_buffering(buffering_line(), 1024);
+    let rc2: i32 = set_stderr_buffering(buffering_unbuffered(), 0);
+    let rc3: i32 = set_stdin_buffering(buffering_full(), 1024);
+    if rc1 != 0: { return 1; }
+    if rc2 != 0: { return 1; }
+    return rc3 == 0 ? 0 : 1;
+}
+
+#[test]
+fn test_nonblocking_stdin_read() -> i32 {
+    let input: Stdin = stdin();
+    var buf = String::with_capacity(64);
+    let n: i64 = read_line_nonblocking(input, buf, 64);
+    String::free(buf);
+    // In CI/stdin-closed cases this can be -1; with no pending input it's 0.
+    // If the process receives input, positive values are also valid.
+    if n < -1: { return 1; }
+    return 0;
+}

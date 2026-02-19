@@ -2,6 +2,8 @@ build
 *.a
 *.out
 *.o
+*.pyc
+*_bin
 docs/out
 
 .cache

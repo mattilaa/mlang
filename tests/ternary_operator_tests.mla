@@ -1,0 +1,15 @@
+mod std::strbuf;
+
+use std::strbuf::eq;
+
+#[test]
+fn test_ternary_with_function_call_condition() -> i32 {
+    let s: string = "ok";
+    return eq(s, "ok") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_ternary_false_branch() -> i32 {
+    let s: string = "bad";
+    return eq(s, "ok") == 1 ? 1 : 0;
+}

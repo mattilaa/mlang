@@ -10,12 +10,12 @@ pub struct Point {
     var y: i32;
 
     // Private method - only callable within the struct
-    fn distance_squared() -> i32 {
+    fn distance_squared(self: Point) -> i32 {
         return self.x * self.x + self.y * self.y;
     }
 
     // Public method - callable from outside
-    pub fn distance() -> i32 {
+    pub fn distance(self: Point) -> i32 {
         return int(double(self.distance_squared()));
     }
 };
@@ -23,7 +23,7 @@ pub struct Point {
 struct Base {
     var value: i32;
 
-    pub fn get_value() -> i32 {
+    pub fn get_value(self: Base) -> i32 {
         return self.value;
     }
 };
@@ -31,14 +31,14 @@ struct Base {
 pub struct Derived : Base {
     var extra: i32;
 
-    pub fn get_total() -> int {
+    pub fn get_total(self: Derived) -> int {
         return self.extra + self.value;
     }
 };
 
 struct Inner {
     var value: int;
-    pub fn get_value() -> int { return self.value; }
+    pub fn get_value(self: Inner) -> int { return self.value; }
 };
 
 struct Outer {

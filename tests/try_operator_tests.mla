@@ -1,3 +1,6 @@
+mod std::strbuf;
+use std::strbuf::contains;
+
 fn ok_num() -> Result<i32, string> {
     return Ok<i32, string>(41);
 }
@@ -21,6 +24,20 @@ fn chain_err() -> Result<i32, string> {
     return Ok<i32, string>(a);
 }
 
+fn leaf_fail() -> Result<i32, string> {
+    return Err<i32, string>("boom");
+}
+
+fn mid_fail() -> Result<i32, string> {
+    let v: i32 = leaf_fail()?;
+    return Ok<i32, string>(v);
+}
+
+fn top_fail() -> Result<i32, string> {
+    let v: i32 = mid_fail()?;
+    return Ok<i32, string>(v);
+}
+
 #[test]
 fn test_try_ok_path() -> i32 {
     let r: Result<i32, string> = chain_ok();
@@ -37,4 +54,23 @@ fn test_try_err_propagation() -> i32 {
         return 0;
     }
     return 1;
+}
+
+#[test]
+fn test_try_err_context_stack() -> i32 {
+    let r: Result<i32, string> = top_fail();
+    if r.is_ok(): {
+        return 1;
+    }
+    let msg: string = r.unwrap_err();
+    if contains(msg, "boom") == 0: {
+        return 1;
+    }
+    if contains(msg, "mid_fail") == 0: {
+        return 1;
+    }
+    if contains(msg, "top_fail") == 0: {
+        return 1;
+    }
+    return 0;
 }

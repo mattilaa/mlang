@@ -152,13 +152,14 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %token MATCH
 %token PUB IMPL
 %token EXTERN
+%token STATIC
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
-%token PLUS MINUS MULTIPLY DIVIDE ASSIGN AMP
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -182,6 +183,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
 %type <ast> print_statement argument_list assert_eq_statement
+%type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
@@ -190,7 +192,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 
 %left LT GT LE GE EQ NE
 %left PLUS MINUS
-%left MULTIPLY DIVIDE
+%left MULTIPLY DIVIDE MODULO
 
 %start program
 
@@ -216,6 +218,7 @@ top_level_item
     | mod_declaration
     | use_declaration
     | impl_block
+    | global_var_statement
     ;
 
 module_path
@@ -426,6 +429,7 @@ statement_list
 statement
     : let_statement
     | var_statement
+    | static_var_statement
     | assignment_statement
     | expression_statement
     | return_statement
@@ -453,6 +457,48 @@ var_statement
         { $$ = create_var_declaration(NULL, $2, $4); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = create_var_declaration($4, $2, NULL); }
+    ;
+
+global_var_statement
+    : VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration($4, $2, $6);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    | VAR IDENTIFIER ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration(NULL, $2, $4);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    | VAR IDENTIFIER COLON type SEMICOLON
+        {
+            $$ = create_var_declaration($4, $2, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isGlobalStorage = true;
+        }
+    ;
+
+static_var_statement
+    : STATIC VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration($5, $3, $7);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
+    | STATIC VAR IDENTIFIER ASSIGN expression SEMICOLON
+        {
+            $$ = create_var_declaration(NULL, $3, $5);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
+    | STATIC VAR IDENTIFIER COLON type SEMICOLON
+        {
+            $$ = create_var_declaration($5, $3, NULL);
+            if(auto* n = dynamic_cast<VarDeclNode*>($$))
+                n->isStaticStorage = true;
+        }
     ;
 
 assignment_statement
@@ -651,6 +697,7 @@ match_binary_expression
     | match_target MINUS match_target { $$ = create_binary_op(MINUS, $1, $3); }
     | match_target MULTIPLY match_target { $$ = create_binary_op(MULTIPLY, $1, $3); }
     | match_target DIVIDE match_target { $$ = create_binary_op(DIVIDE, $1, $3); }
+    | match_target MODULO match_target { $$ = create_binary_op(MODULO, $1, $3); }
     | match_target LT match_target { $$ = create_binary_op(LT, $1, $3); }
     | match_target GT match_target { $$ = create_binary_op(GT, $1, $3); }
     | match_target LE match_target { $$ = create_binary_op(LE, $1, $3); }
@@ -743,6 +790,7 @@ binary_expression
     | expression MINUS expression { $$ = create_binary_op(MINUS, $1, $3); }
     | expression MULTIPLY expression { $$ = create_binary_op(MULTIPLY, $1, $3); }
     | expression DIVIDE expression { $$ = create_binary_op(DIVIDE, $1, $3); }
+    | expression MODULO expression { $$ = create_binary_op(MODULO, $1, $3); }
     | expression LT expression { $$ = create_binary_op(LT, $1, $3); }
     | expression GT expression { $$ = create_binary_op(GT, $1, $3); }
     | expression LE expression { $$ = create_binary_op(LE, $1, $3); }

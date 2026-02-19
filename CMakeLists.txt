@@ -1,7 +1,30 @@
 cmake_minimum_required(VERSION 3.20)
 set(MLANG_VERSION_MAJOR 0)
 set(MLANG_VERSION_MINOR 1)
+option(MLANG_AUTO_INCREMENT_BUILD "Auto-increment build number on each CMake configure" ON)
 set(MLANG_VERSION_BUILD 0 CACHE STRING "Build number")
+set(MLANG_BUILD_NUMBER_FILE "${CMAKE_BINARY_DIR}/.mlang_build_number" CACHE FILEPATH
+    "Path to persisted auto-increment build number")
+
+if(MLANG_AUTO_INCREMENT_BUILD)
+    set(_mlang_seed "${MLANG_VERSION_BUILD}")
+    if(EXISTS "${MLANG_BUILD_NUMBER_FILE}")
+        file(READ "${MLANG_BUILD_NUMBER_FILE}" _mlang_build_raw)
+        string(STRIP "${_mlang_build_raw}" _mlang_build_raw)
+        if(_mlang_build_raw MATCHES "^[0-9]+$")
+            set(_mlang_seed "${_mlang_build_raw}")
+        endif()
+    endif()
+
+    if(NOT _mlang_seed MATCHES "^[0-9]+$")
+        set(_mlang_seed 0)
+    endif()
+
+    math(EXPR MLANG_VERSION_BUILD "${_mlang_seed} + 1")
+    set(MLANG_VERSION_BUILD "${MLANG_VERSION_BUILD}" CACHE STRING "Build number" FORCE)
+    file(WRITE "${MLANG_BUILD_NUMBER_FILE}" "${MLANG_VERSION_BUILD}\n")
+endif()
+
 project(MLang VERSION ${MLANG_VERSION_MAJOR}.${MLANG_VERSION_MINOR}.${MLANG_VERSION_BUILD})
 
 set(CMAKE_CXX_STANDARD 17)
@@ -148,6 +171,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )
@@ -195,23 +219,78 @@ add_executable(mlangd
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${LEXER_OUT}
     ${PARSER_OUT}
 )
 
 add_dependencies(mlangd ParserTarget LexerTarget)
+target_compile_features(mlangd PRIVATE cxx_std_20)
+set_target_properties(mlangd PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
 target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mlangd ${llvm_libs})
+target_compile_definitions(mlangd PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 
 add_library(mlang_std STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
+    ${LEXER_OUT}
+    ${PARSER_OUT}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_error.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
 )
+add_dependencies(mlang_std ParserTarget LexerTarget)
+target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
+target_compile_definitions(mlang_std PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
+
+# RapidJSON for std::json backend (header-only).
+include(FetchContent)
+find_path(RAPIDJSON_INCLUDE_DIR rapidjson/document.h
+    PATH_SUFFIXES include
+    PATHS
+        /opt/homebrew/opt/rapidjson
+        /usr/local/opt/rapidjson
+        /opt/homebrew
+        /usr/local
+        /usr
+)
+if(NOT RAPIDJSON_INCLUDE_DIR)
+    message(STATUS "RapidJSON not found in system paths; fetching v1.1.0")
+    FetchContent_Declare(
+        rapidjson
+        GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+        GIT_TAG v1.1.0
+        GIT_PROGRESS TRUE
+    )
+    FetchContent_GetProperties(rapidjson)
+    if(NOT rapidjson_POPULATED)
+        if(POLICY CMP0169)
+            cmake_policy(SET CMP0169 OLD)
+        endif()
+        FetchContent_Populate(rapidjson)
+    endif()
+    set(RAPIDJSON_INCLUDE_DIR ${rapidjson_SOURCE_DIR}/include)
+endif()
+target_include_directories(mlang_std PRIVATE ${RAPIDJSON_INCLUDE_DIR})
 
 # Print debug information
 message(STATUS "LEXER_OUT: ${LEXER_OUT}")
