@@ -20,6 +20,7 @@ use std::jsonrpc::extract_text_document_text;
 use std::jsonrpc::extract_text_document_uri;
 use std::jsonrpc::extract_text_document_version;
 use std::jsonrpc::extract_workspace_query;
+use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::organize_imports_line_count;
 use std::jsonrpc::organize_imports_text;
 use std::jsonrpc::text_store_get;
@@ -630,6 +631,47 @@ fn handle_workspace_symbol(payload: string) -> string {
     return out;
 }
 
+fn handle_implementation(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    if ensure_uri_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let query_text: string = text_store_get(g_text_store_handle, uri);
+    if len(query_text) == 0: { return "[]"; }
+
+    let uri_count: i64 = uri_store_count(g_uri_store_handle);
+    if uri_count <= 0: { return "[]"; }
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    for ui in 0..uri_count {
+        let doc_uri: string = uri_store_get(g_uri_store_handle, ui);
+        if len(doc_uri) == 0: { continue; }
+        let candidate_text: string = text_store_get(g_text_store_handle, doc_uri);
+        if len(candidate_text) == 0: { continue; }
+        let packed: i64 = find_implementation_pos(query_text, line, col, candidate_text);
+        if packed <= 0: { continue; }
+        let line1: i32 = packed / 4294967296;
+        let col1: i32 = packed%4294967296;
+        let loc: string = location_json(doc_uri, line1, col1);
+        if j > 0: {
+            out = format!("{},{}", out, loc);
+        } else: {
+            out = format!("{}{}", out, loc);
+        }
+        j = j + 1;
+    }
+    out = concat(out, "]");
+    return out;
+}
+
 fn dispatch_result_json(payload: string) -> string {
     let method: string = extract_method(payload);
 
@@ -686,7 +728,7 @@ fn dispatch_result_json(payload: string) -> string {
         return handle_workspace_symbol(payload);
     }
 
-    if eq(method, "textDocument/implementation") == 1: { return "[]"; }
+    if eq(method, "textDocument/implementation") == 1: { return handle_implementation(payload); }
     if eq(method, "textDocument/formatting") == 1: { return "[]"; }
     if eq(method, "textDocument/rangeFormatting") == 1: { return "[]"; }
     if eq(method, "textDocument/codeAction") == 1: { return handle_code_action(payload); }
@@ -710,7 +752,7 @@ fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
 }
 
 fn main() -> i32 {
-    let r: Result<i32, string> = run_stdio_loop(4, 262144, 262144);
+    let r: Result<i32, string> = run_stdio_loop(1, 262144, 262144);
     if r.is_err(): {
         return 1;
     }

@@ -42,6 +42,7 @@ extern pub fn __mlang_std_jsonrpc_text_store_remove(handle: i64, key: string) ->
 extern pub fn __mlang_std_jsonrpc_text_store_get(handle: i64, key: string) -> string;
 extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
+extern pub fn __mlang_std_jsonrpc_find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_uri_store_new() -> i64;
 extern pub fn __mlang_std_jsonrpc_uri_store_free(handle: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_uri_store_add(handle: i64, uri: string) -> int;
@@ -323,6 +324,12 @@ pub fn organize_imports_line_count(text: string) -> i64 {
 /// @brief Return sorted+deduplicated leading import block text.
 pub fn organize_imports_text(text: string) -> string {
     return __mlang_std_jsonrpc_organize_imports_text(text);
+}
+
+/// @brief Find method implementation position as packed `(line1<<32)|column1`.
+/// Returns `0` when no implementation match is found.
+pub fn find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64 {
+    return __mlang_std_jsonrpc_find_implementation_pos(query_text, line, column, candidate_text);
 }
 
 /// @brief Create URI store for tracking open documents.

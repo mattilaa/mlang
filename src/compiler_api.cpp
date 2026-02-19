@@ -198,6 +198,26 @@ static bool startsWith(std::string_view value, std::string_view prefix) {
 #endif
 }
 
+static std::optional<std::string> parseFnNameInLine(std::string_view line) {
+    const size_t fn_pos = line.find("fn ");
+    if (fn_pos == std::string_view::npos) {
+        return std::nullopt;
+    }
+    size_t pos = fn_pos + 3;
+    while (pos < line.size() &&
+           std::isspace(static_cast<unsigned char>(line[pos])) != 0) {
+        ++pos;
+    }
+    if (pos >= line.size() || !isIdentStart(line[pos])) {
+        return std::nullopt;
+    }
+    size_t end = pos + 1;
+    while (end < line.size() && isIdentContinue(line[end])) {
+        ++end;
+    }
+    return std::string(line.substr(pos, end - pos));
+}
+
 static std::vector<std::string_view> splitLines(std::string_view text) {
     std::vector<std::string_view> lines;
     size_t start = 0;
@@ -566,6 +586,28 @@ static std::string functionSignatureFromAst(FunctionDefNode* fn) {
     return sig;
 }
 
+static std::string methodSignatureFromAst(const std::string& owner,
+                                          StructMethodNode* method) {
+    if (!method) {
+        return {};
+    }
+    std::string sig = "fn " + owner + "::" + method->name + "(";
+    if (method->parameters) {
+        for (size_t i = 0; i < method->parameters->parameters.size(); ++i) {
+            if (i > 0) {
+                sig += ", ";
+            }
+            ParameterNode* p = method->parameters->parameters[i];
+            sig += p ? p->name : "_";
+            sig += ": ";
+            sig += (p && p->type) ? p->type->toString() : "_";
+        }
+    }
+    sig += ") -> ";
+    sig += method->returnType ? method->returnType->toString() : "void";
+    return sig;
+}
+
 static ProgramNode* parseProgramFromText(std::string_view text) {
     ASTNode* saved_root = programRoot;
     programRoot = nullptr;
@@ -778,6 +820,56 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             }
             addSemanticSymbol(out, lines, st->name, 3,
                               st->line > 0 ? st->line : 1, 0, {}, {});
+            if (st->members) {
+                for (StructMethodNode* method : st->members->methods) {
+                    if (!method) {
+                        continue;
+                    }
+                    const int method_line = method->line > 0 ? method->line
+                                                             : (st->line > 0 ? st->line : 1);
+                    addSemanticSymbol(out, lines, method->name, 1, method_line, 1,
+                                      typeToString(method->returnType),
+                                      methodSignatureFromAst(st->name, method));
+                    if (method->parameters) {
+                        for (ParameterNode* p : method->parameters->parameters) {
+                            if (!p) {
+                                continue;
+                            }
+                            addSemanticSymbol(out, lines, p->name, 2, method_line, 2,
+                                              typeToString(p->type), {});
+                        }
+                    }
+                    collectStatementSymbols(out, lines, method->body, 2);
+                }
+            }
+        }
+    }
+
+    if (program->implList) {
+        for (ImplBlockNode* impl : program->implList->impls) {
+            if (!impl) {
+                continue;
+            }
+            for (StructMethodNode* method : impl->methods) {
+                if (!method) {
+                    continue;
+                }
+                const int method_line = method->line > 0 ? method->line
+                                                         : (impl->line > 0 ? impl->line : 1);
+                addSemanticSymbol(out, lines, method->name, 1, method_line, 1,
+                                  typeToString(method->returnType),
+                                  methodSignatureFromAst(impl->structName, method));
+                if (method->parameters) {
+                    for (ParameterNode* p : method->parameters->parameters) {
+                        if (!p) {
+                            continue;
+                        }
+                        addSemanticSymbol(out, lines, p->name, 2, method_line, 2,
+                                          typeToString(p->type), {});
+                    }
+                }
+                collectStatementSymbols(out, lines, method->body, 2);
+            }
         }
     }
 
@@ -801,6 +893,31 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                 }
             }
             collectStatementSymbols(out, lines, fn->body, 1);
+        }
+    }
+
+    // Ensure method/function declarations are discoverable even when parser
+    // shape does not expose nested method nodes through the expected AST lists.
+    {
+        std::unordered_set<std::string> seen_fn_line_name;
+        for (const auto& sym : out.symbols) {
+            if (sym.kind != 1) {
+                continue;
+            }
+            seen_fn_line_name.insert(std::to_string(sym.line) + "|" + sym.name);
+        }
+        for (size_t i = 0; i < lines.size(); ++i) {
+            auto maybe_name = parseFnNameInLine(lines[i]);
+            if (!maybe_name.has_value()) {
+                continue;
+            }
+            const int line_no = static_cast<int>(i) + 1;
+            const std::string key = std::to_string(line_no) + "|" + *maybe_name;
+            if (seen_fn_line_name.find(key) != seen_fn_line_name.end()) {
+                continue;
+            }
+            addSemanticSymbol(out, lines, *maybe_name, 1, line_no, 0, {}, {});
+            seen_fn_line_name.insert(key);
         }
     }
 

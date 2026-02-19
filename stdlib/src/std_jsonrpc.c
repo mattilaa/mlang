@@ -1118,6 +1118,271 @@ static int cmp_cstr_ptr(const void* a, const void* b)
     return strcmp(*sa, *sb);
 }
 
+static int is_ident_start_char(char c)
+{
+    unsigned char uc = (unsigned char)c;
+    return (isalpha(uc) != 0) || c == '_';
+}
+
+static int is_ident_char(char c)
+{
+    unsigned char uc = (unsigned char)c;
+    return (isalnum(uc) != 0) || c == '_';
+}
+
+static void line_bounds_at(const char* text, int64_t line0,
+                           const char** out_start, const char** out_end)
+{
+    const char* start = text ? text : "";
+    const char* p = start;
+    int64_t line = 0;
+    while(*p && line < line0)
+    {
+        if(*p == '\n')
+            line++;
+        p++;
+    }
+    start = p;
+    while(*p && *p != '\n')
+        p++;
+    if(out_start)
+        *out_start = start;
+    if(out_end)
+        *out_end = p;
+}
+
+static int parse_struct_decl_line(const char* s, size_t n, char* out_name,
+                                  size_t out_name_cap, char* out_base,
+                                  size_t out_base_cap)
+{
+    size_t i = 0u;
+    while(i < n && (s[i] == ' ' || s[i] == '\t'))
+        ++i;
+    if(i + 6u > n)
+        return 0;
+    if(strncmp(s + i, "struct", 6u) != 0)
+        return 0;
+    i += 6u;
+    if(i < n && is_ident_char(s[i]))
+        return 0;
+    while(i < n && (s[i] == ' ' || s[i] == '\t'))
+        ++i;
+    if(i >= n || !is_ident_start_char(s[i]))
+        return 0;
+    size_t name_start = i;
+    ++i;
+    while(i < n && is_ident_char(s[i]))
+        ++i;
+    size_t name_len = i - name_start;
+    if(name_len + 1u > out_name_cap)
+        return 0;
+    memcpy(out_name, s + name_start, name_len);
+    out_name[name_len] = '\0';
+    if(out_base && out_base_cap > 0u)
+        out_base[0] = '\0';
+    while(i < n && (s[i] == ' ' || s[i] == '\t'))
+        ++i;
+    if(i < n && s[i] == ':')
+    {
+        ++i;
+        while(i < n && (s[i] == ' ' || s[i] == '\t'))
+            ++i;
+        if(i < n && is_ident_start_char(s[i]) && out_base && out_base_cap > 0u)
+        {
+            size_t base_start = i;
+            ++i;
+            while(i < n && is_ident_char(s[i]))
+                ++i;
+            size_t base_len = i - base_start;
+            if(base_len + 1u <= out_base_cap)
+            {
+                memcpy(out_base, s + base_start, base_len);
+                out_base[base_len] = '\0';
+            }
+        }
+    }
+    return 1;
+}
+
+static int identifier_at_line_column(const char* line, size_t n, int64_t col0,
+                                     char* out, size_t out_cap)
+{
+    if(!line || n == 0u || !out || out_cap == 0u)
+        return 0;
+    int64_t pos = col0;
+    if(pos < 0)
+        pos = 0;
+    if((size_t)pos >= n)
+        pos = (int64_t)n - 1;
+    if(!is_ident_char(line[pos]))
+    {
+        if(pos > 0 && is_ident_char(line[pos - 1]))
+            pos--;
+        else
+            return 0;
+    }
+    int64_t start = pos;
+    while(start > 0 && is_ident_char(line[start - 1]))
+        --start;
+    int64_t end = pos;
+    while((size_t)(end + 1) < n && is_ident_char(line[end + 1]))
+        ++end;
+    if(!is_ident_start_char(line[start]))
+        return 0;
+    size_t len = (size_t)(end - start + 1);
+    if(len + 1u > out_cap)
+        return 0;
+    memcpy(out, line + start, len);
+    out[len] = '\0';
+    return 1;
+}
+
+static int count_braces_line(const char* s, size_t n)
+{
+    int depth = 0;
+    for(size_t i = 0; i < n; ++i)
+    {
+        if(s[i] == '{')
+            depth++;
+        else if(s[i] == '}')
+            depth--;
+    }
+    return depth;
+}
+
+static int find_method_decl_in_line(const char* s, size_t n, const char* method,
+                                    int* out_col0)
+{
+    if(!s || !method)
+        return 0;
+    size_t mlen = strlen(method);
+    if(mlen == 0u)
+        return 0;
+    for(size_t i = 0; i + 2u < n; ++i)
+    {
+        if(s[i] != 'f' || s[i + 1u] != 'n')
+            continue;
+        if(i > 0u && is_ident_char(s[i - 1u]))
+            continue;
+        if(!isspace((unsigned char)s[i + 2u]))
+            continue;
+        size_t j = i + 2u;
+        while(j < n && isspace((unsigned char)s[j]))
+            ++j;
+        if(j >= n || !is_ident_start_char(s[j]))
+            continue;
+        size_t name_start = j;
+        ++j;
+        while(j < n && is_ident_char(s[j]))
+            ++j;
+        size_t name_len = j - name_start;
+        if(name_len != mlen)
+            continue;
+        if(strncmp(s + name_start, method, mlen) != 0)
+            continue;
+        while(j < n && isspace((unsigned char)s[j]))
+            ++j;
+        if(j >= n || s[j] != '(')
+            continue;
+        if(out_col0)
+            *out_col0 = (int)name_start;
+        return 1;
+    }
+    return 0;
+}
+
+static int detect_method_target(const char* query_text, int64_t line0, int64_t col0,
+                                char* out_struct, size_t out_struct_cap,
+                                char* out_method, size_t out_method_cap)
+{
+    if(!query_text || !out_struct || !out_method || out_struct_cap == 0u ||
+       out_method_cap == 0u)
+        return 0;
+    const char* ls = NULL;
+    const char* le = NULL;
+    line_bounds_at(query_text, line0, &ls, &le);
+    if(!ls || !le || le <= ls)
+        return 0;
+    if(!identifier_at_line_column(ls, (size_t)(le - ls), col0, out_method,
+                                  out_method_cap))
+        return 0;
+    for(int64_t l = line0; l >= 0; --l)
+    {
+        const char* ss = NULL;
+        const char* se = NULL;
+        line_bounds_at(query_text, l, &ss, &se);
+        if(!ss || !se || se <= ss)
+            continue;
+        if(parse_struct_decl_line(ss, (size_t)(se - ss), out_struct,
+                                  out_struct_cap, NULL, 0u))
+            return 1;
+    }
+    return 0;
+}
+
+static int find_implementation_in_text(const char* candidate_text,
+                                       const char* base_struct,
+                                       const char* method,
+                                       int* out_line1, int* out_col1)
+{
+    if(!candidate_text || !base_struct || !method || !out_line1 || !out_col1)
+        return 0;
+    int64_t line = 0;
+    const char* p = candidate_text;
+    while(*p)
+    {
+        const char* line_start = p;
+        while(*p && *p != '\n')
+            ++p;
+        const char* line_end = p;
+        char struct_name[128];
+        char base_name[128];
+        if(parse_struct_decl_line(line_start, (size_t)(line_end - line_start),
+                                  struct_name, sizeof(struct_name), base_name,
+                                  sizeof(base_name)))
+        {
+            if(base_name[0] != '\0' && strcmp(base_name, base_struct) == 0)
+            {
+                int depth = count_braces_line(line_start,
+                                              (size_t)(line_end - line_start));
+                int started = (memchr(line_start, '{',
+                                      (size_t)(line_end - line_start)) != NULL);
+                int64_t inner_line = line + 1;
+                const char* q = (*p == '\n') ? (p + 1) : p;
+                while(*q)
+                {
+                    const char* s2 = q;
+                    while(*q && *q != '\n')
+                        ++q;
+                    const char* e2 = q;
+                    int col0 = 0;
+                    if(find_method_decl_in_line(s2, (size_t)(e2 - s2), method,
+                                                &col0))
+                    {
+                        *out_line1 = (int)(inner_line + 1);
+                        *out_col1 = col0 + 1;
+                        return 1;
+                    }
+                    if(memchr(s2, '{', (size_t)(e2 - s2)) != NULL)
+                        started = 1;
+                    depth += count_braces_line(s2, (size_t)(e2 - s2));
+                    if(started && depth <= 0)
+                        break;
+                    if(*q == '\n')
+                        ++q;
+                    inner_line++;
+                }
+            }
+        }
+        if(*p == '\n')
+        {
+            ++p;
+            line++;
+        }
+    }
+    return 0;
+}
+
 int64_t __mlang_std_jsonrpc_organize_imports_line_count(const char* text)
 {
     if(!text)
@@ -1230,6 +1495,24 @@ fail:
         free(imports);
     }
     return dup_cstr("");
+}
+
+int64_t __mlang_std_jsonrpc_find_implementation_pos(const char* query_text,
+                                                    int64_t line0,
+                                                    int64_t column0,
+                                                    const char* candidate_text)
+{
+    char base_struct[128];
+    char method[128];
+    if(!detect_method_target(query_text, line0, column0, base_struct,
+                             sizeof(base_struct), method, sizeof(method)))
+        return 0;
+    int line1 = 0;
+    int col1 = 0;
+    if(!find_implementation_in_text(candidate_text, base_struct, method, &line1,
+                                    &col1))
+        return 0;
+    return ((int64_t)line1 << 32) | (int64_t)(uint32_t)col1;
 }
 
 int64_t __mlang_std_jsonrpc_uri_store_new(void)
