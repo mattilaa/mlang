@@ -10,6 +10,11 @@ use std::compiler::Session;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
 use std::jsonrpc::extract_first_change_text;
+use std::jsonrpc::extract_first_diagnostic_end_character;
+use std::jsonrpc::extract_first_diagnostic_end_line;
+use std::jsonrpc::extract_first_diagnostic_message;
+use std::jsonrpc::extract_first_diagnostic_start_character;
+use std::jsonrpc::extract_first_diagnostic_start_line;
 use std::jsonrpc::extract_method;
 use std::jsonrpc::extract_new_name;
 use std::jsonrpc::extract_position_character;
@@ -24,6 +29,7 @@ use std::jsonrpc::extract_workspace_query;
 use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::organize_imports_line_count;
 use std::jsonrpc::organize_imports_text;
+use std::jsonrpc::should_insert_semicolon;
 use std::jsonrpc::signature_help_callee;
 use std::jsonrpc::text_store_get;
 use std::jsonrpc::text_store_new;
@@ -233,22 +239,78 @@ fn handle_did_close(payload: string) -> i32 {
 
 fn handle_code_action(payload: string) -> string {
     if ensure_text_store() != 0: { return "[]"; }
-    if contains(payload, "source.organizeImports") != 1: { return "[]"; }
     let uri: string = extract_text_document_uri(payload);
     if len(uri) == 0: { return "[]"; }
     let text: string = text_store_get(g_text_store_handle, uri);
     if len(text) == 0: { return "[]"; }
-    let import_lines: i64 = organize_imports_line_count(text);
-    if import_lines <= 0: { return "[]"; }
-    let new_block_raw: string = organize_imports_text(text);
-    if len(new_block_raw) == 0: { return "[]"; }
-    let new_block: string = json_escape(new_block_raw);
     let uri_e: string = json_escape(uri);
-    let action: string = format!(
-        "[{{\"title\":\"Organize Imports\",\"kind\":\"source.organizeImports\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":0}}}},\"newText\":\"{}\"}}]}}}}}}]",
-        uri_e, import_lines, new_block
-    );
-    return action;
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    if contains(payload, "source.organizeImports") == 1: {
+        let import_lines: i64 = organize_imports_line_count(text);
+        if import_lines > 0: {
+            let new_block_raw: string = organize_imports_text(text);
+            if len(new_block_raw) > 0: {
+                let new_block: string = json_escape(new_block_raw);
+                let action_oi: string = format!(
+                    "{{\"title\":\"Organize Imports\",\"kind\":\"source.organizeImports\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":0}}}},\"newText\":\"{}\"}}]}}}}}}",
+                    uri_e, import_lines, new_block
+                );
+                if j > 0: {
+                    out = format!("{},{}", out, action_oi);
+                } else: {
+                    out = format!("{}{}", out, action_oi);
+                }
+                j = j + 1;
+            }
+        }
+    }
+
+    if contains(payload, "quickfix") == 1: {
+        let msg: string = extract_first_diagnostic_message(payload);
+        let sl: i64 = extract_first_diagnostic_start_line(payload);
+        let sc: i64 = extract_first_diagnostic_start_character(payload);
+        let el: i64 = extract_first_diagnostic_end_line(payload);
+        let ec: i64 = extract_first_diagnostic_end_character(payload);
+        var semicolon_hint: i32 = 0;
+        if contains(msg, "semicolon") == 1: {
+            semicolon_hint = 1;
+        } else: {
+            if contains(msg, "expected ';'") == 1: {
+                semicolon_hint = 1;
+            }
+        }
+        if semicolon_hint == 1: {
+            if sl >= 0: {
+                if sc >= 0: {
+                    if el >= 0: {
+                        if ec >= 0: {
+                            if sl == el: {
+                                if should_insert_semicolon(text, el, ec) == 1: {
+                                    let action_qf: string = format!(
+                                        "{{\"title\":\"Insert ';'\",\"kind\":\"quickfix\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\";\"}}]}}}}}}",
+                                        uri_e, el, ec, el, ec
+                                    );
+                                    if j > 0: {
+                                        out = format!("{},{}", out, action_qf);
+                                    } else: {
+                                        out = format!("{}{}", out, action_qf);
+                                    }
+                                    j = j + 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out = concat(out, "]");
+    return out;
 }
 
 fn handle_definition(payload: string) -> string {

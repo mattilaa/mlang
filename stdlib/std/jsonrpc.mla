@@ -36,6 +36,12 @@ extern pub fn __mlang_std_jsonrpc_extract_first_change_text(payload: string) -> 
 extern pub fn __mlang_std_jsonrpc_extract_new_name(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_workspace_query(payload: string) -> string;
 extern pub fn __mlang_std_jsonrpc_extract_root_uri(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_message(payload: string) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_start_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_start_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_line(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_character(payload: string) -> i64;
+extern pub fn __mlang_std_jsonrpc_should_insert_semicolon(text: string, line: i64, column: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_signature_help_callee(text: string, line: i64, column: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_workspace_symbol_search(root_uri: string, query: string) -> string;
 extern pub fn __mlang_std_jsonrpc_text_store_new() -> i64;
@@ -297,6 +303,36 @@ pub fn extract_workspace_query(payload: string) -> string {
 /// @brief Extract top-level `rootUri` from initialize payload.
 pub fn extract_root_uri(payload: string) -> string {
     return __mlang_std_jsonrpc_extract_root_uri(payload);
+}
+
+/// @brief Extract first `params.context.diagnostics[0].message` from payload.
+pub fn extract_first_diagnostic_message(payload: string) -> string {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_message(payload);
+}
+
+/// @brief Extract first diagnostic start line from payload.
+pub fn extract_first_diagnostic_start_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_start_line(payload);
+}
+
+/// @brief Extract first diagnostic start character from payload.
+pub fn extract_first_diagnostic_start_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_start_character(payload);
+}
+
+/// @brief Extract first diagnostic end line from payload.
+pub fn extract_first_diagnostic_end_line(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_end_line(payload);
+}
+
+/// @brief Extract first diagnostic end character from payload.
+pub fn extract_first_diagnostic_end_character(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_first_diagnostic_end_character(payload);
+}
+
+/// @brief Return 1 if inserting `;` at line/column is considered safe.
+pub fn should_insert_semicolon(text: string, line: i64, column: i64) -> int {
+    return __mlang_std_jsonrpc_should_insert_semicolon(text, line, column);
 }
 
 /// @brief Extract call-site callee identifier for signature help at line/column.

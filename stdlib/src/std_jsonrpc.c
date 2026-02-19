@@ -975,6 +975,128 @@ char* __mlang_std_jsonrpc_extract_root_uri(const char* payload)
     return s;
 }
 
+static const char* find_first_diagnostic_object(const char* payload)
+{
+    if(!payload)
+        return NULL;
+    const char* params = find_key_after(payload, "params");
+    if(!params)
+        return NULL;
+    const char* context = find_key_after(params, "context");
+    if(!context)
+        return NULL;
+    const char* diagnostics = find_key_after(context, "diagnostics");
+    if(!diagnostics)
+        return NULL;
+    const char* colon = strchr(diagnostics, ':');
+    if(!colon)
+        return NULL;
+    const char* p = skip_ws(colon + 1);
+    if(!p || *p != '[')
+        return NULL;
+    ++p;
+    p = skip_ws(p);
+    if(!p || *p != '{')
+        return NULL;
+    return p;
+}
+
+char* __mlang_std_jsonrpc_extract_first_diagnostic_message(const char* payload)
+{
+    const char* d = find_first_diagnostic_object(payload);
+    if(!d)
+        return dup_cstr("");
+    char* s = extract_string_field_in(d, "message");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
+int64_t __mlang_std_jsonrpc_extract_first_diagnostic_start_line(const char* payload)
+{
+    const char* d = find_first_diagnostic_object(payload);
+    if(!d)
+        return -1;
+    const char* range = find_key_after(d, "range");
+    if(!range)
+        return -1;
+    const char* start = find_key_after(range, "start");
+    if(!start)
+        return -1;
+    return extract_int_field_in(start, "line", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_first_diagnostic_start_character(const char* payload)
+{
+    const char* d = find_first_diagnostic_object(payload);
+    if(!d)
+        return -1;
+    const char* range = find_key_after(d, "range");
+    if(!range)
+        return -1;
+    const char* start = find_key_after(range, "start");
+    if(!start)
+        return -1;
+    return extract_int_field_in(start, "character", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_first_diagnostic_end_line(const char* payload)
+{
+    const char* d = find_first_diagnostic_object(payload);
+    if(!d)
+        return -1;
+    const char* range = find_key_after(d, "range");
+    if(!range)
+        return -1;
+    const char* end = find_key_after(range, "end");
+    if(!end)
+        return -1;
+    return extract_int_field_in(end, "line", -1);
+}
+
+int64_t __mlang_std_jsonrpc_extract_first_diagnostic_end_character(const char* payload)
+{
+    const char* d = find_first_diagnostic_object(payload);
+    if(!d)
+        return -1;
+    const char* range = find_key_after(d, "range");
+    if(!range)
+        return -1;
+    const char* end = find_key_after(range, "end");
+    if(!end)
+        return -1;
+    return extract_int_field_in(end, "character", -1);
+}
+
+int __mlang_std_jsonrpc_should_insert_semicolon(const char* text, int64_t line0,
+                                                int64_t col0)
+{
+    if(!text || line0 < 0 || col0 < 0)
+        return 0;
+    const char* ls = NULL;
+    const char* le = NULL;
+    line_bounds_at(text, line0, &ls, &le);
+    if(!ls || !le || le < ls)
+        return 0;
+
+    int64_t n = (int64_t)(le - ls);
+    if(col0 > n)
+        col0 = n;
+    if(col0 >= 0 && col0 < n && ls[col0] == ';')
+        return 0;
+    if(col0 > 0 && ls[col0 - 1] == ';')
+        return 0;
+
+    int64_t i = n - 1;
+    while(i >= 0 && (ls[i] == ' ' || ls[i] == '\t' || ls[i] == '\r'))
+        --i;
+    if(i < 0)
+        return 0;
+    if(ls[i] == ';' || ls[i] == '{' || ls[i] == '}' || ls[i] == ':')
+        return 0;
+    return 1;
+}
+
 char* __mlang_std_jsonrpc_signature_help_callee(const char* text,
                                                 int64_t line0,
                                                 int64_t column0)
