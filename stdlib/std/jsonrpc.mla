@@ -213,6 +213,12 @@ pub fn cancel_clear_all() -> i32 {
     return __mlang_std_jsonrpc_cancel_clear_all();
 }
 
+/// @brief Extract numeric request id from payload.
+/// Returns -1 when id is absent/invalid.
+pub fn extract_request_id(payload: string) -> i64 {
+    return __mlang_std_jsonrpc_extract_request_id(payload);
+}
+
 /// @brief Parse a JSON-RPC payload and register `$/cancelRequest` ids.
 /// Returns:
 /// - `1` when a cancel request id was registered

@@ -1,0 +1,104 @@
+mod std::jsonrpc;
+mod std::strbuf;
+
+use std::jsonrpc::extract_request_id;
+use std::jsonrpc::run_stdio_loop;
+use std::strbuf::concat;
+use std::strbuf::contains;
+use std::strbuf::len;
+
+fn has_method(payload: string, method: string) -> i32 {
+    let p1: string = format!("\"method\":\"{}\"", method);
+    let p2: string = format!("\"method\": \"{}\"", method);
+    var ok: i32 = 0;
+    if contains(payload, p1) == 1: {
+        ok = 1;
+    }
+    if contains(payload, p2) == 1: {
+        ok = 1;
+    }
+    String::free(p1);
+    String::free(p2);
+    return ok;
+}
+
+fn make_result_response(id: i64, result_json: string) -> string {
+    let id_s: string = format!("{}", id);
+    let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
+    String::free(id_s);
+    let p2: string = concat(p1, ",\"result\":");
+    String::free(p1);
+    let p3: string = concat(p2, result_json);
+    String::free(p2);
+    let out: string = concat(p3, "}");
+    String::free(p3);
+    return out;
+}
+
+fn make_error_response(id: i64, code: i32, message: string) -> string {
+    let id_s: string = format!("{}", id);
+    let code_s: string = format!("{}", code);
+    let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
+    String::free(id_s);
+    let p2: string = concat(p1, ",\"error\":{\"code\":");
+    String::free(p1);
+    let p3: string = concat(p2, code_s);
+    String::free(code_s);
+    String::free(p2);
+    let p4: string = concat(p3, ",\"message\":\"");
+    String::free(p3);
+    let p5: string = concat(p4, message);
+    String::free(p4);
+    let out: string = concat(p5, "\"}}");
+    String::free(p5);
+    return out;
+}
+
+fn dispatch_result_json(payload: string) -> string {
+    if has_method(payload, "initialize") == 1: {
+        return "{\"capabilities\":{\"textDocumentSync\":{\"openClose\":true,\"change\":1},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{\"triggerCharacters\":[\".\",\":\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"renameProvider\":{\"prepareProvider\":true},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{\"interFileDependencies\":false,\"workspaceDiagnostics\":false},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[]},\"full\":true}}}";
+    }
+    if has_method(payload, "shutdown") == 1: {
+        return "null";
+    }
+    if has_method(payload, "textDocument/definition") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/implementation") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/references") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/hover") == 1: { return "null"; }
+    if has_method(payload, "textDocument/documentHighlight") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/completion") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/signatureHelp") == 1: { return "null"; }
+    if has_method(payload, "textDocument/prepareRename") == 1: { return "null"; }
+    if has_method(payload, "textDocument/rename") == 1: { return "null"; }
+    if has_method(payload, "textDocument/documentSymbol") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/formatting") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/rangeFormatting") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/codeAction") == 1: { return "[]"; }
+    if has_method(payload, "textDocument/diagnostic") == 1: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    if has_method(payload, "textDocument/semanticTokens/full") == 1: { return "{\"data\":[]}"; }
+    if has_method(payload, "workspace/symbol") == 1: { return "[]"; }
+    return "";
+}
+
+/// Dispatcher hook consumed by std::jsonrpc::run_stdio_loop.
+fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
+    let id: i64 = extract_request_id(request_payload);
+    if id < 0: {
+        return String::new();
+    }
+
+    let result_json: string = dispatch_result_json(request_payload);
+    if len(result_json) > 0: {
+        return make_result_response(id, result_json);
+    }
+
+    return make_error_response(id, -32601, "Method not found");
+}
+
+fn main() -> i32 {
+    let r: Result<i32, string> = run_stdio_loop(4, 262144, 262144);
+    if r.is_err(): {
+        return 1;
+    }
+    return 0;
+}

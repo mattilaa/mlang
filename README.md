@@ -41,6 +41,24 @@ Tune semantic cache clear cadence for long-running sessions:
 MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 ./build/mlangd --stdio
 ```
 
+## Mlangd (Mlang Scaffold)
+Initial Mlang implementation scaffold lives at `tools/mlangd_mla/main.mla`.
+It uses `std::jsonrpc::run_stdio_loop(...)` and a Mlang dispatcher hook:
+`__mlang_std_jsonrpc_runtime_dispatch(...)`.
+
+Build object:
+
+```sh
+./build/mlang -c tools/mlangd_mla/main.mla -L ./build -lmlang_std
+```
+
+Build executable:
+
+```sh
+./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
+/tmp/mlangd_mla --stdio
+```
+
 `mlang` emits `mlang_commands.json` for editor tooling. You can add module
 search paths in `mlang.toml`:
 
