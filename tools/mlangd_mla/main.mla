@@ -3,7 +3,9 @@ mod std::jsonrpc;
 mod std::strbuf;
 
 use std::compiler::DefinitionLocation;
+use std::compiler::DocumentSymbol;
 use std::compiler::ReferenceLocation;
+use std::compiler::ResolvedSymbol;
 use std::compiler::Session;
 use std::compiler::session_create;
 use std::jsonrpc::extract_first_change_text;
@@ -17,6 +19,7 @@ use std::jsonrpc::extract_text_document_uri;
 use std::jsonrpc::extract_text_document_version;
 use std::jsonrpc::run_stdio_loop;
 use std::strbuf::concat;
+use std::strbuf::contains;
 use std::strbuf::eq;
 use std::strbuf::json_escape;
 use std::strbuf::len;
@@ -84,6 +87,29 @@ fn location_json(uri: string, line1: i32, col1: i32) -> string {
         euri, lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
     );
     return out;
+}
+
+fn range_json(line1: i32, col1: i32) -> string {
+    return format!(
+        "{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}",
+        lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
+    );
+}
+
+fn symbol_kind_lsp(sym: DocumentSymbol) -> i32 {
+    if contains(sym.signature, "fn ") == 1: {
+        return 12;
+    }
+    if contains(sym.signature, "struct ") == 1: {
+        return 23;
+    }
+    if contains(sym.signature, "enum ") == 1: {
+        return 10;
+    }
+    if contains(sym.signature, "mod ") == 1: {
+        return 2;
+    }
+    return 13;
 }
 
 fn handle_did_open(payload: string) -> i32 {
@@ -251,6 +277,116 @@ fn handle_completion(payload: string) -> string {
     return out;
 }
 
+fn handle_document_symbol(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = cr.unwrap();
+    var out: string = String::new();
+    out = concat(out, "[");
+    for i in 0..n {
+        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        if sr.is_err(): { continue; }
+        let sym: DocumentSymbol = sr.unwrap();
+        let name_e: string = json_escape(sym.name);
+        let range: string = range_json(sym.line, sym.column);
+        let kind: i32 = symbol_kind_lsp(sym);
+        let item: string = format!(
+            "{{\"name\":\"{}\",\"kind\":{},\"range\":{},\"selectionRange\":{}}}",
+            name_e, kind, range, range
+        );
+        let prev: string = out;
+        if i > 0: {
+            out = format!("{},{}", out, item);
+        } else: {
+            out = format!("{}{}", out, item);
+        }
+    }
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_document_highlight(payload: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "[]"; }
+    if line < 0: { return "[]"; }
+    if col < 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = cr.unwrap();
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+    for i in 0..n {
+        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        if rr.is_err(): { continue; }
+        let r: ReferenceLocation = rr.unwrap();
+        if eq(r.uri, uri) != 1: { continue; }
+        let range: string = range_json(r.line, r.column);
+        let item: string = format!(
+            "{{\"range\":{},\"kind\":1}}",
+            range
+        );
+        let prev: string = out;
+        if j > 0: {
+            out = format!("{},{}", out, item);
+        } else: {
+            out = format!("{}{}", out, item);
+        }
+        j = j + 1;
+    }
+    let prev2: string = out;
+    out = concat(out, "]");
+    return out;
+}
+
+fn handle_signature_help(payload: string) -> string {
+    if ensure_session() != 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    let uri: string = extract_text_document_uri(payload);
+    let line: i64 = extract_position_line(payload);
+    let col: i64 = extract_position_character(payload);
+    if len(uri) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    if line < 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    if col < 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+
+    let s: Session = current_session();
+    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    if rr.is_err(): {
+        let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
+        if hr.is_err(): { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+        let hv: string = hr.unwrap();
+        if len(hv) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+        let label2: string = json_escape(hv);
+        return format!(
+            "{{\"signatures\":[{{\"label\":\"{}\"}}],\"activeSignature\":0,\"activeParameter\":0}}",
+            label2
+        );
+    }
+    let sym: ResolvedSymbol = rr.unwrap();
+    var sig: string = sym.signature;
+    if len(sig) == 0: {
+        let hr2: Result<string, string> = s.hover(uri, line + 1, col + 1);
+        if hr2.is_err(): { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+        sig = hr2.unwrap();
+    }
+    if len(sig) == 0: { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
+    let label: string = json_escape(sig);
+    return format!(
+        "{{\"signatures\":[{{\"label\":\"{}\"}}],\"activeSignature\":0,\"activeParameter\":0}}",
+        label
+    );
+}
+
 fn dispatch_result_json(payload: string) -> string {
     let method: string = extract_method(payload);
 
@@ -285,7 +421,25 @@ fn dispatch_result_json(payload: string) -> string {
     if eq(method, "textDocument/completion") == 1: {
         return handle_completion(payload);
     }
+    if eq(method, "textDocument/documentSymbol") == 1: {
+        return handle_document_symbol(payload);
+    }
+    if eq(method, "textDocument/documentHighlight") == 1: {
+        return handle_document_highlight(payload);
+    }
+    if eq(method, "textDocument/signatureHelp") == 1: {
+        return handle_signature_help(payload);
+    }
 
+    if eq(method, "textDocument/implementation") == 1: { return "[]"; }
+    if eq(method, "textDocument/prepareRename") == 1: { return "null"; }
+    if eq(method, "textDocument/rename") == 1: { return "null"; }
+    if eq(method, "textDocument/formatting") == 1: { return "[]"; }
+    if eq(method, "textDocument/rangeFormatting") == 1: { return "[]"; }
+    if eq(method, "textDocument/codeAction") == 1: { return "[]"; }
+    if eq(method, "textDocument/diagnostic") == 1: { return "{\"kind\":\"full\",\"items\":[]}"; }
+    if eq(method, "textDocument/semanticTokens/full") == 1: { return "{\"data\":[]}"; }
+    if eq(method, "workspace/symbol") == 1: { return "[]"; }
 
     return "";
 }
