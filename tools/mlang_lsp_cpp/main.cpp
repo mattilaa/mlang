@@ -1180,6 +1180,247 @@ private:
         return out;
     }
 
+    static std::string trim_ws(std::string_view s)
+    {
+        size_t start = 0;
+        while(start < s.size() &&
+              std::isspace(static_cast<unsigned char>(s[start])) != 0)
+            ++start;
+        size_t end = s.size();
+        while(end > start &&
+              std::isspace(static_cast<unsigned char>(s[end - 1])) != 0)
+            --end;
+        return std::string(s.substr(start, end - start));
+    }
+
+    static std::string unquote(std::string_view v)
+    {
+        std::string t = trim_ws(v);
+        if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
+            return t.substr(1, t.size() - 2);
+        return t;
+    }
+
+    static std::vector<std::string> split_toml_array(std::string_view input)
+    {
+        std::vector<std::string> out;
+        std::string cur;
+        bool inQuotes = false;
+        for(char c : input)
+        {
+            if(c == '"')
+            {
+                inQuotes = !inQuotes;
+                cur.push_back(c);
+                continue;
+            }
+            if(c == ',' && !inQuotes)
+            {
+                out.push_back(trim_ws(cur));
+                cur.clear();
+                continue;
+            }
+            cur.push_back(c);
+        }
+        if(!cur.empty())
+            out.push_back(trim_ws(cur));
+        return out;
+    }
+
+    static std::optional<std::filesystem::path>
+    find_manifest_path(std::filesystem::path startDir)
+    {
+        std::error_code ec;
+        startDir = std::filesystem::absolute(startDir, ec);
+        if(ec)
+            return std::nullopt;
+
+        std::filesystem::path cur = startDir;
+        while(!cur.empty())
+        {
+            const auto candidate = cur / "mlang.toml";
+            if(std::filesystem::exists(candidate))
+                return candidate;
+            const auto parent = cur.parent_path();
+            if(parent == cur)
+                break;
+            cur = parent;
+        }
+        return std::nullopt;
+    }
+
+    static std::vector<std::string>
+    parse_module_paths_from_toml(const std::filesystem::path& manifestPath)
+    {
+        std::ifstream in(manifestPath, std::ios::binary);
+        if(!in)
+            return {};
+
+        std::vector<std::string> out;
+        std::string line;
+        std::string section;
+        while(std::getline(in, line))
+        {
+            std::string t = trim_ws(line);
+            if(t.empty() || t[0] == '#')
+                continue;
+            if(t.front() == '[' && t.back() == ']')
+            {
+                section = t.substr(1, t.size() - 2);
+                continue;
+            }
+            if(section != "package" && section != "tool.mlang")
+                continue;
+            const size_t eq = t.find('=');
+            if(eq == std::string::npos)
+                continue;
+            const std::string key = trim_ws(t.substr(0, eq));
+            if(key != "module_paths")
+                continue;
+            const std::string value = trim_ws(t.substr(eq + 1));
+            if(value.empty())
+                continue;
+            if(value.front() == '[' && value.back() == ']')
+            {
+                std::string inner = value.substr(1, value.size() - 2);
+                for(const auto& part : split_toml_array(inner))
+                {
+                    std::string v = unquote(part);
+                    if(!v.empty())
+                        out.push_back(v);
+                }
+            }
+            else
+            {
+                std::string v = unquote(value);
+                if(!v.empty())
+                    out.push_back(v);
+            }
+        }
+        return out;
+    }
+
+    std::vector<std::string> default_stdlib_paths() const
+    {
+        std::vector<std::string> paths;
+        if(const char* env = std::getenv("MLANG_STDLIB_PATH"))
+            paths.emplace_back(env);
+        if(!rootPath.empty())
+            paths.emplace_back((std::filesystem::path(rootPath) / "stdlib").string());
+        if(const char* xdg = std::getenv("XDG_DATA_HOME"))
+            paths.emplace_back(std::string(xdg) + "/mlang/stdlib");
+        if(const char* home = std::getenv("HOME"))
+            paths.emplace_back(std::string(home) + "/.local/share/mlang/stdlib");
+        paths.emplace_back("/usr/local/share/mlang/stdlib");
+        paths.emplace_back("/usr/share/mlang/stdlib");
+        return paths;
+    }
+
+    std::vector<std::string> module_search_paths_for_file(const FileInfo& info) const
+    {
+        namespace fs = std::filesystem;
+        std::vector<std::string> out;
+        std::unordered_set<std::string> seen;
+
+        std::error_code ec;
+        fs::path base = fs::path(info.path).parent_path();
+        if(base.empty())
+            base = ".";
+        fs::path baseAbs = fs::absolute(base, ec);
+        std::string baseStr = (!ec ? baseAbs.lexically_normal().string() : base.string());
+        if(seen.insert(baseStr).second)
+            out.push_back(baseStr);
+
+        if(const auto manifest = find_manifest_path(base); manifest.has_value())
+        {
+            std::vector<std::string> mps = parse_module_paths_from_toml(*manifest);
+            const fs::path manifestDir = manifest->parent_path();
+            for(auto& mp : mps)
+            {
+                fs::path p = fs::path(mp);
+                if(!p.is_absolute())
+                    p = manifestDir / p;
+                std::error_code pec;
+                fs::path abs = fs::absolute(p, pec);
+                std::string v = (!pec ? abs.lexically_normal().string() : p.string());
+                if(seen.insert(v).second)
+                    out.push_back(v);
+            }
+        }
+
+        for(const auto& p : default_stdlib_paths())
+        {
+            if(!p.empty() && seen.insert(p).second)
+                out.push_back(p);
+        }
+
+        if(!rootPath.empty())
+        {
+            std::string rp = fs::path(rootPath).lexically_normal().string();
+            if(seen.insert(rp).second)
+                out.push_back(rp);
+        }
+        return out;
+    }
+
+    std::vector<std::filesystem::path>
+    search_base_paths_for_lookup(const FileInfo* contextFile) const
+    {
+        std::vector<std::filesystem::path> out;
+        std::unordered_set<std::string> seen;
+
+        auto add_path = [&](std::filesystem::path p) {
+            if(p.empty())
+                return;
+            std::error_code ec;
+            p = std::filesystem::absolute(p, ec);
+            if(ec)
+                return;
+            p = p.lexically_normal();
+            std::string key = p.string();
+            if(seen.insert(key).second)
+                out.push_back(p);
+        };
+
+        if(contextFile && !contextFile->path.empty())
+        {
+            for(const auto& root : module_search_paths_for_file(*contextFile))
+                add_path(root);
+        }
+
+        for(const auto& [_, info] : files)
+        {
+            if(info.path.empty())
+                continue;
+            for(const auto& root : module_search_paths_for_file(info))
+                add_path(root);
+        }
+
+        if(!rootPath.empty())
+            add_path(rootPath);
+        add_path(std::filesystem::current_path());
+        return out;
+    }
+
+    static std::string module_name_to_rel_dir(const std::string& moduleName)
+    {
+        std::string rel;
+        rel.reserve(moduleName.size() + 2);
+        for(size_t i = 0; i < moduleName.size();)
+        {
+            if(i + 1 < moduleName.size() && moduleName[i] == ':' &&
+               moduleName[i + 1] == ':')
+            {
+                rel.push_back('/');
+                i += 2;
+                continue;
+            }
+            rel.push_back(moduleName[i]);
+            ++i;
+        }
+        return rel;
+    }
+
     void update_workspace_graph_for_file(const FileInfo& info)
     {
         mlang::ide::WorkspaceDocumentNode node;
@@ -1202,13 +1443,21 @@ private:
                                     const std::string& moduleName) const
     {
         std::filesystem::path base(baseDir);
-        std::filesystem::path direct = base / (moduleName + ".mla");
+        std::string relDir = module_name_to_rel_dir(moduleName);
+        std::filesystem::path direct = base / (relDir + ".mla");
         std::error_code ec;
         if(std::filesystem::exists(direct, ec) && !ec)
             return direct.string();
-        std::filesystem::path dirMod = base / moduleName / "mod.mla";
+        std::filesystem::path dirMod = base / relDir / "mod.mla";
         if(std::filesystem::exists(dirMod, ec) && !ec)
             return dirMod.string();
+        // Backward compatible single-segment fallback.
+        std::filesystem::path legacyDirect = base / (moduleName + ".mla");
+        if(std::filesystem::exists(legacyDirect, ec) && !ec)
+            return legacyDirect.string();
+        std::filesystem::path legacyDirMod = base / moduleName / "mod.mla";
+        if(std::filesystem::exists(legacyDirMod, ec) && !ec)
+            return legacyDirMod.string();
         return {};
     }
 
@@ -1226,14 +1475,12 @@ private:
             if(!providerPath.empty())
                 return providerPath;
         }
-
-        std::filesystem::path base =
-            std::filesystem::path(info.path).parent_path();
-        std::string path = resolve_module_path(base.string(), moduleName);
-        if(!path.empty())
-            return path;
-        if(!rootPath.empty())
-            return resolve_module_path(rootPath, moduleName);
+        for(const auto& root : module_search_paths_for_file(info))
+        {
+            std::string path = resolve_module_path(root, moduleName);
+            if(!path.empty())
+                return path;
+        }
         return {};
     }
 
@@ -1304,44 +1551,11 @@ private:
             return std::nullopt;
         };
 
-        if(!rootPath.empty())
+        for(const auto& base : search_base_paths_for_lookup(contextFile))
         {
-            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+            if(auto p = try_from_base(base))
                 return p;
         }
-
-        if(contextFile && !contextFile->path.empty())
-        {
-            std::filesystem::path dir = std::filesystem::path(contextFile->path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        for(const auto& [_, info] : files)
-        {
-            if(info.path.empty())
-                continue;
-            std::filesystem::path dir = std::filesystem::path(info.path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        if(auto p = try_from_base(std::filesystem::current_path()))
-            return p;
 
         return std::nullopt;
     }
@@ -1405,57 +1619,32 @@ private:
     std::optional<std::filesystem::path>
     resolve_std_strbuf_module_path(const FileInfo* contextFile) const
     {
-        auto try_from_base = [](const std::filesystem::path& base)
+        auto try_from_base = [&](const std::filesystem::path& base)
             -> std::optional<std::filesystem::path> {
             if(base.empty())
                 return std::nullopt;
             std::error_code ec;
-            std::filesystem::path cand = base / "stdlib" / "std" / "strbuf.mla";
-            if(std::filesystem::exists(cand, ec) && !ec)
-                return cand;
+            std::filesystem::path cand1 = base / "stdlib" / "std" / "strbuf.mla";
+            if(std::filesystem::exists(cand1, ec) && !ec)
+                return cand1;
+            std::filesystem::path cand2 = base / "std" / "strbuf.mla";
+            if(std::filesystem::exists(cand2, ec) && !ec)
+                return cand2;
+            std::string resolved = resolve_module_path(base.string(), "std::strbuf");
+            if(!resolved.empty())
+            {
+                std::filesystem::path cand3 = resolved;
+                if(std::filesystem::exists(cand3, ec) && !ec)
+                    return cand3;
+            }
             return std::nullopt;
         };
 
-        if(!rootPath.empty())
+        for(const auto& base : search_base_paths_for_lookup(contextFile))
         {
-            if(auto p = try_from_base(std::filesystem::path(rootPath)))
+            if(auto p = try_from_base(base))
                 return p;
         }
-
-        if(contextFile && !contextFile->path.empty())
-        {
-            std::filesystem::path dir =
-                std::filesystem::path(contextFile->path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        for(const auto& [_, info] : files)
-        {
-            if(info.path.empty())
-                continue;
-            std::filesystem::path dir =
-                std::filesystem::path(info.path).parent_path();
-            while(!dir.empty())
-            {
-                if(auto p = try_from_base(dir))
-                    return p;
-                std::filesystem::path parent = dir.parent_path();
-                if(parent == dir)
-                    break;
-                dir = parent;
-            }
-        }
-
-        if(auto p = try_from_base(std::filesystem::current_path()))
-            return p;
 
         return std::nullopt;
     }
