@@ -156,7 +156,13 @@ static std::optional<size_t> offsetFromLineColumn(std::string_view text, int lin
     return std::nullopt;
 }
 
-static std::optional<std::string> tokenAtOffset(std::string_view text, size_t offset) {
+struct TokenSpan {
+    std::string token;
+    size_t start = 0;
+    size_t end = 0;
+};
+
+static std::optional<TokenSpan> tokenSpanAtOffset(std::string_view text, size_t offset) {
     if (text.empty()) {
         return std::nullopt;
     }
@@ -187,7 +193,11 @@ static std::optional<std::string> tokenAtOffset(std::string_view text, size_t of
     if (!isIdentStart(text[start])) {
         return std::nullopt;
     }
-    return std::string(text.substr(start, end - start + 1));
+    TokenSpan out;
+    out.token = std::string(text.substr(start, end - start + 1));
+    out.start = start;
+    out.end = end;
+    return out;
 }
 
 static bool startsWith(std::string_view value, std::string_view prefix) {
@@ -538,13 +548,13 @@ static std::vector<int> computeLineDepths(std::string_view text) {
 
 static int findIdentifierColumn(std::string_view line, std::string_view name) {
     if (name.empty()) {
-        return 1;
+        return 0;
     }
     size_t pos = 0;
     while (true) {
         pos = line.find(name, pos);
         if (pos == std::string_view::npos) {
-            return 1;
+            return 0;
         }
         const bool left_ok =
             pos == 0 || !isIdentContinue(line[pos - 1]);
@@ -705,10 +715,53 @@ static void addSemanticSymbol(DocumentSemantic& out,
     if (s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size()) {
         s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)], s.name);
     } else {
+        s.column = 0;
+    }
+    if (s.column <= 0) {
         s.column = 1;
     }
     s.stable_id = stableSymbolId(s);
     out.symbols.push_back(std::move(s));
+}
+
+static void addSemanticSymbolAtLine(DocumentSemantic& out,
+                                    const std::vector<std::string_view>& lines,
+                                    std::string name,
+                                    int kind,
+                                    int line_no,
+                                    int depth,
+                                    std::string type_info,
+                                    std::string signature) {
+    SemanticSymbol s;
+    s.name = std::move(name);
+    s.kind = kind;
+    s.uri = out.uri;
+    s.line = line_no > 0 ? line_no : 1;
+    s.depth = depth;
+    s.type_info = std::move(type_info);
+    s.signature = std::move(signature);
+
+    if (s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size()) {
+        s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)], s.name);
+    } else {
+        s.column = 0;
+    }
+    if (s.column <= 0) {
+        s.column = 1;
+    }
+    s.stable_id = stableSymbolId(s);
+    out.symbols.push_back(std::move(s));
+}
+
+static int findStructDeclLine(const std::vector<std::string_view>& lines,
+                              std::string_view struct_name) {
+    const std::string needle = "struct " + std::string(struct_name);
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (lines[i].find(needle) != std::string_view::npos) {
+            return static_cast<int>(i) + 1;
+        }
+    }
+    return 1;
 }
 
 static void collectStatementSymbols(DocumentSemantic& out,
@@ -821,6 +874,18 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             addSemanticSymbol(out, lines, st->name, 3,
                               st->line > 0 ? st->line : 1, 0, {}, {});
             if (st->members) {
+                for (StructMemberNode* member : st->members->members) {
+                    if (!member) {
+                        continue;
+                    }
+                    const int field_line = member->line > 0
+                                               ? member->line
+                                               : (st->line > 0 ? st->line
+                                                               : findStructDeclLine(lines, st->name));
+                    addSemanticSymbolAtLine(out, lines, member->name, 2, field_line, 1,
+                                            typeToString(member->type),
+                                            "field " + st->name + "::" + member->name);
+                }
                 for (StructMethodNode* method : st->members->methods) {
                     if (!method) {
                         continue;
@@ -1067,6 +1132,97 @@ static int lineDepthAt(const DocumentSemantic& doc, int line) {
     return doc.line_depths.back();
 }
 
+static const SemanticSymbol* findVisibleVarByName(const DocumentSemantic& current,
+                                                  std::string_view name,
+                                                  int query_line,
+                                                  int query_depth) {
+    const SemanticSymbol* best_local_var = nullptr;
+    for (const SemanticSymbol& sym : current.symbols) {
+        if (sym.kind != 2 || sym.name != name) {
+            continue;
+        }
+        const int sym_depth = lineDepthAt(current, sym.line);
+        if (sym.line > query_line || sym_depth > query_depth) {
+            continue;
+        }
+        const int best_depth =
+            best_local_var ? lineDepthAt(current, best_local_var->line) : -1;
+        if (!best_local_var ||
+            sym_depth > best_depth ||
+            (sym_depth == best_depth && sym.line > best_local_var->line)) {
+            best_local_var = &sym;
+        }
+    }
+    return best_local_var;
+}
+
+static std::string ownerTypeFromMethodSignature(std::string_view signature) {
+    static constexpr std::string_view kFnPrefix = "fn ";
+    if (!startsWith(signature, kFnPrefix)) {
+        return {};
+    }
+    const std::string_view tail = signature.substr(kFnPrefix.size());
+    const size_t sep = tail.find("::");
+    if (sep == std::string_view::npos || sep == 0) {
+        return {};
+    }
+    return std::string(tail.substr(0, sep));
+}
+
+static std::string structContextAtLine(const DocumentSemantic& current,
+                                       int query_line) {
+    const SemanticSymbol* best_method = nullptr;
+    for (const SemanticSymbol& sym : current.symbols) {
+        if (sym.kind != 1 || sym.line <= 0 || sym.line > query_line) {
+            continue;
+        }
+        if (ownerTypeFromMethodSignature(sym.signature).empty()) {
+            continue;
+        }
+        if (!best_method || sym.line > best_method->line) {
+            best_method = &sym;
+        }
+    }
+    if (!best_method) {
+        return {};
+    }
+    return ownerTypeFromMethodSignature(best_method->signature);
+}
+
+static std::string normalizeStructTypeName(std::string_view type_info) {
+    size_t start = 0;
+    while (start < type_info.size() &&
+           std::isspace(static_cast<unsigned char>(type_info[start])) != 0) {
+        ++start;
+    }
+    size_t end = type_info.size();
+    while (end > start &&
+           std::isspace(static_cast<unsigned char>(type_info[end - 1])) != 0) {
+        --end;
+    }
+    if (start >= end) {
+        return {};
+    }
+    std::string core(type_info.substr(start, end - start));
+    const size_t generic = core.find('<');
+    if (generic != std::string::npos) {
+        core = core.substr(0, generic);
+    }
+    const size_t mod_sep = core.rfind("::");
+    if (mod_sep != std::string::npos && mod_sep + 2 < core.size()) {
+        core = core.substr(mod_sep + 2);
+    }
+    if (core.empty() || !isIdentStart(core.front())) {
+        return {};
+    }
+    for (char c : core) {
+        if (!isIdentContinue(c)) {
+            return {};
+        }
+    }
+    return core;
+}
+
 static std::vector<SemanticSymbol> collectImportedSymbols(
     const DocumentSemantic& current,
     const std::vector<DocumentSemantic>& all_docs) {
@@ -1124,32 +1280,71 @@ static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
     if (!offset.has_value()) {
         return std::nullopt;
     }
-    const std::optional<std::string> token =
-        tokenAtOffset(current.text, *offset);
-    if (!token.has_value()) {
+    const std::optional<TokenSpan> token_span =
+        tokenSpanAtOffset(current.text, *offset);
+    if (!token_span.has_value()) {
         return std::nullopt;
     }
+    const std::string& token = token_span->token;
 
     const int query_depth = lineDepthAt(current, line);
 
-    // Prefer closest visible local variable declaration.
-    const SemanticSymbol* best_local_var = nullptr;
-    for (const SemanticSymbol& sym : current.symbols) {
-        if (sym.name != *token || sym.kind != 2) {
-            continue;
+    // Member access support (self.field and typed_var.field).
+    bool is_member_access = false;
+    std::string member_object;
+    if (token_span->start > 0) {
+        size_t p = token_span->start;
+        while (p > 0 &&
+               std::isspace(static_cast<unsigned char>(current.text[p - 1])) != 0) {
+            --p;
         }
-        const int sym_depth = lineDepthAt(current, sym.line);
-        if (sym.line > line || sym_depth > query_depth) {
-            continue;
-        }
-        const int best_depth =
-            best_local_var ? lineDepthAt(current, best_local_var->line) : -1;
-        if (!best_local_var ||
-            sym_depth > best_depth ||
-            (sym_depth == best_depth && sym.line > best_local_var->line)) {
-            best_local_var = &sym;
+        if (p > 0 && current.text[p - 1] == '.') {
+            size_t q = p - 1;
+            while (q > 0 &&
+                   std::isspace(static_cast<unsigned char>(current.text[q - 1])) != 0) {
+                --q;
+            }
+            const size_t end = q;
+            while (q > 0 && isIdentContinue(current.text[q - 1])) {
+                --q;
+            }
+            if (q < end && isIdentStart(current.text[q])) {
+                member_object = std::string(current.text.substr(q, end - q));
+                is_member_access = true;
+            }
         }
     }
+    if (is_member_access) {
+        std::string owner_type;
+        if (member_object == "self") {
+            owner_type = structContextAtLine(current, line);
+        } else {
+            const SemanticSymbol* object_sym =
+                findVisibleVarByName(current, member_object, line, query_depth);
+            if (object_sym) {
+                owner_type = normalizeStructTypeName(object_sym->type_info);
+            }
+        }
+
+        if (!owner_type.empty()) {
+            const std::string field_sig = "field " + owner_type + "::" + token;
+            for (const DocumentSemantic& doc : all_docs) {
+                for (const SemanticSymbol& sym : doc.symbols) {
+                    if (sym.kind != 2 || sym.name != token) {
+                        continue;
+                    }
+                    if (sym.signature != field_sig) {
+                        continue;
+                    }
+                    return ResolvedQuerySymbol{sym, 1, sym.uri == current.uri};
+                }
+            }
+        }
+    }
+
+    // Prefer closest visible local variable declaration.
+    const SemanticSymbol* best_local_var =
+        findVisibleVarByName(current, token, line, query_depth);
     if (best_local_var) {
         return ResolvedQuerySymbol{*best_local_var, 1, true};
     }
@@ -1158,7 +1353,7 @@ static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
     const SemanticSymbol* first_local = nullptr;
     int overload_count = 0;
     for (const SemanticSymbol& sym : current.symbols) {
-        if (sym.name != *token) {
+        if (sym.name != token) {
             continue;
         }
         if (!first_local) {
@@ -1180,7 +1375,7 @@ static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
     const SemanticSymbol* first_imported = nullptr;
     int imported_overloads = 0;
     for (const SemanticSymbol& sym : imported) {
-        if (sym.name != *token) {
+        if (sym.name != token) {
             continue;
         }
         if (!first_imported) {

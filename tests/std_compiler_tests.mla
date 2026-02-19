@@ -409,3 +409,51 @@ fn test_compiler_resolve_symbol_overload_metadata() -> i32 {
     let _ = s.destroy();
     return 0;
 }
+
+#[test]
+fn test_compiler_resolve_struct_member_self_access() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://resolve_self_field.mla";
+    let src: string = "struct Counter { var value: i32; };\nimpl Counter {\n  fn increment(self: Counter) -> Counter {\n    return Counter { value: self.value + 1 };\n  }\n}\nfn main() -> i32 {\n  let c: Counter = Counter { value: 1 };\n  let n: Counter = c.increment();\n  return n.value;\n}";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    var resolved_col: i32 = 0;
+    var rs: ResolvedSymbol = ResolvedSymbol {
+        id: String::new(),
+        name: String::new(),
+        uri: String::new(),
+        type_info: String::new(),
+        signature: String::new(),
+        kind: 0,
+        line: 0,
+        column: 0,
+        overload_count: 0,
+        from_current_document: 0
+    };
+    for c in 30..40 {
+        let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, 4, c);
+        if rr.is_err(): { continue; }
+        let candidate: ResolvedSymbol = rr.unwrap();
+        if contains(candidate.signature, "field Counter::value") == 1: {
+            resolved_col = c;
+            rs = candidate;
+            break;
+        }
+    }
+    if resolved_col == 0: { return 1; }
+    if rs.kind != 2: { return 1; }
+    if contains(rs.name, "value") == 0: { return 1; }
+
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 4, resolved_col);
+    if dr.is_err(): { return 1; }
+    let def: DefinitionLocation = dr.unwrap();
+    if contains(def.name, "value") == 0: { return 1; }
+    if def.line <= 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
