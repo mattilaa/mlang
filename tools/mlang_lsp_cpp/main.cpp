@@ -87,6 +87,7 @@ int __mlang_compiler_document_rename_is_safe(mlang_compiler_session* session,
                                              int column,
                                              const char* new_name,
                                              int* out_is_safe);
+int __mlang_compiler_semantic_cache_clear(mlang_compiler_session* session);
 }
 
 struct Location
@@ -484,10 +485,15 @@ private:
     std::unordered_map<std::string, Location> cSymbolCache;
     std::unordered_map<std::string, std::string> diagnosticResultIds;
     std::unordered_map<std::string, int> compilerDocVersions;
+    std::unordered_set<std::string> openDocumentUris;
     mlang_compiler_session* compilerSession = nullptr;
     bool cHeadersLoaded = false;
     bool cHeaderDebug = false;
     std::string cHeaderDebugLog;
+    int compilerMutationCount = 0;
+    int compilerCacheClearInterval = 256;
+    std::uint64_t telemetryCacheClears = 0;
+    std::uint64_t telemetryEvictions = 0;
 
     llvm::json::Value make_position_value(int line, int character)
     {
@@ -534,6 +540,82 @@ private:
                compilerSession != nullptr;
     }
 
+    static bool is_file_uri(std::string_view uri)
+    {
+        return uri.rfind("file://", 0) == 0;
+    }
+
+    bool is_path_under_root(const std::string& path) const
+    {
+        if(rootPath.empty() || path.empty())
+            return false;
+        std::error_code ec;
+        std::filesystem::path rp = std::filesystem::weakly_canonical(rootPath, ec);
+        if(ec)
+            return false;
+        std::filesystem::path p = std::filesystem::weakly_canonical(path, ec);
+        if(ec)
+            return false;
+
+        const auto rootItEnd = rp.end();
+        auto rootIt = rp.begin();
+        auto pathIt = p.begin();
+        for(; rootIt != rootItEnd; ++rootIt, ++pathIt)
+        {
+            if(pathIt == p.end() || *pathIt != *rootIt)
+                return false;
+        }
+        return true;
+    }
+
+    void maybe_clear_compiler_semantic_cache()
+    {
+        if(!compilerSession)
+            return;
+        if(compilerCacheClearInterval <= 0)
+            return;
+        if((compilerMutationCount % compilerCacheClearInterval) != 0)
+            return;
+        if(__mlang_compiler_semantic_cache_clear(compilerSession) == 0)
+        {
+            ++telemetryCacheClears;
+            log_runtime_telemetry("cache_clear");
+        }
+    }
+
+    void mark_compiler_mutation()
+    {
+        ++compilerMutationCount;
+        maybe_clear_compiler_semantic_cache();
+    }
+
+    void prune_closed_document_indexes(const std::string& uri)
+    {
+        auto it = files.find(uri);
+        if(it == files.end())
+            return;
+
+        const std::string path = uri_to_path(uri);
+        bool keepIndexed = false;
+        if(is_file_uri(uri))
+        {
+            std::error_code ec;
+            if(!path.empty() && std::filesystem::exists(path, ec) && !ec &&
+               is_path_under_root(path))
+            {
+                keepIndexed = true;
+            }
+        }
+
+        if(keepIndexed)
+            return;
+
+        workspaceGraph.removeDocument(uri);
+        files.erase(it);
+        ++telemetryEvictions;
+        log_runtime_telemetry("evict_closed_doc", uri);
+    }
+
     void compiler_open_or_update(const std::string& uri,
                                  const std::string& text,
                                  std::optional<int> explicitVersion)
@@ -550,7 +632,10 @@ private:
             int status = __mlang_compiler_document_open(
                 compilerSession, uri.c_str(), "mlang", text.c_str(), version);
             if(status == 0)
+            {
                 compilerDocVersions[uri] = version;
+                mark_compiler_mutation();
+            }
             return;
         }
 
@@ -559,7 +644,10 @@ private:
         int status = __mlang_compiler_document_change(
             compilerSession, uri.c_str(), text.c_str(), version);
         if(status == 0)
+        {
             compilerDocVersions[uri] = version;
+            mark_compiler_mutation();
+        }
     }
 
     void compiler_close(const std::string& uri)
@@ -568,6 +656,7 @@ private:
             return;
         __mlang_compiler_document_close(compilerSession, uri.c_str());
         compilerDocVersions.erase(uri);
+        mark_compiler_mutation();
     }
 
     struct ResolvedSemanticSymbol
@@ -930,6 +1019,23 @@ private:
         std::ofstream f(path, std::ios::app);
         if(f)
             f << msg << "\n";
+    }
+
+    void log_runtime_telemetry(const char* event,
+                               const std::string& uri = std::string()) const
+    {
+        if(!cHeaderDebug)
+            return;
+        std::string msg = "[mlangd-telemetry] event=";
+        msg += event ? event : "unknown";
+        msg += " active_docs=" + std::to_string(openDocumentUris.size());
+        msg += " indexed_files=" + std::to_string(files.size());
+        msg += " compiler_docs=" + std::to_string(compilerDocVersions.size());
+        msg += " cache_clears=" + std::to_string(telemetryCacheClears);
+        msg += " evictions=" + std::to_string(telemetryEvictions);
+        if(!uri.empty())
+            msg += " uri=" + uri;
+        debug_log(msg);
     }
 
     std::optional<Location> find_c_symbol_location(const std::string& name)
@@ -2048,11 +2154,13 @@ private:
             int version = -1;
             if(auto v = textDoc->getInteger("version"))
                 version = static_cast<int>(*v);
+            openDocumentUris.insert(uriStr);
             incrementalCompiler.openDocument(uriStr, path, text->str(), version);
             compiler_open_or_update(
                 uriStr, text->str(),
                 version >= 0 ? std::optional<int>(version + 1) : std::nullopt);
             reindex_incremental_document(uriStr);
+            log_runtime_telemetry("didOpen", uriStr);
         }
         else if(method == "textDocument/didChange")
         {
@@ -2065,6 +2173,7 @@ private:
                 return;
 
             std::string uriStr = uri->str();
+            openDocumentUris.insert(uriStr);
             if(!incrementalCompiler.getDocument(uriStr))
             {
                 std::string path = uri_to_path(uriStr);
@@ -2124,6 +2233,7 @@ private:
                                      : std::nullopt);
                 }
                 reindex_incremental_document(uriStr);
+                log_runtime_telemetry("didChange", uriStr);
             }
             else
             {
@@ -2137,6 +2247,8 @@ private:
                             version >= 0 ? std::optional<int>(version + 1)
                                          : std::nullopt);
                         index_document(uriStr, fullText->str());
+                        log_runtime_telemetry("didChange_fallback_full_reindex",
+                                              uriStr);
                     }
                 }
             }
@@ -2161,6 +2273,7 @@ private:
                 incrementalCompiler.openDocument(uriStr, path, text);
             compiler_open_or_update(uriStr, text, std::nullopt);
             reindex_incremental_document(uriStr);
+            log_runtime_telemetry("didSave", uriStr);
         }
         else if(method == "textDocument/didClose")
         {
@@ -2171,8 +2284,11 @@ private:
             if(!uri)
                 return;
             std::string uriStr = uri->str();
+            openDocumentUris.erase(uriStr);
             incrementalCompiler.closeDocument(uriStr);
             compiler_close(uriStr);
+            prune_closed_document_indexes(uriStr);
+            log_runtime_telemetry("didClose", uriStr);
         }
     }
 
@@ -2189,6 +2305,12 @@ private:
         if(root.empty())
             root = std::filesystem::current_path().string();
         rootPath = root;
+        if(const char* env = std::getenv("MLANGD_COMPILER_CACHE_CLEAR_INTERVAL"))
+        {
+            int v = std::atoi(env);
+            if(v > 0)
+                compilerCacheClearInterval = v;
+        }
         ensure_compiler_session();
         scan_workspace(rootPath);
 
