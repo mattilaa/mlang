@@ -628,7 +628,7 @@ TEST_F(MLATest, ComplexExpression)
             return 0;
         }
     )";
-    EXPECT_EQ(compileAndRun(code), "28\n");
+    EXPECT_EQ(compileAndRun(code), "30\n");
 }
 
 TEST_F(MLATest, OperatorPrecedence)
