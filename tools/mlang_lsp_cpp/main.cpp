@@ -3559,6 +3559,7 @@ private:
 
         std::unordered_set<std::string> bases;
         std::string symbol = ident->text;
+        bool queryLooksLikeMethodDecl = false;
 
         if(info.structs.find(symbol) != info.structs.end())
             bases.insert(symbol);
@@ -3567,6 +3568,45 @@ private:
         {
             if(!fn->ownerStruct.empty())
                 bases.insert(fn->ownerStruct);
+        }
+
+        // Prefer direct owner inference at the query site for methods.
+        // This avoids ambiguous owner mapping when multiple structs define
+        // methods with the same name (e.g. Base::run and Derived::run).
+        if(*line >= 0 && *line < (int)info.lines.size())
+        {
+            const std::string& lineText = info.lines[(size_t)*line];
+            std::smatch sigMatch;
+            if(std::regex_search(
+                   lineText, sigMatch,
+                   std::regex("\\bfn\\s+" + symbol +
+                              "\\s*\\([^\\)]*\\bself\\s*:\\s*([A-Za-z_][A-Za-z0-9_:]*)")))
+            {
+                std::string owner = sigMatch[1].str();
+                if(auto pos = owner.rfind("::"); pos != std::string::npos)
+                    owner = owner.substr(pos + 2);
+                if(!owner.empty())
+                    bases.insert(owner);
+            }
+            if(std::regex_search(
+                   lineText,
+                   std::regex("\\bfn\\s+" + symbol + "\\s*\\(")))
+            {
+                queryLooksLikeMethodDecl = true;
+            }
+        }
+
+        for(const auto& [sname, st] : info.structs)
+        {
+            if(st.startLine < 0 || st.endLine < 0)
+                continue;
+            if(*line < st.startLine || *line > st.endLine)
+                continue;
+            auto mit = st.methods.find(symbol);
+            if(mit == st.methods.end())
+                continue;
+            if(mit->second.loc.line == *line)
+                bases.insert(sname);
         }
 
         std::vector<Location> out_impls;
@@ -3605,6 +3645,25 @@ private:
         std::unordered_set<std::string> seen;
         for(const auto& base : bases)
             gather_impl_for_base(base);
+
+        if(out_impls.empty() && queryLooksLikeMethodDecl)
+        {
+            // Fallback: method declaration site but derivation chain was not
+            // resolved; return other struct methods with the same name.
+            for(const auto& [_, finfo] : files)
+            {
+                for(const auto& [sname, st] : finfo.structs)
+                {
+                    auto mit = st.methods.find(symbol);
+                    if(mit == st.methods.end() || mit->second.loc.uri.empty())
+                        continue;
+                    const auto& loc = mit->second.loc;
+                    if(loc.uri == info.uri && loc.line == *line)
+                        continue;
+                    out_impls.push_back(loc);
+                }
+            }
+        }
 
         if(out_impls.empty())
             return handle_definition(params);
