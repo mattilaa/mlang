@@ -30,7 +30,7 @@ use std::jsonrpc::extract_text_document_text;
 use std::jsonrpc::extract_text_document_uri;
 use std::jsonrpc::extract_text_document_version;
 use std::jsonrpc::extract_workspace_query;
-use std::jsonrpc::extract_lines_text;
+use std::jsonrpc::extract_range_text;
 use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::format_text_basic;
 use std::jsonrpc::line_count;
@@ -1039,22 +1039,22 @@ fn handle_range_formatting(payload: string) -> string {
     let uri: string = extract_text_document_uri(payload);
     if len(uri) == 0: { return "[]"; }
     let start_line: i64 = extract_range_start_line(payload);
-    let _start_char: i64 = extract_range_start_character(payload);
+    let start_char: i64 = extract_range_start_character(payload);
     let end_line: i64 = extract_range_end_line(payload);
-    let _end_char: i64 = extract_range_end_character(payload);
+    let end_char: i64 = extract_range_end_character(payload);
     if start_line < 0: { return "[]"; }
+    if start_char < 0: { return "[]"; }
     if end_line < start_line: { return "[]"; }
+    if end_char < 0: { return "[]"; }
     let text: string = text_store_get(g_text_store_handle, uri);
     if len(text) == 0: { return "[]"; }
-    let raw: string = extract_lines_text(text, start_line, end_line);
-    if len(raw) == 0: { return "[]"; }
+    let raw: string = extract_range_text(text, start_line, start_char, end_line, end_char);
     let formatted: string = format_text_basic(raw);
     if eq(formatted, raw) == 1: { return "[]"; }
-    let end_char_full: i64 = line_length(text, end_line);
     let fmt_e: string = json_escape(formatted);
     return format!(
-        "[{{\"range\":{{\"start\":{{\"line\":{},\"character\":0}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
-        start_line, end_line, end_char_full, fmt_e
+        "[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
+        start_line, start_char, end_line, end_char, fmt_e
     );
 }
 

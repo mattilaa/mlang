@@ -1757,6 +1757,47 @@ char* __mlang_std_jsonrpc_extract_lines_text(const char* text, int64_t start_lin
     return out;
 }
 
+char* __mlang_std_jsonrpc_extract_range_text(const char* text, int64_t start_line,
+                                             int64_t start_char, int64_t end_line,
+                                             int64_t end_char)
+{
+    if(!text || start_line < 0 || end_line < start_line || start_char < 0 ||
+       end_char < 0)
+    {
+        return dup_cstr("");
+    }
+    const char* sls = NULL;
+    const char* sle = NULL;
+    const char* els = NULL;
+    const char* ele = NULL;
+    line_bounds_at(text, start_line, &sls, &sle);
+    line_bounds_at(text, end_line, &els, &ele);
+    if(!sls || !sle || !els || !ele || sle < sls || ele < els)
+        return dup_cstr("");
+
+    int64_t slen = (int64_t)(sle - sls);
+    int64_t elen = (int64_t)(ele - els);
+    if(start_char > slen)
+        start_char = slen;
+    if(end_char > elen)
+        end_char = elen;
+    if(start_line == end_line && end_char < start_char)
+        return dup_cstr("");
+
+    const char* from = sls + start_char;
+    const char* to = els + end_char;
+    if(to < from)
+        return dup_cstr("");
+    size_t n = (size_t)(to - from);
+    char* out = (char*)malloc(n + 1u);
+    if(!out)
+        return dup_cstr("");
+    if(n > 0u)
+        memcpy(out, from, n);
+    out[n] = '\0';
+    return out;
+}
+
 char* __mlang_std_jsonrpc_format_text_basic(const char* text)
 {
     if(!text)

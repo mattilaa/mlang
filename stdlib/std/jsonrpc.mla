@@ -56,6 +56,7 @@ extern pub fn __mlang_std_jsonrpc_text_store_get(handle: i64, key: string) -> st
 extern pub fn __mlang_std_jsonrpc_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_line_length(text: string, line: i64) -> i64;
 extern pub fn __mlang_std_jsonrpc_extract_lines_text(text: string, start_line: i64, end_line: i64) -> string;
+extern pub fn __mlang_std_jsonrpc_extract_range_text(text: string, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_format_text_basic(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
@@ -411,6 +412,11 @@ pub fn line_length(text: string, line: i64) -> i64 {
 /// @brief Extract inclusive line range [start_line..end_line] text.
 pub fn extract_lines_text(text: string, start_line: i64, end_line: i64) -> string {
     return __mlang_std_jsonrpc_extract_lines_text(text, start_line, end_line);
+}
+
+/// @brief Extract exact range text [start_line:start_char .. end_line:end_char).
+pub fn extract_range_text(text: string, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> string {
+    return __mlang_std_jsonrpc_extract_range_text(text, start_line, start_char, end_line, end_char);
 }
 
 /// @brief Basic formatter: trims trailing whitespace and normalizes tabs.
