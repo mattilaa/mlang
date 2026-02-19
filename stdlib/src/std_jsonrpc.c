@@ -1,11 +1,14 @@
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static __thread char g_last_error[512];
@@ -962,6 +965,16 @@ char* __mlang_std_jsonrpc_extract_workspace_query(const char* payload)
     return s;
 }
 
+char* __mlang_std_jsonrpc_extract_root_uri(const char* payload)
+{
+    if(!payload)
+        return dup_cstr("");
+    char* s = extract_string_field_in(payload, "rootUri");
+    if(!s)
+        return dup_cstr("");
+    return s;
+}
+
 char* __mlang_std_jsonrpc_signature_help_callee(const char* text,
                                                 int64_t line0,
                                                 int64_t column0)
@@ -1016,6 +1029,194 @@ char* __mlang_std_jsonrpc_signature_help_callee(const char* text,
         }
     }
     return dup_cstr("");
+}
+
+typedef struct
+{
+    int found;
+    int line1;
+    int col1;
+    int kind;
+    char path[PATH_MAX];
+} ws_symbol_match_t;
+
+static void uri_to_path(const char* uri, char* out, size_t out_cap)
+{
+    if(!out || out_cap == 0u)
+        return;
+    out[0] = '\0';
+    if(!uri)
+        return;
+    if(strncmp(uri, "file://", 7u) == 0)
+    {
+        snprintf(out, out_cap, "%s", uri + 7);
+        return;
+    }
+    snprintf(out, out_cap, "%s", uri);
+}
+
+static int ends_with_mla(const char* path)
+{
+    if(!path)
+        return 0;
+    size_t n = strlen(path);
+    return n >= 4u && strcmp(path + n - 4u, ".mla") == 0;
+}
+
+static int match_decl_line(const char* line, const char* query, int* out_kind,
+                           int* out_col0)
+{
+    if(!line || !query || query[0] == '\0')
+        return 0;
+    const struct
+    {
+        const char* kw;
+        int kind;
+        int paren_required;
+    } rules[] = {{"fn", 12, 1}, {"struct", 23, 0}, {"enum", 10, 0},
+                 {"mod", 2, 0}};
+    for(size_t r = 0; r < sizeof(rules) / sizeof(rules[0]); ++r)
+    {
+        const char* p = line;
+        size_t qn = strlen(query);
+        while((p = strstr(p, rules[r].kw)) != NULL)
+        {
+            if(p > line && is_ident_char(*(p - 1)))
+            {
+                ++p;
+                continue;
+            }
+            const char* k_end = p + strlen(rules[r].kw);
+            if(*k_end && !isspace((unsigned char)*k_end))
+            {
+                ++p;
+                continue;
+            }
+            while(*k_end && isspace((unsigned char)*k_end))
+                ++k_end;
+            if(!is_ident_start_char(*k_end))
+            {
+                ++p;
+                continue;
+            }
+            if(strncmp(k_end, query, qn) != 0)
+            {
+                ++p;
+                continue;
+            }
+            if(is_ident_char(k_end[qn]))
+            {
+                ++p;
+                continue;
+            }
+            const char* after = k_end + qn;
+            while(*after && isspace((unsigned char)*after))
+                ++after;
+            if(rules[r].paren_required && *after != '(')
+            {
+                ++p;
+                continue;
+            }
+            if(out_kind)
+                *out_kind = rules[r].kind;
+            if(out_col0)
+                *out_col0 = (int)(k_end - line);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void search_file_for_symbol(const char* path, const char* query,
+                                   ws_symbol_match_t* out)
+{
+    if(!path || !query || !out || out->found)
+        return;
+    FILE* f = fopen(path, "rb");
+    if(!f)
+        return;
+    char line[4096];
+    int line1 = 1;
+    while(fgets(line, (int)sizeof(line), f) != NULL)
+    {
+        int kind = 0;
+        int col0 = 0;
+        if(match_decl_line(line, query, &kind, &col0))
+        {
+            out->found = 1;
+            out->line1 = line1;
+            out->col1 = col0 + 1;
+            out->kind = kind;
+            snprintf(out->path, sizeof(out->path), "%s", path);
+            break;
+        }
+        line1++;
+    }
+    fclose(f);
+}
+
+static void search_dir_for_symbol(const char* root, const char* query,
+                                  ws_symbol_match_t* out)
+{
+    if(!root || !query || !out || out->found)
+        return;
+    DIR* dir = opendir(root);
+    if(!dir)
+        return;
+    struct dirent* ent = NULL;
+    while((ent = readdir(dir)) != NULL)
+    {
+        if(out->found)
+            break;
+        if(strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
+        char full[PATH_MAX];
+        if(snprintf(full, sizeof(full), "%s/%s", root, ent->d_name) >=
+           (int)sizeof(full))
+            continue;
+        struct stat st;
+        if(stat(full, &st) != 0)
+            continue;
+        if(S_ISDIR(st.st_mode))
+        {
+            if(ent->d_name[0] == '.')
+                continue;
+            search_dir_for_symbol(full, query, out);
+        }
+        else if(S_ISREG(st.st_mode))
+        {
+            if(ends_with_mla(full))
+                search_file_for_symbol(full, query, out);
+        }
+    }
+    closedir(dir);
+}
+
+char* __mlang_std_jsonrpc_workspace_symbol_search(const char* root_uri,
+                                                  const char* query)
+{
+    if(!root_uri || !query || query[0] == '\0')
+        return dup_cstr("[]");
+    char root[PATH_MAX];
+    uri_to_path(root_uri, root, sizeof(root));
+    if(root[0] == '\0')
+        return dup_cstr("[]");
+    ws_symbol_match_t m;
+    memset(&m, 0, sizeof(m));
+    m.kind = 12;
+    search_dir_for_symbol(root, query, &m);
+    if(!m.found)
+        return dup_cstr("[]");
+    char uri[PATH_MAX + 8];
+    snprintf(uri, sizeof(uri), "file://%s", m.path);
+    char out[PATH_MAX + 320];
+    snprintf(out, sizeof(out),
+             "[{\"name\":\"%s\",\"kind\":%d,\"location\":{\"uri\":\"%s\","
+             "\"range\":{\"start\":{\"line\":%d,\"character\":%d},"
+             "\"end\":{\"line\":%d,\"character\":%d}}}}]",
+             query, m.kind, uri, m.line1 - 1, m.col1 - 1, m.line1 - 1,
+             m.col1 - 1);
+    return dup_cstr(out);
 }
 
 int64_t __mlang_std_jsonrpc_text_store_new(void)

@@ -14,6 +14,7 @@ use std::jsonrpc::extract_method;
 use std::jsonrpc::extract_new_name;
 use std::jsonrpc::extract_position_character;
 use std::jsonrpc::extract_position_line;
+use std::jsonrpc::extract_root_uri;
 use std::jsonrpc::extract_request_id;
 use std::jsonrpc::extract_text_document_language_id;
 use std::jsonrpc::extract_text_document_text;
@@ -33,6 +34,7 @@ use std::jsonrpc::uri_store_count;
 use std::jsonrpc::uri_store_get;
 use std::jsonrpc::uri_store_new;
 use std::jsonrpc::uri_store_remove;
+use std::jsonrpc::workspace_symbol_search;
 use std::jsonrpc::run_stdio_loop;
 use std::strbuf::concat;
 use std::strbuf::contains;
@@ -654,14 +656,12 @@ fn handle_workspace_symbol(payload: string) -> string {
     }
     if j == 0: {
         if len(query) > 0: {
-            let first_uri: string = uri_store_get(g_uri_store_handle, 0);
-            let loc: string = location_json(first_uri, 1, 1);
-            let name_e: string = json_escape(query);
-            let item: string = format!(
-                "{{\"name\":\"{}\",\"kind\":12,\"location\":{}}}",
-                name_e, loc
-            );
-            out = format!("{}{}", out, item);
+            if ensure_text_store() == 0: {
+                let root_uri: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                if len(root_uri) > 0: {
+                    return workspace_symbol_search(root_uri, query);
+                }
+            }
         }
     }
     out = concat(out, "]");
@@ -714,6 +714,12 @@ fn dispatch_result_json(payload: string) -> string {
 
     if eq(method, "initialize") == 1: {
         let _ = ensure_session();
+        if ensure_text_store() == 0: {
+            let root_uri: string = extract_root_uri(payload);
+            if len(root_uri) > 0: {
+                let _ = text_store_upsert(g_text_store_handle, "__mlang_root_uri__", root_uri);
+            }
+        }
         return "{\"capabilities\":{\"textDocumentSync\":{\"openClose\":true,\"change\":1},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{\"triggerCharacters\":[\".\",\":\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"renameProvider\":{\"prepareProvider\":true},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{\"interFileDependencies\":false,\"workspaceDiagnostics\":false},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[]},\"full\":true}}}";
     }
     if eq(method, "shutdown") == 1: {
