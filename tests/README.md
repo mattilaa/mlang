@@ -87,6 +87,18 @@ python3 tests/lsp_parity_e2e.py --mlangd build/mlangd
 python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 400
 ```
 
+### Option 1e: mlangd_mla organizeImports Transcript (CodeAction)
+
+This is a focused end-to-end JSON-RPC transcript for `tools/mlangd_mla` that
+locks:
+- `textDocument/codeAction` with `source.organizeImports`
+- state updates across `didOpen` / `didChange` / `didClose`
+
+```bash
+./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
+python3 tests/lsp_mlangd_mla_codeaction_transcript.py --mlangd /tmp/mlangd_mla
+```
+
 ### Option 2: Manual CMake Build
 
 ```bash
