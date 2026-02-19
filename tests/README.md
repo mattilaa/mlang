@@ -99,6 +99,28 @@ locks:
 python3 tests/lsp_mlangd_mla_codeaction_transcript.py --mlangd /tmp/mlangd_mla
 ```
 
+### Option 1f: mlangd_mla Rename Transcript (WorkspaceEdit documentChanges)
+
+This focused end-to-end JSON-RPC transcript for `tools/mlangd_mla` locks:
+- `textDocument/rename` returns `WorkspaceEdit.documentChanges` (not legacy `changes`)
+- rename edits include both definition and cross-document references
+
+```bash
+./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
+python3 tests/lsp_mlangd_mla_rename_transcript.py --mlangd /tmp/mlangd_mla
+```
+
+### Option 1g: mlangd_mla Transcript Suite (Consolidated Runner)
+
+Runs both focused `mlangd_mla` transcript checks in one command:
+- organizeImports codeAction lifecycle
+- rename `documentChanges` + cross-document edits
+
+```bash
+./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
+python3 tests/lsp_mlangd_mla_transcripts.py --mlangd /tmp/mlangd_mla
+```
+
 ### Option 2: Manual CMake Build
 
 ```bash

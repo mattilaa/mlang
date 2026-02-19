@@ -24,9 +24,9 @@ jobs:
       - name: Build mlangd_mla
         run: |
           ./build/mlang tools/mlangd_mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd_mla
-      - name: Mlangd MLA organizeImports transcript
+      - name: Mlangd MLA transcript suite
         run: |
-          python3 tests/lsp_mlangd_mla_codeaction_transcript.py --mlangd /tmp/mlangd_mla
+          python3 tests/lsp_mlangd_mla_transcripts.py --mlangd /tmp/mlangd_mla
       - name: LSP parity E2E
         run: |
           python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 180
