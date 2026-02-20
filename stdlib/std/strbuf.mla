@@ -18,6 +18,7 @@ extern fn __mlang_std_strbuf_ends_with(s: string, suffix: string) -> int;
 extern fn __mlang_std_strbuf_contains(s: string, needle: string) -> int;
 extern fn __mlang_std_strbuf_find(s: string, needle: string) -> i64;
 extern fn __mlang_std_strbuf_rfind(s: string, needle: string) -> i64;
+extern fn __mlang_std_strbuf_sub(s: string, start: i64, count: i64) -> string;
 extern fn __mlang_std_strbuf_concat(a: string, b: string) -> string;
 extern fn __mlang_std_strbuf_repeat(s: string, count: i64) -> string;
 extern fn __mlang_std_strbuf_trim(s: string) -> string;
@@ -94,6 +95,16 @@ pub fn find(s: string, needle: string) -> i64 {
 /// Returns `-1` when not found.
 pub fn rfind(s: string, needle: string) -> i64 {
     return __mlang_std_strbuf_rfind(s, needle);
+}
+
+/// @brief Return a byte-based substring of `s`.
+/// @param s Input UTF-8 string.
+/// @param start 0-based start offset in bytes (clamped to `[0, len(s)]`).
+/// @param count Maximum bytes to include (negative values produce `""`).
+/// @return Newly allocated substring (caller frees with `free`).
+/// @note Slicing is byte-based and may split multi-byte UTF-8 codepoints.
+pub fn sub(s: string, start: i64, count: i64) -> string {
+    return __mlang_std_strbuf_sub(s, start, count);
 }
 
 /// @brief Concatenate two strings into newly allocated memory.

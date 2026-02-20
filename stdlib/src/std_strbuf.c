@@ -212,6 +212,47 @@ int64_t __mlang_std_strbuf_rfind(const char* s, const char* needle)
     return last;
 }
 
+/**
+ * @brief Return a newly allocated substring by byte offsets.
+ *
+ * The slice starts at `start` (0-based byte index) and contains up to
+ * `count` bytes. Indices are clamped so out-of-range values are safe:
+ * negative `start` is treated as `0`, negative `count` yields an empty
+ * string, and ranges past the end are truncated.
+ *
+ * @param s Input UTF-8 string (treated as raw bytes for slicing).
+ * @param start Start byte offset (0-based).
+ * @param count Maximum number of bytes to copy.
+ * @return Newly allocated NUL-terminated string (caller frees), or `NULL`
+ * on allocation failure / NULL input.
+ */
+char* __mlang_std_strbuf_sub(const char* s, int64_t start, int64_t count)
+{
+    if(!s)
+        return NULL;
+
+    size_t n = strlen(s);
+    size_t begin = 0u;
+    if(start > 0)
+        begin = (size_t)start;
+    if(begin > n)
+        begin = n;
+
+    size_t take = 0u;
+    if(count > 0)
+        take = (size_t)count;
+    if(begin + take > n)
+        take = n - begin;
+
+    char* out = (char*)malloc(take + 1u);
+    if(!out)
+        return NULL;
+    if(take > 0u)
+        memcpy(out, s + begin, take);
+    out[take] = '\0';
+    return out;
+}
+
 char* __mlang_std_strbuf_concat(const char* a, const char* b)
 {
     if(!a && !b)
