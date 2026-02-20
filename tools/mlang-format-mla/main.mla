@@ -402,14 +402,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
 
-    var config_anchor: string = target_path;
-    if len(config_anchor) == 0: {
-        if len(assume_filename) > 0: {
-            config_anchor = assume_filename;
-        }
-        if len(assume_filename) == 0: {
-            config_anchor = cwd();
-        }
+    var config_anchor: string = cwd();
+    if len(target_path) > 0: {
+        config_anchor = target_path;
+    }
+    if len(assume_filename) > 0: {
+        config_anchor = assume_filename;
     }
 
     let config_path: string = find_config(config_anchor, root_path);

@@ -93,7 +93,7 @@ struct Animal {
     var age: i32;
 };
 
-struct Dog : Animal {
+struct Dog: Animal {
     var name: string;
 };
 

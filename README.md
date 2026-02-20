@@ -129,7 +129,7 @@ Current Mlang port scope:
 - `--style file`, `-i/--in-place`, `--root`, `--assume-filename`
 - `.mlang-format`: `IndentWidth`, `EnsureTrailingNewline`,
   `SpaceAfterComma`, `SpaceAfterColon`, `SpaceAroundOperators`,
-  `SpaceInsideBracesSingleLine`
+  `SpaceInsideBracesSingleLine`, `CompactFatArrow` (default: `true`)
 
 Python formatter remains installable as `mlang-format-py`.
 
