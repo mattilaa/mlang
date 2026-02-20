@@ -87,6 +87,17 @@ python3 tests/lsp_parity_e2e.py --mlangd build/mlangd
 python3 tests/lsp_parity_e2e.py --mlangd build/mlangd --bulk-files 400
 ```
 
+### Option 1d2: LSP Formatting Config Transcript (`.mlang-format`)
+
+This focused JSON-RPC transcript for `mlangd --stdio` verifies formatting reads
+`.mlang-format` from the workspace and changes `textDocument/formatting`
+output accordingly (indent width, operator/comma/colon spacing, trailing
+newline).
+
+```bash
+python3 tests/lsp_mlangd_format_config_transcript.py --mlangd build/mlangd
+```
+
 ### Option 1e: mlangd-mla organizeImports Transcript (CodeAction)
 
 This is a focused end-to-end JSON-RPC transcript for `tools/mlangd-mla` that

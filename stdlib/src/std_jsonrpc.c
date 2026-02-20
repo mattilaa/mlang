@@ -1926,9 +1926,8 @@ char* __mlang_std_jsonrpc_format_text_basic(const char* text)
     return out;
 }
 
-char* __mlang_std_jsonrpc_format_text_with_options(const char* text,
-                                                   int64_t tab_size,
-                                                   int insert_spaces)
+static char* format_text_with_options_impl(const char* text, int64_t tab_size,
+                                           int insert_spaces)
 {
     if(!text)
         return dup_cstr("");
@@ -1981,6 +1980,549 @@ char* __mlang_std_jsonrpc_format_text_with_options(const char* text,
 
     out[w] = '\0';
     return out;
+}
+
+char* __mlang_std_jsonrpc_format_text_with_options(const char* text,
+                                                   int64_t tab_size,
+                                                   int insert_spaces)
+{
+    return format_text_with_options_impl(text, tab_size, insert_spaces);
+}
+
+static int is_space_char(char c) { return c == ' ' || c == '\t'; }
+
+static int is_delim_after_colon_or_comma(char c)
+{
+    return c == '\0' || c == '\n' || c == ',' || c == ';' || c == ')' ||
+           c == ']' || c == '}';
+}
+
+static int is_op_single_char(char c)
+{
+    return c == '=' || c == '+' || c == '-' || c == '*' || c == '/';
+}
+
+static int trim_inline_spaces(char* out, size_t* io_w)
+{
+    size_t w = *io_w;
+    while(w > 0u && is_space_char(out[w - 1u]))
+    {
+        if(w > 1u && out[w - 2u] == '\n')
+            break;
+        out[--w] = '\0';
+    }
+    *io_w = w;
+    return 0;
+}
+
+static int append_char_dyn(char** io_out, size_t* io_cap, size_t* io_w, char c)
+{
+    if(*io_w + 2u >= *io_cap)
+    {
+        size_t next = (*io_cap) * 2u;
+        if(next < 64u)
+            next = 64u;
+        char* grown = (char*)realloc(*io_out, next);
+        if(!grown)
+            return -1;
+        *io_out = grown;
+        *io_cap = next;
+    }
+    (*io_out)[(*io_w)++] = c;
+    (*io_out)[*io_w] = '\0';
+    return 0;
+}
+
+static int append_text_dyn(char** io_out, size_t* io_cap, size_t* io_w,
+                           const char* s, size_t n)
+{
+    for(size_t i = 0; i < n; ++i)
+    {
+        if(append_char_dyn(io_out, io_cap, io_w, s[i]) != 0)
+            return -1;
+    }
+    return 0;
+}
+
+static char* apply_spacing_rules(const char* text, int space_after_comma,
+                                 int space_after_colon,
+                                 int space_around_operators)
+{
+    if(!text)
+        return dup_cstr("");
+    size_t cap = strlen(text) * 2u + 64u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return dup_cstr("");
+    size_t w = 0u;
+    out[0] = '\0';
+
+    enum
+    {
+        ST_CODE = 0,
+        ST_STRING = 1,
+        ST_LINE_COMMENT = 2,
+        ST_BLOCK_COMMENT = 3
+    } st = ST_CODE;
+
+    for(size_t i = 0; text[i] != '\0'; ++i)
+    {
+        char c = text[i];
+        char n1 = text[i + 1u];
+
+        if(st == ST_STRING)
+        {
+            if(append_char_dyn(&out, &cap, &w, c) != 0)
+                goto oom;
+            if(c == '\\' && n1 != '\0')
+            {
+                if(append_char_dyn(&out, &cap, &w, n1) != 0)
+                    goto oom;
+                ++i;
+                continue;
+            }
+            if(c == '"')
+                st = ST_CODE;
+            continue;
+        }
+        if(st == ST_LINE_COMMENT)
+        {
+            if(append_char_dyn(&out, &cap, &w, c) != 0)
+                goto oom;
+            if(c == '\n')
+                st = ST_CODE;
+            continue;
+        }
+        if(st == ST_BLOCK_COMMENT)
+        {
+            if(append_char_dyn(&out, &cap, &w, c) != 0)
+                goto oom;
+            if(c == '*' && n1 == '/')
+            {
+                if(append_char_dyn(&out, &cap, &w, '/') != 0)
+                    goto oom;
+                ++i;
+                st = ST_CODE;
+            }
+            continue;
+        }
+
+        if(c == '"')
+        {
+            if(append_char_dyn(&out, &cap, &w, c) != 0)
+                goto oom;
+            st = ST_STRING;
+            continue;
+        }
+        if(c == '/' && n1 == '/')
+        {
+            if(append_char_dyn(&out, &cap, &w, '/') != 0 ||
+               append_char_dyn(&out, &cap, &w, '/') != 0)
+                goto oom;
+            ++i;
+            st = ST_LINE_COMMENT;
+            continue;
+        }
+        if(c == '/' && n1 == '*')
+        {
+            if(append_char_dyn(&out, &cap, &w, '/') != 0 ||
+               append_char_dyn(&out, &cap, &w, '*') != 0)
+                goto oom;
+            ++i;
+            st = ST_BLOCK_COMMENT;
+            continue;
+        }
+
+        if(is_space_char(c))
+        {
+            while(is_space_char(text[i + 1u]))
+                ++i;
+            char prev = (w > 0u) ? out[w - 1u] : '\0';
+            char nx = text[i + 1u];
+
+            if(prev == '\0' || prev == '\n')
+                continue;
+            if(nx == '\0' || nx == '\n' || nx == ')' || nx == ']' ||
+               nx == '}' || nx == ',' || nx == ';' || nx == ':' || nx == '(' ||
+               nx == '>')
+            {
+                continue;
+            }
+            if(prev == '(' || prev == '[' || prev == '{' || prev == ',' ||
+               prev == ':' || prev == '<')
+            {
+                continue;
+            }
+            if(prev != ' ')
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
+            continue;
+        }
+
+        if(c == ',')
+        {
+            trim_inline_spaces(out, &w);
+            if(append_char_dyn(&out, &cap, &w, ',') != 0)
+                goto oom;
+            while(is_space_char(text[i + 1u]))
+                ++i;
+            char nx = text[i + 1u];
+            if(space_after_comma == 1 && !is_delim_after_colon_or_comma(nx))
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
+            continue;
+        }
+
+        if(c == ':' && n1 == ':')
+        {
+            trim_inline_spaces(out, &w);
+            if(append_char_dyn(&out, &cap, &w, ':') != 0 ||
+               append_char_dyn(&out, &cap, &w, ':') != 0)
+                goto oom;
+            ++i;
+            while(is_space_char(text[i + 1u]))
+                ++i;
+            continue;
+        }
+        if(c == ':')
+        {
+            trim_inline_spaces(out, &w);
+            if(append_char_dyn(&out, &cap, &w, ':') != 0)
+                goto oom;
+            while(is_space_char(text[i + 1u]))
+                ++i;
+            char nx = text[i + 1u];
+            if(space_after_colon == 1 && !is_delim_after_colon_or_comma(nx))
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
+            continue;
+        }
+
+        if(c == '{')
+        {
+            trim_inline_spaces(out, &w);
+            if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
+               out[w - 1u] != '{' && out[w - 1u] != '(' &&
+               out[w - 1u] != '[')
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
+            if(append_char_dyn(&out, &cap, &w, '{') != 0)
+                goto oom;
+            continue;
+        }
+
+        int op_len = 0;
+        if(c == '.' && n1 == '.')
+        {
+            op_len = (text[i + 2u] == '=') ? 3 : 2;
+        }
+        else if((c == '=' || c == '!') && n1 == '=')
+        {
+            op_len = 2;
+        }
+        else if(c == '-' && n1 == '>')
+        {
+            op_len = 2;
+        }
+        else if(is_op_single_char(c))
+        {
+            op_len = 1;
+        }
+
+        if(op_len > 0)
+        {
+            const int keep_compact = (op_len >= 2 && c == '.') ? 1 : 0;
+            trim_inline_spaces(out, &w);
+            if(!keep_compact && space_around_operators == 1)
+            {
+                if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
+                   out[w - 1u] != '(' && out[w - 1u] != '[' &&
+                   out[w - 1u] != '{' && out[w - 1u] != ',' &&
+                   out[w - 1u] != ':')
+                {
+                    if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                        goto oom;
+                }
+            }
+
+            if(append_text_dyn(&out, &cap, &w, &text[i], (size_t)op_len) != 0)
+                goto oom;
+            i += (size_t)op_len - 1u;
+            while(is_space_char(text[i + 1u]))
+                ++i;
+
+            if(!keep_compact && space_around_operators == 1)
+            {
+                char nx = text[i + 1u];
+                if(nx != '\0' && nx != '\n' && nx != ')' && nx != ']' &&
+                   nx != '}' && nx != ',' && nx != ';')
+                {
+                    if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                        goto oom;
+                }
+            }
+            continue;
+        }
+
+        if(append_char_dyn(&out, &cap, &w, c) != 0)
+            goto oom;
+    }
+
+    return out;
+oom:
+    free(out);
+    return dup_cstr("");
+}
+
+static char* apply_single_line_brace_spacing(const char* text, int enable)
+{
+    if(!text || enable == 0)
+        return dup_cstr(text ? text : "");
+
+    size_t cap = strlen(text) * 2u + 64u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return dup_cstr("");
+    size_t w = 0u;
+    out[0] = '\0';
+
+    const char* p = text;
+    while(*p)
+    {
+        const char* ls = p;
+        while(*p && *p != '\n')
+            ++p;
+        const char* le = p;
+        int single_line = 0;
+        const char* open = memchr(ls, '{', (size_t)(le - ls));
+        const char* close = memchr(ls, '}', (size_t)(le - ls));
+        if(open && close && open < close)
+            single_line = 1;
+
+        if(!single_line)
+        {
+            if(append_text_dyn(&out, &cap, &w, ls, (size_t)(le - ls)) != 0)
+                goto oom;
+        }
+        else
+        {
+            const char* q = ls;
+            while(q < le)
+            {
+                if(*q == '{')
+                {
+                    if(append_char_dyn(&out, &cap, &w, '{') != 0)
+                        goto oom;
+                    ++q;
+                    while(q < le && is_space_char(*q))
+                        ++q;
+                    if(q < le && *q != '}')
+                    {
+                        if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                            goto oom;
+                    }
+                    continue;
+                }
+                if(*q == '}')
+                {
+                    trim_inline_spaces(out, &w);
+                    if(w > 0u && out[w - 1u] != '{' && out[w - 1u] != '\n')
+                    {
+                        if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                            goto oom;
+                    }
+                    if(append_char_dyn(&out, &cap, &w, '}') != 0)
+                        goto oom;
+                    ++q;
+                    continue;
+                }
+                if(append_char_dyn(&out, &cap, &w, *q) != 0)
+                    goto oom;
+                ++q;
+            }
+        }
+
+        if(*p == '\n')
+        {
+            if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                goto oom;
+            ++p;
+        }
+    }
+    return out;
+oom:
+    free(out);
+    return dup_cstr("");
+}
+
+static int count_net_brace_delta_code_only(const char* s, size_t n)
+{
+    int depth = 0;
+    int in_string = 0;
+    int in_line_comment = 0;
+    int in_block_comment = 0;
+
+    for(size_t i = 0; s && i < n; ++i)
+    {
+        char c = s[i];
+        char n1 = s[i + 1u];
+
+        if(in_string)
+        {
+            if(c == '\\' && n1 != '\0')
+            {
+                ++i;
+                continue;
+            }
+            if(c == '"')
+                in_string = 0;
+            continue;
+        }
+        if(in_line_comment)
+            break;
+        if(in_block_comment)
+        {
+            if(c == '*' && n1 == '/')
+            {
+                in_block_comment = 0;
+                ++i;
+            }
+            continue;
+        }
+
+        if(c == '"')
+        {
+            in_string = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '/')
+        {
+            in_line_comment = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '*')
+        {
+            in_block_comment = 1;
+            ++i;
+            continue;
+        }
+        if(c == '{')
+            depth++;
+        else if(c == '}')
+            depth--;
+    }
+
+    return depth;
+}
+
+static char* apply_block_indentation(const char* text, int64_t tab_size,
+                                     int insert_spaces)
+{
+    if(!text)
+        return dup_cstr("");
+    if(tab_size <= 0)
+        tab_size = 4;
+    if(tab_size > 16)
+        tab_size = 16;
+
+    size_t cap = strlen(text) * 2u + 128u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+        return dup_cstr("");
+    size_t w = 0u;
+    out[0] = '\0';
+
+    int depth = 0;
+    const char* p = text;
+    while(*p)
+    {
+        const char* ls = p;
+        while(*p && *p != '\n')
+            ++p;
+        const char* le = p;
+
+        const char* first = ls;
+        while(first < le && (*first == ' ' || *first == '\t'))
+            ++first;
+
+        if(first == le)
+        {
+            if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                goto oom;
+            if(*p == '\n')
+                ++p;
+            continue;
+        }
+
+        int line_indent_depth = depth;
+        if(*first == '}' && line_indent_depth > 0)
+            line_indent_depth--;
+        if(line_indent_depth < 0)
+            line_indent_depth = 0;
+
+        if(insert_spaces == 1)
+        {
+            int64_t spaces = (int64_t)line_indent_depth * tab_size;
+            for(int64_t i = 0; i < spaces; ++i)
+            {
+                if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                    goto oom;
+            }
+        }
+        else
+        {
+            for(int i = 0; i < line_indent_depth; ++i)
+            {
+                if(append_char_dyn(&out, &cap, &w, '\t') != 0)
+                    goto oom;
+            }
+        }
+
+        if(append_text_dyn(&out, &cap, &w, first, (size_t)(le - first)) != 0)
+            goto oom;
+
+        depth += count_net_brace_delta_code_only(first, (size_t)(le - first));
+        if(depth < 0)
+            depth = 0;
+
+        if(*p == '\n')
+        {
+            if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                goto oom;
+            ++p;
+        }
+    }
+
+    return out;
+oom:
+    free(out);
+    return dup_cstr("");
+}
+
+char* __mlang_std_jsonrpc_format_text_with_style_options(
+    const char* text, int64_t tab_size, int insert_spaces, int space_after_comma,
+    int space_after_colon, int space_around_operators,
+    int space_inside_braces_single_line)
+{
+    char* base = format_text_with_options_impl(text, tab_size, insert_spaces);
+    char* spaced = apply_spacing_rules(base, space_after_comma,
+                                       space_after_colon,
+                                       space_around_operators);
+    free(base);
+    char* braced = apply_single_line_brace_spacing(
+        spaced, space_inside_braces_single_line);
+    free(spaced);
+    char* indented = apply_block_indentation(braced, tab_size, insert_spaces);
+    free(braced);
+    return indented;
 }
 
 static int cmp_cstr_ptr(const void* a, const void* b)

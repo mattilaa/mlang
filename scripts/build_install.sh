@@ -149,6 +149,8 @@ fi
 
 # Build mlangd-mla with the freshly built compiler/runtime.
 "$build_dir/mlang" "tools/mlangd-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd-mla"
+# Build mlang-format (Mlang implementation, port-in-progress).
+"$build_dir/mlang" "tools/mlang-format-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-format"
 
 if $run_unit_tests; then
   ./tests/run_tests.sh --output-on-failure
@@ -174,12 +176,17 @@ if $install_after_build; then
     sudo mkdir -p "$bin_dir"
     sudo cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
     sudo chmod +x "$bin_dir/mlangd-mla"
+    sudo cp -f "$build_dir/mlang-format" "$bin_dir/mlang-format"
+    sudo chmod +x "$bin_dir/mlang-format"
   else
     mkdir -p "$bin_dir"
     cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
     chmod +x "$bin_dir/mlangd-mla"
+    cp -f "$build_dir/mlang-format" "$bin_dir/mlang-format"
+    chmod +x "$bin_dir/mlang-format"
   fi
   echo "installed mlangd-mla: $bin_dir/mlangd-mla"
+  echo "installed mlang-format: $bin_dir/mlang-format"
 
   stdlib_dir="$prefix/share/mlang/stdlib"
   stdlib_lib_dir="$prefix/lib"

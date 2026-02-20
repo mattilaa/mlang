@@ -63,6 +63,15 @@ extern pub fn __mlang_std_jsonrpc_extract_lines_text(text: string, start_line: i
 extern pub fn __mlang_std_jsonrpc_extract_range_text(text: string, start_line: i64, start_char: i64, end_line: i64, end_char: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_format_text_basic(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_format_text_with_options(text: string, tab_size: i64, insert_spaces: int) -> string;
+extern pub fn __mlang_std_jsonrpc_format_text_with_style_options(
+    text: string,
+    tab_size: i64,
+    insert_spaces: int,
+    space_after_comma: int,
+    space_after_colon: int,
+    space_around_operators: int,
+    space_inside_braces_single_line: int
+) -> string;
 extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
 extern pub fn __mlang_std_jsonrpc_find_implementation_pos(query_text: string, line: i64, column: i64, candidate_text: string) -> i64;
@@ -452,6 +461,27 @@ pub fn format_text_basic(text: string) -> string {
 /// @brief Formatter with explicit tab size + insert-spaces options.
 pub fn format_text_with_options(text: string, tab_size: i64, insert_spaces: int) -> string {
     return __mlang_std_jsonrpc_format_text_with_options(text, tab_size, insert_spaces);
+}
+
+/// @brief Formatter with tab/space options + style spacing toggles.
+pub fn format_text_with_style_options(
+    text: string,
+    tab_size: i64,
+    insert_spaces: int,
+    space_after_comma: int,
+    space_after_colon: int,
+    space_around_operators: int,
+    space_inside_braces_single_line: int
+) -> string {
+    return __mlang_std_jsonrpc_format_text_with_style_options(
+        text,
+        tab_size,
+        insert_spaces,
+        space_after_comma,
+        space_after_colon,
+        space_around_operators,
+        space_inside_braces_single_line
+    );
 }
 
 /// @brief Count leading import lines (`use ...`) at file top.

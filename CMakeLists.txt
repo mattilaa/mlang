@@ -234,7 +234,9 @@ target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mlangd ${llvm_libs})
-target_compile_definitions(mlangd PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(mlangd PRIVATE
+    MLANG_VERSION="${PROJECT_VERSION}"
+    MLANG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp

@@ -8,6 +8,12 @@ extern pub fn __mlang_std_fs_read_line(handle: i64, buf: string, capacity: i64) 
 extern pub fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
 extern pub fn __mlang_std_fs_read_all_lines(handle: i64) -> list<string>;
 extern pub fn __mlang_std_fs_free_lines(lines: list<string>) -> void;
+extern pub fn __mlang_std_fs_file_exists(path: string) -> int;
+extern pub fn __mlang_std_fs_parent_dir(path: string) -> string;
+extern pub fn __mlang_std_fs_cwd() -> string;
+extern pub fn __mlang_std_fs_read_all_text(path: string) -> string;
+extern pub fn __mlang_std_fs_write_all_text(path: string, text: string) -> int;
+extern pub fn __mlang_std_strbuf_len(s: string) -> i64;
 
 /// @brief Owned file handle.
 pub struct File {
@@ -102,4 +108,39 @@ impl BufReader {
 /// @brief Free list returned by `BufReader::lines()`.
 pub fn free_lines(lines: list<string>) -> void {
     __mlang_std_fs_free_lines(lines);
+}
+
+/// @brief Return `1` if a path exists.
+pub fn file_exists(path: string) -> int {
+    return __mlang_std_fs_file_exists(path);
+}
+
+/// @brief Return parent directory path.
+pub fn parent_dir(path: string) -> string {
+    return __mlang_std_fs_parent_dir(path);
+}
+
+/// @brief Return current working directory.
+pub fn cwd() -> string {
+    return __mlang_std_fs_cwd();
+}
+
+/// @brief Read entire file text into one string.
+pub fn read_all_text(path: string) -> Result<string, string> {
+    let text: string = __mlang_std_fs_read_all_text(path);
+    if __mlang_std_strbuf_len(text) == 0: {
+        if file_exists(path) == 0: {
+            return Err<string, string>("std::fs::read_all_text failed");
+        }
+    }
+    return Ok<string, string>(text);
+}
+
+/// @brief Write entire text to file path.
+pub fn write_all_text(path: string, text: string) -> Result<i32, string> {
+    let rc: i32 = __mlang_std_fs_write_all_text(path, text);
+    if rc != 0: {
+        return Err<i32, string>("std::fs::write_all_text failed");
+    }
+    return Ok<i32, string>(0);
 }

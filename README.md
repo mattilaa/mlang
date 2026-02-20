@@ -23,6 +23,10 @@ Use with UVim:
 uvim --mlang-lsp --mlang-lsp-path ./build/mlangd
 ```
 
+UVim `<leader>f` formatting works through `textDocument/formatting`; `mlangd`
+now uses `mlang-format` and `.mlang-format` (`--style=file`) for buffer
+formatting.
+
 Enable LSP debug telemetry (`cache clears`, `active docs`, `evictions`):
 
 ```sh
@@ -103,6 +107,31 @@ Use Make instead of Ninja:
 ./scripts/build_install.sh --use-make
 ./scripts/build_install_lsp.sh --use-make
 ```
+
+## Formatter
+`mlang-format` is now a separate binary compiled from Mlang source:
+`tools/mlang-format-mla/main.mla` (port in progress from Python).
+It supports clang-format style invocation and reads `.mlang-format`
+from the file/workspace hierarchy.
+
+```sh
+# Print formatted output
+mlang-format path/to/file.mla
+
+# In-place rewrite (clang-format style)
+mlang-format -i path/to/file.mla
+
+# From stdin with style lookup anchored to a file path
+cat path/to/file.mla | mlang-format --assume-filename path/to/file.mla
+```
+
+Current Mlang port scope:
+- `--style file`, `-i/--in-place`, `--root`, `--assume-filename`
+- `.mlang-format`: `IndentWidth`, `EnsureTrailingNewline`,
+  `SpaceAfterComma`, `SpaceAfterColon`, `SpaceAroundOperators`,
+  `SpaceInsideBracesSingleLine`
+
+Python formatter remains installable as `mlang-format-py`.
 
 ## Quickstart (Package Manager + curl example)
 Build `mlang`, fetch a git dependency with the package manager, compile the

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct
 {
@@ -187,4 +188,105 @@ void __mlang_std_fs_free_lines(mlang_list_t lines)
         free(data[i]);
     }
     free(data);
+}
+
+int __mlang_std_fs_file_exists(const char* path)
+{
+    if(!path)
+        return 0;
+    return access(path, F_OK) == 0 ? 1 : 0;
+}
+
+char* __mlang_std_fs_parent_dir(const char* path)
+{
+    if(!path || path[0] == '\0')
+        return mlang_strdup(".");
+
+    char* out = mlang_strdup(path);
+    if(!out)
+        return NULL;
+
+    size_t n = strlen(out);
+    while(n > 1 && out[n - 1] == '/')
+    {
+        out[n - 1] = '\0';
+        --n;
+    }
+
+    char* slash = strrchr(out, '/');
+    if(!slash)
+    {
+        free(out);
+        return mlang_strdup(".");
+    }
+    if(slash == out)
+    {
+        slash[1] = '\0';
+        return out;
+    }
+    *slash = '\0';
+    return out;
+}
+
+char* __mlang_std_fs_cwd()
+{
+    char* cwd = getcwd(NULL, 0);
+    if(!cwd)
+        return mlang_strdup(".");
+    return cwd;
+}
+
+char* __mlang_std_fs_read_all_text(const char* path)
+{
+    if(!path)
+        return NULL;
+    FILE* fp = fopen(path, "rb");
+    if(!fp)
+        return NULL;
+    if(fseek(fp, 0, SEEK_END) != 0)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    long sz = ftell(fp);
+    if(sz < 0)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    if(fseek(fp, 0, SEEK_SET) != 0)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    size_t n = (size_t)sz;
+    char* out = (char*)malloc(n + 1);
+    if(!out)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    size_t got = fread(out, 1, n, fp);
+    fclose(fp);
+    if(got != n)
+    {
+        free(out);
+        return NULL;
+    }
+    out[n] = '\0';
+    return out;
+}
+
+int __mlang_std_fs_write_all_text(const char* path, const char* text)
+{
+    if(!path || !text)
+        return -1;
+    FILE* fp = fopen(path, "wb");
+    if(!fp)
+        return -1;
+    size_t n = strlen(text);
+    size_t w = fwrite(text, 1, n, fp);
+    fflush(fp);
+    fclose(fp);
+    return w == n ? 0 : -1;
 }

@@ -182,6 +182,20 @@ static std::string read_file(const std::string& path)
                        std::istreambuf_iterator<char>());
 }
 
+static std::string shell_quote(const std::string& input)
+{
+    std::string out = "'";
+    for(char c : input)
+    {
+        if(c == '\'')
+            out += "'\\''";
+        else
+            out.push_back(c);
+    }
+    out.push_back('\'');
+    return out;
+}
+
 static bool is_mlang_source_path(const std::filesystem::path& path)
 {
     auto ext = path.extension();
@@ -5559,50 +5573,93 @@ private:
         tmpFile << info.text;
         tmpFile.close();
 
+        auto run_formatter = [&](const std::string& cmd) -> std::optional<std::string> {
+            int result = std::system(cmd.c_str());
+            if(result != 0)
+                return std::nullopt;
+            std::string formatted = read_file(tmpPath.string());
+            if(formatted.empty())
+                return std::nullopt;
+            return formatted;
+        };
+
         if(const char* formatterHook = std::getenv("MLANGD_FORMATTER"))
         {
             std::string cmd = formatterHook;
             const std::string placeholder = "{file}";
             if(auto pos = cmd.find(placeholder); pos != std::string::npos)
             {
-                cmd.replace(pos, placeholder.size(), "\"" + tmpPath.string() + "\"");
+                cmd.replace(pos, placeholder.size(),
+                            shell_quote(tmpPath.string()));
             }
             else
             {
-                cmd += " \"" + tmpPath.string() + "\"";
+                cmd += " " + shell_quote(tmpPath.string());
             }
-            int result = std::system(cmd.c_str());
-            if(result != 0)
+            if(auto formatted = run_formatter(cmd))
             {
                 std::filesystem::remove(tmpPath);
-                return {};
+                return *formatted;
             }
-            std::string formatted = read_file(tmpPath.string());
-            std::filesystem::remove(tmpPath);
-            return formatted;
         }
 
-        std::filesystem::path script =
-            std::filesystem::path(rootPath) / "tools" / "mlang_format" /
-            "mlang_format.py";
-        if(!std::filesystem::exists(script))
+        // Preferred path: use installed mlang-format from PATH.
+        std::string mlangFormatCmd = "mlang-format -i --style=file";
+        mlangFormatCmd += " --assume-filename " + shell_quote(sourcePath.string());
+        if(!rootPath.empty())
+            mlangFormatCmd += " --root " + shell_quote(rootPath);
+        mlangFormatCmd += " " + shell_quote(tmpPath.string());
+        if(auto formatted = run_formatter(mlangFormatCmd))
+        {
+            std::filesystem::remove(tmpPath);
+            return *formatted;
+        }
+
+        std::vector<std::filesystem::path> formatterScriptCandidates;
+        if(!rootPath.empty())
+        {
+            formatterScriptCandidates.push_back(
+                std::filesystem::path(rootPath) / "tools" / "mlang_format" /
+                "mlang_format.py");
+        }
+        formatterScriptCandidates.push_back(
+            std::filesystem::current_path() / "tools" / "mlang_format" /
+            "mlang_format.py");
+#ifdef MLANG_SOURCE_DIR
+        formatterScriptCandidates.push_back(
+            std::filesystem::path(MLANG_SOURCE_DIR) / "tools" / "mlang_format" /
+            "mlang_format.py");
+#endif
+
+        std::filesystem::path script;
+        for(const auto& candidate : formatterScriptCandidates)
+        {
+            if(std::filesystem::exists(candidate))
+            {
+                script = candidate;
+                break;
+            }
+        }
+        if(script.empty())
         {
             std::filesystem::remove(tmpPath);
             return {};
         }
 
-        std::string cmd = "python3 \"" + script.string() +
-                          "\" --in-place \"" + tmpPath.string() + "\"";
-        int result = std::system(cmd.c_str());
-        if(result != 0)
+        std::string cmd = "python3 " + shell_quote(script.string()) +
+                          " --in-place --style=file";
+        cmd += " --assume-filename " + shell_quote(sourcePath.string());
+        if(!rootPath.empty())
+            cmd += " --root " + shell_quote(rootPath);
+        cmd += " " + shell_quote(tmpPath.string());
+        if(auto formatted = run_formatter(cmd))
         {
             std::filesystem::remove(tmpPath);
-            return {};
+            return *formatted;
         }
 
-        std::string formatted = read_file(tmpPath.string());
         std::filesystem::remove(tmpPath);
-        return formatted;
+        return {};
     }
 };
 
