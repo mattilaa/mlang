@@ -849,6 +849,19 @@ static int findStructDeclLine(const std::vector<std::string_view>& lines,
     return 1;
 }
 
+static int findEnumDeclLine(const std::vector<std::string_view>& lines,
+                            std::string_view enum_name) {
+    const std::string needle = "enum " + std::string(enum_name);
+    const std::string pub_needle = "pub enum " + std::string(enum_name);
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (lines[i].find(needle) != std::string_view::npos ||
+            lines[i].find(pub_needle) != std::string_view::npos) {
+            return static_cast<int>(i) + 1;
+        }
+    }
+    return 1;
+}
+
 static void collectStatementSymbols(DocumentSemantic& out,
                                     const std::vector<std::string_view>& lines,
                                     StatementListNode* list,
@@ -1018,6 +1031,26 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                         }
                     }
                     collectStatementSymbols(out, lines, method->body, 2);
+                }
+            }
+        }
+    }
+
+    if (program->enumList) {
+        for (EnumDefNode* en : program->enumList->enums) {
+            if (!en) {
+                continue;
+            }
+            const int enum_line = en->line > 0 ? en->line : findEnumDeclLine(lines, en->name);
+            addSemanticSymbol(out, lines, en->name, 3, enum_line, 0, {}, {});
+            if (en->variants) {
+                for (EnumVariantNode* variant : en->variants->variants) {
+                    if (!variant) {
+                        continue;
+                    }
+                    const int variant_line = variant->line > 0 ? variant->line : enum_line;
+                    addSemanticSymbolAtLine(out, lines, variant->name, 2, variant_line, 1, {},
+                                            "variant " + en->name + "::" + variant->name);
                 }
             }
         }
@@ -1887,6 +1920,237 @@ static bool isRenameSafeForSymbol(const SemanticSymbol& target,
 
 static std::string completionPrefixAtOffset(std::string_view text, size_t offset);
 
+struct QualifiedCompletionContext {
+    std::string owner;
+    std::string member_prefix;
+};
+
+static std::optional<QualifiedCompletionContext>
+qualifiedCompletionContextAtOffset(std::string_view text, size_t offset) {
+    if (offset > text.size()) {
+        return std::nullopt;
+    }
+
+    size_t member_start = offset;
+    while (member_start > 0 && isIdentContinue(text[member_start - 1])) {
+        --member_start;
+    }
+    const std::string member_prefix(text.substr(member_start, offset - member_start));
+
+    size_t p = member_start;
+    while (p > 0 &&
+           std::isspace(static_cast<unsigned char>(text[p - 1])) != 0) {
+        --p;
+    }
+    if (p < 2 || text[p - 1] != ':' || text[p - 2] != ':') {
+        return std::nullopt;
+    }
+
+    size_t owner_end = p - 2;
+    while (owner_end > 0 &&
+           std::isspace(static_cast<unsigned char>(text[owner_end - 1])) != 0) {
+        --owner_end;
+    }
+    if (owner_end == 0) {
+        return std::nullopt;
+    }
+
+    size_t owner_start = owner_end;
+    while (owner_start > 0 && isIdentContinue(text[owner_start - 1])) {
+        --owner_start;
+    }
+    if (owner_start >= owner_end || !isIdentStart(text[owner_start])) {
+        return std::nullopt;
+    }
+
+    QualifiedCompletionContext out;
+    out.owner = std::string(text.substr(owner_start, owner_end - owner_start));
+    out.member_prefix = member_prefix;
+    return out;
+}
+
+static bool symbolBelongsToOwner(std::string_view owner,
+                                 const SemanticSymbol& sym) {
+    if (owner.empty() || sym.signature.empty()) {
+        return false;
+    }
+    const std::string field_prefix = "field " + std::string(owner) + "::";
+    const std::string method_prefix = "fn " + std::string(owner) + "::";
+    const std::string variant_prefix = "variant " + std::string(owner) + "::";
+    return startsWith(sym.signature, field_prefix) ||
+           startsWith(sym.signature, method_prefix) ||
+           startsWith(sym.signature, variant_prefix);
+}
+
+static std::vector<std::string> enumVariantsFromText(std::string_view text,
+                                                     std::string_view enum_name) {
+    std::vector<std::string> out;
+    if (enum_name.empty()) {
+        return out;
+    }
+    std::unordered_set<std::string> seen;
+    const std::string enum_sig = "enum " + std::string(enum_name);
+
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t enum_pos = text.find(enum_sig, pos);
+        if (enum_pos == std::string_view::npos) {
+            break;
+        }
+        const bool left_ok = (enum_pos == 0) || !isIdentContinue(text[enum_pos - 1]);
+        const size_t right = enum_pos + enum_sig.size();
+        const bool right_ok = (right >= text.size()) || !isIdentContinue(text[right]);
+        if (!left_ok || !right_ok) {
+            pos = enum_pos + 1;
+            continue;
+        }
+
+        size_t brace = text.find('{', right);
+        if (brace == std::string_view::npos) {
+            break;
+        }
+        int depth = 1;
+        bool in_string = false;
+        bool escape = false;
+        size_t body_end = brace + 1;
+        for (; body_end < text.size(); ++body_end) {
+            const char ch = text[body_end];
+            if (in_string) {
+                if (escape) {
+                    escape = false;
+                    continue;
+                }
+                if (ch == '\\') {
+                    escape = true;
+                    continue;
+                }
+                if (ch == '"') {
+                    in_string = false;
+                }
+                continue;
+            }
+            if (ch == '"') {
+                in_string = true;
+                continue;
+            }
+            if (ch == '{') {
+                ++depth;
+                continue;
+            }
+            if (ch == '}') {
+                --depth;
+                if (depth == 0) {
+                    break;
+                }
+            }
+        }
+        if (body_end >= text.size()) {
+            break;
+        }
+
+        const std::string_view body = text.substr(brace + 1, body_end - brace - 1);
+        size_t i = 0;
+        while (i < body.size()) {
+            while (i < body.size() &&
+                   !isIdentStart(body[i])) {
+                ++i;
+            }
+            if (i >= body.size()) {
+                break;
+            }
+            size_t j = i + 1;
+            while (j < body.size() && isIdentContinue(body[j])) {
+                ++j;
+            }
+            std::string name(body.substr(i, j - i));
+            if (seen.insert(name).second) {
+                out.push_back(std::move(name));
+            }
+            i = j;
+        }
+
+        pos = body_end + 1;
+    }
+    return out;
+}
+
+static bool isKeywordToken(std::string_view token) {
+    static constexpr std::string_view kKeywords[] = {
+        "fn", "let", "var", "struct", "mod", "use", "if", "else", "while",
+        "for", "return",
+    };
+    for (const auto kw : kKeywords) {
+        if (token == kw) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static std::vector<std::string> lexicalIdentifiersBeforeOffset(std::string_view text,
+                                                               size_t offset) {
+    std::vector<std::string> out;
+    if (offset > text.size()) {
+        offset = text.size();
+    }
+    std::unordered_set<std::string> seen;
+    bool in_string = false;
+    bool escape = false;
+    bool line_comment = false;
+
+    for (size_t i = 0; i < offset;) {
+        const char ch = text[i];
+        if (line_comment) {
+            if (ch == '\n') {
+                line_comment = false;
+            }
+            ++i;
+            continue;
+        }
+        if (in_string) {
+            if (escape) {
+                escape = false;
+                ++i;
+                continue;
+            }
+            if (ch == '\\') {
+                escape = true;
+                ++i;
+                continue;
+            }
+            if (ch == '"') {
+                in_string = false;
+            }
+            ++i;
+            continue;
+        }
+        if (ch == '"' ) {
+            in_string = true;
+            ++i;
+            continue;
+        }
+        if (ch == '/' && i + 1 < offset && text[i + 1] == '/') {
+            line_comment = true;
+            i += 2;
+            continue;
+        }
+        if (!isIdentStart(ch)) {
+            ++i;
+            continue;
+        }
+        const size_t start = i;
+        ++i;
+        while (i < offset && isIdentContinue(text[i])) {
+            ++i;
+        }
+        std::string token(text.substr(start, i - start));
+        if (!isKeywordToken(token) && seen.insert(token).second) {
+            out.push_back(std::move(token));
+        }
+    }
+    return out;
+}
+
 static std::vector<std::string> computeSemanticCompletions(
     const DocumentSemantic& current,
     const std::vector<DocumentSemantic>& all_docs,
@@ -1902,6 +2166,49 @@ static std::vector<std::string> computeSemanticCompletions(
     if (!offset.has_value()) {
         return {};
     }
+
+    if (const auto qualified =
+            qualifiedCompletionContextAtOffset(current.text, *offset);
+        qualified.has_value()) {
+        std::set<std::string> scoped_dedup;
+        auto consider_member = [&](std::string_view candidate) {
+            if (qualified->member_prefix.empty() ||
+                startsWith(candidate, qualified->member_prefix)) {
+                scoped_dedup.insert(std::string(candidate));
+            }
+        };
+
+        for (const SemanticSymbol& sym : current.symbols) {
+            if (symbolBelongsToOwner(qualified->owner, sym)) {
+                consider_member(sym.name);
+            }
+        }
+        for (const DocumentSemantic& doc : all_docs) {
+            if (doc.uri == current.uri) {
+                continue;
+            }
+            for (const SemanticSymbol& sym : doc.symbols) {
+                if (symbolBelongsToOwner(qualified->owner, sym)) {
+                    consider_member(sym.name);
+                }
+            }
+        }
+
+        for (const auto& name : enumVariantsFromText(current.text, qualified->owner)) {
+            consider_member(name);
+        }
+        for (const DocumentSemantic& doc : all_docs) {
+            if (doc.uri == current.uri) {
+                continue;
+            }
+            for (const auto& name : enumVariantsFromText(doc.text, qualified->owner)) {
+                consider_member(name);
+            }
+        }
+
+        return std::vector<std::string>(scoped_dedup.begin(), scoped_dedup.end());
+    }
+
     const std::string prefix = completionPrefixAtOffset(current.text, *offset);
 
     std::set<std::string> dedup;
@@ -1930,6 +2237,12 @@ static std::vector<std::string> computeSemanticCompletions(
         collectImportedSymbols(current, all_docs);
     for (const SemanticSymbol& sym : imported) {
         consider(sym.name);
+    }
+
+    // Textual fallback for partially-invalid code while typing:
+    // keep useful local/parameter suggestions even when AST extraction misses.
+    for (const auto& ident : lexicalIdentifiersBeforeOffset(current.text, *offset)) {
+        consider(ident);
     }
 
     return std::vector<std::string>(dedup.begin(), dedup.end());

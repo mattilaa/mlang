@@ -6,17 +6,17 @@ fn sum_range(start: i64, end: i64) -> i64 {
     return total;
 }
 
-fn factorial    (n: i32) -> i32 {
-    var    result: i32 = 1;
-    for i    in 1..n + 1 {
+fn factorial(n: i32) -> i32 {
+    var result: i32 = 1;
+    for i in 1..n + 1 {
         result = result * i;
     }
     return result;
 }
 
-fn    main() -> i32 {
-    let sum: i64 = sum_range(0, 10);  // 45
-    let fact: i32 = factorial(5);      // 120
+fn main() -> i32 {
+    let sum: i64 = sum_range(0, 10); // 45
+    let fact: i32 = factorial(5); // 120
     println!("Sum: {} Factorial: {}", sum, fact);
 
     // Test ..= in for loop
