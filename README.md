@@ -131,8 +131,6 @@ Current Mlang port scope:
   `SpaceAfterComma`, `SpaceAfterColon`, `SpaceAroundOperators`,
   `SpaceInsideBracesSingleLine`, `CompactFatArrow` (default: `true`)
 
-Python formatter remains installable as `mlang-format-py`.
-
 ## Quickstart (Package Manager + curl example)
 Build `mlang`, fetch a git dependency with the package manager, compile the
 example, and run it (the program uses libcurl to fetch a URL).

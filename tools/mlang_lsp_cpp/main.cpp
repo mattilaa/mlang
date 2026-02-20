@@ -5615,49 +5615,6 @@ private:
             return *formatted;
         }
 
-        std::vector<std::filesystem::path> formatterScriptCandidates;
-        if(!rootPath.empty())
-        {
-            formatterScriptCandidates.push_back(
-                std::filesystem::path(rootPath) / "tools" / "mlang_format" /
-                "mlang_format.py");
-        }
-        formatterScriptCandidates.push_back(
-            std::filesystem::current_path() / "tools" / "mlang_format" /
-            "mlang_format.py");
-#ifdef MLANG_SOURCE_DIR
-        formatterScriptCandidates.push_back(
-            std::filesystem::path(MLANG_SOURCE_DIR) / "tools" / "mlang_format" /
-            "mlang_format.py");
-#endif
-
-        std::filesystem::path script;
-        for(const auto& candidate : formatterScriptCandidates)
-        {
-            if(std::filesystem::exists(candidate))
-            {
-                script = candidate;
-                break;
-            }
-        }
-        if(script.empty())
-        {
-            std::filesystem::remove(tmpPath);
-            return {};
-        }
-
-        std::string cmd = "python3 " + shell_quote(script.string()) +
-                          " --in-place --style=file";
-        cmd += " --assume-filename " + shell_quote(sourcePath.string());
-        if(!rootPath.empty())
-            cmd += " --root " + shell_quote(rootPath);
-        cmd += " " + shell_quote(tmpPath.string());
-        if(auto formatted = run_formatter(cmd))
-        {
-            std::filesystem::remove(tmpPath);
-            return *formatted;
-        }
-
         std::filesystem::remove(tmpPath);
         return {};
     }
