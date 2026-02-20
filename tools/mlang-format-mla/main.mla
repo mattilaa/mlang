@@ -37,6 +37,7 @@ struct FormatConfig {
     var space_after_colon: bool;
     var space_around_operators: bool;
     var space_inside_braces_single_line: bool;
+    var compact_fat_arrow: bool;
 };
 
 fn default_config() -> FormatConfig {
@@ -46,7 +47,8 @@ fn default_config() -> FormatConfig {
         space_after_comma: true,
         space_after_colon: true,
         space_around_operators: true,
-        space_inside_braces_single_line: true
+        space_inside_braces_single_line: true,
+        compact_fat_arrow: true
     };
 }
 
@@ -143,6 +145,17 @@ fn parse_space_inside_braces_single_line(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
+fn parse_compact_fat_arrow(line: string, fallback: bool) -> bool {
+    if starts_with(line, "CompactFatArrow:") == 0: {
+        return fallback;
+    }
+    if contains(line, "true") == 1: { return true; }
+    if contains(line, "True") == 1: { return true; }
+    if contains(line, "false") == 1: { return false; }
+    if contains(line, "False") == 1: { return false; }
+    return fallback;
+}
+
 fn read_config(path: string) -> FormatConfig {
     let open_r: Result<File, string> = File::open(path);
     if open_r.is_err(): {
@@ -178,6 +191,8 @@ fn read_config(path: string) -> FormatConfig {
                 line,
                 cfg.space_inside_braces_single_line
             );
+        cfg.compact_fat_arrow =
+            parse_compact_fat_arrow(line, cfg.compact_fat_arrow);
     }
 
     free_lines(lines);
@@ -236,7 +251,8 @@ fn apply_config_format(text: string, cfg: FormatConfig) -> string {
         bool_to_int(cfg.space_after_comma),
         bool_to_int(cfg.space_after_colon),
         bool_to_int(cfg.space_around_operators),
-        bool_to_int(cfg.space_inside_braces_single_line)
+        bool_to_int(cfg.space_inside_braces_single_line),
+        bool_to_int(cfg.compact_fat_arrow)
     );
     if cfg.ensure_trailing_newline: {
         if ends_with(formatted, "\n") == 0: {

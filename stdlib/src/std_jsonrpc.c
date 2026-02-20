@@ -2046,7 +2046,8 @@ static int append_text_dyn(char** io_out, size_t* io_cap, size_t* io_w,
 
 static char* apply_spacing_rules(const char* text, int space_after_comma,
                                  int space_after_colon,
-                                 int space_around_operators)
+                                 int space_around_operators,
+                                 int compact_fat_arrow)
 {
     if(!text)
         return dup_cstr("");
@@ -2131,6 +2132,45 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
             ++i;
             st = ST_BLOCK_COMMENT;
             continue;
+        }
+
+        if(c == '=' && compact_fat_arrow == 1)
+        {
+            size_t j = i + 1u;
+            while(is_space_char(text[j]))
+                ++j;
+            if(text[j] == '>')
+            {
+                trim_inline_spaces(out, &w);
+                if(space_around_operators == 1)
+                {
+                    if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
+                       out[w - 1u] != '(' && out[w - 1u] != '[' &&
+                       out[w - 1u] != '{' && out[w - 1u] != ',' &&
+                       out[w - 1u] != ':')
+                    {
+                        if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                            goto oom;
+                    }
+                }
+                if(append_char_dyn(&out, &cap, &w, '=') != 0 ||
+                   append_char_dyn(&out, &cap, &w, '>') != 0)
+                    goto oom;
+                i = j;
+                while(is_space_char(text[i + 1u]))
+                    ++i;
+                if(space_around_operators == 1)
+                {
+                    char nx = text[i + 1u];
+                    if(nx != '\0' && nx != '\n' && nx != ')' && nx != ']' &&
+                       nx != '}' && nx != ',' && nx != ';')
+                    {
+                        if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                            goto oom;
+                    }
+                }
+                continue;
+            }
         }
 
         if(is_space_char(c))
@@ -2510,12 +2550,13 @@ oom:
 char* __mlang_std_jsonrpc_format_text_with_style_options(
     const char* text, int64_t tab_size, int insert_spaces, int space_after_comma,
     int space_after_colon, int space_around_operators,
-    int space_inside_braces_single_line)
+    int space_inside_braces_single_line, int compact_fat_arrow)
 {
     char* base = format_text_with_options_impl(text, tab_size, insert_spaces);
     char* spaced = apply_spacing_rules(base, space_after_comma,
                                        space_after_colon,
-                                       space_around_operators);
+                                       space_around_operators,
+                                       compact_fat_arrow);
     free(base);
     char* braced = apply_single_line_brace_spacing(
         spaced, space_inside_braces_single_line);
