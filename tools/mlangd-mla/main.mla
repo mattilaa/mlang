@@ -1,4 +1,5 @@
 mod std::compiler;
+mod std::fs;
 mod std::jsonrpc;
 mod std::strbuf;
 
@@ -60,9 +61,15 @@ use std::strbuf::concat;
 use std::strbuf::contains;
 use std::strbuf::eq;
 use std::strbuf::ends_with;
+use std::strbuf::find;
 use std::strbuf::json_escape;
 use std::strbuf::len;
+use std::strbuf::rfind;
 use std::strbuf::starts_with;
+use std::strbuf::sub;
+use std::fs::cwd;
+use std::fs::file_exists;
+use std::fs::read_all_text;
 
 extern fn strcmp(a: str8, b: str8) -> i32;
 extern fn __mlang_std_fs_open_write(path: string) -> i64;
@@ -359,6 +366,357 @@ fn range_json(line1: i32, col1: i32) -> string {
     );
 }
 
+fn is_ident_char(ch: string) -> bool {
+    if len(ch) != 1: { return false; }
+    if contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) == 1: {
+        return true;
+    }
+    return false;
+}
+
+fn line_text_at(text: string, line0: i64) -> string {
+    if line0 < 0: { return String::new(); }
+    let n: i64 = len(text);
+    var cur: i64 = 0;
+    var start: i64 = 0;
+    var found_start: i32 = 0;
+    for i in 0..n {
+        if cur == line0: {
+            start = i;
+            found_start = 1;
+            break;
+        }
+        let ch: string = sub(text, i, 1);
+        if eq(ch, "\n") == 1: {
+            cur = cur + 1;
+        }
+    }
+    if found_start == 0: {
+        if cur == line0: {
+            start = n;
+        } else: {
+            return String::new();
+        }
+    }
+    var endi: i64 = start;
+    var found_end: i32 = 0;
+    for j in start..n {
+        let ch: string = sub(text, j, 1);
+        if eq(ch, "\n") == 1: { break; }
+        endi = j + 1;
+        found_end = 1;
+    }
+    if found_end == 0: {
+        endi = start;
+    }
+    return sub(text, start, endi - start);
+}
+
+fn offset_to_line_col1(text: string, off: i64) -> i64 {
+    let n: i64 = len(text);
+    var pos: i64 = off;
+    if pos < 0: { pos = 0; }
+    if pos > n: { pos = n; }
+    var line1: i64 = 1;
+    var col1: i64 = 1;
+    for i in 0..pos {
+        let ch: string = sub(text, i, 1);
+        if eq(ch, "\n") == 1: {
+            line1 = line1 + 1;
+            col1 = 1;
+        } else: {
+            col1 = col1 + 1;
+        }
+    }
+    return line1 * 1000000 + col1;
+}
+
+fn root_path_from_store() -> string {
+    if ensure_text_store() != 0: { return String::new(); }
+    let root_uri: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+    if len(root_uri) == 0: { return String::new(); }
+    if starts_with(root_uri, "file://") == 1: {
+        return sub(root_uri, 7, len(root_uri) - 7);
+    }
+    return root_uri;
+}
+
+fn path_to_file_uri(path: string) -> string {
+    if len(path) == 0: { return String::new(); }
+    if starts_with(path, "file://") == 1: { return path; }
+    return concat("file://", path);
+}
+
+fn first_match_location(path: string, text: string, pattern: string) -> string {
+    let off: i64 = find(text, pattern);
+    if off < 0: { return String::new(); }
+    let packed: i64 = offset_to_line_col1(text, off);
+    let line1: i32 = packed / 1000000;
+    let col1: i32 = packed - (line1 * 1000000);
+    return location_json(path_to_file_uri(path), line1, col1);
+}
+
+fn runtime_builtin_location(word: string) -> string {
+    let root: string = root_path_from_store();
+    if len(root) == 0: { return String::new(); }
+    let docs: string = concat(root, "/docs/runtime_builtins.mlastub");
+    if file_exists(docs) == 0: { return String::new(); }
+    let text_r: Result<string, string> = read_all_text(docs);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+
+    let tpat: string = format!("struct {}", word);
+    let eloc: string = first_match_location(docs, text, tpat);
+    if len(eloc) > 0: { return eloc; }
+
+    let fpat: string = format!("extern fn {}", word);
+    let floc: string = first_match_location(docs, text, fpat);
+    if len(floc) > 0: { return floc; }
+    return String::new();
+}
+
+fn string_intrinsic_location(member: string) -> string {
+    var target: string = String::new();
+    if eq(member, "new") == 1: { target = "new"; }
+    if eq(member, "with_capacity") == 1: { target = "with_capacity"; }
+    if eq(member, "free") == 1: { target = "free"; }
+    if len(target) == 0: { return String::new(); }
+
+    let root: string = root_path_from_store();
+    var p1: string = String::new();
+    var p2: string = String::new();
+    if len(root) > 0: {
+        p1 = concat(root, "/stdlib/std/strbuf.mla");
+        p2 = concat(root, "/std/strbuf.mla");
+    }
+
+    var path: string = String::new();
+    if len(p1) > 0: {
+        if file_exists(p1) == 1: {
+            path = p1;
+        }
+    }
+    if len(path) == 0: {
+        if len(p2) > 0: {
+            if file_exists(p2) == 1: {
+                path = p2;
+            }
+        }
+    }
+    if len(path) == 0: {
+        let here: string = cwd();
+        let p3: string = concat(here, "/stdlib/std/strbuf.mla");
+        if file_exists(p3) == 1: {
+            path = p3;
+        }
+    }
+    if len(path) == 0: { return String::new(); }
+
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    let pat: string = format!("pub fn {}", target);
+    return first_match_location(path, text, pat);
+}
+
+fn c_type_target(word: string) -> string {
+    if eq(word, "i8") == 1: { return "int8_t"; }
+    if eq(word, "i16") == 1: { return "int16_t"; }
+    if eq(word, "i32") == 1: { return "int32_t"; }
+    if eq(word, "i64") == 1: { return "int64_t"; }
+    if eq(word, "u8") == 1: { return "uint8_t"; }
+    if eq(word, "u16") == 1: { return "uint16_t"; }
+    if eq(word, "u32") == 1: { return "uint32_t"; }
+    if eq(word, "u64") == 1: { return "uint64_t"; }
+    if eq(word, "int") == 1: { return "int32_t"; }
+    if eq(word, "bool") == 1: { return "bool"; }
+    if eq(word, "float") == 1: { return "mlang_float"; }
+    if eq(word, "double") == 1: { return "mlang_double"; }
+    if eq(word, "string") == 1: { return "mlang_string"; }
+    if eq(word, "str8") == 1: { return "mlang_str8"; }
+    if eq(word, "str16") == 1: { return "mlang_str16"; }
+    return String::new();
+}
+
+fn c_internals_location(word: string) -> string {
+    let target: string = c_type_target(word);
+    if len(target) == 0: { return String::new(); }
+
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var p1: string = String::new();
+    var p2: string = String::new();
+    var p3: string = String::new();
+    var p4: string = String::new();
+    if len(root) > 0: {
+        p1 = concat(root, "/mlang_c_types.h");
+        p2 = concat(root, "/docs/runtime_builtins.h");
+    }
+    p3 = concat(here, "/mlang_c_types.h");
+    p4 = concat(here, "/docs/runtime_builtins.h");
+
+    var path: string = String::new();
+    if len(path) == 0: {
+        if len(p1) > 0: {
+            if file_exists(p1) == 1: {
+                path = p1;
+            }
+        }
+    }
+    if len(path) == 0: {
+        if len(p3) > 0: {
+            if file_exists(p3) == 1: {
+                path = p3;
+            }
+        }
+    }
+    if len(path) > 0: {
+        let text_r: Result<string, string> = read_all_text(path);
+        if text_r.is_ok(): {
+            let text: string = text_r.unwrap();
+            let tloc: string = first_match_location(path, text, target);
+            if len(tloc) > 0: { return tloc; }
+        }
+    }
+
+    path = String::new();
+    if len(path) == 0: {
+        if len(p2) > 0: {
+            if file_exists(p2) == 1: {
+                path = p2;
+            }
+        }
+    }
+    if len(path) == 0: {
+        if len(p4) > 0: {
+            if file_exists(p4) == 1: {
+                path = p4;
+            }
+        }
+    }
+    if len(path) > 0: {
+        let text2_r: Result<string, string> = read_all_text(path);
+        if text2_r.is_ok(): {
+            let text2: string = text2_r.unwrap();
+            let tloc2: string = first_match_location(path, text2, target);
+            if len(tloc2) > 0: { return tloc2; }
+            let wloc: string = first_match_location(path, text2, word);
+            if len(wloc) > 0: { return wloc; }
+        }
+    }
+    return String::new();
+}
+
+fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
+    let n: i64 = len(line_text);
+    if n <= 0: { return "::"; }
+    var idx: i64 = col0;
+    if idx < 0: { idx = 0; }
+    if idx > n: { idx = n; }
+    if idx > 0: {
+        let ch: string = sub(line_text, idx - 1, 1);
+        if is_ident_char(ch) == 1: {
+            idx = idx - 1;
+        }
+    }
+    if idx >= n: {
+        if n == 0: { return "::"; }
+        idx = n - 1;
+    }
+    let c0: string = sub(line_text, idx, 1);
+    if is_ident_char(c0) == 0: {
+        return "::";
+    }
+
+    var starti: i64 = idx;
+    let idx0: i64 = idx;
+    for k in 0..idx0 {
+        let pos: i64 = idx0 - k - 1;
+        let ch: string = sub(line_text, pos, 1);
+        if is_ident_char(ch) == 0: { break; }
+        starti = pos;
+    }
+    var endi: i64 = idx + 1;
+    for j in (idx0 + 1)..n {
+        let ch: string = sub(line_text, j, 1);
+        if is_ident_char(ch) == 0: { break; }
+        endi = j + 1;
+    }
+    let word: string = sub(line_text, starti, endi - starti);
+
+    var prefix: string = String::new();
+    let left: string = sub(line_text, 0, starti);
+    let sep: i64 = rfind(left, "::");
+    if sep >= 0: {
+        var sep0: i64 = -1;
+        let ln: i64 = len(left);
+        if sep + 1 < ln: {
+            let a: string = sub(left, sep, 1);
+            let b: string = sub(left, sep + 1, 1);
+            if eq(a, ":") == 1: {
+                if eq(b, ":") == 1: {
+                    sep0 = sep;
+                }
+            }
+        }
+        if sep0 < 0: {
+            if sep > 0: {
+                let a: string = sub(left, sep - 1, 1);
+                let b: string = sub(left, sep, 1);
+                if eq(a, ":") == 1: {
+                    if eq(b, ":") == 1: {
+                        sep0 = sep - 1;
+                    }
+                }
+            }
+        }
+        if sep0 < 0: {
+            if sep > 1: {
+                let a: string = sub(left, sep - 2, 1);
+                let b: string = sub(left, sep - 1, 1);
+                if eq(a, ":") == 1: {
+                    if eq(b, ":") == 1: {
+                        sep0 = sep - 2;
+                    }
+                }
+            }
+        }
+        if sep0 < 0: {
+            return format!("{}::{}", prefix, word);
+        }
+        var qend: i64 = sep0;
+        for t in 0..sep0 {
+            let pos: i64 = sep0 - t - 1;
+            let ch: string = sub(left, pos, 1);
+            if eq(ch, " ") == 1: {
+                qend = pos;
+                continue;
+            }
+            if eq(ch, "\t") == 1: {
+                qend = pos;
+                continue;
+            }
+            break;
+        }
+        var qstart: i64 = qend;
+        let qend0: i64 = qend;
+        for t in 0..qend0 {
+            let pos: i64 = qend0 - t - 1;
+            let ch: string = sub(left, pos, 1);
+            if is_ident_char(ch) == 1: {
+                qstart = pos;
+                continue;
+            }
+            break;
+        }
+        if qstart < qend: {
+            prefix = sub(left, qstart, qend - qstart);
+        }
+    }
+
+    return format!("{}::{}", prefix, word);
+}
+
 fn symbol_kind_lsp(sym: DocumentSymbol) -> i32 {
     if contains(sym.signature, "fn ") == 1: {
         return 12;
@@ -542,6 +900,51 @@ fn handle_definition(payload: string) -> string {
     if len(uri) == 0: { return "[]"; }
     if line < 0: { return "[]"; }
     if col < 0: { return "[]"; }
+
+    if ensure_text_store() == 0: {
+        let query_text: string = text_store_get(g_text_store_handle, uri);
+        if len(query_text) > 0: {
+            let line_text: string = line_text_at(query_text, line);
+            let packed: string = extract_word_and_prefix(line_text, col);
+            let sep: i64 = find(packed, "::");
+            if sep >= 0: {
+                let prefix: string = sub(packed, 0, sep);
+                let word: string = sub(packed, sep + 2, len(packed) - sep - 2);
+                if len(prefix) > 0: {
+                    if eq(prefix, "String") == 1: {
+                        let loc: string = string_intrinsic_location(word);
+                        if len(loc) > 0: { return format!("[{}]", loc); }
+                    }
+                }
+                if len(prefix) == 0: {
+                    if len(word) > 0: {
+                        if eq(word, "new") == 1: {
+                            if contains(line_text, "String::new") == 1: {
+                                let sloc1: string = string_intrinsic_location(word);
+                                if len(sloc1) > 0: { return format!("[{}]", sloc1); }
+                            }
+                        }
+                        if eq(word, "with_capacity") == 1: {
+                            if contains(line_text, "String::with_capacity") == 1: {
+                                let sloc2: string = string_intrinsic_location(word);
+                                if len(sloc2) > 0: { return format!("[{}]", sloc2); }
+                            }
+                        }
+                        if eq(word, "free") == 1: {
+                            if contains(line_text, "String::free") == 1: {
+                                let sloc3: string = string_intrinsic_location(word);
+                                if len(sloc3) > 0: { return format!("[{}]", sloc3); }
+                            }
+                        }
+                        let cloc: string = c_internals_location(word);
+                        if len(cloc) > 0: { return format!("[{}]", cloc); }
+                        let loc2: string = runtime_builtin_location(word);
+                        if len(loc2) > 0: { return format!("[{}]", loc2); }
+                    }
+                }
+            }
+        }
+    }
 
     let s: Session = current_session();
     let dr: Result<DefinitionLocation, string> =
