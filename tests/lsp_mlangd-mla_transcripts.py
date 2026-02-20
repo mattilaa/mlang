@@ -31,6 +31,7 @@ def main() -> int:
     run_step([py, "tests/lsp_mlangd-mla_multifile_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_member_definition_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_internal_definition_transcript.py", "--mlangd", str(mlangd)])
+    run_step([py, "tests/lsp_mlangd-mla_c_extern_definition_transcript.py", "--mlangd", str(mlangd)])
     print("PASS: mlangd-mla transcript suite")
     return 0
 

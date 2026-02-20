@@ -1565,6 +1565,212 @@ static void search_dir_for_symbol(const char* root, const char* query,
     closedir(dir);
 }
 
+static int ends_with_c_source(const char* path)
+{
+    if(!path)
+        return 0;
+    size_t n = strlen(path);
+    if(n >= 2u && strcmp(path + n - 2u, ".h") == 0)
+        return 1;
+    if(n >= 4u && strcmp(path + n - 4u, ".hh") == 0)
+        return 1;
+    if(n >= 2u && strcmp(path + n - 2u, ".c") == 0)
+        return 1;
+    if(n >= 5u && strcmp(path + n - 5u, ".hpp") == 0)
+        return 1;
+    if(n >= 5u && strcmp(path + n - 5u, ".cpp") == 0)
+        return 1;
+    if(n >= 5u && strcmp(path + n - 5u, ".cxx") == 0)
+        return 1;
+    if(n >= 3u && strcmp(path + n - 3u, ".cc") == 0)
+        return 1;
+    return 0;
+}
+
+typedef struct
+{
+    int found;
+    int line1;
+    int col1;
+    char path[PATH_MAX];
+} c_def_loc_t;
+
+static int find_symbol_call_column(const char* line, const char* symbol)
+{
+    if(!line || !symbol || symbol[0] == '\0')
+        return -1;
+    size_t slen = strlen(symbol);
+    const char* p = line;
+    while((p = strstr(p, symbol)) != NULL)
+    {
+        if(p > line && is_ident_char(*(p - 1)))
+        {
+            ++p;
+            continue;
+        }
+        const char* end = p + slen;
+        if(is_ident_char(*end))
+        {
+            ++p;
+            continue;
+        }
+        const char* q = end;
+        while(*q == ' ' || *q == '\t')
+            ++q;
+        if(*q != '(')
+        {
+            ++p;
+            continue;
+        }
+        return (int)(p - line);
+    }
+    return -1;
+}
+
+static int line_is_comment_like(const char* line)
+{
+    if(!line)
+        return 1;
+    while(*line == ' ' || *line == '\t')
+        ++line;
+    if(line[0] == '\0')
+        return 1;
+    if(line[0] == '/' && line[1] == '/')
+        return 1;
+    if(line[0] == '*' || line[0] == '#')
+        return 1;
+    return 0;
+}
+
+static void search_c_file_for_definition(const char* path, const char* symbol,
+                                         c_def_loc_t* out_def,
+                                         c_def_loc_t* out_decl)
+{
+    if(!path || !symbol || !out_def || !out_decl)
+        return;
+    FILE* f = fopen(path, "rb");
+    if(!f)
+        return;
+    char line[4096];
+    int line1 = 1;
+    while(fgets(line, (int)sizeof(line), f) != NULL)
+    {
+        if(line_is_comment_like(line))
+        {
+            ++line1;
+            continue;
+        }
+        int col = find_symbol_call_column(line, symbol);
+        if(col >= 0)
+        {
+            const char* p = line + col;
+            const char* brace = strchr(p, '{');
+            const char* semi = strchr(p, ';');
+            int is_def = (brace != NULL && (semi == NULL || brace < semi));
+            if(is_def)
+            {
+                if(!out_def->found)
+                {
+                    out_def->found = 1;
+                    out_def->line1 = line1;
+                    out_def->col1 = col + 1;
+                    snprintf(out_def->path, sizeof(out_def->path), "%s", path);
+                }
+            }
+            else if(!out_decl->found)
+            {
+                out_decl->found = 1;
+                out_decl->line1 = line1;
+                out_decl->col1 = col + 1;
+                snprintf(out_decl->path, sizeof(out_decl->path), "%s", path);
+            }
+        }
+        ++line1;
+    }
+    fclose(f);
+}
+
+static void search_dir_for_c_definition(const char* root, const char* symbol,
+                                        c_def_loc_t* out_def,
+                                        c_def_loc_t* out_decl)
+{
+    if(!root || !symbol || !out_def || !out_decl)
+        return;
+    DIR* dir = opendir(root);
+    if(!dir)
+        return;
+    struct dirent* ent = NULL;
+    while((ent = readdir(dir)) != NULL)
+    {
+        if(strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
+        char full[PATH_MAX];
+        if(snprintf(full, sizeof(full), "%s/%s", root, ent->d_name) >=
+           (int)sizeof(full))
+            continue;
+        struct stat st;
+        if(stat(full, &st) != 0)
+            continue;
+        if(S_ISDIR(st.st_mode))
+        {
+            if(strcmp(ent->d_name, ".git") == 0 || strcmp(ent->d_name, "build") == 0 ||
+               strcmp(ent->d_name, "out") == 0 || strcmp(ent->d_name, "dist") == 0)
+                continue;
+            if(ent->d_name[0] == '.')
+                continue;
+            search_dir_for_c_definition(full, symbol, out_def, out_decl);
+            if(out_def->found)
+                break;
+        }
+        else if(S_ISREG(st.st_mode))
+        {
+            if(ends_with_c_source(full))
+                search_c_file_for_definition(full, symbol, out_def, out_decl);
+            if(out_def->found)
+                break;
+        }
+    }
+    closedir(dir);
+}
+
+char* __mlang_std_jsonrpc_workspace_c_definition_search(const char* root_uri,
+                                                        const char* symbol)
+{
+    if(!root_uri || !symbol || symbol[0] == '\0')
+        return dup_cstr("");
+    char root[PATH_MAX];
+    uri_to_path(root_uri, root, sizeof(root));
+    if(root[0] == '\0')
+        return dup_cstr("");
+
+    c_def_loc_t def_loc;
+    c_def_loc_t decl_loc;
+    memset(&def_loc, 0, sizeof(def_loc));
+    memset(&decl_loc, 0, sizeof(decl_loc));
+    search_dir_for_c_definition(root, symbol, &def_loc, &decl_loc);
+    c_def_loc_t* best = def_loc.found ? &def_loc : (decl_loc.found ? &decl_loc : NULL);
+    if(!best)
+        return dup_cstr("");
+
+    char uri[PATH_MAX + 8];
+    snprintf(uri, sizeof(uri), "file://%s", best->path);
+    char* uri_e = json_escape_cstr(uri);
+    size_t cap = strlen(uri) + 160u;
+    char* out = (char*)malloc(cap);
+    if(!out)
+    {
+        free(uri_e);
+        return dup_cstr("");
+    }
+    snprintf(out, cap,
+             "{\"uri\":\"%s\",\"range\":{\"start\":{\"line\":%d,\"character\":%d},"
+             "\"end\":{\"line\":%d,\"character\":%d}}}",
+             uri_e ? uri_e : "", best->line1 - 1, best->col1 - 1, best->line1 - 1,
+             best->col1 - 1);
+    free(uri_e);
+    return out;
+}
+
 char* __mlang_std_jsonrpc_workspace_symbol_search(const char* root_uri,
                                                   const char* query)
 {

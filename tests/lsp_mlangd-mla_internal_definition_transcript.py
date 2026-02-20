@@ -36,15 +36,25 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="mlangd-mla_internal_def_") as td:
         root = Path(td)
         (root / "stdlib" / "std").mkdir(parents=True, exist_ok=True)
+        (root / "stdlib" / "src").mkdir(parents=True, exist_ok=True)
+        (root / "docs").mkdir(parents=True, exist_ok=True)
         (root / "stdlib" / "std" / "strbuf.mla").write_text(
             (repo_root / "stdlib" / "std" / "strbuf.mla").read_text()
         )
+        (root / "stdlib" / "src" / "std_math.c").write_text(
+            (repo_root / "stdlib" / "src" / "std_math.c").read_text()
+        )
         (root / "mlang_c_types.h").write_text((repo_root / "mlang_c_types.h").read_text())
+        (root / "docs" / "runtime_builtins.h").write_text(
+            (repo_root / "docs" / "runtime_builtins.h").read_text()
+        )
 
         doc = root / "internal_def.mla"
         text = (
             "fn test_defs() -> i32 {\n"
+            "  let iv: i32 = 1;\n"
             "  let value: string = String::new();\n"
+            "  let num: int = 1;\n"
             "  return 0;\n"
             "}\n"
         )
@@ -97,6 +107,40 @@ def main() -> int:
             assert type_target_line >= 0, f"string type target line missing: {type_res!r}"
             type_line_text = type_target.read_text().splitlines()[type_target_line]
             assert "mlang_string" in type_line_text, f"string type target text mismatch: {type_line_text!r}"
+
+            i32_line, i32_char = position_of(text, "i32 =")
+            i32_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": i32_line, "character": i32_char},
+                },
+            )
+            assert isinstance(i32_res, list) and i32_res, f"i32 definition missing: {i32_res!r}"
+            i32_uri = i32_res[0].get("uri", "")
+            i32_target = Path(i32_uri.removeprefix("file://"))
+            i32_start = i32_res[0].get("range", {}).get("start", {})
+            i32_target_line = int(i32_start.get("line", -1))
+            assert i32_target_line >= 0, f"i32 target line missing: {i32_res!r}"
+            i32_line_text = i32_target.read_text().splitlines()[i32_target_line]
+            assert "int32_t" in i32_line_text, f"i32 target text mismatch: {i32_line_text!r}"
+
+            int_line, int_char = position_of(text, "int =")
+            int_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": int_line, "character": int_char},
+                },
+            )
+            assert isinstance(int_res, list) and int_res, f"int definition missing: {int_res!r}"
+            int_uri = int_res[0].get("uri", "")
+            int_target = Path(int_uri.removeprefix("file://"))
+            int_start = int_res[0].get("range", {}).get("start", {})
+            int_target_line = int(int_start.get("line", -1))
+            assert int_target_line >= 0, f"int target line missing: {int_res!r}"
+            int_line_text = int_target.read_text().splitlines()[int_target_line]
+            assert "int32_t" in int_line_text, f"int target text mismatch: {int_line_text!r}"
         finally:
             client.close()
 

@@ -55,6 +55,7 @@ use std::jsonrpc::uri_store_count;
 use std::jsonrpc::uri_store_get;
 use std::jsonrpc::uri_store_new;
 use std::jsonrpc::uri_store_remove;
+use std::jsonrpc::workspace_c_definition_search;
 use std::jsonrpc::workspace_symbol_search;
 use std::jsonrpc::run_stdio_loop;
 use std::strbuf::concat;
@@ -579,6 +580,83 @@ fn c_internals_location(word: string) -> string {
         }
     }
 
+    if starts_with(target, "mlang_") == 0: {
+        var hname: string = "stdint.h";
+        if eq(target, "bool") == 1: {
+            hname = "stdbool.h";
+        }
+        var hp1: string = String::new();
+        var hp2: string = String::new();
+        var hp3: string = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/";
+        var hp4: string = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/";
+        var hp5: string = "/usr/include/";
+        if len(root) > 0: {
+            hp1 = concat(root, "/");
+        }
+        hp2 = concat(here, "/");
+
+        var hpath: string = String::new();
+        let c1: string = concat(hp1, hname);
+        if file_exists(c1) == 1: { hpath = c1; }
+        if len(hpath) == 0: {
+            let c2: string = concat(hp2, hname);
+            if file_exists(c2) == 1: { hpath = c2; }
+        }
+        if len(hpath) == 0: {
+            let c3: string = concat(hp3, hname);
+            if file_exists(c3) == 1: { hpath = c3; }
+        }
+        if len(hpath) == 0: {
+            let c4: string = concat(hp4, hname);
+            if file_exists(c4) == 1: { hpath = c4; }
+        }
+        if len(hpath) == 0: {
+            let c5: string = concat(hp5, hname);
+            if file_exists(c5) == 1: { hpath = c5; }
+        }
+        if len(hpath) > 0: {
+            let htext_r: Result<string, string> = read_all_text(hpath);
+            if htext_r.is_ok(): {
+                let htext: string = htext_r.unwrap();
+                let hloc: string = first_match_location(hpath, htext, target);
+                if len(hloc) > 0: { return hloc; }
+            }
+        }
+
+        var srcp1: string = String::new();
+        var srcp2: string = String::new();
+        var srcp3: string = String::new();
+        if len(root) > 0: {
+            srcp1 = concat(root, "/stdlib/src/std_math.c");
+            srcp2 = concat(root, "/stdlib/src/std_strbuf.c");
+        }
+        srcp3 = concat(here, "/stdlib/src/std_math.c");
+
+        var spath: string = String::new();
+        if len(srcp1) > 0: {
+            if file_exists(srcp1) == 1: { spath = srcp1; }
+        }
+        if len(spath) == 0: {
+            if len(srcp3) > 0: {
+                if file_exists(srcp3) == 1: { spath = srcp3; }
+            }
+        }
+        if len(spath) == 0: {
+            if len(srcp2) > 0: {
+                if file_exists(srcp2) == 1: { spath = srcp2; }
+            }
+        }
+        if len(spath) > 0: {
+            let stext_r: Result<string, string> = read_all_text(spath);
+            if stext_r.is_ok(): {
+                let stext: string = stext_r.unwrap();
+                let sloc: string = first_match_location(spath, stext, target);
+                if len(sloc) > 0: { return sloc; }
+            }
+        }
+        return String::new();
+    }
+
     path = String::new();
     if len(path) == 0: {
         if len(p2) > 0: {
@@ -600,8 +678,6 @@ fn c_internals_location(word: string) -> string {
             let text2: string = text2_r.unwrap();
             let tloc2: string = first_match_location(path, text2, target);
             if len(tloc2) > 0: { return tloc2; }
-            let wloc: string = first_match_location(path, text2, word);
-            if len(wloc) > 0: { return wloc; }
         }
     }
     return String::new();
@@ -918,6 +994,11 @@ fn handle_definition(payload: string) -> string {
                 }
                 if len(prefix) == 0: {
                     if len(word) > 0: {
+                        let root_uri2: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                        if len(root_uri2) > 0: {
+                            let c_loc_ws: string = workspace_c_definition_search(root_uri2, word);
+                            if len(c_loc_ws) > 0: { return format!("[{}]", c_loc_ws); }
+                        }
                         if eq(word, "new") == 1: {
                             if contains(line_text, "String::new") == 1: {
                                 let sloc1: string = string_intrinsic_location(word);

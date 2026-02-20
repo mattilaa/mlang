@@ -52,6 +52,7 @@ extern pub fn __mlang_std_jsonrpc_extract_first_diagnostic_end_character(payload
 extern pub fn __mlang_std_jsonrpc_should_insert_semicolon(text: string, line: i64, column: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_signature_help_callee(text: string, line: i64, column: i64) -> string;
 extern pub fn __mlang_std_jsonrpc_workspace_symbol_search(root_uri: string, query: string) -> string;
+extern pub fn __mlang_std_jsonrpc_workspace_c_definition_search(root_uri: string, symbol: string) -> string;
 extern pub fn __mlang_std_jsonrpc_text_store_new() -> i64;
 extern pub fn __mlang_std_jsonrpc_text_store_free(handle: i64) -> int;
 extern pub fn __mlang_std_jsonrpc_text_store_upsert(handle: i64, key: string, value: string) -> int;
@@ -407,6 +408,12 @@ pub fn signature_help_callee(text: string, line: i64, column: i64) -> string {
 /// @brief Search workspace filesystem for one symbol declaration by exact name.
 pub fn workspace_symbol_search(root_uri: string, query: string) -> string {
     return __mlang_std_jsonrpc_workspace_symbol_search(root_uri, query);
+}
+
+/// @brief Search workspace C/C++ sources for function definition/declaration by exact name.
+/// Returns one LSP Location JSON object string, or empty string on no match.
+pub fn workspace_c_definition_search(root_uri: string, symbol: string) -> string {
+    return __mlang_std_jsonrpc_workspace_c_definition_search(root_uri, symbol);
 }
 
 /// @brief Create text store for URI->document text mapping.
