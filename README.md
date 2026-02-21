@@ -2,10 +2,12 @@
 MLang - Programming Language
 
 ## LSP
-Minimal LSP server lives at `tools/mlang_lsp/mlang_lsp.py` (stdio).
+Primary LSP servers:
+- `build/mlangd` (C++)
+- `build/mlangd-mla` (Mlang)
 
 ```sh
-python3 tools/mlang_lsp/mlang_lsp.py --stdio
+./build/mlangd --stdio
 ```
 
 ## C++ LSP

@@ -320,12 +320,6 @@ if(BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# ============================================================================
-# LSP script install (user-level install via CMAKE_INSTALL_PREFIX)
-# ============================================================================
-install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/tools/mlang_lsp/mlang_lsp.py
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/mlangd)
-
 install(TARGETS mlang
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
