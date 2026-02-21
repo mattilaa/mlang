@@ -20,6 +20,9 @@ def main() -> int:
         file_path.write_text(
             "fn factorial    (n: i32) -> i32 {\n"
             "    var    result: i32 = 1;\n"
+            "    if result<10: {\n"
+            "        result = result + 1;\n"
+            "    }\n"
             "    for i    in 1..n + 1 {\n"
             "        result = result * i;\n"
             "    }\n"
@@ -49,6 +52,9 @@ def main() -> int:
         assert "    for i in 1..n + 1 {\n" in out, (
             "expected for/in spacing normalization"
         )
+        assert "    if result < 10: {\n" in out, (
+            "expected default relational operator spacing normalization"
+        )
         assert "fn main() -> i32 {\n" in out, (
             "expected function spacing normalization for main"
         )
@@ -57,6 +63,19 @@ def main() -> int:
         )
         assert "let fact: i32 = factorial(5);" in out, (
             "expected factorial assignment spacing normalization"
+        )
+
+        (root / ".mlang-format").write_text(
+            "SpaceAroundRelationalOperators: false\n"
+        )
+        out_compact_rel = subprocess.run(
+            [str(formatter), str(file_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "    if result<10: {\n" in out_compact_rel, (
+            "expected compact relational operators when disabled"
         )
 
     print("PASS: mlang-format spacing e2e (fn/var/for keyword spacing)")

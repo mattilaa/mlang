@@ -2208,6 +2208,107 @@ static int is_op_single_char(char c)
     return c == '=' || c == '+' || c == '-' || c == '*' || c == '/';
 }
 
+static int is_ident_char_local(char c)
+{
+    unsigned char uc = (unsigned char)c;
+    return (isalnum(uc) != 0) || c == '_';
+}
+
+static int is_generic_angle_open(const char* text, size_t lt_index)
+{
+    if(!text || text[lt_index] != '<')
+        return 0;
+
+    size_t p = lt_index;
+    while(p > 0u && is_space_char(text[p - 1u]))
+        --p;
+    if(p == 0u)
+        return 0;
+
+    char prev = text[p - 1u];
+    if(!(is_ident_char_local(prev) || prev == ')' || prev == ']' || prev == '>'))
+        return 0;
+
+    int depth = 1;
+    int seen_ident = 0;
+    for(size_t j = lt_index + 1u; text[j] != '\0'; ++j)
+    {
+        char c = text[j];
+        if(c == '<')
+        {
+            ++depth;
+            continue;
+        }
+        if(c == '>')
+        {
+            --depth;
+            if(depth == 0)
+            {
+                size_t k = j + 1u;
+                while(is_space_char(text[k]))
+                    ++k;
+                char nx = text[k];
+                if(nx == '\0' || nx == '\n' || nx == ')' || nx == ']' ||
+                   nx == '}' || nx == ',' || nx == ';' || nx == ':' ||
+                   nx == '=' || nx == '{' || nx == '(')
+                {
+                    return seen_ident;
+                }
+                return 0;
+            }
+            continue;
+        }
+        if(c == '\n' || c == ';' || c == '{' || c == '"' || c == '\'' ||
+           c == '+' || c == '-' || c == '/' || c == '%' || c == '!' ||
+           c == '|' || c == '^')
+        {
+            return 0;
+        }
+        if(c == ':' && text[j + 1u] == ':')
+        {
+            ++j;
+            continue;
+        }
+        if(c == ':' || c == ',' || c == '[' || c == ']' || c == '(' ||
+           c == ')' || c == '&' || c == '*' || c == '?' || is_space_char(c))
+        {
+            continue;
+        }
+        if(is_ident_char_local(c))
+        {
+            seen_ident = 1;
+            continue;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int is_generic_angle_close(const char* text, size_t gt_index)
+{
+    if(!text || text[gt_index] != '>')
+        return 0;
+    int depth = 1;
+    for(size_t j = gt_index; j > 0u; --j)
+    {
+        char c = text[j - 1u];
+        if(c == '>')
+        {
+            ++depth;
+            continue;
+        }
+        if(c == '<')
+        {
+            --depth;
+            if(depth == 0)
+                return is_generic_angle_open(text, j - 1u);
+        }
+        if(c == '\n' || c == ';' || c == '{')
+            return 0;
+    }
+    return 0;
+}
+
 static int trim_inline_spaces(char* out, size_t* io_w)
 {
     size_t w = *io_w;
@@ -2253,7 +2354,8 @@ static int append_text_dyn(char** io_out, size_t* io_cap, size_t* io_w,
 static char* apply_spacing_rules(const char* text, int space_after_comma,
                                  int space_after_colon,
                                  int space_around_operators,
-                                 int compact_fat_arrow)
+                                 int compact_fat_arrow,
+                                 int space_around_relational_operators)
 {
     if(!text)
         return dup_cstr("");
@@ -2474,9 +2576,17 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
         {
             op_len = 2;
         }
+        else if((c == '<' || c == '>') && n1 == '=')
+        {
+            op_len = 2;
+        }
         else if(c == '-' && n1 == '>')
         {
             op_len = 2;
+        }
+        else if(c == '<' || c == '>')
+        {
+            op_len = 1;
         }
         else if(is_op_single_char(c))
         {
@@ -2485,9 +2595,20 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
 
         if(op_len > 0)
         {
+            if(c == '<' && is_generic_angle_open(text, i))
+                op_len = 0;
+            if(c == '>' && is_generic_angle_close(text, i))
+                op_len = 0;
+        }
+
+        if(op_len > 0)
+        {
+            int space_for_this_operator = space_around_operators;
+            if(c == '<' || c == '>')
+                space_for_this_operator = space_around_relational_operators;
             const int keep_compact = (op_len >= 2 && c == '.') ? 1 : 0;
             trim_inline_spaces(out, &w);
-            if(!keep_compact && space_around_operators == 1)
+            if(!keep_compact && space_for_this_operator == 1)
             {
                 if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
                    out[w - 1u] != '(' && out[w - 1u] != '[' &&
@@ -2505,7 +2626,7 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
             while(is_space_char(text[i + 1u]))
                 ++i;
 
-            if(!keep_compact && space_around_operators == 1)
+            if(!keep_compact && space_for_this_operator == 1)
             {
                 char nx = text[i + 1u];
                 if(nx != '\0' && nx != '\n' && nx != ')' && nx != ']' &&
@@ -2756,13 +2877,15 @@ oom:
 char* __mlang_std_jsonrpc_format_text_with_style_options(
     const char* text, int64_t tab_size, int insert_spaces, int space_after_comma,
     int space_after_colon, int space_around_operators,
-    int space_inside_braces_single_line, int compact_fat_arrow)
+    int space_inside_braces_single_line, int compact_fat_arrow,
+    int space_around_relational_operators)
 {
     char* base = format_text_with_options_impl(text, tab_size, insert_spaces);
     char* spaced = apply_spacing_rules(base, space_after_comma,
                                        space_after_colon,
                                        space_around_operators,
-                                       compact_fat_arrow);
+                                       compact_fat_arrow,
+                                       space_around_relational_operators);
     free(base);
     char* braced = apply_single_line_brace_spacing(
         spaced, space_inside_braces_single_line);

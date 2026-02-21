@@ -131,7 +131,8 @@ Current Mlang port scope:
 - `--style file`, `-i/--in-place`, `--root`, `--assume-filename`
 - `.mlang-format`: `IndentWidth`, `EnsureTrailingNewline`,
   `SpaceAfterComma`, `SpaceAfterColon`, `SpaceAroundOperators`,
-  `SpaceInsideBracesSingleLine`, `CompactFatArrow` (default: `true`)
+  `SpaceAroundRelationalOperators`, `SpaceInsideBracesSingleLine`,
+  `CompactFatArrow` (default: `true`)
 
 ## Quickstart (Package Manager + curl example)
 Build `mlang`, fetch a git dependency with the package manager, compile the

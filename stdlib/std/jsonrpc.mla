@@ -72,7 +72,8 @@ extern pub fn __mlang_std_jsonrpc_format_text_with_style_options(
     space_after_colon: int,
     space_around_operators: int,
     space_inside_braces_single_line: int,
-    compact_fat_arrow: int
+    compact_fat_arrow: int,
+    space_around_relational_operators: int
 ) -> string;
 extern pub fn __mlang_std_jsonrpc_organize_imports_line_count(text: string) -> i64;
 extern pub fn __mlang_std_jsonrpc_organize_imports_text(text: string) -> string;
@@ -480,7 +481,8 @@ pub fn format_text_with_style_options(
     space_after_colon: int,
     space_around_operators: int,
     space_inside_braces_single_line: int,
-    compact_fat_arrow: int
+    compact_fat_arrow: int,
+    space_around_relational_operators: int
 ) -> string {
     return __mlang_std_jsonrpc_format_text_with_style_options(
         text,
@@ -490,7 +492,8 @@ pub fn format_text_with_style_options(
         space_after_colon,
         space_around_operators,
         space_inside_braces_single_line,
-        compact_fat_arrow
+        compact_fat_arrow,
+        space_around_relational_operators
     );
 }
 
