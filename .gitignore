@@ -6,6 +6,7 @@ build
 *.pyc
 *_bin
 docs/out
+PIPE
 
 .cache
 .DS_store
