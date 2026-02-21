@@ -19,7 +19,7 @@ Options:
   --build-dir <dir>  Build directory (default: build)
   --use-make         Use Unix Makefiles instead of Ninja
   --all              Build/install both mlang and mlangd (default behavior)
-  --tests [<path>]   Run tests after build (default: unit + robot). If <path>
+  --tests [<path>]   Run tests after build (default: unit + lsp + robot). If <path>
                      is provided, run only that mlang test target.
   --unit-tests [<path>] Run unit tests after build. If <path> is provided,
                      run only that mlang test target.
@@ -112,11 +112,13 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tests)
       run_unit_tests=true
+      run_lsp_tests=true
       run_robot_tests=true
       install_if_tests_pass=true
       shift
       if [[ $# -gt 0 && "$1" != --* ]]; then
         test_target="$1"
+        run_lsp_tests=false
         run_robot_tests=false
         shift
       fi
