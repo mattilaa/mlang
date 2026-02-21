@@ -1948,6 +1948,11 @@ std::string TypeParamListNode::toString() const
     return result;
 }
 
+std::string TraitDefNode::toString() const
+{
+    return "trait " + name + " {}";
+}
+
 // ImplBlockNode toString
 std::string ImplBlockNode::toString() const
 {
@@ -1963,7 +1968,14 @@ std::string ImplBlockNode::toString() const
         }
         result += ">";
     }
-    result += " " + structName + " {\n";
+    if(!traitName.empty())
+    {
+        result += " " + traitName + " for " + structName + " {\n";
+    }
+    else
+    {
+        result += " " + structName + " {\n";
+    }
     for(auto method : methods)
     {
         result += "    " + method->toString() + "\n";
@@ -2043,9 +2055,21 @@ ASTNode* create_generic_struct_def(char* name, char* base_name,
     return node;
 }
 
-ASTNode* create_impl_block(char* struct_name, ASTNode* type_params)
+ASTNode* create_trait_def(char* name, int line)
+{
+    auto* node = new TraitDefNode(std::string(name));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_impl_block(char* struct_name, ASTNode* type_params,
+                           char* trait_name)
 {
     auto* node = new ImplBlockNode(std::string(struct_name));
+    if(trait_name)
+    {
+        node->traitName = std::string(trait_name);
+    }
 
     if(type_params)
     {

@@ -122,6 +122,7 @@ static int is_try_question_context()
 "static"        { return STATIC; }
 "fn"            { return FUNCTION; }
 "impl"          { return IMPL; }
+"trait"         { return TRAIT; }
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }

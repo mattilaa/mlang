@@ -1,0 +1,28 @@
+trait Summary {
+    fn summarize(&self) -> string;
+}
+
+struct SocialPost {
+    var username: string;
+    var content: string;
+    var reply: bool;
+    var repost: bool;
+};
+
+impl Summary for SocialPost {
+    fn summarize(&self) -> string {
+        return format!("{}: {}", self.username, self.content);
+    }
+}
+
+fn main() -> i32 {
+    let post: SocialPost = SocialPost {
+        username: "alice",
+        content: "Hello from traits",
+        reply: false,
+        repost: false
+    };
+
+    println!("{}", post.summarize());
+    return 0;
+}

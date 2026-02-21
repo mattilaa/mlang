@@ -113,7 +113,8 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
 ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
-ASTNode* create_impl_block(char* struct_name, ASTNode* type_params);
+ASTNode* create_trait_def(char* name, int line);
+ASTNode* create_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
 ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
 ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
@@ -132,6 +133,33 @@ ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
+
+static void bind_impl_self_types(ImplBlockNode* implBlock)
+{
+    if(!implBlock)
+    {
+        return;
+    }
+    for(auto* method : implBlock->methods)
+    {
+        if(!method || !method->parameters)
+        {
+            continue;
+        }
+        for(auto* param : method->parameters->parameters)
+        {
+            if(!param || param->name != "self")
+            {
+                continue;
+            }
+            auto* selfType = dynamic_cast<StructTypeRefNode*>(param->type);
+            if(selfType && selfType->structName == "Self")
+            {
+                param->type = new StructTypeRefNode(implBlock->structName);
+            }
+        }
+    }
+}
 %}
 
 %union {
@@ -150,7 +178,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH
-%token PUB IMPL
+%token PUB IMPL TRAIT
 %token EXTERN
 %token STATIC
 %token TRUE_LIT FALSE_LIT
@@ -187,7 +215,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
 %type <ast> map_iterator
-%type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list
+%type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
 
 %left LT GT LE GE EQ NE
@@ -213,6 +241,7 @@ top_level_list
 top_level_item
     : struct_def
     | enum_def
+    | trait_def
     | function_def
     | test_function_def
     | mod_declaration
@@ -284,6 +313,23 @@ enum_variant
     : IDENTIFIER { $$ = create_enum_variant($1); }
     ;
 
+trait_def
+    : TRAIT IDENTIFIER LBRACE trait_method_decl_list RBRACE
+        { $$ = create_trait_def($2, yylineno); }
+    ;
+
+trait_method_decl_list
+    : /* empty */ { $$ = NULL; }
+    | trait_method_decl_list trait_method_decl { $$ = NULL; }
+    ;
+
+trait_method_decl
+    : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
+        { $$ = NULL; }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
+        { $$ = NULL; }
+    ;
+
 type_param_list
     : IDENTIFIER { $$ = create_type_param_list($1); }
     | type_param_list COMMA IDENTIFIER { $$ = add_type_param($1, $3); }
@@ -301,6 +347,18 @@ impl_block
             if(methodList) {
                 implBlock->methods = methodList->methods;
             }
+            bind_impl_self_types(implBlock);
+        }
+    | IMPL IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = create_impl_block($4, NULL, $2);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($6);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            bind_impl_self_types(implBlock);
+            $$ = impl;
         }
     | IMPL LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
         {
@@ -310,6 +368,7 @@ impl_block
             if(methodList) {
                 implBlock->methods = methodList->methods;
             }
+            bind_impl_self_types(implBlock);
             $$ = impl;
         }
     | IMPL GENERIC_LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
@@ -320,12 +379,35 @@ impl_block
             if(methodList) {
                 implBlock->methods = methodList->methods;
             }
+            bind_impl_self_types(implBlock);
+            $$ = impl;
+        }
+    | IMPL LT type_param_list GT IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = create_impl_block($7, $3, $5);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($9);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            bind_impl_self_types(implBlock);
+            $$ = impl;
+        }
+    | IMPL GENERIC_LT type_param_list GT IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
+        {
+            ASTNode* impl = create_impl_block($7, $3, $5);
+            auto* implBlock = static_cast<ImplBlockNode*>(impl);
+            auto* methodList = static_cast<ImplBlockNode*>($9);
+            if(methodList) {
+                implBlock->methods = methodList->methods;
+            }
+            bind_impl_self_types(implBlock);
             $$ = impl;
         }
     ;
 
 impl_method_list
-    : /* empty */ { $$ = create_impl_block("", NULL); }
+    : /* empty */ { $$ = create_impl_block(strdup(""), NULL, NULL); }
     | impl_method_list struct_method
         {
             $$ = add_impl_method($1, $2);
@@ -384,6 +466,8 @@ parameters
 
 parameter
     : IDENTIFIER COLON type { $$ = create_parameter($3, $1); }
+    | AMP IDENTIFIER
+        { $$ = create_parameter(create_struct_type_ref(strdup("Self")), $2); }
     ;
 
 type

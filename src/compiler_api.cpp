@@ -1533,6 +1533,61 @@ static bool parseSelfTypeFromSignatureLine(std::string_view line,
     return true;
 }
 
+static bool parseImplOwnerFromLine(std::string_view line,
+                                   std::string& out_type) {
+    const size_t impl_pos = line.find("impl ");
+    if (impl_pos == std::string_view::npos) {
+        return false;
+    }
+
+    size_t pos = impl_pos + 5;
+    while (pos < line.size() &&
+           std::isspace(static_cast<unsigned char>(line[pos])) != 0) {
+        ++pos;
+    }
+    if (pos >= line.size()) {
+        return false;
+    }
+
+    if (line[pos] == '<') {
+        int depth = 0;
+        while (pos < line.size()) {
+            const char ch = line[pos++];
+            if (ch == '<') {
+                ++depth;
+            } else if (ch == '>') {
+                --depth;
+                if (depth == 0) {
+                    break;
+                }
+            }
+        }
+        while (pos < line.size() &&
+               std::isspace(static_cast<unsigned char>(line[pos])) != 0) {
+            ++pos;
+        }
+    }
+
+    const size_t for_pos = line.find(" for ", pos);
+    if (for_pos != std::string_view::npos) {
+        pos = for_pos + 5;
+    }
+    while (pos < line.size() &&
+           std::isspace(static_cast<unsigned char>(line[pos])) != 0) {
+        ++pos;
+    }
+    if (pos >= line.size() || !isIdentStart(line[pos])) {
+        return false;
+    }
+
+    size_t end = pos + 1;
+    while (end < line.size() && isIdentContinue(line[end])) {
+        ++end;
+    }
+    out_type = std::string(line.substr(pos, end - pos));
+    return !out_type.empty();
+}
+
 static bool findStructFieldDeclaration(std::string_view text,
                                        std::string_view struct_name,
                                        std::string_view field_name,
@@ -1662,6 +1717,9 @@ static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemant
         for (int y = std::min(line - 1, static_cast<int>(lines.size()) - 1);
              y >= 0; --y) {
             if (parseSelfTypeFromSignatureLine(lines[static_cast<size_t>(y)], owner)) {
+                break;
+            }
+            if (parseImplOwnerFromLine(lines[static_cast<size_t>(y)], owner)) {
                 break;
             }
         }

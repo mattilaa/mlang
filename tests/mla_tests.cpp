@@ -981,6 +981,40 @@ TEST_F(MLATest, MultipleFunctions)
     EXPECT_EQ(compileAndRun(code), "10 15\n");
 }
 
+TEST_F(MLATest, TraitImplWithRefSelf)
+{
+    std::string code = R"(
+        trait Summary {
+            fn summarize(&self) -> string;
+        }
+
+        struct SocialPost {
+            var username: string;
+            var content: string;
+            var reply: bool;
+            var repost: bool;
+        };
+
+        impl Summary for SocialPost {
+            fn summarize(&self) -> string {
+                return format!("{}: {}", self.username, self.content);
+            }
+        }
+
+        fn main() -> i32 {
+            let p: SocialPost = SocialPost {
+                username: "alice",
+                content: "hello",
+                reply: false,
+                repost: false
+            };
+            println!("{}", p.summarize());
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "alice: hello\n");
+}
+
 // ============================================================================
 // Type Cast Tests
 // ============================================================================

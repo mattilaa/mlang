@@ -519,3 +519,32 @@ fn test_compiler_definition_method_params_and_member_access() -> i32 {
     let _ = s.destroy();
     return 0;
 }
+
+#[test]
+fn test_compiler_definition_prefers_member_object_symbol() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://member_object_definition_prefer_lhs.mla";
+    let src: string = "trait Summary {\n    fn summarize(&self) -> string;\n}\n\nstruct SocialPost {\n    var username: string;\n    var content: string;\n    var reply: bool;\n    var repost: bool;\n};\n\nimpl Summary for SocialPost {\n    fn summarize(&self) -> string {\n        return format!(\"{}: {}\", self.username, self.content);\n    }\n}\n\nfn main() -> i32 {\n    let post: SocialPost = SocialPost {\n        username: \"alice\",\n        content: \"Hello from traits\",\n        reply: false,\n        repost: false\n    };\n\n    println!(\"{}\", post.summarize());\n    return 0;\n}\n";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "post" in "post.summarize()" should resolve to local variable.
+    let post_dr: Result<DefinitionLocation, string> = s.definition(uri, 26, 20);
+    if post_dr.is_err(): { return 1; }
+    let post_def: DefinitionLocation = post_dr.unwrap();
+    if contains(post_def.name, "post") == 0: { return 1; }
+    if post_def.line != 19: { return 1; }
+
+    // Cursor on "summarize" should still resolve to the method declaration.
+    let method_dr: Result<DefinitionLocation, string> = s.definition(uri, 26, 27);
+    if method_dr.is_err(): { return 1; }
+    let method_def: DefinitionLocation = method_dr.unwrap();
+    if contains(method_def.name, "summarize") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}

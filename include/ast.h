@@ -907,11 +907,21 @@ public:
     std::string toString() const override;
 };
 
+class TraitDefNode : public ASTNode
+{
+public:
+    std::string name;
+
+    TraitDefNode(const std::string& n) : name(n) {}
+    std::string toString() const override;
+};
+
 // Impl block for adding methods to a struct
 class ImplBlockNode : public ASTNode
 {
 public:
     std::string structName;
+    std::string traitName; // Empty when this is an inherent impl
     std::vector<std::string> typeParams; // Generic type parameters
     std::vector<StructMethodNode*> methods;
 
@@ -1192,7 +1202,9 @@ ASTNode* add_type_param(ASTNode* list, char* param);
 ASTNode* create_generic_struct_def(char* name, char* base_name,
                                    ASTNode* type_params, ASTNode* members,
                                    int is_public, int derive_debug);
-ASTNode* create_impl_block(char* struct_name, ASTNode* type_params);
+ASTNode* create_trait_def(char* name, int line);
+ASTNode* create_impl_block(char* struct_name, ASTNode* type_params,
+                           char* trait_name = nullptr);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
 ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args,
                                ASTNode* fields, int line);
