@@ -49,7 +49,7 @@ LSP_SYMBOL_KIND_STRUCT = 23
 
 
 WORD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-MLANG_SOURCE_EXTS = (".mla", ".mlastub")
+MLANG_SOURCE_EXTS = (".mla",)
 
 MLANG_FORMAT_DIR = os.path.join(os.path.dirname(__file__), "..", "mlang_format")
 if MLANG_FORMAT_DIR not in sys.path:
@@ -243,8 +243,8 @@ class MlangLspServer:
             attr_name = "derive"
         candidates = [
             os.path.join(self.root_path, "stdlib", "attributes.mla"),
-            os.path.join(self.root_path, "docs", "language_attributes.mlastub"),
-            os.path.join(self.root_path, "docs", "runtime_builtins.mlastub"),
+            os.path.join(self.root_path, "docs", "language_attributes.md"),
+            os.path.join(self.root_path, "docs", "language_reference.h"),
         ]
         for docs_path in candidates:
             if not os.path.isfile(docs_path):

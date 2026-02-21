@@ -207,9 +207,6 @@ fn normalize_start_dir(start_path: string) -> string {
     if ends_with(start_path, ".mla") == 1: {
         return parent_dir(start_path);
     }
-    if ends_with(start_path, ".mlastub") == 1: {
-        return parent_dir(start_path);
-    }
     return start_path;
 }
 

@@ -460,19 +460,30 @@ fn first_match_location(path: string, text: string, pattern: string) -> string {
 fn runtime_builtin_location(word: string) -> string {
     let root: string = root_path_from_store();
     if len(root) == 0: { return String::new(); }
-    let docs: string = concat(root, "/docs/runtime_builtins.mlastub");
-    if file_exists(docs) == 0: { return String::new(); }
-    let text_r: Result<string, string> = read_all_text(docs);
-    if text_r.is_err(): { return String::new(); }
-    let text: string = text_r.unwrap();
+    let docs_lang: string = concat(root, "/docs/language_reference.h");
+    let docs_runtime: string = concat(root, "/docs/runtime_builtins.h");
 
-    let tpat: string = format!("struct {}", word);
-    let eloc: string = first_match_location(docs, text, tpat);
-    if len(eloc) > 0: { return eloc; }
+    if file_exists(docs_lang) == 1: {
+        let text_r: Result<string, string> = read_all_text(docs_lang);
+        if text_r.is_ok(): {
+            let text: string = text_r.unwrap();
+            let p1: string = first_match_location(docs_lang, text, word);
+            if len(p1) > 0: { return p1; }
+            let p2: string = first_match_location(docs_lang, text, format!("Mlang{}", word));
+            if len(p2) > 0: { return p2; }
+        }
+    }
 
-    let fpat: string = format!("extern fn {}", word);
-    let floc: string = first_match_location(docs, text, fpat);
-    if len(floc) > 0: { return floc; }
+    if file_exists(docs_runtime) == 1: {
+        let text_r2: Result<string, string> = read_all_text(docs_runtime);
+        if text_r2.is_ok(): {
+            let text2: string = text_r2.unwrap();
+            let p3: string = first_match_location(docs_runtime, text2, word);
+            if len(p3) > 0: { return p3; }
+            let p4: string = first_match_location(docs_runtime, text2, format!("mlang_{}", word));
+            if len(p4) > 0: { return p4; }
+        }
+    }
     return String::new();
 }
 

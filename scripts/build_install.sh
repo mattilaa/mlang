@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
-                        [--unit-tests] [--robot-tests] [--tests] [--no-tests]
+                        [--unit-tests [<path>]] [--robot-tests] [--tests [<path>]] [--no-tests]
                         [--install-if-tests-pass]
 
 Builds the mlang compiler and mlangd (C++ LSP) and optionally installs them.
@@ -19,8 +19,10 @@ Options:
   --build-dir <dir>  Build directory (default: build)
   --use-make         Use Unix Makefiles instead of Ninja
   --all              Build/install both mlang and mlangd (default behavior)
-  --tests            Run unit + robot tests after build (installs only if tests pass)
-  --unit-tests       Run unit tests after build (ctest, installs only if tests pass)
+  --tests [<path>]   Run tests after build (default: unit + robot). If <path>
+                     is provided, run only that mlang test target.
+  --unit-tests [<path>] Run unit tests after build. If <path> is provided,
+                     run only that mlang test target.
   --robot-tests      Run robot tests after build (installs only if tests pass)
   --no-tests         Skip all tests (default)
   --install-if-tests-pass  Install only if requested tests pass
@@ -47,6 +49,7 @@ build_all=true
 run_unit_tests=false
 run_robot_tests=false
 install_if_tests_pass=false
+test_target=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -109,11 +112,20 @@ while [[ $# -gt 0 ]]; do
       run_robot_tests=true
       install_if_tests_pass=true
       shift
+      if [[ $# -gt 0 && "$1" != --* ]]; then
+        test_target="$1"
+        run_robot_tests=false
+        shift
+      fi
       ;;
     --unit-tests)
       run_unit_tests=true
       install_if_tests_pass=true
       shift
+      if [[ $# -gt 0 && "$1" != --* ]]; then
+        test_target="$1"
+        shift
+      fi
       ;;
     --robot-tests)
       run_robot_tests=true
@@ -153,7 +165,11 @@ fi
 "$build_dir/mlang" "tools/mlang-format-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-format"
 
 if $run_unit_tests; then
-  ./tests/run_tests.sh --output-on-failure
+  if [[ -n "$test_target" ]]; then
+    PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
+  else
+    ./tests/run_tests.sh --output-on-failure
+  fi
 fi
 
 if $run_robot_tests; then

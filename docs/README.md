@@ -77,5 +77,4 @@ See also:
   (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`).
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
-- `docs/language_attributes.mlastub` for syntax-highlighted, LSP-indexed
-  attribute examples used by go-to-definition.
+- `docs/language_attributes.md` for attribute documentation.
