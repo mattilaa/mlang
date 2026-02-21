@@ -809,6 +809,238 @@ fn symbol_kind_lsp(sym: DocumentSymbol) -> i32 {
     return 13;
 }
 
+fn completion_kind_lsp(label: string) -> i32 {
+    if ends_with(label, "!") == 1: { return 14; }
+    if eq(label, "fn") == 1: { return 14; }
+    if eq(label, "let") == 1: { return 14; }
+    if eq(label, "var") == 1: { return 14; }
+    if eq(label, "if") == 1: { return 14; }
+    if eq(label, "else") == 1: { return 14; }
+    if eq(label, "for") == 1: { return 14; }
+    if eq(label, "return") == 1: { return 14; }
+    if eq(label, "struct") == 1: { return 14; }
+    if eq(label, "enum") == 1: { return 14; }
+    if eq(label, "mod") == 1: { return 14; }
+    if eq(label, "use") == 1: { return 14; }
+    if eq(label, "match") == 1: { return 14; }
+    if eq(label, "impl") == 1: { return 14; }
+    if eq(label, "extern") == 1: { return 14; }
+    if eq(label, "pub") == 1: { return 14; }
+    if eq(label, "int") == 1: { return 22; }
+    if eq(label, "i32") == 1: { return 22; }
+    if eq(label, "i64") == 1: { return 22; }
+    if eq(label, "u32") == 1: { return 22; }
+    if eq(label, "u64") == 1: { return 22; }
+    if eq(label, "bool") == 1: { return 22; }
+    if eq(label, "string") == 1: { return 22; }
+    return 6;
+}
+
+fn completion_detail(label: string) -> string {
+    if ends_with(label, "!") == 1: { return "builtin macro"; }
+    if eq(label, "fn") == 1: { return "keyword: function definition"; }
+    if eq(label, "let") == 1: { return "keyword: immutable binding"; }
+    if eq(label, "var") == 1: { return "keyword: mutable binding"; }
+    if eq(label, "if") == 1: { return "keyword: conditional branch"; }
+    if eq(label, "else") == 1: { return "keyword: alternate branch"; }
+    if eq(label, "for") == 1: { return "keyword: loop over range/iterable"; }
+    if eq(label, "return") == 1: { return "keyword: return from function"; }
+    if eq(label, "struct") == 1: { return "keyword: struct type declaration"; }
+    if eq(label, "enum") == 1: { return "keyword: enum type declaration"; }
+    if eq(label, "mod") == 1: { return "keyword: module declaration"; }
+    if eq(label, "use") == 1: { return "keyword: import symbol/module"; }
+    if eq(label, "match") == 1: { return "keyword: pattern matching"; }
+    if eq(label, "impl") == 1: { return "keyword: implementation block"; }
+    if eq(label, "extern") == 1: { return "keyword: external symbol declaration"; }
+    if eq(label, "pub") == 1: { return "keyword: public visibility"; }
+    if eq(label, "int") == 1: { return "builtin type alias (int32_t)"; }
+    if eq(label, "i32") == 1: { return "builtin 32-bit signed integer"; }
+    if eq(label, "i64") == 1: { return "builtin 64-bit signed integer"; }
+    if eq(label, "u32") == 1: { return "builtin 32-bit unsigned integer"; }
+    if eq(label, "u64") == 1: { return "builtin 64-bit unsigned integer"; }
+    if eq(label, "bool") == 1: { return "builtin boolean type"; }
+    if eq(label, "string") == 1: { return "builtin UTF-8 string type"; }
+    return String::new();
+}
+
+fn completion_documentation(label: string) -> string {
+    if eq(label, "int") == 1: {
+        return "Alias for a 32-bit signed integer. Maps to C int32_t in the runtime ABI.";
+    }
+    if eq(label, "i32") == 1: {
+        return "Signed 32-bit integer type for arithmetic and integer APIs.";
+    }
+    if eq(label, "i64") == 1: {
+        return "Signed 64-bit integer type for larger integer values.";
+    }
+    if eq(label, "bool") == 1: {
+        return "Boolean type with true/false values.";
+    }
+    if eq(label, "string") == 1: {
+        return "UTF-8 string type used by stdlib and formatting macros.";
+    }
+    if eq(label, "println!") == 1: {
+        return "Print formatted text to stdout and append a newline.";
+    }
+    if eq(label, "print!") == 1: {
+        return "Print formatted text to stdout without a trailing newline.";
+    }
+    if eq(label, "eprintln!") == 1: {
+        return "Print formatted text to stderr and append a newline.";
+    }
+    if eq(label, "eprint!") == 1: {
+        return "Print formatted text to stderr without a trailing newline.";
+    }
+    if eq(label, "fn") == 1: {
+        return "Starts a function declaration: fn name(params) -> ReturnType { ... }";
+    }
+    if eq(label, "if") == 1: {
+        return "Conditional branch. Executes block when condition is true.";
+    }
+    if eq(label, "else") == 1: {
+        return "Alternate branch executed when the preceding if-condition is false.";
+    }
+    if eq(label, "let") == 1: {
+        return "Introduce an immutable local binding.";
+    }
+    if eq(label, "var") == 1: {
+        return "Introduce a mutable local binding.";
+    }
+    if eq(label, "for") == 1: {
+        return "Loop construct, commonly used with ranges: for i in 0..n { ... }";
+    }
+    if eq(label, "return") == 1: {
+        return "Return a value from the current function.";
+    }
+    if eq(label, "match") == 1: {
+        return "Pattern matching expression over enum/option/result and literals.";
+    }
+    return String::new();
+}
+
+fn completion_symbol_detail_in_uri(s: Session, target_uri: string, label: string) -> string {
+    if len(target_uri) == 0: { return String::new(); }
+    if len(label) == 0: { return String::new(); }
+    let cr: Result<i32, string> = s.document_symbol_count(target_uri);
+    if cr.is_err(): { return String::new(); }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    for i in 0..n {
+        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(target_uri, i);
+        if sr.is_err(): { continue; }
+        let sym: DocumentSymbol = match sr {
+            Ok(v) => v,
+            Err(_e) => DocumentSymbol {
+                id: String::new(),
+                name: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0
+            }
+        };
+        if eq(sym.name, label) != 1: { continue; }
+        if len(sym.signature) > 0: { return sym.signature; }
+        if len(sym.type_info) > 0: { return sym.type_info; }
+        if ensure_text_store() == 0: {
+            let text: string = text_store_get(g_text_store_handle, target_uri);
+            if len(text) > 0: {
+                let line0: i64 = sym.line - 1;
+                if line0 >= 0: {
+                    let ltxt: string = line_text_at(text, line0);
+                    if contains(ltxt, "struct ") == 1: {
+                        if contains(ltxt, label) == 1: {
+                            return format!("struct {}", label);
+                        }
+                    }
+                    if contains(ltxt, "enum ") == 1: {
+                        if contains(ltxt, label) == 1: {
+                            return format!("enum {}", label);
+                        }
+                    }
+                    if contains(ltxt, "fn ") == 1: {
+                        if contains(ltxt, label) == 1: {
+                            return format!("fn {}", label);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return String::new();
+}
+
+fn completion_symbol_doc_in_uri(s: Session, target_uri: string, label: string) -> string {
+    if len(target_uri) == 0: { return String::new(); }
+    if len(label) == 0: { return String::new(); }
+    let cr: Result<i32, string> = s.document_symbol_count(target_uri);
+    if cr.is_err(): { return String::new(); }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+    for i in 0..n {
+        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(target_uri, i);
+        if sr.is_err(): { continue; }
+        let sym: DocumentSymbol = match sr {
+            Ok(v) => v,
+            Err(_e) => DocumentSymbol {
+                id: String::new(),
+                name: String::new(),
+                type_info: String::new(),
+                signature: String::new(),
+                kind: 0,
+                line: 0,
+                column: 0
+            }
+        };
+        if eq(sym.name, label) != 1: { continue; }
+        if len(sym.type_info) > 0: {
+            if len(sym.signature) > 0: {
+                if eq(sym.type_info, sym.signature) != 1: {
+                    return format!("type: {}", sym.type_info);
+                }
+            }
+            return sym.type_info;
+        }
+        if len(sym.signature) > 0: { return sym.signature; }
+    }
+    return String::new();
+}
+
+fn completion_symbol_detail(s: Session, current_uri: string, label: string) -> string {
+    let d0: string = completion_symbol_detail_in_uri(s, current_uri, label);
+    if len(d0) > 0: { return d0; }
+    if ensure_uri_store() != 0: { return String::new(); }
+    let n: i64 = uri_store_count(g_uri_store_handle);
+    for i in 0..n {
+        let u: string = uri_store_get(g_uri_store_handle, i);
+        if len(u) == 0: { continue; }
+        if eq(u, current_uri) == 1: { continue; }
+        let d: string = completion_symbol_detail_in_uri(s, u, label);
+        if len(d) > 0: { return d; }
+    }
+    return String::new();
+}
+
+fn completion_symbol_doc(s: Session, current_uri: string, label: string) -> string {
+    let d0: string = completion_symbol_doc_in_uri(s, current_uri, label);
+    if len(d0) > 0: { return d0; }
+    if ensure_uri_store() != 0: { return String::new(); }
+    let n: i64 = uri_store_count(g_uri_store_handle);
+    for i in 0..n {
+        let u: string = uri_store_get(g_uri_store_handle, i);
+        if len(u) == 0: { continue; }
+        if eq(u, current_uri) == 1: { continue; }
+        let d: string = completion_symbol_doc_in_uri(s, u, label);
+        if len(d) > 0: { return d; }
+    }
+    return String::new();
+}
+
 fn handle_did_open(payload: string) -> i32 {
     if ensure_session() != 0: {
         return 1;
@@ -1153,6 +1385,7 @@ fn handle_completion(payload: string) -> string {
     var out: string = String::new();
     let p0: string = concat(out, "[");
     out = p0;
+    var j: i32 = 0;
 
     for i in 0..n {
         let ir: Result<string, string> = s.completion_get(uri, line + 1, col + 1, i);
@@ -1162,16 +1395,35 @@ fn handle_completion(payload: string) -> string {
             Err(_e) => String::new()
         };
         let label: string = json_escape(label_raw);
-        let item: string = format!(
-            "{{\"label\":\"{}\",\"kind\":6}}",
-            label
-        );
-        let prev: string = out;
-        if i > 0: {
+        let kind: i32 = completion_kind_lsp(label_raw);
+        var detail_raw: string = completion_detail(label_raw);
+        var doc_raw: string = completion_documentation(label_raw);
+        if len(detail_raw) == 0: {
+            detail_raw = completion_symbol_detail(s, uri, label_raw);
+        }
+        if len(doc_raw) == 0: {
+            doc_raw = completion_symbol_doc(s, uri, label_raw);
+        }
+        let detail: string = json_escape(detail_raw);
+        let doc: string = json_escape(doc_raw);
+        var item: string = String::new();
+        if len(doc_raw) > 0: {
+            item = format!(
+                "{{\"label\":\"{}\",\"kind\":{},\"detail\":\"{}\",\"documentation\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
+                label, kind, detail, doc
+            );
+        } else: {
+            item = format!(
+                "{{\"label\":\"{}\",\"kind\":{},\"detail\":\"{}\"}}",
+                label, kind, detail
+            );
+        }
+        if j > 0: {
             out = format!("{},{}", out, item);
         } else: {
             out = format!("{}{}", out, item);
         }
+        j = j + 1;
     }
 
     let prev2: string = out;
