@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
-                        [--unit-tests [<path>]] [--robot-tests] [--tests [<path>]] [--no-tests]
+                        [--unit-tests [<path>]] [--lsp-tests] [--robot-tests] [--tests [<path>]] [--all-tests] [--no-tests]
                         [--install-if-tests-pass]
 
 Builds the mlang compiler and mlangd (C++ LSP) and optionally installs them.
@@ -23,7 +23,9 @@ Options:
                      is provided, run only that mlang test target.
   --unit-tests [<path>] Run unit tests after build. If <path> is provided,
                      run only that mlang test target.
+  --lsp-tests        Run Python transcript/integration tests for mlangd/mlangd-mla.
   --robot-tests      Run robot tests after build (installs only if tests pass)
+  --all-tests        Run unit + lsp + robot tests.
   --no-tests         Skip all tests (default)
   --install-if-tests-pass  Install only if requested tests pass
   --help             Show this help
@@ -33,7 +35,7 @@ Notes:
   to: <prefix>/share/mlang/stdlib
   and stdlib libraries to: <prefix>/lib
   - Install runs by default unless --no-install is set.
-  - --tests/--unit-tests/--robot-tests imply --install-if-tests-pass.
+  - --tests/--unit-tests/--lsp-tests/--robot-tests/--all-tests imply --install-if-tests-pass.
   - --install-if-tests-pass requires tests to be selected.
   - --no-tests and --no-install clear --install-if-tests-pass.
 USAGE
@@ -47,6 +49,7 @@ build_dir="build"
 generator="Ninja"
 build_all=true
 run_unit_tests=false
+run_lsp_tests=false
 run_robot_tests=false
 install_if_tests_pass=false
 test_target=""
@@ -127,13 +130,26 @@ while [[ $# -gt 0 ]]; do
         shift
       fi
       ;;
+    --lsp-tests)
+      run_lsp_tests=true
+      install_if_tests_pass=true
+      shift
+      ;;
     --robot-tests)
+      run_robot_tests=true
+      install_if_tests_pass=true
+      shift
+      ;;
+    --all-tests)
+      run_unit_tests=true
+      run_lsp_tests=true
       run_robot_tests=true
       install_if_tests_pass=true
       shift
       ;;
     --no-tests)
       run_unit_tests=false
+      run_lsp_tests=false
       run_robot_tests=false
       install_if_tests_pass=false
       shift
@@ -168,8 +184,18 @@ if $run_unit_tests; then
   if [[ -n "$test_target" ]]; then
     PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
   else
+    # C++/ctest suite
     ./tests/run_tests.sh --output-on-failure
+    # MLang test suite (*.mla under tests/)
+    PATH=".:${PATH}" "$build_dir/mlang" test tests
   fi
+fi
+
+if $run_lsp_tests; then
+  python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
+  python3 tests/lsp_integration_transcript.py --mlangd "$build_dir/mlangd"
+  python3 tests/lsp_mlangd_format_config_transcript.py --mlangd "$build_dir/mlangd"
+  python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
 fi
 
 if $run_robot_tests; then
@@ -177,8 +203,8 @@ if $run_robot_tests; then
 fi
 
 if $install_after_build; then
-  if $install_if_tests_pass && ! $run_unit_tests && ! $run_robot_tests; then
-    echo "error: --install-if-tests-pass requires --tests, --unit-tests, or --robot-tests" >&2
+  if $install_if_tests_pass && ! $run_unit_tests && ! $run_lsp_tests && ! $run_robot_tests; then
+    echo "error: --install-if-tests-pass requires --tests, --unit-tests, --lsp-tests, --robot-tests, or --all-tests" >&2
     exit 1
   fi
   if $use_sudo; then
