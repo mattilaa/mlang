@@ -58,6 +58,7 @@ private:
     std::map<std::string, std::string> structBases;
     std::set<std::string> constantVariables;
     std::set<std::string> globalConstantVariables;
+    std::set<std::string> movedVariables;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
     // Track element types for generic lists and maps
@@ -162,6 +163,11 @@ private:
     bool isCopyType(TypeNode* typeNode);
     OwnershipClass classifyOwnership(TypeNode* typeNode);
     std::string ownershipClassName(TypeNode* typeNode);
+    bool isMoveOnlyVariable(const std::string& name);
+    bool isVariableMoved(const std::string& name) const;
+    void clearMovedVariable(const std::string& name);
+    void consumeMoveFromExpression(ExpressionNode* expr, int line,
+                                   const std::string& context);
     llvm::StructType* getStructType(const std::string& name);
     std::string typeMangle(TypeNode* typeNode) const;
     std::string functionSignatureKey(FunctionDefNode* node) const;

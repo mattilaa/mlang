@@ -1217,6 +1217,46 @@ TEST_F(MLATest, FloatModuloByZeroReportsError)
     EXPECT_NE(out.find("modulo by zero"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipUseAfterMoveReportsError)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn take_post(p: Post) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "hello" };
+            let b: Post = a;
+            return take_post(a);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCopyTypeRemainsUsableAfterAssignment)
+{
+    std::string code = R"(
+        fn keep(x: i32) -> i32 {
+            return x;
+        }
+
+        fn main() -> i32 {
+            let a: i32 = 7;
+            let b: i32 = a;
+            return keep(a) + b;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 14);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================

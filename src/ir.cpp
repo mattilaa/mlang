@@ -203,6 +203,97 @@ std::string CodeGenerator::ownershipClassName(TypeNode* typeNode)
                                                                : "MoveOnly";
 }
 
+bool CodeGenerator::isMoveOnlyVariable(const std::string& name)
+{
+    auto typeIt = variableTypes.find(name);
+    if(typeIt == variableTypes.end())
+        return false;
+
+    TypeNode::TypeKind kind = typeIt->second;
+    if(kind == TypeNode::TYPE_STRUCT)
+    {
+        auto sit = structVariableTypes.find(name);
+        if(sit == structVariableTypes.end())
+            return true;
+        StructTypeRefNode t(sit->second);
+        return !isCopyType(&t);
+    }
+    if(kind == TypeNode::TYPE_TUPLE)
+    {
+        auto tit = tupleElementTypes.find(name);
+        if(tit == tupleElementTypes.end())
+            return true;
+        TypeListNode typeList;
+        for(auto* t : tit->second)
+            typeList.addType(t);
+        TupleTypeNode tupleType(&typeList);
+        return !isCopyType(&tupleType);
+    }
+    if(kind == TypeNode::TYPE_LIST)
+    {
+        auto lit = listElementTypes.find(name);
+        if(lit != listElementTypes.end())
+        {
+            GenericListTypeNode listType(lit->second);
+            return !isCopyType(&listType);
+        }
+    }
+    if(kind == TypeNode::TYPE_MAP)
+    {
+        auto mit = mapKeyValueTypes.find(name);
+        if(mit != mapKeyValueTypes.end())
+        {
+            MapTypeNode mapType(mit->second.first, mit->second.second);
+            return !isCopyType(&mapType);
+        }
+    }
+    if(kind == TypeNode::TYPE_PTR)
+    {
+        auto pit = pointerElementTypes.find(name);
+        if(pit != pointerElementTypes.end())
+        {
+            PointerTypeNode ptrType(pit->second);
+            return !isCopyType(&ptrType);
+        }
+    }
+
+    TypeNode scalarType(kind);
+    return !isCopyType(&scalarType);
+}
+
+bool CodeGenerator::isVariableMoved(const std::string& name) const
+{
+    return movedVariables.find(name) != movedVariables.end();
+}
+
+void CodeGenerator::clearMovedVariable(const std::string& name)
+{
+    movedVariables.erase(name);
+}
+
+void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
+                                              const std::string& context)
+{
+    auto* id = dynamic_cast<IdentifierNode*>(expr);
+    if(!id)
+        return;
+
+    if(globalNamedValues.find(id->name) != globalNamedValues.end())
+        return;
+
+    if(!isMoveOnlyVariable(id->name))
+        return;
+
+    if(isVariableMoved(id->name))
+    {
+        reportError(line, "value '" + id->name + "' was already moved before " +
+                              context);
+        return;
+    }
+
+    movedVariables.insert(id->name);
+}
+
 llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
 {
     if(!typeNode)
@@ -2525,6 +2616,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Clear the named values map and constant tracking for new function scope
     namedValues.clear();
     constantVariables.clear();
+    movedVariables.clear();
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
@@ -3626,9 +3718,11 @@ void CodeGenerator::generateForStatement(ForNode* node)
             oldType = typeIt->second;
             hadOldType = true;
         }
+        bool hadOldMoved = isVariableMoved(node->varName);
 
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = TypeNode::TYPE_I64;
+        clearMovedVariable(node->varName);
 
         // Create basic blocks for loop structure
         llvm::BasicBlock* condBB =
@@ -3707,6 +3801,11 @@ void CodeGenerator::generateForStatement(ForNode* node)
             variableTypes[node->varName] = oldType;
         else
             variableTypes.erase(node->varName);
+
+        if(hadOldMoved)
+            movedVariables.insert(node->varName);
+        else
+            clearMovedVariable(node->varName);
     }
     else if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->iterable))
     {
@@ -3794,9 +3893,11 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    bool hadOldMoved = isVariableMoved(node->varName);
 
     namedValues[node->varName] = loopVar;
     variableTypes[node->varName] = TypeNode::TYPE_I64; // Placeholder
+    clearMovedVariable(node->varName);
 
     // Create basic blocks
     llvm::BasicBlock* condBB =
@@ -3875,6 +3976,11 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldMoved)
+        movedVariables.insert(node->varName);
+    else
+        clearMovedVariable(node->varName);
 }
 
 void CodeGenerator::generateForListVariableIteration(ForNode* node,
@@ -3939,9 +4045,11 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    bool hadOldMoved = isVariableMoved(node->varName);
 
     namedValues[node->varName] = loopVar;
     variableTypes[node->varName] = elemTypeNode->kind;
+    clearMovedVariable(node->varName);
 
     // Create blocks
     llvm::BasicBlock* condBB =
@@ -4012,6 +4120,11 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldMoved)
+        movedVariables.insert(node->varName);
+    else
+        clearMovedVariable(node->varName);
 }
 
 void CodeGenerator::generateForMapIteration(ForNode* node,
@@ -4081,6 +4194,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    bool hadOldMoved = isVariableMoved(node->varName);
 
     switch(mapIter->kind)
     {
@@ -4089,6 +4203,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         loopVar = builder.CreateAlloca(keyType, nullptr, node->varName);
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = keyTypeNode->kind;
+        clearMovedVariable(node->varName);
         break;
 
     case MapIteratorNode::ITER_VALUES:
@@ -4096,6 +4211,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         loopVar = builder.CreateAlloca(valueType, nullptr, node->varName);
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = valTypeNode->kind;
+        clearMovedVariable(node->varName);
         break;
 
     case MapIteratorNode::ITER_ENTRIES:
@@ -4108,6 +4224,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
                 builder.CreateAlloca(entryStructType, nullptr, node->varName);
             namedValues[node->varName] = loopVar;
             variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
+            clearMovedVariable(node->varName);
 
             // Store element types for tuple access
             std::vector<TypeNode*> elemTypes = {keyTypeNode, valTypeNode};
@@ -4224,6 +4341,11 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     else
         variableTypes.erase(node->varName);
 
+    if(hadOldMoved)
+        movedVariables.insert(node->varName);
+    else
+        clearMovedVariable(node->varName);
+
     // Clean up tuple element types if we added them
     if(mapIter->kind == MapIteratorNode::ITER_ENTRIES)
     {
@@ -4241,6 +4363,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         llvm::Value* returnValue = generateExpression(node->expression);
         if(!returnValue)
             return;
+        consumeMoveFromExpression(node->expression, node->line, "return");
 
         llvm::Type* actualType = returnValue->getType();
 
@@ -4423,6 +4546,13 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 {
+    if(globalNamedValues.find(node->name) == globalNamedValues.end() &&
+       isVariableMoved(node->name))
+    {
+        reportError(node->line, "use of moved value: '" + node->name + "'");
+        return nullptr;
+    }
+
     llvm::Value* value = namedValues[node->name];
     if(!value)
     {
@@ -4753,6 +4883,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     llvm::Value* initValue = generateExpression(node->expression);
     if(!initValue)
         return;
+    consumeMoveFromExpression(node->expression, node->line,
+                              "initializing '" + node->name + "'");
+    clearMovedVariable(node->name);
 
     if(!node->type)
     {
@@ -5218,6 +5351,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    if(node->initExpr)
+    {
+        consumeMoveFromExpression(node->initExpr, node->line,
+                                  "initializing '" + node->name + "'");
+    }
+    clearMovedVariable(node->name);
     if(node->isStaticStorage || node->isGlobalStorage)
     {
         std::string storageName = node->name;
@@ -5921,6 +6060,8 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     llvm::Value* value = generateExpression(node->expression);
     if(!value)
         return;
+    consumeMoveFromExpression(node->expression, node->line,
+                              "assigning to '" + node->name + "'");
 
     llvm::Type* targetType = nullptr;
     llvm::AllocaInst* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(variable);
@@ -5978,6 +6119,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     }
 
     builder.CreateStore(value, variable);
+    clearMovedVariable(node->name);
 }
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
@@ -6109,6 +6251,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     llvm::Value* value = generateExpression(node->expression);
     if(!value)
         return;
+    consumeMoveFromExpression(node->expression, node->line,
+                              "assigning to field '" + fieldName + "'");
 
     // Get struct type
     llvm::StructType* structType = getStructType(structTypeName);
@@ -6223,6 +6367,8 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
     llvm::Value* value = generateExpression(node->value);
     if(!value)
         return;
+    consumeMoveFromExpression(node->value, node->line,
+                              "assigning through dereference");
 
     llvm::Type* valueType = value->getType();
     if(valueType != elemType)
@@ -6761,6 +6907,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Value* ptr = generateExpression(node->arguments[0]);
         if(!ptr)
             return nullptr;
+        consumeMoveFromExpression(node->arguments[0], node->line,
+                                  "passing argument to String::free");
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
@@ -6890,6 +7038,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         llvm::Value* argVal = generateExpression(argNode);
                         if(!argVal)
                             return nullptr;
+                        consumeMoveFromExpression(
+                            argNode, node->line,
+                            "passing argument to static method '" + node->name +
+                                "'");
 
                         llvm::Type* expectedType = callee->getArg(idx)->getType();
                         if(argVal->getType() != expectedType)
@@ -6953,6 +7105,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
+        consumeMoveFromExpression(arg, node->line,
+                                  "passing argument to function '" +
+                                      node->name + "'");
         argVals.push_back(argVal);
     }
 
@@ -8151,6 +8306,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     // Clear scope
     namedValues.clear();
     constantVariables.clear();
+    movedVariables.clear();
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
@@ -8419,6 +8575,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedMapKeyValueTypes = mapKeyValueTypes;
                     auto savedTupleElementTypes = tupleElementTypes;
                     auto savedPointerElementTypes = pointerElementTypes;
+                    auto savedMovedVariables = movedVariables;
                     auto savedCleanupScopes = cleanupScopes;
 
                     // Generate the method body
@@ -8433,6 +8590,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     mapKeyValueTypes = savedMapKeyValueTypes;
                     tupleElementTypes = savedTupleElementTypes;
                     pointerElementTypes = savedPointerElementTypes;
+                    movedVariables = savedMovedVariables;
                     cleanupScopes = savedCleanupScopes;
 
                     if(savedBlock)
@@ -8454,6 +8612,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
+        consumeMoveFromExpression(arg, node->line,
+                                  "passing argument to method '" +
+                                      node->methodName + "'");
         args.push_back(argVal);
     }
 
@@ -9318,6 +9479,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedMapKeyValueTypes = mapKeyValueTypes;
         auto savedTupleElementTypes = tupleElementTypes;
         auto savedPointerElementTypes = pointerElementTypes;
+        auto savedMovedVariables = movedVariables;
         auto savedCleanupScopes = cleanupScopes;
 
         std::string binding =
@@ -9339,6 +9501,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         mapKeyValueTypes = savedMapKeyValueTypes;
         tupleElementTypes = savedTupleElementTypes;
         pointerElementTypes = savedPointerElementTypes;
+        movedVariables = savedMovedVariables;
         cleanupScopes = savedCleanupScopes;
 
         return armValue;
