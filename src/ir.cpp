@@ -305,7 +305,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
 {
     clearPointerBorrow(pointerVar);
 
-    auto registerOwnerBorrow = [&](const std::string& ownerName) -> bool
+    auto registerOwnerBorrow = [&](const std::string& ownerName,
+                                   bool enforceExclusive) -> bool
     {
         if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
            isVariableMoved(ownerName))
@@ -316,7 +317,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         }
 
         auto activeIt = activeBorrowers.find(ownerName);
-        if(activeIt != activeBorrowers.end())
+        if(enforceExclusive && activeIt != activeBorrowers.end())
         {
             for(const auto& borrower : activeIt->second)
             {
@@ -347,7 +348,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                       "'");
                 return;
             }
-            (void)registerOwnerBorrow(borrowIt->second);
+            (void)registerOwnerBorrow(borrowIt->second, true);
             return;
         }
     }
@@ -360,7 +361,68 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     if(ownerName.empty())
         return;
 
-    (void)registerOwnerBorrow(ownerName);
+    bool enforceExclusive = true;
+    auto pit = pointerElementTypes.find(pointerVar);
+    TypeNode* ptrElemType = pit != pointerElementTypes.end() ? pit->second : nullptr;
+    if(ptrElemType)
+    {
+        TypeNode::TypeKind ownerKind = TypeNode::TYPE_VOID;
+        bool hasOwnerKind = false;
+        auto vit = variableTypes.find(ownerName);
+        if(vit != variableTypes.end())
+        {
+            ownerKind = vit->second;
+            hasOwnerKind = true;
+        }
+        else
+        {
+            auto gvit = globalVariableTypes.find(ownerName);
+            if(gvit != globalVariableTypes.end())
+            {
+                ownerKind = gvit->second;
+                hasOwnerKind = true;
+            }
+        }
+
+        if(hasOwnerKind)
+        {
+            bool sameOwnerType = false;
+            if(ownerKind == TypeNode::TYPE_STRUCT &&
+               ptrElemType->kind == TypeNode::TYPE_STRUCT)
+            {
+                std::string ownerStructName;
+                auto sit = structVariableTypes.find(ownerName);
+                if(sit != structVariableTypes.end())
+                    ownerStructName = sit->second;
+                else
+                {
+                    auto gsit = globalStructVariableTypes.find(ownerName);
+                    if(gsit != globalStructVariableTypes.end())
+                        ownerStructName = gsit->second;
+                }
+
+                if(auto* sr = dynamic_cast<StructTypeRefNode*>(ptrElemType))
+                    sameOwnerType = (sr->structName == ownerStructName);
+                else if(auto* gsr =
+                            dynamic_cast<GenericStructTypeRefNode*>(ptrElemType))
+                    sameOwnerType =
+                        (getOrCreateMonomorphizedStruct(gsr->structName,
+                                                        gsr->typeArgs) ==
+                         ownerStructName);
+                // Be conservative when owner struct metadata is unavailable.
+                if(ownerStructName.empty())
+                    sameOwnerType = true;
+            }
+            else
+            {
+                sameOwnerType = (ownerKind == ptrElemType->kind);
+            }
+
+            enforceExclusive = sameOwnerType;
+        }
+    }
+
+    (void)registerOwnerBorrow(ownerName, enforceExclusive);
 }
 
 std::string CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
