@@ -1958,6 +1958,46 @@ TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
               std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCannotAssignFieldWhileOwnerBorrowed)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var b: Box = Box { value: 1 };
+            let p: ptr<Box> = &b;
+            b.value = 2;
+            return b.value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanAssignFieldAfterBorrowScopeEnds)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn main() -> i32 {
+            var b: Box = Box { value: 1 };
+            if 1: {
+                let p: ptr<Box> = &b;
+            }
+            b.value = 2;
+            return b.value;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 2);
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
 {
     std::string code = R"(

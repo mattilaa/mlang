@@ -6704,6 +6704,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     llvm::Value* structPtr;
     std::string structTypeName;
     std::string fieldName;
+    std::string ownerName;
     bool targetGlobalStorage = false;
 
     std::function<bool(ExpressionNode*)> isGlobalBackedStructExpr =
@@ -6741,6 +6742,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
 
         fieldName = fieldAccess->fieldName;
+        ownerName = resolveBorrowOwnerFromLValue(fieldAccess);
 
         // Get the struct pointer for the object part (everything except the
         // last field)
@@ -6792,6 +6794,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     {
         // Simple assignment: a.b = x
         fieldName = node->fieldName;
+        ownerName = node->structName;
 
         structPtr = namedValues[node->structName];
         if(!structPtr)
@@ -6818,6 +6821,75 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             {
                 structPtr = builder.CreateLoad(allocaType, alloca,
                                                node->structName + ".ptr");
+            }
+        }
+    }
+
+    if(!ownerName.empty())
+    {
+        auto borIt = activeBorrowers.find(ownerName);
+        if(borIt != activeBorrowers.end() && !borIt->second.empty())
+        {
+            std::set<std::string> allowedBorrowers;
+            if(node->target)
+            {
+                std::function<void(ExpressionNode*)> collectAllowedBorrowers =
+                    [&](ExpressionNode* expr) -> void
+                {
+                    if(!expr)
+                        return;
+
+                    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+                    {
+                        if(unary->op == UnaryOpNode::OP_DEREF)
+                        {
+                            if(auto* pid =
+                                   dynamic_cast<IdentifierNode*>(unary->operand))
+                            {
+                                auto pit =
+                                    pointerBorrowTarget.find(pid->name);
+                                if(pit != pointerBorrowTarget.end() &&
+                                   pit->second == ownerName)
+                                {
+                                    allowedBorrowers.insert(pid->name);
+                                }
+                            }
+                        }
+                        collectAllowedBorrowers(unary->operand);
+                        return;
+                    }
+
+                    if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+                    {
+                        collectAllowedBorrowers(field->object);
+                        return;
+                    }
+
+                    if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+                    {
+                        collectAllowedBorrowers(index->base);
+                        collectAllowedBorrowers(index->index);
+                        return;
+                    }
+
+                    if(auto* tuple = dynamic_cast<TupleAccessNode*>(expr))
+                    {
+                        collectAllowedBorrowers(tuple->tuple);
+                        return;
+                    }
+                };
+                collectAllowedBorrowers(node->target);
+            }
+
+            for(const auto& by : borIt->second)
+            {
+                if(allowedBorrowers.find(by) == allowedBorrowers.end())
+                {
+                    reportError(node->line,
+                                "cannot assign to field of '" + ownerName +
+                                    "' while borrowed by '" + by + "'");
+                    return;
+                }
             }
         }
     }
