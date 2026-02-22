@@ -9486,6 +9486,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     llvm::Value* matchVal = generateExpression(node->target);
     if(!matchVal)
         return nullptr;
+    auto incomingMoved = movedVariables;
 
     bool hasOk = false;
     bool hasErr = false;
@@ -9629,7 +9630,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     };
 
     auto generateArmValue =
-        [&](MatchArmNode* arm, int valueIndex, TypeNode* valueType)
+        [&](MatchArmNode* arm, int valueIndex, TypeNode* valueType,
+            std::set<std::string>* outMovedState)
         -> llvm::Value*
     {
         auto savedNamedValues = namedValues;
@@ -9653,6 +9655,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         llvm::Value* armValue =
             arm ? generateExpression(arm->expression) : nullptr;
+        if(outMovedState)
+            *outMovedState = movedVariables;
 
         namedValues = savedNamedValues;
         variableTypes = savedVariableTypes;
@@ -9745,14 +9749,18 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         builder.CreateCondBr(isOkVal, okBB, errBB);
 
         builder.SetInsertPoint(okBB);
-        llvm::Value* okValue = generateArmValue(okArm, okIndex, okType);
+        std::set<std::string> okMovedState;
+        llvm::Value* okValue =
+            generateArmValue(okArm, okIndex, okType, &okMovedState);
         if(!okValue)
             return nullptr;
         builder.CreateBr(mergeBB);
         llvm::BasicBlock* okEnd = builder.GetInsertBlock();
 
         builder.SetInsertPoint(errBB);
-        llvm::Value* errValue = generateArmValue(errArm, errIndex, errType);
+        std::set<std::string> errMovedState;
+        llvm::Value* errValue =
+            generateArmValue(errArm, errIndex, errType, &errMovedState);
         if(!errValue)
             return nullptr;
         builder.CreateBr(mergeBB);
@@ -9837,6 +9845,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             builder.CreatePHI(okValueType, 2, "match.result");
         phi->addIncoming(okValue, okEnd);
         phi->addIncoming(errValue, errEnd);
+        okMovedState.insert(errMovedState.begin(), errMovedState.end());
+        movedVariables = std::move(okMovedState);
         return phi;
     }
 
@@ -9911,16 +9921,18 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         builder.CreateCondBr(isSomeVal, someBB, noneBB);
 
         builder.SetInsertPoint(someBB);
+        std::set<std::string> someMovedState;
         llvm::Value* someValue = generateArmValue(someArm, valueIndex,
-                                                  valueType);
+                                                  valueType, &someMovedState);
         if(!someValue)
             return nullptr;
         builder.CreateBr(mergeBB);
         llvm::BasicBlock* someEnd = builder.GetInsertBlock();
 
         builder.SetInsertPoint(noneBB);
+        std::set<std::string> noneMovedState;
         llvm::Value* noneValue = generateArmValue(noneArm, valueIndex,
-                                                  valueType);
+                                                  valueType, &noneMovedState);
         if(!noneValue)
             return nullptr;
         builder.CreateBr(mergeBB);
@@ -10006,6 +10018,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             builder.CreatePHI(someValueType, 2, "match.result");
         phi->addIncoming(someValue, someEnd);
         phi->addIncoming(noneValue, noneEnd);
+        someMovedState.insert(noneMovedState.begin(), noneMovedState.end());
+        movedVariables = std::move(someMovedState);
         return phi;
     }
 
@@ -10087,6 +10101,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         wildcardBB = llvm::BasicBlock::Create(context, "match.wildcard", func);
 
     std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
+    std::vector<std::set<std::string>> armMovedStates;
     std::vector<llvm::BasicBlock*> armBlocks;
 
     llvm::BasicBlock* nextBB = nullptr;
@@ -10108,12 +10123,15 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         builder.CreateCondBr(cmp, armBB, fallBB);
 
         builder.SetInsertPoint(armBB);
+        movedVariables = incomingMoved;
         llvm::Value* armVal = generateExpression(arm->expression);
         if(!armVal)
             return nullptr;
+        armMovedStates.push_back(movedVariables);
         builder.CreateBr(mergeBB);
         armValues.push_back({armVal, builder.GetInsertBlock()});
         armBlocks.push_back(armBB);
+        movedVariables = incomingMoved;
 
         builder.SetInsertPoint(fallBB);
         nextBB = fallBB;
@@ -10122,11 +10140,14 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     if(wildcardArm)
     {
         builder.SetInsertPoint(wildcardBB);
+        movedVariables = incomingMoved;
         llvm::Value* armVal = generateExpression(wildcardArm->expression);
         if(!armVal)
             return nullptr;
+        armMovedStates.push_back(movedVariables);
         builder.CreateBr(mergeBB);
         armValues.push_back({armVal, builder.GetInsertBlock()});
+        movedVariables = incomingMoved;
     }
     else
     {
@@ -10256,6 +10277,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         builder.CreatePHI(commonType, (unsigned)armValues.size(), "match.result");
     for(const auto& pair : armValues)
         phi->addIncoming(pair.first, pair.second);
+    std::set<std::string> mergedMoved;
+    for(const auto& st : armMovedStates)
+        mergedMoved.insert(st.begin(), st.end());
+    movedVariables = std::move(mergedMoved);
     return phi;
 }
 

@@ -1308,6 +1308,34 @@ TEST_F(MLATest, OwnershipIfBranchMoveMakesValueUnavailableAfterIf)
     EXPECT_NE(out.find("use of moved value"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipMatchArmMoveMakesValueUnavailableAfterMatch)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn take_post(p: Post) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "hello" };
+            let flag: i32 = 1;
+            let x: i32 = match flag {
+                1 => take_post(a),
+                _ => 20
+            };
+            return take_post(a);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value"), std::string::npos);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================
