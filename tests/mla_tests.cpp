@@ -1441,6 +1441,29 @@ TEST_F(MLATest, OwnershipRebindingSamePointerBorrowAllowed)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipCannotAliasBorrowFromPointerVariable)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            let b: Post = Post { content: "b" };
+            var p: ptr<Post> = &a;
+            var q: ptr<Post> = &b;
+            q = p;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot alias exclusive borrow"), std::string::npos);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================

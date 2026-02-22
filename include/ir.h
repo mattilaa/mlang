@@ -171,6 +171,9 @@ private:
     void clearPointerBorrow(const std::string& pointerVar);
     void registerPointerBorrow(const std::string& pointerVar,
                                ExpressionNode* expr, int line);
+    std::string getBorrowedOwnerForPointerExpression(
+        ExpressionNode* expr) const;
+    bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
                                    const std::string& context);
     llvm::StructType* getStructType(const std::string& name);

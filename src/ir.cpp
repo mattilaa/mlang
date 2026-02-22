@@ -289,6 +289,53 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
 {
     clearPointerBorrow(pointerVar);
 
+    auto registerOwnerBorrow = [&](const std::string& ownerName) -> bool
+    {
+        if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
+           isVariableMoved(ownerName))
+        {
+            reportError(line,
+                        "cannot borrow moved value: '" + ownerName + "'");
+            return false;
+        }
+
+        auto activeIt = activeBorrowers.find(ownerName);
+        if(activeIt != activeBorrowers.end())
+        {
+            for(const auto& borrower : activeIt->second)
+            {
+                if(borrower != pointerVar)
+                {
+                    reportError(line, "cannot borrow '" + ownerName +
+                                          "' while already borrowed by '" +
+                                          borrower + "'");
+                    return false;
+                }
+            }
+        }
+
+        pointerBorrowTarget[pointerVar] = ownerName;
+        activeBorrowers[ownerName].insert(pointerVar);
+        return true;
+    };
+
+    if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto borrowIt = pointerBorrowTarget.find(idExpr->name);
+        if(borrowIt != pointerBorrowTarget.end())
+        {
+            if(idExpr->name != pointerVar)
+            {
+                reportError(line, "cannot alias exclusive borrow from '" +
+                                      idExpr->name + "' into '" + pointerVar +
+                                      "'");
+                return;
+            }
+            (void)registerOwnerBorrow(borrowIt->second);
+            return;
+        }
+    }
+
     auto* unary = dynamic_cast<UnaryOpNode*>(expr);
     if(!unary || unary->op != UnaryOpNode::OP_ADDR)
         return;
@@ -297,30 +344,40 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     if(!id)
         return;
 
-    if(globalNamedValues.find(id->name) == globalNamedValues.end() &&
-       isVariableMoved(id->name))
+    (void)registerOwnerBorrow(id->name);
+}
+
+std::string CodeGenerator::getBorrowedOwnerForPointerExpression(
+    ExpressionNode* expr) const
+{
+    auto* idExpr = dynamic_cast<IdentifierNode*>(expr);
+    if(!idExpr)
+        return "";
+
+    auto borrowIt = pointerBorrowTarget.find(idExpr->name);
+    if(borrowIt == pointerBorrowTarget.end())
+        return "";
+
+    return borrowIt->second;
+}
+
+bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
+                                               int line)
+{
+    std::string ownerName =
+        getBorrowedOwnerForPointerExpression(pointerExpr);
+    if(ownerName.empty())
+        return true;
+
+    if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
+       isVariableMoved(ownerName))
     {
-        reportError(line, "cannot borrow moved value: '" + id->name + "'");
-        return;
+        reportError(line, "cannot dereference pointer to moved value: '" +
+                              ownerName + "'");
+        return false;
     }
 
-    auto activeIt = activeBorrowers.find(id->name);
-    if(activeIt != activeBorrowers.end())
-    {
-        for(const auto& borrower : activeIt->second)
-        {
-            if(borrower != pointerVar)
-            {
-                reportError(line, "cannot borrow '" + id->name +
-                                      "' while already borrowed by '" +
-                                      borrower + "'");
-                return;
-            }
-        }
-    }
-
-    pointerBorrowTarget[pointerVar] = id->name;
-    activeBorrowers[id->name].insert(pointerVar);
+    return true;
 }
 
 void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
@@ -997,6 +1054,9 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
     {
         if(unary->op == UnaryOpNode::OP_DEREF)
         {
+            if(!validatePointerDereference(unary->operand, line))
+                return nullptr;
+
             llvm::Value* ptrVal = generateExpression(unary->operand);
             if(!ptrVal)
                 return nullptr;
@@ -3255,6 +3315,9 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
     }
     case UnaryOpNode::OP_DEREF:
     {
+        if(!validatePointerDereference(node->operand, node->line))
+            return nullptr;
+
         llvm::Value* ptrVal = generateExpression(node->operand);
         if(!ptrVal)
             return nullptr;
@@ -6630,6 +6693,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
 void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
 {
+    if(!validatePointerDereference(node->pointerExpr, node->line))
+        return;
+
     llvm::Value* ptrVal = generateExpression(node->pointerExpr);
     if(!ptrVal)
         return;
@@ -6867,6 +6933,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
     {
         if(unary->op == UnaryOpNode::OP_DEREF)
         {
+            if(!validatePointerDereference(unary->operand, line))
+                return {nullptr, ""};
+
             llvm::Value* ptrVal = generateExpression(unary->operand);
             if(!ptrVal)
                 return {nullptr, ""};
