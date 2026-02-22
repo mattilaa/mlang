@@ -396,6 +396,41 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
     return true;
 }
 
+bool CodeGenerator::validateNoEscapingBorrowOnReturn(ExpressionNode* expr,
+                                                     int line)
+{
+    std::string ownerName;
+    if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = pointerBorrowTarget.find(idExpr->name);
+        if(it != pointerBorrowTarget.end())
+            ownerName = it->second;
+    }
+    else if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR)
+        {
+            if(auto* ownerId = dynamic_cast<IdentifierNode*>(unary->operand))
+                ownerName = ownerId->name;
+        }
+    }
+
+    if(ownerName.empty())
+        return true;
+
+    if(globalNamedValues.find(ownerName) != globalNamedValues.end())
+        return true;
+
+    if(namedValues.find(ownerName) != namedValues.end())
+    {
+        reportError(line, "cannot return pointer that borrows local value: '" +
+                              ownerName + "'");
+        return false;
+    }
+
+    return true;
+}
+
 void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                                               const std::string& context)
 {
@@ -4713,6 +4748,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
 
     if(node->expression)
     {
+        if(!validateNoEscapingBorrowOnReturn(node->expression, node->line))
+            return;
+
         llvm::Value* returnValue = generateExpression(node->expression);
         if(!returnValue)
             return;

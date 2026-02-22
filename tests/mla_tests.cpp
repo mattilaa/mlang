@@ -1554,6 +1554,44 @@ TEST_F(MLATest, OwnershipOuterPointerBorrowSurvivesLoopLocalPointer)
     EXPECT_NE(out.find("while borrowed"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocal)
+{
+    std::string code = R"(
+        fn bad_ptr() -> ptr<i32> {
+            let x: i32 = 7;
+            return &x;
+        }
+
+        fn main() -> i32 {
+            let p: ptr<i32> = bad_ptr();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
+{
+    std::string code = R"(
+        var G: i32 = 7;
+
+        fn get_g() -> ptr<i32> {
+            return &G;
+        }
+
+        fn main() -> i32 {
+            let p: ptr<i32> = get_g();
+            return *p;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================
