@@ -4106,12 +4106,14 @@ void CodeGenerator::generateForStatement(ForNode* node)
 
         if(node->body)
         {
+            enterCleanupScope();
             for(auto stmt : node->body->statements)
             {
                 generateStatement(stmt);
                 if(builder.GetInsertBlock()->getTerminator())
                     break;
             }
+            exitCleanupScope();
         }
 
         if(!builder.GetInsertBlock()->getTerminator())
@@ -4282,12 +4284,14 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
 
     if(node->body)
     {
+        enterCleanupScope();
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
             if(builder.GetInsertBlock()->getTerminator())
                 break;
         }
+        exitCleanupScope();
     }
 
     if(!builder.GetInsertBlock()->getTerminator())
@@ -4426,12 +4430,14 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
 
     if(node->body)
     {
+        enterCleanupScope();
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
             if(builder.GetInsertBlock()->getTerminator())
                 break;
         }
+        exitCleanupScope();
     }
 
     if(!builder.GetInsertBlock()->getTerminator())
@@ -4646,12 +4652,14 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
 
     if(node->body)
     {
+        enterCleanupScope();
         for(auto stmt : node->body->statements)
         {
             generateStatement(stmt);
             if(builder.GetInsertBlock()->getTerminator())
                 break;
         }
+        exitCleanupScope();
     }
 
     if(!builder.GetInsertBlock()->getTerminator())
@@ -5225,6 +5233,7 @@ bool CodeGenerator::canConvertType(llvm::Type* actualType,
 
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
+    recordScopedPointerVariable(node->name);
     llvm::Value* initValue = generateExpression(node->expression);
     if(!initValue)
         return;
@@ -5369,7 +5378,6 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
-        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->expression, node->line);
 
         constantVariables.insert(node->name);
@@ -5471,7 +5479,6 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
-        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->expression, node->line);
         constantVariables.insert(node->name);
         return;
@@ -5701,6 +5708,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    recordScopedPointerVariable(node->name);
     clearPointerBorrow(node->name);
     if(node->initExpr)
     {
@@ -6014,7 +6022,6 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
-        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->initExpr, node->line);
 
         return;
@@ -6144,7 +6151,6 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
-        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->initExpr, node->line);
         return;
     }
