@@ -1,0 +1,78 @@
+mod std::strbuf;
+use std::strbuf::*;
+
+// A function that reads a string borrow — takes `string` by value,
+// which in mlang is a char* copy (an immutable view of the bytes).
+fn greet(name: string) -> void {
+    println!("Hello, {}!", name);
+}
+
+fn print_both(a: string, b: string) -> void {
+    println!("{} | {}", a, b);
+}
+
+fn count_chars(s: string) -> i64 {
+    return len(s);
+}
+
+fn main() -> i32 {
+    // ── 1. Immutable string + multiple borrows ────────────────────────────
+    //
+    // `let` binds an immutable owner.  Multiple readers (&) are fine
+    // simultaneously — nobody can mutate while a borrow is alive.
+    let s = String::from("mlang");
+    let r1 = &s;
+    let r2 = &s;
+    print_both(r1, r2);           // "mlang | mlang"
+    println!("length: {}", count_chars(s));
+
+    // ── 2. Mutable string — push_str ─────────────────────────────────────
+    //
+    // `var` gives an owned, mutable binding.  push_str appends in-place.
+    var greeting = String::from("Hello");
+    greeting.push_str(", world");
+    greeting.push_str("!");
+    println!("{}", greeting);     // "Hello, world!"
+
+    // ── 3. NLL — borrow ends at its last use, not at end of scope ─────────
+    //
+    // Rust's non-lexical lifetimes let the immutable borrow of `msg` expire
+    // after `greet(ref)`.  The push_str on the next line is therefore valid.
+    var msg = String::from("NLL");
+    let ref = &msg;
+    greet(ref);                   // last use of `ref`
+    msg.push_str(" works");       // OK: `ref` is no longer live
+    println!("{}", msg);          // "NLL works"
+
+    // ── 4. Read-only inspection via a borrow ──────────────────────────────
+    //
+    // We borrow `word` to inspect its length, then mutate it afterwards.
+    var word = String::from("borrow");
+    let view = &word;
+    let n = count_chars(view);    // read through the borrow
+    println!("'{}' has {} bytes", view, n);
+    // `view` is last used above; the borrow expires here.
+    word.push_str("_checker");
+    println!("extended: {}", word);   // "borrow_checker"
+
+    // ── 5. Multiple sequential mutations ─────────────────────────────────
+    //
+    // Each push_str builds a new concatenation; the owner stays mutable.
+    var buf = String::from("");
+    buf.push_str("one");
+    buf.push_str(", two");
+    buf.push_str(", three");
+    println!("{}", buf);          // "one, two, three"
+
+    // ── ✗ Would NOT compile — mutation while borrowed ─────────────────────
+    //
+    // Uncommenting this block triggers a compile error:
+    //   "cannot mutate 'locked' while it is borrowed"
+    //
+    // var locked = String::from("safe");
+    // let guard = &locked;
+    // locked.push_str("!");   // error: `guard` is still live
+    // println!("{}", guard);
+
+    return 0;
+}

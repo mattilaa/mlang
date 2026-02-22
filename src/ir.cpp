@@ -4,6 +4,152 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+
+// Recursively collect all IdentifierNode names referenced in an AST subtree.
+// Used for Non-Lexical Lifetime (NLL) borrow expiration.
+static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
+{
+    if(!node)
+        return;
+    if(auto* id = dynamic_cast<IdentifierNode*>(node))
+    {
+        out.insert(id->name);
+        return;
+    }
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(node))
+    {
+        collectUsedIdents(bin->left, out);
+        collectUsedIdents(bin->right, out);
+        return;
+    }
+    if(auto* un = dynamic_cast<UnaryOpNode*>(node))
+    {
+        collectUsedIdents(un->operand, out);
+        return;
+    }
+    if(auto* tern = dynamic_cast<TernaryNode*>(node))
+    {
+        collectUsedIdents(tern->condition, out);
+        collectUsedIdents(tern->trueExpr, out);
+        collectUsedIdents(tern->falseExpr, out);
+        return;
+    }
+    if(auto* call = dynamic_cast<FunctionCallNode*>(node))
+    {
+        for(auto* arg : call->arguments)
+            collectUsedIdents(arg, out);
+        return;
+    }
+    if(auto* mc = dynamic_cast<MethodCallNode*>(node))
+    {
+        collectUsedIdents(mc->object, out);
+        for(auto* arg : mc->arguments)
+            collectUsedIdents(arg, out);
+        return;
+    }
+    if(auto* fa = dynamic_cast<FieldAccessNode*>(node))
+    {
+        if(!fa->structName.empty())
+            out.insert(fa->structName);
+        collectUsedIdents(fa->object, out);
+        return;
+    }
+    if(auto* idx = dynamic_cast<IndexExpressionNode*>(node))
+    {
+        collectUsedIdents(idx->base, out);
+        collectUsedIdents(idx->index, out);
+        return;
+    }
+    if(auto* cast = dynamic_cast<CastExpressionNode*>(node))
+    {
+        collectUsedIdents(cast->expression, out);
+        return;
+    }
+    if(auto* tryE = dynamic_cast<TryExpressionNode*>(node))
+    {
+        collectUsedIdents(tryE->expression, out);
+        return;
+    }
+    if(auto* es = dynamic_cast<ExpressionStatementNode*>(node))
+    {
+        collectUsedIdents(es->expression, out);
+        return;
+    }
+    if(auto* ret = dynamic_cast<ReturnNode*>(node))
+    {
+        collectUsedIdents(ret->expression, out);
+        return;
+    }
+    if(auto* letD = dynamic_cast<LetDeclNode*>(node))
+    {
+        collectUsedIdents(letD->expression, out);
+        return;
+    }
+    if(auto* varD = dynamic_cast<VarDeclNode*>(node))
+    {
+        collectUsedIdents(varD->initExpr, out);
+        return;
+    }
+    if(auto* asgn = dynamic_cast<AssignmentNode*>(node))
+    {
+        collectUsedIdents(asgn->expression, out);
+        return;
+    }
+    if(auto* fa2 = dynamic_cast<FieldAssignmentNode*>(node))
+    {
+        if(!fa2->structName.empty())
+            out.insert(fa2->structName);
+        collectUsedIdents(fa2->target, out);
+        collectUsedIdents(fa2->expression, out);
+        return;
+    }
+    if(auto* da = dynamic_cast<DerefAssignmentNode*>(node))
+    {
+        collectUsedIdents(da->pointerExpr, out);
+        collectUsedIdents(da->value, out);
+        return;
+    }
+    if(auto* print = dynamic_cast<PrintNode*>(node))
+    {
+        for(auto* arg : print->arguments)
+            collectUsedIdents(arg, out);
+        return;
+    }
+    if(auto* aeq = dynamic_cast<AssertEqNode*>(node))
+    {
+        collectUsedIdents(aeq->left, out);
+        collectUsedIdents(aeq->right, out);
+        return;
+    }
+    if(auto* ifN = dynamic_cast<IfNode*>(node))
+    {
+        collectUsedIdents(ifN->condition, out);
+        if(ifN->thenBranch)
+            for(auto* s : ifN->thenBranch->statements)
+                collectUsedIdents(s, out);
+        collectUsedIdents(ifN->elseIfBranch, out);
+        if(ifN->elseBranch)
+            for(auto* s : ifN->elseBranch->statements)
+                collectUsedIdents(s, out);
+        return;
+    }
+    if(auto* forN = dynamic_cast<ForNode*>(node))
+    {
+        collectUsedIdents(forN->iterable, out);
+        if(forN->body)
+            for(auto* s : forN->body->statements)
+                collectUsedIdents(s, out);
+        return;
+    }
+    if(auto* blk = dynamic_cast<BlockStatementNode*>(node))
+    {
+        if(blk->statements)
+            for(auto* s : blk->statements->statements)
+                collectUsedIdents(s, out);
+        return;
+    }
+}
+
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
@@ -181,11 +327,13 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
         case TypeNode::TYPE_U32:
         case TypeNode::TYPE_U64:
         case TypeNode::TYPE_PTR:
-            return OwnershipClass::Copy;
-        case TypeNode::TYPE_VOID:
+        // string/str8/str16 are char* — pointer-sized, implicitly shared.
+        // Mutation safety is enforced via activeBorrowers, not move tracking.
         case TypeNode::TYPE_STRING:
         case TypeNode::TYPE_STR8:
         case TypeNode::TYPE_STR16:
+            return OwnershipClass::Copy;
+        case TypeNode::TYPE_VOID:
         case TypeNode::TYPE_LIST:
         case TypeNode::TYPE_MAP:
         case TypeNode::TYPE_STRUCT:
@@ -3127,9 +3275,23 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     // Generate the function body
     if(node->body)
     {
-        for(auto stmt : node->body->statements)
+        const auto& bodyStmts = node->body->statements;
+        for(size_t si = 0; si < bodyStmts.size(); si++)
         {
-            generateStatement(stmt);
+            generateStatement(bodyStmts[si]);
+            // NLL: expire borrow variables not referenced in remaining stmts
+            if(!pointerBorrowTarget.empty())
+            {
+                std::set<std::string> futureIdents;
+                for(size_t sj = si + 1; sj < bodyStmts.size(); sj++)
+                    collectUsedIdents(bodyStmts[sj], futureIdents);
+                std::vector<std::string> toClear;
+                for(const auto& kv : pointerBorrowTarget)
+                    if(!futureIdents.count(kv.first))
+                        toClear.push_back(kv.first);
+                for(const auto& ptr : toClear)
+                    clearPointerBorrow(ptr);
+            }
         }
     }
 
@@ -3206,9 +3368,23 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
     {
         enterCleanupScope();
-        for(auto stmt : blockNode->statements->statements)
+        const auto& blkStmts = blockNode->statements->statements;
+        for(size_t si = 0; si < blkStmts.size(); si++)
         {
-            generateStatement(stmt);
+            generateStatement(blkStmts[si]);
+            // NLL: expire borrow variables not referenced in remaining stmts
+            if(!pointerBorrowTarget.empty())
+            {
+                std::set<std::string> futureIdents;
+                for(size_t sj = si + 1; sj < blkStmts.size(); sj++)
+                    collectUsedIdents(blkStmts[sj], futureIdents);
+                std::vector<std::string> toClear;
+                for(const auto& kv : pointerBorrowTarget)
+                    if(!futureIdents.count(kv.first))
+                        toClear.push_back(kv.first);
+                for(const auto& ptr : toClear)
+                    clearPointerBorrow(ptr);
+            }
         }
         exitCleanupScope();
     }
@@ -5487,6 +5663,26 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     llvm::Value* initValue = generateExpression(node->expression);
     if(!initValue)
         return;
+    // For `let r = &s` where s is a string: getLValuePointer returns the alloca
+    // (char**). Load the actual char* so the borrow variable behaves like a
+    // normal string value when passed to println! / strcmp / etc.
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(node->expression))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR)
+        {
+            if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
+            {
+                auto typeIt = variableTypes.find(id->name);
+                if(typeIt != variableTypes.end() &&
+                   typeIt->second == TypeNode::TYPE_STRING)
+                {
+                    initValue = builder.CreateLoad(initValue->getType(),
+                                                   initValue,
+                                                   id->name + ".str_borrow");
+                }
+            }
+        }
+    }
     consumeMoveFromExpression(node->expression, node->line,
                               "initializing '" + node->name + "'");
     clearMovedVariable(node->name);
@@ -5527,7 +5723,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
                 if(call->name == "String::new" ||
-                   call->name == "String::with_capacity")
+                   call->name == "String::with_capacity" ||
+                   call->name == "String::from" ||
+                   call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
             }
 
@@ -5576,7 +5774,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         if(auto* call = dynamic_cast<FunctionCallNode*>(node->expression))
         {
             if(call->name == "String::new" ||
-               call->name == "String::with_capacity")
+               call->name == "String::with_capacity" ||
+               call->name == "String::from" ||
+               call->name == "String::to_utf8")
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
@@ -6183,7 +6383,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
                 if(call->name == "String::new" ||
-                   call->name == "String::with_capacity")
+                   call->name == "String::with_capacity" ||
+                   call->name == "String::from" ||
+                   call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
             }
 
@@ -6232,7 +6434,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* call = dynamic_cast<FunctionCallNode*>(node->initExpr))
         {
             if(call->name == "String::new" ||
-               call->name == "String::with_capacity")
+               call->name == "String::with_capacity" ||
+               call->name == "String::from" ||
+               call->name == "String::to_utf8")
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
@@ -7974,6 +8178,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return nullptr;
         }
         return builder.CreateCall(freeFunc, {ptr});
+    }
+    if(node->name == "String::from" || node->name == "String::to_utf8")
+    {
+        if(node->arguments.size() != 1)
+        {
+            reportError(node->line, node->name + " expects one argument");
+            return nullptr;
+        }
+        llvm::Value* arg = generateExpression(node->arguments[0]);
+        if(!arg)
+            return nullptr;
+        initializeStdlibFunctions();
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::FunctionType* cloneFnType =
+            llvm::FunctionType::get(ptrType, {ptrType}, false);
+        llvm::FunctionCallee cloneFn =
+            module->getOrInsertFunction("__mlang_std_strbuf_clone", cloneFnType);
+        return builder.CreateCall(cloneFn, {arg}, "string_from");
     }
 
     if(node->name == "thread_spawn")
@@ -9756,6 +9983,74 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             reportError(node->line,
                         "use of moved value: '" + objId->name + "'");
             return nullptr;
+        }
+
+        // Handle built-in string methods (push_str, etc.)
+        {
+            auto strTypeIt = variableTypes.find(objId->name);
+            if(strTypeIt != variableTypes.end() &&
+               strTypeIt->second == TypeNode::TYPE_STRING)
+            {
+                if(node->methodName == "push_str")
+                {
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line,
+                                    "push_str expects one argument");
+                        return nullptr;
+                    }
+                    if(constantVariables.count(objId->name))
+                    {
+                        reportError(node->line,
+                                    "cannot call push_str on immutable "
+                                    "string '" +
+                                        objId->name + "'");
+                        return nullptr;
+                    }
+                    auto borrowIt = activeBorrowers.find(objId->name);
+                    if(borrowIt != activeBorrowers.end() &&
+                       !borrowIt->second.empty())
+                    {
+                        reportError(node->line,
+                                    "cannot mutate '" + objId->name +
+                                        "' while it is borrowed");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    llvm::Value* currentStr = builder.CreateLoad(
+                        ptrType, allocaPtr, objId->name + ".load");
+                    llvm::Value* suffix =
+                        generateExpression(node->arguments[0]);
+                    if(!suffix)
+                        return nullptr;
+                    llvm::FunctionType* concatFnType =
+                        llvm::FunctionType::get(ptrType, {ptrType, ptrType},
+                                                false);
+                    llvm::FunctionCallee concatFn =
+                        module->getOrInsertFunction(
+                            "__mlang_std_strbuf_concat", concatFnType);
+                    llvm::Value* newStr = builder.CreateCall(
+                        concatFn, {currentStr, suffix}, "push_str.result");
+                    builder.CreateStore(newStr, allocaPtr);
+                    return llvm::Constant::getNullValue(ptrType);
+                }
+                reportError(node->line,
+                            "string has no method named '" +
+                                node->methodName + "'");
+                return nullptr;
+            }
         }
 
         // Simple case: identifier.method()

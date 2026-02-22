@@ -1,0 +1,39 @@
+mod std::strbuf;
+
+use std::strbuf::*;
+
+fn main() -> i32 {
+    // ✓ This compiles: multiple immutable borrows
+    let s = String::to_utf8("hello");
+    let r1 = &s;
+    let r2 = &s;
+    println!("{} and {}", r1, r2);
+
+    // ✓ This compiles: mutable borrow after immutable borrows are done
+    var s2 = String::to_utf8("hello");
+    s2.push_str(" world");
+    println!("{}", s2);
+
+    // ✗ This does NOT compile: mutable borrow while immutable borrow exists
+    /*
+    let mut s3 = String::from("hello");
+    let r3 = &s3;
+    s3.push_str(" world");  // error: cannot borrow `s3` as mutable
+    println!("{}", r3);
+    */
+
+    // ✗ This does NOT compile: two mutable borrows
+    /*
+    let mut s4 = String::from("hello");
+    let r4 = &mut s4;
+    let r5 = &mut s4;  // error: cannot borrow `s4` as mutable more than once
+    println!("{} {}", r4, r5);
+    */
+
+    // ✓ This compiles: NLL (non-lexical lifetimes) allows this
+    var s5 = String::from("hello");
+    let r6 = &s5;
+    println!("{}", r6); // r6's last use
+    s5.push_str(" world"); // OK: r6 is no longer used
+    println!("{}", s5);
+}
