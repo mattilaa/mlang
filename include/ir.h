@@ -59,6 +59,8 @@ private:
     std::set<std::string> constantVariables;
     std::set<std::string> globalConstantVariables;
     std::set<std::string> movedVariables;
+    std::map<std::string, std::string> pointerBorrowTarget;
+    std::map<std::string, std::set<std::string>> activeBorrowers;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
     // Track element types for generic lists and maps
@@ -166,6 +168,9 @@ private:
     bool isMoveOnlyVariable(const std::string& name);
     bool isVariableMoved(const std::string& name) const;
     void clearMovedVariable(const std::string& name);
+    void clearPointerBorrow(const std::string& pointerVar);
+    void registerPointerBorrow(const std::string& pointerVar,
+                               ExpressionNode* expr, int line);
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
                                    const std::string& context);
     llvm::StructType* getStructType(const std::string& name);

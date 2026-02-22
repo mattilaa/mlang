@@ -1268,15 +1268,11 @@ TEST_F(MLATest, OwnershipAddressOfIsNonConsumingRead)
             return 0;
         }
 
-        fn take_post(p: Post) -> i32 {
-            return 0;
-        }
-
         fn main() -> i32 {
             let a: Post = Post { content: "hello" };
             let p: ptr<Post> = &a;
             let _ok: i32 = borrow_ptr(p);
-            return take_post(a);
+            return 0;
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 0);
@@ -1334,6 +1330,50 @@ TEST_F(MLATest, OwnershipMatchArmMoveMakesValueUnavailableAfterMatch)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("use of moved value"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "hello" };
+            let p: ptr<Post> = &a;
+            let moved: Post = a;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move"), std::string::npos);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipPointerReassignReleasesPreviousBorrow)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn take_post(p: Post) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            let b: Post = Post { content: "b" };
+            var p: ptr<Post> = &a;
+            p = &b;
+            return take_post(a);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
 // ============================================================================

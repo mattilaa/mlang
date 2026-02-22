@@ -271,6 +271,46 @@ void CodeGenerator::clearMovedVariable(const std::string& name)
     movedVariables.erase(name);
 }
 
+void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
+{
+    auto it = pointerBorrowTarget.find(pointerVar);
+    if(it == pointerBorrowTarget.end())
+        return;
+
+    auto ownerIt = activeBorrowers.find(it->second);
+    if(ownerIt != activeBorrowers.end())
+    {
+        ownerIt->second.erase(pointerVar);
+        if(ownerIt->second.empty())
+            activeBorrowers.erase(ownerIt);
+    }
+    pointerBorrowTarget.erase(it);
+}
+
+void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
+                                          ExpressionNode* expr, int line)
+{
+    clearPointerBorrow(pointerVar);
+
+    auto* unary = dynamic_cast<UnaryOpNode*>(expr);
+    if(!unary || unary->op != UnaryOpNode::OP_ADDR)
+        return;
+
+    auto* id = dynamic_cast<IdentifierNode*>(unary->operand);
+    if(!id)
+        return;
+
+    if(globalNamedValues.find(id->name) == globalNamedValues.end() &&
+       isVariableMoved(id->name))
+    {
+        reportError(line, "cannot borrow moved value: '" + id->name + "'");
+        return;
+    }
+
+    pointerBorrowTarget[pointerVar] = id->name;
+    activeBorrowers[id->name].insert(pointerVar);
+}
+
 void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                                               const std::string& context)
 {
@@ -293,6 +333,14 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
             if(!borrowed && isMoveOnlyVariable(id->name))
             {
+                auto borIt = activeBorrowers.find(id->name);
+                if(borIt != activeBorrowers.end() && !borIt->second.empty())
+                {
+                    std::string by = *borIt->second.begin();
+                    reportError(line, "cannot move '" + id->name +
+                                          "' while borrowed by '" + by + "'");
+                    return;
+                }
                 movedVariables.insert(id->name);
             }
             return;
@@ -2753,6 +2801,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     namedValues.clear();
     constantVariables.clear();
     movedVariables.clear();
+    pointerBorrowTarget.clear();
+    activeBorrowers.clear();
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
@@ -5031,6 +5081,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     consumeMoveFromExpression(node->expression, node->line,
                               "initializing '" + node->name + "'");
     clearMovedVariable(node->name);
+    clearPointerBorrow(node->name);
 
     if(!node->type)
     {
@@ -5168,6 +5219,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
+        registerPointerBorrow(node->name, node->expression, node->line);
 
         constantVariables.insert(node->name);
         return;
@@ -5268,6 +5320,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
+        registerPointerBorrow(node->name, node->expression, node->line);
         constantVariables.insert(node->name);
         return;
     }
@@ -5496,6 +5549,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
+    clearPointerBorrow(node->name);
     if(node->initExpr)
     {
         consumeMoveFromExpression(node->initExpr, node->line,
@@ -5808,6 +5862,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
+        registerPointerBorrow(node->name, node->initExpr, node->line);
 
         return;
     }
@@ -5936,6 +5991,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
+        registerPointerBorrow(node->name, node->initExpr, node->line);
         return;
     }
 
@@ -6205,6 +6261,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     llvm::Value* value = generateExpression(node->expression);
     if(!value)
         return;
+
+    auto borIt = activeBorrowers.find(node->name);
+    if(borIt != activeBorrowers.end() && !borIt->second.empty())
+    {
+        std::string by = *borIt->second.begin();
+        reportError(node->line, "cannot assign to '" + node->name +
+                                    "' while borrowed by '" + by + "'");
+        return;
+    }
     consumeMoveFromExpression(node->expression, node->line,
                               "assigning to '" + node->name + "'");
 
@@ -6265,6 +6330,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
     builder.CreateStore(value, variable);
     clearMovedVariable(node->name);
+    if(variableTypes.find(node->name) != variableTypes.end() &&
+       variableTypes[node->name] == TypeNode::TYPE_PTR)
+    {
+        registerPointerBorrow(node->name, node->expression, node->line);
+    }
+    else
+    {
+        clearPointerBorrow(node->name);
+    }
 }
 
 void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
@@ -8459,6 +8533,8 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     namedValues.clear();
     constantVariables.clear();
     movedVariables.clear();
+    pointerBorrowTarget.clear();
+    activeBorrowers.clear();
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
@@ -8736,6 +8812,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedTupleElementTypes = tupleElementTypes;
                     auto savedPointerElementTypes = pointerElementTypes;
                     auto savedMovedVariables = movedVariables;
+                    auto savedPointerBorrowTarget = pointerBorrowTarget;
+                    auto savedActiveBorrowers = activeBorrowers;
                     auto savedCleanupScopes = cleanupScopes;
 
                     // Generate the method body
@@ -8751,6 +8829,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     tupleElementTypes = savedTupleElementTypes;
                     pointerElementTypes = savedPointerElementTypes;
                     movedVariables = savedMovedVariables;
+                    pointerBorrowTarget = savedPointerBorrowTarget;
+                    activeBorrowers = savedActiveBorrowers;
                     cleanupScopes = savedCleanupScopes;
 
                     if(savedBlock)
@@ -9642,6 +9722,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedTupleElementTypes = tupleElementTypes;
         auto savedPointerElementTypes = pointerElementTypes;
         auto savedMovedVariables = movedVariables;
+        auto savedPointerBorrowTarget = pointerBorrowTarget;
+        auto savedActiveBorrowers = activeBorrowers;
         auto savedCleanupScopes = cleanupScopes;
 
         std::string binding =
@@ -9666,6 +9748,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         tupleElementTypes = savedTupleElementTypes;
         pointerElementTypes = savedPointerElementTypes;
         movedVariables = savedMovedVariables;
+        pointerBorrowTarget = savedPointerBorrowTarget;
+        activeBorrowers = savedActiveBorrowers;
         cleanupScopes = savedCleanupScopes;
 
         return armValue;
