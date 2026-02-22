@@ -1376,6 +1376,33 @@ TEST_F(MLATest, OwnershipPointerReassignReleasesPreviousBorrow)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipIfReturnBranchBorrowDoesNotLeak)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn take_post(p: Post) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            let b: Post = Post { content: "b" };
+            var p: ptr<Post> = &b;
+            let cond: i32 = 1;
+            if cond: {
+                p = &a;
+                return 0;
+            }
+            let moved: Post = a;
+            return take_post(moved);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================

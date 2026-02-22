@@ -273,18 +273,15 @@ void CodeGenerator::clearMovedVariable(const std::string& name)
 
 void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
 {
-    auto it = pointerBorrowTarget.find(pointerVar);
-    if(it == pointerBorrowTarget.end())
-        return;
-
-    auto ownerIt = activeBorrowers.find(it->second);
-    if(ownerIt != activeBorrowers.end())
+    for(auto it = activeBorrowers.begin(); it != activeBorrowers.end();)
     {
-        ownerIt->second.erase(pointerVar);
-        if(ownerIt->second.empty())
-            activeBorrowers.erase(ownerIt);
+        it->second.erase(pointerVar);
+        if(it->second.empty())
+            it = activeBorrowers.erase(it);
+        else
+            ++it;
     }
-    pointerBorrowTarget.erase(it);
+    pointerBorrowTarget.erase(pointerVar);
 }
 
 void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
@@ -3710,6 +3707,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
 void CodeGenerator::generateIfStatement(IfNode* node)
 {
     auto incomingMoved = movedVariables;
+    auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingActiveBorrowers = activeBorrowers;
 
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
@@ -3765,14 +3764,20 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     // Generate 'then' block
     builder.SetInsertPoint(thenBB);
     movedVariables = incomingMoved;
+    pointerBorrowTarget = incomingPointerBorrowTarget;
+    activeBorrowers = incomingActiveBorrowers;
     for(auto stmt : node->thenBranch->statements)
     {
         generateStatement(stmt);
     }
     auto thenMoved = movedVariables;
+    auto thenPointerBorrowTarget = pointerBorrowTarget;
+    auto thenActiveBorrowers = activeBorrowers;
+    llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
+    bool thenFallsThrough = thenEnd && !thenEnd->getTerminator();
 
     // Only add branch if block doesn't already have a terminator
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(thenFallsThrough)
     {
         builder.CreateBr(mergeBB);
     }
@@ -3781,6 +3786,8 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     elseBB->insertInto(function);
     builder.SetInsertPoint(elseBB);
     movedVariables = incomingMoved;
+    pointerBorrowTarget = incomingPointerBorrowTarget;
+    activeBorrowers = incomingActiveBorrowers;
 
     if(node->elseIfBranch)
     {
@@ -3806,9 +3813,13 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         }
     }
     auto elseMoved = movedVariables;
+    auto elsePointerBorrowTarget = pointerBorrowTarget;
+    auto elseActiveBorrowers = activeBorrowers;
+    llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
+    bool elseFallsThrough = elseEnd && !elseEnd->getTerminator();
 
     // Only add branch if block doesn't already have a terminator
-    if(!builder.GetInsertBlock()->getTerminator())
+    if(elseFallsThrough)
     {
         builder.CreateBr(mergeBB);
     }
@@ -3817,8 +3828,48 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     mergeBB->insertInto(function);
     builder.SetInsertPoint(mergeBB);
 
-    thenMoved.insert(elseMoved.begin(), elseMoved.end());
-    movedVariables = std::move(thenMoved);
+    if(thenFallsThrough || elseFallsThrough)
+    {
+        std::set<std::string> mergedMoved;
+        std::map<std::string, std::string> mergedPointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> mergedActiveBorrowers;
+
+        auto mergeOne = [&](const std::set<std::string>& movedState,
+                            const std::map<std::string, std::string>& ptrState,
+                            const std::map<std::string, std::set<std::string>>&
+                                borrowersState)
+        {
+            mergedMoved.insert(movedState.begin(), movedState.end());
+            for(const auto& kv : ptrState)
+            {
+                if(mergedPointerBorrowTarget.find(kv.first) ==
+                   mergedPointerBorrowTarget.end())
+                {
+                    mergedPointerBorrowTarget[kv.first] = kv.second;
+                }
+            }
+            for(const auto& kv : borrowersState)
+            {
+                auto& dst = mergedActiveBorrowers[kv.first];
+                dst.insert(kv.second.begin(), kv.second.end());
+            }
+        };
+
+        if(thenFallsThrough)
+            mergeOne(thenMoved, thenPointerBorrowTarget, thenActiveBorrowers);
+        if(elseFallsThrough)
+            mergeOne(elseMoved, elsePointerBorrowTarget, elseActiveBorrowers);
+
+        movedVariables = std::move(mergedMoved);
+        pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+        activeBorrowers = std::move(mergedActiveBorrowers);
+    }
+    else
+    {
+        movedVariables = incomingMoved;
+        pointerBorrowTarget = incomingPointerBorrowTarget;
+        activeBorrowers = incomingActiveBorrowers;
+    }
 }
 
 void CodeGenerator::generateForStatement(ForNode* node)
@@ -9567,6 +9618,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     if(!matchVal)
         return nullptr;
     auto incomingMoved = movedVariables;
+    auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingActiveBorrowers = activeBorrowers;
 
     bool hasOk = false;
     bool hasErr = false;
@@ -9711,7 +9764,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
     auto generateArmValue =
         [&](MatchArmNode* arm, int valueIndex, TypeNode* valueType,
-            std::set<std::string>* outMovedState)
+            std::set<std::string>* outMovedState,
+            std::map<std::string, std::string>* outPointerBorrowTarget,
+            std::map<std::string, std::set<std::string>>* outActiveBorrowers)
         -> llvm::Value*
     {
         auto savedNamedValues = namedValues;
@@ -9739,6 +9794,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             arm ? generateExpression(arm->expression) : nullptr;
         if(outMovedState)
             *outMovedState = movedVariables;
+        if(outPointerBorrowTarget)
+            *outPointerBorrowTarget = pointerBorrowTarget;
+        if(outActiveBorrowers)
+            *outActiveBorrowers = activeBorrowers;
 
         namedValues = savedNamedValues;
         variableTypes = savedVariableTypes;
@@ -9834,8 +9893,11 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         builder.SetInsertPoint(okBB);
         std::set<std::string> okMovedState;
+        std::map<std::string, std::string> okPointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> okActiveBorrowers;
         llvm::Value* okValue =
-            generateArmValue(okArm, okIndex, okType, &okMovedState);
+            generateArmValue(okArm, okIndex, okType, &okMovedState,
+                             &okPointerBorrowTarget, &okActiveBorrowers);
         if(!okValue)
             return nullptr;
         llvm::BasicBlock* okEnd = builder.GetInsertBlock();
@@ -9845,8 +9907,11 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         builder.SetInsertPoint(errBB);
         std::set<std::string> errMovedState;
+        std::map<std::string, std::string> errPointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> errActiveBorrowers;
         llvm::Value* errValue =
-            generateArmValue(errArm, errIndex, errType, &errMovedState);
+            generateArmValue(errArm, errIndex, errType, &errMovedState,
+                             &errPointerBorrowTarget, &errActiveBorrowers);
         if(!errValue)
             return nullptr;
         llvm::BasicBlock* errEnd = builder.GetInsertBlock();
@@ -9857,15 +9922,21 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         builder.SetInsertPoint(mergeBB);
         std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
         std::vector<std::set<std::string>> armMovedStates;
+        std::vector<std::map<std::string, std::string>> armPointerBorrowStates;
+        std::vector<std::map<std::string, std::set<std::string>>> armActiveBorrowerStates;
         if(okFallsThrough)
         {
             armValues.push_back({okValue, okEnd});
             armMovedStates.push_back(okMovedState);
+            armPointerBorrowStates.push_back(okPointerBorrowTarget);
+            armActiveBorrowerStates.push_back(okActiveBorrowers);
         }
         if(errFallsThrough)
         {
             armValues.push_back({errValue, errEnd});
             armMovedStates.push_back(errMovedState);
+            armPointerBorrowStates.push_back(errPointerBorrowTarget);
+            armActiveBorrowerStates.push_back(errActiveBorrowers);
         }
         if(armValues.empty())
         {
@@ -9956,9 +10027,32 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         for(const auto& pair : armValues)
             phi->addIncoming(pair.first, pair.second);
         std::set<std::string> mergedMoved;
+        std::map<std::string, std::string> mergedPointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> mergedActiveBorrowers;
         for(const auto& st : armMovedStates)
             mergedMoved.insert(st.begin(), st.end());
+        for(const auto& ptrState : armPointerBorrowStates)
+        {
+            for(const auto& kv : ptrState)
+            {
+                if(mergedPointerBorrowTarget.find(kv.first) ==
+                   mergedPointerBorrowTarget.end())
+                {
+                    mergedPointerBorrowTarget[kv.first] = kv.second;
+                }
+            }
+        }
+        for(const auto& borrowersState : armActiveBorrowerStates)
+        {
+            for(const auto& kv : borrowersState)
+            {
+                auto& dst = mergedActiveBorrowers[kv.first];
+                dst.insert(kv.second.begin(), kv.second.end());
+            }
+        }
         movedVariables = std::move(mergedMoved);
+        pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+        activeBorrowers = std::move(mergedActiveBorrowers);
         return phi;
     }
 
@@ -10034,8 +10128,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         builder.SetInsertPoint(someBB);
         std::set<std::string> someMovedState;
+        std::map<std::string, std::string> somePointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> someActiveBorrowers;
         llvm::Value* someValue = generateArmValue(someArm, valueIndex,
-                                                  valueType, &someMovedState);
+                                                  valueType, &someMovedState,
+                                                  &somePointerBorrowTarget,
+                                                  &someActiveBorrowers);
         if(!someValue)
             return nullptr;
         llvm::BasicBlock* someEnd = builder.GetInsertBlock();
@@ -10045,8 +10143,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         builder.SetInsertPoint(noneBB);
         std::set<std::string> noneMovedState;
+        std::map<std::string, std::string> nonePointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> noneActiveBorrowers;
         llvm::Value* noneValue = generateArmValue(noneArm, valueIndex,
-                                                  valueType, &noneMovedState);
+                                                  valueType, &noneMovedState,
+                                                  &nonePointerBorrowTarget,
+                                                  &noneActiveBorrowers);
         if(!noneValue)
             return nullptr;
         llvm::BasicBlock* noneEnd = builder.GetInsertBlock();
@@ -10057,15 +10159,21 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         builder.SetInsertPoint(mergeBB);
         std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
         std::vector<std::set<std::string>> armMovedStates;
+        std::vector<std::map<std::string, std::string>> armPointerBorrowStates;
+        std::vector<std::map<std::string, std::set<std::string>>> armActiveBorrowerStates;
         if(someFallsThrough)
         {
             armValues.push_back({someValue, someEnd});
             armMovedStates.push_back(someMovedState);
+            armPointerBorrowStates.push_back(somePointerBorrowTarget);
+            armActiveBorrowerStates.push_back(someActiveBorrowers);
         }
         if(noneFallsThrough)
         {
             armValues.push_back({noneValue, noneEnd});
             armMovedStates.push_back(noneMovedState);
+            armPointerBorrowStates.push_back(nonePointerBorrowTarget);
+            armActiveBorrowerStates.push_back(noneActiveBorrowers);
         }
         if(armValues.empty())
         {
@@ -10157,9 +10265,32 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         for(const auto& pair : armValues)
             phi->addIncoming(pair.first, pair.second);
         std::set<std::string> mergedMoved;
+        std::map<std::string, std::string> mergedPointerBorrowTarget;
+        std::map<std::string, std::set<std::string>> mergedActiveBorrowers;
         for(const auto& st : armMovedStates)
             mergedMoved.insert(st.begin(), st.end());
+        for(const auto& ptrState : armPointerBorrowStates)
+        {
+            for(const auto& kv : ptrState)
+            {
+                if(mergedPointerBorrowTarget.find(kv.first) ==
+                   mergedPointerBorrowTarget.end())
+                {
+                    mergedPointerBorrowTarget[kv.first] = kv.second;
+                }
+            }
+        }
+        for(const auto& borrowersState : armActiveBorrowerStates)
+        {
+            for(const auto& kv : borrowersState)
+            {
+                auto& dst = mergedActiveBorrowers[kv.first];
+                dst.insert(kv.second.begin(), kv.second.end());
+            }
+        }
         movedVariables = std::move(mergedMoved);
+        pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+        activeBorrowers = std::move(mergedActiveBorrowers);
         return phi;
     }
 
@@ -10242,6 +10373,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
     std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
     std::vector<std::set<std::string>> armMovedStates;
+    std::vector<std::map<std::string, std::string>> armPointerBorrowStates;
+    std::vector<std::map<std::string, std::set<std::string>>> armActiveBorrowerStates;
     std::vector<llvm::BasicBlock*> armBlocks;
 
     llvm::BasicBlock* nextBB = nullptr;
@@ -10264,6 +10397,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         builder.SetInsertPoint(armBB);
         movedVariables = incomingMoved;
+        pointerBorrowTarget = incomingPointerBorrowTarget;
+        activeBorrowers = incomingActiveBorrowers;
         llvm::Value* armVal = generateExpression(arm->expression);
         if(!armVal)
             return nullptr;
@@ -10271,11 +10406,15 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!armEnd->getTerminator())
         {
             armMovedStates.push_back(movedVariables);
+            armPointerBorrowStates.push_back(pointerBorrowTarget);
+            armActiveBorrowerStates.push_back(activeBorrowers);
             builder.CreateBr(mergeBB);
             armValues.push_back({armVal, builder.GetInsertBlock()});
         }
         armBlocks.push_back(armBB);
         movedVariables = incomingMoved;
+        pointerBorrowTarget = incomingPointerBorrowTarget;
+        activeBorrowers = incomingActiveBorrowers;
 
         builder.SetInsertPoint(fallBB);
         nextBB = fallBB;
@@ -10285,6 +10424,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     {
         builder.SetInsertPoint(wildcardBB);
         movedVariables = incomingMoved;
+        pointerBorrowTarget = incomingPointerBorrowTarget;
+        activeBorrowers = incomingActiveBorrowers;
         llvm::Value* armVal = generateExpression(wildcardArm->expression);
         if(!armVal)
             return nullptr;
@@ -10292,10 +10433,14 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         if(!wildcardEnd->getTerminator())
         {
             armMovedStates.push_back(movedVariables);
+            armPointerBorrowStates.push_back(pointerBorrowTarget);
+            armActiveBorrowerStates.push_back(activeBorrowers);
             builder.CreateBr(mergeBB);
             armValues.push_back({armVal, builder.GetInsertBlock()});
         }
         movedVariables = incomingMoved;
+        pointerBorrowTarget = incomingPointerBorrowTarget;
+        activeBorrowers = incomingActiveBorrowers;
     }
     else
     {
@@ -10431,9 +10576,32 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     for(const auto& pair : armValues)
         phi->addIncoming(pair.first, pair.second);
     std::set<std::string> mergedMoved;
+    std::map<std::string, std::string> mergedPointerBorrowTarget;
+    std::map<std::string, std::set<std::string>> mergedActiveBorrowers;
     for(const auto& st : armMovedStates)
         mergedMoved.insert(st.begin(), st.end());
+    for(const auto& ptrState : armPointerBorrowStates)
+    {
+        for(const auto& kv : ptrState)
+        {
+            if(mergedPointerBorrowTarget.find(kv.first) ==
+               mergedPointerBorrowTarget.end())
+            {
+                mergedPointerBorrowTarget[kv.first] = kv.second;
+            }
+        }
+    }
+    for(const auto& borrowersState : armActiveBorrowerStates)
+    {
+        for(const auto& kv : borrowersState)
+        {
+            auto& dst = mergedActiveBorrowers[kv.first];
+            dst.insert(kv.second.begin(), kv.second.end());
+        }
+    }
     movedVariables = std::move(mergedMoved);
+    pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+    activeBorrowers = std::move(mergedActiveBorrowers);
     return phi;
 }
 
