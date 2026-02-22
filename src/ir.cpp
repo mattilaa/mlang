@@ -6559,6 +6559,29 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     llvm::Value* structPtr;
     std::string structTypeName;
     std::string fieldName;
+    bool targetGlobalStorage = false;
+
+    std::function<bool(ExpressionNode*)> isGlobalBackedStructExpr =
+        [&](ExpressionNode* expr) -> bool
+    {
+        if(!expr)
+            return false;
+        if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+        {
+            auto it = namedValues.find(id->name);
+            return it != namedValues.end() &&
+                   llvm::isa<llvm::GlobalVariable>(it->second);
+        }
+        if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+        {
+            if(field->object)
+                return isGlobalBackedStructExpr(field->object);
+            auto it = namedValues.find(field->structName);
+            return it != namedValues.end() &&
+                   llvm::isa<llvm::GlobalVariable>(it->second);
+        }
+        return false;
+    };
 
     // Handle chained assignment (a.b.c = x) vs simple assignment (a.b = x)
     if(node->target)
@@ -6584,6 +6607,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 return;
             structPtr = ptr;
             structTypeName = typeName;
+            targetGlobalStorage = isGlobalBackedStructExpr(fieldAccess->object);
         }
         else
         {
@@ -6604,6 +6628,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 return;
             }
             structTypeName = typeIt->second;
+            targetGlobalStorage =
+                llvm::isa<llvm::GlobalVariable>(structPtr);
 
             // Handle self pointer
             if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
@@ -6637,6 +6663,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
             return;
         }
         structTypeName = typeIt->second;
+        targetGlobalStorage = llvm::isa<llvm::GlobalVariable>(structPtr);
 
         // Handle self pointer
         if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
@@ -6693,6 +6720,13 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
 
     // Convert value if needed
     llvm::Type* targetType = getLLVMTypeFromNode(fieldType);
+    if(targetType->isPointerTy() && targetGlobalStorage &&
+       !validateNoEscapingBorrow(
+           node->expression, node->line,
+           "store in global/static field '" + fieldName + "'"))
+    {
+        return;
+    }
     llvm::Type* valueType = value->getType();
 
     if(valueType != targetType)
