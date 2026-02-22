@@ -1,0 +1,236 @@
+mod std::strbuf;
+use std::strbuf::*;
+
+extern fn strcmp(a: string, b: string) -> int;
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+fn streq(a: string, b: string) -> i32 {
+    return strcmp(a, b) == 0 ? 1 : 0;
+}
+
+// ── 1. Immutable borrow — read through reference ─────────────────────────────
+
+#[test]
+fn test_immutable_borrow_read() -> i32 {
+    let s = String::from("hello");
+    let r = &s;
+    // r holds the same char* as s — reading it gives the same string
+    if streq(r, "hello") != 1: { return 1; }
+    return 0;
+}
+
+// ── 2. Multiple simultaneous immutable borrows ────────────────────────────────
+
+#[test]
+fn test_multiple_immutable_borrows() -> i32 {
+    let s = String::from("world");
+    let r1 = &s;
+    let r2 = &s;
+    if streq(r1, "world") != 1: { return 1; }
+    if streq(r2, "world") != 1: { return 1; }
+    if streq(r1, r2) != 1: { return 1; }
+    return 0;
+}
+
+// ── 3. Borrow passed to a function ────────────────────────────────────────────
+
+fn identity(x: string) -> string {
+    return x;
+}
+
+#[test]
+fn test_borrow_passed_to_function() -> i32 {
+    let s = String::from("pass");
+    let r = &s;
+    let got = identity(r);
+    if streq(got, "pass") != 1: { return 1; }
+    return 0;
+}
+
+// ── 4. NLL — borrow expires at last use, mutation is then allowed ─────────────
+
+#[test]
+fn test_nll_borrow_expires() -> i32 {
+    var s = String::from("hello");
+    let r = &s;
+    // last use of r — borrow ends here
+    if streq(r, "hello") != 1: { return 1; }
+    // r is dead; mutation of s is now valid
+    s.push_str(" world");
+    if streq(s, "hello world") != 1: { return 1; }
+    return 0;
+}
+
+// ── 5. clone() produces an independent copy ────────────────────────────────────
+
+#[test]
+fn test_clone_independent() -> i32 {
+    var original = String::from("base");
+    var copy = original.clone();
+    // mutate both independently
+    original.push_str("_A");
+    copy.push_str("_B");
+    if streq(original, "base_A") != 1: { return 1; }
+    if streq(copy,     "base_B") != 1: { return 1; }
+    return 0;
+}
+
+// ── 6. let-bound clone as immutable string ────────────────────────────────────
+
+#[test]
+fn test_clone_let_read() -> i32 {
+    let s = String::from("source");
+    let snap = s.clone();
+    if streq(snap, "source") != 1: { return 1; }
+    return 0;
+}
+
+// ── 7. clone() then borrow the clone ─────────────────────────────────────────
+
+#[test]
+fn test_clone_then_borrow() -> i32 {
+    var s = String::from("original");
+    let c = s.clone();
+    let rc = &c;
+    // borrow of clone is independent of s
+    s.push_str("_mutated");
+    if streq(rc,        "original") != 1: { return 1; }
+    if streq(s, "original_mutated") != 1: { return 1; }
+    return 0;
+}
+
+// ── 8. &mut borrow — take exclusive mutable reference ────────────────────────
+
+fn append_via_ref(r: string, suffix: string) -> string {
+    return concat(r, suffix);
+}
+
+#[test]
+fn test_mut_borrow_basic() -> i32 {
+    var s = String::from("hello");
+    let r = &mut s;
+    // use the &mut ref to compute a new value (via concat, read-only view)
+    let extended = append_via_ref(r, " world");
+    if streq(extended, "hello world") != 1: { return 1; }
+    return 0;
+}
+
+// ── 9. &mut borrow expires — then shared borrows are valid ───────────────────
+
+#[test]
+fn test_mut_borrow_nll_then_shared() -> i32 {
+    var s = String::from("data");
+    let m = &mut s;
+    // last use of m (NLL — borrow expires here)
+    if streq(m, "data") != 1: { return 1; }
+    // m is dead; shared borrows are now valid
+    let r1 = &s;
+    let r2 = &s;
+    if streq(r1, "data") != 1: { return 1; }
+    if streq(r2, "data") != 1: { return 1; }
+    return 0;
+}
+
+// ── 10. push_str after shared borrow expires (NLL) ───────────────────────────
+
+#[test]
+fn test_push_str_after_borrow_expires() -> i32 {
+    var s = String::from("foo");
+    let r = &s;
+    let snap = r;  // last use of r
+    s.push_str("bar");
+    if streq(s,    "foobar") != 1: { return 1; }
+    if streq(snap, "foo")    != 1: { return 1; }
+    return 0;
+}
+
+// ── 11. string len() method ──────────────────────────────────────────────────
+
+#[test]
+fn test_string_len_method() -> i32 {
+    let s = String::from("hello");
+    if s.len() != 5: { return 1; }
+    var t = String::from("");
+    if t.len() != 0: { return 1; }
+    t.push_str("abc");
+    if t.len() != 3: { return 1; }
+    return 0;
+}
+
+// ── 12. string is_empty() method ────────────────────────────────────────────
+
+#[test]
+fn test_string_is_empty_method() -> i32 {
+    let empty = String::new();
+    if empty.is_empty() != 1: { return 1; }
+    let nonempty = String::from("x");
+    if nonempty.is_empty() != 0: { return 1; }
+    return 0;
+}
+
+// ── 13. Multiple sequential push_str calls ──────────────────────────────────
+
+#[test]
+fn test_sequential_push_str() -> i32 {
+    var s = String::new();
+    s.push_str("a");
+    s.push_str("b");
+    s.push_str("c");
+    if streq(s, "abc") != 1: { return 1; }
+    if s.len() != 3: { return 1; }
+    return 0;
+}
+
+// ── 14. Borrow of function parameter (string is Copy) ───────────────────────
+
+fn borrow_param(src: string) -> string {
+    let r = &src;
+    return r;
+}
+
+#[test]
+fn test_borrow_of_parameter() -> i32 {
+    let result = borrow_param("test");
+    if streq(result, "test") != 1: { return 1; }
+    return 0;
+}
+
+// ── 15. Re-use of string value across multiple calls ────────────────────────
+//    (verifies string Copy semantics — no spurious move errors)
+
+#[test]
+fn test_string_copy_semantics() -> i32 {
+    let s = String::from("reuse");
+    // s can be passed to multiple functions without being "moved"
+    if s.len() != 5: { return 1; }
+    if s.is_empty() != 0: { return 1; }
+    if streq(s, "reuse") != 1: { return 1; }
+    return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The following patterns must NOT compile (left in block comments to document
+// the expected borrow-checker rejections):
+//
+//  ✗ Mutate while shared borrow is active:
+//      var s = String::from("x");
+//      let r = &s;
+//      s.push_str("y");   // error: cannot mutate 's' while it is borrowed
+//      println!("{}", r);
+//
+//  ✗ Take &mut borrow of let-bound (immutable) variable:
+//      let s = String::from("x");
+//      let r = &mut s;    // error: cannot take mutable reference of immutable variable
+//
+//  ✗ Take &mut borrow while shared borrow is active:
+//      var s = String::from("x");
+//      let r = &s;
+//      let m = &mut s;    // error: cannot borrow 's' as mutable because it is already borrowed
+//      println!("{} {}", r, m);
+//
+//  ✗ Assign to owner while &mut borrow is live:
+//      var s = String::from("x");
+//      let m = &mut s;
+//      s = String::from("y"); // error: cannot assign while mutably borrowed by 'm'
+// ─────────────────────────────────────────────────────────────────────────────

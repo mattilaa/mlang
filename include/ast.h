@@ -259,6 +259,7 @@ public:
     {
         OP_NEG,
         OP_ADDR,
+        OP_ADDR_MUT, // &mut x — exclusive mutable borrow
         OP_DEREF
     };
 

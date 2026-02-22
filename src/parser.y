@@ -187,7 +187,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
-%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -739,6 +739,8 @@ unary_expression
         { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
     | AMP unary_expression
         { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
+    | AMP_MUT unary_expression
+        { $$ = create_unary_op(AMP_MUT, $2); if($$) $$->line = yylineno; }
     | MULTIPLY unary_expression
         { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
     | postfix_expression TRY_QUESTION

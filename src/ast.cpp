@@ -266,6 +266,9 @@ ASTNode* create_unary_op(int op, ASTNode* operand)
     case AMP:
         opType = UnaryOpNode::OP_ADDR;
         break;
+    case AMP_MUT:
+        opType = UnaryOpNode::OP_ADDR_MUT;
+        break;
     case MULTIPLY:
         opType = UnaryOpNode::OP_DEREF;
         break;

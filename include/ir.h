@@ -61,6 +61,10 @@ private:
     std::set<std::string> movedVariables;
     std::map<std::string, std::string> pointerBorrowTarget;
     std::map<std::string, std::set<std::string>> activeBorrowers;
+    // Tracks the single exclusive mutable borrower per owner variable.
+    // Invariant: activeMutBorrower[owner] is set iff a &mut borrow is live;
+    // activeBorrowers[owner] must be empty while this is set, and vice-versa.
+    std::map<std::string, std::string> activeMutBorrower;
     std::map<std::string, int> variableScopeDepth;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
@@ -185,7 +189,9 @@ private:
     void clearMovedVariable(const std::string& name);
     void clearPointerBorrow(const std::string& pointerVar);
     void registerPointerBorrow(const std::string& pointerVar,
-                               ExpressionNode* expr, int line);
+                               ExpressionNode* expr, int line,
+                               bool isMutable = false);
+    bool isMutBorrower(const std::string& ptrVar) const;
     int currentScopeDepth() const;
     void recordVariableScopeDepth(const std::string& varName);
     void recordScopedPointerVariable(const std::string& pointerVar);

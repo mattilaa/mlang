@@ -1,0 +1,206 @@
+mod std::strbuf;
+use std::strbuf::*;
+
+// ── Borrow Patterns in MLang ─────────────────────────────────────────────────
+//
+// This file demonstrates the full borrowing model available in MLang, a
+// Rust-inspired language where:
+//   * let    = immutable binding
+//   * var    = mutable binding  (Rust's `let mut`)
+//   * &s     = shared (immutable) borrow
+//   * &mut s = exclusive (mutable) borrow
+
+// ── 1. Shared (immutable) borrows ────────────────────────────────────────────
+//
+// Multiple shared borrows of the same value can be active at the same time.
+
+fn demo_shared_borrows() -> void {
+    let greeting = String::from("Hello, mlang!");
+    let r1 = &greeting;
+    let r2 = &greeting;
+    // Both r1 and r2 are live simultaneously -- perfectly valid.
+    println!("{}", r1);
+    println!("{}", r2);
+}
+
+// ── 2. NLL -- borrow expires at last use ──────────────────────────────────────
+//
+// Non-Lexical Lifetimes: a borrow's scope ends at its LAST USE, not at the
+// closing brace of the enclosing block.  Once a borrow is dead you may mutate
+// the original value again.
+
+fn demo_nll() -> void {
+    var message = String::from("Hello");
+
+    let r = &message;
+    // Last use of r -- borrow expires here.
+    println!("{}", r);
+
+    // r is dead; mutation is now valid.
+    message.push_str(", world!");
+    println!("{}", message);
+}
+
+// ── 3. Mutable borrow (&mut) ─────────────────────────────────────────────────
+//
+// An exclusive mutable borrow prevents any other use of the owner while it is
+// live.  The owner must be declared with `var`.
+
+fn demo_mut_borrow() -> void {
+    var s = String::from("Greetings");
+    let m = &mut s;
+    // Use the mutable reference (read-only view via concat).
+    let extended = concat(m, "!");
+    println!("{}", extended);
+
+    // m's last use was above; shared borrows are valid again.
+    let r1 = &s;
+    let r2 = &s;
+    println!("{}", r1);
+    println!("{}", r2);
+}
+
+// ── 4. clone() -- independent copy ────────────────────────────────────────────
+//
+// clone() produces a deep copy; mutations of either copy do not affect the other.
+
+fn demo_clone() -> void {
+    var original = String::from("base");
+    var copy     = original.clone();
+
+    original.push_str("_A");
+    copy.push_str("_B");
+
+    println!("{}", original);   // base_A
+    println!("{}", copy);       // base_B
+}
+
+// ── 5. clone() then borrow ────────────────────────────────────────────────────
+//
+// You can borrow a clone independently of its source.  Mutating the source
+// does not invalidate the clone's borrow.
+
+fn demo_clone_then_borrow() -> void {
+    var s  = String::from("source");
+    let c  = s.clone();
+    let rc = &c;         // borrow of the clone, not of s
+
+    s.push_str("_mutated");   // fine -- c is independent
+
+    println!("{}", rc);   // source
+    println!("{}", s);    // source_mutated
+}
+
+// ── 6. len() and is_empty() ───────────────────────────────────────────────────
+
+fn demo_string_methods() -> void {
+    var buf = String::new();
+    println!("{}", buf.is_empty());   // 1
+
+    buf.push_str("hello");
+    println!("{}", buf.len());        // 5
+    println!("{}", buf.is_empty());   // 0
+
+    buf.push_str(", world");
+    println!("{}", buf.len());        // 12
+}
+
+// ── 7. Sequential push_str ───────────────────────────────────────────────────
+
+fn demo_sequential_push_str() -> void {
+    var result = String::new();
+    result.push_str("one");
+    result.push_str(", ");
+    result.push_str("two");
+    result.push_str(", ");
+    result.push_str("three");
+    println!("{}", result);   // one, two, three
+}
+
+// ── 8. Borrow of function parameter ─────────────────────────────────────────
+//
+// String parameters are Copy (char* pointer copy), so taking a reference to
+// one and returning it is safe -- no dangling pointer is created.
+
+fn identity_via_borrow(src: string) -> string {
+    let r = &src;
+    return r;
+}
+
+fn demo_borrow_of_param() -> void {
+    let s   = String::from("parameter");
+    let got = identity_via_borrow(s);
+    println!("{}", got);   // parameter
+}
+
+// ── 9. String Copy semantics ─────────────────────────────────────────────────
+//
+// Passing a `string` to a function copies the char* pointer -- it does NOT move
+// ownership.  The same binding can be used multiple times.
+
+fn get_len(s: string) -> i64 {
+    return s.len();
+}
+
+fn demo_copy_semantics() -> void {
+    let s = String::from("reusable");
+    // s can be passed to multiple call sites without being "consumed".
+    println!("{}", get_len(s));   // 8
+    println!("{}", get_len(s));   // 8
+    println!("{}", s);            // reusable
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Patterns that the borrow checker REJECTS (shown as comments):
+//
+//   * Mutate while shared borrow is live:
+//       var s = String::from("x");
+//       let r = &s;
+//       s.push_str("y");    // error: cannot mutate 's' while borrowed
+//       println!("{}", r);
+//
+//   * &mut of let-bound variable:
+//       let s = String::from("x");
+//       let m = &mut s;    // error: cannot borrow immutable variable as mutable
+//
+//   * Shared borrow while &mut is live:
+//       var s = String::from("x");
+//       let m = &mut s;
+//       let r = &s;        // error: cannot borrow as immutable -- already mut-borrowed
+//
+//   * Assign through owner while &mut borrow is live:
+//       var s = String::from("x");
+//       let m = &mut s;
+//       s = String::from("y");   // error: cannot assign while mutably borrowed
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn main() -> i32 {
+    println!("=== 1. Shared borrows ===");
+    demo_shared_borrows();
+
+    println!("=== 2. NLL borrow expiry ===");
+    demo_nll();
+
+    println!("=== 3. Mutable borrow ===");
+    demo_mut_borrow();
+
+    println!("=== 4. clone() ===");
+    demo_clone();
+
+    println!("=== 5. clone() then borrow ===");
+    demo_clone_then_borrow();
+
+    println!("=== 6. len() / is_empty() ===");
+    demo_string_methods();
+
+    println!("=== 7. Sequential push_str ===");
+    demo_sequential_push_str();
+
+    println!("=== 8. Borrow of parameter ===");
+    demo_borrow_of_param();
+
+    println!("=== 9. String Copy semantics ===");
+    demo_copy_semantics();
+
+    return 0;
+}

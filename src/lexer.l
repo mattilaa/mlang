@@ -207,6 +207,7 @@ static int is_try_question_context()
 "*"             { return MULTIPLY; }
 "/"             { return DIVIDE; }
 "%"             { return MODULO; }
+"&mut"          { return AMP_MUT; }
 "&"             { return AMP; }
 .               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
 %%

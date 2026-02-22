@@ -429,7 +429,23 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
         else
             ++it;
     }
+    // Also clear any exclusive mutable borrow this variable held
+    for(auto it = activeMutBorrower.begin(); it != activeMutBorrower.end();)
+    {
+        if(it->second == pointerVar)
+            it = activeMutBorrower.erase(it);
+        else
+            ++it;
+    }
     pointerBorrowTarget.erase(pointerVar);
+}
+
+bool CodeGenerator::isMutBorrower(const std::string& ptrVar) const
+{
+    for(const auto& kv : activeMutBorrower)
+        if(kv.second == ptrVar)
+            return true;
+    return false;
 }
 
 int CodeGenerator::currentScopeDepth() const
@@ -471,7 +487,8 @@ void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
 }
 
 void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
-                                          ExpressionNode* expr, int line)
+                                          ExpressionNode* expr, int line,
+                                          bool isMutable)
 {
     clearPointerBorrow(pointerVar);
 
@@ -495,6 +512,53 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             reportError(line, "cannot borrow '" + ownerName +
                                   "' into longer-lived pointer '" +
                                   pointerVar + "'");
+            return false;
+        }
+
+        if(isMutable)
+        {
+            // &mut: reject if any shared borrowers exist
+            auto sharedIt = activeBorrowers.find(ownerName);
+            if(sharedIt != activeBorrowers.end() &&
+               !sharedIt->second.empty())
+            {
+                reportError(line,
+                            "cannot borrow '" + ownerName +
+                                "' as mutable because it is already borrowed");
+                return false;
+            }
+            // &mut: reject if another &mut borrow exists
+            auto mutIt = activeMutBorrower.find(ownerName);
+            if(mutIt != activeMutBorrower.end() &&
+               mutIt->second != pointerVar)
+            {
+                reportError(line,
+                            "cannot borrow '" + ownerName +
+                                "' as mutable more than once at a time");
+                return false;
+            }
+            // Owner must be var (mutable)
+            if(constantVariables.count(ownerName))
+            {
+                reportError(line,
+                            "cannot borrow immutable variable '" + ownerName +
+                                "' as mutable");
+                return false;
+            }
+            pointerBorrowTarget[pointerVar] = ownerName;
+            activeMutBorrower[ownerName] = pointerVar;
+            return true;
+        }
+
+        // Shared borrow: reject if a &mut borrow is active
+        auto mutIt = activeMutBorrower.find(ownerName);
+        if(mutIt != activeMutBorrower.end())
+        {
+            reportError(line,
+                        "cannot borrow '" + ownerName +
+                            "' as immutable because it is also borrowed as "
+                            "mutable by '" +
+                            mutIt->second + "'");
             return false;
         }
 
@@ -525,6 +589,16 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         {
             if(idExpr->name != pointerVar)
             {
+                // For Copy types (strings), assigning a borrow variable is
+                // just copying the char* value — no alias tracking needed.
+                auto typeIt = variableTypes.find(idExpr->name);
+                if(typeIt != variableTypes.end() &&
+                   (typeIt->second == TypeNode::TYPE_STRING ||
+                    typeIt->second == TypeNode::TYPE_STR8 ||
+                    typeIt->second == TypeNode::TYPE_STR16))
+                {
+                    return; // plain char* copy, no borrow alias
+                }
                 reportError(line, "cannot alias exclusive borrow from '" +
                                       idExpr->name + "' into '" + pointerVar +
                                       "'");
@@ -536,14 +610,17 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     }
 
     auto* unary = dynamic_cast<UnaryOpNode*>(expr);
-    if(!unary || unary->op != UnaryOpNode::OP_ADDR)
+    if(!unary || (unary->op != UnaryOpNode::OP_ADDR &&
+                  unary->op != UnaryOpNode::OP_ADDR_MUT))
         return;
 
     std::string ownerName = resolveBorrowOwnerFromLValue(unary->operand);
     if(ownerName.empty())
         return;
 
-    bool enforceExclusive = true;
+    // Shared borrows allow multiple concurrent borrowers; only typed exclusive
+    // pointers (e.g. *T owning pointers) enforce a single active borrow.
+    bool enforceExclusive = false;
     auto pit = pointerElementTypes.find(pointerVar);
     TypeNode* ptrElemType = pit != pointerElementTypes.end() ? pit->second : nullptr;
     if(ptrElemType)
@@ -710,6 +787,16 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
 
     if(namedValues.find(ownerName) != namedValues.end())
     {
+        // For Copy types (strings), a borrow variable is just a char* value.
+        // Returning it does not create a dangling reference.
+        auto typeIt = variableTypes.find(ownerName);
+        if(typeIt != variableTypes.end() &&
+           (typeIt->second == TypeNode::TYPE_STRING ||
+            typeIt->second == TypeNode::TYPE_STR8 ||
+            typeIt->second == TypeNode::TYPE_STR16))
+        {
+            return true;
+        }
         reportError(line, "cannot " + action +
                               " pointer that borrows local value: '" +
                               ownerName + "'");
@@ -3214,6 +3301,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     movedVariables.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
+    activeMutBorrower.clear();
     variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
@@ -3684,6 +3772,22 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             return nullptr;
         return ptr;
     }
+    case UnaryOpNode::OP_ADDR_MUT:
+    {
+        // &mut x — validate the owner is mutable (var, not let)
+        std::string ownerName = resolveBorrowOwnerFromLValue(node->operand);
+        if(!ownerName.empty() && constantVariables.count(ownerName))
+        {
+            reportError(node->line,
+                        "cannot take mutable reference of immutable variable '" +
+                            ownerName + "'");
+            return nullptr;
+        }
+        llvm::Value* ptr = getLValuePointer(node->operand, node->line);
+        if(!ptr)
+            return nullptr;
+        return ptr;
+    }
     case UnaryOpNode::OP_DEREF:
     {
         if(!validatePointerDereference(node->operand, node->line))
@@ -3716,6 +3820,7 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingActiveBorrowers = activeBorrowers;
+    auto incomingActiveMutBorrower = activeMutBorrower;
 
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
@@ -3770,12 +3875,14 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
+    activeMutBorrower = incomingActiveMutBorrower;
     llvm::Value* thenVal = generateExpression(node->trueExpr);
     if(!thenVal)
         return nullptr;
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
     auto thenActiveBorrowers = activeBorrowers;
+    auto thenActiveMutBorrower = activeMutBorrower;
     if(!builder.GetInsertBlock()->getTerminator())
         builder.CreateBr(mergeBB);
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
@@ -3786,12 +3893,14 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
+    activeMutBorrower = incomingActiveMutBorrower;
     llvm::Value* elseVal = generateExpression(node->falseExpr);
     if(!elseVal)
         return nullptr;
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
     auto elseActiveBorrowers = activeBorrowers;
+    auto elseActiveMutBorrower = activeMutBorrower;
     if(!builder.GetInsertBlock()->getTerminator())
         builder.CreateBr(mergeBB);
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
@@ -3980,6 +4089,13 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
         dst.insert(kv.second.begin(), kv.second.end());
     }
     activeBorrowers = std::move(mergedActiveBorrowers);
+
+    // Merge &mut borrowers: keep only those active in both branches
+    std::map<std::string, std::string> mergedActiveMutBorrower;
+    for(const auto& kv : thenActiveMutBorrower)
+        if(elseActiveMutBorrower.count(kv.first))
+            mergedActiveMutBorrower[kv.first] = kv.second;
+    activeMutBorrower = std::move(mergedActiveMutBorrower);
 
     return phi;
 }
@@ -4200,6 +4316,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingActiveBorrowers = activeBorrowers;
+    auto incomingActiveMutBorrower = activeMutBorrower;
 
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
@@ -4257,6 +4374,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
+    activeMutBorrower = incomingActiveMutBorrower;
     enterCleanupScope();
     for(auto stmt : node->thenBranch->statements)
     {
@@ -4266,6 +4384,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
     auto thenActiveBorrowers = activeBorrowers;
+    auto thenActiveMutBorrower = activeMutBorrower;
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
     bool thenFallsThrough = thenEnd && !thenEnd->getTerminator();
 
@@ -4281,6 +4400,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
+    activeMutBorrower = incomingActiveMutBorrower;
 
     if(node->elseIfBranch)
     {
@@ -4310,6 +4430,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
     auto elseActiveBorrowers = activeBorrowers;
+    auto elseActiveMutBorrower = activeMutBorrower;
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
     bool elseFallsThrough = elseEnd && !elseEnd->getTerminator();
 
@@ -4358,12 +4479,19 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         movedVariables = std::move(mergedMoved);
         pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
         activeBorrowers = std::move(mergedActiveBorrowers);
+        // Merge &mut: conservative — keep only those live in both branches
+        std::map<std::string, std::string> mergedMutBorrower;
+        for(const auto& kv : thenActiveMutBorrower)
+            if(elseActiveMutBorrower.count(kv.first))
+                mergedMutBorrower[kv.first] = kv.second;
+        activeMutBorrower = std::move(mergedMutBorrower);
     }
     else
     {
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
+        activeMutBorrower = incomingActiveMutBorrower;
     }
 }
 
@@ -5668,7 +5796,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     // normal string value when passed to println! / strcmp / etc.
     if(auto* unary = dynamic_cast<UnaryOpNode*>(node->expression))
     {
-        if(unary->op == UnaryOpNode::OP_ADDR)
+        if(unary->op == UnaryOpNode::OP_ADDR ||
+           unary->op == UnaryOpNode::OP_ADDR_MUT)
         {
             if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
             {
@@ -5728,6 +5857,27 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                    call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
             }
+            if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
+            {
+                if(mc->methodName == "clone")
+                    return TypeNode::TYPE_STRING;
+            }
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+            {
+                if(unary->op == UnaryOpNode::OP_ADDR ||
+                   unary->op == UnaryOpNode::OP_ADDR_MUT)
+                {
+                    if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
+                    {
+                        auto tit = variableTypes.find(id->name);
+                        if(tit != variableTypes.end() &&
+                           (tit->second == TypeNode::TYPE_STRING ||
+                            tit->second == TypeNode::TYPE_STR8 ||
+                            tit->second == TypeNode::TYPE_STR16))
+                            return tit->second;
+                    }
+                }
+            }
 
             llvm::Type* t = initValue->getType();
             if(t->isIntegerTy(1))
@@ -5781,6 +5931,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
         }
+        if(auto* mc2 = dynamic_cast<MethodCallNode*>(node->expression))
+        {
+            if(mc2->methodName == "clone")
+                variableTypes[node->name] = TypeNode::TYPE_STRING;
+        }
 
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
         {
@@ -5831,7 +5986,13 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
-        registerPointerBorrow(node->name, node->expression, node->line);
+        {
+            auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
+            bool _is_mut_borrow = _borrow_unary &&
+                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            registerPointerBorrow(node->name, node->expression, node->line,
+                                  _is_mut_borrow);
+        }
 
         constantVariables.insert(node->name);
         return;
@@ -5932,7 +6093,13 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
-        registerPointerBorrow(node->name, node->expression, node->line);
+        {
+            auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
+            bool _is_mut_borrow = _borrow_unary &&
+                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            registerPointerBorrow(node->name, node->expression, node->line,
+                                  _is_mut_borrow);
+        }
         constantVariables.insert(node->name);
         return;
     }
@@ -6388,6 +6555,27 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                    call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
             }
+            if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
+            {
+                if(mc->methodName == "clone")
+                    return TypeNode::TYPE_STRING;
+            }
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+            {
+                if(unary->op == UnaryOpNode::OP_ADDR ||
+                   unary->op == UnaryOpNode::OP_ADDR_MUT)
+                {
+                    if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
+                    {
+                        auto tit = variableTypes.find(id->name);
+                        if(tit != variableTypes.end() &&
+                           (tit->second == TypeNode::TYPE_STRING ||
+                            tit->second == TypeNode::TYPE_STR8 ||
+                            tit->second == TypeNode::TYPE_STR16))
+                            return tit->second;
+                    }
+                }
+            }
 
             llvm::Type* t = initValue->getType();
             if(t->isIntegerTy(1))
@@ -6441,6 +6629,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
         }
+        if(auto* mc2 = dynamic_cast<MethodCallNode*>(node->initExpr))
+        {
+            if(mc2->methodName == "clone")
+                variableTypes[node->name] = TypeNode::TYPE_STRING;
+        }
 
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
         {
@@ -6491,7 +6684,13 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
-        registerPointerBorrow(node->name, node->initExpr, node->line);
+        {
+            auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
+            bool _is_mut_borrow = _borrow_unary &&
+                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            registerPointerBorrow(node->name, node->initExpr, node->line,
+                                  _is_mut_borrow);
+        }
 
         return;
     }
@@ -6620,7 +6819,13 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
-        registerPointerBorrow(node->name, node->initExpr, node->line);
+        {
+            auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
+            bool _is_mut_borrow = _borrow_unary &&
+                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            registerPointerBorrow(node->name, node->initExpr, node->line,
+                                  _is_mut_borrow);
+        }
         return;
     }
 
@@ -6899,6 +7104,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
                                     "' while borrowed by '" + by + "'");
         return;
     }
+    auto mutBorIt = activeMutBorrower.find(node->name);
+    if(mutBorIt != activeMutBorrower.end())
+    {
+        reportError(node->line,
+                    "cannot assign to '" + node->name +
+                        "' directly while mutably borrowed by '" +
+                        mutBorIt->second + "'");
+        return;
+    }
     consumeMoveFromExpression(node->expression, node->line,
                               "assigning to '" + node->name + "'");
 
@@ -6968,7 +7182,13 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         {
             return;
         }
-        registerPointerBorrow(node->name, node->expression, node->line);
+        {
+            auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
+            bool _is_mut_borrow = _borrow_unary &&
+                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            registerPointerBorrow(node->name, node->expression, node->line,
+                                  _is_mut_borrow);
+        }
     }
     else
     {
@@ -9596,6 +9816,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     movedVariables.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
+    activeMutBorrower.clear();
     variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
@@ -10016,6 +10237,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                         "' while it is borrowed");
                         return nullptr;
                     }
+                    auto mutBorrowIt = activeMutBorrower.find(objId->name);
+                    if(mutBorrowIt != activeMutBorrower.end())
+                    {
+                        reportError(node->line,
+                                    "cannot mutate '" + objId->name +
+                                        "' directly while mutably borrowed by '" +
+                                        mutBorrowIt->second + "'");
+                        return nullptr;
+                    }
                     llvm::Value* allocaPtr = namedValues[objId->name];
                     if(!allocaPtr)
                     {
@@ -10045,6 +10275,99 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         concatFn, {currentStr, suffix}, "push_str.result");
                     builder.CreateStore(newStr, allocaPtr);
                     return llvm::Constant::getNullValue(ptrType);
+                }
+                // --- clone() ---
+                if(node->methodName == "clone")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line, "clone() takes no arguments");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    llvm::Value* currentStr = builder.CreateLoad(
+                        ptrType, allocaPtr, objId->name + ".load");
+                    llvm::FunctionType* cloneFnType =
+                        llvm::FunctionType::get(ptrType, {ptrType}, false);
+                    llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
+                        "__mlang_std_strbuf_clone", cloneFnType);
+                    return builder.CreateCall(cloneFn, {currentStr},
+                                             objId->name + ".clone");
+                }
+                // --- len() ---
+                if(node->methodName == "len")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line, "len() takes no arguments");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    llvm::Value* currentStr = builder.CreateLoad(
+                        ptrType, allocaPtr, objId->name + ".load");
+                    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+                    llvm::FunctionType* lenFnType =
+                        llvm::FunctionType::get(i64Type, {ptrType}, false);
+                    llvm::FunctionCallee lenFn = module->getOrInsertFunction(
+                        "__mlang_std_strbuf_len", lenFnType);
+                    return builder.CreateCall(lenFn, {currentStr},
+                                             objId->name + ".len");
+                }
+                // --- is_empty() ---
+                if(node->methodName == "is_empty")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "is_empty() takes no arguments");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    llvm::Value* currentStr = builder.CreateLoad(
+                        ptrType, allocaPtr, objId->name + ".load");
+                    llvm::Type* intType = llvm::Type::getInt32Ty(context);
+                    llvm::FunctionType* emptyFnType =
+                        llvm::FunctionType::get(intType, {ptrType}, false);
+                    llvm::FunctionCallee emptyFn = module->getOrInsertFunction(
+                        "__mlang_std_strbuf_is_empty", emptyFnType);
+                    return builder.CreateCall(emptyFn, {currentStr},
+                                             objId->name + ".is_empty");
                 }
                 reportError(node->line,
                             "string has no method named '" +
@@ -10205,6 +10528,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedMovedVariables = movedVariables;
                     auto savedPointerBorrowTarget = pointerBorrowTarget;
                     auto savedActiveBorrowers = activeBorrowers;
+                    auto savedActiveMutBorrower = activeMutBorrower;
                     auto savedVariableScopeDepth = variableScopeDepth;
                     auto savedCleanupScopes = cleanupScopes;
                     auto savedPointerBorrowScopes = pointerBorrowScopes;
@@ -10226,6 +10550,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     movedVariables = savedMovedVariables;
                     pointerBorrowTarget = savedPointerBorrowTarget;
                     activeBorrowers = savedActiveBorrowers;
+                    activeMutBorrower = savedActiveMutBorrower;
                     variableScopeDepth = savedVariableScopeDepth;
                     cleanupScopes = savedCleanupScopes;
                     pointerBorrowScopes = savedPointerBorrowScopes;
@@ -10985,6 +11310,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingActiveBorrowers = activeBorrowers;
+    auto incomingActiveMutBorrower = activeMutBorrower;
 
     bool hasOk = false;
     bool hasErr = false;
@@ -11144,6 +11470,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedMovedVariables = movedVariables;
         auto savedPointerBorrowTarget = pointerBorrowTarget;
         auto savedActiveBorrowers = activeBorrowers;
+        auto savedActiveMutBorrower = activeMutBorrower;
         auto savedCleanupScopes = cleanupScopes;
 
         std::string binding =
@@ -11174,6 +11501,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         movedVariables = savedMovedVariables;
         pointerBorrowTarget = savedPointerBorrowTarget;
         activeBorrowers = savedActiveBorrowers;
+        activeMutBorrower = savedActiveMutBorrower;
         cleanupScopes = savedCleanupScopes;
 
         return armValue;
@@ -11764,6 +12092,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
+        activeMutBorrower = incomingActiveMutBorrower;
         llvm::Value* armVal = generateExpression(arm->expression);
         if(!armVal)
             return nullptr;
@@ -11780,6 +12109,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
+        activeMutBorrower = incomingActiveMutBorrower;
 
         builder.SetInsertPoint(fallBB);
         nextBB = fallBB;
@@ -11791,6 +12121,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
+        activeMutBorrower = incomingActiveMutBorrower;
         llvm::Value* armVal = generateExpression(wildcardArm->expression);
         if(!armVal)
             return nullptr;
@@ -11806,6 +12137,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         movedVariables = incomingMoved;
         pointerBorrowTarget = incomingPointerBorrowTarget;
         activeBorrowers = incomingActiveBorrowers;
+        activeMutBorrower = incomingActiveMutBorrower;
     }
     else
     {
