@@ -274,24 +274,160 @@ void CodeGenerator::clearMovedVariable(const std::string& name)
 void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
                                               const std::string& context)
 {
-    auto* id = dynamic_cast<IdentifierNode*>(expr);
-    if(!id)
-        return;
-
-    if(globalNamedValues.find(id->name) != globalNamedValues.end())
-        return;
-
-    if(!isMoveOnlyVariable(id->name))
-        return;
-
-    if(isVariableMoved(id->name))
+    std::function<void(ExpressionNode*, bool)> consume =
+        [&](ExpressionNode* e, bool borrowed) -> void
     {
-        reportError(line, "value '" + id->name + "' was already moved before " +
-                              context);
-        return;
-    }
+        if(!e)
+            return;
 
-    movedVariables.insert(id->name);
+        if(auto* id = dynamic_cast<IdentifierNode*>(e))
+        {
+            if(globalNamedValues.find(id->name) != globalNamedValues.end())
+                return;
+
+            if(isVariableMoved(id->name))
+            {
+                reportError(line, "use of moved value: '" + id->name + "'");
+                return;
+            }
+
+            if(!borrowed && isMoveOnlyVariable(id->name))
+            {
+                movedVariables.insert(id->name);
+            }
+            return;
+        }
+
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(e))
+        {
+            if(unary->op == UnaryOpNode::OP_ADDR)
+            {
+                consume(unary->operand, true);
+            }
+            else
+            {
+                consume(unary->operand, borrowed);
+            }
+            return;
+        }
+
+        if(auto* binary = dynamic_cast<BinaryOpNode*>(e))
+        {
+            consume(binary->left, false);
+            consume(binary->right, false);
+            return;
+        }
+
+        if(auto* call = dynamic_cast<FunctionCallNode*>(e))
+        {
+            (void)call;
+            return;
+        }
+
+        if(auto* methodCall = dynamic_cast<MethodCallNode*>(e))
+        {
+            (void)methodCall;
+            return;
+        }
+
+        if(auto* field = dynamic_cast<FieldAccessNode*>(e))
+        {
+            if(field->object)
+            {
+                consume(field->object, true);
+            }
+            else if(!field->structName.empty())
+            {
+                if(globalNamedValues.find(field->structName) ==
+                       globalNamedValues.end() &&
+                   isVariableMoved(field->structName))
+                {
+                    reportError(line, "use of moved value: '" +
+                                          field->structName + "'");
+                }
+            }
+            return;
+        }
+
+        if(auto* index = dynamic_cast<IndexExpressionNode*>(e))
+        {
+            consume(index->base, true);
+            consume(index->index, false);
+            return;
+        }
+
+        if(auto* castExpr = dynamic_cast<CastExpressionNode*>(e))
+        {
+            consume(castExpr->expression, false);
+            return;
+        }
+
+        if(auto* tryExpr = dynamic_cast<TryExpressionNode*>(e))
+        {
+            consume(tryExpr->expression, false);
+            return;
+        }
+
+        if(auto* ternary = dynamic_cast<TernaryNode*>(e))
+        {
+            consume(ternary->condition, false);
+            auto incomingMoved = movedVariables;
+
+            movedVariables = incomingMoved;
+            consume(ternary->trueExpr, false);
+            auto thenMoved = movedVariables;
+
+            movedVariables = incomingMoved;
+            consume(ternary->falseExpr, false);
+            auto elseMoved = movedVariables;
+
+            thenMoved.insert(elseMoved.begin(), elseMoved.end());
+            movedVariables = std::move(thenMoved);
+            return;
+        }
+
+        if(auto* listLit = dynamic_cast<ListLiteralNode*>(e))
+        {
+            if(listLit->elements)
+            {
+                for(auto* elem : listLit->elements->elements)
+                    consume(elem, false);
+            }
+            return;
+        }
+
+        if(auto* mapLit = dynamic_cast<MapLiteralNode*>(e))
+        {
+            if(mapLit->entries)
+            {
+                for(auto* entry : mapLit->entries->entries)
+                {
+                    consume(entry->key, false);
+                    consume(entry->value, false);
+                }
+            }
+            return;
+        }
+
+        if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(e))
+        {
+            if(tupleLit->elements)
+            {
+                for(auto* elem : tupleLit->elements->elements)
+                    consume(elem, false);
+            }
+            return;
+        }
+
+        if(auto* structLit = dynamic_cast<StructLiteralNode*>(e))
+        {
+            for(const auto& init : structLit->fields)
+                consume(init.second, false);
+            return;
+        }
+    };
+
+    consume(expr, false);
 }
 
 llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
@@ -3523,6 +3659,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
 
 void CodeGenerator::generateIfStatement(IfNode* node)
 {
+    auto incomingMoved = movedVariables;
+
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
         return;
@@ -3576,10 +3714,12 @@ void CodeGenerator::generateIfStatement(IfNode* node)
 
     // Generate 'then' block
     builder.SetInsertPoint(thenBB);
+    movedVariables = incomingMoved;
     for(auto stmt : node->thenBranch->statements)
     {
         generateStatement(stmt);
     }
+    auto thenMoved = movedVariables;
 
     // Only add branch if block doesn't already have a terminator
     if(!builder.GetInsertBlock()->getTerminator())
@@ -3590,6 +3730,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     // Generate 'else' block
     elseBB->insertInto(function);
     builder.SetInsertPoint(elseBB);
+    movedVariables = incomingMoved;
 
     if(node->elseIfBranch)
     {
@@ -3614,6 +3755,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
             generateStatement(stmt);
         }
     }
+    auto elseMoved = movedVariables;
 
     // Only add branch if block doesn't already have a terminator
     if(!builder.GetInsertBlock()->getTerminator())
@@ -3624,6 +3766,9 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     // Generate merge block
     mergeBB->insertInto(function);
     builder.SetInsertPoint(mergeBB);
+
+    thenMoved.insert(elseMoved.begin(), elseMoved.end());
+    movedVariables = std::move(thenMoved);
 }
 
 void CodeGenerator::generateForStatement(ForNode* node)
@@ -6418,6 +6563,13 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
     // Case 1: Simple identifier (e.g., "myStruct")
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
+        if(globalNamedValues.find(id->name) == globalNamedValues.end() &&
+           isVariableMoved(id->name))
+        {
+            reportError(line, "use of moved value: '" + id->name + "'");
+            return {nullptr, ""};
+        }
+
         llvm::Value* ptr = namedValues[id->name];
         if(!ptr)
         {
@@ -8426,6 +8578,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     auto* objId = dynamic_cast<IdentifierNode*>(node->object);
     if(objId)
     {
+        if(globalNamedValues.find(objId->name) == globalNamedValues.end() &&
+           isVariableMoved(objId->name))
+        {
+            reportError(node->line,
+                        "use of moved value: '" + objId->name + "'");
+            return nullptr;
+        }
+
         // Simple case: identifier.method()
         auto typeIt = structVariableTypes.find(objId->name);
         if(typeIt == structVariableTypes.end())
