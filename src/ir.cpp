@@ -7499,10 +7499,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
-            const std::string& calleeName) -> bool
+            const std::string& calleeName,
+            const std::string& implicitWholeOwner) -> bool
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
+        if(!implicitWholeOwner.empty())
+            wholeOwnersInCall.insert(implicitWholeOwner);
         auto describeBorrowPath = [&](ExpressionNode* expr,
                                       std::string& ownerOut,
                                       std::string& pathOut,
@@ -7812,7 +7815,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
 
                     if(!validateTemporaryBorrowArguments(node->arguments,
-                                                         node->name))
+                                                         node->name, ""))
                     {
                         return nullptr;
                     }
@@ -7885,7 +7888,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return nullptr;
     }
 
-    if(!validateTemporaryBorrowArguments(node->arguments, node->name))
+    if(!validateTemporaryBorrowArguments(node->arguments, node->name, ""))
         return nullptr;
 
     std::vector<llvm::Value*> argVals;
@@ -9216,10 +9219,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
-            const std::string& calleeName) -> bool
+            const std::string& calleeName,
+            const std::string& implicitWholeOwner) -> bool
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
+        if(!implicitWholeOwner.empty())
+            wholeOwnersInCall.insert(implicitWholeOwner);
         auto describeBorrowPath = [&](ExpressionNode* expr,
                                       std::string& ownerOut,
                                       std::string& pathOut,
@@ -9551,11 +9557,25 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         }
     }
 
+    std::string receiverOwner = resolveBorrowOwnerFromLValue(node->object);
+    if(!receiverOwner.empty())
+    {
+        auto activeIt = activeBorrowers.find(receiverOwner);
+        if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+        {
+            std::string by = *activeIt->second.begin();
+            reportError(node->line, "cannot call method on '" + receiverOwner +
+                                        "' while borrowed by '" + by + "'");
+            return nullptr;
+        }
+    }
+
     // Build arguments - first is pointer to struct
     std::vector<llvm::Value*> args;
     args.push_back(objPtr);
 
-    if(!validateTemporaryBorrowArguments(node->arguments, node->methodName))
+    if(!validateTemporaryBorrowArguments(node->arguments, node->methodName,
+                                         receiverOwner))
         return nullptr;
 
     // Add other arguments

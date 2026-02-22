@@ -1796,6 +1796,94 @@ TEST_F(MLATest, OwnershipCanBorrowNestedDisjointFieldsInSingleCall)
     EXPECT_EQ(compileAndRunExitCode(code), 5);
 }
 
+TEST_F(MLATest, OwnershipCannotCallMethodWhileObjectBorrowed)
+{
+    std::string code = R"(
+        trait Summary {
+            fn summarize(&self) -> string;
+        }
+
+        struct SocialPost {
+            var username: string;
+            var content: string;
+            var reply: bool;
+            var repost: bool;
+        };
+
+        impl Summary for SocialPost {
+            fn summarize(&self) -> string {
+                return format!("{}: {}", self.username, self.content);
+            }
+        }
+
+        fn main() -> i32 {
+            let p: SocialPost = SocialPost {
+                username: "alice",
+                content: "hello",
+                reply: false,
+                repost: false
+            };
+            let q: ptr<SocialPost> = &p;
+            println!("{}", p.summarize());
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotBorrowMethodReceiverAndFieldArgSameObject)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        impl Pair {
+            fn add_with(&self, x: ptr<i32>) -> i32 {
+                return self.left + *x;
+            }
+        }
+
+        fn main() -> i32 {
+            let p: Pair = Pair { left: 2, right: 3 };
+            return p.add_with(&p.right);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("overlapping parts"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        impl Pair {
+            fn add_with(&self, x: ptr<i32>) -> i32 {
+                return self.left + *x;
+            }
+        }
+
+        fn main() -> i32 {
+            let a: Pair = Pair { left: 2, right: 3 };
+            let b: Pair = Pair { left: 10, right: 20 };
+            return a.add_with(&b.right);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 22);
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
 {
     std::string code = R"(
