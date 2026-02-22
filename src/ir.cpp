@@ -284,6 +284,22 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
     pointerBorrowTarget.erase(pointerVar);
 }
 
+void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
+{
+    if(pointerBorrowScopes.empty())
+        return;
+
+    PointerBorrowScopeEntry entry;
+    entry.pointerVar = pointerVar;
+    auto it = pointerBorrowTarget.find(pointerVar);
+    if(it != pointerBorrowTarget.end())
+    {
+        entry.hadPreviousBorrow = true;
+        entry.previousOwner = it->second;
+    }
+    pointerBorrowScopes.back().push_back(std::move(entry));
+}
+
 void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
                                           ExpressionNode* expr, int line)
 {
@@ -2878,6 +2894,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
+    pointerBorrowScopes.clear();
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
@@ -3844,10 +3861,12 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
+    enterCleanupScope();
     for(auto stmt : node->thenBranch->statements)
     {
         generateStatement(stmt);
     }
+    exitCleanupScope();
     auto thenMoved = movedVariables;
     auto thenPointerBorrowTarget = pointerBorrowTarget;
     auto thenActiveBorrowers = activeBorrowers;
@@ -3885,10 +3904,12 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     }
     else if(node->elseBranch)
     {
+        enterCleanupScope();
         for(auto stmt : node->elseBranch->statements)
         {
             generateStatement(stmt);
         }
+        exitCleanupScope();
     }
     auto elseMoved = movedVariables;
     auto elsePointerBorrowTarget = pointerBorrowTarget;
@@ -5348,6 +5369,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
+        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->expression, node->line);
 
         constantVariables.insert(node->name);
@@ -5449,6 +5471,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
+        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->expression, node->line);
         constantVariables.insert(node->name);
         return;
@@ -5991,6 +6014,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             pointerElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I8));
         }
+        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->initExpr, node->line);
 
         return;
@@ -6120,6 +6144,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_PTR;
+        recordScopedPointerVariable(node->name);
         registerPointerBorrow(node->name, node->initExpr, node->line);
         return;
     }
@@ -7096,15 +7121,28 @@ void CodeGenerator::reportError(int line, const std::string& message)
 void CodeGenerator::enterCleanupScope()
 {
     cleanupScopes.emplace_back();
+    pointerBorrowScopes.emplace_back();
 }
 
 void CodeGenerator::exitCleanupScope()
 {
-    if(cleanupScopes.empty())
+    if(cleanupScopes.empty() || pointerBorrowScopes.empty())
         return;
 
     auto actions = std::move(cleanupScopes.back());
     cleanupScopes.pop_back();
+    auto pointerEntries = std::move(pointerBorrowScopes.back());
+    pointerBorrowScopes.pop_back();
+
+    for(auto it = pointerEntries.rbegin(); it != pointerEntries.rend(); ++it)
+    {
+        clearPointerBorrow(it->pointerVar);
+        if(it->hadPreviousBorrow && !it->previousOwner.empty())
+        {
+            pointerBorrowTarget[it->pointerVar] = it->previousOwner;
+            activeBorrowers[it->previousOwner].insert(it->pointerVar);
+        }
+    }
 
     if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
         return;
@@ -8673,6 +8711,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
+    pointerBorrowScopes.clear();
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
 

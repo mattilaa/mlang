@@ -1464,6 +1464,51 @@ TEST_F(MLATest, OwnershipCannotAliasBorrowFromPointerVariable)
     EXPECT_NE(out.find("cannot alias exclusive borrow"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipBorrowEndsWhenPointerGoesOutOfScope)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            if 1: {
+                let p: ptr<Post> = &a;
+            }
+            let moved: Post = a;
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, OwnershipOuterPointerBorrowRestoredAfterShadowedPointerScope)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            let b: Post = Post { content: "b" };
+            let p: ptr<Post> = &a;
+            if 1: {
+                let p: ptr<Post> = &b;
+            }
+            let moved: Post = a;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move"), std::string::npos);
+    EXPECT_NE(out.find("while borrowed"), std::string::npos);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================

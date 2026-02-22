@@ -131,6 +131,13 @@ private:
         llvm::Function* dropFunction = nullptr;
     };
     std::vector<std::vector<ScopeCleanup>> cleanupScopes;
+    struct PointerBorrowScopeEntry
+    {
+        std::string pointerVar;
+        bool hadPreviousBorrow = false;
+        std::string previousOwner;
+    };
+    std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
 
     // === GENERICS SUPPORT ===
     // Store generic struct templates: name -> StructDefNode*
@@ -171,6 +178,7 @@ private:
     void clearPointerBorrow(const std::string& pointerVar);
     void registerPointerBorrow(const std::string& pointerVar,
                                ExpressionNode* expr, int line);
+    void recordScopedPointerVariable(const std::string& pointerVar);
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
