@@ -1624,6 +1624,37 @@ TEST_F(MLATest, OwnershipCanStoreGlobalBorrowInGlobalPointer)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipCannotBorrowInnerLocalIntoOuterPointer)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            var p: ptr<i32>;
+            if 1: {
+                let x: i32 = 7;
+                p = &x;
+            }
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("longer-lived pointer"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanBorrowIntoPointerWhenLifetimesMatch)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 7;
+            var p: ptr<i32> = &x;
+            return *p;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
 {
     std::string code = R"(

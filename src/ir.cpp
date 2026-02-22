@@ -284,6 +284,28 @@ void CodeGenerator::clearPointerBorrow(const std::string& pointerVar)
     pointerBorrowTarget.erase(pointerVar);
 }
 
+int CodeGenerator::currentScopeDepth() const
+{
+    return static_cast<int>(cleanupScopes.size());
+}
+
+void CodeGenerator::recordVariableScopeDepth(const std::string& varName)
+{
+    if(variableScopeDepthScopes.empty())
+        return;
+
+    VariableScopeDepthEntry entry;
+    entry.varName = varName;
+    auto it = variableScopeDepth.find(varName);
+    if(it != variableScopeDepth.end())
+    {
+        entry.hadPreviousDepth = true;
+        entry.previousDepth = it->second;
+    }
+    variableScopeDepth[varName] = currentScopeDepth();
+    variableScopeDepthScopes.back().push_back(std::move(entry));
+}
+
 void CodeGenerator::recordScopedPointerVariable(const std::string& pointerVar)
 {
     if(pointerBorrowScopes.empty())
@@ -313,6 +335,18 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         {
             reportError(line,
                         "cannot borrow moved value: '" + ownerName + "'");
+            return false;
+        }
+
+        auto pointerDepthIt = variableScopeDepth.find(pointerVar);
+        auto ownerDepthIt = variableScopeDepth.find(ownerName);
+        if(pointerDepthIt != variableScopeDepth.end() &&
+           ownerDepthIt != variableScopeDepth.end() &&
+           ownerDepthIt->second > pointerDepthIt->second)
+        {
+            reportError(line, "cannot borrow '" + ownerName +
+                                  "' into longer-lived pointer '" +
+                                  pointerVar + "'");
             return false;
         }
 
@@ -3032,10 +3066,12 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     movedVariables.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
+    variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
+    variableScopeDepthScopes.clear();
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
@@ -3048,6 +3084,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
         builder.CreateStore(&arg, alloca);
         namedValues[std::string(arg.getName())] = alloca;
+        recordVariableScopeDepth(std::string(arg.getName()));
 
         // Track parameter types
         if(paramIdx < node->parameters->parameters.size())
@@ -5385,6 +5422,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                               "initializing '" + node->name + "'");
     clearMovedVariable(node->name);
     clearPointerBorrow(node->name);
+    recordVariableScopeDepth(node->name);
 
     if(!node->type)
     {
@@ -6026,6 +6064,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         }
         return;
     }
+
+    recordVariableScopeDepth(node->name);
 
     if(!node->type)
     {
@@ -7320,17 +7360,21 @@ void CodeGenerator::enterCleanupScope()
 {
     cleanupScopes.emplace_back();
     pointerBorrowScopes.emplace_back();
+    variableScopeDepthScopes.emplace_back();
 }
 
 void CodeGenerator::exitCleanupScope()
 {
-    if(cleanupScopes.empty() || pointerBorrowScopes.empty())
+    if(cleanupScopes.empty() || pointerBorrowScopes.empty() ||
+       variableScopeDepthScopes.empty())
         return;
 
     auto actions = std::move(cleanupScopes.back());
     cleanupScopes.pop_back();
     auto pointerEntries = std::move(pointerBorrowScopes.back());
     pointerBorrowScopes.pop_back();
+    auto depthEntries = std::move(variableScopeDepthScopes.back());
+    variableScopeDepthScopes.pop_back();
 
     for(auto it = pointerEntries.rbegin(); it != pointerEntries.rend(); ++it)
     {
@@ -7340,6 +7384,13 @@ void CodeGenerator::exitCleanupScope()
             pointerBorrowTarget[it->pointerVar] = it->previousOwner;
             activeBorrowers[it->previousOwner].insert(it->pointerVar);
         }
+    }
+    for(auto it = depthEntries.rbegin(); it != depthEntries.rend(); ++it)
+    {
+        if(it->hadPreviousDepth)
+            variableScopeDepth[it->varName] = it->previousDepth;
+        else
+            variableScopeDepth.erase(it->varName);
     }
 
     if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
@@ -8906,10 +8957,12 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     movedVariables.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
+    variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
+    variableScopeDepthScopes.clear();
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
@@ -8922,6 +8975,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
         builder.CreateStore(&arg, alloca);
         namedValues[std::string(arg.getName())] = alloca;
+        recordVariableScopeDepth(std::string(arg.getName()));
 
         if(argIdx == 0 && !method->isStatic)
         {

@@ -61,6 +61,7 @@ private:
     std::set<std::string> movedVariables;
     std::map<std::string, std::string> pointerBorrowTarget;
     std::map<std::string, std::set<std::string>> activeBorrowers;
+    std::map<std::string, int> variableScopeDepth;
     std::map<std::string, TypeNode::TypeKind> variableTypes;
     std::map<std::string, TypeNode::TypeKind> globalVariableTypes;
     // Track element types for generic lists and maps
@@ -138,6 +139,13 @@ private:
         std::string previousOwner;
     };
     std::vector<std::vector<PointerBorrowScopeEntry>> pointerBorrowScopes;
+    struct VariableScopeDepthEntry
+    {
+        std::string varName;
+        bool hadPreviousDepth = false;
+        int previousDepth = 0;
+    };
+    std::vector<std::vector<VariableScopeDepthEntry>> variableScopeDepthScopes;
 
     // === GENERICS SUPPORT ===
     // Store generic struct templates: name -> StructDefNode*
@@ -178,6 +186,8 @@ private:
     void clearPointerBorrow(const std::string& pointerVar);
     void registerPointerBorrow(const std::string& pointerVar,
                                ExpressionNode* expr, int line);
+    int currentScopeDepth() const;
+    void recordVariableScopeDepth(const std::string& varName);
     void recordScopedPointerVariable(const std::string& pointerVar);
     std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
     std::string getBorrowedOwnerForPointerExpression(
