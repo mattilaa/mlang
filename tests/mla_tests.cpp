@@ -1655,6 +1655,53 @@ TEST_F(MLATest, OwnershipCanBorrowIntoPointerWhenLifetimesMatch)
     EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
+TEST_F(MLATest, OwnershipCannotBorrowSameOwnerTwiceInSingleCall)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn inspect(a: ptr<Post>, b: ptr<Post>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            return inspect(&p, &p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("multiple times in call"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn inspect(a: ptr<Post>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            let q: ptr<Post> = &p;
+            return inspect(&p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("while already borrowed"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
 {
     std::string code = R"(

@@ -7497,6 +7497,51 @@ void CodeGenerator::registerStructCleanupIfNeeded(
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    auto validateTemporaryBorrowArguments =
+        [&](const std::vector<ExpressionNode*>& args,
+            const std::string& calleeName) -> bool
+    {
+        std::set<std::string> borrowedInCall;
+        for(auto* arg : args)
+        {
+            auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+            if(!unary || unary->op != UnaryOpNode::OP_ADDR)
+                continue;
+
+            std::string owner = resolveBorrowOwnerFromLValue(unary->operand);
+            if(owner.empty())
+                continue;
+
+            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
+               isVariableMoved(owner))
+            {
+                reportError(node->line,
+                            "cannot borrow moved value: '" + owner + "'");
+                return false;
+            }
+
+            auto activeIt = activeBorrowers.find(owner);
+            if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+            {
+                std::string by = *activeIt->second.begin();
+                reportError(node->line, "cannot borrow '" + owner +
+                                            "' while already borrowed by '" +
+                                            by + "'");
+                return false;
+            }
+
+            if(!borrowedInCall.insert(owner).second)
+            {
+                reportError(node->line,
+                            "cannot borrow '" + owner +
+                                "' multiple times in call to '" +
+                                calleeName + "'");
+                return false;
+            }
+        }
+        return true;
+    };
+
     if(node->name == "String::new")
     {
         if(!node->arguments.empty())
@@ -7678,6 +7723,12 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                         return nullptr;
                     }
 
+                    if(!validateTemporaryBorrowArguments(node->arguments,
+                                                         node->name))
+                    {
+                        return nullptr;
+                    }
+
                     std::vector<llvm::Value*> callArgs;
                     callArgs.reserve(node->arguments.size());
                     size_t idx = 0;
@@ -7745,6 +7796,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         reportError(node->line, "unknown function: '" + node->name + "'");
         return nullptr;
     }
+
+    if(!validateTemporaryBorrowArguments(node->arguments, node->name))
+        return nullptr;
 
     std::vector<llvm::Value*> argVals;
     argVals.reserve(node->arguments.size());
@@ -9072,6 +9126,51 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 {
+    auto validateTemporaryBorrowArguments =
+        [&](const std::vector<ExpressionNode*>& args,
+            const std::string& calleeName) -> bool
+    {
+        std::set<std::string> borrowedInCall;
+        for(auto* arg : args)
+        {
+            auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+            if(!unary || unary->op != UnaryOpNode::OP_ADDR)
+                continue;
+
+            std::string owner = resolveBorrowOwnerFromLValue(unary->operand);
+            if(owner.empty())
+                continue;
+
+            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
+               isVariableMoved(owner))
+            {
+                reportError(node->line,
+                            "cannot borrow moved value: '" + owner + "'");
+                return false;
+            }
+
+            auto activeIt = activeBorrowers.find(owner);
+            if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+            {
+                std::string by = *activeIt->second.begin();
+                reportError(node->line, "cannot borrow '" + owner +
+                                            "' while already borrowed by '" +
+                                            by + "'");
+                return false;
+            }
+
+            if(!borrowedInCall.insert(owner).second)
+            {
+                reportError(node->line,
+                            "cannot borrow '" + owner +
+                                "' multiple times in call to '" +
+                                calleeName + "'");
+                return false;
+            }
+        }
+        return true;
+    };
+
     // Get the object struct pointer and type
     // This supports both simple (p.method()) and chained (a.b.method()) access
     llvm::Value* objPtr;
@@ -9240,7 +9339,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedMovedVariables = movedVariables;
                     auto savedPointerBorrowTarget = pointerBorrowTarget;
                     auto savedActiveBorrowers = activeBorrowers;
+                    auto savedVariableScopeDepth = variableScopeDepth;
                     auto savedCleanupScopes = cleanupScopes;
+                    auto savedPointerBorrowScopes = pointerBorrowScopes;
+                    auto savedVariableScopeDepthScopes =
+                        variableScopeDepthScopes;
 
                     // Generate the method body
                     generateMethodDefinition(definingStruct, methodDef);
@@ -9257,7 +9360,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     movedVariables = savedMovedVariables;
                     pointerBorrowTarget = savedPointerBorrowTarget;
                     activeBorrowers = savedActiveBorrowers;
+                    variableScopeDepth = savedVariableScopeDepth;
                     cleanupScopes = savedCleanupScopes;
+                    pointerBorrowScopes = savedPointerBorrowScopes;
+                    variableScopeDepthScopes =
+                        savedVariableScopeDepthScopes;
 
                     if(savedBlock)
                     {
@@ -9271,6 +9378,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     // Build arguments - first is pointer to struct
     std::vector<llvm::Value*> args;
     args.push_back(objPtr);
+
+    if(!validateTemporaryBorrowArguments(node->arguments, node->methodName))
+        return nullptr;
 
     // Add other arguments
     for(auto arg : node->arguments)
