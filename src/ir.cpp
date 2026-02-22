@@ -9754,8 +9754,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             generateArmValue(okArm, okIndex, okType, &okMovedState);
         if(!okValue)
             return nullptr;
-        builder.CreateBr(mergeBB);
         llvm::BasicBlock* okEnd = builder.GetInsertBlock();
+        bool okFallsThrough = (okEnd->getTerminator() == nullptr);
+        if(okFallsThrough)
+            builder.CreateBr(mergeBB);
 
         builder.SetInsertPoint(errBB);
         std::set<std::string> errMovedState;
@@ -9763,12 +9765,31 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             generateArmValue(errArm, errIndex, errType, &errMovedState);
         if(!errValue)
             return nullptr;
-        builder.CreateBr(mergeBB);
         llvm::BasicBlock* errEnd = builder.GetInsertBlock();
+        bool errFallsThrough = (errEnd->getTerminator() == nullptr);
+        if(errFallsThrough)
+            builder.CreateBr(mergeBB);
 
         builder.SetInsertPoint(mergeBB);
-        llvm::Type* okValueType = okValue->getType();
-        llvm::Type* errValueType = errValue->getType();
+        std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
+        std::vector<std::set<std::string>> armMovedStates;
+        if(okFallsThrough)
+        {
+            armValues.push_back({okValue, okEnd});
+            armMovedStates.push_back(okMovedState);
+        }
+        if(errFallsThrough)
+        {
+            armValues.push_back({errValue, errEnd});
+            armMovedStates.push_back(errMovedState);
+        }
+        if(armValues.empty())
+        {
+            reportError(node->line,
+                        "match expression has no continuing arm");
+            return nullptr;
+        }
+        llvm::Type* okValueType = armValues[0].first->getType();
 
         auto castInBlock = [&](llvm::Value* val, llvm::Type* target,
                                llvm::BasicBlock* block) -> llvm::Value*
@@ -9796,8 +9817,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             return val;
         };
 
-        if(okValueType != errValueType)
+        if(armValues.size() == 2 &&
+           armValues[0].first->getType() != armValues[1].first->getType())
         {
+            llvm::Type* errValueType = armValues[1].first->getType();
             llvm::Type* commonType = nullptr;
             if(okValueType->isIntegerTy() && errValueType->isIntegerTy())
             {
@@ -9830,8 +9853,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 return nullptr;
             }
 
-            okValue = castInBlock(okValue, commonType, okEnd);
-            errValue = castInBlock(errValue, commonType, errEnd);
+            armValues[0].first =
+                castInBlock(armValues[0].first, commonType, armValues[0].second);
+            armValues[1].first =
+                castInBlock(armValues[1].first, commonType, armValues[1].second);
             okValueType = commonType;
         }
 
@@ -9842,11 +9867,14 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
 
         llvm::PHINode* phi =
-            builder.CreatePHI(okValueType, 2, "match.result");
-        phi->addIncoming(okValue, okEnd);
-        phi->addIncoming(errValue, errEnd);
-        okMovedState.insert(errMovedState.begin(), errMovedState.end());
-        movedVariables = std::move(okMovedState);
+            builder.CreatePHI(okValueType, (unsigned)armValues.size(),
+                              "match.result");
+        for(const auto& pair : armValues)
+            phi->addIncoming(pair.first, pair.second);
+        std::set<std::string> mergedMoved;
+        for(const auto& st : armMovedStates)
+            mergedMoved.insert(st.begin(), st.end());
+        movedVariables = std::move(mergedMoved);
         return phi;
     }
 
@@ -9926,8 +9954,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                                                   valueType, &someMovedState);
         if(!someValue)
             return nullptr;
-        builder.CreateBr(mergeBB);
         llvm::BasicBlock* someEnd = builder.GetInsertBlock();
+        bool someFallsThrough = (someEnd->getTerminator() == nullptr);
+        if(someFallsThrough)
+            builder.CreateBr(mergeBB);
 
         builder.SetInsertPoint(noneBB);
         std::set<std::string> noneMovedState;
@@ -9935,12 +9965,31 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                                                   valueType, &noneMovedState);
         if(!noneValue)
             return nullptr;
-        builder.CreateBr(mergeBB);
         llvm::BasicBlock* noneEnd = builder.GetInsertBlock();
+        bool noneFallsThrough = (noneEnd->getTerminator() == nullptr);
+        if(noneFallsThrough)
+            builder.CreateBr(mergeBB);
 
         builder.SetInsertPoint(mergeBB);
-        llvm::Type* someValueType = someValue->getType();
-        llvm::Type* noneValueType = noneValue->getType();
+        std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
+        std::vector<std::set<std::string>> armMovedStates;
+        if(someFallsThrough)
+        {
+            armValues.push_back({someValue, someEnd});
+            armMovedStates.push_back(someMovedState);
+        }
+        if(noneFallsThrough)
+        {
+            armValues.push_back({noneValue, noneEnd});
+            armMovedStates.push_back(noneMovedState);
+        }
+        if(armValues.empty())
+        {
+            reportError(node->line,
+                        "match expression has no continuing arm");
+            return nullptr;
+        }
+        llvm::Type* someValueType = armValues[0].first->getType();
 
         auto castInBlock = [&](llvm::Value* val, llvm::Type* target,
                                llvm::BasicBlock* block) -> llvm::Value*
@@ -9968,8 +10017,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             return val;
         };
 
-        if(someValueType != noneValueType)
+        if(armValues.size() == 2 &&
+           armValues[0].first->getType() != armValues[1].first->getType())
         {
+            llvm::Type* noneValueType = armValues[1].first->getType();
             llvm::Type* commonType = nullptr;
             if(someValueType->isIntegerTy() && noneValueType->isIntegerTy())
             {
@@ -10003,8 +10054,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 return nullptr;
             }
 
-            someValue = castInBlock(someValue, commonType, someEnd);
-            noneValue = castInBlock(noneValue, commonType, noneEnd);
+            armValues[0].first = castInBlock(armValues[0].first, commonType,
+                                             armValues[0].second);
+            armValues[1].first = castInBlock(armValues[1].first, commonType,
+                                             armValues[1].second);
             someValueType = commonType;
         }
 
@@ -10015,11 +10068,14 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
 
         llvm::PHINode* phi =
-            builder.CreatePHI(someValueType, 2, "match.result");
-        phi->addIncoming(someValue, someEnd);
-        phi->addIncoming(noneValue, noneEnd);
-        someMovedState.insert(noneMovedState.begin(), noneMovedState.end());
-        movedVariables = std::move(someMovedState);
+            builder.CreatePHI(someValueType, (unsigned)armValues.size(),
+                              "match.result");
+        for(const auto& pair : armValues)
+            phi->addIncoming(pair.first, pair.second);
+        std::set<std::string> mergedMoved;
+        for(const auto& st : armMovedStates)
+            mergedMoved.insert(st.begin(), st.end());
+        movedVariables = std::move(mergedMoved);
         return phi;
     }
 
@@ -10127,9 +10183,13 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         llvm::Value* armVal = generateExpression(arm->expression);
         if(!armVal)
             return nullptr;
-        armMovedStates.push_back(movedVariables);
-        builder.CreateBr(mergeBB);
-        armValues.push_back({armVal, builder.GetInsertBlock()});
+        llvm::BasicBlock* armEnd = builder.GetInsertBlock();
+        if(!armEnd->getTerminator())
+        {
+            armMovedStates.push_back(movedVariables);
+            builder.CreateBr(mergeBB);
+            armValues.push_back({armVal, builder.GetInsertBlock()});
+        }
         armBlocks.push_back(armBB);
         movedVariables = incomingMoved;
 
@@ -10144,9 +10204,13 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         llvm::Value* armVal = generateExpression(wildcardArm->expression);
         if(!armVal)
             return nullptr;
-        armMovedStates.push_back(movedVariables);
-        builder.CreateBr(mergeBB);
-        armValues.push_back({armVal, builder.GetInsertBlock()});
+        llvm::BasicBlock* wildcardEnd = builder.GetInsertBlock();
+        if(!wildcardEnd->getTerminator())
+        {
+            armMovedStates.push_back(movedVariables);
+            builder.CreateBr(mergeBB);
+            armValues.push_back({armVal, builder.GetInsertBlock()});
+        }
         movedVariables = incomingMoved;
     }
     else
@@ -10156,6 +10220,11 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     }
 
     std::vector<llvm::Type*> armTypes;
+    if(armValues.empty())
+    {
+        reportError(node->line, "match expression has no continuing arm");
+        return nullptr;
+    }
     armTypes.reserve(armValues.size());
     for(const auto& pair : armValues)
         armTypes.push_back(pair.first->getType());
