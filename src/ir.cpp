@@ -7593,7 +7593,30 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return false;
                 }
                 auto& paths = subpathsInCall[owner];
-                if(!paths.insert(path).second)
+                bool overlaps = false;
+                for(const auto& existing : paths)
+                {
+                    if(existing == path)
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                    if(path.size() > existing.size() &&
+                       path.compare(0, existing.size(), existing) == 0 &&
+                       path[existing.size()] == '.')
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                    if(existing.size() > path.size() &&
+                       existing.compare(0, path.size(), path) == 0 &&
+                       existing[path.size()] == '.')
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                }
+                if(overlaps)
                 {
                     reportError(node->line,
                                 "cannot borrow '" + owner + "." + path +
@@ -7601,6 +7624,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                     calleeName + "'");
                     return false;
                 }
+                paths.insert(path);
             }
         }
         return true;
@@ -9286,7 +9310,30 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return false;
                 }
                 auto& paths = subpathsInCall[owner];
-                if(!paths.insert(path).second)
+                bool overlaps = false;
+                for(const auto& existing : paths)
+                {
+                    if(existing == path)
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                    if(path.size() > existing.size() &&
+                       path.compare(0, existing.size(), existing) == 0 &&
+                       path[existing.size()] == '.')
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                    if(existing.size() > path.size() &&
+                       existing.compare(0, path.size(), path) == 0 &&
+                       existing[path.size()] == '.')
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                }
+                if(overlaps)
                 {
                     reportError(node->line,
                                 "cannot borrow '" + owner + "." + path +
@@ -9294,6 +9341,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     calleeName + "'");
                     return false;
                 }
+                paths.insert(path);
             }
         }
         return true;

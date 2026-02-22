@@ -1746,6 +1746,56 @@ TEST_F(MLATest, OwnershipCannotBorrowWholeAndFieldInSingleCall)
     EXPECT_NE(out.find("overlapping parts"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCannotBorrowNestedOverlappingFieldsInSingleCall)
+{
+    std::string code = R"(
+        struct Inner {
+            var x: i32;
+        };
+        struct Outer {
+            var inner: Inner;
+            var other: i32;
+        };
+
+        fn consume(a: ptr<Inner>, b: ptr<i32>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let o: Outer = Outer { inner: Inner { x: 2 }, other: 3 };
+            return consume(&o.inner, &o.inner.x);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("multiple times in call"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanBorrowNestedDisjointFieldsInSingleCall)
+{
+    std::string code = R"(
+        struct Inner {
+            var x: i32;
+        };
+        struct Outer {
+            var inner: Inner;
+            var other: i32;
+        };
+
+        fn add2(a: ptr<i32>, b: ptr<i32>) -> i32 {
+            return *a + *b;
+        }
+
+        fn main() -> i32 {
+            let o: Outer = Outer { inner: Inner { x: 2 }, other: 3 };
+            return add2(&o.inner.x, &o.other);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
 {
     std::string code = R"(
