@@ -179,6 +179,7 @@ private:
     void registerPointerBorrow(const std::string& pointerVar,
                                ExpressionNode* expr, int line);
     void recordScopedPointerVariable(const std::string& pointerVar);
+    std::string resolveBorrowOwnerFromLValue(ExpressionNode* expr) const;
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);

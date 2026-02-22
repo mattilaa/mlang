@@ -1624,6 +1624,52 @@ TEST_F(MLATest, OwnershipCanStoreGlobalBorrowInGlobalPointer)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+
+        fn bad_field_ptr() -> ptr<i32> {
+            let b: Box = Box { value: 7 };
+            return &b.value;
+        }
+
+        fn main() -> i32 {
+            let p: ptr<i32> = bad_field_ptr();
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot return pointer that borrows local value"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
+{
+    std::string code = R"(
+        struct Box {
+            var value: i32;
+        };
+        var GP: ptr<i32>;
+
+        fn main() -> i32 {
+            let b: Box = Box { value: 7 };
+            GP = &b.value;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot store in global/static"), std::string::npos);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================

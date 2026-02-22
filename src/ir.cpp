@@ -356,11 +356,55 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     if(!unary || unary->op != UnaryOpNode::OP_ADDR)
         return;
 
-    auto* id = dynamic_cast<IdentifierNode*>(unary->operand);
-    if(!id)
+    std::string ownerName = resolveBorrowOwnerFromLValue(unary->operand);
+    if(ownerName.empty())
         return;
 
-    (void)registerOwnerBorrow(id->name);
+    (void)registerOwnerBorrow(ownerName);
+}
+
+std::string CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
+{
+    std::function<std::string(ExpressionNode*)> resolve =
+        [&](ExpressionNode* e) -> std::string
+    {
+        if(!e)
+            return "";
+
+        if(auto* id = dynamic_cast<IdentifierNode*>(e))
+            return id->name;
+
+        if(auto* field = dynamic_cast<FieldAccessNode*>(e))
+        {
+            if(field->object)
+                return resolve(field->object);
+            return field->structName;
+        }
+
+        if(auto* index = dynamic_cast<IndexExpressionNode*>(e))
+            return resolve(index->base);
+
+        if(auto* tupleAccess = dynamic_cast<TupleAccessNode*>(e))
+            return resolve(tupleAccess->tuple);
+
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(e))
+        {
+            if(unary->op == UnaryOpNode::OP_DEREF)
+            {
+                if(auto* pid = dynamic_cast<IdentifierNode*>(unary->operand))
+                {
+                    auto it = pointerBorrowTarget.find(pid->name);
+                    if(it != pointerBorrowTarget.end())
+                        return it->second;
+                }
+            }
+            return resolve(unary->operand);
+        }
+
+        return "";
+    };
+
+    return resolve(expr);
 }
 
 std::string CodeGenerator::getBorrowedOwnerForPointerExpression(
@@ -410,8 +454,7 @@ bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
     {
         if(unary->op == UnaryOpNode::OP_ADDR)
         {
-            if(auto* ownerId = dynamic_cast<IdentifierNode*>(unary->operand))
-                ownerName = ownerId->name;
+            ownerName = resolveBorrowOwnerFromLValue(unary->operand);
         }
     }
 
