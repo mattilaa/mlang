@@ -1675,7 +1675,7 @@ TEST_F(MLATest, OwnershipCannotBorrowSameOwnerTwiceInSingleCall)
     int rc = 0;
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
-    EXPECT_NE(out.find("multiple times in call"), std::string::npos);
+    EXPECT_NE(out.find("overlapping parts"), std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
@@ -1700,6 +1700,50 @@ TEST_F(MLATest, OwnershipCannotBorrowCallArgWhenOwnerAlreadyBorrowed)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("while already borrowed"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCanBorrowDisjointFieldsInSingleCall)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn add2(a: ptr<i32>, b: ptr<i32>) -> i32 {
+            return *a + *b;
+        }
+
+        fn main() -> i32 {
+            let p: Pair = Pair { left: 2, right: 3 };
+            return add2(&p.left, &p.right);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
+TEST_F(MLATest, OwnershipCannotBorrowWholeAndFieldInSingleCall)
+{
+    std::string code = R"(
+        struct Pair {
+            var left: i32;
+            var right: i32;
+        };
+
+        fn consume(a: ptr<Pair>, b: ptr<i32>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Pair = Pair { left: 2, right: 3 };
+            return consume(&p, &p.left);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("overlapping parts"), std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)

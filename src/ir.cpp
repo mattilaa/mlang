@@ -7501,15 +7501,55 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName) -> bool
     {
-        std::set<std::string> borrowedInCall;
+        std::set<std::string> wholeOwnersInCall;
+        std::map<std::string, std::set<std::string>> subpathsInCall;
+        auto describeBorrowPath = [&](ExpressionNode* expr,
+                                      std::string& ownerOut,
+                                      std::string& pathOut,
+                                      bool& isWholeOwnerOut) -> bool
+        {
+            ownerOut = resolveBorrowOwnerFromLValue(expr);
+            if(ownerOut.empty())
+                return false;
+
+            isWholeOwnerOut = true;
+            pathOut.clear();
+
+            std::vector<std::string> fields;
+            ExpressionNode* cur = expr;
+            while(auto* field = dynamic_cast<FieldAccessNode*>(cur))
+            {
+                fields.push_back(field->fieldName);
+                if(field->object)
+                    cur = field->object;
+                else
+                    break;
+            }
+
+            if(!fields.empty())
+            {
+                isWholeOwnerOut = false;
+                std::reverse(fields.begin(), fields.end());
+                for(size_t i = 0; i < fields.size(); ++i)
+                {
+                    if(i)
+                        pathOut += ".";
+                    pathOut += fields[i];
+                }
+            }
+            return true;
+        };
+
         for(auto* arg : args)
         {
             auto* unary = dynamic_cast<UnaryOpNode*>(arg);
             if(!unary || unary->op != UnaryOpNode::OP_ADDR)
                 continue;
 
-            std::string owner = resolveBorrowOwnerFromLValue(unary->operand);
-            if(owner.empty())
+            std::string owner;
+            std::string path;
+            bool isWholeOwner = true;
+            if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
                 continue;
 
             if(globalNamedValues.find(owner) == globalNamedValues.end() &&
@@ -7530,13 +7570,37 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return false;
             }
 
-            if(!borrowedInCall.insert(owner).second)
+            if(isWholeOwner)
             {
-                reportError(node->line,
-                            "cannot borrow '" + owner +
-                                "' multiple times in call to '" +
-                                calleeName + "'");
-                return false;
+                if(wholeOwnersInCall.count(owner) ||
+                   (subpathsInCall.count(owner) &&
+                    !subpathsInCall[owner].empty()))
+                {
+                    reportError(node->line,
+                                "cannot borrow overlapping parts of '" + owner +
+                                    "' in call to '" + calleeName + "'");
+                    return false;
+                }
+                wholeOwnersInCall.insert(owner);
+            }
+            else
+            {
+                if(wholeOwnersInCall.count(owner))
+                {
+                    reportError(node->line,
+                                "cannot borrow overlapping parts of '" + owner +
+                                    "' in call to '" + calleeName + "'");
+                    return false;
+                }
+                auto& paths = subpathsInCall[owner];
+                if(!paths.insert(path).second)
+                {
+                    reportError(node->line,
+                                "cannot borrow '" + owner + "." + path +
+                                    "' multiple times in call to '" +
+                                    calleeName + "'");
+                    return false;
+                }
             }
         }
         return true;
@@ -9130,15 +9194,55 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName) -> bool
     {
-        std::set<std::string> borrowedInCall;
+        std::set<std::string> wholeOwnersInCall;
+        std::map<std::string, std::set<std::string>> subpathsInCall;
+        auto describeBorrowPath = [&](ExpressionNode* expr,
+                                      std::string& ownerOut,
+                                      std::string& pathOut,
+                                      bool& isWholeOwnerOut) -> bool
+        {
+            ownerOut = resolveBorrowOwnerFromLValue(expr);
+            if(ownerOut.empty())
+                return false;
+
+            isWholeOwnerOut = true;
+            pathOut.clear();
+
+            std::vector<std::string> fields;
+            ExpressionNode* cur = expr;
+            while(auto* field = dynamic_cast<FieldAccessNode*>(cur))
+            {
+                fields.push_back(field->fieldName);
+                if(field->object)
+                    cur = field->object;
+                else
+                    break;
+            }
+
+            if(!fields.empty())
+            {
+                isWholeOwnerOut = false;
+                std::reverse(fields.begin(), fields.end());
+                for(size_t i = 0; i < fields.size(); ++i)
+                {
+                    if(i)
+                        pathOut += ".";
+                    pathOut += fields[i];
+                }
+            }
+            return true;
+        };
+
         for(auto* arg : args)
         {
             auto* unary = dynamic_cast<UnaryOpNode*>(arg);
             if(!unary || unary->op != UnaryOpNode::OP_ADDR)
                 continue;
 
-            std::string owner = resolveBorrowOwnerFromLValue(unary->operand);
-            if(owner.empty())
+            std::string owner;
+            std::string path;
+            bool isWholeOwner = true;
+            if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
                 continue;
 
             if(globalNamedValues.find(owner) == globalNamedValues.end() &&
@@ -9159,13 +9263,37 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 return false;
             }
 
-            if(!borrowedInCall.insert(owner).second)
+            if(isWholeOwner)
             {
-                reportError(node->line,
-                            "cannot borrow '" + owner +
-                                "' multiple times in call to '" +
-                                calleeName + "'");
-                return false;
+                if(wholeOwnersInCall.count(owner) ||
+                   (subpathsInCall.count(owner) &&
+                    !subpathsInCall[owner].empty()))
+                {
+                    reportError(node->line,
+                                "cannot borrow overlapping parts of '" + owner +
+                                    "' in call to '" + calleeName + "'");
+                    return false;
+                }
+                wholeOwnersInCall.insert(owner);
+            }
+            else
+            {
+                if(wholeOwnersInCall.count(owner))
+                {
+                    reportError(node->line,
+                                "cannot borrow overlapping parts of '" + owner +
+                                    "' in call to '" + calleeName + "'");
+                    return false;
+                }
+                auto& paths = subpathsInCall[owner];
+                if(!paths.insert(path).second)
+                {
+                    reportError(node->line,
+                                "cannot borrow '" + owner + "." + path +
+                                    "' multiple times in call to '" +
+                                    calleeName + "'");
+                    return false;
+                }
             }
         }
         return true;
