@@ -1332,6 +1332,44 @@ TEST_F(MLATest, OwnershipMatchArmMoveMakesValueUnavailableAfterMatch)
     EXPECT_NE(out.find("use of moved value"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipTernaryBranchMovesArePathSensitiveDuringEvaluation)
+{
+    std::string code = R"(
+        fn take_msg(s: string) -> i32 {
+            return 5;
+        }
+
+        fn main() -> i32 {
+            let flag: i32 = 0;
+            let msg: string = "hello";
+            let x: i32 = flag > 0 ? take_msg(msg) : take_msg(msg);
+            return x;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 5);
+}
+
+TEST_F(MLATest, OwnershipTernaryMoveStillConsumesAfterMerge)
+{
+    std::string code = R"(
+        fn take_msg(s: string) -> i32 {
+            return 1;
+        }
+
+        fn main() -> i32 {
+            let flag: i32 = 1;
+            let msg: string = "hello";
+            let x: i32 = flag > 0 ? take_msg(msg) : 0;
+            return take_msg(msg) + x;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
 {
     std::string code = R"(

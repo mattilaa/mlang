@@ -3537,6 +3537,10 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
 
 llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
 {
+    auto incomingMoved = movedVariables;
+    auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingActiveBorrowers = activeBorrowers;
+
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
         return nullptr;
@@ -3587,9 +3591,15 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
 
     // Then block
     builder.SetInsertPoint(thenBB);
+    movedVariables = incomingMoved;
+    pointerBorrowTarget = incomingPointerBorrowTarget;
+    activeBorrowers = incomingActiveBorrowers;
     llvm::Value* thenVal = generateExpression(node->trueExpr);
     if(!thenVal)
         return nullptr;
+    auto thenMoved = movedVariables;
+    auto thenPointerBorrowTarget = pointerBorrowTarget;
+    auto thenActiveBorrowers = activeBorrowers;
     if(!builder.GetInsertBlock()->getTerminator())
         builder.CreateBr(mergeBB);
     llvm::BasicBlock* thenEnd = builder.GetInsertBlock();
@@ -3597,9 +3607,15 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     // Else block
     elseBB->insertInto(function);
     builder.SetInsertPoint(elseBB);
+    movedVariables = incomingMoved;
+    pointerBorrowTarget = incomingPointerBorrowTarget;
+    activeBorrowers = incomingActiveBorrowers;
     llvm::Value* elseVal = generateExpression(node->falseExpr);
     if(!elseVal)
         return nullptr;
+    auto elseMoved = movedVariables;
+    auto elsePointerBorrowTarget = pointerBorrowTarget;
+    auto elseActiveBorrowers = activeBorrowers;
     if(!builder.GetInsertBlock()->getTerminator())
         builder.CreateBr(mergeBB);
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
@@ -3763,6 +3779,32 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     llvm::PHINode* phi = builder.CreatePHI(commonType, 2, "ternary.result");
     phi->addIncoming(thenVal, thenEnd);
     phi->addIncoming(elseVal, elseEnd);
+
+    std::set<std::string> mergedMoved = thenMoved;
+    mergedMoved.insert(elseMoved.begin(), elseMoved.end());
+    movedVariables = std::move(mergedMoved);
+
+    std::map<std::string, std::string> mergedPointerBorrowTarget =
+        thenPointerBorrowTarget;
+    for(const auto& kv : elsePointerBorrowTarget)
+    {
+        if(mergedPointerBorrowTarget.find(kv.first) ==
+           mergedPointerBorrowTarget.end())
+        {
+            mergedPointerBorrowTarget[kv.first] = kv.second;
+        }
+    }
+    pointerBorrowTarget = std::move(mergedPointerBorrowTarget);
+
+    std::map<std::string, std::set<std::string>> mergedActiveBorrowers =
+        thenActiveBorrowers;
+    for(const auto& kv : elseActiveBorrowers)
+    {
+        auto& dst = mergedActiveBorrowers[kv.first];
+        dst.insert(kv.second.begin(), kv.second.end());
+    }
+    activeBorrowers = std::move(mergedActiveBorrowers);
+
     return phi;
 }
 
