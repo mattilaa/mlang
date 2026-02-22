@@ -396,8 +396,8 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
     return true;
 }
 
-bool CodeGenerator::validateNoEscapingBorrowOnReturn(ExpressionNode* expr,
-                                                     int line)
+bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
+                                             const std::string& action)
 {
     std::string ownerName;
     if(auto* idExpr = dynamic_cast<IdentifierNode*>(expr))
@@ -423,7 +423,8 @@ bool CodeGenerator::validateNoEscapingBorrowOnReturn(ExpressionNode* expr,
 
     if(namedValues.find(ownerName) != namedValues.end())
     {
-        reportError(line, "cannot return pointer that borrows local value: '" +
+        reportError(line, "cannot " + action +
+                              " pointer that borrows local value: '" +
                               ownerName + "'");
         return false;
     }
@@ -4748,7 +4749,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
 
     if(node->expression)
     {
-        if(!validateNoEscapingBorrowOnReturn(node->expression, node->line))
+        if(!validateNoEscapingBorrow(node->expression, node->line, "return"))
             return;
 
         llvm::Value* returnValue = generateExpression(node->expression);
@@ -5826,6 +5827,14 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         if(node->initExpr)
         {
+            if((kind == TypeNode::TYPE_PTR || targetType->isPointerTy()) &&
+               !validateNoEscapingBorrow(
+                   node->initExpr, node->line,
+                   "store in global/static '" + node->name + "'"))
+            {
+                return;
+            }
+
             if(node->isStaticStorage)
             {
                 std::string guardName = storageName + "__inited";
@@ -6528,9 +6537,15 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
     builder.CreateStore(value, variable);
     clearMovedVariable(node->name);
-    if(variableTypes.find(node->name) != variableTypes.end() &&
-       variableTypes[node->name] == TypeNode::TYPE_PTR)
+    if(targetType->isPointerTy())
     {
+        if(targetGlobal &&
+           !validateNoEscapingBorrow(
+               node->expression, node->line,
+               "store in global/static '" + node->name + "'"))
+        {
+            return;
+        }
         registerPointerBorrow(node->name, node->expression, node->line);
     }
     else

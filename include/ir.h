@@ -182,7 +182,8 @@ private:
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
-    bool validateNoEscapingBorrowOnReturn(ExpressionNode* expr, int line);
+    bool validateNoEscapingBorrow(ExpressionNode* expr, int line,
+                                  const std::string& action);
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
                                    const std::string& context);
     llvm::StructType* getStructType(const std::string& name);
