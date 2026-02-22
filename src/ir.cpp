@@ -94,6 +94,115 @@ bool CodeGenerator::isUnsignedType(TypeNode::TypeKind kind)
     }
 }
 
+bool CodeGenerator::isCopyType(TypeNode* typeNode)
+{
+    return classifyOwnership(typeNode) == OwnershipClass::Copy;
+}
+
+CodeGenerator::OwnershipClass
+CodeGenerator::classifyOwnership(TypeNode* typeNode)
+{
+    std::set<std::string> visitingStructs;
+    std::function<OwnershipClass(TypeNode*)> classify =
+        [&](TypeNode* t) -> OwnershipClass
+    {
+        if(!t)
+            return OwnershipClass::MoveOnly;
+
+        if(auto* tupleType = dynamic_cast<TupleTypeNode*>(t))
+        {
+            if(!tupleType->elementTypes)
+                return OwnershipClass::MoveOnly;
+            for(auto* elem : tupleType->elementTypes->types)
+            {
+                if(classify(elem) != OwnershipClass::Copy)
+                    return OwnershipClass::MoveOnly;
+            }
+            return OwnershipClass::Copy;
+        }
+
+        if(dynamic_cast<PointerTypeNode*>(t))
+            return OwnershipClass::Copy;
+
+        auto classifyStructByName = [&](const std::string& structName)
+            -> OwnershipClass
+        {
+            auto enumIt = enumValues.find(structName);
+            if(enumIt != enumValues.end())
+                return OwnershipClass::Copy;
+
+            auto membersIt = structMembers.find(structName);
+            if(membersIt == structMembers.end())
+            {
+                // Unknown/user-generic type parameter: conservative default.
+                return OwnershipClass::MoveOnly;
+            }
+
+            if(visitingStructs.count(structName))
+            {
+                // Recursive type cycle: conservative default.
+                return OwnershipClass::MoveOnly;
+            }
+
+            visitingStructs.insert(structName);
+            for(const auto& member : membersIt->second)
+            {
+                if(classify(member.second) != OwnershipClass::Copy)
+                {
+                    visitingStructs.erase(structName);
+                    return OwnershipClass::MoveOnly;
+                }
+            }
+            visitingStructs.erase(structName);
+            return OwnershipClass::Copy;
+        };
+
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(t))
+            return classifyStructByName(structRef->structName);
+        if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(t))
+        {
+            std::string mangledName = getOrCreateMonomorphizedStruct(
+                genStructRef->structName, genStructRef->typeArgs);
+            return classifyStructByName(mangledName);
+        }
+
+        switch(t->kind)
+        {
+        case TypeNode::TYPE_BOOL:
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_FLOAT:
+        case TypeNode::TYPE_DOUBLE:
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_I32:
+        case TypeNode::TYPE_I64:
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+        case TypeNode::TYPE_U64:
+        case TypeNode::TYPE_PTR:
+            return OwnershipClass::Copy;
+        case TypeNode::TYPE_VOID:
+        case TypeNode::TYPE_STRING:
+        case TypeNode::TYPE_STR8:
+        case TypeNode::TYPE_STR16:
+        case TypeNode::TYPE_LIST:
+        case TypeNode::TYPE_MAP:
+        case TypeNode::TYPE_STRUCT:
+        case TypeNode::TYPE_TUPLE:
+        default:
+            return OwnershipClass::MoveOnly;
+        }
+    };
+    return classify(typeNode);
+}
+
+std::string CodeGenerator::ownershipClassName(TypeNode* typeNode)
+{
+    return classifyOwnership(typeNode) == OwnershipClass::Copy ? "Copy"
+                                                               : "MoveOnly";
+}
+
 llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
 {
     if(!typeNode)

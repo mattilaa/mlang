@@ -5,7 +5,7 @@ GENERATE_LATEX = NO
 QUIET = YES
 WARN_IF_UNDOCUMENTED = NO
 WARN_IF_DOC_ERROR = NO
-INPUT = docs/runtime_builtins.h docs/language_reference.h docs/stdlib_mlang_api.md docs/language_attributes.md docs/README.md stdlib/std
+INPUT = docs/runtime_builtins.h docs/language_reference.h docs/ownership_model.h docs/stdlib_mlang_api.md docs/language_attributes.md docs/README.md stdlib/std
 FILE_PATTERNS = *.h *.md *.mla
 EXTENSION_MAPPING = mla=C++
 RECURSIVE = YES

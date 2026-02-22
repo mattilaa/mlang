@@ -15,6 +15,12 @@
 class CodeGenerator
 {
 public:
+    enum class OwnershipClass
+    {
+        Copy,
+        MoveOnly
+    };
+
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
                   std::unique_ptr<llvm::Module>& m, bool debug = false)
         : context(ctx), builder(b), module(m), hasError(false),
@@ -153,6 +159,9 @@ private:
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);
     llvm::Type* getLLVMTypeFromNode(TypeNode* typeNode);
     bool isUnsignedType(TypeNode::TypeKind kind);
+    bool isCopyType(TypeNode* typeNode);
+    OwnershipClass classifyOwnership(TypeNode* typeNode);
+    std::string ownershipClassName(TypeNode* typeNode);
     llvm::StructType* getStructType(const std::string& name);
     std::string typeMangle(TypeNode* typeNode) const;
     std::string functionSignatureKey(FunctionDefNode* node) const;

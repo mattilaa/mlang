@@ -73,6 +73,8 @@ explicit imports.
 See also:
 - `docs/language_reference.h` for Doxygen groups covering language builtins
   (types, keywords, macros, attributes).
+- `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
+  `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`).
 - `docs/language_attributes.md` for Rust-like attributes such as
