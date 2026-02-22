@@ -5528,8 +5528,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             auto sit = structVariableTypes.find(id->name);
             if(sit != structVariableTypes.end())
+            {
                 structVariableTypes[node->name] = sit->second;
                 registerStructCleanupIfNeeded(node->name, sit->second);
+            }
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
@@ -6182,8 +6184,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             auto sit = structVariableTypes.find(id->name);
             if(sit != structVariableTypes.end())
+            {
                 structVariableTypes[node->name] = sit->second;
                 registerStructCleanupIfNeeded(node->name, sit->second);
+            }
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;

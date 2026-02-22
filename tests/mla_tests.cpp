@@ -500,6 +500,33 @@ TEST_F(MLATest, VarReassignment)
     EXPECT_EQ(compileAndRun(code), "20\n");
 }
 
+TEST_F(MLATest, LetInferenceFromIdentifier)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 41;
+            let y = x;
+            println!("{}", y + 1);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "42\n");
+}
+
+TEST_F(MLATest, VarInferenceFromIdentifier)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 10;
+            var y = x;
+            y = y + 5;
+            println!("{}", y);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "15\n");
+}
+
 TEST_F(MLATest, PointerAccess)
 {
     std::string code = R"(
