@@ -1884,6 +1884,80 @@ TEST_F(MLATest, OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject)
     EXPECT_EQ(compileAndRunExitCode(code), 22);
 }
 
+TEST_F(MLATest, OwnershipCannotMixBorrowAndMoveSameCall)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn consume_two(a: ptr<Post>, b: Post) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            return consume_two(&p, p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotMixMoveAndBorrowSameCall)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn consume_two(a: Post, b: ptr<Post>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            return consume_two(p, &p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        impl Post {
+            fn consume_with(&self, other: Post) -> i32 {
+                return 0;
+            }
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            return p.consume_with(p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCannotReturnPointerBorrowingLocalField)
 {
     std::string code = R"(

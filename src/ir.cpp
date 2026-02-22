@@ -7504,6 +7504,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
+        std::set<std::string> movedOwnersInCall;
         if(!implicitWholeOwner.empty())
             wholeOwnersInCall.insert(implicitWholeOwner);
         auto describeBorrowPath = [&](ExpressionNode* expr,
@@ -7542,9 +7543,116 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
             return true;
         };
+        std::function<void(ExpressionNode*, bool)> collectMovedOwners =
+            [&](ExpressionNode* expr, bool borrowed) -> void
+        {
+            if(!expr)
+                return;
+
+            if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+            {
+                if(globalNamedValues.find(id->name) != globalNamedValues.end())
+                    return;
+                if(!borrowed && isMoveOnlyVariable(id->name))
+                    movedOwnersInCall.insert(id->name);
+                return;
+            }
+
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+            {
+                if(unary->op == UnaryOpNode::OP_ADDR)
+                    collectMovedOwners(unary->operand, true);
+                else
+                    collectMovedOwners(unary->operand, borrowed);
+                return;
+            }
+
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+            {
+                collectMovedOwners(binary->left, false);
+                collectMovedOwners(binary->right, false);
+                return;
+            }
+
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                if(field->object)
+                    collectMovedOwners(field->object, true);
+                return;
+            }
+
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+            {
+                collectMovedOwners(index->base, true);
+                collectMovedOwners(index->index, false);
+                return;
+            }
+
+            if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+            {
+                collectMovedOwners(castExpr->expression, false);
+                return;
+            }
+
+            if(auto* tryExpr = dynamic_cast<TryExpressionNode*>(expr))
+            {
+                collectMovedOwners(tryExpr->expression, false);
+                return;
+            }
+
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
+            {
+                collectMovedOwners(ternary->condition, false);
+                collectMovedOwners(ternary->trueExpr, false);
+                collectMovedOwners(ternary->falseExpr, false);
+                return;
+            }
+
+            if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+            {
+                if(listLit->elements)
+                {
+                    for(auto* elem : listLit->elements->elements)
+                        collectMovedOwners(elem, false);
+                }
+                return;
+            }
+
+            if(auto* mapLit = dynamic_cast<MapLiteralNode*>(expr))
+            {
+                if(mapLit->entries)
+                {
+                    for(auto* entry : mapLit->entries->entries)
+                    {
+                        collectMovedOwners(entry->key, false);
+                        collectMovedOwners(entry->value, false);
+                    }
+                }
+                return;
+            }
+
+            if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(expr))
+            {
+                if(tupleLit->elements)
+                {
+                    for(auto* elem : tupleLit->elements->elements)
+                        collectMovedOwners(elem, false);
+                }
+                return;
+            }
+
+            if(auto* structLit = dynamic_cast<StructLiteralNode*>(expr))
+            {
+                for(const auto& init : structLit->fields)
+                    collectMovedOwners(init.second, false);
+                return;
+            }
+        };
 
         for(auto* arg : args)
         {
+            collectMovedOwners(arg, false);
+
             auto* unary = dynamic_cast<UnaryOpNode*>(arg);
             if(!unary || unary->op != UnaryOpNode::OP_ADDR)
                 continue;
@@ -7630,6 +7738,20 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 paths.insert(path);
             }
         }
+
+        for(const auto& movedOwner : movedOwnersInCall)
+        {
+            if(wholeOwnersInCall.count(movedOwner) ||
+               subpathsInCall.find(movedOwner) != subpathsInCall.end())
+            {
+                reportError(node->line,
+                            "cannot move '" + movedOwner +
+                                "' while borrowed in call to '" + calleeName +
+                                "'");
+                return false;
+            }
+        }
+
         return true;
     };
 
@@ -9224,6 +9346,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     {
         std::set<std::string> wholeOwnersInCall;
         std::map<std::string, std::set<std::string>> subpathsInCall;
+        std::set<std::string> movedOwnersInCall;
         if(!implicitWholeOwner.empty())
             wholeOwnersInCall.insert(implicitWholeOwner);
         auto describeBorrowPath = [&](ExpressionNode* expr,
@@ -9262,9 +9385,116 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
             return true;
         };
+        std::function<void(ExpressionNode*, bool)> collectMovedOwners =
+            [&](ExpressionNode* expr, bool borrowed) -> void
+        {
+            if(!expr)
+                return;
+
+            if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+            {
+                if(globalNamedValues.find(id->name) != globalNamedValues.end())
+                    return;
+                if(!borrowed && isMoveOnlyVariable(id->name))
+                    movedOwnersInCall.insert(id->name);
+                return;
+            }
+
+            if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+            {
+                if(unary->op == UnaryOpNode::OP_ADDR)
+                    collectMovedOwners(unary->operand, true);
+                else
+                    collectMovedOwners(unary->operand, borrowed);
+                return;
+            }
+
+            if(auto* binary = dynamic_cast<BinaryOpNode*>(expr))
+            {
+                collectMovedOwners(binary->left, false);
+                collectMovedOwners(binary->right, false);
+                return;
+            }
+
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                if(field->object)
+                    collectMovedOwners(field->object, true);
+                return;
+            }
+
+            if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+            {
+                collectMovedOwners(index->base, true);
+                collectMovedOwners(index->index, false);
+                return;
+            }
+
+            if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+            {
+                collectMovedOwners(castExpr->expression, false);
+                return;
+            }
+
+            if(auto* tryExpr = dynamic_cast<TryExpressionNode*>(expr))
+            {
+                collectMovedOwners(tryExpr->expression, false);
+                return;
+            }
+
+            if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
+            {
+                collectMovedOwners(ternary->condition, false);
+                collectMovedOwners(ternary->trueExpr, false);
+                collectMovedOwners(ternary->falseExpr, false);
+                return;
+            }
+
+            if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+            {
+                if(listLit->elements)
+                {
+                    for(auto* elem : listLit->elements->elements)
+                        collectMovedOwners(elem, false);
+                }
+                return;
+            }
+
+            if(auto* mapLit = dynamic_cast<MapLiteralNode*>(expr))
+            {
+                if(mapLit->entries)
+                {
+                    for(auto* entry : mapLit->entries->entries)
+                    {
+                        collectMovedOwners(entry->key, false);
+                        collectMovedOwners(entry->value, false);
+                    }
+                }
+                return;
+            }
+
+            if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(expr))
+            {
+                if(tupleLit->elements)
+                {
+                    for(auto* elem : tupleLit->elements->elements)
+                        collectMovedOwners(elem, false);
+                }
+                return;
+            }
+
+            if(auto* structLit = dynamic_cast<StructLiteralNode*>(expr))
+            {
+                for(const auto& init : structLit->fields)
+                    collectMovedOwners(init.second, false);
+                return;
+            }
+        };
 
         for(auto* arg : args)
         {
+            collectMovedOwners(arg, false);
+
             auto* unary = dynamic_cast<UnaryOpNode*>(arg);
             if(!unary || unary->op != UnaryOpNode::OP_ADDR)
                 continue;
@@ -9350,6 +9580,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 paths.insert(path);
             }
         }
+
+        for(const auto& movedOwner : movedOwnersInCall)
+        {
+            if(wholeOwnersInCall.count(movedOwner) ||
+               subpathsInCall.find(movedOwner) != subpathsInCall.end())
+            {
+                reportError(node->line,
+                            "cannot move '" + movedOwner +
+                                "' while borrowed in call to '" + calleeName +
+                                "'");
+                return false;
+            }
+        }
+
         return true;
     };
 
