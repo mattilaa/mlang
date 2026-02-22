@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <sys/wait.h>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -49,8 +50,9 @@ protected:
     void SetUp() override
     {
         // Create a temporary directory for test files
-        testDir =
-            fs::temp_directory_path() / ("mla_test_" + std::to_string(rand()));
+        testDir = fs::temp_directory_path() /
+                  ("mla_test_" + std::to_string(static_cast<long long>(getpid())) +
+                   "_" + std::to_string(rand()));
         fs::create_directories(testDir);
         sourceFile = testDir + "/test.mla";
         outputExe = testDir + "/test_exe";
