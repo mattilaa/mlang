@@ -4284,10 +4284,27 @@ void CodeGenerator::generateForStatement(ForNode* node)
             hadOldType = true;
         }
         bool hadOldMoved = isVariableMoved(node->varName);
+        auto stateBeforeLoopMoved = movedVariables;
+        auto stateBeforeLoopPointerBorrowTarget = pointerBorrowTarget;
+        auto stateBeforeLoopActiveBorrowers = activeBorrowers;
 
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = TypeNode::TYPE_I64;
         clearMovedVariable(node->varName);
+
+        bool rangeNeverExecutes = false;
+        if(auto* startConst = llvm::dyn_cast<llvm::ConstantInt>(startVal))
+        {
+            if(auto* endConst = llvm::dyn_cast<llvm::ConstantInt>(endVal))
+            {
+                int64_t startInt = startConst->getSExtValue();
+                int64_t endInt = endConst->getSExtValue();
+                if(rangeExpr->inclusive)
+                    rangeNeverExecutes = startInt > endInt;
+                else
+                    rangeNeverExecutes = startInt >= endInt;
+            }
+        }
 
         // Create basic blocks for loop structure
         llvm::BasicBlock* condBB =
@@ -4373,6 +4390,16 @@ void CodeGenerator::generateForStatement(ForNode* node)
             movedVariables.insert(node->varName);
         else
             clearMovedVariable(node->varName);
+
+        // If the range is provably empty, the loop body does not execute.
+        // Preserve ownership state from before loop-body evaluation.
+        if(rangeNeverExecutes)
+        {
+            movedVariables = std::move(stateBeforeLoopMoved);
+            pointerBorrowTarget =
+                std::move(stateBeforeLoopPointerBorrowTarget);
+            activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
+        }
     }
     else if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->iterable))
     {
