@@ -304,6 +304,21 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         return;
     }
 
+    auto activeIt = activeBorrowers.find(id->name);
+    if(activeIt != activeBorrowers.end())
+    {
+        for(const auto& borrower : activeIt->second)
+        {
+            if(borrower != pointerVar)
+            {
+                reportError(line, "cannot borrow '" + id->name +
+                                      "' while already borrowed by '" +
+                                      borrower + "'");
+                return;
+            }
+        }
+    }
+
     pointerBorrowTarget[pointerVar] = id->name;
     activeBorrowers[id->name].insert(pointerVar);
 }

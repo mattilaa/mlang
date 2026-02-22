@@ -1403,6 +1403,44 @@ TEST_F(MLATest, OwnershipIfReturnBranchBorrowDoesNotLeak)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, OwnershipCannotCreateSecondActiveBorrow)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            var p: ptr<Post> = &a;
+            var q: ptr<Post> = &a;
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("already borrowed"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipRebindingSamePointerBorrowAllowed)
+{
+    std::string code = R"(
+        struct Post {
+            var content: string;
+        };
+
+        fn main() -> i32 {
+            let a: Post = Post { content: "a" };
+            var p: ptr<Post> = &a;
+            p = &a;
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
 // ============================================================================
 // Integration Tests
 // ============================================================================
