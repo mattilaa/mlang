@@ -300,6 +300,15 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
                 }
             }
             visitingStructs.erase(structName);
+            // Handle<T> and stdlib single-i64 handle wrappers are Copy.
+            // These types wrap OS/runtime handles (file descriptors, mutex
+            // handles, etc.) where copying the handle integer is safe.
+            if(structName == "Handle" ||
+               structName.rfind("Handle_", 0) == 0 ||
+               structName == "Mutex"   ||
+               structName == "Condvar" ||
+               structName == "Channel")
+                return OwnershipClass::Copy;
             // User-defined structs are MoveOnly by default (Rust semantics).
             // Even if all fields are Copy the struct itself does not implement
             // Copy unless explicitly annotated (not yet supported).
@@ -825,7 +834,7 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
             if(isVariableMoved(id->name))
             {
-                reportError(line, "use of moved value: '" + id->name + "'");
+                reportError(line, id->col, "use of moved value: '" + id->name + "'");
                 return;
             }
 
@@ -1401,7 +1410,7 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
         auto it = namedValues.find(id->name);
         if(it == namedValues.end())
         {
-            reportError(line, "unknown variable: '" + id->name + "'");
+            reportError(line, id->col, "unknown variable: '" + id->name + "'");
             return nullptr;
         }
         return it->second;
@@ -1516,7 +1525,7 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         auto typeIt = variableTypes.find(id->name);
         if(typeIt == variableTypes.end())
         {
-            reportError(line, "unknown variable: '" + id->name + "'");
+            reportError(line, id->col, "unknown variable: '" + id->name + "'");
             return nullptr;
         }
 
@@ -5500,14 +5509,14 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
     if(globalNamedValues.find(node->name) == globalNamedValues.end() &&
        isVariableMoved(node->name))
     {
-        reportError(node->line, "use of moved value: '" + node->name + "'");
+        reportError(node->line, node->col, "use of moved value: '" + node->name + "'");
         return nullptr;
     }
 
     llvm::Value* value = namedValues[node->name];
     if(!value)
     {
-        reportError(node->line, "unknown variable: '" + node->name + "'");
+        reportError(node->line, node->col, "unknown variable: '" + node->name + "'");
         return nullptr;
     }
 
@@ -6180,15 +6189,18 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         // Convert tuple literal elements to match declared types
         if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->expression))
         {
-            // Build tuple with proper type conversions
+            // Build tuple with proper type conversions.
+            // Use CreateExtractValue from the already-generated initValue so
+            // each element is generated exactly once (consumeMoveFromExpression
+            // has already run and marked MoveOnly sources as moved).
             llvm::Value* tupleVal = llvm::UndefValue::get(tupleStructType);
 
             for(size_t i = 0; i < tupleLit->elements->elements.size() &&
                               i < tupleType->elementTypes->types.size();
                 ++i)
             {
-                llvm::Value* elemVal =
-                    generateExpression(tupleLit->elements->elements[i]);
+                llvm::Value* elemVal = builder.CreateExtractValue(
+                    initValue, {static_cast<unsigned>(i)}, "tuple.extract");
                 if(!elemVal)
                     return;
 
@@ -7958,13 +7970,34 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 
 void CodeGenerator::reportError(int line, const std::string& message)
 {
+    reportError(line, 0, message);
+}
+
+void CodeGenerator::reportError(int line, int col, const std::string& message)
+{
     const std::string& file =
         sourceFileName.empty() ? std::string("<input>") : sourceFileName;
-    if(line > 0)
+    if(line > 0 && col > 0)
+        std::cerr << file << ":" << line << ":" << col << ": error: " << message
+                  << std::endl;
+    else if(line > 0)
         std::cerr << file << ":" << line << ": error: " << message << std::endl;
     else
         std::cerr << file << ": error: " << message << std::endl;
     hasError = true;
+}
+
+void CodeGenerator::reportWarning(int line, int col, const std::string& message)
+{
+    const std::string& file =
+        sourceFileName.empty() ? std::string("<input>") : sourceFileName;
+    if(line > 0 && col > 0)
+        std::cerr << file << ":" << line << ":" << col << ": warning: " << message
+                  << std::endl;
+    else if(line > 0)
+        std::cerr << file << ":" << line << ": warning: " << message << std::endl;
+    else
+        std::cerr << file << ": warning: " << message << std::endl;
 }
 
 void CodeGenerator::enterCleanupScope()
@@ -10535,20 +10568,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     if(node->methodName == "unwrap" && isResultType(structTypeName))
     {
-        if(node->line > 0)
-        {
-            std::cerr << "Warning (line " << node->line
-                      << "): Result.unwrap() may panic on Err; consider "
-                         "match/is_ok/is_err"
-                      << std::endl;
-        }
-        else
-        {
-            std::cerr
-                << "Warning: Result.unwrap() may panic on Err; consider "
-                   "match/is_ok/is_err"
-                << std::endl;
-        }
+        reportWarning(node->line, node->col,
+                      "Result.unwrap() may panic on Err; consider "
+                      "match/is_ok/is_err");
     }
 
     bool isPublic = methodIt->second.first;

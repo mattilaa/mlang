@@ -14,7 +14,6 @@ fn run_demo() -> Result<i32, string> {
     }
 
     free_lines(lines);
-    f.close();
     return Ok<i32, string>(0);
 }
 

@@ -94,7 +94,6 @@ impl JsonDoc {
         }
 
         free_lines(lines);
-        file.close();
 
         let parsed: Result<JsonDoc, string> = JsonDoc::parse(text);
         String::free(text);

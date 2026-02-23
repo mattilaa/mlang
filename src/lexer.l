@@ -6,6 +6,16 @@
 
 extern bool parseHadError;
 
+int yycolumn = 1;       // current column (end of last-consumed token)
+int yycolumn_token = 1; // column at start of the current token
+
+#define YY_USER_ACTION                          \
+    yycolumn_token = yycolumn;                  \
+    for(int _yci = 0; _yci < yyleng; _yci++) { \
+        if(yytext[_yci] == '\n') yycolumn = 1;  \
+        else                     yycolumn++;    \
+    }
+
 static int yyinput(void);
 static void yyunput(int, char*);
 

@@ -26,17 +26,11 @@ fn main() -> i32 {
         println!("Person is active");
     }
 
-    // Create a Point instance
-    var p1: Point;
-    p1.x = 100;
-    p1.y = 200;
-
-    var p2: Point;
-    p2.x = 300;
-    p2.y = 400;
-
     // Tuple containing a Point struct and other data
-    let pointData: tuple<Point, string> = (p1, "origin");
+    var pa: Point;
+    pa.x = 100;
+    pa.y = 200;
+    let pointData: tuple<Point, string> = (pa, "origin");
 
     // Access the Point from tuple and its fields
     let extractedPoint: Point = pointData.0;
@@ -44,14 +38,23 @@ fn main() -> i32 {
     println!("Point y: {}", extractedPoint.y);
     println!("Label: {}", pointData.1);
 
-    // Tuple with two Points (line segment)
-    let line: tuple<Point, Point> = (p1, p2);
+    // Tuple with two Points (line segment) — fresh instances
+    var pb: Point;
+    pb.x = 100;
+    pb.y = 200;
+    var pc: Point;
+    pc.x = 300;
+    pc.y = 400;
+    let line: tuple<Point, Point> = (pb, pc);
     let start: Point = line.0;
     let end: Point = line.1;
     println!("Line from ({}, {}) to ({}, {})", start.x, start.y, end.x, end.y);
 
-    // Tuple with Point, bool, and int
-    let markedPoint: tuple<Point, bool, int> = (p1, true, 5);
+    // Tuple with Point, bool, and int — fresh instance
+    var pd: Point;
+    pd.x = 100;
+    pd.y = 200;
+    let markedPoint: tuple<Point, bool, int> = (pd, true, 5);
     if markedPoint.1: {
         let mp: Point = markedPoint.0;
         println!("Marked point at ({}, {}) with priority {}", mp.x, mp.y, markedPoint.2);

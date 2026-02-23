@@ -346,6 +346,8 @@ private:
     getStructPtrAndType(ExpressionNode* expr, int line);
 
     void reportError(int line, const std::string& message);
+    void reportError(int line, int col, const std::string& message);
+    void reportWarning(int line, int col, const std::string& message);
 };
 
 class Backend

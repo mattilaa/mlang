@@ -16,6 +16,7 @@ static char* join_module_path(char* left, char* right)
 
 extern int yylex();
 extern int yylineno;
+extern int yycolumn_token;
 extern char* yytext;
 void yyerror(const char* s);
 
@@ -57,6 +58,7 @@ ASTNode* create_double_literal(float value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
+ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* create_try_expression(ASTNode* expr, int line);
@@ -845,7 +847,7 @@ primary_expression
         { $$ = create_format_expr($3, $5, yylineno); }
     | IDENTIFIER COLONCOLON IDENTIFIER
         { $$ = create_enum_literal($1, $3, yylineno); }
-    | IDENTIFIER { $$ = create_identifier_line($1, yylineno); }
+    | IDENTIFIER { $$ = create_identifier_at($1, yylineno, yycolumn_token); }
     | LPAREN expression RPAREN { $$ = $2; }
     | match_expression { $$ = $1; }
     | list_literal { $$ = $1; }

@@ -33,6 +33,7 @@ class ASTNode
 {
 public:
     int line = 0;
+    int col  = 0;
     virtual ~ASTNode() = default;
     virtual std::string toString() const = 0;
 };
@@ -1130,6 +1131,7 @@ ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
+ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_unary_op(int op, ASTNode* operand);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,

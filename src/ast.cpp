@@ -215,6 +215,14 @@ ASTNode* create_identifier_line(char* name, int line)
     return node;
 }
 
+ASTNode* create_identifier_at(char* name, int line, int col)
+{
+    auto* node = new IdentifierNode(std::string(name));
+    node->line = line;
+    node->col  = col;
+    return node;
+}
+
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
 {
     BinaryOpNode::OpType opType;
@@ -1172,6 +1180,9 @@ std::string UnaryOpNode::toString() const
         break;
     case OP_ADDR:
         op_str = "&";
+        break;
+    case OP_ADDR_MUT:
+        op_str = "&mut ";
         break;
     case OP_DEREF:
         op_str = "*";
