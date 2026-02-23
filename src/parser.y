@@ -140,6 +140,28 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_closure(ASTNode* body);
+
+// Desugar `lhs op= rhs` into `lhs = lhs op rhs`.
+// Only simple identifier LHS is supported; for other LHS forms an error is
+// set and a dummy node is returned.
+static ASTNode* make_compound_assign(ASTNode* lhs, int op, ASTNode* rhs,
+                                     int line)
+{
+    if(auto* id = dynamic_cast<IdentifierNode*>(lhs))
+    {
+        // Fresh IdentifierNode for the read side — must not reuse lhs pointer.
+        auto* readExpr = new IdentifierNode(id->name);
+        readExpr->line = line;
+        return create_assignment(const_cast<char*>(id->name.c_str()),
+                                 create_binary_op(op, readExpr, rhs), line);
+    }
+    // Compound assignment on field/index LHS: build a chained assignment where
+    // the lhs node serves as the write target and a clone serves as the read.
+    // For now we reuse lhs in the read position (DAG), which is safe as long as
+    // the AST is read-only after construction and nodes are never freed.
+    return create_chained_field_assignment(
+        lhs, create_binary_op(op, lhs, rhs), line);
+}
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 
 static void bind_impl_self_types(ImplBlockNode* implBlock)
@@ -196,6 +218,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT PIPE PIPE_PIPE
+%token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -603,6 +626,16 @@ assignment_statement
             else
                 $$ = create_chained_field_assignment($1, $3, yylineno);
         }
+    | postfix_expression PLUS_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, PLUS, $3, yylineno); }
+    | postfix_expression MINUS_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MINUS, $3, yylineno); }
+    | postfix_expression MULTIPLY_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MULTIPLY, $3, yylineno); }
+    | postfix_expression DIVIDE_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, DIVIDE, $3, yylineno); }
+    | postfix_expression MODULO_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
     | MULTIPLY unary_expression ASSIGN expression SEMICOLON
         { $$ = create_deref_assignment($2, $4, yylineno); }
     ;

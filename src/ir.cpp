@@ -3318,6 +3318,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     namedValues.clear();
     constantVariables.clear();
     movedVariables.clear();
+    closureVariables.clear();
+    activeInlineClosures.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
@@ -5854,6 +5856,28 @@ bool CodeGenerator::canConvertType(llvm::Type* actualType,
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
     recordScopedPointerVariable(node->name);
+
+    // Inline closure: let inc = || { ... }
+    if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
+    {
+        closureVariables[node->name] = closureInit;
+        recordVariableScopeDepth(node->name);
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::AllocaInst* alloca = builder.CreateAlloca(
+            ptrType, nullptr, node->name + ".closure");
+        builder.CreateStore(
+            llvm::ConstantPointerNull::get(
+                llvm::cast<llvm::PointerType>(ptrType)),
+            alloca);
+        namedValues[node->name] = alloca;
+        return;
+    }
+
     llvm::Value* initValue = generateExpression(node->expression);
     if(!initValue)
         return;
@@ -6573,6 +6597,30 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     }
 
     recordVariableScopeDepth(node->name);
+
+    // Inline closure: var inc = || { ... }
+    // Store the AST and leave a null-ptr placeholder; no LLVM value generated.
+    if(node->initExpr)
+    {
+        if(auto* closureInit = dynamic_cast<ClosureNode*>(node->initExpr))
+        {
+            closureVariables[node->name] = closureInit;
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* ptrType =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            llvm::AllocaInst* alloca = builder.CreateAlloca(
+                ptrType, nullptr, node->name + ".closure");
+            builder.CreateStore(
+                llvm::ConstantPointerNull::get(
+                    llvm::cast<llvm::PointerType>(ptrType)),
+                alloca);
+            namedValues[node->name] = alloca;
+            return;
+        }
+    }
 
     if(!node->type)
     {
@@ -8534,6 +8582,47 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name == "atomic_i64_free")
         return generateAtomicI64Free(node);
 
+    // Inline closure call: inc()
+    {
+        auto closIt = closureVariables.find(node->name);
+        if(closIt != closureVariables.end())
+        {
+            // Re-entrancy guard — recursive inline closures are unsupported.
+            if(!activeInlineClosures.insert(node->name).second)
+            {
+                reportError(node->line,
+                            "recursive call to inline closure '" + node->name +
+                                "' is not supported");
+                return nullptr;
+            }
+            ClosureNode* closure = closIt->second;
+
+            // Clear loop context so break/continue don't escape the closure.
+            auto savedBreak    = loopBreakBlocks;
+            auto savedContinue = loopContinueBlocks;
+            loopBreakBlocks.clear();
+            loopContinueBlocks.clear();
+
+            enterCleanupScope();
+            if(closure->body)
+            {
+                for(auto* stmt : closure->body->statements)
+                {
+                    generateStatement(stmt);
+                    if(builder.GetInsertBlock() &&
+                       builder.GetInsertBlock()->getTerminator())
+                        break;
+                }
+            }
+            exitCleanupScope();
+
+            loopBreakBlocks  = std::move(savedBreak);
+            loopContinueBlocks = std::move(savedContinue);
+            activeInlineClosures.erase(node->name);
+            return nullptr; // inline closures return void
+        }
+    }
+
     auto overloadIt = functionOverloads.find(node->name);
     if(overloadIt == functionOverloads.end())
     {
@@ -8971,11 +9060,15 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     auto savedLoopBreak           = loopBreakBlocks;
     auto savedLoopContinue        = loopContinueBlocks;
     auto savedModule              = currentModule;
+    auto savedClosureVars         = closureVariables;
+    auto savedActiveInline        = activeInlineClosures;
 
     // Initialise a fresh scope for the closure body
     namedValues.clear();
     constantVariables.clear();
     movedVariables.clear();
+    closureVariables.clear();
+    activeInlineClosures.clear();
     pointerBorrowTarget.clear();
     activeBorrowers.clear();
     activeMutBorrower.clear();
@@ -9028,6 +9121,8 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     loopBreakBlocks          = std::move(savedLoopBreak);
     loopContinueBlocks       = std::move(savedLoopContinue);
     currentModule            = std::move(savedModule);
+    closureVariables         = std::move(savedClosureVars);
+    activeInlineClosures     = std::move(savedActiveInline);
     builder.restoreIP(savedIP);
 
     return closureFn;

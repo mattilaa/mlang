@@ -63,6 +63,11 @@ private:
     std::set<std::string> constantVariables;
     std::set<std::string> globalConstantVariables;
     std::set<std::string> movedVariables;
+    // Inline closures: var inc = || { ... }; inc();
+    // Maps closure variable name -> its AST node for inline body generation.
+    std::map<std::string, ClosureNode*> closureVariables;
+    // Re-entrancy guard: tracks closures currently being inlined.
+    std::set<std::string> activeInlineClosures;
     std::map<std::string, std::string> pointerBorrowTarget;
     std::map<std::string, std::set<std::string>> activeBorrowers;
     // Tracks the single exclusive mutable borrower per owner variable.

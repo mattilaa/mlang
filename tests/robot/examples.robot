@@ -9,6 +9,7 @@ ${MLANG}           ./build/mlang
 ...    examples/c_lib_usage.mla
 ...    examples/c_type_mappings.mla
 ...    examples/closure_thread.mla
+...    examples/closures_demo.mla
 ...    examples/debug_test.mla
 ...    examples/enum_option_match.mla
 ...    examples/ffi_add.mla
@@ -170,3 +171,46 @@ Mlang Test Sample Directory
 Type Inference Regression
     ${run}=    Run Process    ${MLANG}    test    tests/type_inference_tests.mla    stdout=PIPE    stderr=PIPE    env:PATH=.:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Type inference regression failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+
+Closures Demo Runs Correctly
+    [Documentation]    Build and run examples/closures_demo.mla, verify key
+    ...                output lines for compound assignment, inline capturing
+    ...                closures, and thread::spawn with a closure literal.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/closures_demo_bin
+    ${build}=    Run Process    ${MLANG}    examples/closures_demo.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building closures_demo.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=closures_demo exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    # Inline capturing closure -- counter increments correctly
+    Should Contain    ${run.stdout}    final count: 3
+    # Compound assignment operators
+    Should Contain    ${run.stdout}    2 + 3  = 5
+    Should Contain    ${run.stdout}    5 * 4  = 20
+    Should Contain    ${run.stdout}    20 - 8 = 12
+    Should Contain    ${run.stdout}    12 / 3 = 4
+    # Accumulator closure called in a loop
+    Should Contain    ${run.stdout}    sum of 5 calls to add (+=10 each): 50
+    # Two independent closures
+    Should Contain    ${run.stdout}    x (0 + 3*3) = 9
+    Should Contain    ${run.stdout}    y (1 * 2^3) = 8
+    # Logic inside closure (evens/odds)
+    Should Contain    ${run.stdout}    evens=4 odds=4
+    # thread::spawn with closure -- spawned output appears (order not checked)
+    Should Contain    ${run.stdout}    [thread 1] hello from spawned closure!
+    Should Contain    ${run.stdout}    [thread 2] sum(1..3) = 6
+    # Rust-style spawn pattern
+    Should Contain    ${run.stdout}    hi from the main thread!
+    Should Contain    ${run.stdout}    hi number 1 from the spawned thread!
+    Should Contain    ${run.stdout}    hi number 3 from the spawned thread!
+
+Closure Tests Pass
+    [Documentation]    Run tests/closure_tests.mla through the mlang test runner.
+    ...                Covers compound assignment and inline capturing closures.
+    ${run}=    Run Process    ${MLANG}    test    tests/closure_tests.mla
+    ...    stdout=PIPE    stderr=PIPE    env:PATH=.:%{PATH}
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=closure_tests failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    pass=17
