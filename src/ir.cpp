@@ -300,7 +300,10 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
                 }
             }
             visitingStructs.erase(structName);
-            return OwnershipClass::Copy;
+            // User-defined structs are MoveOnly by default (Rust semantics).
+            // Even if all fields are Copy the struct itself does not implement
+            // Copy unless explicitly annotated (not yet supported).
+            return OwnershipClass::MoveOnly;
         };
 
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(t))
@@ -1072,6 +1075,13 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
 #else
         return llvm::PointerType::get(elemType, 0);
 #endif
+    }
+
+    // Handle reference type (&T and &mut T)
+    // At LLVM level &string == string (both char*); resolve to element type.
+    if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
+    {
+        return getLLVMTypeFromNode(refType->elementType);
     }
 
     // Fall back to basic type kind
@@ -3326,7 +3336,21 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         if(paramIdx < node->parameters->parameters.size())
         {
             auto* paramNode = node->parameters->parameters[paramIdx];
+            if(auto* refType = dynamic_cast<ReferenceTypeNode*>(paramNode->type))
+            {
+                // Store inner element kind so the borrow checker treats the
+                // param as the inner type (e.g. &string -> TYPE_STRING).
+                variableTypes[std::string(arg.getName())] =
+                    refType->elementType->kind;
+                // Immutable reference: param may not be mutated inside body.
+                if(!refType->isMutable)
+                    constantVariables.insert(std::string(arg.getName()));
+                // Mutable reference: leave out of constantVariables.
+            }
+            else
+            {
             variableTypes[std::string(arg.getName())] = paramNode->type->kind;
+            }
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(paramNode->type))
             {
@@ -3375,8 +3399,18 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                     collectUsedIdents(bodyStmts[sj], futureIdents);
                 std::vector<std::string> toClear;
                 for(const auto& kv : pointerBorrowTarget)
-                    if(!futureIdents.count(kv.first))
-                        toClear.push_back(kv.first);
+                {
+                    if(futureIdents.count(kv.first))
+                        continue;
+                    // Don't NLL-expire exclusive struct borrows (ptr<T> where T
+                    // is a struct). They remain active until scope exit or explicit
+                    // reassignment so a second borrow of the same owner is rejected.
+                    auto peit = pointerElementTypes.find(kv.first);
+                    if(peit != pointerElementTypes.end() && peit->second &&
+                       peit->second->kind == TypeNode::TYPE_STRUCT)
+                        continue;
+                    toClear.push_back(kv.first);
+                }
                 for(const auto& ptr : toClear)
                     clearPointerBorrow(ptr);
             }
@@ -3468,8 +3502,18 @@ void CodeGenerator::generateStatement(StatementNode* node)
                     collectUsedIdents(blkStmts[sj], futureIdents);
                 std::vector<std::string> toClear;
                 for(const auto& kv : pointerBorrowTarget)
-                    if(!futureIdents.count(kv.first))
-                        toClear.push_back(kv.first);
+                {
+                    if(futureIdents.count(kv.first))
+                        continue;
+                    // Don't NLL-expire exclusive struct borrows (ptr<T> where T
+                    // is a struct). They remain active until scope exit or explicit
+                    // reassignment so a second borrow of the same owner is rejected.
+                    auto peit = pointerElementTypes.find(kv.first);
+                    if(peit != pointerElementTypes.end() && peit->second &&
+                       peit->second->kind == TypeNode::TYPE_STRUCT)
+                        continue;
+                    toClear.push_back(kv.first);
+                }
                 for(const auto& ptr : toClear)
                     clearPointerBorrow(ptr);
             }
@@ -7914,14 +7958,12 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 
 void CodeGenerator::reportError(int line, const std::string& message)
 {
+    const std::string& file =
+        sourceFileName.empty() ? std::string("<input>") : sourceFileName;
     if(line > 0)
-    {
-        std::cerr << "Error (line " << line << "): " << message << std::endl;
-    }
+        std::cerr << file << ":" << line << ": error: " << message << std::endl;
     else
-    {
-        std::cerr << "Error: " << message << std::endl;
-    }
+        std::cerr << file << ": error: " << message << std::endl;
     hasError = true;
 }
 
@@ -8612,6 +8654,28 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
+        // &s / &mut s where s is a string: generateExpression(OP_ADDR) returns
+        // the alloca (char**). Load through to get the actual char* so the
+        // callee receives the string pointer, not the stack address.
+        if(auto* unary = dynamic_cast<UnaryOpNode*>(arg))
+        {
+            if(unary->op == UnaryOpNode::OP_ADDR ||
+               unary->op == UnaryOpNode::OP_ADDR_MUT)
+            {
+                if(auto* id = dynamic_cast<IdentifierNode*>(unary->operand))
+                {
+                    auto tit = variableTypes.find(id->name);
+                    if(tit != variableTypes.end() &&
+                       (tit->second == TypeNode::TYPE_STRING ||
+                        tit->second == TypeNode::TYPE_STR8 ||
+                        tit->second == TypeNode::TYPE_STR16))
+                    {
+                        argVal = builder.CreateLoad(argVal->getType(), argVal,
+                                                    id->name + ".str_deref");
+                    }
+                }
+            }
+        }
         consumeMoveFromExpression(arg, node->line,
                                   "passing argument to function '" +
                                       node->name + "'");
@@ -8792,6 +8856,33 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                                     "' has wrong type: expected '" +
                                     expectedStr + "', got '" + actualStr + "'");
                     return nullptr;
+                }
+            }
+        }
+
+        // &mut T parameter requires caller to pass &mut value.
+        // &T accepts both plain value and &val (string is Copy).
+        if(best->node &&
+           paramIdx < (size_t)best->node->parameters->parameters.size() &&
+           paramIdx < node->arguments.size())
+        {
+            auto* declParam = best->node->parameters->parameters[paramIdx];
+            if(auto* refType =
+                   dynamic_cast<ReferenceTypeNode*>(declParam->type))
+            {
+                if(refType->isMutable)
+                {
+                    auto* argExpr = node->arguments[paramIdx];
+                    auto* unary   = dynamic_cast<UnaryOpNode*>(argExpr);
+                    bool isRefMut =
+                        unary && unary->op == UnaryOpNode::OP_ADDR_MUT;
+                    if(!isRefMut)
+                    {
+                        reportError(node->line,
+                                    "parameter '" + declParam->name +
+                                        "' expects &mut argument");
+                        return nullptr;
+                    }
                 }
             }
         }

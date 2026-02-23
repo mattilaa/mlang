@@ -666,12 +666,12 @@ fn __jsonrpc_worker_thread(inbound_handle: i64, done_handle: i64, request_capaci
     return 0;
 }
 
-fn __jsonrpc_spawn_workers(remaining: i32, rt: Runtime, done_handle: i64, request_capacity: i64, response_capacity: i64) -> i32 {
+fn __jsonrpc_spawn_workers(remaining: i32, inbound_handle: i64, done_handle: i64, request_capacity: i64, response_capacity: i64) -> i32 {
     if remaining <= 0: {
         return 0;
     }
-    thread_spawn(__jsonrpc_worker_thread, rt.inbound_handle, done_handle, request_capacity, response_capacity);
-    return __jsonrpc_spawn_workers(remaining - 1, rt, done_handle, request_capacity, response_capacity);
+    thread_spawn(__jsonrpc_worker_thread, inbound_handle, done_handle, request_capacity, response_capacity);
+    return __jsonrpc_spawn_workers(remaining - 1, inbound_handle, done_handle, request_capacity, response_capacity);
 }
 
 /// @brief Run full stdio JSON-RPC loop with worker-thread dispatch.
@@ -715,7 +715,7 @@ pub fn run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity:
     }
 
     thread_spawn(__jsonrpc_reader_thread, rt.inbound_handle, done_handle, req_cap);
-    __jsonrpc_spawn_workers(workers, rt, done_handle, req_cap, resp_cap);
+    __jsonrpc_spawn_workers(workers, rt.inbound_handle, done_handle, req_cap, resp_cap);
 
     var done_buf = String::with_capacity(32);
     for _i in 0..(workers + 1) {

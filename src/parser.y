@@ -19,6 +19,9 @@ extern int yylineno;
 extern char* yytext;
 void yyerror(const char* s);
 
+// Source file name used in error messages (set by main before yyparse())
+const char* g_sourceFile = "<input>";
+
 // External reference to programRoot defined in globals.cpp
 extern "C" {
     extern ASTNode* programRoot;
@@ -53,6 +56,7 @@ ASTNode* create_float_literal(float value);
 ASTNode* create_double_literal(float value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
+ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* create_try_expression(ASTNode* expr, int line);
@@ -132,6 +136,7 @@ ASTNode* create_enum_variant_list(ASTNode* variant);
 ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
+ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 
 static void bind_impl_self_types(ImplBlockNode* implBlock)
@@ -484,6 +489,8 @@ type
     | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
     | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
+    | AMP type               { $$ = create_reference_type($2, 0); }
+    | AMP_MUT type           { $$ = create_reference_type($2, 1); }
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
     | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
@@ -838,7 +845,7 @@ primary_expression
         { $$ = create_format_expr($3, $5, yylineno); }
     | IDENTIFIER COLONCOLON IDENTIFIER
         { $$ = create_enum_literal($1, $3, yylineno); }
-    | IDENTIFIER { $$ = create_identifier($1); }
+    | IDENTIFIER { $$ = create_identifier_line($1, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
     | match_expression { $$ = $1; }
     | list_literal { $$ = $1; }
@@ -979,9 +986,9 @@ void yyerror(const char* s) {
     if(is_reserved_type_keyword(yytext))
     {
         fprintf(stderr,
-                "error: expected identifier, found keyword '%s' (line %d)\n",
-                yytext, yylineno);
+                "%s:%d: error: expected identifier, found keyword '%s'\n",
+                g_sourceFile, yylineno, yytext);
         return;
     }
-    fprintf(stderr, "Error at line %d: %s\n", yylineno, s);
+    fprintf(stderr, "%s:%d: error: %s\n", g_sourceFile, yylineno, s);
 }

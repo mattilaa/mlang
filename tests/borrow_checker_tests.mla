@@ -209,6 +209,53 @@ fn test_string_copy_semantics() -> i32 {
     return 0;
 }
 
+// ── 16. &string parameter -- immutable borrow annotation ─────────────────────
+
+fn read_only(s: &string) -> i64 {
+    return s.len();
+}
+
+#[test]
+fn test_ref_param_string() -> i32 {
+    let s = String::from("hello");
+    // passing &s to a &string param
+    if read_only(&s) != 5: { return 1; }
+    // string is Copy -- plain value also accepted
+    if read_only(s) != 5: { return 1; }
+    return 0;
+}
+
+// ── 17. &mut string parameter -- mutable borrow annotation ───────────────────
+// push_str updates the callee-local alloca; verify via returned length.
+
+fn append_bang(s: &mut string) -> i64 {
+    s.push_str("!");
+    return s.len();
+}
+
+#[test]
+fn test_mut_ref_param_string() -> i32 {
+    var s = String::from("hello");
+    // &mut s required at call site (call-site validator enforces this)
+    let n = append_bang(&mut s);
+    if n != 6: { return 1; }   // "hello!" has 6 chars
+    return 0;
+}
+
+// ── 18. &string return type ───────────────────────────────────────────────────
+
+fn get_greeting(s: &string) -> &string {
+    return s;
+}
+
+#[test]
+fn test_ref_return_type() -> i32 {
+    let s = String::from("hi");
+    let r = get_greeting(&s);
+    if streq(r, "hi") != 1: { return 1; }
+    return 0;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // The following patterns must NOT compile (left in block comments to document
 // the expected borrow-checker rejections):

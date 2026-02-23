@@ -245,17 +245,13 @@ pub fn try_lock(out: Stdout) -> int {
 /// @brief Write text with implicit lock/unlock around the write.
 pub fn write_sync(out: Stdout, s: string) -> i64 {
     let lk: StdoutLock = lock(out);
-    let n = write_locked(lk, s);
-    unlock(lk);
-    return n;
+    return write_locked(lk, s);
 }
 
 /// @brief Write text+newline with implicit lock/unlock around the write.
 pub fn writeln_sync(out: Stdout, s: string) -> i64 {
     let lk: StdoutLock = lock(out);
-    let n = writeln_locked(lk, s);
-    unlock(lk);
-    return n;
+    return writeln_locked(lk, s);
 }
 
 /// @brief Trait-like read.

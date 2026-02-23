@@ -214,7 +214,6 @@ fn read_config(path: string) -> FormatConfig {
     }
 
     free_lines(lines);
-    file.close();
     return cfg;
 }
 

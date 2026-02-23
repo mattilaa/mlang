@@ -804,17 +804,17 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
     return format!("{}::{}", prefix, word);
 }
 
-fn symbol_kind_lsp(sym: DocumentSymbol) -> i32 {
-    if contains(sym.signature, "fn ") == 1: {
+fn symbol_kind_lsp(sig: string) -> i32 {
+    if contains(sig, "fn ") == 1: {
         return 12;
     }
-    if contains(sym.signature, "struct ") == 1: {
+    if contains(sig, "struct ") == 1: {
         return 23;
     }
-    if contains(sym.signature, "enum ") == 1: {
+    if contains(sig, "enum ") == 1: {
         return 10;
     }
-    if contains(sym.signature, "mod ") == 1: {
+    if contains(sig, "mod ") == 1: {
         return 2;
     }
     return 13;
@@ -929,9 +929,10 @@ fn completion_documentation(label: string) -> string {
     return String::new();
 }
 
-fn completion_symbol_detail_in_uri(s: Session, target_uri: string, label: string) -> string {
+fn completion_symbol_detail_in_uri(target_uri: string, label: string) -> string {
     if len(target_uri) == 0: { return String::new(); }
     if len(label) == 0: { return String::new(); }
+    let s: Session = current_session();
     let cr: Result<i32, string> = s.document_symbol_count(target_uri);
     if cr.is_err(): { return String::new(); }
     let n: i32 = match cr {
@@ -984,9 +985,10 @@ fn completion_symbol_detail_in_uri(s: Session, target_uri: string, label: string
     return String::new();
 }
 
-fn completion_symbol_doc_in_uri(s: Session, target_uri: string, label: string) -> string {
+fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
     if len(target_uri) == 0: { return String::new(); }
     if len(label) == 0: { return String::new(); }
+    let s: Session = current_session();
     let cr: Result<i32, string> = s.document_symbol_count(target_uri);
     if cr.is_err(): { return String::new(); }
     let n: i32 = match cr {
@@ -1022,8 +1024,8 @@ fn completion_symbol_doc_in_uri(s: Session, target_uri: string, label: string) -
     return String::new();
 }
 
-fn completion_symbol_detail(s: Session, current_uri: string, label: string) -> string {
-    let d0: string = completion_symbol_detail_in_uri(s, current_uri, label);
+fn completion_symbol_detail(current_uri: string, label: string) -> string {
+    let d0: string = completion_symbol_detail_in_uri(current_uri, label);
     if len(d0) > 0: { return d0; }
     if ensure_uri_store() != 0: { return String::new(); }
     let n: i64 = uri_store_count(g_uri_store_handle);
@@ -1031,14 +1033,14 @@ fn completion_symbol_detail(s: Session, current_uri: string, label: string) -> s
         let u: string = uri_store_get(g_uri_store_handle, i);
         if len(u) == 0: { continue; }
         if eq(u, current_uri) == 1: { continue; }
-        let d: string = completion_symbol_detail_in_uri(s, u, label);
+        let d: string = completion_symbol_detail_in_uri(u, label);
         if len(d) > 0: { return d; }
     }
     return String::new();
 }
 
-fn completion_symbol_doc(s: Session, current_uri: string, label: string) -> string {
-    let d0: string = completion_symbol_doc_in_uri(s, current_uri, label);
+fn completion_symbol_doc(current_uri: string, label: string) -> string {
+    let d0: string = completion_symbol_doc_in_uri(current_uri, label);
     if len(d0) > 0: { return d0; }
     if ensure_uri_store() != 0: { return String::new(); }
     let n: i64 = uri_store_count(g_uri_store_handle);
@@ -1046,7 +1048,7 @@ fn completion_symbol_doc(s: Session, current_uri: string, label: string) -> stri
         let u: string = uri_store_get(g_uri_store_handle, i);
         if len(u) == 0: { continue; }
         if eq(u, current_uri) == 1: { continue; }
-        let d: string = completion_symbol_doc_in_uri(s, u, label);
+        let d: string = completion_symbol_doc_in_uri(u, label);
         if len(d) > 0: { return d; }
     }
     return String::new();
@@ -1410,10 +1412,10 @@ fn handle_completion(payload: string) -> string {
         var detail_raw: string = completion_detail(label_raw);
         var doc_raw: string = completion_documentation(label_raw);
         if len(detail_raw) == 0: {
-            detail_raw = completion_symbol_detail(s, uri, label_raw);
+            detail_raw = completion_symbol_detail(uri, label_raw);
         }
         if len(doc_raw) == 0: {
-            doc_raw = completion_symbol_doc(s, uri, label_raw);
+            doc_raw = completion_symbol_doc(uri, label_raw);
         }
         let detail: string = json_escape(detail_raw);
         let doc: string = json_escape(doc_raw);
@@ -1472,7 +1474,7 @@ fn handle_document_symbol(payload: string) -> string {
         };
         let name_e: string = json_escape(sym.name);
         let range: string = range_json(sym.line, sym.column);
-        let kind: i32 = symbol_kind_lsp(sym);
+        let kind: i32 = symbol_kind_lsp(sym.signature);
         let item: string = format!(
             "{{\"name\":\"{}\",\"kind\":{},\"range\":{},\"selectionRange\":{}}}",
             name_e, kind, range, range
@@ -1839,7 +1841,7 @@ fn handle_workspace_symbol(payload: string) -> string {
             if len(query) > 0: {
                 if contains(sym.name, query) != 1: { continue; }
             }
-            let kind: i32 = symbol_kind_lsp(sym);
+            let kind: i32 = symbol_kind_lsp(sym.signature);
             let name_e: string = json_escape(sym.name);
             let loc: string = location_json(uri, sym.line, sym.column);
             let item: string = format!(
@@ -1868,8 +1870,8 @@ fn handle_workspace_symbol(payload: string) -> string {
     return out;
 }
 
-fn semantic_token_type(sym: DocumentSymbol) -> i32 {
-    let kind_lsp: i32 = symbol_kind_lsp(sym);
+fn semantic_token_type(sig: string) -> i32 {
+    let kind_lsp: i32 = symbol_kind_lsp(sig);
     if kind_lsp == 12: {
         return 2; // function
     }
@@ -1882,30 +1884,30 @@ fn semantic_token_type(sym: DocumentSymbol) -> i32 {
     if kind_lsp == 2: {
         return 0; // keyword/module
     }
-    if contains(sym.signature, "fn ") == 1: {
+    if contains(sig, "fn ") == 1: {
         return 2; // function
     }
-    if contains(sym.signature, "struct ") == 1: {
+    if contains(sig, "struct ") == 1: {
         return 5; // type
     }
-    if contains(sym.signature, "enum ") == 1: {
+    if contains(sig, "enum ") == 1: {
         return 5; // type
     }
-    if contains(sym.signature, "mod ") == 1: {
+    if contains(sig, "mod ") == 1: {
         return 0; // keyword
     }
     return 4; // variable
 }
 
-fn semantic_token_modifiers(sym: DocumentSymbol) -> i32 {
+fn semantic_token_modifiers(sig: string) -> i32 {
     // bit 0: declaration
     // bit 1: static
     // bit 2: readonly
     var mods: i32 = 1;
-    if contains(sym.signature, "static ") == 1: {
+    if contains(sig, "static ") == 1: {
         mods = mods + 2;
     }
-    if contains(sym.signature, "let ") == 1: {
+    if contains(sig, "let ") == 1: {
         mods = mods + 4;
     }
     return mods;
@@ -1956,8 +1958,8 @@ fn handle_semantic_tokens_full(payload: string) -> string {
             ds = col0 - prev_col;
         }
         let tlen: i32 = len(sym.name);
-        let ttype: i32 = semantic_token_type(sym);
-        let tmods: i32 = semantic_token_modifiers(sym);
+        let ttype: i32 = semantic_token_type(sym.signature);
+        let tmods: i32 = semantic_token_modifiers(sym.signature);
         let chunk: string = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
         if j > 0: {
             data = format!("{},{}", data, chunk);

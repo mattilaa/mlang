@@ -208,6 +208,13 @@ ASTNode* create_identifier(char* name)
     return new IdentifierNode(std::string(name));
 }
 
+ASTNode* create_identifier_line(char* name, int line)
+{
+    auto* node = new IdentifierNode(std::string(name));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
 {
     BinaryOpNode::OpType opType;
@@ -699,6 +706,18 @@ ASTNode* create_list_type()
 ASTNode* create_pointer_type(ASTNode* element_type)
 {
     return new PointerTypeNode(static_cast<TypeNode*>(element_type));
+}
+
+ASTNode* create_reference_type(ASTNode* element_type, int is_mutable)
+{
+    return new ReferenceTypeNode(
+        static_cast<TypeNode*>(element_type), is_mutable != 0);
+}
+
+std::string ReferenceTypeNode::toString() const
+{
+    std::string m = isMutable ? "mut " : "";
+    return "&" + m + (elementType ? elementType->toString() : "void");
 }
 
 ASTNode* create_list_literal(ASTNode* elements)

@@ -63,7 +63,9 @@ public:
         TYPE_U8,
         TYPE_U16,
         TYPE_U32,
-        TYPE_U64
+        TYPE_U64,
+        TYPE_REF,      // &T  -- immutable reference
+        TYPE_REF_MUT   // &mut T -- mutable reference
     };
 
     TypeKind kind;
@@ -79,6 +81,20 @@ public:
     TypeNode* elementType;
     PointerTypeNode(TypeNode* elemType)
         : TypeNode(TYPE_PTR), elementType(elemType)
+    {
+    }
+    std::string toString() const override;
+};
+
+// Reference type node: &T / &mut T
+class ReferenceTypeNode : public TypeNode
+{
+public:
+    TypeNode* elementType;
+    bool      isMutable;   // true for &mut T
+    ReferenceTypeNode(TypeNode* elemType, bool mut)
+        : TypeNode(mut ? TYPE_REF_MUT : TYPE_REF),
+          elementType(elemType), isMutable(mut)
     {
     }
     std::string toString() const override;
@@ -1113,6 +1129,7 @@ ASTNode* create_float_literal(float value);
 ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);
 ASTNode* create_identifier(char* name);
+ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_unary_op(int op, ASTNode* operand);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,

@@ -23,6 +23,7 @@
 // Declare functions and globals from parser/lexer
 extern int yyparse();
 extern FILE* yyin;
+extern const char* g_sourceFile;   // set before yyparse() for error messages
 extern "C"
 {
     extern ASTNode* programRoot;
@@ -858,6 +859,7 @@ int main(int argc, char** argv)
         }
 
         parseHadError = false;
+        g_sourceFile = inputFile.c_str();
         if(yyparse() != 0 || parseHadError)
         {
             std::cerr << "Parsing failed." << std::endl;
@@ -960,6 +962,7 @@ int main(int argc, char** argv)
 
         // Initialize code generator
         CodeGenerator generator(context, builder, module, debugMode);
+        generator.setSourceFile(inputFile);
         generator.setTestMode(testMode);
         if(!testMode)
             generator.setIncludeTests(includeTests);

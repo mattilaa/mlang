@@ -1378,16 +1378,24 @@ TEST_F(MLATest, OwnershipTernaryBranchMovesArePathSensitiveDuringEvaluation)
 
 TEST_F(MLATest, OwnershipTernaryMoveStillConsumesAfterMerge)
 {
+    // Verify that if a MoveOnly value is consumed in the ternary "then" branch,
+    // using it again after the merge is a "use of moved value" error.
+    // Uses a struct (Post) which is correctly MoveOnly; string is Copy and
+    // would not trigger move semantics.
     std::string code = R"(
-        fn take_msg(s: string) -> i32 {
+        struct Post {
+            var content: string;
+        };
+
+        fn take_post(p: Post) -> i32 {
             return 1;
         }
 
         fn main() -> i32 {
             let flag: i32 = 1;
-            let msg: string = "hello";
-            let x: i32 = flag > 0 ? take_msg(msg) : 0;
-            return take_msg(msg) + x;
+            let msg: Post = Post { content: "hello" };
+            let x: i32 = flag > 0 ? take_post(msg) : 0;
+            return take_post(msg) + x;
         }
     )";
     writeSource(code);

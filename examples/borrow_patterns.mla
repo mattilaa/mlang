@@ -66,13 +66,13 @@ fn demo_mut_borrow() -> void {
 
 fn demo_clone() -> void {
     var original = String::from("base");
-    var copy     = original.clone();
+    var copy = original.clone();
 
     original.push_str("_A");
     copy.push_str("_B");
 
-    println!("{}", original);   // base_A
-    println!("{}", copy);       // base_B
+    println!("{}", original); // base_A
+    println!("{}", copy); // base_B
 }
 
 // ── 5. clone() then borrow ────────────────────────────────────────────────────
@@ -81,28 +81,28 @@ fn demo_clone() -> void {
 // does not invalidate the clone's borrow.
 
 fn demo_clone_then_borrow() -> void {
-    var s  = String::from("source");
-    let c  = s.clone();
-    let rc = &c;         // borrow of the clone, not of s
+    var s = String::from("source");
+    let c = s.clone();
+    let rc = &c; // borrow of the clone, not of s
 
-    s.push_str("_mutated");   // fine -- c is independent
+    s.push_str("_mutated"); // fine -- c is independent
 
-    println!("{}", rc);   // source
-    println!("{}", s);    // source_mutated
+    println!("{}", rc); // source
+    println!("{}", s); // source_mutated
 }
 
 // ── 6. len() and is_empty() ───────────────────────────────────────────────────
 
 fn demo_string_methods() -> void {
     var buf = String::new();
-    println!("{}", buf.is_empty());   // 1
+    println!("{}", buf.is_empty()); // 1
 
     buf.push_str("hello");
-    println!("{}", buf.len());        // 5
-    println!("{}", buf.is_empty());   // 0
+    println!("{}", buf.len()); // 5
+    println!("{}", buf.is_empty()); // 0
 
     buf.push_str(", world");
-    println!("{}", buf.len());        // 12
+    println!("{}", buf.len()); // 12
 }
 
 // ── 7. Sequential push_str ───────────────────────────────────────────────────
@@ -114,40 +114,41 @@ fn demo_sequential_push_str() -> void {
     result.push_str("two");
     result.push_str(", ");
     result.push_str("three");
-    println!("{}", result);   // one, two, three
+    println!("{}", result); // one, two, three
 }
 
 // ── 8. Borrow of function parameter ─────────────────────────────────────────
 //
-// String parameters are Copy (char* pointer copy), so taking a reference to
-// one and returning it is safe -- no dangling pointer is created.
+// Use &string in the signature to document that the function borrows its
+// argument without taking ownership.  String is Copy, so the caller can pass
+// either a plain value or &val.
 
-fn identity_via_borrow(src: string) -> string {
-    let r = &src;
-    return r;
+fn identity_via_borrow(src: &string) -> &string {
+    return src;
 }
 
 fn demo_borrow_of_param() -> void {
-    let s   = String::from("parameter");
-    let got = identity_via_borrow(s);
-    println!("{}", got);   // parameter
+    let s = String::from("parameter");
+    let got = identity_via_borrow(&s);
+    println!("{}", got); // parameter
 }
 
 // ── 9. String Copy semantics ─────────────────────────────────────────────────
 //
 // Passing a `string` to a function copies the char* pointer -- it does NOT move
 // ownership.  The same binding can be used multiple times.
+// Using &string in the signature makes the borrowing contract explicit.
 
-fn get_len(s: string) -> i64 {
+fn get_len(s: &string) -> i64 {
     return s.len();
 }
 
 fn demo_copy_semantics() -> void {
     let s = String::from("reusable");
-    // s can be passed to multiple call sites without being "consumed".
-    println!("{}", get_len(s));   // 8
-    println!("{}", get_len(s));   // 8
-    println!("{}", s);            // reusable
+    // &s passes a shared borrow; string is Copy so s remains usable.
+    println!("{}", get_len(&s)); // 8
+    println!("{}", get_len(&s)); // 8
+    println!("{}", s); // reusable
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

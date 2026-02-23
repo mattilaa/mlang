@@ -42,6 +42,10 @@ public:
     {
         includeTests = enabled;
     }
+    void setSourceFile(const std::string& file)
+    {
+        sourceFileName = file;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -85,6 +89,7 @@ private:
     bool debugEnabled;
     bool testMode = false;
     bool includeTests = true;
+    std::string sourceFileName;
 
     // Visibility tracking for functions
     // Maps function signature key -> (isPublic, sourceModule)
