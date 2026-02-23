@@ -3660,6 +3660,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
 #endif
         return builder.CreateBitCast(fn, ptrType, "closure.ptr");
     }
+    else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node))
+    {
+        return generateArrayFill(arrFill);
+    }
     return nullptr;
 }
 
@@ -4563,12 +4567,33 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     }
 }
 
+// Strip .iter() / .into_iter() / .enumerate() method wrappers from a
+// for-loop iterable, returning the underlying collection expression.
+// This lets "arr.iter().enumerate()" and "arr.into_iter()" work as
+// aliases for the plain collection "arr".
+static ExpressionNode* stripIterMethods(ExpressionNode* expr)
+{
+    while(auto* mc = dynamic_cast<MethodCallNode*>(expr))
+    {
+        const std::string& mn = mc->methodName;
+        if(mn == "iter" || mn == "into_iter" || mn == "enumerate")
+            expr = mc->object;
+        else
+            break;
+    }
+    return expr;
+}
+
 void CodeGenerator::generateForStatement(ForNode* node)
 {
     llvm::Function* function = builder.GetInsertBlock()->getParent();
 
+    // Strip .iter() / .into_iter() / .enumerate() wrappers from the iterable.
+    // The actual iteration is always over the underlying collection.
+    ExpressionNode* iterableExpr = stripIterMethods(node->iterable);
+
     // Check if it's a range expression
-    auto* rangeExpr = dynamic_cast<RangeExpressionNode*>(node->iterable);
+    auto* rangeExpr = dynamic_cast<RangeExpressionNode*>(iterableExpr);
     if(rangeExpr)
     {
         // Generate start and end values
@@ -4773,12 +4798,53 @@ void CodeGenerator::generateForStatement(ForNode* node)
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
         }
     }
-    else if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->iterable))
+    else if(auto* listLit = dynamic_cast<ListLiteralNode*>(iterableExpr))
     {
         // Iterating over a list literal: for x in [1, 2, 3] { ... }
         generateForListLiteralIteration(node, listLit);
     }
-    else if(auto* identifier = dynamic_cast<IdentifierNode*>(node->iterable))
+    else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(iterableExpr))
+    {
+        // Iterating over [val; N] — materialise as a list literal iteration
+        // by generating the fill value into a temporary list first.
+        llvm::Value* listVal = generateArrayFill(arrFill);
+        if(!listVal)
+            return;
+        // Store the generated list into a temp alloca so the list-variable
+        // iteration path can load it.
+        llvm::Type* listType = listVal->getType();
+        llvm::AllocaInst* tmpList =
+            builder.CreateAlloca(listType, nullptr, "arrtmp");
+        builder.CreateStore(listVal, tmpList);
+
+        // Determine element type from ArrayFillNode.value
+        llvm::Value* fillVal = generateExpression(arrFill->value);
+        if(!fillVal)
+            return;
+        // Build a synthetic element TypeNode (i64 for integer fill values)
+        auto* elemTypeNode = new TypeNode(TypeNode::TYPE_I64);
+        if(fillVal->getType()->isIntegerTy(32))
+            elemTypeNode = new TypeNode(TypeNode::TYPE_I32);
+        else if(fillVal->getType()->isIntegerTy(1))
+            elemTypeNode = new TypeNode(TypeNode::TYPE_BOOL);
+        else if(fillVal->getType()->isFloatTy())
+            elemTypeNode = new TypeNode(TypeNode::TYPE_FLOAT);
+        else if(fillVal->getType()->isDoubleTy())
+            elemTypeNode = new TypeNode(TypeNode::TYPE_DOUBLE);
+
+        std::string tmpName = "__arr_fill_tmp";
+        listElementTypes[tmpName] = elemTypeNode;
+        namedValues[tmpName] = tmpList;
+
+        auto* synthId = new IdentifierNode(tmpName);
+        synthId->line = node->line;
+        generateForListVariableIteration(node, synthId);
+        delete synthId;
+        namedValues.erase(tmpName);
+        listElementTypes.erase(tmpName);
+        delete elemTypeNode;
+    }
+    else if(auto* identifier = dynamic_cast<IdentifierNode*>(iterableExpr))
     {
         // Check if it's a map variable (iterate over entries by default)
         auto mapIt = mapKeyValueTypes.find(identifier->name);
@@ -4796,7 +4862,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
             generateForListVariableIteration(node, identifier);
         }
     }
-    else if(auto* mapIter = dynamic_cast<MapIteratorNode*>(node->iterable))
+    else if(auto* mapIter = dynamic_cast<MapIteratorNode*>(iterableExpr))
     {
         // Iterating over map.keys(), map.values(), or map.entries()
         generateForMapIteration(node, mapIter);
@@ -4864,6 +4930,24 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     namedValues[node->varName] = loopVar;
     variableTypes[node->varName] = TypeNode::TYPE_I64; // Placeholder
     clearMovedVariable(node->varName);
+
+    // Enumerate support: expose index alloca under indexVarName
+    bool hasIdxVar = !node->indexVarName.empty();
+    llvm::Value* oldIdxVal = nullptr;
+    TypeNode::TypeKind oldIdxType = TypeNode::TYPE_VOID;
+    bool hadOldIdxType = false;
+    if(hasIdxVar)
+    {
+        oldIdxVal = namedValues.count(node->indexVarName)
+                        ? namedValues[node->indexVarName]
+                        : nullptr;
+        hadOldIdxType =
+            variableTypes.find(node->indexVarName) != variableTypes.end();
+        if(hadOldIdxType)
+            oldIdxType = variableTypes[node->indexVarName];
+        namedValues[node->indexVarName] = indexVar;
+        variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
+    }
 
     // Create basic blocks
     llvm::BasicBlock* condBB =
@@ -4934,7 +5018,20 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
 
-    // Restore
+    // Restore index var if used
+    if(hasIdxVar)
+    {
+        if(oldIdxVal)
+            namedValues[node->indexVarName] = oldIdxVal;
+        else
+            namedValues.erase(node->indexVarName);
+        if(hadOldIdxType)
+            variableTypes[node->indexVarName] = oldIdxType;
+        else
+            variableTypes.erase(node->indexVarName);
+    }
+
+    // Restore value var
     if(oldVal)
         namedValues[node->varName] = oldVal;
     else
@@ -5019,6 +5116,25 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     variableTypes[node->varName] = elemTypeNode->kind;
     clearMovedVariable(node->varName);
 
+    // If this is an enumerate loop (for (i, x) in ...), expose the index alloca
+    // under indexVarName so body code can read it.
+    bool hasIdxVar = !node->indexVarName.empty();
+    llvm::Value* oldIdxVal = nullptr;
+    TypeNode::TypeKind oldIdxType = TypeNode::TYPE_VOID;
+    bool hadOldIdxType = false;
+    if(hasIdxVar)
+    {
+        oldIdxVal = namedValues.count(node->indexVarName)
+                        ? namedValues[node->indexVarName]
+                        : nullptr;
+        hadOldIdxType =
+            variableTypes.find(node->indexVarName) != variableTypes.end();
+        if(hadOldIdxType)
+            oldIdxType = variableTypes[node->indexVarName];
+        namedValues[node->indexVarName] = indexVar;
+        variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
+    }
+
     // Create blocks
     llvm::BasicBlock* condBB =
         llvm::BasicBlock::Create(context, "for.cond", function);
@@ -5080,7 +5196,20 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     loopBreakBlocks.pop_back();
     loopContinueBlocks.pop_back();
 
-    // Restore
+    // Restore index var if used
+    if(hasIdxVar)
+    {
+        if(oldIdxVal)
+            namedValues[node->indexVarName] = oldIdxVal;
+        else
+            namedValues.erase(node->indexVarName);
+        if(hadOldIdxType)
+            variableTypes[node->indexVarName] = oldIdxType;
+        else
+            variableTypes.erase(node->indexVarName);
+    }
+
+    // Restore value var
     if(oldVal)
         namedValues[node->varName] = oldVal;
     else
@@ -5878,7 +6007,20 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         return;
     }
 
-    llvm::Value* initValue = generateExpression(node->expression);
+    // For list/array-fill initializers with a declared element type, pass that
+    // type to the generator so integer literals (always i64) are coerced to the
+    // declared size (e.g., i32), preventing stride mismatches during iteration.
+    llvm::Value* initValue = nullptr;
+    if(auto* genListType = dynamic_cast<GenericListTypeNode*>(node->type))
+    {
+        llvm::Type* declElem = getLLVMType(genListType->elementType->kind);
+        if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
+            initValue = generateListLiteral(listLit, declElem);
+        else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node->expression))
+            initValue = generateArrayFill(arrFill, declElem);
+    }
+    if(!initValue)
+        initValue = generateExpression(node->expression);
     if(!initValue)
         return;
     // For `let r = &s` where s is a string: getLValuePointer returns the alloca
@@ -6867,7 +7009,16 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         if(node->initExpr)
         {
-            llvm::Value* initValue = generateExpression(node->initExpr);
+            llvm::Type* declElem =
+                getLLVMType(genListType->elementType->kind);
+            llvm::Value* initValue = nullptr;
+            if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
+                initValue = generateListLiteral(listLit, declElem);
+            else if(auto* arrFill =
+                        dynamic_cast<ArrayFillNode*>(node->initExpr))
+                initValue = generateArrayFill(arrFill, declElem);
+            else
+                initValue = generateExpression(node->initExpr);
             if(initValue)
             {
                 builder.CreateStore(initValue, alloca);
@@ -10718,6 +10869,94 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
         }
 
+        // Handle built-in list methods (len)
+        {
+            auto listTypeIt = variableTypes.find(objId->name);
+            if(listTypeIt != variableTypes.end() &&
+               listTypeIt->second == TypeNode::TYPE_LIST)
+            {
+                if(node->methodName == "len")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line, "len() takes no arguments");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+                    // List struct layout: {i64 count, ptr data}
+                    // Extract field 0 (count) via extractvalue after loading the struct
+                    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
+                    llvm::StructType* listStructType =
+                        llvm::StructType::get(context, listStructTypes);
+                    llvm::Value* listStruct = builder.CreateLoad(
+                        listStructType, allocaPtr, objId->name + ".load");
+                    return builder.CreateExtractValue(listStruct, 0,
+                                                      objId->name + ".len");
+                }
+                reportError(node->line,
+                            "list has no method named '" +
+                                node->methodName + "'");
+                return nullptr;
+            }
+        }
+
+        // Handle built-in map methods (len)
+        {
+            auto mapTypeIt = variableTypes.find(objId->name);
+            if(mapTypeIt != variableTypes.end() &&
+               mapTypeIt->second == TypeNode::TYPE_MAP)
+            {
+                if(node->methodName == "len")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line, "len() takes no arguments");
+                        return nullptr;
+                    }
+                    llvm::Value* allocaPtr = namedValues[objId->name];
+                    if(!allocaPtr)
+                    {
+                        reportError(node->line,
+                                    "unknown variable: " + objId->name);
+                        return nullptr;
+                    }
+                    // Map struct layout: {i64 count, ptr keys, ptr vals}
+                    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* ptrType = llvm::PointerType::get(
+                        llvm::Type::getInt8Ty(context), 0);
+#endif
+                    std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType,
+                                                               ptrType};
+                    llvm::StructType* mapStructType =
+                        llvm::StructType::get(context, mapStructTypes);
+                    llvm::Value* mapStruct = builder.CreateLoad(
+                        mapStructType, allocaPtr, objId->name + ".load");
+                    return builder.CreateExtractValue(mapStruct, 0,
+                                                      objId->name + ".len");
+                }
+                reportError(node->line,
+                            "map has no method named '" +
+                                node->methodName + "'");
+                return nullptr;
+            }
+        }
+
         // Simple case: identifier.method()
         auto typeIt = structVariableTypes.find(objId->name);
         if(typeIt == structVariableTypes.end())
@@ -10975,7 +11214,8 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     return value;
 }
 
-llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node)
+llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
+                                                 llvm::Type* declaredElemType)
 {
     // List structure: { i64 size, ptr data }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -11006,7 +11246,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node)
 
     // Generate all elements
     std::vector<llvm::Value*> elementValues;
-    llvm::Type* elementType = nullptr;
+    // Preferred element type: use declared type if provided, else infer from first
+    llvm::Type* elementType = declaredElemType;
 
     for(auto* elem : node->elements->elements)
     {
@@ -11016,6 +11257,19 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node)
         if(!elementType)
         {
             elementType = val->getType();
+        }
+        // Coerce element to match the target element type (e.g., truncate i64 → i32)
+        if(val->getType() != elementType)
+        {
+            if(val->getType()->isIntegerTy() && elementType->isIntegerTy())
+            {
+                unsigned valBits = val->getType()->getIntegerBitWidth();
+                unsigned tgtBits = elementType->getIntegerBitWidth();
+                if(valBits > tgtBits)
+                    val = builder.CreateTrunc(val, elementType, "elem.trunc");
+                else
+                    val = builder.CreateSExt(val, elementType, "elem.ext");
+            }
         }
         elementValues.push_back(val);
     }
@@ -11046,6 +11300,88 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node)
         listStruct, llvm::ConstantInt::get(i64Type, listSize), 0);
     listStruct = builder.CreateInsertValue(listStruct, dataAlloc, 1);
 
+    return listStruct;
+}
+
+llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
+                                               llvm::Type* declaredElemType)
+{
+    // [val; N] — a list of N copies of val
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+
+    llvm::Value* fillVal = generateExpression(node->value);
+    llvm::Value* countVal = generateExpression(node->count);
+    if(!fillVal || !countVal)
+        return nullptr;
+
+    // Coerce fill value to the declared element type (e.g., i64 literal → i32)
+    llvm::Type* elemType =
+        declaredElemType ? declaredElemType : fillVal->getType();
+    if(fillVal->getType() != elemType)
+    {
+        if(fillVal->getType()->isIntegerTy() && elemType->isIntegerTy())
+        {
+            unsigned srcBits = fillVal->getType()->getIntegerBitWidth();
+            unsigned dstBits = elemType->getIntegerBitWidth();
+            if(srcBits > dstBits)
+                fillVal = builder.CreateTrunc(fillVal, elemType, "fill.trunc");
+            else
+                fillVal = builder.CreateSExt(fillVal, elemType, "fill.ext");
+        }
+    }
+
+    // Extend count to i64
+    if(countVal->getType() != i64Type)
+        countVal = builder.CreateSExt(countVal, i64Type, "fill.count");
+
+    // Allocate storage for count elements
+    llvm::Value* dataAlloc =
+        builder.CreateAlloca(elemType, countVal, "filldata");
+
+    // Loop to store the fill value at each index
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::AllocaInst* idxAlloca = builder.CreateAlloca(i64Type, nullptr, "fi");
+    builder.CreateStore(llvm::ConstantInt::get(i64Type, 0), idxAlloca);
+
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "fill.cond", function);
+    llvm::BasicBlock* bodyBB =
+        llvm::BasicBlock::Create(context, "fill.body", function);
+    llvm::BasicBlock* endBB =
+        llvm::BasicBlock::Create(context, "fill.end", function);
+
+    builder.CreateBr(condBB);
+
+    builder.SetInsertPoint(condBB);
+    llvm::Value* idx = builder.CreateLoad(i64Type, idxAlloca, "fi");
+    llvm::Value* cmp = builder.CreateICmpSLT(idx, countVal, "fill.cond");
+    builder.CreateCondBr(cmp, bodyBB, endBB);
+
+    builder.SetInsertPoint(bodyBB);
+    llvm::Value* elemPtr =
+        builder.CreateGEP(elemType, dataAlloc, idx, "fill.ptr");
+    builder.CreateStore(fillVal, elemPtr);
+    llvm::Value* nextIdx =
+        builder.CreateAdd(idx, llvm::ConstantInt::get(i64Type, 1), "fi.next");
+    builder.CreateStore(nextIdx, idxAlloca);
+    builder.CreateBr(condBB);
+
+    builder.SetInsertPoint(endBB);
+
+    // Build list struct { size, data }
+    std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
+    llvm::StructType* listStructType =
+        llvm::StructType::get(context, listStructTypes);
+
+    llvm::Value* listStruct = llvm::UndefValue::get(listStructType);
+    listStruct = builder.CreateInsertValue(listStruct, countVal, 0);
+    listStruct = builder.CreateInsertValue(listStruct, dataAlloc, 1);
     return listStruct;
 }
 

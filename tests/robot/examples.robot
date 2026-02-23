@@ -34,6 +34,7 @@ ${MLANG}           ./build/mlang
 ...    examples/print_test.mla
 ...    examples/result_match.mla
 ...    examples/result_usage.mla
+...    examples/slice.mla
 ...    examples/str_types.mla
 ...    examples/ternary_example.mla
 ...    examples/thread_basic.mla
@@ -214,3 +215,38 @@ Closure Tests Pass
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=closure_tests failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    pass=17
+
+Slice Example Runs Correctly
+    [Documentation]    Build and run examples/slice.mla; verify key output lines
+    ...                for [T;N] type annotation, [val;N] fill literal, enumerate
+    ...                loop forms, iter()/into_iter() adaptors, and len().
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/slice_bin
+    ${build}=    Run Process    ${MLANG}    examples/slice.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building slice.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=slice example exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    # [T; N] type annotation + len()
+    Should Contain    ${run.stdout}    first element:  1
+    Should Contain    ${run.stdout}    element count:  5
+    # [val; N] fill literal
+    Should Contain    ${run.stdout}    [0] = 0
+    Should Contain    ${run.stdout}    [0] = 5
+    # Dynamic fill count
+    Should Contain    ${run.stdout}    [5] = 1
+    # sum via iter()
+    Should Contain    ${run.stdout}    sum of primes = 41
+    # Enumerate loops (all four forms produce identical output)
+    Should Contain    ${run.stdout}    0: alpha
+    Should Contain    ${run.stdout}    3: delta
+    # iter() / into_iter() no-op adaptors
+    Should Contain    ${run.stdout}    via .iter():
+    Should Contain    ${run.stdout}    via .into_iter():
+    Should Contain    ${run.stdout}    100
+    # Practical: first index > 90
+    Should Contain    ${run.stdout}    first score > 90 at index 0
+    # Multiplication table row 7
+    Should Contain    ${run.stdout}    7 * 0 = 0
+    Should Contain    ${run.stdout}    7 * 9 = 63

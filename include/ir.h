@@ -295,7 +295,10 @@ private:
     llvm::Value* generateAtomicI64Free(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
-    llvm::Value* generateListLiteral(ListLiteralNode* node);
+    llvm::Value* generateListLiteral(ListLiteralNode* node,
+                                    llvm::Type* declaredElemType = nullptr);
+    llvm::Value* generateArrayFill(ArrayFillNode* node,
+                                   llvm::Type* declaredElemType = nullptr);
     llvm::Value* generateMapLiteral(MapLiteralNode* node);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);

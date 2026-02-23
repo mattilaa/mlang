@@ -499,6 +499,17 @@ public:
     std::string toString() const override;
 };
 
+// Array fill literal: [val; N]
+// Semantics: a list of N copies of val
+class ArrayFillNode : public ExpressionNode
+{
+public:
+    ExpressionNode* value; // the fill value
+    ExpressionNode* count; // number of elements
+    ArrayFillNode(ExpressionNode* v, ExpressionNode* c) : value(v), count(c) {}
+    std::string toString() const override;
+};
+
 // Index expression node: arr[index] or map[key]
 class IndexExpressionNode : public ExpressionNode
 {
@@ -722,11 +733,13 @@ class ForNode : public StatementNode
 {
 public:
     std::string varName;
+    std::string indexVarName; // non-empty for "for (i, x) in ..." enumerate style
     ExpressionNode* iterable;
     StatementListNode* body;
 
-    ForNode(const std::string& v, ExpressionNode* it, StatementListNode* b)
-        : varName(v), iterable(it), body(b)
+    ForNode(const std::string& v, ExpressionNode* it, StatementListNode* b,
+            const std::string& idxVar = "")
+        : varName(v), indexVarName(idxVar), iterable(it), body(b)
     {
     }
     std::string toString() const override;

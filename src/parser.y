@@ -140,6 +140,9 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_closure(ASTNode* body);
+ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
+                               ASTNode* body, int line);
+ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
 
 // Desugar `lhs op= rhs` into `lhs = lhs op rhs`.
 // Only simple identifier LHS is supported; for other LHS forms an error is
@@ -224,6 +227,8 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token FAT_ARROW
 %token GENERIC_LT
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
+%token ITER_METHOD INTO_ITER_METHOD ENUMERATE_METHOD
+%token ITER_ENUMERATE_METHOD INTO_ITER_ENUMERATE_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
 %token DERIVE_DEBUG
 %token TEST_ATTR
@@ -517,6 +522,8 @@ type
     | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
     | AMP type               { $$ = create_reference_type($2, 0); }
     | AMP_MUT type           { $$ = create_reference_type($2, 1); }
+    | LBRACKET type SEMICOLON expression RBRACKET
+        { $$ = create_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
     | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
@@ -672,6 +679,23 @@ for_statement
         { $$ = create_for_iterator($2, create_map_values_iterator($4, yylineno), $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression ENTRIES_METHOD block_statement
         { $$ = create_for_iterator($2, create_map_entries_iterator($4, yylineno), $6, yylineno); }
+    /* for x in coll.iter() / .into_iter() — strip the no-op method */
+    | FOR IDENTIFIER IN primary_expression ITER_METHOD block_statement
+        { $$ = create_for_iterator($2, $4, $6, yylineno); }
+    | FOR IDENTIFIER IN primary_expression INTO_ITER_METHOD block_statement
+        { $$ = create_for_iterator($2, $4, $6, yylineno); }
+    /* for (i, x) in coll  — enumerate style (index var, value var) */
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $9, yylineno); }
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN range_expression block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $9, yylineno); }
+    /* for (i, x) in coll.enumerate() / .iter().enumerate() / .into_iter().enumerate() */
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression ENUMERATE_METHOD block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression ITER_ENUMERATE_METHOD block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression INTO_ITER_ENUMERATE_METHOD block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
     ;
 
 range_expression
@@ -960,6 +984,8 @@ cast_expression
 list_literal
     : LBRACKET list_elements RBRACKET { $$ = create_list_literal($2); }
     | LBRACKET RBRACKET { $$ = create_list_literal(NULL); }
+    | LBRACKET expression SEMICOLON expression RBRACKET
+        { $$ = create_array_fill($2, $4); }   /* [val; N] fill literal */
     ;
 
 list_elements

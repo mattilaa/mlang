@@ -192,6 +192,11 @@ static int is_try_question_context()
 ".keys()"       { return KEYS_METHOD; }
 ".values()"     { return VALUES_METHOD; }
 ".entries()"    { return ENTRIES_METHOD; }
+".iter()"       { return ITER_METHOD; }
+".into_iter()"  { return INTO_ITER_METHOD; }
+".iter().enumerate()"      { return ITER_ENUMERATE_METHOD; }
+".into_iter().enumerate()" { return INTO_ITER_ENUMERATE_METHOD; }
+".enumerate()"  { return ENUMERATE_METHOD; }
 "<"             { return is_generic_struct_literal_start() ? GENERIC_LT : LT; }
 ">"             { return GT; }
 "<="            { return LE; }
