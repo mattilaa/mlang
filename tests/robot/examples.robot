@@ -162,15 +162,18 @@ Mlang Test Runner
     ...        return 1;
     ...    }
     Create File    ${src}    ${code}
-    ${run}=    Run Process    ${MLANG}    test    ${src}    stdout=PIPE    stderr=PIPE
+    ${run}=    Run Process    ${MLANG}    test    ${src}
+    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    1    msg=Expected 1 failing test, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Mlang Test Sample Directory
-    ${run}=    Run Process    ${MLANG}    test    tests    stdout=PIPE    stderr=PIPE
+    ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests
+    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Expected sample tests to pass, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Type Inference Regression
-    ${run}=    Run Process    ${MLANG}    test    tests/type_inference_tests.mla    stdout=PIPE    stderr=PIPE    env:PATH=.:%{PATH}
+    ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/type_inference_tests.mla
+    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Type inference regression failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Closures Demo Runs Correctly
@@ -210,8 +213,8 @@ Closures Demo Runs Correctly
 Closure Tests Pass
     [Documentation]    Run tests/closure_tests.mla through the mlang test runner.
     ...                Covers compound assignment and inline capturing closures.
-    ${run}=    Run Process    ${MLANG}    test    tests/closure_tests.mla
-    ...    stdout=PIPE    stderr=PIPE    env:PATH=.:%{PATH}
+    ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/closure_tests.mla
+    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=closure_tests failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    pass=17
