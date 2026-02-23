@@ -722,6 +722,16 @@ ASTNode* create_reference_type(ASTNode* element_type, int is_mutable)
         static_cast<TypeNode*>(element_type), is_mutable != 0);
 }
 
+ASTNode* create_closure(ASTNode* body)
+{
+    return new ClosureNode(static_cast<StatementListNode*>(body));
+}
+
+std::string ClosureNode::toString() const
+{
+    return "|| { ... }";
+}
+
 std::string ReferenceTypeNode::toString() const
 {
     std::string m = isMutable ? "mut " : "";

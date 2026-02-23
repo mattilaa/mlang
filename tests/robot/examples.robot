@@ -8,6 +8,7 @@ ${MLANG}           ./build/mlang
 ...    examples/break_continue.mla
 ...    examples/c_lib_usage.mla
 ...    examples/c_type_mappings.mla
+...    examples/closure_thread.mla
 ...    examples/debug_test.mla
 ...    examples/enum_option_match.mla
 ...    examples/ffi_add.mla
@@ -17,6 +18,8 @@ ${MLANG}           ./build/mlang
 ...    examples/main.mla
 ...    examples/map_iteration.mla
 ...    examples/map_list.mla
+...    examples/mlang_attributes.mla
+...    examples/package_manager_git_cjson/src/main.mla
 ...    examples/std_math_demo.mla
 ...    examples/std_string_demo.mla
 ...    examples/std_thread_demo.mla
@@ -30,15 +33,13 @@ ${MLANG}           ./build/mlang
 ...    examples/print_test.mla
 ...    examples/result_match.mla
 ...    examples/result_usage.mla
-...    examples/mlang_attributes.mla
 ...    examples/str_types.mla
+...    examples/ternary_example.mla
 ...    examples/thread_basic.mla
 ...    examples/thread_multi.mla
 ...    examples/thread_mutex_atomic.mla
-...    examples/ternary_example.mla
 ...    examples/tuple_example.mla
 ...    examples/tuple_test.mla
-...    examples/package_manager_git_cjson/src/main.mla
 
 *** Test Cases ***
 Compile All Examples

@@ -272,6 +272,7 @@ private:
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
+    llvm::Function* generateClosureFn(ClosureNode* node);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);

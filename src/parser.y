@@ -139,6 +139,7 @@ ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* create_closure(ASTNode* body);
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 
 static void bind_impl_self_types(ImplBlockNode* implBlock)
@@ -194,7 +195,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
-%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT PIPE PIPE_PIPE
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -852,6 +853,10 @@ primary_expression
     | match_expression { $$ = $1; }
     | list_literal { $$ = $1; }
     | map_literal { $$ = $1; }
+    | PIPE_PIPE LBRACE RBRACE
+        { $$ = create_closure(NULL); }
+    | PIPE_PIPE LBRACE statement_list RBRACE
+        { $$ = create_closure($3); }
     ;
 
 /* Struct literal: StructName { field: value, ... } */

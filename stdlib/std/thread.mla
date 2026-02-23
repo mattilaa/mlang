@@ -2,8 +2,21 @@
 /// \brief Thread/concurrency helpers for MLang (std::thread).
 ///
 /// This module provides documented wrappers around runtime thread primitives.
-/// Note: `thread_spawn(...)` is a compiler intrinsic and should be called
-/// directly.
+///
+/// ## Usage
+///
+/// Spawn a thread with a closure (preferred):
+///   let handle = thread::spawn(|| {
+///       println!("hello from thread!");
+///   });
+///   thread::join(handle);
+///
+/// Spawn a named function (legacy):
+///   let handle = thread_spawn(my_fn);
+///   thread::join(handle);
+///
+/// Note: `thread_spawn(...)` is a compiler intrinsic also reachable via the
+/// `thread::spawn` qualified name when given a closure or function identifier.
 
 /// @brief Join a spawned thread handle.
 /// Returns thread exit status.

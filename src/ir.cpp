@@ -3645,6 +3645,19 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateMatchExpression(matchExpr);
     }
+    else if(auto* closure = dynamic_cast<ClosureNode*>(node))
+    {
+        llvm::Function* fn = generateClosureFn(closure);
+        if(!fn)
+            return nullptr;
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        return builder.CreateBitCast(fn, ptrType, "closure.ptr");
+    }
     return nullptr;
 }
 
@@ -8498,7 +8511,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return builder.CreateCall(cloneFn, {arg}, "string_from");
     }
 
-    if(node->name == "thread_spawn")
+    if(node->name == "thread_spawn" || node->name == "thread::spawn")
         return generateThreadSpawn(node);
     if(node->name == "thread_join")
         return generateThreadJoin(node);
@@ -8929,6 +8942,97 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     return builder.CreateCall(callee, args, "calltmp");
 }
 
+llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
+{
+    static int closureSeq = 0;
+    std::string closureName =
+        "__mlang_closure_" + std::to_string(closureSeq++);
+
+    llvm::FunctionType* closureFnType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
+    llvm::Function* closureFn = llvm::Function::Create(
+        closureFnType, llvm::Function::PrivateLinkage, closureName,
+        module.get());
+
+    // Save current codegen state so we can restore it after the closure body
+    auto savedIP                  = builder.saveIP();
+    auto savedNamedValues         = namedValues;
+    auto savedConstantVars        = constantVariables;
+    auto savedMovedVars           = movedVariables;
+    auto savedPtrBorrowTarget     = pointerBorrowTarget;
+    auto savedActiveBorrowers     = activeBorrowers;
+    auto savedActiveMutBorrow     = activeMutBorrower;
+    auto savedVarScopeDepth       = variableScopeDepth;
+    auto savedVarTypes            = variableTypes;
+    auto savedStructVarTypes      = structVariableTypes;
+    auto savedCleanupScopes       = cleanupScopes;
+    auto savedPtrBorrowScopes     = pointerBorrowScopes;
+    auto savedVarDepthScopes      = variableScopeDepthScopes;
+    auto savedLoopBreak           = loopBreakBlocks;
+    auto savedLoopContinue        = loopContinueBlocks;
+    auto savedModule              = currentModule;
+
+    // Initialise a fresh scope for the closure body
+    namedValues.clear();
+    constantVariables.clear();
+    movedVariables.clear();
+    pointerBorrowTarget.clear();
+    activeBorrowers.clear();
+    activeMutBorrower.clear();
+    variableScopeDepth.clear();
+    variableTypes.clear();
+    structVariableTypes.clear();
+    cleanupScopes.clear();
+    pointerBorrowScopes.clear();
+    variableScopeDepthScopes.clear();
+    loopBreakBlocks.clear();
+    loopContinueBlocks.clear();
+    currentModule = "";
+
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", closureFn);
+    builder.SetInsertPoint(entry);
+
+    seedFunctionScopeWithGlobals();
+    enterCleanupScope();
+
+    if(node->body)
+    {
+        for(auto* stmt : node->body->statements)
+        {
+            generateStatement(stmt);
+            if(builder.GetInsertBlock() &&
+               builder.GetInsertBlock()->getTerminator())
+                break;
+        }
+    }
+
+    exitCleanupScope();
+
+    if(!builder.GetInsertBlock()->getTerminator())
+        builder.CreateRetVoid();
+
+    // Restore caller state
+    namedValues              = std::move(savedNamedValues);
+    constantVariables        = std::move(savedConstantVars);
+    movedVariables           = std::move(savedMovedVars);
+    pointerBorrowTarget      = std::move(savedPtrBorrowTarget);
+    activeBorrowers          = std::move(savedActiveBorrowers);
+    activeMutBorrower        = std::move(savedActiveMutBorrow);
+    variableScopeDepth       = std::move(savedVarScopeDepth);
+    variableTypes            = std::move(savedVarTypes);
+    structVariableTypes      = std::move(savedStructVarTypes);
+    cleanupScopes            = std::move(savedCleanupScopes);
+    pointerBorrowScopes      = std::move(savedPtrBorrowScopes);
+    variableScopeDepthScopes = std::move(savedVarDepthScopes);
+    loopBreakBlocks          = std::move(savedLoopBreak);
+    loopContinueBlocks       = std::move(savedLoopContinue);
+    currentModule            = std::move(savedModule);
+    builder.restoreIP(savedIP);
+
+    return closureFn;
+}
+
 llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 {
     if(node->arguments.size() < 1 || node->arguments.size() > 5)
@@ -8939,84 +9043,103 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         return nullptr;
     }
 
-    auto* targetId = dynamic_cast<IdentifierNode*>(node->arguments[0]);
-    if(!targetId)
-    {
-        reportError(node->line,
-                    "thread_spawn expects a function name identifier");
-        return nullptr;
-    }
-
-    size_t argCount = node->arguments.size() - 1;
-
+    size_t argCount = 0;
     llvm::Function* targetFunc = nullptr;
-    auto overloadIt = functionOverloads.find(targetId->name);
-    if(overloadIt != functionOverloads.end())
+
+    if(auto* closureArg = dynamic_cast<ClosureNode*>(node->arguments[0]))
     {
-        for(auto& info : overloadIt->second)
+        if(node->arguments.size() != 1)
         {
-            if(!isOverloadVisible(info))
-                continue;
-            llvm::Function* candidate = info.function;
-            if(!candidate || candidate->isVarArg())
-                continue;
-            if(candidate->arg_size() != argCount)
-                continue;
-            if(targetFunc && targetFunc != candidate)
-            {
-                reportError(node->line,
-                            "ambiguous function: '" + targetId->name +
-                                "' for thread_spawn");
-                return nullptr;
-            }
-            targetFunc = candidate;
+            reportError(node->line,
+                        "closure-based thread_spawn takes no extra arguments");
+            return nullptr;
         }
+        targetFunc = generateClosureFn(closureArg);
+        if(!targetFunc)
+            return nullptr;
+        // argCount stays 0 — closure captures nothing via the arg buffer
     }
-
-    if(!targetFunc)
-        targetFunc = module->getFunction(targetId->name);
-    if(!targetFunc)
+    else
     {
-        reportError(node->line,
-                    "unknown function: '" + targetId->name + "'");
-        return nullptr;
-    }
-
-    if(targetFunc->arg_size() != argCount)
-    {
-        reportError(node->line,
-                    "thread_spawn target argument count mismatch");
-        return nullptr;
-    }
-
-    for(size_t i = 0; i < argCount; ++i)
-    {
-        llvm::Type* paramType = targetFunc->getFunctionType()->getParamType(i);
-        if(paramType->isIntegerTy())
-            continue;
-        if(paramType->isStructTy())
+        auto* targetId = dynamic_cast<IdentifierNode*>(node->arguments[0]);
+        if(!targetId)
         {
-            auto* structType = llvm::cast<llvm::StructType>(paramType);
-            std::string structName = structType->getName().str();
-            auto memIt = structMembers.find(structName);
-            int rawIndex = -1;
-            if(memIt != structMembers.end())
+            reportError(node->line,
+                        "thread_spawn expects a function name identifier or closure");
+            return nullptr;
+        }
+
+        argCount = node->arguments.size() - 1;
+
+        auto overloadIt = functionOverloads.find(targetId->name);
+        if(overloadIt != functionOverloads.end())
+        {
+            for(auto& info : overloadIt->second)
             {
-                for(size_t m = 0; m < memIt->second.size(); ++m)
+                if(!isOverloadVisible(info))
+                    continue;
+                llvm::Function* candidate = info.function;
+                if(!candidate || candidate->isVarArg())
+                    continue;
+                if(candidate->arg_size() != argCount)
+                    continue;
+                if(targetFunc && targetFunc != candidate)
                 {
-                    if(memIt->second[m].first == "raw")
+                    reportError(node->line,
+                                "ambiguous function: '" + targetId->name +
+                                    "' for thread_spawn");
+                    return nullptr;
+                }
+                targetFunc = candidate;
+            }
+        }
+
+        if(!targetFunc)
+            targetFunc = module->getFunction(targetId->name);
+        if(!targetFunc)
+        {
+            reportError(node->line,
+                        "unknown function: '" + targetId->name + "'");
+            return nullptr;
+        }
+
+        if(targetFunc->arg_size() != argCount)
+        {
+            reportError(node->line,
+                        "thread_spawn target argument count mismatch");
+            return nullptr;
+        }
+
+        for(size_t i = 0; i < argCount; ++i)
+        {
+            llvm::Type* paramType =
+                targetFunc->getFunctionType()->getParamType(i);
+            if(paramType->isIntegerTy())
+                continue;
+            if(paramType->isStructTy())
+            {
+                auto* structType = llvm::cast<llvm::StructType>(paramType);
+                std::string structName = structType->getName().str();
+                auto memIt = structMembers.find(structName);
+                int rawIndex = -1;
+                if(memIt != structMembers.end())
+                {
+                    for(size_t m = 0; m < memIt->second.size(); ++m)
                     {
-                        rawIndex = static_cast<int>(m);
-                        break;
+                        if(memIt->second[m].first == "raw")
+                        {
+                            rawIndex = static_cast<int>(m);
+                            break;
+                        }
                     }
                 }
+                if(rawIndex >= 0)
+                    continue;
             }
-            if(rawIndex >= 0)
-                continue;
+            reportError(node->line,
+                        "thread_spawn arguments must be integer or handle types");
+            return nullptr;
         }
-        reportError(node->line,
-                    "thread_spawn arguments must be integer or handle types");
-        return nullptr;
     }
 
     initializePthreadFunctions();

@@ -490,6 +490,15 @@ public:
     std::string toString() const override;
 };
 
+// Closure literal: || { body }
+class ClosureNode : public ExpressionNode
+{
+public:
+    StatementListNode* body; // may be null for empty body
+    ClosureNode(StatementListNode* b) : body(b) {}
+    std::string toString() const override;
+};
+
 // Index expression node: arr[index] or map[key]
 class IndexExpressionNode : public ExpressionNode
 {
