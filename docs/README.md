@@ -70,13 +70,16 @@ The runtime builtins are implemented by the compiler backend and map to
 platform facilities (pthreads and libc). These symbols are available without
 explicit imports.
 
+For Vec (dynamic array) helpers, see:
+- `stdlib/std/vec.mla`
+  (`Vec::new`, `vec![...]`, `push/pop/clear`, `len/is_empty`,
+   `contains/index_of`, `sort/sort_desc/reverse/dedup`, `first/last`).
+
 See also:
-- `docs/language_reference.h` for Doxygen groups covering language builtins
-  (types, keywords, macros, attributes).
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
-  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`).
+  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`, `std::vec`).
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
 - `docs/language_attributes.md` for attribute documentation.

@@ -230,6 +230,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token ITER_METHOD INTO_ITER_METHOD ENUMERATE_METHOD
 %token ITER_ENUMERATE_METHOD INTO_ITER_ENUMERATE_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
+%token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
 
@@ -517,6 +518,14 @@ type
     | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = create_list_type(); }
     | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
+    /* Vec<T> is an alias for list<T> */
+    | IDENTIFIER GENERIC_LT type GT
+        {
+            if(strcmp($1, "Vec") == 0)
+                $$ = create_generic_list_type($3);
+            else
+                $$ = create_generic_struct_type_ref($1, create_type_list($3));
+        }
     | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
     | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
@@ -986,6 +995,11 @@ list_literal
     | LBRACKET RBRACKET { $$ = create_list_literal(NULL); }
     | LBRACKET expression SEMICOLON expression RBRACKET
         { $$ = create_array_fill($2, $4); }   /* [val; N] fill literal */
+    /* vec![...] macro forms — same semantics as list literals */
+    | VEC_MACRO LBRACKET list_elements RBRACKET { $$ = create_list_literal($3); }
+    | VEC_MACRO LBRACKET RBRACKET               { $$ = create_list_literal(NULL); }
+    | VEC_MACRO LBRACKET expression SEMICOLON expression RBRACKET
+        { $$ = create_array_fill($3, $5); }   /* vec![val; N] fill macro */
     ;
 
 list_elements

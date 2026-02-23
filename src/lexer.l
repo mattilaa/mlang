@@ -176,6 +176,7 @@ static int is_try_question_context()
 "debug!"        { return DEBUGPRINT; }
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
+"vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]" { return DERIVE_DEBUG; }
 "#[test]"         { return TEST_ATTR; }
 "int("          { return CAST_INT; }

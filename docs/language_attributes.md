@@ -1,4 +1,4 @@
-# Mlang Language Attributes
+# Mlang Language Attributes {#language_attributes}
 
 This document describes Rust-like attributes currently implemented in Mlang and
 how to extend them.

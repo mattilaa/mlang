@@ -30,6 +30,11 @@
 // Asserts that two values are equal. Debug-only by default.
 // Usage: assert_eq!(left, right);
 
+// @builtin_macro vec
+// Creates a Vec<T> (list<T>) from a literal or fill expression.
+// Usage: vec![a, b, c]   -- list from elements
+// Usage: vec![val; N]    -- N copies of val
+
 // Built-in attributes (compiler-recognized)
 // Usage: #[derive(Debug)] struct Foo { ... };
 // Usage: #[test] fn test_name() -> i32 { return 0; }

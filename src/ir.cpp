@@ -6059,6 +6059,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
         auto infer_kind_from_expr = [&](ExpressionNode* expr) -> TypeNode::TypeKind
         {
+            if(dynamic_cast<IntLiteralNode*>(expr))
+                return TypeNode::TYPE_I64;  // generateIntLiteral always emits i64
             if(dynamic_cast<BoolLiteralNode*>(expr))
                 return TypeNode::TYPE_BOOL;
             if(dynamic_cast<FloatLiteralNode*>(expr))
@@ -6088,6 +6090,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                    call->name == "String::from" ||
                    call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
+                if(call->name == "Vec::new")
+                    return TypeNode::TYPE_LIST;
             }
             if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
             {
@@ -6162,6 +6166,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
+            if(call->name == "Vec::new")
+            {
+                variableTypes[node->name] = TypeNode::TYPE_LIST;
+            }
         }
         if(auto* mc2 = dynamic_cast<MethodCallNode*>(node->expression))
         {
@@ -6172,9 +6180,18 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
         {
             variableTypes[node->name] = TypeNode::TYPE_LIST;
-            TypeNode::TypeKind elemKind = TypeNode::TYPE_INT;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_I64;
             if(listLit->elements && !listLit->elements->elements.empty())
                 elemKind = infer_kind_from_expr(listLit->elements->elements[0]);
+            listElementTypes[node->name] =
+                static_cast<TypeNode*>(create_type_node(elemKind));
+        }
+        else if(auto* arrFill2 = dynamic_cast<ArrayFillNode*>(node->expression))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_LIST;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_I64;
+            if(arrFill2->value)
+                elemKind = infer_kind_from_expr(arrFill2->value);
             listElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(elemKind));
         }
@@ -6784,6 +6801,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         auto infer_kind_from_expr = [&](ExpressionNode* expr) -> TypeNode::TypeKind
         {
+            if(dynamic_cast<IntLiteralNode*>(expr))
+                return TypeNode::TYPE_I64;  // generateIntLiteral always emits i64
             if(dynamic_cast<BoolLiteralNode*>(expr))
                 return TypeNode::TYPE_BOOL;
             if(dynamic_cast<FloatLiteralNode*>(expr))
@@ -6813,6 +6832,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                    call->name == "String::from" ||
                    call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
+                if(call->name == "Vec::new")
+                    return TypeNode::TYPE_LIST;
             }
             if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
             {
@@ -6887,6 +6908,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
+            if(call->name == "Vec::new")
+            {
+                variableTypes[node->name] = TypeNode::TYPE_LIST;
+            }
         }
         if(auto* mc2 = dynamic_cast<MethodCallNode*>(node->initExpr))
         {
@@ -6897,9 +6922,18 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
         {
             variableTypes[node->name] = TypeNode::TYPE_LIST;
-            TypeNode::TypeKind elemKind = TypeNode::TYPE_INT;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_I64;
             if(listLit->elements && !listLit->elements->elements.empty())
                 elemKind = infer_kind_from_expr(listLit->elements->elements[0]);
+            listElementTypes[node->name] =
+                static_cast<TypeNode*>(create_type_node(elemKind));
+        }
+        else if(auto* arrFill = dynamic_cast<ArrayFillNode*>(node->initExpr))
+        {
+            variableTypes[node->name] = TypeNode::TYPE_LIST;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_I64;
+            if(arrFill->value)
+                elemKind = infer_kind_from_expr(arrFill->value);
             listElementTypes[node->name] =
                 static_cast<TypeNode*>(create_type_node(elemKind));
         }
@@ -8611,6 +8645,26 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return true;
     };
 
+    // Vec::new() — returns an empty list struct {0, null}
+    if(node->name == "Vec::new")
+    {
+        if(!node->arguments.empty())
+        {
+            reportError(node->line, "Vec::new expects no arguments");
+            return nullptr;
+        }
+        llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType = llvm::PointerType::get(
+            llvm::Type::getInt8Ty(context), 0);
+#endif
+        std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
+        llvm::StructType* listStructType =
+            llvm::StructType::get(context, listStructTypes);
+        return llvm::ConstantAggregateZero::get(listStructType);
+    }
     if(node->name == "String::new")
     {
         if(!node->arguments.empty())
@@ -10906,8 +10960,331 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return builder.CreateExtractValue(listStruct, 0,
                                                       objId->name + ".len");
                 }
+                // ---- helper lambdas for Vec methods ----
+                llvm::Value* allocaPtr2 = namedValues[objId->name];
+                if(!allocaPtr2)
+                {
+                    reportError(node->line,
+                                "unknown variable: " + objId->name);
+                    return nullptr;
+                }
+                llvm::Type* voidType2 = llvm::Type::getVoidTy(context);
+#if LLVM_VERSION_MAJOR >= 15
+                llvm::Type* opaquePtrType =
+                    llvm::PointerType::get(context, 0);
+#else
+                llvm::Type* opaquePtrType = llvm::PointerType::get(
+                    llvm::Type::getInt8Ty(context), 0);
+#endif
+                llvm::Type* i32Type2 = llvm::Type::getInt32Ty(context);
+                llvm::Type* i64Type2 = llvm::Type::getInt64Ty(context);
+                llvm::Type* i1Type2  = llvm::Type::getInt1Ty(context);
+
+                // Determine element type for overload selection
+                TypeNode::TypeKind elemKind2 = TypeNode::TYPE_I32;
+                {
+                    auto elit = listElementTypes.find(objId->name);
+                    if(elit != listElementTypes.end() && elit->second)
+                        elemKind2 = elit->second->kind;
+                }
+                bool elemIsI64 = (elemKind2 == TypeNode::TYPE_I64 ||
+                                  elemKind2 == TypeNode::TYPE_U64);
+                bool elemIsStr = (elemKind2 == TypeNode::TYPE_STRING ||
+                                  elemKind2 == TypeNode::TYPE_STR8);
+
+                auto callVecVoidFn = [&](const std::string& fnName) {
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        voidType2, {opaquePtrType}, false);
+                    llvm::FunctionCallee fn =
+                        module->getOrInsertFunction(fnName, ft);
+                    builder.CreateCall(fn, {allocaPtr2});
+                    return llvm::Constant::getNullValue(voidType2);
+                };
+
+                // --- is_empty() ---
+                if(node->methodName == "is_empty")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "is_empty() takes no arguments");
+                        return nullptr;
+                    }
+                    // reuse the len path: compare count == 0
+                    std::vector<llvm::Type*> lsTypes = {i64Type2,
+                                                        opaquePtrType};
+                    llvm::StructType* lsType =
+                        llvm::StructType::get(context, lsTypes);
+                    llvm::Value* ls = builder.CreateLoad(
+                        lsType, allocaPtr2, objId->name + ".load");
+                    llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
+                    return builder.CreateICmpEQ(
+                        cnt, llvm::ConstantInt::get(i64Type2, 0),
+                        objId->name + ".is_empty");
+                }
+                // --- push(val) ---
+                if(node->methodName == "push")
+                {
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line, "push() takes one argument");
+                        return nullptr;
+                    }
+                    llvm::Value* val2 =
+                        generateExpression(node->arguments[0]);
+                    if(!val2) return nullptr;
+
+                    std::string fnName2;
+                    llvm::Type* valType2;
+                    if(elemIsStr)
+                    {
+                        fnName2 = "__mlang_std_vec_push_str";
+                        valType2 = opaquePtrType;
+                    }
+                    else if(elemIsI64)
+                    {
+                        fnName2 = "__mlang_std_vec_push_i64";
+                        valType2 = i64Type2;
+                        if(val2->getType() != i64Type2)
+                            val2 = builder.CreateSExt(val2, i64Type2);
+                    }
+                    else
+                    {
+                        fnName2 = "__mlang_std_vec_push_i32";
+                        valType2 = i32Type2;
+                        if(val2->getType() != i32Type2)
+                            val2 = builder.CreateTrunc(val2, i32Type2);
+                    }
+                    llvm::FunctionType* ft2 = llvm::FunctionType::get(
+                        voidType2, {opaquePtrType, valType2}, false);
+                    llvm::FunctionCallee fn2 =
+                        module->getOrInsertFunction(fnName2, ft2);
+                    builder.CreateCall(fn2, {allocaPtr2, val2});
+                    return llvm::Constant::getNullValue(voidType2);
+                }
+                // --- pop() ---
+                if(node->methodName == "pop")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line, "pop() takes no arguments");
+                        return nullptr;
+                    }
+                    std::string fnName3;
+                    llvm::Type* retType3;
+                    if(elemIsStr)
+                    {
+                        fnName3  = "__mlang_std_vec_pop_str";
+                        retType3 = opaquePtrType;
+                    }
+                    else if(elemIsI64)
+                    {
+                        fnName3  = "__mlang_std_vec_pop_i64";
+                        retType3 = i64Type2;
+                    }
+                    else
+                    {
+                        fnName3  = "__mlang_std_vec_pop_i32";
+                        retType3 = i32Type2;
+                    }
+                    llvm::FunctionType* ft3 =
+                        llvm::FunctionType::get(retType3, {opaquePtrType}, false);
+                    llvm::FunctionCallee fn3 =
+                        module->getOrInsertFunction(fnName3, ft3);
+                    return builder.CreateCall(fn3, {allocaPtr2},
+                                             objId->name + ".pop");
+                }
+                // --- clear() ---
+                if(node->methodName == "clear")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "clear() takes no arguments");
+                        return nullptr;
+                    }
+                    return callVecVoidFn("__mlang_std_vec_clear");
+                }
+                // --- contains(val) ---
+                if(node->methodName == "contains")
+                {
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line,
+                                    "contains() takes one argument");
+                        return nullptr;
+                    }
+                    llvm::Value* val4 =
+                        generateExpression(node->arguments[0]);
+                    if(!val4) return nullptr;
+
+                    std::string fnName4;
+                    llvm::Type* valType4;
+                    if(elemIsI64)
+                    {
+                        fnName4  = "__mlang_std_vec_contains_i64";
+                        valType4 = i64Type2;
+                        if(val4->getType() != i64Type2)
+                            val4 = builder.CreateSExt(val4, i64Type2);
+                    }
+                    else
+                    {
+                        fnName4  = "__mlang_std_vec_contains_i32";
+                        valType4 = i32Type2;
+                        if(val4->getType() != i32Type2)
+                            val4 = builder.CreateTrunc(val4, i32Type2);
+                    }
+                    llvm::FunctionType* ft4 = llvm::FunctionType::get(
+                        i32Type2, {opaquePtrType, valType4}, false);
+                    llvm::FunctionCallee fn4 =
+                        module->getOrInsertFunction(fnName4, ft4);
+                    return builder.CreateCall(fn4, {allocaPtr2, val4},
+                                             objId->name + ".contains");
+                }
+                // --- index_of(val) ---
+                if(node->methodName == "index_of")
+                {
+                    if(node->arguments.size() != 1)
+                    {
+                        reportError(node->line,
+                                    "index_of() takes one argument");
+                        return nullptr;
+                    }
+                    llvm::Value* val5 =
+                        generateExpression(node->arguments[0]);
+                    if(!val5) return nullptr;
+
+                    std::string fnName5;
+                    llvm::Type* valType5;
+                    if(elemIsI64)
+                    {
+                        fnName5  = "__mlang_std_vec_index_of_i64";
+                        valType5 = i64Type2;
+                        if(val5->getType() != i64Type2)
+                            val5 = builder.CreateSExt(val5, i64Type2);
+                    }
+                    else
+                    {
+                        fnName5  = "__mlang_std_vec_index_of_i32";
+                        valType5 = i32Type2;
+                        if(val5->getType() != i32Type2)
+                            val5 = builder.CreateTrunc(val5, i32Type2);
+                    }
+                    llvm::FunctionType* ft5 = llvm::FunctionType::get(
+                        i64Type2, {opaquePtrType, valType5}, false);
+                    llvm::FunctionCallee fn5 =
+                        module->getOrInsertFunction(fnName5, ft5);
+                    return builder.CreateCall(fn5, {allocaPtr2, val5},
+                                             objId->name + ".index_of");
+                }
+                // --- sort() ---
+                if(node->methodName == "sort")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "sort() takes no arguments");
+                        return nullptr;
+                    }
+                    return callVecVoidFn(elemIsI64 ?
+                        "__mlang_std_vec_sort_i64" :
+                        "__mlang_std_vec_sort_i32");
+                }
+                // --- sort_desc() ---
+                if(node->methodName == "sort_desc")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "sort_desc() takes no arguments");
+                        return nullptr;
+                    }
+                    return callVecVoidFn(elemIsI64 ?
+                        "__mlang_std_vec_sort_desc_i64" :
+                        "__mlang_std_vec_sort_desc_i32");
+                }
+                // --- reverse() ---
+                if(node->methodName == "reverse")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "reverse() takes no arguments");
+                        return nullptr;
+                    }
+                    return callVecVoidFn(
+                        elemIsStr ? "__mlang_std_vec_reverse_str" :
+                        elemIsI64 ? "__mlang_std_vec_reverse_i64" :
+                                    "__mlang_std_vec_reverse_i32");
+                }
+                // --- dedup() ---
+                if(node->methodName == "dedup")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "dedup() takes no arguments");
+                        return nullptr;
+                    }
+                    return callVecVoidFn("__mlang_std_vec_dedup_i32");
+                }
+                // --- first() ---
+                if(node->methodName == "first")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "first() takes no arguments");
+                        return nullptr;
+                    }
+                    // v[0] — direct GEP (same pattern as last())
+                    std::vector<llvm::Type*> lsTypes5 = {i64Type2,
+                                                         opaquePtrType};
+                    llvm::StructType* lsType5 =
+                        llvm::StructType::get(context, lsTypes5);
+                    llvm::Value* ls5 = builder.CreateLoad(
+                        lsType5, allocaPtr2, objId->name + ".load");
+                    llvm::Value* dataPtr5 = builder.CreateExtractValue(
+                        ls5, 1, "dataptr");
+                    llvm::Type* elemType5 = getLLVMType(elemKind2);
+                    llvm::Value* zero5 = llvm::ConstantInt::get(i64Type2, 0);
+                    llvm::Value* gep5 = builder.CreateGEP(
+                        elemType5, dataPtr5, zero5, "first.ptr");
+                    return builder.CreateLoad(elemType5, gep5,
+                                             objId->name + ".first");
+                }
+                // --- last() ---
+                if(node->methodName == "last")
+                {
+                    if(!node->arguments.empty())
+                    {
+                        reportError(node->line,
+                                    "last() takes no arguments");
+                        return nullptr;
+                    }
+                    // v[v.len() - 1]
+                    std::vector<llvm::Type*> lsTypes6 = {i64Type2,
+                                                         opaquePtrType};
+                    llvm::StructType* lsType6 =
+                        llvm::StructType::get(context, lsTypes6);
+                    llvm::Value* ls6 = builder.CreateLoad(
+                        lsType6, allocaPtr2, objId->name + ".load");
+                    llvm::Value* cnt6 = builder.CreateExtractValue(
+                        ls6, 0, "count");
+                    llvm::Value* lastIdx = builder.CreateSub(
+                        cnt6, llvm::ConstantInt::get(i64Type2, 1), "lastIdx");
+                    // Generate via list indexing using lastIdx directly
+                    // We replicate the GEP logic to avoid parsing -1 as a literal
+                    llvm::Value* dataPtr6 = builder.CreateExtractValue(
+                        ls6, 1, "dataptr");
+                    llvm::Type* elemType6 = getLLVMType(elemKind2);
+                    llvm::Value* gep6 = builder.CreateGEP(
+                        elemType6, dataPtr6, lastIdx, "last.ptr");
+                    return builder.CreateLoad(elemType6, gep6,
+                                             objId->name + ".last");
+                }
                 reportError(node->line,
-                            "list has no method named '" +
+                            "Vec has no method named '" +
                                 node->methodName + "'");
                 return nullptr;
             }

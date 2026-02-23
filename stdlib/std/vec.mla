@@ -1,0 +1,361 @@
+/// \file vec.mla
+/// \brief Rust-like Vec<T> for MLang (std::vec).
+///
+/// Vec<T> is a type alias for `list<T>`. The two are interchangeable:
+///
+/// ```mlang
+/// mod std::vec;
+/// use std::vec::*;
+///
+/// var v: Vec<i32> = Vec::new();
+/// v.push(1);
+/// v.push(2);
+/// v.push(3);
+/// println!("len={}", v.len());
+/// ```
+///
+/// ## Constructor / macro
+///   - `Vec::new()`         — empty vec (compiler intrinsic)
+///   - `Vec::new_i32()`     — explicit empty i32 vec
+///   - `vec![a, b, c]`      — literal macro (compiler built-in)
+///   - `vec![val; N]`       — fill macro  (compiler built-in)
+///
+/// ## Methods (called on the variable, do not move it)
+///   - `v.len()`            — i64 element count
+///   - `v.is_empty()`       — bool
+///   - `v.push(val)`        — append element (mutates in-place)
+///   - `v.pop()`            — remove & return last element
+///   - `v.clear()`          — reset count to 0
+///   - `v.contains(val)`    — bool membership test
+///   - `v.index_of(val)`    — i64 first index, -1 if absent
+///   - `v.sort()`           — ascending in-place sort
+///   - `v.sort_desc()`      — descending in-place sort
+///   - `v.reverse()`        — in-place reversal
+///   - `v.dedup()`          — remove consecutive duplicates
+///   - `v.first()`          — first element (panics if empty)
+///   - `v.last()`           — last element  (panics if empty)
+///
+/// All methods above are compiler intrinsics backed by libmlang_std.
+/// The `extern fn` declarations below are for documentation only —
+/// they are wired directly in the code generator.
+
+// ------------------------------------------------------------------ //
+// vec! macro stub — for editor go-to-definition (gd) support.        //
+// The macro itself is a compiler built-in; this declaration acts as  //
+// the navigation anchor so `gd` on `vec` jumps here.                 //
+// ------------------------------------------------------------------ //
+
+/// @defgroup vec_macros Vec Macros
+/// @brief Compiler-built-in macros for Vec construction.
+
+/// @brief Create a Vec\<T\> from a list of elements.
+/// @ingroup vec_macros
+///
+/// Two forms are supported:
+///
+/// **Literal form** — construct from a comma-separated list:
+/// ```mlang
+/// var v = vec![1, 2, 3];          // Vec<i64>, inferred
+/// var v: Vec<i32> = vec![1, 2, 3]; // Vec<i32>, explicit type
+/// ```
+///
+/// **Fill form** — N copies of a single value:
+/// ```mlang
+/// var zeros = vec![0; 8];  // [0, 0, 0, 0, 0, 0, 0, 0]
+/// ```
+///
+/// The element type is inferred from the initialiser unless an explicit
+/// `Vec<T>` annotation is provided on the variable.
+///
+/// @return A new `list<T>` containing the specified elements.
+extern fn vec() -> void;
+
+// ------------------------------------------------------------------ //
+// Native C backing functions (wired via ir.cpp method dispatch).      //
+// These are listed here for documentation / linter visibility.        //
+// ------------------------------------------------------------------ //
+
+extern fn __mlang_std_vec_push_i32(vec_ptr: ptr<i8>, val: i32) -> void;
+extern fn __mlang_std_vec_push_i64(vec_ptr: ptr<i8>, val: i64) -> void;
+extern fn __mlang_std_vec_push_str(vec_ptr: ptr<i8>, val: string) -> void;
+extern fn __mlang_std_vec_pop_i32(vec_ptr: ptr<i8>) -> i32;
+extern fn __mlang_std_vec_pop_i64(vec_ptr: ptr<i8>) -> i64;
+extern fn __mlang_std_vec_pop_str(vec_ptr: ptr<i8>) -> string;
+extern fn __mlang_std_vec_clear(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_contains_i32(vec_ptr: ptr<i8>, val: i32) -> int;
+extern fn __mlang_std_vec_contains_i64(vec_ptr: ptr<i8>, val: i64) -> int;
+extern fn __mlang_std_vec_index_of_i32(vec_ptr: ptr<i8>, val: i32) -> i64;
+extern fn __mlang_std_vec_index_of_i64(vec_ptr: ptr<i8>, val: i64) -> i64;
+extern fn __mlang_std_vec_sort_i32(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_sort_i64(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_sort_desc_i32(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_sort_desc_i64(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_reverse_i32(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_reverse_i64(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_reverse_str(vec_ptr: ptr<i8>) -> void;
+extern fn __mlang_std_vec_dedup_i32(vec_ptr: ptr<i8>) -> void;
+
+// ------------------------------------------------------------------ //
+// Method stubs — compiler intrinsics, documented for gd/hover.       //
+// Vec<T> methods are wired in the code generator and backed by       //
+// libmlang_std. These extern fn declarations are LSP navigation      //
+// anchors; pressing gd on any method name jumps here.               //
+// ------------------------------------------------------------------ //
+
+/// @defgroup vec_methods Vec Methods
+/// @brief Instance methods available on every `Vec<T>` / `list<T>`.
+
+// -- Construction -------------------------------------------------- //
+
+/// @brief Create an empty `Vec<T>`.
+/// @ingroup vec_methods
+///
+/// The canonical constructor for a vector.  The element type `T` is
+/// determined by the explicit type annotation on the variable or by
+/// inference from the first `push`:
+///
+/// ```mlang
+/// var v: Vec<i32> = Vec::new();   // element type fixed to i32
+/// v.push(10);
+/// v.push(20);
+/// println!("len={}", v.len());    // len=2
+/// ```
+///
+/// For a specific element type you may also call the typed factories:
+///   - `Vec::new_i32()` — `list<i32>`
+///   - `Vec::new_i64()` — `list<i64>`
+///   - `Vec::new_str()` — `list<string>`
+///
+/// @return An empty `list<T>`.
+pub fn new() -> list<i64> {
+    return Vec::new();
+}
+
+// -- Size ---------------------------------------------------------- //
+
+/// @brief Return the number of elements in the Vec.
+/// @ingroup vec_methods
+///
+/// ```mlang
+/// var v = vec![1, 2, 3];
+/// println!("len={}", v.len());    // len=3
+///
+/// var empty: Vec<i32> = Vec::new();
+/// println!("len={}", empty.len()); // len=0
+/// ```
+///
+/// @return `i64` — number of elements currently stored.
+pub fn len(v: list<i64>) -> i64 {
+    return v.len();
+}
+
+/// @brief Return `true` if the Vec contains no elements.
+/// @ingroup vec_methods
+///
+/// Equivalent to `v.len() == 0` but more expressive.
+///
+/// ```mlang
+/// var v: Vec<i32> = Vec::new();
+/// println!("{}", v.is_empty());  // 1 (true)
+/// v.push(42);
+/// println!("{}", v.is_empty());  // 0 (false)
+/// ```
+///
+/// @return `bool` — `true` when empty, `false` otherwise.
+pub fn is_empty(v: list<i64>) -> bool {
+    return v.is_empty();
+}
+
+// -- Mutation ------------------------------------------------------ //
+
+/// @brief Append an element to the end of the Vec.
+/// @ingroup vec_methods
+///
+/// Grows the Vec by one element.  The Vec must be declared with `var`
+/// (mutable binding).
+///
+/// ```mlang
+/// var v: Vec<i32> = Vec::new();
+/// v.push(1);
+/// v.push(2);
+/// v.push(3);
+/// println!("len={}", v.len());   // len=3
+/// ```
+///
+/// @param val  The element to append.  Must match the Vec element type.
+pub fn push(v: list<i64>, val: i64) -> void {
+    v.push(val);
+}
+
+/// @brief Remove and return the last element.
+/// @ingroup vec_methods
+///
+/// Panics if the Vec is empty.
+///
+/// ```mlang
+/// var v: Vec<i32> = Vec::new();
+/// v.push(10);
+/// v.push(20);
+/// let top = v.pop();
+/// println!("popped={}", top);    // popped=20
+/// println!("len={}", v.len());   // len=1
+/// ```
+///
+/// @return The removed element.
+pub fn pop(v: list<i64>) -> i64 {
+    return v.pop();
+}
+
+/// @brief Remove all elements, resetting the Vec to empty.
+/// @ingroup vec_methods
+///
+/// The Vec remains valid and can be pushed to again after clearing.
+///
+/// ```mlang
+/// var v = vec![1, 2, 3];
+/// v.clear();
+/// println!("len={}", v.len());   // len=0
+/// ```
+pub fn clear(v: list<i64>) -> void {
+    v.clear();
+}
+
+// -- Search -------------------------------------------------------- //
+
+/// @brief Return `true` if the Vec contains the given element.
+/// @ingroup vec_methods
+///
+/// Uses equality comparison; element type must be comparable.
+///
+/// ```mlang
+/// var v = vec![10, 20, 30];
+/// println!("{}", v.contains(20));  // 1 (true)
+/// println!("{}", v.contains(99));  // 0 (false)
+/// ```
+///
+/// @param val  Element to search for.
+/// @return `bool` — `true` if found, `false` otherwise.
+pub fn contains(v: list<i64>, val: i64) -> bool {
+    return v.contains(val);
+}
+
+/// @brief Return the zero-based index of the first occurrence of `val`.
+/// @ingroup vec_methods
+///
+/// Returns `-1` if the element is not found.
+///
+/// ```mlang
+/// var v = vec![10, 20, 30, 20];
+/// println!("{}", v.index_of(20));  // 1  (first match)
+/// println!("{}", v.index_of(99));  // -1 (not found)
+/// ```
+///
+/// @param val  Element to search for.
+/// @return `i64` — index of first match, or `-1` if absent.
+pub fn index_of(v: list<i64>, val: i64) -> i64 {
+    return v.index_of(val);
+}
+
+// -- Ordering ------------------------------------------------------ //
+
+/// @brief Sort elements in ascending order (in-place).
+/// @ingroup vec_methods
+///
+/// ```mlang
+/// var v = vec![3, 1, 4, 1, 5, 9, 2];
+/// v.sort();
+/// println!("first={} last={}", v.first(), v.last()); // first=1 last=9
+/// ```
+pub fn sort(v: list<i64>) -> void {
+    v.sort();
+}
+
+/// @brief Sort elements in descending order (in-place).
+/// @ingroup vec_methods
+///
+/// ```mlang
+/// var v = vec![3, 1, 4, 1, 5];
+/// v.sort_desc();
+/// println!("first={}", v.first()); // first=5
+/// ```
+pub fn sort_desc(v: list<i64>) -> void {
+    v.sort_desc();
+}
+
+/// @brief Reverse the element order in-place.
+/// @ingroup vec_methods
+///
+/// ```mlang
+/// var v = vec![1, 2, 3];
+/// v.reverse();
+/// println!("first={}", v.first()); // first=3
+/// ```
+pub fn reverse(v: list<i64>) -> void {
+    v.reverse();
+}
+
+/// @brief Remove consecutive duplicate elements (in-place).
+/// @ingroup vec_methods
+///
+/// Only adjacent duplicates are removed.  Sort first to remove all
+/// duplicates:
+///
+/// ```mlang
+/// var v = vec![1, 1, 2, 3, 3, 3, 4];
+/// v.dedup();
+/// println!("len={}", v.len());   // len=4  ([1,2,3,4])
+/// ```
+pub fn dedup(v: list<i64>) -> void {
+    v.dedup();
+}
+
+// -- Access -------------------------------------------------------- //
+
+/// @brief Return the first element.  Panics if the Vec is empty.
+/// @ingroup vec_methods
+///
+/// ```mlang
+/// var v = vec![7, 14, 21];
+/// println!("first={}", v.first()); // first=7
+/// ```
+///
+/// @return The first element of type T.
+pub fn first(v: list<i64>) -> i64 {
+    return v.first();
+}
+
+/// @brief Return the last element.  Panics if the Vec is empty.
+/// @ingroup vec_methods
+///
+/// ```mlang
+/// var v = vec![7, 14, 21];
+/// println!("last={}", v.last()); // last=21
+/// ```
+///
+/// @return The last element of type T.
+pub fn last(v: list<i64>) -> i64 {
+    return v.last();
+}
+
+// ------------------------------------------------------------------ //
+// Public factory functions                                             //
+// ------------------------------------------------------------------ //
+
+/// @brief Create an empty Vec<i32>.
+/// Equivalent to `Vec::new()` with an explicit element type.
+/// @return An empty list<i32>.
+pub fn new_i32() -> list<i32> {
+    return Vec::new();
+}
+
+/// @brief Create an empty Vec<i64>.
+/// @return An empty list<i64>.
+pub fn new_i64() -> list<i64> {
+    return Vec::new();
+}
+
+/// @brief Create an empty Vec<string>.
+/// @return An empty list<string>.
+pub fn new_str() -> list<string> {
+    return Vec::new();
+}

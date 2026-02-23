@@ -1,4 +1,4 @@
-# Mlang Stdlib Module API
+# Mlang Stdlib Module API {#stdlib_mlang_api}
 
 This page documents the **MLang-facing stdlib modules** under `stdlib/std/`.
 These are the APIs you import in Mlang source via:
@@ -15,6 +15,7 @@ mod std::time;
 mod std::fs;
 mod std::strbuf;
 mod std::thread;
+mod std::vec;
 ```
 
 The source-of-truth implementation files are:
@@ -29,6 +30,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/time.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/thread.mla`
+- `stdlib/std/vec.mla`
 
 ## std::fs
 
@@ -399,3 +401,66 @@ Module file: `stdlib/std/thread.mla`
 - `atomic_store_value(handle: Handle<Atomic64>, value: i64) -> i64`
 - `atomic_add_value(handle: Handle<Atomic64>, delta: i64) -> i64`
 - `atomic_free_handle(handle: Handle<Atomic64>) -> void`
+
+## std::vec
+
+Module file: `stdlib/std/vec.mla`
+
+`Vec<T>` is a type alias for `list<T>`. The two are interchangeable in all
+contexts. All methods listed below are compiler intrinsics backed by
+`libmlang_std`.
+
+### Constructors
+
+- `Vec::new() -> Vec<T>` — create an empty Vec; element type inferred from context
+- `Vec::new_i32() -> Vec<i32>` — empty Vec with explicit `i32` element type
+- `Vec::new_i64() -> Vec<i64>` — empty Vec with explicit `i64` element type
+- `Vec::new_str() -> Vec<string>` — empty Vec with explicit `string` element type
+
+### Macros
+
+- `vec![a, b, c]` — construct a Vec from a comma-separated list of elements
+- `vec![val; N]` — construct a Vec of `N` copies of `val`
+
+### Size
+
+- `v.len() -> i64` — number of elements currently stored
+- `v.is_empty() -> bool` — `true` when the Vec contains no elements
+
+### Mutation
+
+- `v.push(val)` — append `val` to the end (grows the Vec by one)
+- `v.pop() -> T` — remove and return the last element; panics if empty
+- `v.clear()` — remove all elements (Vec remains valid for further pushes)
+
+### Search
+
+- `v.contains(val) -> bool` — `true` if `val` is present in the Vec
+- `v.index_of(val) -> i64` — zero-based index of first match, or `-1` if absent
+
+### Ordering
+
+- `v.sort()` — sort elements in ascending order (in-place)
+- `v.sort_desc()` — sort elements in descending order (in-place)
+- `v.reverse()` — reverse element order (in-place)
+- `v.dedup()` — remove consecutive duplicate elements; sort first to deduplicate all
+
+### Access
+
+- `v.first() -> T` — return the first element; panics if empty
+- `v.last() -> T` — return the last element; panics if empty
+
+### Iteration
+
+```mlang
+// for-in loop
+for x in v {
+    println!("{}", x);
+}
+
+// enumerated loop
+for(i, x) in v.enumerate() {
+    println!("v[{}] = {}", i, x);
+}
+```
+

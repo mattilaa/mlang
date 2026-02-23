@@ -1,0 +1,184 @@
+/// std_vec_demo.mla
+/// Demonstrates Vec<T> from the MLang standard library.
+///
+/// Vec<T> is a type alias for list<T>.
+/// Use `mod std::vec; use std::vec::*;` for the public API helpers,
+/// or use Vec::new() and vec![] directly (compiler built-ins).
+///
+/// Build:  mlang run examples/std_vec_demo.mla
+/// Run:    ./a.out
+
+// ------------------------------------------------------------------ //
+// Basic construction                                                  //
+// ------------------------------------------------------------------ //
+
+use std::vec::*;
+
+fn demo_construction() -> void {
+    println!("--- construction ---");
+
+    // Empty Vec with explicit element type
+    var a: Vec<i32> = Vec::new();
+    println!("Vec::new() len={}", a.len());
+
+    // Vec from literal with inferred type
+    var b = vec![1, 2, 3, 4, 5];
+    println!("vec![1..5] len={}", b.len());
+
+    // Fill literal: N copies of a value
+    var c = vec![0; 8];
+    println!("vec![0; 8] len={}", c.len());
+    println!("fill first={}", c.first());
+}
+
+// ------------------------------------------------------------------ //
+// Push / pop                                                          //
+// ------------------------------------------------------------------ //
+
+fn demo_push_pop() -> void {
+    println!("--- push / pop ---");
+    var v: Vec<i32> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    println!("after 3 pushes len={}", v.len());
+
+    let top = v.pop();
+    println!("popped={}", top);
+    println!("after pop len={}", v.len());
+}
+
+// ------------------------------------------------------------------ //
+// first / last                                                        //
+// ------------------------------------------------------------------ //
+
+fn demo_first_last() -> void {
+    println!("--- first / last ---");
+    var v: Vec<i32> = Vec::new();
+    v.push(7);
+    v.push(14);
+    v.push(21);
+    println!("first={}", v.first());
+    println!("last={}", v.last());
+}
+
+// ------------------------------------------------------------------ //
+// sort / sort_desc / reverse / dedup                                  //
+// ------------------------------------------------------------------ //
+
+fn demo_sort() -> void {
+    println!("--- sort / sort_desc / reverse / dedup ---");
+    var v: Vec<i32> = Vec::new();
+    v.push(5);
+    v.push(1);
+    v.push(4);
+    v.push(1);
+    v.push(3);
+    v.push(2);
+    v.push(1);
+
+    v.sort();
+    println!("sorted  first={} last={}", v.first(), v.last());
+
+    v.dedup();
+    println!("deduped len={}", v.len());
+    println!("deduped first={} last={}", v.first(), v.last());
+
+    v.sort_desc();
+    println!("sort_desc first={} last={}", v.first(), v.last());
+
+    v.reverse();
+    println!("reversed first={} last={}", v.first(), v.last());
+}
+
+// ------------------------------------------------------------------ //
+// contains / index_of                                                 //
+// ------------------------------------------------------------------ //
+
+fn demo_search() -> void {
+    println!("--- contains / index_of ---");
+    var v: Vec<i32> = Vec::new();
+    v.push(10);
+    v.push(20);
+    v.push(30);
+    v.push(40);
+
+    let has20 = v.contains(20);
+    let has99 = v.contains(99);
+    println!("contains(20)={} contains(99)={}", has20, has99);
+
+    let idx30 = v.index_of(30);
+    let idxMiss = v.index_of(99);
+    println!("index_of(30)={} index_of(99)={}", idx30, idxMiss);
+}
+
+// ------------------------------------------------------------------ //
+// is_empty / clear                                                    //
+// ------------------------------------------------------------------ //
+
+fn demo_clear() -> void {
+    println!("--- is_empty / clear ---");
+    var v: Vec<i32> = Vec::new();
+    println!("empty? {}", v.is_empty());
+    v.push(1);
+    v.push(2);
+    println!("after push empty? {}", v.is_empty());
+    v.clear();
+    println!("after clear len={} empty? {}", v.len(), v.is_empty());
+}
+
+// ------------------------------------------------------------------ //
+// Vec<i64>                                                            //
+// ------------------------------------------------------------------ //
+
+fn demo_i64() -> void {
+    println!("--- Vec<i64> ---");
+    var v: Vec<i64> = Vec::new();
+    v.push(1000000000);
+    v.push(2000000000);
+    v.push(3000000000);
+    v.sort();
+    println!("i64 first={}", v.first());
+    println!("i64 last={}", v.last());
+    println!("i64 len={}", v.len());
+}
+
+// ------------------------------------------------------------------ //
+// For loop iteration                                                  //
+// ------------------------------------------------------------------ //
+
+fn demo_iteration() -> void {
+    println!("--- iteration ---");
+    var primes: Vec<i32> = Vec::new();
+    primes.push(2);
+    primes.push(3);
+    primes.push(5);
+    primes.push(7);
+    primes.push(11);
+
+    for p in primes {
+        println!("prime: {}", p);
+    }
+
+    var nums = vec![10, 20, 30];
+    for(i, n) in nums.enumerate() {
+        println!("nums[{}] = {}", i, n);
+    }
+}
+
+// ------------------------------------------------------------------ //
+// main                                                                //
+// ------------------------------------------------------------------ //
+
+fn main() -> i32 {
+    demo_construction();
+    demo_push_pop();
+    demo_first_last();
+    demo_sort();
+    demo_search();
+    demo_clear();
+    demo_i64();
+    demo_iteration();
+    println!("done");
+    return 0;
+}

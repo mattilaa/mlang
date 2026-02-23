@@ -35,6 +35,7 @@ ${MLANG}           ./build/mlang
 ...    examples/result_match.mla
 ...    examples/result_usage.mla
 ...    examples/slice.mla
+...    examples/std_vec_demo.mla
 ...    examples/str_types.mla
 ...    examples/ternary_example.mla
 ...    examples/thread_basic.mla

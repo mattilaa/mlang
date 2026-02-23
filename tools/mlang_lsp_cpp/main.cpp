@@ -439,6 +439,8 @@ static std::string type_name(TypeNode* node)
 {
     if(!node)
         return {};
+    if(node->kind == TypeNode::TYPE_LIST)
+        return "Vec";
     if(node->kind == TypeNode::TYPE_STRUCT)
     {
         if(auto* s = dynamic_cast<StructTypeRefNode*>(node))
@@ -1769,6 +1771,103 @@ private:
         return std::nullopt;
     }
 
+    std::optional<std::filesystem::path>
+    resolve_std_vec_module_path(const FileInfo* contextFile) const
+    {
+        auto try_from_base = [&](const std::filesystem::path& base)
+            -> std::optional<std::filesystem::path> {
+            if(base.empty())
+                return std::nullopt;
+            std::error_code ec;
+            std::filesystem::path cand1 = base / "stdlib" / "std" / "vec.mla";
+            if(std::filesystem::exists(cand1, ec) && !ec)
+                return cand1;
+            std::filesystem::path cand2 = base / "std" / "vec.mla";
+            if(std::filesystem::exists(cand2, ec) && !ec)
+                return cand2;
+            std::string resolved = resolve_module_path(base.string(), "std::vec");
+            if(!resolved.empty())
+            {
+                std::filesystem::path cand3 = resolved;
+                if(std::filesystem::exists(cand3, ec) && !ec)
+                    return cand3;
+            }
+            return std::nullopt;
+        };
+
+        for(const auto& base : search_base_paths_for_lookup(contextFile))
+        {
+            if(auto p = try_from_base(base))
+                return p;
+        }
+
+        // Also check default stdlib paths (covers rootPath/stdlib, system paths,
+        // and the MLANG_STDLIB_PATH env var) for robustness when the workspace
+        // root doesn't directly contain stdlib/.
+        for(const auto& p : default_stdlib_paths())
+        {
+            if(auto found = try_from_base(p))
+                return found;
+        }
+
+        // Last resort: scan already-indexed files for one that is vec.mla.
+        for(const auto& [uri, fileInfo] : files)
+        {
+            if(fileInfo.path.empty())
+                continue;
+            std::filesystem::path fp(fileInfo.path);
+            if(fp.filename() == "vec.mla" &&
+               fp.parent_path().filename() == "std")
+                return fp;
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<Location>
+    find_vec_method_location(const std::string& methodName,
+                             const FileInfo* contextFile = nullptr)
+    {
+        auto modPathOpt = resolve_std_vec_module_path(contextFile);
+        if(!modPathOpt)
+            return std::nullopt;
+
+        const std::filesystem::path modPath = *modPathOpt;
+        std::string uri = path_to_uri(modPath.string());
+
+        // Use already-indexed AST if available; otherwise force-index vec.mla.
+        auto fileIt = files.find(uri);
+        if(fileIt == files.end())
+        {
+            // vec.mla is on disk but not yet indexed — index it now.
+            get_or_index_file(modPath.string());
+            fileIt = files.find(uri);
+        }
+        if(fileIt != files.end())
+        {
+            if(auto loc = find_symbol_in_file(fileIt->second, methodName))
+            {
+                Location l = *loc;
+                l.uri = uri;
+                return l;
+            }
+        }
+
+        // Final fallback: text search for fn <methodName>.
+        std::string text = read_file(modPath.string());
+        if(text.empty())
+            return std::nullopt;
+        auto lines = split_lines(text);
+
+        auto loc = find_definition_location(
+            lines, 0, -1,
+            std::regex("\\b(?:pub\\s+)?(?:extern\\s+)?fn\\s+(" + methodName + ")\\b"));
+        if(!loc)
+            return std::nullopt;
+        loc->uri = uri;
+        return loc;
+    }
+
     std::optional<Location>
     find_string_intrinsic_location(const std::string& memberName,
                                    const FileInfo* contextFile = nullptr)
@@ -2576,6 +2675,8 @@ private:
         if(auto* letDecl = dynamic_cast<LetDeclNode*>(stmt))
         {
             std::string t = type_name(letDecl->type);
+            if(t.empty() && letDecl->expression)
+                t = resolve_expr_type(letDecl->expression, fn, info);
             if(!t.empty())
                 fn.varTypes[letDecl->name] = t;
             return;
@@ -2638,8 +2739,12 @@ private:
         {
             return lit->structName;
         }
+        if(dynamic_cast<ListLiteralNode*>(expr) || dynamic_cast<ArrayFillNode*>(expr))
+            return "Vec";
         if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
         {
+            if(call->name == "Vec::new")
+                return "Vec";
             auto it = functionReturns.find(call->name);
             if(it != functionReturns.end())
                 return it->second;
@@ -3314,6 +3419,13 @@ private:
                 return location_to_json(*loc);
         }
 
+        // Resolve Vec::new and other Vec:: static methods.
+        if(modulePrefix == "Vec")
+        {
+            if(auto loc = find_vec_method_location(word, &info))
+                return location_to_json(*loc);
+        }
+
         if(auto loc = find_runtime_builtin_location(word, &info))
             return location_to_json(*loc);
 
@@ -3465,7 +3577,15 @@ private:
                 {
                     auto sit = info.structs.find(baseType);
                     if(sit == info.structs.end())
+                    {
+                        // Vec<T> is not a struct but has known methods in stdlib.
+                        if(baseType == "Vec" && idxChain == chain.size() - 1)
+                        {
+                            if(auto loc = find_vec_method_location(chain[idxChain], &info))
+                                return location_to_json(*loc);
+                        }
                         break;
+                    }
                     if(idxChain == chain.size() - 1 && isMethodCall)
                     {
                         auto* mi = find_method_in_struct(sit->second,
