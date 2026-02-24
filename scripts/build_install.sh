@@ -232,8 +232,8 @@ bump_version() {
   fi
 
   git add "$cmake_file"
-  git commit -m "version: bump to ${new_major}.${new_minor}"
-  echo "committed version bump: ${new_major}.${new_minor}"
+  git commit -m "Update version: mlang ${new_major}.${new_minor}"
+  echo "committed version bump: v${new_major}.${new_minor}"
 }
 
 # ============================================================================

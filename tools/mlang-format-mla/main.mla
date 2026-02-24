@@ -1,3 +1,4 @@
+mod std::compiler;
 mod std::fs;
 mod std::io;
 mod std::jsonrpc;
@@ -28,6 +29,7 @@ use std::strbuf::rtrim;
 use std::strbuf::starts_with;
 use std::strbuf::sub;
 use std::strbuf::trim;
+use std::compiler::version;
 
 extern fn strcmp(a: str8, b: str8) -> i32;
 struct FormatConfig {
@@ -343,6 +345,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         if strcmp(arg, "--help") == 0: {
             usage();
+            return 0;
+        }
+        if strcmp(arg, "--version") == 0: {
+            println!("mlang-format {}", version());
+            return 0;
+        }
+        if strcmp(arg, "-v") == 0: {
+            println!("mlang-format {}", version());
             return 0;
         }
         if strcmp(arg, "-i") == 0: {
