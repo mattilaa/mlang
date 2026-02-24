@@ -45,6 +45,9 @@ ${MLANG}           ./build/mlang
 ...    examples/tuple_example.mla
 ...    examples/tuple_test.mla
 ...    examples/argparser_demo.mla
+...    examples/std_fs_lines.mla
+...    examples/std_fs_seek.mla
+...    examples/std_fs_rw.mla
 
 *** Test Cases ***
 Compile All Examples
@@ -340,3 +343,66 @@ Printf And GetChar Demo
     Should Contain    ${run.stdout}    val=7
     Should Contain    ${run.stdout}    fprintf stdout
     Should Contain    ${run.stderr}    eprintf stderr
+
+Fs Lines Demo Runs Correctly
+    [Documentation]    Build and run examples/std_fs_lines.mla; verify that
+    ...                BufReader filters comment lines, counts data rows,
+    ...                prints each data line, and finds entries by content.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_fs_lines_bin
+    ${build}=    Run Process    ${MLANG}    examples/std_fs_lines.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building std_fs_lines.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=std_fs_lines exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    header: name,score
+    Should Contain    ${run.stdout}    data: Alice,95
+    Should Contain    ${run.stdout}    data: Bob,87
+    Should Contain    ${run.stdout}    data: Carol,92
+    Should Contain    ${run.stdout}    data: Dave,78
+    Should Contain    ${run.stdout}    total_lines=7
+    Should Contain    ${run.stdout}    comments=2
+    Should Contain    ${run.stdout}    data=4
+    Should Contain    ${run.stdout}    found: Alice,95
+
+Fs Seek Demo Runs Correctly
+    [Documentation]    Build and run examples/std_fs_seek.mla; verify
+    ...                SeekFrom::start/current/end, File::tell, and
+    ...                File::size all produce the expected output.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_fs_seek_bin
+    ${build}=    Run Process    ${MLANG}    examples/std_fs_seek.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building std_fs_seek.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=std_fs_seek exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    size=20
+    Should Contain    ${run.stdout}    start(0)+4: 0123
+    Should Contain    ${run.stdout}    start(10)+4: ABCD
+    Should Contain    ${run.stdout}    end(-4)+4: GHIJ
+    Should Contain    ${run.stdout}    tell=20
+    Should Contain    ${run.stdout}    start(4),skip(2),+4: 6789
+    Should Contain    ${run.stdout}    first3: 012
+
+Fs Rw Demo Runs Correctly
+    [Documentation]    Build and run examples/std_fs_rw.mla; verify
+    ...                File::create, File::append, and File::open_rw
+    ...                (in-place field patching with seek+write_bytes).
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_fs_rw_bin
+    ${build}=    Run Process    ${MLANG}    examples/std_fs_rw.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building std_fs_rw.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=std_fs_rw exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    after create
+    Should Contain    ${run.stdout}    STATUS:PENDING
+    Should Contain    ${run.stdout}    after append
+    Should Contain    ${run.stdout}    LOG:entry1
+    Should Contain    ${run.stdout}    LOG:entry2
+    Should Contain    ${run.stdout}    after patch
+    Should Contain    ${run.stdout}    STATUS:DONE
+    Should Contain    ${run.stdout}    final_size=45

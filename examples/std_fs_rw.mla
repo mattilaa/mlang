@@ -1,0 +1,75 @@
+/// Demonstrates File::append and File::open_rw (in-place editing).
+///
+/// Shows three open modes working together:
+///   1. File::create  — write an initial status record
+///   2. File::append  — add log entries without touching existing content
+///   3. File::open_rw — seek to a known offset and patch a field in-place
+///
+/// Run: ./build/mlang run examples/std_fs_rw.mla
+
+mod std::fs;
+
+use std::fs::File;
+use std::fs::SeekFrom;
+
+fn print_file(path: string) -> i32 {
+    let tr: Result<string, string> = read_all_text(path);
+    if tr.is_err(): { println!("error: read failed"); return 1; }
+    println!("{}", tr.unwrap());
+    return 0;
+}
+
+fn main() -> i32 {
+    let path: string = "/tmp/mlang_rw_demo.txt";
+
+    // -- step 1: create with initial content ------------------------------
+    // "STATUS:PENDING" is 14 bytes; "STATUS:" occupies bytes 0-6,
+    // "PENDING" occupies bytes 7-13, so we can patch just those 7 bytes.
+    let cr: Result<File, string> = File::create(path);
+    if cr.is_err(): { println!("error: create failed"); return 1; }
+    var fc: File = cr.unwrap();
+    fc.write_line("STATUS:PENDING");
+    fc.write_line("COUNT:0");
+    fc.close();
+
+    println!("--- after create ---");
+    if print_file(path) != 0: { return 1; }
+
+    // -- step 2: append log entries ---------------------------------------
+    let ar: Result<File, string> = File::append(path);
+    if ar.is_err(): { println!("error: append failed"); return 1; }
+    var fa: File = ar.unwrap();
+    fa.write_line("LOG:entry1");
+    fa.write_line("LOG:entry2");
+    fa.close();
+
+    println!("--- after append ---");
+    if print_file(path) != 0: { return 1; }
+
+    // -- step 3: open_rw — patch STATUS field in-place -------------------
+    // "STATUS:" is 7 bytes at offset 0, "PENDING" is 7 bytes at offset 7.
+    // We overwrite those 7 bytes with "DONE   " (padded to same length).
+    let rwr: Result<File, string> = File::open_rw(path);
+    if rwr.is_err(): { println!("error: open_rw failed"); return 1; }
+    var frw: File = rwr.unwrap();
+
+    let sk: Result<i64, string> = frw.seek(SeekFrom::start(7));
+    if sk.is_err(): { frw.close(); return 1; }
+    let pw: Result<i64, string> = frw.write_bytes("DONE   ", 7);
+    if pw.is_err(): { frw.close(); return 1; }
+    frw.close();
+
+    println!("--- after patch ---");
+    if print_file(path) != 0: { return 1; }
+
+    // -- step 4: show file size at each stage is sane --------------------
+    let fr: Result<File, string> = File::open(path);
+    if fr.is_err(): { return 1; }
+    var ff: File = fr.unwrap();
+    let sz_r: Result<i64, string> = ff.size();
+    let sz: i64 = sz_r.unwrap();
+    println!("final_size={}", sz);
+    ff.close();
+
+    return 0;
+}
