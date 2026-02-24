@@ -44,6 +44,7 @@ ${MLANG}           ./build/mlang
 ...    examples/thread_mutex_atomic.mla
 ...    examples/tuple_example.mla
 ...    examples/tuple_test.mla
+...    examples/argparser_demo.mla
 
 *** Test Cases ***
 Compile All Examples
@@ -239,6 +240,40 @@ Inline Attrs Demo Runs Correctly
     Should Contain    ${run.stdout}    clamp(-3, 0..10): 0
     Should Contain    ${run.stdout}    clamp(5,  0..10): 5
     Should Contain    ${run.stdout}    sum of clamp(i,2..4)^2 for i=1..5: 49
+
+Argparser Demo Runs Correctly
+    [Documentation]    Build and run examples/argparser_demo.mla with various CLI args;
+    ...                verify flags, options, and positionals are parsed correctly.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/argparser_demo_bin
+    ${build}=    Run Process    ${MLANG}    examples/argparser_demo.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building argparser_demo.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    # Run with --verbose, --output, and a positional
+    ${run}=    Run Process    ${bin}    --verbose    --output    result.txt    myfile.txt
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=argparser_demo exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    verbose=1
+    Should Contain    ${run.stdout}    dry-run=0
+    Should Contain    ${run.stdout}    output=result.txt
+    Should Contain    ${run.stdout}    count=1
+    Should Contain    ${run.stdout}    positional_count=1
+    Should Contain    ${run.stdout}    input=myfile.txt
+    Should Contain    ${run.stdout}    (verbose mode active)
+    # Run with short flags and --count
+    ${run2}=    Run Process    ${bin}    -v    -c    5    -o    out2.txt    file2.txt
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run2.rc}    0
+    Should Contain    ${run2.stdout}    verbose=1
+    Should Contain    ${run2.stdout}    output=out2.txt
+    Should Contain    ${run2.stdout}    count=5
+    Should Contain    ${run2.stdout}    input=file2.txt
+    # Run with no positional -- shows count=0
+    ${run3}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run3.rc}    0
+    Should Contain    ${run3.stdout}    verbose=0
+    Should Contain    ${run3.stdout}    positional_count=0
 
 Slice Example Runs Correctly
     [Documentation]    Build and run examples/slice.mla; verify key output lines

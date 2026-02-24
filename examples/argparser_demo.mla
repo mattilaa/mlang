@@ -1,0 +1,62 @@
+/// Demonstrates std::argparser -- C-style CLI argument parsing.
+///
+/// Run:
+///   ./build/mlang run examples/argparser_demo.mla -- --verbose --output result.txt input.txt
+///   ./build/mlang run examples/argparser_demo.mla -- --help
+///   ./build/mlang run examples/argparser_demo.mla -- --count 7 -v myfile.txt
+
+mod std::argparser;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("argparser_demo", "A demonstration of std::argparser.");
+    ap.flag("verbose", "v", "Enable verbose output");
+    ap.flag("dry-run", "n", "Simulate without writing");
+    ap.option("output", "o", "Output file path", "output.txt");
+    ap.option("count", "c", "Repeat count", "1");
+    ap.positional("input", "Input file to process");
+
+    let result: ParseResult = ap.parse(argc, args);
+
+    if result.help_requested(): {
+        ap.print_help();
+        result.free();
+        ap.free();
+        return 0;
+    }
+
+    if result.has_error(): {
+        println!("Error: {}", result.error());
+        ap.print_help();
+        result.free();
+        ap.free();
+        return 1;
+    }
+
+    let verbose: bool = result.flag("verbose");
+    let dry_run: bool = result.flag("dry-run");
+    let output: string = result.get("output");
+    let count: i64 = result.get_i64("count");
+    let npos: i64 = result.positional_count();
+
+    println!("verbose={}", verbose);
+    println!("dry-run={}", dry_run);
+    println!("output={}", output);
+    println!("count={}", count);
+    println!("positional_count={}", npos);
+
+    if npos > 0: {
+        let input: string = result.positional(0);
+        println!("input={}", input);
+    }
+
+    if verbose: {
+        println!("(verbose mode active)");
+    }
+
+    result.free();
+    ap.free();
+    return 0;
+}

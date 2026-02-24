@@ -1,0 +1,225 @@
+/// \file argparser.mla
+/// \brief C-style CLI argument parser for MLang (std::argparser).
+///
+/// Provides Rust/clap-inspired argument parsing for `fn main(argc: i32, args: list<str8>)`.
+///
+/// ## Quick start
+///
+/// ```mlang
+/// mod std::argparser;
+/// use std::argparser::*;
+///
+/// fn main(argc: i32, args: list<str8>) -> i32 {
+///     var ap: ArgParser = ArgParser::new("myapp", "A demo tool");
+///     ap.flag("verbose", "v", "Enable verbose output");
+///     ap.option("output", "o", "Output file", "out.txt");
+///     ap.positional("input", "Input file to process");
+///
+///     let result: ParseResult = ap.parse(argc, args);
+///     if result.help_requested(): { ap.print_help(); return 0; }
+///     if result.has_error(): {
+///         println!("Error: {}", result.error());
+///         return 1;
+///     }
+///
+///     let verbose: bool = result.flag("verbose");
+///     let output: string = result.get("output");
+///     let input: string = result.positional(0);
+///     println!("verbose={} output={} input={}", verbose, output, input);
+///     return 0;
+/// }
+/// ```
+///
+/// ## Supported syntax
+///   - `--flag`            boolean flag
+///   - `-f`                short flag
+///   - `--option value`    option with value
+///   - `--option=value`    option with inline value
+///   - `-o value`          short option with value
+///   - `-o<value>`         short option with attached value
+///   - `--`                end of options; rest are positionals
+///   - `--help` / `-h`     set help_requested flag (no exit)
+///
+/// ## Methods
+///
+/// **ArgParser:**
+///   - `ArgParser::new(prog, desc)`    create parser
+///   - `ap.flag(long, short, help)`    declare boolean flag
+///   - `ap.option(long, short, help, default)` declare key-value option
+///   - `ap.positional(name, help)`     declare positional argument
+///   - `ap.parse(argc, args)`          parse args; returns ParseResult
+///   - `ap.print_help()`               print usage to stdout
+///   - `ap.free()`                     release C resources
+///
+/// **ParseResult:**
+///   - `r.ok()`              true if parse succeeded
+///   - `r.has_error()`       true if parse failed
+///   - `r.error()`           error message string
+///   - `r.help_requested()`  true if --help/-h was seen
+///   - `r.flag(name)`        bool -- was flag set?
+///   - `r.get(name)`         string value of option (or default)
+///   - `r.get_i64(name)`     i64 value of option
+///   - `r.positional(idx)`   positional string at index
+///   - `r.positional_count()` number of positional args
+///   - `r.free()`            release C resources
+
+// ------------------------------------------------------------------- //
+// Extern C functions                                                   //
+// ------------------------------------------------------------------- //
+
+extern pub fn __mlang_std_argparser_new(prog: string, desc: string) -> i64;
+extern pub fn __mlang_std_argparser_free(handle: i64) -> void;
+extern pub fn __mlang_std_argparser_add_flag(handle: i64, long_name: string, short_name: string, help: string) -> void;
+extern pub fn __mlang_std_argparser_add_option(handle: i64, long_name: string, short_name: string, help: string, default_val: string) -> void;
+extern pub fn __mlang_std_argparser_add_positional(handle: i64, name: string, help: string) -> void;
+extern pub fn __mlang_std_argparser_print_help(handle: i64) -> void;
+
+extern pub fn __mlang_std_argparser_parse_begin(parser_handle: i64) -> i64;
+extern pub fn __mlang_std_argparser_parse_add(result_handle: i64, arg: string) -> void;
+extern pub fn __mlang_std_argparser_parse_finish(parser_handle: i64, result_handle: i64) -> void;
+
+extern pub fn __mlang_std_parseresult_free(handle: i64) -> void;
+extern pub fn __mlang_std_parseresult_ok(handle: i64) -> i32;
+extern pub fn __mlang_std_parseresult_help_requested(handle: i64) -> i32;
+extern pub fn __mlang_std_parseresult_error(handle: i64) -> string;
+extern pub fn __mlang_std_parseresult_flag(handle: i64, name: string) -> i32;
+extern pub fn __mlang_std_parseresult_get(handle: i64, name: string) -> string;
+extern pub fn __mlang_std_parseresult_get_i64(handle: i64, name: string) -> i64;
+extern pub fn __mlang_std_parseresult_positional(handle: i64, idx: i64) -> string;
+extern pub fn __mlang_std_parseresult_positional_count(handle: i64) -> i64;
+
+// ------------------------------------------------------------------- //
+// ArgParser struct and impl                                            //
+// ------------------------------------------------------------------- //
+
+/// @brief Opaque argument parser handle.
+pub struct ArgParser {
+    var handle: i64;
+};
+
+/// @brief Opaque parse result handle.
+pub struct ParseResult {
+    var handle: i64;
+};
+
+impl ArgParser {
+    /// @brief Create a new argument parser.
+    /// @param prog  Program name shown in usage line.
+    /// @param desc  Short description shown below usage.
+    pub fn new(prog: string, desc: string) -> ArgParser {
+        let h: i64 = __mlang_std_argparser_new(prog, desc);
+        return ArgParser { handle: h };
+    }
+
+    /// @brief Declare a boolean flag (--long / -short).
+    /// @param long_name   Long flag name without "--" (e.g. "verbose").
+    /// @param short_name  Single-char short name without "-" (e.g. "v"), or "" for none.
+    /// @param help        Help text shown in --help output.
+    pub fn flag(self: ArgParser, long_name: string, short_name: string, help: string) -> void {
+        __mlang_std_argparser_add_flag(self.handle, long_name, short_name, help);
+    }
+
+    /// @brief Declare a key-value option (--long <val> / -short <val>).
+    /// @param long_name   Long option name without "--" (e.g. "output").
+    /// @param short_name  Single-char short name, or "" for none.
+    /// @param help        Help text.
+    /// @param default_val Default value string (use "" for no default).
+    pub fn option(self: ArgParser, long_name: string, short_name: string, help: string, default_val: string) -> void {
+        __mlang_std_argparser_add_option(self.handle, long_name, short_name, help, default_val);
+    }
+
+    /// @brief Declare a positional argument.
+    /// @param name  Positional name shown in usage (e.g. "input").
+    /// @param help  Help text.
+    pub fn positional(self: ArgParser, name: string, help: string) -> void {
+        __mlang_std_argparser_add_positional(self.handle, name, help);
+    }
+
+    /// @brief Parse command-line arguments from fn main(argc, args).
+    ///
+    /// Skips argv[0] (the program name).  After this call the ArgParser
+    /// handle remains valid and can be used with `print_help()`.
+    ///
+    /// @param argc  Argument count from main (including argv[0]).
+    /// @param args  Argument list from main (list<str8>).
+    /// @return ParseResult — always valid; check ok()/has_error().
+    pub fn parse(self: ArgParser, argc: i32, args: list<str8>) -> ParseResult {
+        let rh: i64 = __mlang_std_argparser_parse_begin(self.handle);
+        var i: i32 = 0;
+        for arg in args {
+            if i > 0: {
+                let s: string = format!("{}", arg);
+                __mlang_std_argparser_parse_add(rh, s);
+            }
+            i = i + 1;
+        }
+        __mlang_std_argparser_parse_finish(self.handle, rh);
+        return ParseResult { handle: rh };
+    }
+
+    /// @brief Print usage and option help to stdout.
+    pub fn print_help(self: ArgParser) -> void {
+        __mlang_std_argparser_print_help(self.handle);
+    }
+
+    /// @brief Release C resources for this parser.
+    pub fn free(self: ArgParser) -> void {
+        __mlang_std_argparser_free(self.handle);
+    }
+}
+
+impl ParseResult {
+    /// @brief Return true if parsing succeeded (no errors).
+    pub fn ok(self: ParseResult) -> bool {
+        return __mlang_std_parseresult_ok(self.handle) == 1;
+    }
+
+    /// @brief Return true if parsing failed.
+    pub fn has_error(self: ParseResult) -> bool {
+        return __mlang_std_parseresult_ok(self.handle) == 0;
+    }
+
+    /// @brief Return the parse error message, or "" if no error.
+    pub fn error(self: ParseResult) -> string {
+        return __mlang_std_parseresult_error(self.handle);
+    }
+
+    /// @brief Return true if --help or -h was present in the args.
+    pub fn help_requested(self: ParseResult) -> bool {
+        return __mlang_std_parseresult_help_requested(self.handle) == 1;
+    }
+
+    /// @brief Return true if the named flag was set.
+    /// @param name  Long flag name (e.g. "verbose").
+    pub fn flag(self: ParseResult, name: string) -> bool {
+        return __mlang_std_parseresult_flag(self.handle, name) == 1;
+    }
+
+    /// @brief Return the string value of an option.
+    /// @param name  Long option name (e.g. "output").
+    pub fn get(self: ParseResult, name: string) -> string {
+        return __mlang_std_parseresult_get(self.handle, name);
+    }
+
+    /// @brief Return the integer value of an option.
+    /// @param name  Long option name.
+    pub fn get_i64(self: ParseResult, name: string) -> i64 {
+        return __mlang_std_parseresult_get_i64(self.handle, name);
+    }
+
+    /// @brief Return positional argument at zero-based index.
+    /// @param idx  Zero-based index.
+    pub fn positional(self: ParseResult, idx: i64) -> string {
+        return __mlang_std_parseresult_positional(self.handle, idx);
+    }
+
+    /// @brief Return number of positional arguments.
+    pub fn positional_count(self: ParseResult) -> i64 {
+        return __mlang_std_parseresult_positional_count(self.handle);
+    }
+
+    /// @brief Release C resources for this result.
+    pub fn free(self: ParseResult) -> void {
+        __mlang_std_parseresult_free(self.handle);
+    }
+}
