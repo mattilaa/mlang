@@ -6,6 +6,7 @@ usage() {
 Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
                         [--unit-tests [<path>]] [--lsp-tests] [--robot-tests] [--tests [<path>]] [--all-tests] [--no-tests]
                         [--install-if-tests-pass]
+                        [--merge-to-main] [--bump-minor] [--bump-major]
 
 Builds the mlang compiler and optionally installs it.
 
@@ -28,6 +29,15 @@ Options:
   --all-tests        Run unit + lsp + robot tests.
   --no-tests         Skip all tests (default)
   --install-if-tests-pass  Install only if requested tests pass
+  --merge-to-main    Merge current branch into main (fast-forward if possible,
+                     otherwise creates a merge commit), then stay on main.
+                     Happens before the build step.
+  --bump-minor       Increment MLANG_VERSION_MINOR by 1, reset build counter
+                     to 0, and commit the change. Happens after --merge-to-main
+                     (if requested) and before the build step.
+  --bump-major       Increment MLANG_VERSION_MAJOR by 1, reset MINOR and build
+                     counter to 0, and commit the change. Happens after
+                     --merge-to-main (if requested) and before the build step.
   --help             Show this help
 
 Notes:
@@ -38,6 +48,8 @@ Notes:
   - --tests/--unit-tests/--lsp-tests/--robot-tests/--all-tests imply --install-if-tests-pass.
   - --install-if-tests-pass requires tests to be selected.
   - --no-tests and --no-install clear --install-if-tests-pass.
+  - --bump-minor and --bump-major can be combined with --merge-to-main for a
+    full release workflow: merge branch, bump version, build, test, install.
 USAGE
 }
 
@@ -53,6 +65,9 @@ run_lsp_tests=false
 run_robot_tests=false
 install_if_tests_pass=false
 test_target=""
+merge_to_main=false
+bump_minor=false
+bump_major=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -160,6 +175,18 @@ while [[ $# -gt 0 ]]; do
       install_if_tests_pass=true
       shift
       ;;
+    --merge-to-main)
+      merge_to_main=true
+      shift
+      ;;
+    --bump-minor)
+      bump_minor=true
+      shift
+      ;;
+    --bump-major)
+      bump_major=true
+      shift
+      ;;
     *)
       echo "error: unknown argument: $1" >&2
       usage
@@ -172,6 +199,74 @@ if [[ -z "$bin_dir" ]]; then
   bin_dir="${prefix}/bin"
 fi
 
+# ============================================================================
+# Version bump helper
+# ============================================================================
+bump_version() {
+  local mode="$1"   # "major" or "minor"
+  local cmake_file="CMakeLists.txt"
+
+  local cur_major cur_minor
+  cur_major=$(grep 'set(MLANG_VERSION_MAJOR' "$cmake_file" | grep -o '[0-9]*')
+  cur_minor=$(grep 'set(MLANG_VERSION_MINOR' "$cmake_file" | grep -o '[0-9]*')
+
+  local new_major="$cur_major"
+  local new_minor="$cur_minor"
+
+  if [[ "$mode" == "major" ]]; then
+    new_major=$(( cur_major + 1 ))
+    new_minor=0
+  else
+    new_minor=$(( cur_minor + 1 ))
+  fi
+
+  echo "version: ${cur_major}.${cur_minor} -> ${new_major}.${new_minor}"
+
+  # Update CMakeLists.txt (macOS-safe sed with empty backup extension)
+  sed -i '' "s/set(MLANG_VERSION_MAJOR ${cur_major})/set(MLANG_VERSION_MAJOR ${new_major})/" "$cmake_file"
+  sed -i '' "s/set(MLANG_VERSION_MINOR ${cur_minor})/set(MLANG_VERSION_MINOR ${new_minor})/" "$cmake_file"
+
+  # Reset the persisted build counter so the next build starts from 1
+  if [[ -f "${build_dir}/.mlang_build_number" ]]; then
+    echo "0" > "${build_dir}/.mlang_build_number"
+  fi
+
+  git add "$cmake_file"
+  git commit -m "version: bump to ${new_major}.${new_minor}"
+  echo "committed version bump: ${new_major}.${new_minor}"
+}
+
+# ============================================================================
+# Step 1: merge to main (if requested)
+# ============================================================================
+if $merge_to_main; then
+  source_branch=$(git rev-parse --abbrev-ref HEAD)
+  if [[ "$source_branch" == "main" ]]; then
+    echo "error: already on main — nothing to merge" >&2
+    exit 1
+  fi
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "error: working tree has uncommitted changes; commit or stash before merging" >&2
+    exit 1
+  fi
+  echo "merging '$source_branch' into main..."
+  git checkout main
+  git merge "$source_branch" --no-ff -m "Merge branch '${source_branch}' into main"
+  echo "merged '$source_branch' into main"
+fi
+
+# ============================================================================
+# Step 2: version bump (if requested)
+# ============================================================================
+if $bump_major; then
+  bump_version "major"
+elif $bump_minor; then
+  bump_version "minor"
+fi
+
+# ============================================================================
+# Step 3: build
+# ============================================================================
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 if $build_all; then
   cmake --build "$build_dir" --target mlang mlang_std
