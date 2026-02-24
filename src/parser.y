@@ -139,6 +139,32 @@ ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* create_closure(ASTNode* body);
+ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
+                               ASTNode* body, int line);
+ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
+
+// Desugar `lhs op= rhs` into `lhs = lhs op rhs`.
+// Only simple identifier LHS is supported; for other LHS forms an error is
+// set and a dummy node is returned.
+static ASTNode* make_compound_assign(ASTNode* lhs, int op, ASTNode* rhs,
+                                     int line)
+{
+    if(auto* id = dynamic_cast<IdentifierNode*>(lhs))
+    {
+        // Fresh IdentifierNode for the read side — must not reuse lhs pointer.
+        auto* readExpr = new IdentifierNode(id->name);
+        readExpr->line = line;
+        return create_assignment(const_cast<char*>(id->name.c_str()),
+                                 create_binary_op(op, readExpr, rhs), line);
+    }
+    // Compound assignment on field/index LHS: build a chained assignment where
+    // the lhs node serves as the write target and a clone serves as the read.
+    // For now we reuse lhs in the read position (DAG), which is safe as long as
+    // the AST is read-only after construction and nodes are never freed.
+    return create_chained_field_assignment(
+        lhs, create_binary_op(op, lhs, rhs), line);
+}
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 
 static void bind_impl_self_types(ImplBlockNode* implBlock)
@@ -194,17 +220,25 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
-%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT PIPE PIPE_PIPE
+%token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN
 %token LT GT LE GE EQ NE
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
 %token GENERIC_LT
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
+%token ITER_METHOD INTO_ITER_METHOD ENUMERATE_METHOD
+%token ITER_ENUMERATE_METHOD INTO_ITER_ENUMERATE_METHOD
 %token CAST_INT CAST_FLOAT CAST_DOUBLE
+%token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token INLINE_ATTR
+%token INLINE_ALWAYS_ATTR
+%token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
+%type <ast> inline_function_def
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
@@ -251,6 +285,7 @@ top_level_item
     | trait_def
     | function_def
     | test_function_def
+    | inline_function_def
     | mod_declaration
     | use_declaration
     | impl_block
@@ -459,6 +494,15 @@ test_function_def
         { static_cast<FunctionDefNode*>($2)->isTest = true; $$ = $2; }
     ;
 
+inline_function_def
+    : INLINE_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isInline = true; $$ = $2; }
+    | INLINE_ALWAYS_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isInlineAlways = true; $$ = $2; }
+    | INLINE_NEVER_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isInlineNever = true; $$ = $2; }
+    ;
+
 parameter_list
     : /* empty */ { $$ = create_empty_parameter_list(); }
     | parameters
@@ -488,11 +532,21 @@ type
     | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = create_list_type(); }
     | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
+    /* Vec<T> is an alias for list<T> */
+    | IDENTIFIER GENERIC_LT type GT
+        {
+            if(strcmp($1, "Vec") == 0)
+                $$ = create_generic_list_type($3);
+            else
+                $$ = create_generic_struct_type_ref($1, create_type_list($3));
+        }
     | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
     | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
     | AMP type               { $$ = create_reference_type($2, 0); }
     | AMP_MUT type           { $$ = create_reference_type($2, 1); }
+    | LBRACKET type SEMICOLON expression RBRACKET
+        { $$ = create_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
     | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
     | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
     | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
@@ -602,6 +656,16 @@ assignment_statement
             else
                 $$ = create_chained_field_assignment($1, $3, yylineno);
         }
+    | postfix_expression PLUS_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, PLUS, $3, yylineno); }
+    | postfix_expression MINUS_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MINUS, $3, yylineno); }
+    | postfix_expression MULTIPLY_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MULTIPLY, $3, yylineno); }
+    | postfix_expression DIVIDE_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, DIVIDE, $3, yylineno); }
+    | postfix_expression MODULO_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
     | MULTIPLY unary_expression ASSIGN expression SEMICOLON
         { $$ = create_deref_assignment($2, $4, yylineno); }
     ;
@@ -638,6 +702,23 @@ for_statement
         { $$ = create_for_iterator($2, create_map_values_iterator($4, yylineno), $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression ENTRIES_METHOD block_statement
         { $$ = create_for_iterator($2, create_map_entries_iterator($4, yylineno), $6, yylineno); }
+    /* for x in coll.iter() / .into_iter() — strip the no-op method */
+    | FOR IDENTIFIER IN primary_expression ITER_METHOD block_statement
+        { $$ = create_for_iterator($2, $4, $6, yylineno); }
+    | FOR IDENTIFIER IN primary_expression INTO_ITER_METHOD block_statement
+        { $$ = create_for_iterator($2, $4, $6, yylineno); }
+    /* for (i, x) in coll  — enumerate style (index var, value var) */
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $9, yylineno); }
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN range_expression block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $9, yylineno); }
+    /* for (i, x) in coll.enumerate() / .iter().enumerate() / .into_iter().enumerate() */
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression ENUMERATE_METHOD block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression ITER_ENUMERATE_METHOD block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+    | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression INTO_ITER_ENUMERATE_METHOD block_statement
+        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
     ;
 
 range_expression
@@ -852,6 +933,10 @@ primary_expression
     | match_expression { $$ = $1; }
     | list_literal { $$ = $1; }
     | map_literal { $$ = $1; }
+    | PIPE_PIPE LBRACE RBRACE
+        { $$ = create_closure(NULL); }
+    | PIPE_PIPE LBRACE statement_list RBRACE
+        { $$ = create_closure($3); }
     ;
 
 /* Struct literal: StructName { field: value, ... } */
@@ -922,6 +1007,13 @@ cast_expression
 list_literal
     : LBRACKET list_elements RBRACKET { $$ = create_list_literal($2); }
     | LBRACKET RBRACKET { $$ = create_list_literal(NULL); }
+    | LBRACKET expression SEMICOLON expression RBRACKET
+        { $$ = create_array_fill($2, $4); }   /* [val; N] fill literal */
+    /* vec![...] macro forms — same semantics as list literals */
+    | VEC_MACRO LBRACKET list_elements RBRACKET { $$ = create_list_literal($3); }
+    | VEC_MACRO LBRACKET RBRACKET               { $$ = create_list_literal(NULL); }
+    | VEC_MACRO LBRACKET expression SEMICOLON expression RBRACKET
+        { $$ = create_array_fill($3, $5); }   /* vec![val; N] fill macro */
     ;
 
 list_elements

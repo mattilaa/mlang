@@ -63,6 +63,11 @@ private:
     std::set<std::string> constantVariables;
     std::set<std::string> globalConstantVariables;
     std::set<std::string> movedVariables;
+    // Inline closures: var inc = || { ... }; inc();
+    // Maps closure variable name -> its AST node for inline body generation.
+    std::map<std::string, ClosureNode*> closureVariables;
+    // Re-entrancy guard: tracks closures currently being inlined.
+    std::set<std::string> activeInlineClosures;
     std::map<std::string, std::string> pointerBorrowTarget;
     std::map<std::string, std::set<std::string>> activeBorrowers;
     // Tracks the single exclusive mutable borrower per owner variable.
@@ -272,6 +277,7 @@ private:
     llvm::Value* generateFieldAccess(FieldAccessNode* node);
     llvm::Value* generateFunctionCall(FunctionCallNode* node);
     llvm::Value* generateThreadSpawn(FunctionCallNode* node);
+    llvm::Function* generateClosureFn(ClosureNode* node);
     llvm::Value* generateThreadJoin(FunctionCallNode* node);
     llvm::Value* buildHandleValue(const std::string& handleTypeName,
                                   llvm::Value* rawHandle, int line);
@@ -289,7 +295,10 @@ private:
     llvm::Value* generateAtomicI64Free(FunctionCallNode* node);
     llvm::Value* generateMethodCall(MethodCallNode* node);
     llvm::Value* generateCastExpression(CastExpressionNode* node);
-    llvm::Value* generateListLiteral(ListLiteralNode* node);
+    llvm::Value* generateListLiteral(ListLiteralNode* node,
+                                    llvm::Type* declaredElemType = nullptr);
+    llvm::Value* generateArrayFill(ArrayFillNode* node,
+                                   llvm::Type* declaredElemType = nullptr);
     llvm::Value* generateMapLiteral(MapLiteralNode* node);
     llvm::Value* generateIndexExpression(IndexExpressionNode* node);
     llvm::Value* generateTupleLiteral(TupleLiteralNode* node);

@@ -722,6 +722,16 @@ ASTNode* create_reference_type(ASTNode* element_type, int is_mutable)
         static_cast<TypeNode*>(element_type), is_mutable != 0);
 }
 
+ASTNode* create_closure(ASTNode* body)
+{
+    return new ClosureNode(static_cast<StatementListNode*>(body));
+}
+
+std::string ClosureNode::toString() const
+{
+    return "|| { ... }";
+}
+
 std::string ReferenceTypeNode::toString() const
 {
     std::string m = isMutable ? "mut " : "";
@@ -1526,14 +1536,23 @@ std::string RangeExpressionNode::toString() const
 
 std::string ForNode::toString() const
 {
+    std::string varPart = indexVarName.empty()
+                              ? varName
+                              : "(" + indexVarName + ", " + varName + ")";
     std::string result =
-        "for " + varName + " in " + iterable->toString() + " {\n";
+        "for " + varPart + " in " + iterable->toString() + " {\n";
     if(body)
     {
         result += body->toString();
     }
     result += "}\n";
     return result;
+}
+
+std::string ArrayFillNode::toString() const
+{
+    return "[" + (value ? value->toString() : "") + "; " +
+           (count ? count->toString() : "") + "]";
 }
 
 ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
@@ -1558,6 +1577,25 @@ ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
                              static_cast<ExpressionNode*>(iterable), stmtList);
     node->line = line;
     return node;
+}
+
+ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
+                               ASTNode* body, int line)
+{
+    auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
+    StatementListNode* stmtList = blockBody ? blockBody->statements : nullptr;
+
+    auto* node = new ForNode(std::string(val_var),
+                             static_cast<ExpressionNode*>(iterable), stmtList,
+                             std::string(index_var));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_array_fill(ASTNode* value, ASTNode* count)
+{
+    return new ArrayFillNode(static_cast<ExpressionNode*>(value),
+                             static_cast<ExpressionNode*>(count));
 }
 
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive)

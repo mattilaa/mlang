@@ -1,4 +1,4 @@
-# Mlang Language Attributes
+# Mlang Language Attributes {#language_attributes}
 
 This document describes Rust-like attributes currently implemented in Mlang and
 how to extend them.
@@ -54,10 +54,44 @@ fn test_addition() -> i32 {
 }
 ```
 
+## `#[inline]`
+
+Applies to function definitions. Suggests to the compiler that the function
+should be inlined at call sites (maps to LLVM `InlineHint`).
+
+## `#[inline(always)]`
+
+Applies to function definitions. Strongly suggests that the function must
+always be inlined (maps to LLVM `AlwaysInline`).
+
+## `#[inline(never)]`
+
+Applies to function definitions. Strongly suggests that the function must
+never be inlined (maps to LLVM `NoInline`).
+
+Example:
+
+```mla
+#[inline]
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+#[inline(always)]
+fn fast_mul(a: i32, b: i32) -> i32 {
+    return a * b;
+}
+
+#[inline(never)]
+fn debug_only(x: i32) -> i32 {
+    println!("{}", x);
+    return x;
+}
+```
+
 ## Adding a New Rust-like Attribute
 
-To add a new attribute such as `#[derive(Clone)]` or `#[inline]`, update these
-compiler stages:
+To add a new attribute such as `#[derive(Clone)]`, update these compiler stages:
 
 1. Lexer: add the literal token in `src/lexer.l`.
 2. Parser: add token/grammar handling in `src/parser.y`.
@@ -67,5 +101,5 @@ compiler stages:
 5. Docs/examples/tests: add usage docs and a compile/runtime test.
 
 Note:
-- `#[derive(Debug)]` and `#[test]` are the only attribute forms recognized
-  right now.
+- `#[derive(Debug)]`, `#[test]`, `#[inline]`, `#[inline(always)]`, and
+  `#[inline(never)]` are the attribute forms currently recognized.

@@ -1,0 +1,29 @@
+// Example: thread::spawn with closure syntax
+mod std::thread;
+use std::thread::*;
+
+fn main() -> i32 {
+    // Spawn a thread with a closure (|| { ... } syntax)
+    let h1: Handle<Thread> = thread::spawn(|| {
+        println!("hello from spawned thread!");
+    });
+    join(h1);
+
+    // Closure with a loop
+    let h2: Handle<Thread> = thread::spawn(|| {
+        var i: int = 0;
+        for i in 0..3 {
+            println!("thread loop iteration {}", i);
+        }
+    });
+    join(h2);
+
+    // thread_spawn intrinsic also accepts closures
+    let h3: Handle<Thread> = thread_spawn(|| {
+        println!("spawned via intrinsic with closure");
+    });
+    join(h3);
+
+    println!("all threads done");
+    return 0;
+}

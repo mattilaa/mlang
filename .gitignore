@@ -1,4 +1,5 @@
 build
+results
 *bin
 *.a
 *.out

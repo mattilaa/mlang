@@ -457,6 +457,38 @@ fn first_match_location(path: string, text: string, pattern: string) -> string {
     return location_json(path_to_file_uri(path), line1, col1);
 }
 
+fn attribute_doc_location(line_text: string) -> string {
+    let root: string = root_path_from_store();
+    if len(root) == 0: { return String::new(); }
+    let doc_path: string = concat(root, "/docs/language_attributes.md");
+    if file_exists(doc_path) != 1: { return String::new(); }
+    let text_r: Result<string, string> = read_all_text(doc_path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    // Check longest forms first so #[inline] does not match inside #[inline(always)]
+    if contains(line_text, "#[inline(always)]") == 1: {
+        let loc: string = first_match_location(doc_path, text, "## `#[inline(always)]`");
+        if len(loc) > 0: { return loc; }
+    }
+    if contains(line_text, "#[inline(never)]") == 1: {
+        let loc: string = first_match_location(doc_path, text, "## `#[inline(never)]`");
+        if len(loc) > 0: { return loc; }
+    }
+    if contains(line_text, "#[inline]") == 1: {
+        let loc: string = first_match_location(doc_path, text, "## `#[inline]`");
+        if len(loc) > 0: { return loc; }
+    }
+    if contains(line_text, "#[test]") == 1: {
+        let loc: string = first_match_location(doc_path, text, "## `#[test]`");
+        if len(loc) > 0: { return loc; }
+    }
+    if contains(line_text, "#[derive(Debug)]") == 1: {
+        let loc: string = first_match_location(doc_path, text, "## `#[derive(Debug)]`");
+        if len(loc) > 0: { return loc; }
+    }
+    return String::new();
+}
+
 fn runtime_builtin_location(word: string) -> string {
     let root: string = root_path_from_store();
     if len(root) == 0: { return String::new(); }
@@ -1226,6 +1258,10 @@ fn handle_definition(payload: string) -> string {
         let query_text: string = text_store_get(g_text_store_handle, uri);
         if len(query_text) > 0: {
             let line_text: string = line_text_at(query_text, line);
+            if contains(line_text, "#[") == 1: {
+                let attr_loc: string = attribute_doc_location(line_text);
+                if len(attr_loc) > 0: { return format!("[{}]", attr_loc); }
+            }
             let packed: string = extract_word_and_prefix(line_text, col);
             let sep: i64 = find(packed, "::");
             if sep >= 0: {

@@ -61,5 +61,5 @@ CONSOLE_COLORS="${ROBOT_CONSOLE_COLORS:-on}"
   --consolecolors "$CONSOLE_COLORS" \
   --consolewidth 120 \
   --variable MLANG:"$MLANG_BIN" \
-  --outputdir "$ROOT_DIR/build/robot" \
+  --outputdir "$ROOT_DIR/results" \
   "$ROOT_DIR/tests/robot/examples.robot"

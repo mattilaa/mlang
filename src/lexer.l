@@ -176,8 +176,12 @@ static int is_try_question_context()
 "debug!"        { return DEBUGPRINT; }
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
-"#[derive(Debug)]" { return DERIVE_DEBUG; }
-"#[test]"         { return TEST_ATTR; }
+"vec!"          { return VEC_MACRO; }
+"#[derive(Debug)]"    { return DERIVE_DEBUG; }
+"#[test]"             { return TEST_ATTR; }
+"#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }
+"#[inline(never)]"    { return INLINE_NEVER_ATTR; }
+"#[inline]"           { return INLINE_ATTR; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }
@@ -192,6 +196,11 @@ static int is_try_question_context()
 ".keys()"       { return KEYS_METHOD; }
 ".values()"     { return VALUES_METHOD; }
 ".entries()"    { return ENTRIES_METHOD; }
+".iter()"       { return ITER_METHOD; }
+".into_iter()"  { return INTO_ITER_METHOD; }
+".iter().enumerate()"      { return ITER_ENUMERATE_METHOD; }
+".into_iter().enumerate()" { return INTO_ITER_ENUMERATE_METHOD; }
+".enumerate()"  { return ENUMERATE_METHOD; }
 "<"             { return is_generic_struct_literal_start() ? GENERIC_LT : LT; }
 ">"             { return GT; }
 "<="            { return LE; }
@@ -212,6 +221,11 @@ static int is_try_question_context()
 [0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
 [0-9]+          { yylval.ival = strtoll(yytext, NULL, 10); return INT_LITERAL; }
+"+="            { return PLUS_ASSIGN; }
+"-="            { return MINUS_ASSIGN; }
+"*="            { return MULTIPLY_ASSIGN; }
+"/="            { return DIVIDE_ASSIGN; }
+"%="            { return MODULO_ASSIGN; }
 "+"             { return PLUS; }
 "-"             { return MINUS; }
 "*"             { return MULTIPLY; }
@@ -219,5 +233,7 @@ static int is_try_question_context()
 "%"             { return MODULO; }
 "&mut"          { return AMP_MUT; }
 "&"             { return AMP; }
+"||"            { return PIPE_PIPE; }
+"|"             { return PIPE; }
 .               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
 %%

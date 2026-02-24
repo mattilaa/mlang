@@ -1,0 +1,140 @@
+// slice.mla -- array/slice features in mlang
+//
+// Demonstrates:
+//   [T; N]              fixed-size array type annotation (alias for list<T>)
+//   [val; N]            fill literal -- N copies of val (N can be a runtime value)
+//   for (i, x) in arr  enumerate-style loop (index + value)
+//   arr.iter()          no-op adaptor (Rust compatibility)
+//   arr.into_iter()     no-op adaptor (Rust compatibility)
+//   arr.enumerate()     shorthand indexed iteration
+//   arr.iter().enumerate()       chained form
+//   arr.into_iter().enumerate()  chained form
+
+fn sum_array(arr: list<i32>) -> i32 {
+    var total = 0;
+    for x in arr.iter() {
+        total += x;
+    }
+    return total;
+}
+
+fn main() -> i32 {
+    // ---------------------------------------------------------------
+    // 1. [T; N] type annotation + plain literal
+    // ---------------------------------------------------------------
+    println!("=== [T; N] type annotation ===");
+
+    let xs: [i32; 5] = [1, 2, 3, 4, 5];
+    println!("first element:  {}", xs[0]);
+    println!("second element: {}", xs[1]);
+    println!("element count:  {}", xs.len());
+
+    // ---------------------------------------------------------------
+    // 2. [val; N] fill literal
+    // ---------------------------------------------------------------
+    println!("\n=== fill literals ===");
+
+    let zeros: [i32; 5] = [0; 5];
+    println!("zeros:");
+    for (i, v) in zeros.iter().enumerate() {
+        println!("  [{}] = {}", i, v);
+    }
+
+    let fives: [i32; 4] = [5; 4];
+    println!("fives:");
+    for (i, v) in fives.iter().enumerate() {
+        println!("  [{}] = {}", i, v);
+    }
+
+    // N can be a runtime value
+    let n = 6;
+    let ones: [i32; 6] = [1; n];
+    println!("ones (n=6):");
+    for (i, v) in ones.iter().enumerate() {
+        println!("  [{}] = {}", i, v);
+    }
+
+    // ---------------------------------------------------------------
+    // 3. sum via iter()
+    // ---------------------------------------------------------------
+    println!("\n=== sum via iter() ===");
+
+    let primes: [i32; 6] = [2, 3, 5, 7, 11, 13];
+    println!("sum of primes = {}", sum_array(primes));
+
+    // ---------------------------------------------------------------
+    // 4. Enumerate-style for loops (all four forms)
+    // ---------------------------------------------------------------
+    println!("\n=== enumerate loops ===");
+
+    let letters: list<string> = ["alpha", "beta", "gamma", "delta"];
+
+    // for (i, x) in coll -- direct
+    println!("direct:");
+    for (i, name) in letters {
+        println!("  {}: {}", i, name);
+    }
+
+    let letters2: list<string> = ["alpha", "beta", "gamma", "delta"];
+    println!(".enumerate():");
+    for (i, name) in letters2.enumerate() {
+        println!("  {}: {}", i, name);
+    }
+
+    let letters3: list<string> = ["alpha", "beta", "gamma", "delta"];
+    println!(".iter().enumerate():");
+    for (i, name) in letters3.iter().enumerate() {
+        println!("  {}: {}", i, name);
+    }
+
+    let letters4: list<string> = ["alpha", "beta", "gamma", "delta"];
+    println!(".into_iter().enumerate():");
+    for (i, name) in letters4.into_iter().enumerate() {
+        println!("  {}: {}", i, name);
+    }
+
+    // ---------------------------------------------------------------
+    // 5. iter() / into_iter() no-op adaptors
+    // ---------------------------------------------------------------
+    println!("\n=== iter() / into_iter() ===");
+
+    let scores: [i32; 5] = [95, 87, 73, 100, 62];
+    println!("via .iter():");
+    for s in scores.iter() {
+        println!("  {}", s);
+    }
+
+    let scores2: [i32; 5] = [95, 87, 73, 100, 62];
+    println!("via .into_iter():");
+    for s in scores2.into_iter() {
+        println!("  {}", s);
+    }
+
+    // ---------------------------------------------------------------
+    // 6. Practical: find first index with score > 90
+    // ---------------------------------------------------------------
+    println!("\n=== find first index with score > 90 ===");
+
+    let scores3: [i32; 5] = [95, 87, 73, 100, 62];
+    var found_idx = -1;
+    for (i, s) in scores3.iter().enumerate() {
+        if s > 90: {
+            if found_idx == -1: { found_idx = int(i); }
+        }
+    }
+    if found_idx >= 0: {
+        println!("first score > 90 at index {}", found_idx);
+    }
+
+    // ---------------------------------------------------------------
+    // 7. Fill + enumerate: multiplication table row
+    // ---------------------------------------------------------------
+    println!("\n=== multiplication table (row 7) ===");
+
+    let row: [i32; 10] = [0; 10];
+    for (i, _v) in row.iter().enumerate() {
+        println!("  7 * {} = {}", i, 7 * int(i));
+    }
+
+    return 0;
+}

@@ -1,1 +1,0 @@
-fn add() -> int { return 0; }

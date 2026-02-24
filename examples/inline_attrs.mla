@@ -1,0 +1,59 @@
+// Demonstrates #[inline], #[inline(always)], and #[inline(never)] attributes.
+// These map directly to LLVM InlineHint, AlwaysInline, and NoInline.
+
+// #[inline] -- hint to the optimizer that inlining is beneficial
+#[inline]
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+// #[inline] on a helper used in a hot path
+#[inline]
+fn square(n: i32) -> i32 {
+    return n * n;
+}
+
+// #[inline(always)] -- force the compiler to always inline this call
+#[inline(always)]
+fn clamp(val: i32, lo: i32, hi: i32) -> i32 {
+    if val < lo: {
+        return lo;
+    }
+    if val > hi: {
+        return hi;
+    }
+    return val;
+}
+
+// #[inline(never)] -- keep as a real call (useful for debugging/profiling)
+#[inline(never)]
+fn report(label: string, val: i32) -> void {
+    println!("{}: {}", label, val);
+}
+
+fn main() -> i32 {
+    // #[inline] -- add and square
+    let sum: i32 = add(12, 8);
+    let sq: i32  = square(7);
+    report("add(12, 8)", sum);
+    report("square(7)", sq);
+
+    // #[inline(always)] -- clamp keeps values in range
+    let a: i32 = clamp(15, 0, 10);
+    let b: i32 = clamp(-3, 0, 10);
+    let c: i32 = clamp(5, 0, 10);
+    report("clamp(15, 0..10)", a);
+    report("clamp(-3, 0..10)", b);
+    report("clamp(5,  0..10)", c);
+
+    // #[inline(never)] -- report() stays as a real function call above
+
+    // combine all three in a loop
+    var acc: i32 = 0;
+    for i in 1..6 {
+        acc = add(acc, square(clamp(i, 2, 4)));
+    }
+    report("sum of clamp(i,2..4)^2 for i=1..5", acc);
+
+    return 0;
+}
