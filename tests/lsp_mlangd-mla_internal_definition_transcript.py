@@ -37,7 +37,6 @@ def main() -> int:
         root = Path(td)
         (root / "stdlib" / "std").mkdir(parents=True, exist_ok=True)
         (root / "stdlib" / "src").mkdir(parents=True, exist_ok=True)
-        (root / "docs").mkdir(parents=True, exist_ok=True)
         (root / "stdlib" / "std" / "strbuf.mla").write_text(
             (repo_root / "stdlib" / "std" / "strbuf.mla").read_text()
         )
@@ -45,9 +44,6 @@ def main() -> int:
             (repo_root / "stdlib" / "src" / "std_math.c").read_text()
         )
         (root / "mlang_c_types.h").write_text((repo_root / "mlang_c_types.h").read_text())
-        (root / "docs" / "runtime_builtins.h").write_text(
-            (repo_root / "docs" / "runtime_builtins.h").read_text()
-        )
 
         doc = root / "internal_def.mla"
         text = (

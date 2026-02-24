@@ -207,37 +207,6 @@ llvm_map_components_to_libnames(llvm_libs
 
 target_link_libraries(mlang ${llvm_libs})
 
-# ============================================================================
-# mlangd (C++ LSP server)
-# ============================================================================
-add_executable(mlangd
-    tools/mlang_lsp_cpp/main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/module.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/incremental_compiler.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ide_query.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/workspace_graph.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_concurrency.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler_api.cpp
-    ${LEXER_OUT}
-    ${PARSER_OUT}
-)
-
-add_dependencies(mlangd ParserTarget LexerTarget)
-target_compile_features(mlangd PRIVATE cxx_std_20)
-set_target_properties(mlangd PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-)
-target_include_directories(mlangd PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(mlangd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mlangd ${llvm_libs})
-target_compile_definitions(mlangd PRIVATE
-    MLANG_VERSION="${PROJECT_VERSION}"
-    MLANG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
@@ -322,9 +291,6 @@ if(BUILD_TESTS)
 endif()
 
 install(TARGETS mlang
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-install(TARGETS mlangd
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(TARGETS mlang_std

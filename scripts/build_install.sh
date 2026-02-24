@@ -7,7 +7,7 @@ Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir 
                         [--unit-tests [<path>]] [--lsp-tests] [--robot-tests] [--tests [<path>]] [--all-tests] [--no-tests]
                         [--install-if-tests-pass]
 
-Builds the mlang compiler and mlangd (C++ LSP) and optionally installs them.
+Builds the mlang compiler and optionally installs it.
 
 Options:
   --install          Install after build (default)
@@ -18,12 +18,12 @@ Options:
   --sudo             Use sudo for install step
   --build-dir <dir>  Build directory (default: build)
   --use-make         Use Unix Makefiles instead of Ninja
-  --all              Build/install both mlang and mlangd (default behavior)
+  --all              Build/install mlang and mlang_std (default behavior)
   --tests [<path>]   Run tests after build (default: unit + lsp + robot). If <path>
                      is provided, run only that mlang test target.
   --unit-tests [<path>] Run unit tests after build. If <path> is provided,
                      run only that mlang test target.
-  --lsp-tests        Run Python transcript/integration tests for mlangd/mlangd-mla.
+  --lsp-tests        Run Python transcript/integration tests for mlangd-mla.
   --robot-tests      Run robot tests after build (installs only if tests pass)
   --all-tests        Run unit + lsp + robot tests.
   --no-tests         Skip all tests (default)
@@ -174,7 +174,7 @@ fi
 
 cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 if $build_all; then
-  cmake --build "$build_dir" --target mlang mlangd mlang_std
+  cmake --build "$build_dir" --target mlang mlang_std
 fi
 
 # Build mlangd-mla with the freshly built compiler/runtime.
@@ -195,8 +195,6 @@ fi
 
 if $run_lsp_tests; then
   python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
-  python3 tests/lsp_integration_transcript.py --mlangd "$build_dir/mlangd"
-  python3 tests/lsp_mlangd_format_config_transcript.py --mlangd "$build_dir/mlangd"
   python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
 fi
 
