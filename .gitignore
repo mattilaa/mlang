@@ -6,6 +6,8 @@ results
 *.o
 *.pyc
 *_bin
+*html
+*xml
 docs/out
 PIPE
 
