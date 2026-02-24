@@ -1,0 +1,50 @@
+/// \file printf.mla
+/// \brief C-style printf wrappers for MLang (std::printf).
+///
+/// MLang cannot express variadic functions, so use `format!` to build
+/// the string first, then pass it to `printf` / `eprintf` / `fprintf`:
+///
+/// ```mlang
+/// mod std::printf;
+/// use std::printf::*;
+///
+/// printf(format!("x = {}, y = {}\n", x, y));
+/// eprintf(format!("error: {}\n", msg));
+/// fprintf(2, format!("stderr fd: {}\n", code));
+/// ```
+///
+/// ## Functions
+///   - `printf(s)`         write `s` to stdout (no implicit newline)
+///   - `eprintf(s)`        write `s` to stderr (no implicit newline)
+///   - `fprintf(fd, s)`    write `s` to fd 1 (stdout) or 2 (stderr)
+
+extern pub fn __mlang_std_io_printf(s: string) -> void;
+extern pub fn __mlang_std_io_eprintf(s: string) -> void;
+extern pub fn __mlang_std_io_fprintf(fd: i32, s: string) -> void;
+
+/// @brief Write a pre-formatted string to stdout (no implicit newline).
+///
+/// Use `format!` to build the string with substitutions:
+/// ```mlang
+/// printf(format!("count = {}\n", n));
+/// ```
+pub fn printf(s: string) -> void {
+    __mlang_std_io_printf(s);
+}
+
+/// @brief Write a pre-formatted string to stderr (no implicit newline).
+///
+/// ```mlang
+/// eprintf(format!("fatal: {}\n", msg));
+/// ```
+pub fn eprintf(s: string) -> void {
+    __mlang_std_io_eprintf(s);
+}
+
+/// @brief Write a pre-formatted string to a file descriptor.
+///
+/// @param fd   1 for stdout, 2 for stderr.
+/// @param s    Pre-formatted string.
+pub fn fprintf(fd: i32, s: string) -> void {
+    __mlang_std_io_fprintf(fd, s);
+}

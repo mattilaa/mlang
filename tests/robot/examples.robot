@@ -309,3 +309,34 @@ Slice Example Runs Correctly
     # Multiplication table row 7
     Should Contain    ${run.stdout}    7 * 0 = 0
     Should Contain    ${run.stdout}    7 * 9 = 63
+
+Printf And GetChar Demo
+    [Documentation]    Verify std::printf (printf/eprintf/fprintf) compile and
+    ...                produce correct output; get_char is verified via compile only.
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/printf_demo.mla
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/printf_demo_bin
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    mod std::printf;
+    ...    mod std::io;
+    ...    use std::printf::printf;
+    ...    use std::printf::eprintf;
+    ...    use std::printf::fprintf;
+    ...    use std::io::get_char;
+    ...    fn main() -> i32 {
+    ...        printf(format!("hello printf\\n"));
+    ...        printf(format!("val={}\\n", 7));
+    ...        fprintf(1, format!("fprintf stdout\\n"));
+    ...        eprintf(format!("eprintf stderr\\n"));
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building printf_demo (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=printf_demo exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    hello printf
+    Should Contain    ${run.stdout}    val=7
+    Should Contain    ${run.stdout}    fprintf stdout
+    Should Contain    ${run.stderr}    eprintf stderr

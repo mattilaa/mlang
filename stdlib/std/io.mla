@@ -25,6 +25,7 @@ extern fn __mlang_std_io_stdin_read_line_nonblocking(buf: string, capacity: i64)
 extern fn __mlang_std_io_set_stdin_buffering(mode: int, size: i64) -> int;
 extern fn __mlang_std_io_set_stdout_buffering(mode: int, size: i64) -> int;
 extern fn __mlang_std_io_set_stderr_buffering(mode: int, size: i64) -> int;
+extern fn __mlang_std_io_get_char() -> i32;
 extern fn __mlang_std_io_cursor_new(capacity: i64) -> i64;
 extern fn __mlang_std_io_cursor_free(handle: i64) -> void;
 extern fn __mlang_std_io_cursor_read(handle: i64, buf: string, capacity: i64) -> i64;
@@ -315,6 +316,20 @@ pub fn set_stdout_buffering(mode: int, size: i64) -> int {
 /// @brief Set stderr buffering mode and size.
 pub fn set_stderr_buffering(mode: int, size: i64) -> int {
     return __mlang_std_io_set_stderr_buffering(mode, size);
+}
+
+/// @brief Read one character from stdin.
+///
+/// Wraps C `getchar()`.  Returns the character as an `i32` code point,
+/// or `-1` on EOF or error.
+///
+/// ```mlang
+/// let ch: i32 = get_char();
+/// if ch == -1: { /* EOF */ }
+/// println!("got: {}", ch);
+/// ```
+pub fn get_char() -> i32 {
+    return __mlang_std_io_get_char();
 }
 
 /// @brief Compiler-recognized scope-exit destructor for StdoutLock.

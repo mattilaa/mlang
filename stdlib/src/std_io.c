@@ -370,6 +370,33 @@ int64_t __mlang_std_io_cursor_read_line(int64_t handle, char* buf, int64_t capac
     return out_n;
 }
 
+/* -----------------------------------------------------------------------
+ * get_char / printf
+ * --------------------------------------------------------------------- */
+
+int32_t __mlang_std_io_get_char(void)
+{
+    return (int32_t)getchar();
+}
+
+void __mlang_std_io_printf(const char* s)
+{
+    if(s) { fputs(s, stdout); fflush(stdout); }
+}
+
+void __mlang_std_io_eprintf(const char* s)
+{
+    if(s) { fputs(s, stderr); fflush(stderr); }
+}
+
+void __mlang_std_io_fprintf(int32_t fd, const char* s)
+{
+    if(!s) return;
+    FILE* f = (fd == 2) ? stderr : stdout;
+    fputs(s, f);
+    fflush(f);
+}
+
 char* __mlang_std_io_cursor_to_string(int64_t handle)
 {
     mlang_io_cursor_t* c = cursor_from_handle(handle);

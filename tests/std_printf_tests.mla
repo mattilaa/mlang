@@ -1,0 +1,182 @@
+mod std::printf;
+mod std::strbuf;
+
+use std::printf::printf;
+use std::printf::eprintf;
+use std::printf::fprintf;
+use std::strbuf::len;
+use std::strbuf::eq;
+use std::strbuf::contains;
+use std::strbuf::starts_with;
+use std::strbuf::ends_with;
+
+// -- printf ---------------------------------------------------------------
+
+#[test]
+fn test_printf_plain() -> i32 {
+    printf("test_printf_plain\n");
+    return 0;
+}
+
+#[test]
+fn test_printf_format_i32() -> i32 {
+    let s: string = format!("val={}\n", 42);
+    if contains(s, "val=42") != 1: { return 1; }
+    printf(s);
+    return 0;
+}
+
+#[test]
+fn test_printf_format_multi_args() -> i32 {
+    let s: string = format!("a={} b={} c={}\n", 1, 2, 3);
+    if contains(s, "a=1") != 1: { return 1; }
+    if contains(s, "b=2") != 1: { return 1; }
+    if contains(s, "c=3") != 1: { return 1; }
+    printf(s);
+    return 0;
+}
+
+#[test]
+fn test_printf_format_string_arg() -> i32 {
+    let name: string = "world";
+    let s: string = format!("hello {}\n", name);
+    if contains(s, "hello world") != 1: { return 1; }
+    printf(s);
+    return 0;
+}
+
+#[test]
+fn test_printf_format_bool() -> i32 {
+    let s_true: string = format!("flag={}\n", true);
+    let s_false: string = format!("flag={}\n", false);
+    // bools print as 1 / 0
+    if contains(s_true,  "flag=1") != 1: { return 1; }
+    if contains(s_false, "flag=0") != 1: { return 1; }
+    printf(s_true);
+    printf(s_false);
+    return 0;
+}
+
+#[test]
+fn test_printf_negative_number() -> i32 {
+    let s: string = format!("neg={}\n", -99);
+    if contains(s, "neg=-99") != 1: { return 1; }
+    printf(s);
+    return 0;
+}
+
+#[test]
+fn test_printf_i64_large() -> i32 {
+    let big: i64 = 1000000;
+    let s: string = format!("big={}\n", big);
+    if contains(s, "big=1000000") != 1: { return 1; }
+    printf(s);
+    return 0;
+}
+
+#[test]
+fn test_printf_empty_string() -> i32 {
+    // must not crash on empty input
+    printf("");
+    return 0;
+}
+
+#[test]
+fn test_printf_newline_only() -> i32 {
+    printf("\n");
+    return 0;
+}
+
+#[test]
+fn test_printf_sequence() -> i32 {
+    printf("seq_line1\n");
+    printf("seq_line2\n");
+    printf("seq_line3\n");
+    return 0;
+}
+
+#[test]
+fn test_printf_no_trailing_newline() -> i32 {
+    // printf does not append a newline -- verify format string has no \n
+    let s: string = format!("no-nl-{}", 7);
+    if ends_with(s, "\n") == 1: { return 1; }
+    printf(s);
+    printf("\n");   // emit newline separately so output stays clean
+    return 0;
+}
+
+// -- format string correctness --------------------------------------------
+
+#[test]
+fn test_format_string_length() -> i32 {
+    let s: string = format!("abc={}", 123);
+    // "abc=123" is 7 characters
+    if len(s) != 7: { return 1; }
+    printf(s);
+    printf("\n");
+    return 0;
+}
+
+#[test]
+fn test_format_string_eq() -> i32 {
+    let s: string = format!("{}", 0);
+    if eq(s, "0") != 1: { return 1; }
+    printf(s);
+    printf("\n");
+    return 0;
+}
+
+#[test]
+fn test_format_starts_and_ends() -> i32 {
+    let s: string = format!("start-{}-end", 42);
+    if starts_with(s, "start-") != 1: { return 1; }
+    if ends_with(s, "-end") != 1: { return 1; }
+    printf(s);
+    printf("\n");
+    return 0;
+}
+
+// -- eprintf --------------------------------------------------------------
+
+#[test]
+fn test_eprintf_plain() -> i32 {
+    eprintf("test_eprintf_plain\n");
+    return 0;
+}
+
+#[test]
+fn test_eprintf_format() -> i32 {
+    let s: string = format!("error code={}\n", 404);
+    if contains(s, "error code=404") != 1: { return 1; }
+    eprintf(s);
+    return 0;
+}
+
+#[test]
+fn test_eprintf_empty() -> i32 {
+    eprintf("");
+    return 0;
+}
+
+// -- fprintf --------------------------------------------------------------
+
+#[test]
+fn test_fprintf_fd1_stdout() -> i32 {
+    let s: string = format!("fprintf fd={}\n", 1);
+    fprintf(1, s);
+    return 0;
+}
+
+#[test]
+fn test_fprintf_fd2_stderr() -> i32 {
+    let s: string = format!("fprintf fd={}\n", 2);
+    fprintf(2, s);
+    return 0;
+}
+
+#[test]
+fn test_fprintf_empty() -> i32 {
+    fprintf(1, "");
+    fprintf(2, "");
+    return 0;
+}
