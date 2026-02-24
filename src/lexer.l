@@ -177,8 +177,11 @@ static int is_try_question_context()
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
 "vec!"          { return VEC_MACRO; }
-"#[derive(Debug)]" { return DERIVE_DEBUG; }
-"#[test]"         { return TEST_ATTR; }
+"#[derive(Debug)]"    { return DERIVE_DEBUG; }
+"#[test]"             { return TEST_ATTR; }
+"#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }
+"#[inline(never)]"    { return INLINE_NEVER_ATTR; }
+"#[inline]"           { return INLINE_ATTR; }
 "int("          { return CAST_INT; }
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }

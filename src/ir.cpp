@@ -3306,6 +3306,14 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         return function;
     }
 
+    // Apply inline attributes
+    if(node->isInlineAlways)
+        function->addFnAttr(llvm::Attribute::AlwaysInline);
+    else if(node->isInlineNever)
+        function->addFnAttr(llvm::Attribute::NoInline);
+    else if(node->isInline)
+        function->addFnAttr(llvm::Attribute::InlineHint);
+
     // Track which module this function is from (for visibility checks)
     std::string savedModule = currentModule;
     currentModule = node->sourceModule;

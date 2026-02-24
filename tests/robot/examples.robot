@@ -16,6 +16,7 @@ ${MLANG}           ./build/mlang
 ...    examples/ffi_cos.mla
 ...    examples/for_loop_example.mla
 ...    examples/generics_test.mla
+...    examples/inline_attrs.mla
 ...    examples/main.mla
 ...    examples/map_iteration.mla
 ...    examples/map_list.mla
@@ -219,6 +220,25 @@ Closure Tests Pass
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=closure_tests failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    pass=17
+
+Inline Attrs Demo Runs Correctly
+    [Documentation]    Build and run examples/inline_attrs.mla; verify that
+    ...                #[inline], #[inline(always)], and #[inline(never)]
+    ...                compile and produce correct output.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/inline_attrs_bin
+    ${build}=    Run Process    ${MLANG}    examples/inline_attrs.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building inline_attrs.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=inline_attrs exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    add(12, 8): 20
+    Should Contain    ${run.stdout}    square(7): 49
+    Should Contain    ${run.stdout}    clamp(15, 0..10): 10
+    Should Contain    ${run.stdout}    clamp(-3, 0..10): 0
+    Should Contain    ${run.stdout}    clamp(5,  0..10): 5
+    Should Contain    ${run.stdout}    sum of clamp(i,2..4)^2 for i=1..5: 49
 
 Slice Example Runs Correctly
     [Documentation]    Build and run examples/slice.mla; verify key output lines

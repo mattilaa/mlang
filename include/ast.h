@@ -1052,6 +1052,9 @@ public:
     bool isPublic;
     bool isExtern;
     bool isTest = false;
+    bool isInline = false;
+    bool isInlineAlways = false;
+    bool isInlineNever = false;
     std::string sourceModule; // Module this function was defined in (for
                               // visibility checks)
 

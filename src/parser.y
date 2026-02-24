@@ -233,8 +233,12 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token INLINE_ATTR
+%token INLINE_ALWAYS_ATTR
+%token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
+%type <ast> inline_function_def
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
@@ -281,6 +285,7 @@ top_level_item
     | trait_def
     | function_def
     | test_function_def
+    | inline_function_def
     | mod_declaration
     | use_declaration
     | impl_block
@@ -487,6 +492,15 @@ function_def
 test_function_def
     : TEST_ATTR function_def
         { static_cast<FunctionDefNode*>($2)->isTest = true; $$ = $2; }
+    ;
+
+inline_function_def
+    : INLINE_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isInline = true; $$ = $2; }
+    | INLINE_ALWAYS_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isInlineAlways = true; $$ = $2; }
+    | INLINE_NEVER_ATTR function_def
+        { static_cast<FunctionDefNode*>($2)->isInlineNever = true; $$ = $2; }
     ;
 
 parameter_list

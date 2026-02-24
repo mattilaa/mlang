@@ -39,15 +39,23 @@ constexpr std::array<const char*, 11> kRuntimeBuiltinFunctions = {
 
 constexpr const char* kAttrDeriveDebug = "#[derive(Debug)]";
 constexpr const char* kAttrTest = "#[test]";
+constexpr const char* kAttrInline = "#[inline]";
+constexpr const char* kAttrInlineAlways = "#[inline(always)]";
+constexpr const char* kAttrInlineNever = "#[inline(never)]";
 
-constexpr std::array<const char*, 2> kAttributeKeywords = {
+constexpr std::array<const char*, 4> kAttributeKeywords = {
     "derive",
     "test",
+    "inline",
+    "inline(always)",
 };
 
-constexpr std::array<AttributeTokenSpec, 2> kAttributeTokenSpecs = {
-    AttributeTokenSpec{kAttrDeriveDebug, 2, 6}, // derive
-    AttributeTokenSpec{kAttrTest, 2, 4},        // test
+constexpr std::array<AttributeTokenSpec, 5> kAttributeTokenSpecs = {
+    AttributeTokenSpec{kAttrDeriveDebug,  2, 6},  // derive
+    AttributeTokenSpec{kAttrTest,         2, 4},   // test
+    AttributeTokenSpec{kAttrInline,       2, 6},   // inline
+    AttributeTokenSpec{kAttrInlineAlways, 2, 13},  // inline(always)
+    AttributeTokenSpec{kAttrInlineNever,  2, 12},  // inline(never)
 };
 
 } // namespace mlang::constants
