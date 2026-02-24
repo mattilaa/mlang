@@ -290,3 +290,96 @@ int __mlang_std_fs_write_all_text(const char* path, const char* text)
     fclose(fp);
     return w == n ? 0 : -1;
 }
+
+/* -----------------------------------------------------------------------
+ * Seek / tell / size
+ * --------------------------------------------------------------------- */
+
+/* whence: 0=SEEK_SET, 1=SEEK_CUR, 2=SEEK_END */
+int64_t __mlang_std_fs_seek(int64_t handle, int64_t offset, int32_t whence)
+{
+    FILE* fp = (FILE*)(intptr_t)handle;
+    if(!fp)
+        return -1;
+    int w = (whence == 0) ? SEEK_SET :
+            (whence == 1) ? SEEK_CUR : SEEK_END;
+    if(fseek(fp, (long)offset, w) != 0)
+        return -1;
+    long pos = ftell(fp);
+    return (int64_t)pos;
+}
+
+int64_t __mlang_std_fs_tell(int64_t handle)
+{
+    FILE* fp = (FILE*)(intptr_t)handle;
+    if(!fp)
+        return -1;
+    long pos = ftell(fp);
+    return (int64_t)pos;
+}
+
+int64_t __mlang_std_fs_file_size(int64_t handle)
+{
+    FILE* fp = (FILE*)(intptr_t)handle;
+    if(!fp)
+        return -1;
+    long saved = ftell(fp);
+    if(saved < 0)
+        return -1;
+    if(fseek(fp, 0, SEEK_END) != 0)
+        return -1;
+    long sz = ftell(fp);
+    (void)fseek(fp, saved, SEEK_SET);
+    return (int64_t)sz;
+}
+
+/* -----------------------------------------------------------------------
+ * Binary read / write
+ * --------------------------------------------------------------------- */
+
+/* Reads up to `n` bytes from handle into buf (caller-allocated, capacity >= n+1).
+ * NUL-terminates buf. Returns bytes actually read, or -1 on error. */
+int64_t __mlang_std_fs_read_bytes(int64_t handle, char* buf, int64_t n)
+{
+    FILE* fp = (FILE*)(intptr_t)handle;
+    if(!fp || !buf || n <= 0)
+        return -1;
+    size_t got = fread(buf, 1, (size_t)n, fp);
+    buf[got] = '\0';
+    if(got == 0 && ferror(fp))
+        return -1;
+    return (int64_t)got;
+}
+
+/* Writes exactly `n` bytes from buf to handle.
+ * Returns bytes written, or -1 on error. */
+int64_t __mlang_std_fs_write_bytes(int64_t handle, const char* buf, int64_t n)
+{
+    FILE* fp = (FILE*)(intptr_t)handle;
+    if(!fp || !buf || n <= 0)
+        return -1;
+    size_t w = fwrite(buf, 1, (size_t)n, fp);
+    fflush(fp);
+    return (int64_t)w;
+}
+
+/* -----------------------------------------------------------------------
+ * Additional open modes
+ * --------------------------------------------------------------------- */
+
+int64_t __mlang_std_fs_open_append(const char* path)
+{
+    if(!path)
+        return 0;
+    FILE* fp = fopen(path, "ab");
+    return (int64_t)(intptr_t)fp;
+}
+
+int64_t __mlang_std_fs_open_read_write(const char* path)
+{
+    if(!path)
+        return 0;
+    /* r+b: read+write, file must exist */
+    FILE* fp = fopen(path, "r+b");
+    return (int64_t)(intptr_t)fp;
+}

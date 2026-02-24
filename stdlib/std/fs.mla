@@ -1,8 +1,54 @@
 /// \file fs.mla
-/// \brief Minimal filesystem module (std::fs).
+/// \brief Filesystem and binary I/O module for MLang (std::fs).
+///
+/// Provides file handles, buffered reading, seek/tell, binary read/write,
+/// and convenience helpers for reading and writing whole files.
+///
+/// ## Open modes
+/// | Factory           | C mode | Can read | Can write |
+/// |-------------------|--------|----------|-----------|
+/// | `File::open`      | `rb`   | yes      | no        |
+/// | `File::create`    | `wb`   | no       | yes (truncates) |
+/// | `File::append`    | `ab`   | no       | yes (end only)  |
+/// | `File::open_rw`   | `r+b`  | yes      | yes (in-place, file must exist) |
+///
+/// ## Seeking
+/// Use `SeekFrom::start(n)`, `SeekFrom::current(n)`, or `SeekFrom::end(n)`
+/// with `File::seek`.  All offsets are `i64`; negative values are valid for
+/// `current` and `end`.
+///
+/// ## Quick example
+/// ```mlang
+/// mod std::fs;
+/// use std::fs::File;
+/// use std::fs::SeekFrom;
+///
+/// fn main() -> i32 {
+///     let fr: Result<File, string> = File::open("data.bin");
+///     if fr.is_err(): { return 1; }
+///     var f: File = fr.unwrap();
+///
+///     // jump to last 10 bytes
+///     let sk: Result<i64, string> = f.seek(SeekFrom::end(-10));
+///     if sk.is_err(): { f.close(); return 1; }
+///
+///     var buf: string = String::with_capacity(11);
+///     let nr: Result<i64, string> = f.read_bytes(buf, 10);
+///     let n: i64 = nr.unwrap();
+///     println!("read {} bytes: {}", n, buf);
+///     f.close();
+///     return 0;
+/// }
+/// ```
+
+// ------------------------------------------------------------------ //
+// C ABI (not part of the public API)                                  //
+// ------------------------------------------------------------------ //
 
 extern pub fn __mlang_std_fs_open_read(path: string) -> i64;
 extern pub fn __mlang_std_fs_open_write(path: string) -> i64;
+extern pub fn __mlang_std_fs_open_append(path: string) -> i64;
+extern pub fn __mlang_std_fs_open_read_write(path: string) -> i64;
 extern pub fn __mlang_std_fs_close(handle: i64) -> int;
 extern pub fn __mlang_std_fs_read_line(handle: i64, buf: string, capacity: i64) -> i64;
 extern pub fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
@@ -14,20 +60,155 @@ extern pub fn __mlang_std_fs_cwd() -> string;
 extern pub fn __mlang_std_fs_read_all_text(path: string) -> string;
 extern pub fn __mlang_std_fs_write_all_text(path: string, text: string) -> int;
 extern pub fn __mlang_std_strbuf_len(s: string) -> i64;
+extern pub fn __mlang_std_fs_seek(handle: i64, offset: i64, whence: i32) -> i64;
+extern pub fn __mlang_std_fs_tell(handle: i64) -> i64;
+extern pub fn __mlang_std_fs_file_size(handle: i64) -> i64;
+extern pub fn __mlang_std_fs_read_bytes(handle: i64, buf: string, n: i64) -> i64;
+extern pub fn __mlang_std_fs_write_bytes(handle: i64, buf: string, n: i64) -> i64;
+
+// ------------------------------------------------------------------ //
+// SeekFrom                                                             //
+// ------------------------------------------------------------------ //
+
+/// @defgroup seekfrom SeekFrom
+/// @brief Seek anchor passed to `File::seek`.
+
+/// @brief Seek position anchor — describes where a seek is measured from.
+/// @ingroup seekfrom
+///
+/// MLang's equivalent of Rust's `std::io::SeekFrom` enum.
+/// Construct with one of the three static factories and pass to `File::seek`:
+///
+/// ```mlang
+/// f.seek(SeekFrom::start(0));     // rewind to byte 0
+/// f.seek(SeekFrom::end(-10));     // 10 bytes before EOF
+/// f.seek(SeekFrom::current(4));   // skip 4 bytes forward
+/// ```
+///
+/// @note `whence` values match POSIX: 0 = SEEK_SET, 1 = SEEK_CUR, 2 = SEEK_END.
+pub struct SeekFrom {
+    var whence: i32;
+    var offset: i64;
+};
+
+impl SeekFrom {
+    /// @brief Seek anchor measured from the beginning of the file.
+    /// @ingroup seekfrom
+    ///
+    /// The resulting position is exactly `offset` bytes from byte 0.
+    /// `offset` must be >= 0.
+    ///
+    /// ```mlang
+    /// // rewind to the very beginning
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::start(0));
+    ///
+    /// // jump to byte 512
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::start(512));
+    /// ```
+    ///
+    /// @param offset  Non-negative byte offset from the start of the file.
+    /// @return A `SeekFrom` value ready to pass to `File::seek`.
+    pub fn start(offset: i64) -> SeekFrom {
+        return SeekFrom { whence: 0, offset: offset };
+    }
+
+    /// @brief Seek anchor measured from the current file position.
+    /// @ingroup seekfrom
+    ///
+    /// Positive `offset` moves forward; negative `offset` moves backward.
+    /// The resulting position is clamped to `[0, file_size]`.
+    ///
+    /// ```mlang
+    /// // skip 4 bytes forward from wherever we are
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::current(4));
+    ///
+    /// // step 2 bytes back
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::current(-2));
+    /// ```
+    ///
+    /// @param offset  Signed byte offset relative to the current position.
+    /// @return A `SeekFrom` value ready to pass to `File::seek`.
+    pub fn current(offset: i64) -> SeekFrom {
+        return SeekFrom { whence: 1, offset: offset };
+    }
+
+    /// @brief Seek anchor measured from the end of the file.
+    /// @ingroup seekfrom
+    ///
+    /// `offset` is typically negative to seek before EOF.
+    /// `SeekFrom::end(0)` positions the cursor exactly at EOF.
+    ///
+    /// ```mlang
+    /// // position cursor at the last 10 bytes
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::end(-10));
+    ///
+    /// // position at EOF (useful before appending via open_rw)
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::end(0));
+    /// ```
+    ///
+    /// @param offset  Signed byte offset from the end of the file (usually <= 0).
+    /// @return A `SeekFrom` value ready to pass to `File::seek`.
+    pub fn end(offset: i64) -> SeekFrom {
+        return SeekFrom { whence: 2, offset: offset };
+    }
+}
+
+// ------------------------------------------------------------------ //
+// File                                                                 //
+// ------------------------------------------------------------------ //
+
+/// @defgroup file File
+/// @brief Owned file handle with text and binary I/O methods.
 
 /// @brief Owned file handle.
+/// @ingroup file
+///
+/// Wraps a C `FILE*` as an opaque `i64` handle.  Always call `close()` when
+/// done; there is no automatic destructor.
+///
+/// Open with one of the static factories (`open`, `create`, `append`, `open_rw`).
 pub struct File {
     var handle: i64;
 };
 
+/// @defgroup bufreader BufReader
+/// @brief Buffered line-by-line reader over a `File`.
+
 /// @brief Buffered line reader over a file handle.
+/// @ingroup bufreader
+///
+/// Wraps a `File` and provides line-at-a-time reading with a configurable
+/// internal buffer.  The default line buffer is 4096 bytes; use
+/// `BufReader::with_capacity` for larger lines.
+///
+/// ```mlang
+/// let fr: Result<File, string> = File::open("log.txt");
+/// var r: BufReader = BufReader::new(fr.unwrap());
+/// let lines: list<string> = r.lines();
+/// for line in lines {
+///     println!("{}", line);
+/// }
+/// free_lines(lines);
+/// ```
 pub struct BufReader {
     var file: File;
     var line_capacity: i64;
 };
 
 impl File {
-    ///  Open existing file for reading.
+    /// @brief Open an existing file for reading (binary mode).
+    /// @ingroup file
+    ///
+    /// Returns `Err` if the file does not exist or cannot be opened.
+    ///
+    /// ```mlang
+    /// let fr: Result<File, string> = File::open("data.txt");
+    /// if fr.is_err(): { println!("open failed"); return 1; }
+    /// var f: File = fr.unwrap();
+    /// ```
+    ///
+    /// @param path  Path to the file.
+    /// @return `Ok(File)` on success, `Err(string)` on failure.
     pub fn open(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_read(path);
         if h == 0: {
@@ -36,7 +217,22 @@ impl File {
         return Ok<File, string>(File { handle: h });
     }
 
-    ///  Create/truncate file for writing.
+    /// @brief Create or truncate a file for writing (binary mode).
+    /// @ingroup file
+    ///
+    /// If the file already exists its contents are discarded.
+    /// Returns `Err` if the path cannot be created.
+    ///
+    /// ```mlang
+    /// let cr: Result<File, string> = File::create("out.txt");
+    /// if cr.is_err(): { return 1; }
+    /// var f: File = cr.unwrap();
+    /// f.write("hello\n");
+    /// f.close();
+    /// ```
+    ///
+    /// @param path  Destination file path.
+    /// @return `Ok(File)` on success, `Err(string)` on failure.
     pub fn create(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_write(path);
         if h == 0: {
@@ -45,8 +241,69 @@ impl File {
         return Ok<File, string>(File { handle: h });
     }
 
-    ///  Close file handle.
-    /// Returns `0` on success.
+    /// @brief Open an existing file for appending (binary mode).
+    /// @ingroup file
+    ///
+    /// All writes go to the end of the file regardless of `seek`.
+    /// The file is created if it does not exist.
+    /// Returns `Err` if the path cannot be opened.
+    ///
+    /// ```mlang
+    /// let ar: Result<File, string> = File::append("log.txt");
+    /// if ar.is_err(): { return 1; }
+    /// var f: File = ar.unwrap();
+    /// f.write_line("new entry");
+    /// f.close();
+    /// ```
+    ///
+    /// @param path  Path to the file.
+    /// @return `Ok(File)` on success, `Err(string)` on failure.
+    pub fn append(path: string) -> Result<File, string> {
+        let h = __mlang_std_fs_open_append(path);
+        if h == 0: {
+            return Err<File, string>("std::fs::File::append failed");
+        }
+        return Ok<File, string>(File { handle: h });
+    }
+
+    /// @brief Open an existing file for both reading and writing (binary mode).
+    /// @ingroup file
+    ///
+    /// The file **must already exist** (use `create` to make a new file first).
+    /// The initial position is byte 0; use `seek` to position before writing
+    /// in-place.  Returns `Err` if the file does not exist or cannot be opened.
+    ///
+    /// ```mlang
+    /// // patch bytes 7..12 in an existing file
+    /// let rwr: Result<File, string> = File::open_rw("data.bin");
+    /// if rwr.is_err(): { return 1; }
+    /// var f: File = rwr.unwrap();
+    /// f.seek(SeekFrom::start(7));
+    /// f.write("PATCH");
+    /// f.close();
+    /// ```
+    ///
+    /// @param path  Path to an existing file.
+    /// @return `Ok(File)` on success, `Err(string)` on failure.
+    pub fn open_rw(path: string) -> Result<File, string> {
+        let h = __mlang_std_fs_open_read_write(path);
+        if h == 0: {
+            return Err<File, string>("std::fs::File::open_rw failed");
+        }
+        return Ok<File, string>(File { handle: h });
+    }
+
+    /// @brief Close the file handle and flush any pending writes.
+    /// @ingroup file
+    ///
+    /// Always call `close()` when you are finished with a file.
+    /// Calling `close()` on an already-closed handle is a no-op.
+    ///
+    /// ```mlang
+    /// f.close();
+    /// ```
+    ///
+    /// @return `0` on success, non-zero on flush/close error.
     pub fn close(self: File) -> i32 {
         if self.handle == 0: {
             return 0;
@@ -54,8 +311,17 @@ impl File {
         return __mlang_std_fs_close(self.handle);
     }
 
-    ///  Write text into file.
-    /// Returns bytes written.
+    /// @brief Write a string to the file at the current position.
+    /// @ingroup file
+    ///
+    /// ```mlang
+    /// let wr: Result<i64, string> = f.write("hello");
+    /// if wr.is_err(): { return 1; }
+    /// println!("wrote {} bytes", wr.unwrap());
+    /// ```
+    ///
+    /// @param s  Text to write (NUL-terminated string).
+    /// @return `Ok(i64)` — bytes written; `Err(string)` on I/O error.
     pub fn write(self: File, s: string) -> Result<i64, string> {
         let n = __mlang_std_fs_write(self.handle, s);
         if n < 0: {
@@ -64,7 +330,18 @@ impl File {
         return Ok<i64, string>(n);
     }
 
-    ///  Write text followed by newline.
+    /// @brief Write a string followed by a newline (`\n`).
+    /// @ingroup file
+    ///
+    /// Equivalent to calling `write(s)` then `write("\n")`.
+    ///
+    /// ```mlang
+    /// f.write_line("first line");
+    /// f.write_line("second line");
+    /// ```
+    ///
+    /// @param s  Text to write (newline is appended automatically).
+    /// @return `Ok(i64)` — total bytes written including newline; `Err(string)` on error.
     pub fn write_line(self: File, s: string) -> Result<i64, string> {
         let n1: Result<i64, string> = self.write(s);
         if n1.is_err(): {
@@ -76,21 +353,185 @@ impl File {
         }
         return Ok<i64, string>(n1.unwrap() + n2.unwrap());
     }
+
+    /// @brief Move the file cursor to the position described by `sf`.
+    /// @ingroup file
+    ///
+    /// The new cursor position is returned on success.  Use `SeekFrom::start`,
+    /// `SeekFrom::current`, or `SeekFrom::end` to build the anchor.
+    ///
+    /// ```mlang
+    /// // jump to last 10 bytes
+    /// let sk: Result<i64, string> = f.seek(SeekFrom::end(-10));
+    /// if sk.is_err(): { f.close(); return 1; }
+    /// println!("cursor now at {}", sk.unwrap());
+    ///
+    /// // rewind
+    /// f.seek(SeekFrom::start(0));
+    ///
+    /// // skip 4 bytes forward
+    /// f.seek(SeekFrom::current(4));
+    /// ```
+    ///
+    /// @param sf  Seek anchor — construct with `SeekFrom::start/current/end`.
+    /// @return `Ok(i64)` — new byte offset from file start; `Err(string)` on failure.
+    pub fn seek(self: File, sf: SeekFrom) -> Result<i64, string> {
+        let pos: i64 = __mlang_std_fs_seek(self.handle, sf.offset, sf.whence);
+        if pos < 0: {
+            return Err<i64, string>("std::fs::File::seek failed");
+        }
+        return Ok<i64, string>(pos);
+    }
+
+    /// @brief Return the current byte offset from the start of the file.
+    /// @ingroup file
+    ///
+    /// Equivalent to `seek(SeekFrom::current(0))` but does not move the cursor.
+    ///
+    /// ```mlang
+    /// let t: Result<i64, string> = f.tell();
+    /// println!("cursor at byte {}", t.unwrap());
+    /// ```
+    ///
+    /// @return `Ok(i64)` — current position in bytes; `Err(string)` on failure.
+    pub fn tell(self: File) -> Result<i64, string> {
+        let pos: i64 = __mlang_std_fs_tell(self.handle);
+        if pos < 0: {
+            return Err<i64, string>("std::fs::File::tell failed");
+        }
+        return Ok<i64, string>(pos);
+    }
+
+    /// @brief Return the total size of the file in bytes.
+    /// @ingroup file
+    ///
+    /// Internally seeks to EOF and back, so the cursor position is preserved.
+    ///
+    /// ```mlang
+    /// let sz: Result<i64, string> = f.size();
+    /// println!("file is {} bytes", sz.unwrap());
+    /// ```
+    ///
+    /// @return `Ok(i64)` — file size in bytes; `Err(string)` on failure.
+    pub fn size(self: File) -> Result<i64, string> {
+        let sz: i64 = __mlang_std_fs_file_size(self.handle);
+        if sz < 0: {
+            return Err<i64, string>("std::fs::File::size failed");
+        }
+        return Ok<i64, string>(sz);
+    }
+
+    /// @brief Read up to `n` bytes from the current cursor position into `buf`.
+    /// @ingroup file
+    ///
+    /// `buf` must be pre-allocated with at least `n + 1` bytes of capacity;
+    /// use `String::with_capacity(n + 1)`.  The buffer is always NUL-terminated.
+    /// The returned count may be less than `n` at or near EOF.
+    ///
+    /// ```mlang
+    /// var buf: string = String::with_capacity(11);
+    ///
+    /// // read up to 10 bytes
+    /// let nr: Result<i64, string> = f.read_bytes(buf, 10);
+    /// if nr.is_err(): { f.close(); return 1; }
+    /// let n: i64 = nr.unwrap();
+    /// println!("got {} bytes: {}", n, buf);
+    ///
+    /// // read exactly 4 bytes starting at offset 8
+    /// f.seek(SeekFrom::start(8));
+    /// f.read_bytes(buf, 4);
+    /// ```
+    ///
+    /// @param buf  Pre-allocated mutable string buffer (capacity >= n + 1).
+    /// @param n    Maximum number of bytes to read.
+    /// @return `Ok(i64)` — bytes actually read (0 at EOF); `Err(string)` on I/O error.
+    pub fn read_bytes(self: File, buf: string, n: i64) -> Result<i64, string> {
+        let got: i64 = __mlang_std_fs_read_bytes(self.handle, buf, n);
+        if got < 0: {
+            return Err<i64, string>("std::fs::File::read_bytes failed");
+        }
+        return Ok<i64, string>(got);
+    }
+
+    /// @brief Write `n` bytes from `buf` at the current cursor position.
+    /// @ingroup file
+    ///
+    /// Unlike `write`, which writes the whole NUL-terminated string,
+    /// `write_bytes` stops after exactly `n` bytes — useful for binary data
+    /// that may contain NUL characters.
+    ///
+    /// ```mlang
+    /// // write a 4-byte magic header
+    /// let header: string = "MLAG";
+    /// let wr: Result<i64, string> = f.write_bytes(header, 4);
+    /// if wr.is_err(): { return 1; }
+    ///
+    /// // overwrite 5 bytes in-place at offset 7
+    /// f.seek(SeekFrom::start(7));
+    /// f.write_bytes("PATCH", 5);
+    /// ```
+    ///
+    /// @param buf  Source buffer (at least `n` bytes of valid data).
+    /// @param n    Number of bytes to write.
+    /// @return `Ok(i64)` — bytes written; `Err(string)` on I/O error.
+    pub fn write_bytes(self: File, buf: string, n: i64) -> Result<i64, string> {
+        let w: i64 = __mlang_std_fs_write_bytes(self.handle, buf, n);
+        if w < 0: {
+            return Err<i64, string>("std::fs::File::write_bytes failed");
+        }
+        return Ok<i64, string>(w);
+    }
 }
 
+// ------------------------------------------------------------------ //
+// BufReader                                                            //
+// ------------------------------------------------------------------ //
+
 impl BufReader {
-    ///  Construct buffered reader with default capacity.
+    /// @brief Construct a buffered reader with a 4096-byte line buffer.
+    /// @ingroup bufreader
+    ///
+    /// ```mlang
+    /// let fr: Result<File, string> = File::open("input.txt");
+    /// var r: BufReader = BufReader::new(fr.unwrap());
+    /// ```
+    ///
+    /// @param file  Open file handle (opened with `File::open`).
+    /// @return A new `BufReader` ready to read lines.
     pub fn new(file: File) -> BufReader {
         return BufReader { file: file, line_capacity: 4096 };
     }
 
-    ///  Construct buffered reader with custom line buffer size.
+    /// @brief Construct a buffered reader with a custom line buffer size.
+    /// @ingroup bufreader
+    ///
+    /// Use when individual lines may exceed 4096 bytes.
+    ///
+    /// ```mlang
+    /// var r: BufReader = BufReader::with_capacity(fr.unwrap(), 65536);
+    /// ```
+    ///
+    /// @param file      Open file handle.
+    /// @param capacity  Maximum line length in bytes (including NUL).
+    /// @return A new `BufReader` with the specified buffer size.
     pub fn with_capacity(file: File, capacity: i64) -> BufReader {
         return BufReader { file: file, line_capacity: capacity };
     }
 
-    ///  Read one line into caller-owned buffer.
-    /// Returns bytes read.
+    /// @brief Read one line from the file into a caller-owned buffer.
+    /// @ingroup bufreader
+    ///
+    /// The trailing newline is stripped.  Returns `Err` at EOF or on error.
+    ///
+    /// ```mlang
+    /// var buf: string = String::with_capacity(4096);
+    /// let n: Result<i64, string> = r.read_line(buf);
+    /// if n.is_err(): { /* EOF or error */ }
+    /// println!("{}", buf);
+    /// ```
+    ///
+    /// @param buf  Caller-allocated buffer; capacity set by `with_capacity` (default 4096).
+    /// @return `Ok(i64)` — bytes read without newline; `Err(string)` at EOF or on error.
     pub fn read_line(self: BufReader, buf: string) -> Result<i64, string> {
         let n = __mlang_std_fs_read_line(self.file.handle, buf, self.line_capacity);
         if n < 0: {
@@ -99,33 +540,102 @@ impl BufReader {
         return Ok<i64, string>(n);
     }
 
-    ///  Read all lines into `list<string>`.
+    /// @brief Read all remaining lines into a `list<string>`.
+    /// @ingroup bufreader
+    ///
+    /// Reads from the current file position to EOF.  Always call `free_lines`
+    /// on the returned list when done to avoid memory leaks.
+    ///
+    /// ```mlang
+    /// let lines: list<string> = r.lines();
+    /// for line in lines {
+    ///     println!("{}", line);
+    /// }
+    /// free_lines(lines);
+    /// ```
+    ///
+    /// @return A heap-allocated `list<string>`; caller must call `free_lines`.
     pub fn lines(self: BufReader) -> list<string> {
         return __mlang_std_fs_read_all_lines(self.file.handle);
     }
 }
 
-/// @brief Free list returned by `BufReader::lines()`.
+// ------------------------------------------------------------------ //
+// Module-level helpers                                                 //
+// ------------------------------------------------------------------ //
+
+/// @brief Free a line list returned by `BufReader::lines`.
+///
+/// Must be called after every `BufReader::lines` call to release the
+/// heap-allocated strings.
+///
+/// ```mlang
+/// let lines: list<string> = r.lines();
+/// // ... use lines ...
+/// free_lines(lines);
+/// ```
+///
+/// @param lines  The list returned by `BufReader::lines`.
 pub fn free_lines(lines: list<string>) -> void {
     __mlang_std_fs_free_lines(lines);
 }
 
-/// @brief Return `1` if a path exists.
+/// @brief Return `1` if `path` exists and is accessible, `0` otherwise.
+///
+/// ```mlang
+/// if file_exists("/tmp/out.txt") == 1: { println!("found"); }
+/// ```
+///
+/// @param path  File or directory path to check.
+/// @return `1` if the path exists, `0` otherwise.
 pub fn file_exists(path: string) -> int {
     return __mlang_std_fs_file_exists(path);
 }
 
-/// @brief Return parent directory path.
+/// @brief Return the parent directory of `path`.
+///
+/// For `"/a/b/c.txt"` returns `"/a/b"`.
+/// For a bare filename with no slash returns `"."`.
+///
+/// ```mlang
+/// let dir: string = parent_dir("/home/user/file.txt");
+/// println!("{}", dir);   // /home/user
+/// ```
+///
+/// @param path  Any file or directory path.
+/// @return Heap-allocated parent directory string.
 pub fn parent_dir(path: string) -> string {
     return __mlang_std_fs_parent_dir(path);
 }
 
-/// @brief Return current working directory.
+/// @brief Return the current working directory.
+///
+/// ```mlang
+/// let cwd_path: string = cwd();
+/// println!("cwd: {}", cwd_path);
+/// ```
+///
+/// @return Heap-allocated string with the absolute CWD path.
 pub fn cwd() -> string {
     return __mlang_std_fs_cwd();
 }
 
-/// @brief Read entire file text into one string.
+/// @brief Read the entire contents of a file into a single string.
+///
+/// Convenient for small-to-medium text files.  For large files prefer
+/// `BufReader::lines` or `File::read_bytes` to avoid loading everything
+/// into memory at once.
+///
+/// ```mlang
+/// let tr: Result<string, string> = read_all_text("config.toml");
+/// if tr.is_err(): { return 1; }
+/// let text: string = tr.unwrap();
+/// println!("{}", text);
+/// ```
+///
+/// @param path  Path to the file to read.
+/// @return `Ok(string)` — full file contents; `Err(string)` if the file
+///         cannot be opened or read.
 pub fn read_all_text(path: string) -> Result<string, string> {
     let text: string = __mlang_std_fs_read_all_text(path);
     if __mlang_std_strbuf_len(text) == 0: {
@@ -136,7 +646,18 @@ pub fn read_all_text(path: string) -> Result<string, string> {
     return Ok<string, string>(text);
 }
 
-/// @brief Write entire text to file path.
+/// @brief Write `text` to `path`, creating or truncating the file.
+///
+/// Equivalent to `File::create` + `File::write` + `File::close` in one call.
+///
+/// ```mlang
+/// let wr: Result<i32, string> = write_all_text("out.txt", "hello\n");
+/// if wr.is_err(): { println!("write failed"); return 1; }
+/// ```
+///
+/// @param path  Destination file path (created or truncated).
+/// @param text  String to write.
+/// @return `Ok(0)` on success; `Err(string)` on failure.
 pub fn write_all_text(path: string, text: string) -> Result<i32, string> {
     let rc: i32 = __mlang_std_fs_write_all_text(path, text);
     if rc != 0: {
