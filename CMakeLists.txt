@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 set(MLANG_VERSION_MAJOR 0)
-set(MLANG_VERSION_MINOR 1)
+set(MLANG_VERSION_MINOR 2)
 option(MLANG_AUTO_INCREMENT_BUILD "Auto-increment build number on each CMake configure" ON)
 set(MLANG_VERSION_BUILD 0 CACHE STRING "Build number")
 set(MLANG_BUILD_NUMBER_FILE "${CMAKE_BINARY_DIR}/.mlang_build_number" CACHE FILEPATH
