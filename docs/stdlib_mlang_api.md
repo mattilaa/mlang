@@ -5,6 +5,7 @@ These are the APIs you import in Mlang source via:
 
 ```mla
 mod std::io;
+mod std::esc;
 mod std::json;
 mod std::jsonrpc;
 mod std::math;
@@ -20,6 +21,7 @@ mod std::vec;
 
 The source-of-truth implementation files are:
 - `stdlib/std/fs.mla`
+- `stdlib/std/esc.mla`
 - `stdlib/std/io.mla`
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
@@ -65,6 +67,44 @@ collection/string values (including values typed through `use type` aliases).
 - `m.values()` iterator for `for val in m.values() { ... }`
 - `m.entries()` iterator for `for entry in m.entries() { ... }`
   where `entry` is a tuple `(K, V)` and can be accessed via `.0` / `.1`
+
+## std::esc
+
+Module file: `stdlib/std/esc.mla`
+
+ANSI escape helpers for terminal color/style and cursor control. API is
+value-set-driven so call sites avoid raw numeric SGR/control codes.
+
+### Value-set Types
+- `Color` (alias of `i32`)
+- `CursorCommand` (alias of `i32`)
+- `CursorDirection` (alias of `i32`)
+
+### Color/style API
+- `reset() -> string`
+- `fg(color: Color) -> string`
+- `bg(color: Color) -> string`
+- `bold_on() -> string`
+- `bold_off() -> string`
+- `underline_on() -> string`
+- `underline_off() -> string`
+- `inverse_on() -> string`
+- `inverse_off() -> string`
+
+### Cursor API
+- `cursor(cmd: CursorCommand) -> string`
+- `cursor_move(dir: CursorDirection, amount: i32) -> string`
+
+### Enum value helpers
+- Color helpers: `color_default`, `color_black`, `color_red`, `color_green`,
+  `color_yellow`, `color_blue`, `color_magenta`, `color_cyan`, `color_white`,
+  `color_bright_black`, `color_bright_red`, `color_bright_green`,
+  `color_bright_yellow`, `color_bright_blue`, `color_bright_magenta`,
+  `color_bright_cyan`, `color_bright_white`
+- Cursor command helpers:
+  `cmd_home`, `cmd_clear_screen`, `cmd_clear_line`, `cmd_hide`, `cmd_show`,
+  `cmd_save`, `cmd_restore`
+- Cursor direction helpers: `dir_up`, `dir_down`, `dir_right`, `dir_left`
 
 ## std::fs
 

@@ -66,6 +66,10 @@ For thread and atomic helpers, see:
   (`join`, `mutex_new/lock/unlock/free`,
    `atomic_new/load/store/add/free`).
 
+For terminal ANSI escape helpers, see:
+- `stdlib/std/esc.mla`
+  (named-value `fg/bg/reset`, style toggles, and cursor control helpers).
+
 The runtime builtins are implemented by the compiler backend and map to
 platform facilities (pthreads and libc). These symbols are available without
 explicit imports.
@@ -100,7 +104,7 @@ See also:
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
-  (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`, `std::vec`).
+  (`std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.

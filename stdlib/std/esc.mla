@@ -1,0 +1,145 @@
+/// \file esc.mla
+/// \brief ANSI terminal escape helpers for MLang (std::esc).
+///
+/// Provides named value-sets for:
+/// - foreground/background colors
+/// - text styles (bold, underline, inverse)
+/// - cursor controls (home, clear, show/hide, move)
+
+extern pub fn __mlang_std_esc_reset() -> string;
+extern pub fn __mlang_std_esc_sgr_code(code: i32) -> string;
+extern pub fn __mlang_std_esc_cursor_code(code: i32) -> string;
+extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> string;
+
+use type Color = i32;
+use type CursorCommand = i32;
+use type CursorDirection = i32;
+
+/// @brief Color value helpers.
+pub fn color_default() -> Color { return 0; }
+pub fn color_black() -> Color { return 1; }
+pub fn color_red() -> Color { return 2; }
+pub fn color_green() -> Color { return 3; }
+pub fn color_yellow() -> Color { return 4; }
+pub fn color_blue() -> Color { return 5; }
+pub fn color_magenta() -> Color { return 6; }
+pub fn color_cyan() -> Color { return 7; }
+pub fn color_white() -> Color { return 8; }
+pub fn color_bright_black() -> Color { return 9; }
+pub fn color_bright_red() -> Color { return 10; }
+pub fn color_bright_green() -> Color { return 11; }
+pub fn color_bright_yellow() -> Color { return 12; }
+pub fn color_bright_blue() -> Color { return 13; }
+pub fn color_bright_magenta() -> Color { return 14; }
+pub fn color_bright_cyan() -> Color { return 15; }
+pub fn color_bright_white() -> Color { return 16; }
+
+/// @brief Cursor command value helpers.
+pub fn cmd_home() -> CursorCommand { return 0; }
+pub fn cmd_clear_screen() -> CursorCommand { return 1; }
+pub fn cmd_clear_line() -> CursorCommand { return 2; }
+pub fn cmd_hide() -> CursorCommand { return 3; }
+pub fn cmd_show() -> CursorCommand { return 4; }
+pub fn cmd_save() -> CursorCommand { return 5; }
+pub fn cmd_restore() -> CursorCommand { return 6; }
+
+/// @brief Cursor direction value helpers.
+pub fn dir_up() -> CursorDirection { return 0; }
+pub fn dir_down() -> CursorDirection { return 1; }
+pub fn dir_right() -> CursorDirection { return 2; }
+pub fn dir_left() -> CursorDirection { return 3; }
+
+fn fg_code(c: Color) -> i32 {
+    if c == color_black(): { return 30; }
+    if c == color_red(): { return 31; }
+    if c == color_green(): { return 32; }
+    if c == color_yellow(): { return 33; }
+    if c == color_blue(): { return 34; }
+    if c == color_magenta(): { return 35; }
+    if c == color_cyan(): { return 36; }
+    if c == color_white(): { return 37; }
+    if c == color_bright_black(): { return 90; }
+    if c == color_bright_red(): { return 91; }
+    if c == color_bright_green(): { return 92; }
+    if c == color_bright_yellow(): { return 93; }
+    if c == color_bright_blue(): { return 94; }
+    if c == color_bright_magenta(): { return 95; }
+    if c == color_bright_cyan(): { return 96; }
+    if c == color_bright_white(): { return 97; }
+    return 39;
+}
+
+fn bg_code(c: Color) -> i32 {
+    if c == color_black(): { return 40; }
+    if c == color_red(): { return 41; }
+    if c == color_green(): { return 42; }
+    if c == color_yellow(): { return 43; }
+    if c == color_blue(): { return 44; }
+    if c == color_magenta(): { return 45; }
+    if c == color_cyan(): { return 46; }
+    if c == color_white(): { return 47; }
+    if c == color_bright_black(): { return 100; }
+    if c == color_bright_red(): { return 101; }
+    if c == color_bright_green(): { return 102; }
+    if c == color_bright_yellow(): { return 103; }
+    if c == color_bright_blue(): { return 104; }
+    if c == color_bright_magenta(): { return 105; }
+    if c == color_bright_cyan(): { return 106; }
+    if c == color_bright_white(): { return 107; }
+    return 49;
+}
+
+/// @brief Reset all SGR styles/colors.
+pub fn reset() -> string {
+    return __mlang_std_esc_reset();
+}
+
+/// @brief Set foreground color.
+pub fn fg(color: Color) -> string {
+    return __mlang_std_esc_sgr_code(fg_code(color));
+}
+
+/// @brief Set background color.
+pub fn bg(color: Color) -> string {
+    return __mlang_std_esc_sgr_code(bg_code(color));
+}
+
+/// @brief Enable bold text.
+pub fn bold_on() -> string {
+    return __mlang_std_esc_sgr_code(1);
+}
+
+/// @brief Disable bold/dim text.
+pub fn bold_off() -> string {
+    return __mlang_std_esc_sgr_code(22);
+}
+
+/// @brief Enable underline.
+pub fn underline_on() -> string {
+    return __mlang_std_esc_sgr_code(4);
+}
+
+/// @brief Disable underline.
+pub fn underline_off() -> string {
+    return __mlang_std_esc_sgr_code(24);
+}
+
+/// @brief Enable inverse video.
+pub fn inverse_on() -> string {
+    return __mlang_std_esc_sgr_code(7);
+}
+
+/// @brief Disable inverse video.
+pub fn inverse_off() -> string {
+    return __mlang_std_esc_sgr_code(27);
+}
+
+/// @brief Return a cursor control escape sequence.
+pub fn cursor(cmd: CursorCommand) -> string {
+    return __mlang_std_esc_cursor_code(cmd);
+}
+
+/// @brief Move cursor by `amount` in given direction.
+pub fn cursor_move(dir: CursorDirection, amount: i32) -> string {
+    return __mlang_std_esc_cursor_move(dir, amount);
+}

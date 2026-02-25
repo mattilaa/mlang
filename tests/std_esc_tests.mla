@@ -1,0 +1,57 @@
+mod std::esc;
+mod std::strbuf;
+
+use std::esc::bg;
+use std::esc::bold_off;
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::color_blue;
+use std::esc::color_red;
+use std::esc::cursor;
+use std::esc::cursor_move;
+use std::esc::dir_right;
+use std::esc::dir_up;
+use std::esc::fg;
+use std::esc::reset;
+use std::strbuf::find;
+use std::strbuf::len;
+
+#[test]
+fn test_esc_fg_bg_codes() -> i32 {
+    if find(fg(color_red()), "[31m") != 1: { return 1; }
+    if find(bg(color_blue()), "[44m") != 1: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_esc_style_codes() -> i32 {
+    if find(bold_on(), "[1m") != 1: { return 1; }
+    if find(bold_off(), "[22m") != 1: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_esc_cursor_commands() -> i32 {
+    let home: string = cursor(cmd_home());
+    let hide: string = cursor(cmd_hide());
+    let show: string = cursor(cmd_show());
+    let clear: string = cursor(cmd_clear_screen());
+    if find(home, "[H") != 1: { return 1; }
+    if find(hide, "[?25l") != 1: { return 1; }
+    if find(show, "[?25h") != 1: { return 1; }
+    if find(clear, "[2J") != 1: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_esc_cursor_move_and_reset() -> i32 {
+    if find(cursor_move(dir_up(), 3), "[3A") != 1: { return 1; }
+    if find(cursor_move(dir_right(), 12), "[12C") != 1: { return 1; }
+    let rs: string = reset();
+    if find(rs, "[0m") != 1: { return 1; }
+    if len(rs) < 4: { return 1; }
+    return 0;
+}

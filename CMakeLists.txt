@@ -224,6 +224,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_esc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_argparser.c
