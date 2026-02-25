@@ -5,15 +5,22 @@
 /// - foreground/background colors
 /// - text styles (bold, underline, inverse)
 /// - cursor controls (home, clear, show/hide, move)
+///
+/// Escape sequences auto-disable when `std::term::supports_ansi()` is false.
 
 extern pub fn __mlang_std_esc_reset() -> string;
 extern pub fn __mlang_std_esc_sgr_code(code: i32) -> string;
 extern pub fn __mlang_std_esc_cursor_code(code: i32) -> string;
 extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> string;
+extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
 
 use type Color = i32;
 use type CursorCommand = i32;
 use type CursorDirection = i32;
+
+fn ansi_enabled() -> i32 {
+    return __mlang_std_term_stdout_supports_ansi();
+}
 
 /// @brief Color value helpers.
 pub fn color_default() -> Color { return 0; }
@@ -91,55 +98,66 @@ fn bg_code(c: Color) -> i32 {
 
 /// @brief Reset all SGR styles/colors.
 pub fn reset() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_reset();
 }
 
 /// @brief Set foreground color.
 pub fn fg(color: Color) -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(fg_code(color));
 }
 
 /// @brief Set background color.
 pub fn bg(color: Color) -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(bg_code(color));
 }
 
 /// @brief Enable bold text.
 pub fn bold_on() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(1);
 }
 
 /// @brief Disable bold/dim text.
 pub fn bold_off() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(22);
 }
 
 /// @brief Enable underline.
 pub fn underline_on() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(4);
 }
 
 /// @brief Disable underline.
 pub fn underline_off() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(24);
 }
 
 /// @brief Enable inverse video.
 pub fn inverse_on() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(7);
 }
 
 /// @brief Disable inverse video.
 pub fn inverse_off() -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_sgr_code(27);
 }
 
 /// @brief Return a cursor control escape sequence.
 pub fn cursor(cmd: CursorCommand) -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_cursor_code(cmd);
 }
 
 /// @brief Move cursor by `amount` in given direction.
 pub fn cursor_move(dir: CursorDirection, amount: i32) -> string {
+    if ansi_enabled() == 0: { return ""; }
     return __mlang_std_esc_cursor_move(dir, amount);
 }

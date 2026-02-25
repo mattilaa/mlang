@@ -849,6 +849,7 @@ class StructMemberListNode : public ASTNode
 public:
     std::vector<StructMemberNode*> members;
     std::vector<StructMethodNode*> methods;
+    std::vector<EnumDefNode*> enums;
 
     void addMember(StructMemberNode* m)
     {
@@ -857,6 +858,10 @@ public:
     void addMethod(StructMethodNode* m)
     {
         methods.push_back(m);
+    }
+    void addEnum(EnumDefNode* e)
+    {
+        enums.push_back(e);
     }
     std::string toString() const override;
 };

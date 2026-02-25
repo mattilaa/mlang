@@ -1,0 +1,66 @@
+mod std::term;
+
+use std::term::TerminalCaps;
+use std::term::color_16;
+use std::term::color_256;
+use std::term::color_none;
+use std::term::color_truecolor;
+use std::term::stderr_caps;
+use std::term::stdin_enable_raw;
+use std::term::stdin_restore;
+use std::term::supports_ansi;
+use std::term::stdout_caps;
+
+fn is_valid_color_level(v: i32) -> i32 {
+    if v == color_none(): { return 1; }
+    if v == color_16(): { return 1; }
+    if v == color_256(): { return 1; }
+    if v == color_truecolor(): { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_term_stdout_caps_shape() -> i32 {
+    let c: TerminalCaps = stdout_caps();
+    if is_valid_color_level(c.color_level) != 1: { return 1; }
+    if c.truecolor == 1 && c.color_level != color_truecolor(): { return 1; }
+    if c.is_tty == 1: {
+        if c.rows <= 0: { return 1; }
+        if c.cols <= 0: { return 1; }
+    }
+    return 0;
+}
+
+#[test]
+fn test_term_stderr_caps_shape() -> i32 {
+    let c: TerminalCaps = stderr_caps();
+    if is_valid_color_level(c.color_level) != 1: { return 1; }
+    if c.truecolor == 1 && c.color_level != color_truecolor(): { return 1; }
+    if c.is_tty == 1: {
+        if c.rows <= 0: { return 1; }
+        if c.cols <= 0: { return 1; }
+    }
+    return 0;
+}
+
+#[test]
+fn test_term_raw_mode_calls_are_safe() -> i32 {
+    // In non-interactive runners stdin is often not a TTY.
+    // This test only verifies the APIs are callable and don't crash.
+    let r1: i32 = stdin_enable_raw();
+    let r2: i32 = stdin_restore();
+    if r1 == 0: {
+        // If enabling raw succeeded, restore should also succeed.
+        return r2 == 0 ? 0 : 1;
+    }
+    return 0;
+}
+
+#[test]
+fn test_term_supports_ansi_is_consistent() -> i32 {
+    let c: TerminalCaps = stdout_caps();
+    let ansi: i32 = supports_ansi();
+    if ansi != 0 && ansi != 1: { return 1; }
+    if c.is_tty == 0 && ansi != 0: { return 1; }
+    return 0;
+}

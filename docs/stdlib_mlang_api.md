@@ -12,6 +12,7 @@ mod std::math;
 mod std::net;
 mod std::process;
 mod std::sync;
+mod std::term;
 mod std::time;
 mod std::fs;
 mod std::strbuf;
@@ -29,6 +30,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
 - `stdlib/std/sync.mla`
+- `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/thread.mla`
@@ -74,6 +76,7 @@ Module file: `stdlib/std/esc.mla`
 
 ANSI escape helpers for terminal color/style and cursor control. API is
 value-set-driven so call sites avoid raw numeric SGR/control codes.
+Sequences auto-disable to `""` when `std::term::supports_ansi()` is false.
 
 ### Value-set Types
 - `Color` (alias of `i32`)
@@ -412,6 +415,42 @@ Module file: `stdlib/std/sync.mla`
 - `Channel::try_recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
 - `Channel::close(self: Channel) -> i32`
 - `Channel::free(self: Channel) -> i32`
+
+## std::term
+
+Module file: `stdlib/std/term.mla`
+
+Terminal capability detection and termios helpers.
+
+### Types
+- `TermSize`
+- `TerminalCaps`
+- `ColorLevel` (`i32` alias)
+
+### Color level constants
+- `color_none() -> ColorLevel` (0)
+- `color_16() -> ColorLevel` (16)
+- `color_256() -> ColorLevel` (256)
+- `color_truecolor() -> ColorLevel` (16777216)
+
+### Capability queries
+- `term_name() -> string`
+- `supports_ansi() -> i32`
+- `stdin_is_tty() -> i32`
+- `stdout_is_tty() -> i32`
+- `stderr_is_tty() -> i32`
+- `stdout_size() -> TermSize`
+- `stderr_size() -> TermSize`
+- `stdout_color_level() -> ColorLevel`
+- `stderr_color_level() -> ColorLevel`
+- `stdout_truecolor() -> i32`
+- `stderr_truecolor() -> i32`
+- `stdout_caps() -> TerminalCaps`
+- `stderr_caps() -> TerminalCaps`
+
+### termios helpers
+- `stdin_enable_raw() -> i32`
+- `stdin_restore() -> i32`
 
 ## std::time
 

@@ -2424,6 +2424,35 @@ void CodeGenerator::generateCode(ProgramNode* program)
             {
                 typeDefs[st->name] = {"struct", st->line};
             }
+
+            if(st->members)
+            {
+                for(auto* nestedEnum : st->members->enums)
+                {
+                    if(!nestedEnum)
+                        continue;
+                    if(reservedTypeNames.count(nestedEnum->name))
+                    {
+                        reportError(nestedEnum->line,
+                                    "type name '" + nestedEnum->name +
+                                        "' is a reserved keyword");
+                    }
+                    auto eit = typeDefs.find(nestedEnum->name);
+                    if(eit != typeDefs.end())
+                    {
+                        reportError(
+                            nestedEnum->line,
+                            "type name '" + nestedEnum->name +
+                                "' conflicts with earlier " +
+                                eit->second.first + " defined at line " +
+                                std::to_string(eit->second.second));
+                    }
+                    else
+                    {
+                        typeDefs[nestedEnum->name] = {"enum", nestedEnum->line};
+                    }
+                }
+            }
         }
     }
 
@@ -2485,6 +2514,18 @@ void CodeGenerator::generateCode(ProgramNode* program)
         for(auto enumDef : program->enumList->enums)
         {
             generateEnumDefinition(enumDef);
+        }
+    }
+    if(program->structList)
+    {
+        for(auto* st : program->structList->structs)
+        {
+            if(!st || !st->members)
+                continue;
+            for(auto* nestedEnum : st->members->enums)
+            {
+                generateEnumDefinition(nestedEnum);
+            }
         }
     }
 
@@ -6234,7 +6275,15 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
     {
         for(auto* st : program->structList->structs)
             if(st)
+            {
                 knownTypeNames.insert(st->name);
+                if(st->members)
+                {
+                    for(auto* nestedEnum : st->members->enums)
+                        if(nestedEnum)
+                            knownTypeNames.insert(nestedEnum->name);
+                }
+            }
     }
     if(program->enumList)
     {

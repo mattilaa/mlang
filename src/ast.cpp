@@ -544,10 +544,24 @@ ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def)
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
                            int is_public, int derive_debug)
 {
-    return new StructDefNode(
+    auto* def = new StructDefNode(
         std::string(name), base_name ? std::string(base_name) : "",
         static_cast<StructMemberListNode*>(members), is_public != 0,
         derive_debug != 0);
+
+    // Qualify nested enum names as Struct::Enum for type/literal resolution.
+    if(def->members)
+    {
+        for(auto* en : def->members->enums)
+        {
+            if(en && en->name.find("::") == std::string::npos)
+            {
+                en->name = def->name + "::" + en->name;
+            }
+        }
+    }
+
+    return def;
 }
 
 ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public)
@@ -589,6 +603,10 @@ ASTNode* create_struct_member_list(ASTNode* member)
     {
         list->addMethod(methodNode);
     }
+    else if(auto* enumNode = dynamic_cast<EnumDefNode*>(member))
+    {
+        list->addEnum(enumNode);
+    }
     return list;
 }
 
@@ -602,6 +620,10 @@ ASTNode* add_struct_member(ASTNode* list, ASTNode* member)
     else if(auto* methodNode = dynamic_cast<StructMethodNode*>(member))
     {
         memberList->addMethod(methodNode);
+    }
+    else if(auto* enumNode = dynamic_cast<EnumDefNode*>(member))
+    {
+        memberList->addEnum(enumNode);
     }
     return memberList;
 }
@@ -1429,6 +1451,10 @@ std::string StructMemberListNode::toString() const
     for(const auto& member : members)
     {
         result += "    " + member->toString() + "\n";
+    }
+    for(const auto& en : enums)
+    {
+        result += "    " + en->toString() + "\n";
     }
     for(const auto& method : methods)
     {

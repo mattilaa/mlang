@@ -4,6 +4,9 @@
 #include <string.h>
 #include "ast.h"
 
+ASTNode* create_identifier_at(char* name, int line, int col);
+ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
+
 static char* join_module_path(char* left, char* right)
 {
     size_t len = strlen(left) + 2 + strlen(right) + 1;
@@ -12,6 +15,32 @@ static char* join_module_path(char* left, char* right)
         return left;
     snprintf(out, len, "%s::%s", left, right);
     return out;
+}
+
+static ASTNode* create_enum_or_ident_from_path(char* path, int line)
+{
+    const char* last = NULL;
+    for(const char* p = path; p && *p; ++p)
+    {
+        if(p[0] == ':' && p[1] == ':')
+            last = p;
+    }
+
+    if(!last)
+        return create_identifier_at(path, line, 0);
+
+    size_t enumLen = (size_t)(last - path);
+    char* enumName = (char*)malloc(enumLen + 1);
+    if(!enumName)
+        return create_identifier_at(path, line, 0);
+    memcpy(enumName, path, enumLen);
+    enumName[enumLen] = '\0';
+
+    char* variant = strdup(last + 2);
+    if(!variant)
+        return create_identifier_at(path, line, 0);
+
+    return create_enum_literal(enumName, variant, line);
 }
 
 extern int yylex();
@@ -484,6 +513,8 @@ struct_member
         { $$ = create_struct_member(0, $4, $2, $6); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = create_struct_member(1, $4, $2, NULL); }
+    | enum_def
+        { $$ = $1; }
     ;
 
 struct_method
@@ -571,14 +602,6 @@ type
     | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = create_list_type(); }
     | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
-    /* Vec<T> is an alias for list<T> */
-    | IDENTIFIER GENERIC_LT type GT
-        {
-            if(strcmp($1, "Vec") == 0)
-                $$ = create_generic_list_type($3);
-            else
-                $$ = create_generic_struct_type_ref($1, create_type_list($3));
-        }
     | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
     | tuple_type
     | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
@@ -594,8 +617,16 @@ type
     | U16    { $$ = create_type_node(TypeNode::TYPE_U16); }
     | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
-    | IDENTIFIER { $$ = create_struct_type_ref($1); }
-    | IDENTIFIER GENERIC_LT type_list GT { $$ = create_generic_struct_type_ref($1, $3); }
+    | module_path { $$ = create_struct_type_ref($1); }
+    | module_path GENERIC_LT type_list GT
+        {
+            auto* list = static_cast<TypeListNode*>($3);
+            // Vec<T> is a built-in alias for list<T>; for N != 1 fall back to generic struct.
+            if(strcmp($1, "Vec") == 0 && list && list->types.size() == 1)
+                $$ = create_generic_list_type(list->types[0]);
+            else
+                $$ = create_generic_struct_type_ref($1, $3);
+        }
     ;
 
 tuple_type
@@ -988,10 +1019,13 @@ match_arm
 match_pattern
     : IDENTIFIER LPAREN IDENTIFIER RPAREN
         { $$ = create_match_pattern($1, $3, yylineno); }
-    | IDENTIFIER COLONCOLON IDENTIFIER
-        { $$ = create_match_literal_pattern(create_enum_literal($1, $3, yylineno), yylineno); }
-    | IDENTIFIER
-        { $$ = create_match_pattern($1, NULL, yylineno); }
+    | module_path
+        {
+            if(strstr($1, "::"))
+                $$ = create_match_literal_pattern(create_enum_or_ident_from_path($1, yylineno), yylineno);
+            else
+                $$ = create_match_pattern($1, NULL, yylineno);
+        }
     | INT_LITERAL
         { $$ = create_match_literal_pattern(create_int_literal($1), yylineno); }
     | FLOAT_LITERAL
@@ -1017,9 +1051,8 @@ primary_expression
         { $$ = create_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
         { $$ = create_format_expr($3, $5, yylineno); }
-    | IDENTIFIER COLONCOLON IDENTIFIER
-        { $$ = create_enum_literal($1, $3, yylineno); }
-    | IDENTIFIER { $$ = create_identifier_at($1, yylineno, yycolumn_token); }
+    | module_path
+        { $$ = create_enum_or_ident_from_path($1, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
     | match_expression { $$ = $1; }
     | list_literal { $$ = $1; }
@@ -1073,18 +1106,10 @@ binary_expression
     ;
 
 function_call
-    : IDENTIFIER LPAREN RPAREN { $$ = create_function_call($1, NULL, NULL, yylineno); }
-    | IDENTIFIER LPAREN argument_list RPAREN { $$ = create_function_call_multi($1, $3, yylineno); }
-    | IDENTIFIER COLONCOLON IDENTIFIER LPAREN RPAREN
-        {
-            char* qname = join_module_path($1, $3);
-            $$ = create_function_call(qname, NULL, NULL, yylineno);
-        }
-    | IDENTIFIER COLONCOLON IDENTIFIER LPAREN argument_list RPAREN
-        {
-            char* qname = join_module_path($1, $3);
-            $$ = create_function_call_multi(qname, $5, yylineno);
-        }
+    : module_path LPAREN RPAREN
+        { $$ = create_function_call($1, NULL, NULL, yylineno); }
+    | module_path LPAREN argument_list RPAREN
+        { $$ = create_function_call_multi($1, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         { $$ = create_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
