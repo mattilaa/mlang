@@ -836,6 +836,10 @@ if_statement
         { $$ = create_if_statement($2, $4, $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF expression COLON statement else_if_list optional_else
         { $$ = create_if_statement($2, create_statement_list($4), $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF expression COLON expression block_statement else_if_list optional_else
+        { $$ = create_if_statement(create_binary_op(AMP_AMP, $2, $4), $5, $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF expression COLON expression statement else_if_list optional_else
+        { $$ = create_if_statement(create_binary_op(AMP_AMP, $2, $4), create_statement_list($5), $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF expression block_statement else_if_list optional_else
         { $$ = create_if_statement($2, $3, $4, $5); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
@@ -846,6 +850,10 @@ if_statement
         { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, $9, $10, $11); }
     | IF LET IDENTIFIER ASSIGN expression COLON expression COLON statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, create_statement_list($9), $10, $11); }
+    | IF LET IDENTIFIER EQ expression COLON expression block_statement else_if_list optional_else
+        { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, $8, $9, $10); }
+    | IF LET IDENTIFIER EQ expression COLON expression statement else_if_list optional_else
+        { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, create_statement_list($8), $9, $10); }
     | IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
         { ASTNode* __init = create_var_declaration($5, $3, $7); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $9, $11, $12, $13); }
     | IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement else_if_list optional_else
@@ -864,6 +872,8 @@ else_if_list
 else_if
     : ELSE IF expression COLON block_statement { $$ = create_else_if($3, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF expression COLON statement { $$ = create_else_if($3, create_statement_list($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF expression COLON expression block_statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF expression COLON expression statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), create_statement_list($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF expression block_statement { $$ = create_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement
         { ASTNode* __init = create_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, $12); }
@@ -873,6 +883,10 @@ else_if
         { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, $10); }
     | ELSE IF LET IDENTIFIER ASSIGN expression COLON expression COLON statement
         { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, create_statement_list($10)); }
+    | ELSE IF LET IDENTIFIER EQ expression COLON expression block_statement
+        { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, $9); }
+    | ELSE IF LET IDENTIFIER EQ expression COLON expression statement
+        { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, create_statement_list($9)); }
     | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement
         { ASTNode* __init = create_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, $12); }
     | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement

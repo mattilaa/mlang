@@ -101,6 +101,7 @@ static int is_try_question_context()
 
 %%
 [ \t\n]+        { /* Ignore whitespace */ }
+(\302\240)+     { /* Ignore UTF-8 non-breaking spaces (U+00A0) */ }
 "//".*          { /* Ignore single-line comments */ }
 "/*"            { BEGIN(COMMENT); }
 <COMMENT>{
