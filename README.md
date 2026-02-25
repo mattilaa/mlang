@@ -73,6 +73,20 @@ search paths in `mlang.toml`:
 module_paths = ["modules", "vendor/mlang"]
 ```
 
+## Package Manager Frontend (MLang)
+MLang frontend wrapper for package-manager CLI is available at:
+`tools/mlang-pkg-mla/main.mla`.
+
+Build and run:
+
+```sh
+./build/mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
+/tmp/mlang-pkg-mla --backend ./build/mlang init
+/tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
+/tmp/mlang-pkg-mla --backend ./build/mlang fetch
+/tmp/mlang-pkg-mla --backend ./build/mlang build -O2
+```
+
 ## Stdlib Linking
 When using stdlib modules backed by native code (e.g. `std::math`), link
 against the stdlib library just like GCC/Clang:

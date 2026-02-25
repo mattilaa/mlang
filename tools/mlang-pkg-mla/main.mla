@@ -1,0 +1,126 @@
+/// \file main.mla
+/// \brief MLang frontend CLI for the package manager.
+///
+/// This tool ports the package-manager *frontend* (CLI parsing/dispatch) to
+/// MLang while keeping the existing C++ backend implementation (`mlang pkg`)
+/// as the execution engine.
+///
+/// ## Usage
+///   mlang-pkg-mla [--backend <mlang_bin>] <subcommand> [args...]
+///
+/// Subcommands are passed through to:
+///   <backend> pkg <subcommand> [args...]
+///
+/// Example:
+///   mlang-pkg-mla add mydep --git https://github.com/org/repo.git
+///
+/// With explicit backend path:
+///   mlang-pkg-mla --backend ./build/mlang build -O2
+
+mod std::process;
+mod std::strbuf;
+
+use std::process::Child;
+use std::process::ExitStatus;
+use std::process::spawn_inherit;
+use std::strbuf::eq;
+
+fn print_usage() -> void {
+    println!("Usage:");
+    println!("  mlang-pkg-mla [--backend <mlang_bin>] <subcommand> [args...]");
+    println!("");
+    println!("Subcommands:");
+    println!("  init");
+    println!("  add <name> [--git URL] [--rev REV] [--tag TAG]");
+    println!("  add <name> [--pkg-config NAME] [--system]");
+    println!("  fetch");
+    println!("  build [-O0|-O1|-O2|-O3]");
+    println!("");
+    println!("Examples:");
+    println!("  mlang-pkg-mla init");
+    println!("  mlang-pkg-mla add cjson --git https://github.com/DaveGamble/cJSON.git");
+    println!("  mlang-pkg-mla build -O2");
+}
+
+fn is_supported_subcommand(s: string) -> i32 {
+    if eq(s, "init") == 1 { return 1; }
+    if eq(s, "add") == 1 { return 1; }
+    if eq(s, "fetch") == 1 { return 1; }
+    if eq(s, "build") == 1 { return 1; }
+    return 0;
+}
+
+fn run_backend(backend: string, pkg_args: list<string>) -> i32 {
+    let child_r: Result<Child, string> = spawn_inherit(backend, pkg_args);
+    if child_r.is_err() {
+        println!("mlang-pkg-mla: failed to launch backend '{}': {}", backend, child_r.unwrap_err());
+        return 1;
+    }
+    let child: Child = child_r.unwrap();
+
+    let st_r: Result<ExitStatus, string> = child.wait();
+    if st_r.is_err() {
+        println!("mlang-pkg-mla: backend wait failed: {}", st_r.unwrap_err());
+        child.close();
+        return 1;
+    }
+    let st: ExitStatus = st_r.unwrap();
+    child.close();
+    if st.exited() != 1 {
+        println!("mlang-pkg-mla: backend did not exit normally");
+        return 1;
+    }
+    return st.code();
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var argv: list<string> = [];
+    for a in args {
+        argv.push(format!("{}", a));
+    }
+
+    if argc < 2 {
+        print_usage();
+        return 1;
+    }
+
+    var backend: string = "mlang";
+    var start_idx: i64 = 1;
+
+    if argv.len() > 1 && eq(argv[1], "--backend") == 1 {
+        if argv.len() < 4 {
+            println!("mlang-pkg-mla: --backend requires a value and subcommand");
+            print_usage();
+            return 1;
+        }
+        backend = argv[2];
+        start_idx = 3;
+    }
+
+    if start_idx >= argv.len() {
+        print_usage();
+        return 1;
+    }
+
+    let sub: string = argv[start_idx];
+    if eq(sub, "-h") == 1 || eq(sub, "--help") == 1 {
+        print_usage();
+        return 0;
+    }
+
+    if is_supported_subcommand(sub) != 1 {
+        println!("mlang-pkg-mla: unknown subcommand '{}'", sub);
+        print_usage();
+        return 1;
+    }
+
+    var pkg_args: list<string> = [];
+    pkg_args.push("pkg");
+    let argv_len: i64 = argv.len();
+    for i in start_idx..argv_len {
+        let arg_i: string = argv[i];
+        pkg_args.push(arg_i);
+    }
+
+    return run_backend(backend, pkg_args);
+}
