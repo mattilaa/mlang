@@ -27,4 +27,6 @@ Currently provided:
   backed by RapidJSON.
 - `std/net.mla`: TCP client/server over libc sockets
   (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
-   `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`).
+   `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`,
+   `try_clone`, `from_handle`/`raw_handle` for multithread handoff, and
+   listener backlog tuning via `set_backlog`).

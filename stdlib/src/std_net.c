@@ -11,6 +11,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+/**
+ * @file std_net.c
+ * @brief POSIX TCP backend for std::net MLang bindings.
+ */
+
 static char g_last_error[256];
 
 static void set_error_from_errno(const char* op)
@@ -50,6 +55,12 @@ char* __mlang_std_net_last_error(void)
     return dup_cstr(g_last_error);
 }
 
+/**
+ * @brief Create a TCP listener socket bound to addr:port.
+ * @param addr IPv4 address string (e.g. "127.0.0.1").
+ * @param port TCP port in [0, 65535]; 0 requests an ephemeral port.
+ * @return Socket fd (>0) on success, 0 on failure.
+ */
 int64_t __mlang_std_net_tcp_bind(const char* addr, int64_t port)
 {
     if(!addr || port < 0 || port > 65535)
@@ -98,6 +109,11 @@ int64_t __mlang_std_net_tcp_bind(const char* addr, int64_t port)
     return (int64_t)fd;
 }
 
+/**
+ * @brief Query the local bound TCP port for a socket.
+ * @param handle Listener/socket handle.
+ * @return Local port on success, -1 on failure.
+ */
 int64_t __mlang_std_net_tcp_local_port(int64_t handle)
 {
     int fd = (int)handle;
@@ -121,6 +137,11 @@ int64_t __mlang_std_net_tcp_local_port(int64_t handle)
     return (int64_t)ntohs(sa.sin_port);
 }
 
+/**
+ * @brief Accept one incoming TCP connection.
+ * @param listener Listener handle from __mlang_std_net_tcp_bind.
+ * @return Accepted socket fd (>0) on success, 0 on failure.
+ */
 int64_t __mlang_std_net_tcp_accept(int64_t listener)
 {
     int lfd = (int)listener;
@@ -144,6 +165,12 @@ int64_t __mlang_std_net_tcp_accept(int64_t listener)
     return (int64_t)cfd;
 }
 
+/**
+ * @brief Connect a TCP stream socket to addr:port.
+ * @param addr IPv4 address string.
+ * @param port TCP port in [0, 65535].
+ * @return Connected socket fd (>0) on success, 0 on failure.
+ */
 int64_t __mlang_std_net_tcp_connect(const char* addr, int64_t port)
 {
     if(!addr || port < 0 || port > 65535)
@@ -182,6 +209,13 @@ int64_t __mlang_std_net_tcp_connect(const char* addr, int64_t port)
     return (int64_t)fd;
 }
 
+/**
+ * @brief Read bytes from a TCP socket into a caller buffer.
+ * @param handle Stream handle.
+ * @param buf Destination buffer (must be writable).
+ * @param capacity Buffer capacity in bytes, including trailing NUL.
+ * @return Number of bytes read, or -1 on failure.
+ */
 int64_t __mlang_std_net_tcp_read(int64_t handle, char* buf, int64_t capacity)
 {
     int fd = (int)handle;
@@ -203,6 +237,12 @@ int64_t __mlang_std_net_tcp_read(int64_t handle, char* buf, int64_t capacity)
     return (int64_t)n;
 }
 
+/**
+ * @brief Write a NUL-terminated string to a TCP socket.
+ * @param handle Stream handle.
+ * @param s UTF-8 payload string.
+ * @return Number of bytes written, or -1 on failure.
+ */
 int64_t __mlang_std_net_tcp_write(int64_t handle, const char* s)
 {
     int fd = (int)handle;
@@ -224,6 +264,11 @@ int64_t __mlang_std_net_tcp_write(int64_t handle, const char* s)
     return (int64_t)n;
 }
 
+/**
+ * @brief Close a TCP socket handle.
+ * @param handle Listener or stream handle.
+ * @return 0 on success, -1 on failure.
+ */
 int __mlang_std_net_tcp_close(int64_t handle)
 {
     int fd = (int)handle;
@@ -244,6 +289,12 @@ int __mlang_std_net_tcp_close(int64_t handle)
     return 0;
 }
 
+/**
+ * @brief Enable or disable non-blocking mode on a socket.
+ * @param handle Socket handle.
+ * @param enabled Non-zero to enable, 0 to disable.
+ * @return 0 on success, -1 on failure.
+ */
 int __mlang_std_net_tcp_set_nonblocking(int64_t handle, int enabled)
 {
     int fd = (int)handle;
@@ -308,4 +359,57 @@ int __mlang_std_net_tcp_set_write_timeout_ms(int64_t handle, int64_t timeout_ms)
 {
     return set_socket_timeout_ms((int)handle, SO_SNDTIMEO, timeout_ms,
                                  "set_write_timeout_ms");
+}
+
+/**
+ * @brief Duplicate a TCP stream handle (dup).
+ * @param handle Existing socket handle.
+ * @return New handle (>0) on success, 0 on failure.
+ */
+int64_t __mlang_std_net_tcp_try_clone(int64_t handle)
+{
+    int fd = (int)handle;
+    if(fd <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("try_clone");
+        return 0;
+    }
+
+    int clone_fd = dup(fd);
+    if(clone_fd < 0)
+    {
+        set_error_from_errno("dup");
+        return 0;
+    }
+
+    clear_error();
+    return (int64_t)clone_fd;
+}
+
+/**
+ * @brief Adjust listener backlog by calling listen() again.
+ * @param handle Listener handle.
+ * @param backlog Desired pending-connection queue length.
+ * @return 0 on success, -1 on failure.
+ */
+int __mlang_std_net_tcp_set_listener_backlog(int64_t handle, int64_t backlog)
+{
+    int fd = (int)handle;
+    if(fd <= 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_listener_backlog");
+        return -1;
+    }
+
+    int queue = (int)(backlog <= 0 ? 16 : backlog);
+    if(listen(fd, queue) != 0)
+    {
+        set_error_from_errno("listen");
+        return -1;
+    }
+
+    clear_error();
+    return 0;
 }

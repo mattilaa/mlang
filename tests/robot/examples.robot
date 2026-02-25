@@ -48,6 +48,8 @@ ${MLANG}           ./build/mlang
 ...    examples/std_fs_lines.mla
 ...    examples/std_fs_seek.mla
 ...    examples/std_fs_rw.mla
+...    examples/std_net_mt_server.mla
+...    examples/std_net_mt_client.mla
 
 *** Test Cases ***
 Compile All Examples
@@ -406,3 +408,42 @@ Fs Rw Demo Runs Correctly
     Should Contain    ${run.stdout}    after patch
     Should Contain    ${run.stdout}    STATUS:DONE
     Should Contain    ${run.stdout}    final_size=45
+
+Multithreaded Net Server Client Roundtrip
+    [Documentation]    Build and run multithreaded std::net server/client examples
+    ...                and verify concurrent echo roundtrips succeed.
+    ${server_bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_server_bin
+    ${client_bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_client_bin
+    ${server_out}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_server.out
+    ${server_err}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_server.err
+    ${PORT}=    Set Variable    18788
+
+    ${build_server}=    Run Process    ${MLANG}    examples/std_net_mt_server.mla    -o    ${server_bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_server.rc}    0
+    ...    msg=Failed building std_net_mt_server (rc=${build_server.rc})\nSTDOUT:\n${build_server.stdout}\nSTDERR:\n${build_server.stderr}
+
+    ${build_client}=    Run Process    ${MLANG}    examples/std_net_mt_client.mla    -o    ${client_bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_client.rc}    0
+    ...    msg=Failed building std_net_mt_client (rc=${build_client.rc})\nSTDOUT:\n${build_client.stdout}\nSTDERR:\n${build_client.stderr}
+
+    Start Process    ${server_bin}    --port    ${PORT}
+    ...    alias=net_server    stdout=${server_out}    stderr=${server_err}
+    Sleep    1s
+
+    ${client_run}=    Run Process    ${client_bin}    --port    ${PORT}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${client_run.rc}    0
+    ...    msg=std_net_mt_client failed (rc=${client_run.rc})\nSTDOUT:\n${client_run.stdout}\nSTDERR:\n${client_run.stderr}
+    Should Contain    ${client_run.stdout}    CLIENT_DONE ok=2
+
+    ${server_res}=    Wait For Process    net_server    timeout=10s
+    Should Be Equal As Integers    ${server_res.rc}    0
+    ...    msg=std_net_mt_server failed (rc=${server_res.rc})\nSTDOUT:\n${server_res.stdout}\nSTDERR:\n${server_res.stderr}
+
+    ${server_stdout}=    Get File    ${server_out}
+    Should Contain    ${server_stdout}    SERVER_READY
+    Should Contain    ${server_stdout}    SERVER_CLIENT_OK id=1
+    Should Contain    ${server_stdout}    SERVER_CLIENT_OK id=2
+    Should Contain    ${server_stdout}    SERVER_DONE handled=2

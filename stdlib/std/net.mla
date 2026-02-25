@@ -12,6 +12,8 @@ extern pub fn __mlang_std_net_tcp_close(handle: i64) -> int;
 extern pub fn __mlang_std_net_tcp_set_nonblocking(handle: i64, enabled: int) -> int;
 extern pub fn __mlang_std_net_tcp_set_read_timeout_ms(handle: i64, timeout_ms: i64) -> int;
 extern pub fn __mlang_std_net_tcp_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> int;
+extern pub fn __mlang_std_net_tcp_try_clone(handle: i64) -> i64;
+extern pub fn __mlang_std_net_tcp_set_listener_backlog(handle: i64, backlog: i64) -> int;
 
 pub struct TcpListener {
     var handle: i64;
@@ -55,6 +57,15 @@ impl TcpListener {
 
     pub fn close(self: TcpListener) -> i32 {
         return __mlang_std_net_tcp_close(self.handle);
+    }
+
+    /// Tune pending-connection queue length (listen backlog).
+    pub fn set_backlog(self: TcpListener, backlog: i64) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_net_tcp_set_listener_backlog(self.handle, backlog);
+        if rc != 0: {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
     }
 }
 
@@ -109,5 +120,25 @@ impl TcpStream {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
+    }
+
+    /// Clone a TCP stream handle so it can be used by another thread.
+    pub fn try_clone(self: TcpStream) -> Result<TcpStream, string> {
+        let h: i64 = __mlang_std_net_tcp_try_clone(self.handle);
+        if h == 0: {
+            return Err<TcpStream, string>(last_error());
+        }
+        return Ok<TcpStream, string>(TcpStream { handle: h });
+    }
+
+    /// Construct a stream wrapper from an owned raw handle.
+    /// Caller must ensure the handle is valid and closed exactly once.
+    pub fn from_handle(handle: i64) -> TcpStream {
+        return TcpStream { handle: handle };
+    }
+
+    /// Expose underlying socket handle for thread handoff patterns.
+    pub fn raw_handle(self: TcpStream) -> i64 {
+        return self.handle;
     }
 }

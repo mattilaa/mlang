@@ -1,0 +1,122 @@
+/// Multithreaded TCP echo server example for std::net.
+///
+/// Runs until it has handled exactly two clients, then exits.
+/// Use together with examples/std_net_mt_client.mla.
+
+mod std::argparser;
+mod std::net;
+mod std::thread;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::thread::join;
+
+fn handle_client(id: i64, stream_handle: i64) -> i32 {
+    let stream: TcpStream = TcpStream::from_handle(stream_handle);
+    var input = String::with_capacity(256);
+
+    let r: Result<i64, string> = stream.read(input, 256);
+    if r.is_err(): {
+        println!("SERVER_CLIENT_ERROR id={} err={}", id, r.unwrap_err());
+        String::free(input);
+        stream.close();
+        return 1;
+    }
+
+    let w: Result<i64, string> = stream.write(input);
+    if w.is_err(): {
+        println!("SERVER_CLIENT_ERROR id={} err={}", id, w.unwrap_err());
+        String::free(input);
+        stream.close();
+        return 1;
+    }
+
+    println!("SERVER_CLIENT_OK id={} msg={}", id, input);
+    String::free(input);
+    stream.close();
+    return 0;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("std_net_mt_server", "Multithreaded std::net echo server.");
+    ap.option("port", "p", "TCP port", "7878");
+    let parsed: ParseResult = ap.parse(argc, args);
+
+    if parsed.has_error(): {
+        println!("parse error: {}", parsed.error());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let port: i64 = parsed.get_i64("port");
+    parsed.free();
+    ap.free();
+
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", port);
+    if listener_r.is_err(): {
+        println!("bind failed: {}", listener_r.unwrap_err());
+        return 1;
+    }
+    let listener: TcpListener = listener_r.unwrap();
+    let backlog_r: Result<i32, string> = listener.set_backlog(32);
+    if backlog_r.is_err(): {
+        println!("set_backlog failed: {}", backlog_r.unwrap_err());
+        listener.close();
+        return 1;
+    }
+
+    println!("SERVER_READY port={}", port);
+
+    let s1_r: Result<TcpStream, string> = listener.accept();
+    if s1_r.is_err(): {
+        println!("accept 1 failed: {}", s1_r.unwrap_err());
+        listener.close();
+        return 1;
+    }
+    let s1: TcpStream = s1_r.unwrap();
+    let s1c_r: Result<TcpStream, string> = s1.try_clone();
+    if s1c_r.is_err(): {
+        println!("clone 1 failed: {}", s1c_r.unwrap_err());
+        s1.close();
+        listener.close();
+        return 1;
+    }
+    let s1c: TcpStream = s1c_r.unwrap();
+    let h1: Handle<Thread> = thread_spawn(handle_client, 1, s1c.raw_handle());
+    s1.close();
+
+    let s2_r: Result<TcpStream, string> = listener.accept();
+    if s2_r.is_err(): {
+        println!("accept 2 failed: {}", s2_r.unwrap_err());
+        join(h1);
+        listener.close();
+        return 1;
+    }
+    let s2: TcpStream = s2_r.unwrap();
+    let s2c_r: Result<TcpStream, string> = s2.try_clone();
+    if s2c_r.is_err(): {
+        println!("clone 2 failed: {}", s2c_r.unwrap_err());
+        s2.close();
+        join(h1);
+        listener.close();
+        return 1;
+    }
+    let s2c: TcpStream = s2c_r.unwrap();
+    let h2: Handle<Thread> = thread_spawn(handle_client, 2, s2c.raw_handle());
+    s2.close();
+
+    let rc1: int = join(h1);
+    let rc2: int = join(h2);
+
+    listener.close();
+    println!("SERVER_DONE handled=2");
+    if rc1 == 0: {
+        if rc2 == 0: {
+            return 0;
+        }
+    }
+    return 1;
+}

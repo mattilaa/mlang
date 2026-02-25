@@ -225,6 +225,7 @@ Module file: `stdlib/std/net.mla`
 - `TcpListener::accept(self: TcpListener) -> Result<TcpStream, string>`
 - `TcpListener::local_port(self: TcpListener) -> Result<i64, string>`
 - `TcpListener::close(self: TcpListener) -> i32`
+- `TcpListener::set_backlog(self: TcpListener, backlog: i64) -> Result<i32, string>`
 
 ### Stream API
 - `TcpStream::connect(addr: string, port: i64) -> Result<TcpStream, string>`
@@ -234,6 +235,9 @@ Module file: `stdlib/std/net.mla`
 - `TcpStream::set_nonblocking(self: TcpStream, enabled: int) -> Result<i32, string>`
 - `TcpStream::set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, string>`
 - `TcpStream::set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, string>`
+- `TcpStream::try_clone(self: TcpStream) -> Result<TcpStream, string>`
+- `TcpStream::from_handle(handle: i64) -> TcpStream`
+- `TcpStream::raw_handle(self: TcpStream) -> i64`
 
 ### Errors
 - `last_error() -> string`
@@ -463,4 +467,3 @@ for(i, x) in v.enumerate() {
     println!("v[{}] = {}", i, x);
 }
 ```
-

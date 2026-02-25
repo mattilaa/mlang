@@ -1,0 +1,84 @@
+/// Multithreaded TCP client example for std::net.
+///
+/// Spawns two client threads, each connecting to the server and verifying
+/// an echo round trip.
+
+mod std::argparser;
+mod std::net;
+mod std::strbuf;
+mod std::thread;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::net::TcpStream;
+use std::strbuf::eq;
+use std::thread::join;
+
+fn run_client(id: i64, port: i64) -> i32 {
+    let c_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    if c_r.is_err(): {
+        println!("CLIENT_ERROR id={} err={}", id, c_r.unwrap_err());
+        return 1;
+    }
+    let c: TcpStream = c_r.unwrap();
+
+    let msg: string = format!("hello-{}", id);
+    let w: Result<i64, string> = c.write(msg);
+    if w.is_err(): {
+        println!("CLIENT_ERROR id={} err={}", id, w.unwrap_err());
+        c.close();
+        return 1;
+    }
+
+    var buf = String::with_capacity(256);
+    let r: Result<i64, string> = c.read(buf, 256);
+    if r.is_err(): {
+        println!("CLIENT_ERROR id={} err={}", id, r.unwrap_err());
+        String::free(buf);
+        c.close();
+        return 1;
+    }
+
+    let ok: i32 = eq(buf, msg);
+    if ok == 1: {
+        println!("CLIENT_OK id={} msg={}", id, buf);
+    } else: {
+        println!("CLIENT_BAD_ECHO id={} got={} expected={}", id, buf, msg);
+    }
+
+    String::free(buf);
+    c.close();
+    return ok == 1 ? 0 : 1;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("std_net_mt_client", "Multithreaded std::net client.");
+    ap.option("port", "p", "TCP port", "7878");
+    let parsed: ParseResult = ap.parse(argc, args);
+
+    if parsed.has_error(): {
+        println!("parse error: {}", parsed.error());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let port: i64 = parsed.get_i64("port");
+    parsed.free();
+    ap.free();
+
+    let h1: Handle<Thread> = thread_spawn(run_client, 1, port);
+    let h2: Handle<Thread> = thread_spawn(run_client, 2, port);
+    let rc1: int = join(h1);
+    let rc2: int = join(h2);
+
+    var ok: i32 = 0;
+    if rc1 == 0: {
+        ok = ok + 1;
+    }
+    if rc2 == 0: {
+        ok = ok + 1;
+    }
+    println!("CLIENT_DONE ok={}", ok);
+    return ok == 2 ? 0 : 1;
+}

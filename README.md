@@ -195,6 +195,8 @@ Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
 TCP networking API (`std::net::TcpListener`, `std::net::TcpStream`,
 non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
+Multithreaded TCP server/client examples:
+`examples/std_net_mt_server.mla` and `examples/std_net_mt_client.mla`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
 JSON-RPC/LSP transport runtime (`std::jsonrpc` Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
@@ -204,6 +206,28 @@ Manual stdio JSON-RPC worker runtime demo (`run_stdio_loop`, built-in `$/cancelR
 Incremental parse/query API for tooling (`std::compiler::Session`, open/change/close, diagnostics, hover, completion, document symbols, cross-document definition via `mod` files) example:
 `examples/std_compiler_demo.mla`.
 `?` is supported for `Result` propagation (early-return on `Err`).
+
+## Multithreaded TCP Demo (Local)
+Build the compiler and run the new multithreaded TCP server/client examples:
+
+```sh
+cmake -S . -B build
+cmake --build build -j
+
+# Terminal 1: start server
+./build/mlang examples/std_net_mt_server.mla -o /tmp/std_net_mt_server_bin
+/tmp/std_net_mt_server_bin --port 18788
+
+# Terminal 2: run client
+./build/mlang examples/std_net_mt_client.mla -o /tmp/std_net_mt_client_bin
+/tmp/std_net_mt_client_bin --port 18788
+```
+
+Run the Robot Framework example suite (includes the multithreaded net case):
+
+```sh
+./tests/run_examples_robot.sh
+```
 
 ## Examples
 - Scope-exit destructor + owned resource cleanup:
