@@ -905,6 +905,9 @@ public:
     std::string name;
     bool hasExplicitValue = false;
     int64_t explicitValue = 0;
+    bool hasReferenceValue = false;
+    std::string refEnumName;
+    std::string refVariantName;
 
     EnumVariantNode(const std::string& n, bool hasValue = false,
                     int64_t value = 0)
@@ -1284,6 +1287,8 @@ ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public,
                          int backing_type = TypeNode::TYPE_I32);
 ASTNode* create_enum_variant(char* name, int has_explicit_value = 0,
                              long long explicit_value = 0);
+ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name,
+                                 char* ref_variant_name);
 ASTNode* create_enum_variant_list(ASTNode* variant);
 ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);

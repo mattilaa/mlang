@@ -6077,6 +6077,50 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                 value = variant->explicitValue;
                 nextImplicitValid = true;
             }
+            else if(variant->hasReferenceValue)
+            {
+                const std::string& refEnumName = variant->refEnumName;
+                const std::string& refVariantName = variant->refVariantName;
+                bool resolved = false;
+
+                // Self-reference is allowed only to already defined variants.
+                if(refEnumName == node->name)
+                {
+                    auto selfIt = variants.find(refVariantName);
+                    if(selfIt != variants.end())
+                    {
+                        value = selfIt->second;
+                        resolved = true;
+                    }
+                }
+                else
+                {
+                    auto refEnumIt = enumValues.find(refEnumName);
+                    if(refEnumIt != enumValues.end())
+                    {
+                        auto refVarIt =
+                            refEnumIt->second.find(refVariantName);
+                        if(refVarIt != refEnumIt->second.end())
+                        {
+                            value = refVarIt->second;
+                            resolved = true;
+                        }
+                    }
+                }
+
+                if(!resolved)
+                {
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "enum variant '" + variant->name +
+                            "' references unknown enum value '" +
+                            refEnumName + "::" + refVariantName +
+                            "' in enum '" + node->name + "'");
+                    return;
+                }
+
+                nextImplicitValid = true;
+            }
             else if(!nextImplicitValid)
             {
                 reportError(variant->line > 0 ? variant->line : node->line,
@@ -6088,11 +6132,32 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
 
             if(!fitsInEnumBaseType(baseKind, value))
             {
-                reportError(variant->line > 0 ? variant->line : node->line,
-                            "enum variant value '" + std::to_string(value) +
-                                "' does not fit backing type '" +
-                                enumBaseTypeName(baseKind) + "' in enum '" +
-                                node->name + "'");
+                if(variant->hasReferenceValue)
+                {
+                    TypeNode::TypeKind refBaseKind = TypeNode::TYPE_I32;
+                    auto refBkIt = enumBaseTypes.find(variant->refEnumName);
+                    if(refBkIt != enumBaseTypes.end())
+                        refBaseKind = refBkIt->second;
+
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "enum types/values are not compatible: '" +
+                            variant->refEnumName + "::" +
+                            variant->refVariantName + "' (" +
+                            enumBaseTypeName(refBaseKind) + ", value " +
+                            std::to_string(value) + ") cannot fit in enum '" +
+                            node->name + "' backing type '" +
+                            enumBaseTypeName(baseKind) + "'");
+                }
+                else
+                {
+                    reportError(
+                        variant->line > 0 ? variant->line : node->line,
+                        "enum variant value '" + std::to_string(value) +
+                            "' does not fit backing type '" +
+                            enumBaseTypeName(baseKind) + "' in enum '" +
+                            node->name + "'");
+                }
                 return;
             }
 

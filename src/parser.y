@@ -415,6 +415,8 @@ enum_variant
     : IDENTIFIER { $$ = create_enum_variant($1, 0, 0); }
     | IDENTIFIER ASSIGN INT_LITERAL { $$ = create_enum_variant($1, 1, $3); }
     | IDENTIFIER ASSIGN MINUS INT_LITERAL { $$ = create_enum_variant($1, 1, -$4); }
+    | IDENTIFIER ASSIGN module_path COLONCOLON IDENTIFIER
+        { $$ = create_enum_variant_ref($1, $3, $5); }
     ;
 
 trait_def

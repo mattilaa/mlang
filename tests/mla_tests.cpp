@@ -2283,6 +2283,101 @@ TEST_F(MLATest, EnumImplicitValueOverflowFails)
               std::string::npos);
 }
 
+TEST_F(MLATest, EnumCanReferenceCompatibleOtherEnumValue)
+{
+    std::string code = R"(
+        enum U8Enum : u8 {
+            Invalid = 1,
+            Success = 2
+        };
+
+        enum WideEnum : u32 {
+            Invalid = U8Enum::Invalid,
+            Success = U8Enum::Success,
+            Next
+        };
+
+        fn main() -> i32 {
+            let a: WideEnum = WideEnum::Invalid;
+            let b: WideEnum = WideEnum::Success;
+            let c: WideEnum = WideEnum::Next;
+            let s: i32 = match a {
+                WideEnum::Invalid => 1,
+                WideEnum::Success => 2,
+                WideEnum::Next => 3,
+                _ => 0
+            };
+            let s2: i32 = match b {
+                WideEnum::Invalid => 1,
+                WideEnum::Success => 2,
+                WideEnum::Next => 3,
+                _ => 0
+            };
+            let s3: i32 = match c {
+                WideEnum::Invalid => 1,
+                WideEnum::Success => 2,
+                WideEnum::Next => 3,
+                _ => 0
+            };
+            if s != 1 { return 1; }
+            if s2 != 2 { return 2; }
+            if s3 != 3 { return 3; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, EnumReferenceValueMustFitTargetBackingType)
+{
+    std::string code = R"(
+        enum Big : u32 {
+            Huge = 300
+        };
+
+        enum Small : u8 {
+            Bad = Big::Huge
+        };
+
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("enum types/values are not compatible"),
+              std::string::npos);
+    EXPECT_NE(out.find("cannot fit in enum 'Small' backing type 'u8'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, EnumReferenceSignedToUnsignedIncompatibilityHasClearError)
+{
+    std::string code = R"(
+        enum Signed : i8 {
+            Neg = -1
+        };
+
+        enum Unsigned : u8 {
+            Bad = Signed::Neg
+        };
+
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("enum types/values are not compatible"),
+              std::string::npos);
+    EXPECT_NE(out.find("Signed::Neg"), std::string::npos);
+    EXPECT_NE(out.find("backing type 'u8'"), std::string::npos);
+}
+
 TEST_F(MLATest, EnumBackingValidExampleCompilesAndRuns)
 {
     fs::path repoRoot = fs::path(__FILE__).parent_path().parent_path();

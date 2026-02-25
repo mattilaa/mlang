@@ -1,0 +1,22 @@
+// Cross-enum value reuse when target backing type is compatible.
+
+enum U8Enum : u8 {
+    Invalid = 1,
+    Success = 2
+};
+
+enum WideEnum : u32 {
+    Invalid = U8Enum::Invalid,
+    Success = U8Enum::Success,
+    Next
+};
+
+fn main() -> i32 {
+    let s: WideEnum = WideEnum::Success;
+    return match s {
+        WideEnum::Invalid => 1,
+        WideEnum::Success => 0,
+        WideEnum::Next => 2,
+        _ => 3
+    };
+}

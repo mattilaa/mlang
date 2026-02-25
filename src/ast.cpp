@@ -579,6 +579,16 @@ ASTNode* create_enum_variant(char* name, int has_explicit_value,
                                static_cast<int64_t>(explicit_value));
 }
 
+ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name,
+                                 char* ref_variant_name)
+{
+    auto* node = new EnumVariantNode(std::string(name), false, 0);
+    node->hasReferenceValue = true;
+    node->refEnumName = std::string(ref_enum_name);
+    node->refVariantName = std::string(ref_variant_name);
+    return node;
+}
+
 ASTNode* create_enum_variant_list(ASTNode* variant)
 {
     auto* list = new EnumVariantListNode();
@@ -1500,6 +1510,8 @@ std::string StructDefNode::toString() const
 
 std::string EnumVariantNode::toString() const
 {
+    if(hasReferenceValue)
+        return name + " = " + refEnumName + "::" + refVariantName;
     if(hasExplicitValue)
         return name + " = " + std::to_string(explicitValue);
     return name;
