@@ -31,6 +31,7 @@ ${MLANG}           ./build/mlang
 ...    examples/std_process_demo.mla
 ...    examples/std_time_demo.mla
 ...    examples/std_sync_demo.mla
+...    examples/pkg_workflow_main.mla
 ...    examples/pointer_access.mla
 ...    examples/print_test.mla
 ...    examples/result_match.mla
@@ -483,3 +484,131 @@ Multithreaded Net Server Client Roundtrip
     Should Contain    ${server_stdout}    SERVER_CLIENT_OK id=1
     Should Contain    ${server_stdout}    SERVER_CLIENT_OK id=2
     Should Contain    ${server_stdout}    SERVER_DONE handled=2
+
+Pkg Fetch Build Parity (CPP vs MLA)
+    [Documentation]    Create a local git C dependency and verify both
+    ...                package-manager backends (MLANG_PKG_IMPL=cpp|mla)
+    ...                pass init/add/fetch/build and produce runnable binaries.
+    ${base}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/pkg_parity
+    ${dep_repo}=    Catenate    SEPARATOR=    ${base}/depmini
+    ${cpp_proj}=    Catenate    SEPARATOR=    ${base}/pkg_cpp_app
+    ${mla_proj}=    Catenate    SEPARATOR=    ${base}/pkg_mla_app
+
+    ${setup}=    Catenate    SEPARATOR=\n
+    ...    set -e
+    ...    rm -rf '${base}'
+    ...    mkdir -p '${dep_repo}' '${cpp_proj}/src' '${mla_proj}/src'
+    ...    cat > '${dep_repo}/CMakeLists.txt' <<'EOF'
+    ...    cmake_minimum_required(VERSION 3.10)
+    ...    project(depmini C)
+    ...    add_library(depmini STATIC dep.c)
+    ...    EOF
+    ...    cat > '${dep_repo}/dep.c' <<'EOF'
+    ...    int depmini_add(int a, int b) { return a + b; }
+    ...    EOF
+    ...    cp '${EXECDIR}/examples/pkg_workflow_main.mla' '${cpp_proj}/src/main.mla'
+    ...    cp '${EXECDIR}/examples/pkg_workflow_main.mla' '${mla_proj}/src/main.mla'
+    ...    cd '${dep_repo}'
+    ...    git init -q
+    ...    git add .
+    ...    git -c user.name=robot -c user.email=robot@example.com commit -q -m init
+    ${setup_r}=    Run Process    /bin/sh    -lc    ${setup}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup_r.rc}    0
+    ...    msg=Package fixture setup failed (rc=${setup_r.rc})\nSTDOUT:\n${setup_r.stdout}\nSTDERR:\n${setup_r.stderr}
+
+    ${cpp_init}=    Run Process    ${MLANG}    pkg    init
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_init.rc}    0
+    ${cpp_add}=    Run Process    ${MLANG}    pkg    add    depmini    --git    ${dep_repo}
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_add.rc}    0
+    ${cpp_fetch}=    Run Process    ${MLANG}    pkg    fetch
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_fetch.rc}    0
+    ${cpp_build}=    Run Process    ${MLANG}    pkg    build    -O0
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_build.rc}    0
+    File Should Exist    ${cpp_proj}/build/pkg_cpp_app
+    ${cpp_run}=    Run Process    ${cpp_proj}/build/pkg_cpp_app    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_run.rc}    0
+    Should Contain    ${cpp_run.stdout}    pkg workflow ok
+
+    ${mla_init}=    Run Process    ${MLANG}    pkg    init
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_init.rc}    0
+    ${mla_add}=    Run Process    ${MLANG}    pkg    add    depmini    --git    ${dep_repo}
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_add.rc}    0
+    ${mla_fetch}=    Run Process    ${MLANG}    pkg    fetch
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_fetch.rc}    0
+    ${mla_build}=    Run Process    ${MLANG}    pkg    build    -O0
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_build.rc}    0
+    File Should Exist    ${mla_proj}/build/pkg_mla_app
+    ${mla_run}=    Run Process    ${mla_proj}/build/pkg_mla_app    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_run.rc}    0
+    Should Contain    ${mla_run.stdout}    pkg workflow ok
+
+Pkg PkgConfig Parity (CPP vs MLA)
+    [Documentation]    Verify pkg-config based c-dependencies behave identically
+    ...                for both package-manager backends using a local fake
+    ...                pkg-config executable.
+    ${base}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/pkg_cfg_parity
+    ${fakebin}=    Catenate    SEPARATOR=    ${base}/fakebin
+    ${cpp_proj}=    Catenate    SEPARATOR=    ${base}/pkgcfg_cpp_app
+    ${mla_proj}=    Catenate    SEPARATOR=    ${base}/pkgcfg_mla_app
+    ${path_env}=    Catenate    SEPARATOR=    ${fakebin}:%{PATH}
+
+    ${setup}=    Catenate    SEPARATOR=\n
+    ...    set -e
+    ...    rm -rf '${base}'
+    ...    mkdir -p '${fakebin}' '${cpp_proj}/src' '${mla_proj}/src'
+    ...    cp '${EXECDIR}/examples/pkg_workflow_main.mla' '${cpp_proj}/src/main.mla'
+    ...    cp '${EXECDIR}/examples/pkg_workflow_main.mla' '${mla_proj}/src/main.mla'
+    ...    cat > '${fakebin}/pkg-config' <<'EOF'
+    ...    #!/bin/sh
+    ...    if [ "$1" = "--cflags" ] && [ "$2" = "--libs" ]; then
+    ...      echo "-lm"
+    ...      exit 0
+    ...    fi
+    ...    exit 1
+    ...    EOF
+    ...    chmod +x '${fakebin}/pkg-config'
+    ${setup_r}=    Run Process    /bin/sh    -lc    ${setup}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${setup_r.rc}    0
+    ...    msg=pkg-config fixture setup failed (rc=${setup_r.rc})\nSTDOUT:\n${setup_r.stdout}\nSTDERR:\n${setup_r.stderr}
+
+    ${cpp_init}=    Run Process    ${MLANG}    pkg    init
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_init.rc}    0
+    ${cpp_add}=    Run Process    ${MLANG}    pkg    add    fakelib    --pkg-config    fakelib
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_add.rc}    0
+    ${cpp_fetch}=    Run Process    ${MLANG}    pkg    fetch
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_fetch.rc}    0
+    ${cpp_build}=    Run Process    ${MLANG}    pkg    build    -O0
+    ...    cwd=${cpp_proj}    env:MLANG_PKG_IMPL=cpp    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_build.rc}    0
+    File Should Exist    ${cpp_proj}/build/pkgcfg_cpp_app
+    ${cpp_run}=    Run Process    ${cpp_proj}/build/pkgcfg_cpp_app    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${cpp_run.rc}    0
+    Should Contain    ${cpp_run.stdout}    pkg workflow ok
+
+    ${mla_init}=    Run Process    ${MLANG}    pkg    init
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_init.rc}    0
+    ${mla_add}=    Run Process    ${MLANG}    pkg    add    fakelib    --pkg-config    fakelib
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_add.rc}    0
+    ${mla_fetch}=    Run Process    ${MLANG}    pkg    fetch
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_fetch.rc}    0
+    ${mla_build}=    Run Process    ${MLANG}    pkg    build    -O0
+    ...    cwd=${mla_proj}    env:MLANG_PKG_IMPL=mla    env:PATH=${path_env}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_build.rc}    0
+    File Should Exist    ${mla_proj}/build/pkgcfg_mla_app
+    ${mla_run}=    Run Process    ${mla_proj}/build/pkgcfg_mla_app    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${mla_run.rc}    0
+    Should Contain    ${mla_run.stdout}    pkg workflow ok

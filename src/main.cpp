@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <unordered_set>
 #include <sys/wait.h>
+#include <unistd.h>
 
 // Declare functions and globals from parser/lexer
 extern int yyparse();
@@ -609,6 +610,91 @@ static std::optional<std::filesystem::path> find_manifest_path(
     return std::nullopt;
 }
 
+static std::string shell_quote(std::string_view s)
+{
+    std::string out;
+    out.reserve(s.size() + 8);
+    out.push_back('\'');
+    for(char c : s)
+    {
+        if(c == '\'')
+            out += "'\\''";
+        else
+            out.push_back(c);
+    }
+    out.push_back('\'');
+    return out;
+}
+
+static std::optional<std::filesystem::path>
+find_mlang_pkg_frontend_source(const char* argv0)
+{
+    namespace fs = std::filesystem;
+    std::vector<fs::path> candidates;
+    candidates.push_back(fs::current_path() / "tools" / "mlang-pkg-mla" /
+                         "main.mla");
+
+    fs::path exePath(argv0 ? argv0 : "mlang");
+    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
+                                                : fs::current_path();
+    candidates.push_back(exeDir / ".." / "tools" / "mlang-pkg-mla" /
+                         "main.mla");
+    candidates.push_back(exeDir / "tools" / "mlang-pkg-mla" / "main.mla");
+
+    for(const auto& c : candidates)
+    {
+        std::error_code ec;
+        if(fs::exists(c, ec))
+            return fs::weakly_canonical(c, ec);
+    }
+    return std::nullopt;
+}
+
+static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
+{
+    namespace fs = std::filesystem;
+    if(argc < 2 || std::string(argv[1]) != "pkg")
+        return std::nullopt;
+
+    auto srcOpt = find_mlang_pkg_frontend_source(argv[0]);
+    if(!srcOpt.has_value())
+        return std::nullopt;
+
+    fs::path src = *srcOpt;
+    fs::path exePath(argv[0] ? argv[0] : "mlang");
+    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
+                                                : fs::current_path();
+    fs::path stdlibLibDir = exeDir;
+    fs::path tmpBin =
+        fs::temp_directory_path() /
+        ("mlang-pkg-mla-" + std::to_string(static_cast<long long>(::getpid())));
+
+    std::string compileCmd = shell_quote(argv[0]) + " " +
+                             shell_quote(src.string()) + " -L " +
+                             shell_quote(stdlibLibDir.string()) +
+                             " -lmlang_std -o " + shell_quote(tmpBin.string());
+    int compileRc = std::system(compileCmd.c_str());
+    std::error_code ecCheck;
+    bool haveCompiledTool = fs::exists(tmpBin, ecCheck);
+    if(compileRc != 0 && !haveCompiledTool)
+        return std::nullopt;
+
+    std::string runCmd = shell_quote(tmpBin.string()) + " --backend " +
+                         shell_quote(argv[0]);
+    for(int i = 1; i < argc; ++i)
+        runCmd += " " + shell_quote(argv[i]);
+
+    int runRc = std::system(runCmd.c_str());
+    std::error_code ec;
+    fs::remove(tmpBin, ec);
+
+    if(runRc < 0)
+        return 1;
+    if(WIFEXITED(runRc))
+        return WEXITSTATUS(runRc);
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
 #ifndef MLANG_VERSION
@@ -627,6 +713,17 @@ int main(int argc, char** argv)
     }
     if(std::string(argv[1]) == "pkg")
     {
+        const char* implEnv = std::getenv("MLANG_PKG_IMPL");
+        std::string impl = implEnv ? implEnv : "";
+        bool preferMla = impl.empty() || impl == "mla";
+        bool forceCpp = impl == "cpp";
+
+        if(preferMla && !forceCpp)
+        {
+            if(auto rc = run_mlang_pkg_frontend(argc, argv); rc.has_value())
+                return *rc;
+        }
+
         PackageManager pkg;
         return pkg.run(argc, argv);
     }

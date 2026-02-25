@@ -68,31 +68,23 @@ fn print_usage() -> void {
     println!("  build [-O0|-O1|-O2|-O3]");
 }
 
-fn command_preview(program: string, args: list<string>) -> string {
-    var s: string = program;
-    for a in args {
-        s = format!("{} {}", s, a);
-    }
-    return s;
-}
-
 fn run_inherit(program: string, args: list<string>) -> i32 {
-    println!("{}", command_preview(program, args));
+    println!("running {}", program);
     let cr: Result<Child, string> = spawn_inherit(program, args);
-    if cr.is_err(): {
+    if (cr.is_err()) {
         println!("failed to spawn '{}': {}", program, cr.unwrap_err());
         return 1;
     }
     let child: Child = cr.unwrap();
     let wr: Result<ExitStatus, string> = child.wait();
-    if wr.is_err(): {
+    if (wr.is_err()) {
         println!("wait failed for '{}': {}", program, wr.unwrap_err());
         child.close();
         return 1;
     }
     let st: ExitStatus = wr.unwrap();
     child.close();
-    if st.exited() != 1: {
+    if (st.exited() != 1) {
         return 1;
     }
     return st.code();
@@ -100,13 +92,13 @@ fn run_inherit(program: string, args: list<string>) -> i32 {
 
 fn run_capture_stdout(program: string, args: list<string>) -> Result<string, string> {
     let cr: Result<Child, string> = spawn(program, args);
-    if cr.is_err(): {
+    if (cr.is_err()) {
         return Err<string, string>(format!("failed to spawn '{}': {}", program, cr.unwrap_err()));
     }
     let child: Child = cr.unwrap();
 
     let or: Result<ChildStdout, string> = child.stdout();
-    if or.is_err(): {
+    if (or.is_err()) {
         child.close();
         return Err<string, string>("failed to capture stdout");
     }
@@ -116,14 +108,14 @@ fn run_capture_stdout(program: string, args: list<string>) -> Result<string, str
     var text: string = String::new();
     for _i in 0..4096 {
         let rr: Result<i64, string> = out.read(buf, 1024);
-        if rr.is_err(): {
+        if (rr.is_err()) {
             out.close();
             child.close();
             String::free(buf);
             return Err<string, string>("failed to read child stdout");
         }
         let n: i64 = rr.unwrap();
-        if n <= 0: {
+        if (n <= 0) {
             break;
         }
         let chunk: string = sub(buf, 0, n);
@@ -133,13 +125,13 @@ fn run_capture_stdout(program: string, args: list<string>) -> Result<string, str
     String::free(buf);
 
     let wr: Result<ExitStatus, string> = child.wait();
-    if wr.is_err(): {
+    if (wr.is_err()) {
         child.close();
         return Err<string, string>("wait failed");
     }
     let st: ExitStatus = wr.unwrap();
     child.close();
-    if st.success() != 1: {
+    if (st.success() != 1) {
         return Err<string, string>(format!("command exited with {}", st.code()));
     }
     return Ok<string, string>(text);
@@ -149,17 +141,17 @@ fn split_lines(content: string) -> list<string> {
     var out: list<string> = [];
     var cur: string = String::new();
     let n: i64 = len(content);
-    if n == 0: {
+    if (n == 0) {
         return out;
     }
     for i in 0..n {
         let ch: string = sub(content, i, 1);
-        if eq(ch, "\n") == 1: {
+        if (eq(ch, "\n") == 1) {
             out.push(cur);
             cur = String::new();
             continue;
         }
-        if eq(ch, "\r") == 1: {
+        if (eq(ch, "\r") == 1) {
             continue;
         }
         cur = format!("{}{}", cur, ch);
@@ -173,7 +165,7 @@ fn join_lines(lines: list<string>) -> string {
     let n: i64 = lines.len();
     for i in 0..n {
         out = format!("{}{}", out, lines[i]);
-        if i + 1 < n: {
+        if (i + 1 < n) {
             out = format!("{}\n", out);
         }
     }
@@ -182,11 +174,11 @@ fn join_lines(lines: list<string>) -> string {
 
 fn basename(path: string) -> string {
     let pos: i64 = rfind(path, "/");
-    if pos < 0: {
+    if (pos < 0) {
         return path;
     }
     let n: i64 = len(path);
-    if pos + 1 >= n: {
+    if (pos + 1 >= n) {
         return path;
     }
     return sub(path, pos + 1, n - pos - 1);
@@ -200,9 +192,9 @@ fn is_section_line(line: string, section: string) -> i32 {
 
 fn line_has_dep(line: string, name: string) -> i32 {
     let t: string = trim(line);
-    if len(t) == 0: { return 0; }
-    if starts_with(t, "#") == 1: { return 0; }
-    if starts_with(t, name) == 0: { return 0; }
+    if (len(t) == 0) { return 0; }
+    if (starts_with(t, "#") == 1) { return 0; }
+    if (starts_with(t, name) == 0) { return 0; }
     return find(t, "=") >= 0 ? 1 : 0;
 }
 
@@ -213,11 +205,11 @@ fn add_dep_to_section(content: string, section: string, dep_name: string, line: 
     var section_start: i64 = -1;
     var section_end: i64 = n;
     for i in 0..n {
-        if is_section_line(lines[i], section) == 1: {
+        if (is_section_line(lines[i], section) == 1) {
             section_start = i;
             for j in i + 1..n {
                 let t: string = trim(lines[j]);
-                if len(t) > 0 && starts_with(t, "[") == 1: {
+                if (len(t) > 0 && starts_with(t, "[") == 1) {
                     section_end = j;
                     break;
                 }
@@ -226,20 +218,20 @@ fn add_dep_to_section(content: string, section: string, dep_name: string, line: 
         }
     }
 
-    if section_start >= 0: {
+    if (section_start >= 0) {
         for i in section_start + 1..section_end {
-            if line_has_dep(lines[i], dep_name) == 1: {
+            if (line_has_dep(lines[i], dep_name) == 1) {
                 return Err<string, string>("Dependency already exists");
             }
         }
         var out_lines: list<string> = [];
         for i in 0..n {
-            if i == section_end: {
+            if (i == section_end) {
                 out_lines.push(line);
             }
             out_lines.push(lines[i]);
         }
-        if section_end == n: {
+        if (section_end == n) {
             out_lines.push(line);
         }
         return Ok<string, string>(join_lines(out_lines));
@@ -248,7 +240,7 @@ fn add_dep_to_section(content: string, section: string, dep_name: string, line: 
     var out_lines2: list<string> = [];
     for i in 0..n {
         let v: string = lines[i];
-        if i == 0 && len(v) == 0: {
+        if (i == 0 && len(v) == 0) {
             continue;
         }
         out_lines2.push(v);
@@ -261,17 +253,17 @@ fn add_dep_to_section(content: string, section: string, dep_name: string, line: 
 fn find_toml_string(content: string, key: string) -> string {
     let needle: string = format!("{} = \"", key);
     let pos0: i64 = find(content, needle);
-    if pos0 < 0: {
+    if (pos0 < 0) {
         return "";
     }
     let pos: i64 = pos0 + len(needle);
     let n: i64 = len(content);
-    if pos >= n: {
+    if (pos >= n) {
         return "";
     }
     let tail: string = sub(content, pos, n - pos);
     let end_rel: i64 = find(tail, "\"");
-    if end_rel < 0: {
+    if (end_rel < 0) {
         return "";
     }
     return sub(content, pos, end_rel);
@@ -284,23 +276,23 @@ fn split_csv(input: string) -> list<string> {
     let n: i64 = len(input);
     for i in 0..n {
         let ch: string = sub(input, i, 1);
-        if eq(ch, ": {") == 1: {
+        if (eq(ch, "{") == 1) {
             depth = depth + 1;
-        } else if eq(ch, "}") == 1: {
+        } else if ((eq(ch, "}") == 1)) {
             depth = depth - 1;
         }
-        if eq(ch, ",") == 1 && depth == 0: {
+        if (eq(ch, ",") == 1 && depth == 0) {
             let t: string = trim(cur);
-            if len(t) > 0: {
+            if (len(t) > 0) {
                 out.push(t);
             }
             cur = String::new();
-        } else: {
+        } else {
             cur = format!("{}{}", cur, ch);
         }
     }
     let t2: string = trim(cur);
-    if len(t2) > 0: {
+    if (len(t2) > 0) {
         out.push(t2);
     }
     return out;
@@ -312,18 +304,18 @@ fn split_semicolon(input: string) -> list<string> {
     let n: i64 = len(input);
     for i in 0..n {
         let ch: string = sub(input, i, 1);
-        if eq(ch, ";") == 1: {
+        if (eq(ch, ";") == 1) {
             let t: string = trim(cur);
-            if len(t) > 0: {
+            if (len(t) > 0) {
                 out.push(t);
             }
             cur = String::new();
-        } else: {
+        } else {
             cur = format!("{}{}", cur, ch);
         }
     }
     let t2: string = trim(cur);
-    if len(t2) > 0: {
+    if (len(t2) > 0) {
         out.push(t2);
     }
     return out;
@@ -332,12 +324,12 @@ fn split_semicolon(input: string) -> list<string> {
 fn unquote(v: string) -> string {
     let t: string = trim(v);
     let n: i64 = len(t);
-    if n < 2: {
+    if (n < 2) {
         return t;
     }
     let first: string = sub(t, 0, 1);
     let last: string = sub(t, n - 1, 1);
-    if eq(first, "\"") == 1 && eq(last, "\"") == 1: {
+    if (eq(first, "\"") == 1 && eq(last, "\"") == 1) {
         return sub(t, 1, n - 2);
     }
     return t;
@@ -347,14 +339,14 @@ fn parse_inline_table(line: string) -> list<KV> {
     var out: list<KV> = [];
     let l: i64 = find(line, "{");
     let r: i64 = rfind(line, "}");
-    if l < 0 || r < 0 || r <= l: {
+    if (l < 0 || r < 0 || r <= l) {
         return out;
     }
     let inner: string = sub(line, l + 1, r - l - 1);
     let parts: list<string> = split_csv(inner);
     for p in parts {
         let eqi: i64 = find(p, "=");
-        if eqi < 0: {
+        if (eqi < 0) {
             continue;
         }
         let k: string = trim(sub(p, 0, eqi));
@@ -367,7 +359,7 @@ fn parse_inline_table(line: string) -> list<KV> {
 
 fn kv_get(kvs: list<KV>, key: string) -> string {
     for kv in kvs {
-        if eq(kv.key, key) == 1: {
+        if (eq(kv.key, key) == 1) {
             return kv.value;
         }
     }
@@ -380,30 +372,30 @@ fn parse_git_deps(content: string) -> list<DepSpec> {
     var section: string = String::new();
     for line in lines {
         let t: string = trim(line);
-        if len(t) == 0 || starts_with(t, "#") == 1: {
+        if (len(t) == 0 || starts_with(t, "#") == 1) {
             continue;
         }
-        if starts_with(t, "[") == 1 && ends_with(t, "]") == 1: {
+        if (starts_with(t, "[") == 1 && ends_with(t, "]") == 1) {
             section = sub(t, 1, len(t) - 2);
             continue;
         }
-        if eq(section, "dependencies") == 0 && eq(section, "c-dependencies") == 0: {
+        if (eq(section, "dependencies") == 0 && eq(section, "c-dependencies") == 0) {
             continue;
         }
         let eqi: i64 = find(t, "=");
-        if eqi < 0: {
+        if (eqi < 0) {
             continue;
         }
         let name: string = trim(sub(t, 0, eqi));
-        if len(name) == 0: {
+        if (len(name) == 0) {
             continue;
         }
-        if contains(t, ": {") != 1: {
+        if (contains(t, "{") != 1) {
             continue;
         }
         let kvs: list<KV> = parse_inline_table(t);
         let git: string = kv_get(kvs, "git");
-        if len(git) == 0: {
+        if (len(git) == 0) {
             continue;
         }
         var dep: DepSpec = DepSpec {
@@ -414,7 +406,7 @@ fn parse_git_deps(content: string) -> list<DepSpec> {
             build: kv_get(kvs, "build"),
             cmake_args: kv_get(kvs, "cmake_args")
         };
-        if len(dep.build) == 0: {
+        if (len(dep.build) == 0) {
             dep.build = "cmake";
         }
         deps.push(dep);
@@ -428,22 +420,22 @@ fn parse_c_deps(content: string) -> list<CDepSpec> {
     var section: string = String::new();
     for line in lines {
         let t: string = trim(line);
-        if len(t) == 0 || starts_with(t, "#") == 1: {
+        if (len(t) == 0 || starts_with(t, "#") == 1) {
             continue;
         }
-        if starts_with(t, "[") == 1 && ends_with(t, "]") == 1: {
+        if (starts_with(t, "[") == 1 && ends_with(t, "]") == 1) {
             section = sub(t, 1, len(t) - 2);
             continue;
         }
-        if eq(section, "c-dependencies") == 0: {
+        if (eq(section, "c-dependencies") == 0) {
             continue;
         }
         let eqi: i64 = find(t, "=");
-        if eqi < 0: {
+        if (eqi < 0) {
             continue;
         }
         let name: string = trim(sub(t, 0, eqi));
-        if len(name) == 0: {
+        if (len(name) == 0) {
             continue;
         }
 
@@ -453,25 +445,25 @@ fn parse_c_deps(content: string) -> list<CDepSpec> {
             use_pkg_config: 0
         };
 
-        if contains(t, ": {") == 1: {
+        if (contains(t, "{") == 1) {
             let kvs: list<KV> = parse_inline_table(t);
             let pc: string = kv_get(kvs, "pkg_config");
-            if len(pc) > 0: {
+            if (len(pc) > 0) {
                 dep.pkg_config = pc;
                 dep.use_pkg_config = 1;
-            } else: {
+            } else {
                 let sys: string = kv_get(kvs, "system");
-                if eq(sys, "true") == 1 || eq(sys, "1") == 1: {
+                if (eq(sys, "true") == 1 || eq(sys, "1") == 1) {
                     dep.pkg_config = name;
                     dep.use_pkg_config = 1;
                 }
             }
-        } else: {
+        } else {
             dep.pkg_config = name;
             dep.use_pkg_config = 1;
         }
 
-        if dep.use_pkg_config == 1: {
+        if (dep.use_pkg_config == 1) {
             deps.push(dep);
         }
     }
@@ -486,21 +478,21 @@ fn split_shell_tokens(input: string) -> list<string> {
     let n: i64 = len(input);
     for i in 0..n {
         let ch: string = sub(input, i, 1);
-        if in_quotes == 1: {
-            if eq(ch, quote) == 1: {
+        if (in_quotes == 1) {
+            if (eq(ch, quote) == 1) {
                 in_quotes = 0;
                 continue;
             }
             cur = format!("{}{}", cur, ch);
             continue;
         }
-        if eq(ch, "\"") == 1 || eq(ch, "'") == 1: {
+        if (eq(ch, "\"") == 1 || eq(ch, "'") == 1) {
             in_quotes = 1;
             quote = ch;
             continue;
         }
-        if eq(ch, " ") == 1 || eq(ch, "\t") == 1 || eq(ch, "\n") == 1 || eq(ch, "\r") == 1: {
-            if len(cur) > 0: {
+        if (eq(ch, " ") == 1 || eq(ch, "\t") == 1 || eq(ch, "\n") == 1 || eq(ch, "\r") == 1) {
+            if (len(cur) > 0) {
                 out.push(cur);
                 cur = String::new();
             }
@@ -508,7 +500,7 @@ fn split_shell_tokens(input: string) -> list<string> {
         }
         cur = format!("{}{}", cur, ch);
     }
-    if len(cur) > 0: {
+    if (len(cur) > 0) {
         out.push(cur);
     }
     return out;
@@ -516,7 +508,7 @@ fn split_shell_tokens(input: string) -> list<string> {
 
 fn contains_string(items: list<string>, needle: string) -> i32 {
     for it in items {
-        if eq(it, needle) == 1: {
+        if (eq(it, needle) == 1) {
             return 1;
         }
     }
@@ -525,22 +517,22 @@ fn contains_string(items: list<string>, needle: string) -> i32 {
 
 fn extract_lib_name(path: string) -> string {
     let name: string = basename(path);
-    if starts_with(name, "lib") == 0: {
+    if (starts_with(name, "lib") == 0) {
         return "";
     }
-    if ends_with(name, ".a") == 1 || ends_with(name, ".dylib") == 1 || ends_with(name, ".so") == 1: {
+    if (ends_with(name, ".a") == 1 || ends_with(name, ".dylib") == 1 || ends_with(name, ".so") == 1) {
         let dot: i64 = rfind(name, ".");
-        if dot <= 3: {
+        if (dot <= 3) {
             return "";
         }
         let stem: string = sub(name, 0, dot);
-        if starts_with(stem, "lib") == 0 || len(stem) <= 3: {
+        if (starts_with(stem, "lib") == 0 || len(stem) <= 3) {
             return "";
         }
         return sub(stem, 3, len(stem) - 3);
     }
     let so_pos: i64 = find(name, ".so.");
-    if so_pos > 3: {
+    if (so_pos > 3) {
         return sub(name, 3, so_pos - 3);
     }
     return "";
@@ -558,28 +550,28 @@ fn collect_dep_link_flags(deps: list<DepSpec>, deps_dir: string) -> LinkFlags {
             format!("{}/lib", dep_path)
         ];
         for d in cand {
-            if file_exists(d) == 0: {
+            if (file_exists(d) == 0) {
                 continue;
             }
-            if contains_string(lib_dirs, d) == 0: {
+            if (contains_string(lib_dirs, d) == 0) {
                 lib_dirs.push(d);
             }
             let fr: Result<string, string> =
                 run_capture_stdout("find", [d, "-maxdepth", "1", "-type", "f"]);
-            if fr.is_err(): {
+            if (fr.is_err()) {
                 continue;
             }
             let lines: list<string> = split_lines(fr.unwrap());
             for p in lines {
                 let path: string = trim(p);
-                if len(path) == 0: {
+                if (len(path) == 0) {
                     continue;
                 }
                 let lib_name: string = extract_lib_name(path);
-                if len(lib_name) == 0: {
+                if (len(lib_name) == 0) {
                     continue;
                 }
-                if contains_string(libs, lib_name) == 0: {
+                if (contains_string(libs, lib_name) == 0) {
                     libs.push(lib_name);
                 }
             }
@@ -591,27 +583,27 @@ fn collect_dep_link_flags(deps: list<DepSpec>, deps_dir: string) -> LinkFlags {
 
 fn fetch_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
     let path: string = format!("{}/{}", deps_dir, dep.name);
-    if file_exists(path) == 0: {
+    if (file_exists(path) == 0) {
         let rc: i32 = run_inherit("git", ["clone", dep.git, path]);
-        if rc != 0: {
+        if (rc != 0) {
             return 1;
         }
-    } else: {
+    } else {
         let rc: i32 = run_inherit("git", ["-C", path, "fetch", "--all", "--tags"]);
-        if rc != 0: {
+        if (rc != 0) {
             return 1;
         }
     }
 
-    if len(dep.rev) > 0: {
+    if (len(dep.rev) > 0) {
         let rc: i32 = run_inherit("git", ["-C", path, "checkout", dep.rev]);
-        if rc != 0: {
+        if (rc != 0) {
             return 1;
         }
-    } else if len(dep.tag) > 0: {
+    } else if ((len(dep.tag) > 0)) {
         let target: string = format!("tags/{}", dep.tag);
         let rc: i32 = run_inherit("git", ["-C", path, "checkout", target]);
-        if rc != 0: {
+        if (rc != 0) {
             return 1;
         }
     }
@@ -620,44 +612,44 @@ fn fetch_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
 
 fn build_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
     let path: string = format!("{}/{}", deps_dir, dep.name);
-    if file_exists(path) == 0: {
+    if (file_exists(path) == 0) {
         return 1;
     }
 
-    if eq(dep.build, "cmake") == 1: {
+    if (eq(dep.build, "cmake") == 1) {
         let build_dir: string = format!("{}/build", path);
         var cfg_args: list<string> = ["-S", path, "-B", build_dir];
-        if len(dep.cmake_args) > 0: {
+        if (len(dep.cmake_args) > 0) {
             let args: list<string> = split_semicolon(dep.cmake_args);
             for a in args {
-                if len(a) == 0: {
+                if (len(a) == 0) {
                     continue;
                 }
-                if starts_with(a, "-") == 1: {
+                if (starts_with(a, "-") == 1) {
                     cfg_args.push(a);
-                } else: {
+                } else {
                     cfg_args.push(format!("-D{}", a));
                 }
             }
         }
-        if run_inherit("cmake", cfg_args) != 0: {
+        if (run_inherit("cmake", cfg_args) != 0) {
             return 1;
         }
         return run_inherit("cmake", ["--build", build_dir]);
     }
 
-    if eq(dep.build, "meson") == 1: {
+    if (eq(dep.build, "meson") == 1) {
         let build_dir: string = format!("{}/build", path);
-        if file_exists(build_dir) == 0: {
+        if (file_exists(build_dir) == 0) {
             let rc_setup: i32 = run_inherit("meson", ["setup", build_dir, path]);
-            if rc_setup != 0: {
+            if (rc_setup != 0) {
                 return 1;
             }
         }
         return run_inherit("meson", ["compile", "-C", build_dir]);
     }
 
-    if eq(dep.build, "make") == 1: {
+    if (eq(dep.build, "make") == 1) {
         return run_inherit("make", ["-C", path]);
     }
 
@@ -667,38 +659,38 @@ fn build_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
 
 fn ensure_deps_dir() -> i32 {
     let rc1: i32 = run_inherit("mkdir", ["-p", "build"]);
-    if rc1 != 0: {
+    if (rc1 != 0) {
         return 1;
     }
     let rc2: i32 = run_inherit("mkdir", ["-p", "build/deps"]);
-    if rc2 != 0: {
+    if (rc2 != 0) {
         return 1;
     }
     return 0;
 }
 
 fn read_manifest(manifest_path: string) -> Result<string, string> {
-    if file_exists(manifest_path) == 0: {
+    if (file_exists(manifest_path) == 0) {
         return Err<string, string>("mlang.toml not found. Run 'mlang pkg init' first.");
     }
     let rr: Result<string, string> = read_all_text(manifest_path);
-    if rr.is_err(): {
+    if (rr.is_err()) {
         return Err<string, string>("Failed to read mlang.toml");
     }
     let content: string = rr.unwrap();
-    if len(content) == 0: {
+    if (len(content) == 0) {
         return Err<string, string>("Failed to read mlang.toml");
     }
     return Ok<string, string>(content);
 }
 
 fn run_init(manifest_path: string) -> i32 {
-    if file_exists(manifest_path) == 1: {
+    if (file_exists(manifest_path) == 1) {
         println!("mlang.toml already exists");
         return 1;
     }
     var name: string = basename(cwd());
-    if len(name) == 0: {
+    if (len(name) == 0) {
         name = "app";
     }
     let content: string = format!(
@@ -707,7 +699,7 @@ fn run_init(manifest_path: string) -> i32 {
         version()
     );
     let wr: Result<i32, string> = write_all_text(manifest_path, content);
-    if wr.is_err(): {
+    if (wr.is_err()) {
         println!("Failed to write mlang.toml");
         return 1;
     }
@@ -715,7 +707,7 @@ fn run_init(manifest_path: string) -> i32 {
 }
 
 fn run_add(argc: i32, argv: list<string>, start_idx: i64, manifest_path: string) -> i32 {
-    if start_idx + 1 >= argc: {
+    if (start_idx + 1 >= argc) {
         println!("Usage: mlang-pkg-mla add <name> [--git URL] [--rev REV] [--tag TAG]");
         println!("       mlang-pkg-mla add <name> [--pkg-config NAME] [--system]");
         return 1;
@@ -730,29 +722,29 @@ fn run_add(argc: i32, argv: list<string>, start_idx: i64, manifest_path: string)
 
     let n: i64 = argv.len();
     var i: i64 = start_idx + 2;
-    while i < n: {
+    while (i < n) {
         let arg: string = argv[i];
-        if eq(arg, "--git") == 1 && i + 1 < n: {
+        if (eq(arg, "--git") == 1 && i + 1 < n) {
             git_url = argv[i + 1];
             i = i + 2;
             continue;
         }
-        if eq(arg, "--rev") == 1 && i + 1 < n: {
+        if (eq(arg, "--rev") == 1 && i + 1 < n) {
             rev = argv[i + 1];
             i = i + 2;
             continue;
         }
-        if eq(arg, "--tag") == 1 && i + 1 < n: {
+        if (eq(arg, "--tag") == 1 && i + 1 < n) {
             tag = argv[i + 1];
             i = i + 2;
             continue;
         }
-        if eq(arg, "--pkg-config") == 1 && i + 1 < n: {
+        if (eq(arg, "--pkg-config") == 1 && i + 1 < n) {
             pkg_config = argv[i + 1];
             i = i + 2;
             continue;
         }
-        if eq(arg, "--system") == 1: {
+        if (eq(arg, "--system") == 1) {
             system_dep = 1;
             i = i + 1;
             continue;
@@ -762,7 +754,7 @@ fn run_add(argc: i32, argv: list<string>, start_idx: i64, manifest_path: string)
     }
 
     let rr: Result<string, string> = read_manifest(manifest_path);
-    if rr.is_err(): {
+    if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
     }
@@ -770,33 +762,33 @@ fn run_add(argc: i32, argv: list<string>, start_idx: i64, manifest_path: string)
 
     var section: string = "dependencies";
     var line: string = "";
-    if system_dep == 1 || len(pkg_config) > 0: {
+    if (system_dep == 1 || len(pkg_config) > 0) {
         section = "c-dependencies";
-        if system_dep == 1: {
+        if (system_dep == 1) {
             line = format!("{} = {{ system = true }}", name);
-        } else: {
+        } else {
             line = format!("{} = {{ pkg_config = \"{}\" }}", name, pkg_config);
         }
-    } else if len(git_url) > 0: {
+    } else if ((len(git_url) > 0)) {
         line = format!("{} = {{ git = \"{}\"", name, git_url);
-        if len(rev) > 0: {
+        if (len(rev) > 0) {
             line = format!("{}, rev = \"{}\"", line, rev);
         }
-        if len(tag) > 0: {
+        if (len(tag) > 0) {
             line = format!("{}, tag = \"{}\"", line, tag);
         }
         line = format!("{} }}", line);
-    } else: {
+    } else {
         line = format!("{} = \"*\"", name);
     }
 
     let ar: Result<string, string> = add_dep_to_section(content, section, name, line);
-    if ar.is_err(): {
+    if (ar.is_err()) {
         println!("Dependency already exists: {}", name);
         return 1;
     }
     let wr: Result<i32, string> = write_all_text(manifest_path, ar.unwrap());
-    if wr.is_err(): {
+    if (wr.is_err()) {
         println!("Failed to update mlang.toml");
         return 1;
     }
@@ -805,18 +797,18 @@ fn run_add(argc: i32, argv: list<string>, start_idx: i64, manifest_path: string)
 
 fn run_fetch(manifest_path: string) -> i32 {
     let rr: Result<string, string> = read_manifest(manifest_path);
-    if rr.is_err(): {
+    if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
     }
     let content: string = rr.unwrap();
     let deps: list<DepSpec> = parse_git_deps(content);
 
-    if ensure_deps_dir() != 0: {
+    if (ensure_deps_dir() != 0) {
         return 1;
     }
     for dep in deps {
-        if fetch_git_dep(dep, "build/deps") != 0: {
+        if (fetch_git_dep(dep, "build/deps") != 0) {
             return 1;
         }
     }
@@ -828,9 +820,9 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
     var opt_flag: string = "";
     let n: i64 = argv.len();
     var i: i64 = start_idx + 1;
-    while i < n: {
+    while (i < n) {
         let arg: string = argv[i];
-        if eq(arg, "-O0") == 1 || eq(arg, "-O1") == 1 || eq(arg, "-O2") == 1 || eq(arg, "-O3") == 1: {
+        if (eq(arg, "-O0") == 1 || eq(arg, "-O1") == 1 || eq(arg, "-O2") == 1 || eq(arg, "-O3") == 1) {
             opt_flag = arg;
             i = i + 1;
             continue;
@@ -841,7 +833,7 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
     }
 
     let rr: Result<string, string> = read_manifest(manifest_path);
-    if rr.is_err(): {
+    if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
     }
@@ -849,16 +841,16 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
     let deps: list<DepSpec> = parse_git_deps(content);
     let cdeps: list<CDepSpec> = parse_c_deps(content);
 
-    if ensure_deps_dir() != 0: {
+    if (ensure_deps_dir() != 0) {
         return 1;
     }
     for dep in deps {
-        if fetch_git_dep(dep, "build/deps") != 0: {
+        if (fetch_git_dep(dep, "build/deps") != 0) {
             return 1;
         }
     }
     for dep in deps {
-        if build_git_dep(dep, "build/deps") != 0: {
+        if (build_git_dep(dep, "build/deps") != 0) {
             return 1;
         }
     }
@@ -867,12 +859,12 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
 
     var pkg_flags: list<string> = [];
     for dep in cdeps {
-        if dep.use_pkg_config == 0 || len(dep.pkg_config) == 0: {
+        if (dep.use_pkg_config == 0 || len(dep.pkg_config) == 0) {
             continue;
         }
         let r: Result<string, string> =
             run_capture_stdout("pkg-config", ["--cflags", "--libs", dep.pkg_config]);
-        if r.is_err(): {
+        if (r.is_err()) {
             println!("pkg-config failed for: {}", dep.pkg_config);
             return 1;
         }
@@ -884,39 +876,43 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
 
     var entry: string = "src/main.mla";
     let entry_cfg: string = find_toml_string(content, "entry");
-    if len(entry_cfg) > 0: {
+    if (len(entry_cfg) > 0) {
         entry = entry_cfg;
     }
     var name: string = "app";
     let name_cfg: string = find_toml_string(content, "name");
-    if len(name_cfg) > 0: {
+    if (len(name_cfg) > 0) {
         name = name_cfg;
     }
 
-    if run_inherit("mkdir", ["-p", "build"]) != 0: {
+    if (run_inherit("mkdir", ["-p", "build"]) != 0) {
         return 1;
     }
 
     let output: string = format!("build/{}", name);
     var cmd_args: list<string> = [entry, "-o", output];
-    if len(opt_flag) > 0: {
+    if (len(opt_flag) > 0) {
         cmd_args.push(opt_flag);
     }
-    for d in link_flags.lib_dirs {
+    let link_dirs: list<string> = link_flags.lib_dirs;
+    let link_libs: list<string> = link_flags.libs;
+    let pkg_flags_local: list<string> = pkg_flags;
+
+    for d in link_dirs {
         cmd_args.push(format!("-L{}", d));
     }
-    for l in link_flags.libs {
+    for l in link_libs {
         cmd_args.push(format!("-l{}", l));
     }
-    for d in link_flags.lib_dirs {
+    for d in link_dirs {
         cmd_args.push(format!("-Wl,-rpath,{}", d));
     }
-    for f in pkg_flags {
+    for f in pkg_flags_local {
         cmd_args.push(f);
     }
 
     let rc: i32 = run_inherit(backend, cmd_args);
-    if rc != 0: {
+    if (rc != 0) {
         println!("Build failed.");
         return 1;
     }
@@ -929,7 +925,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         argv.push(format!("{}", a));
     }
 
-    if argc < 2: {
+    if (argc < 2) {
         print_usage();
         return 1;
     }
@@ -937,8 +933,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var backend: string = "mlang";
     var idx: i64 = 1;
 
-    if argv.len() > 1 && eq(argv[1], "--backend") == 1: {
-        if argv.len() < 4: {
+    if (argv.len() > 1 && eq(argv[1], "--backend") == 1) {
+        if (argv.len() < 4) {
             println!("--backend requires a value and subcommand");
             print_usage();
             return 1;
@@ -947,36 +943,36 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         idx = 3;
     }
 
-    if idx >= argv.len(): {
+    if (idx >= argv.len()) {
         print_usage();
         return 1;
     }
 
-    if eq(argv[idx], "pkg") == 1: {
+    if (eq(argv[idx], "pkg") == 1) {
         idx = idx + 1;
     }
-    if idx >= argv.len(): {
+    if (idx >= argv.len()) {
         print_usage();
         return 1;
     }
 
     let sub: string = argv[idx];
-    if eq(sub, "-h") == 1 || eq(sub, "--help") == 1: {
+    if (eq(sub, "-h") == 1 || eq(sub, "--help") == 1) {
         print_usage();
         return 0;
     }
 
     let manifest: string = "mlang.toml";
-    if eq(sub, "init") == 1: {
+    if (eq(sub, "init") == 1) {
         return run_init(manifest);
     }
-    if eq(sub, "add") == 1: {
+    if (eq(sub, "add") == 1) {
         return run_add(argc, argv, idx, manifest);
     }
-    if eq(sub, "fetch") == 1: {
+    if (eq(sub, "fetch") == 1) {
         return run_fetch(manifest);
     }
-    if eq(sub, "build") == 1: {
+    if (eq(sub, "build") == 1) {
         return run_build(argc, argv, idx, manifest, backend);
     }
 

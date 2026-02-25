@@ -73,9 +73,17 @@ search paths in `mlang.toml`:
 module_paths = ["modules", "vendor/mlang"]
 ```
 
-## Package Manager Frontend (MLang)
-MLang frontend wrapper for package-manager CLI is available at:
-`tools/mlang-pkg-mla/main.mla`.
+## Package Manager (MLang Backend Default)
+`mlang pkg ...` now prefers the MLang implementation in
+`tools/mlang-pkg-mla/main.mla` by default, with automatic fallback to the C++
+backend if needed.
+
+Force backend selection with:
+
+```sh
+MLANG_PKG_IMPL=mla ./build/mlang pkg init
+MLANG_PKG_IMPL=cpp ./build/mlang pkg init
+```
 
 Build and run:
 
