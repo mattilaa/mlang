@@ -241,6 +241,100 @@ bool CodeGenerator::isUnsignedType(TypeNode::TypeKind kind)
     }
 }
 
+static bool isEnumIntegralType(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static unsigned enumBitWidth(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_U8:
+        return 8;
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_U16:
+        return 16;
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U64:
+        return 64;
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_U32:
+    default:
+        return 32;
+    }
+}
+
+static bool enumIsUnsigned(TypeNode::TypeKind kind)
+{
+    return kind == TypeNode::TYPE_U8 || kind == TypeNode::TYPE_U16 ||
+           kind == TypeNode::TYPE_U32 || kind == TypeNode::TYPE_U64;
+}
+
+static std::string enumBaseTypeName(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_INT:
+        return "int";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    default:
+        return "i32";
+    }
+}
+
+static bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value)
+{
+    const unsigned bits = enumBitWidth(kind);
+    if(enumIsUnsigned(kind))
+    {
+        if(value < 0)
+            return false;
+        if(bits >= 64)
+            return true;
+        const uint64_t maxVal = (uint64_t{1} << bits) - 1u;
+        return static_cast<uint64_t>(value) <= maxVal;
+    }
+
+    if(bits >= 64)
+        return true;
+
+    const int64_t minVal = -(int64_t{1} << (bits - 1));
+    const int64_t maxVal = (int64_t{1} << (bits - 1)) - 1;
+    return value >= minVal && value <= maxVal;
+}
+
 bool CodeGenerator::isCopyType(TypeNode* typeNode)
 {
     return classifyOwnership(typeNode) == OwnershipClass::Copy;
@@ -1016,7 +1110,11 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         auto enumIt = enumValues.find(structRef->structName);
         if(enumIt != enumValues.end())
         {
-            return llvm::Type::getInt32Ty(context);
+            auto bkIt = enumBaseTypes.find(structRef->structName);
+            TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+            if(bkIt != enumBaseTypes.end())
+                baseKind = bkIt->second;
+            return getLLVMType(baseKind);
         }
 
         auto it = structTypes.find(structRef->structName);
@@ -5853,8 +5951,13 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
                     "unknown enum variant: '" + node->variantName + "'");
         return nullptr;
     }
-    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
-                                  variantIt->second, true);
+    TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+    auto bkIt = enumBaseTypes.find(node->enumName);
+    if(bkIt != enumBaseTypes.end())
+        baseKind = bkIt->second;
+    llvm::Type* enumTy = getLLVMType(baseKind);
+    return llvm::ConstantInt::get(enumTy, variantIt->second,
+                                  !enumIsUnsigned(baseKind));
 }
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
@@ -5943,8 +6046,18 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
         return;
     }
 
+    TypeNode::TypeKind baseKind = node->backingType;
+    if(!isEnumIntegralType(baseKind))
+    {
+        reportError(node->line,
+                    "enum '" + node->name +
+                        "' has non-integer backing type");
+        return;
+    }
+
     std::map<std::string, int64_t> variants;
     int64_t nextValue = 0;
+    bool nextImplicitValid = true;
     if(node->variants)
     {
         for(auto* variant : node->variants->variants)
@@ -5957,11 +6070,47 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                             "duplicate enum variant: '" + variant->name + "'");
                 return;
             }
-            variants[variant->name] = nextValue++;
+
+            int64_t value = nextValue;
+            if(variant->hasExplicitValue)
+            {
+                value = variant->explicitValue;
+                nextImplicitValid = true;
+            }
+            else if(!nextImplicitValid)
+            {
+                reportError(variant->line > 0 ? variant->line : node->line,
+                            "enum implicit value overflows backing type '" +
+                                enumBaseTypeName(baseKind) + "' in enum '" +
+                                node->name + "'");
+                return;
+            }
+
+            if(!fitsInEnumBaseType(baseKind, value))
+            {
+                reportError(variant->line > 0 ? variant->line : node->line,
+                            "enum variant value '" + std::to_string(value) +
+                                "' does not fit backing type '" +
+                                enumBaseTypeName(baseKind) + "' in enum '" +
+                                node->name + "'");
+                return;
+            }
+
+            variants[variant->name] = value;
+            if(value == std::numeric_limits<int64_t>::max())
+            {
+                nextImplicitValid = false;
+            }
+            else
+            {
+                nextValue = value + 1;
+                nextImplicitValid = fitsInEnumBaseType(baseKind, nextValue);
+            }
         }
     }
 
     enumValues[node->name] = variants;
+    enumBaseTypes[node->name] = baseKind;
 }
 
 llvm::StructType* CodeGenerator::getStructType(const std::string& name)
@@ -7581,7 +7730,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         auto enumIt = enumValues.find(structRef->structName);
         if(enumIt != enumValues.end())
         {
-            llvm::Type* targetType = llvm::Type::getInt32Ty(context);
+            TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+            auto baseIt = enumBaseTypes.find(structRef->structName);
+            if(baseIt != enumBaseTypes.end())
+                baseKind = baseIt->second;
+
+            llvm::Type* targetType = getLLVMType(baseKind);
             llvm::AllocaInst* alloca =
                 builder.CreateAlloca(targetType, nullptr, node->name);
 
@@ -7599,8 +7753,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 if(initValue->getType()->isIntegerTy())
                 {
-                    initValue = builder.CreateSExt(initValue, targetType,
-                                                   "enum.sext");
+                    initValue = builder.CreateIntCast(
+                        initValue, targetType, !enumIsUnsigned(baseKind),
+                        enumIsUnsigned(baseKind) ? "enum.cast.u"
+                                                 : "enum.cast.s");
                 }
                 else
                 {
@@ -8367,7 +8523,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         auto enumIt = enumValues.find(structRef->structName);
         if(enumIt != enumValues.end())
         {
-            llvm::Type* targetType = llvm::Type::getInt32Ty(context);
+            TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+            auto baseIt = enumBaseTypes.find(structRef->structName);
+            if(baseIt != enumBaseTypes.end())
+                baseKind = baseIt->second;
+
+            llvm::Type* targetType = getLLVMType(baseKind);
             llvm::AllocaInst* alloca =
                 builder.CreateAlloca(targetType, nullptr, node->name);
 
@@ -8380,8 +8541,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     {
                         if(initValue->getType()->isIntegerTy())
                         {
-                            initValue = builder.CreateSExt(
-                                initValue, targetType, "enum.sext");
+                            initValue = builder.CreateIntCast(
+                                initValue, targetType,
+                                !enumIsUnsigned(baseKind),
+                                enumIsUnsigned(baseKind) ? "enum.cast.u"
+                                                         : "enum.cast.s");
                         }
                         else
                         {

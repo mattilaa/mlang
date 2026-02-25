@@ -110,6 +110,30 @@ protected:
         return output;
     }
 
+    std::string compilePathCapture(const fs::path& srcPath, int& exitCode)
+    {
+        std::string cmd = compilerPath + " -o " + outputExe + " " +
+                          srcPath.string() + " 2>&1";
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if(!pipe)
+        {
+            exitCode = -1;
+            return "";
+        }
+        std::string output;
+        char buffer[256];
+        while(fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        {
+            output += buffer;
+        }
+        int rc = pclose(pipe);
+        if(WIFEXITED(rc))
+            exitCode = WEXITSTATUS(rc);
+        else
+            exitCode = -1;
+        return output;
+    }
+
     // Run the compiled executable and capture stdout
     std::string run()
     {
@@ -2163,6 +2187,131 @@ TEST_F(MLATest, OwnershipCannotStorePointerBorrowingLocalFieldInGlobalPointer)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("cannot store in global/static"), std::string::npos);
+}
+
+// ============================================================================
+// Enum Backing Type Tests
+// ============================================================================
+
+TEST_F(MLATest, EnumWithI64BackingCompilesAndMatches)
+{
+    std::string code = R"(
+        enum Big : i64 {
+            Min = -42,
+            Max = 9223372036854775807
+        };
+
+        fn as_i32(v: Big) -> i32 {
+            return match v {
+                Big::Min => -1,
+                Big::Max => 1,
+                _ => 0
+            };
+        }
+
+        fn main() -> i32 {
+            let a: Big = Big::Max;
+            let b: Big = Big::Min;
+            if as_i32(a) != 1 { return 1; }
+            if as_i32(b) != -1 { return 2; }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, EnumWithU8BackingCompiles)
+{
+    std::string code = R"(
+        enum Small : u8 {
+            Zero = 0,
+            Max = 255
+        };
+
+        fn main() -> i32 {
+            let s: Small = Small::Max;
+            let z: Small = Small::Zero;
+            let ok: i32 = match s {
+                Small::Max => 1,
+                _ => 0
+            };
+            let ok2: i32 = match z {
+                Small::Zero => 1,
+                _ => 0
+            };
+            return 2 - (ok + ok2);
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, EnumExplicitValueOverflowFails)
+{
+    std::string code = R"(
+        enum TooBig : u8 {
+            A = 256
+        };
+
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("does not fit backing type 'u8'"), std::string::npos);
+}
+
+TEST_F(MLATest, EnumImplicitValueOverflowFails)
+{
+    std::string code = R"(
+        enum TooBig : u8 {
+            A = 255,
+            B
+        };
+
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("implicit value overflows backing type 'u8'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, EnumBackingValidExampleCompilesAndRuns)
+{
+    fs::path repoRoot = fs::path(__FILE__).parent_path().parent_path();
+    fs::path src = repoRoot / "examples" / "enum_backing_valid.mla";
+    int rc = 0;
+    std::string out = compilePathCapture(src, rc);
+    EXPECT_EQ(rc, 0) << out;
+    EXPECT_EQ(runExitCode(), 0);
+}
+
+TEST_F(MLATest, EnumBackingExplicitOverflowExampleFails)
+{
+    fs::path repoRoot = fs::path(__FILE__).parent_path().parent_path();
+    fs::path src = repoRoot / "examples" / "enum_backing_fail_u8_explicit.mla";
+    int rc = 0;
+    std::string out = compilePathCapture(src, rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("does not fit backing type 'u8'"), std::string::npos);
+}
+
+TEST_F(MLATest, EnumBackingImplicitOverflowExampleFails)
+{
+    fs::path repoRoot = fs::path(__FILE__).parent_path().parent_path();
+    fs::path src = repoRoot / "examples" / "enum_backing_fail_u8_implicit.mla";
+    int rc = 0;
+    std::string out = compilePathCapture(src, rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("implicit value overflows backing type 'u8'"),
+              std::string::npos);
 }
 
 // ============================================================================

@@ -89,6 +89,8 @@ private:
     std::map<std::string, std::string> globalStructVariableTypes;
     // Track enum variants: enum name -> variant name -> value
     std::map<std::string, std::map<std::string, int64_t>> enumValues;
+    // Track enum backing integer kind per enum name.
+    std::map<std::string, TypeNode::TypeKind> enumBaseTypes;
     std::set<std::string> debugStructs;
     bool hasError;
     bool debugEnabled;

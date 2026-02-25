@@ -564,16 +564,19 @@ ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members,
     return def;
 }
 
-ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public)
+ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public,
+                         int backing_type)
 {
-    return new EnumDefNode(std::string(name),
-                           static_cast<EnumVariantListNode*>(variants),
-                           is_public != 0);
+    return new EnumDefNode(
+        std::string(name), static_cast<EnumVariantListNode*>(variants),
+        is_public != 0, static_cast<TypeNode::TypeKind>(backing_type));
 }
 
-ASTNode* create_enum_variant(char* name)
+ASTNode* create_enum_variant(char* name, int has_explicit_value,
+                             long long explicit_value)
 {
-    return new EnumVariantNode(std::string(name));
+    return new EnumVariantNode(std::string(name), has_explicit_value != 0,
+                               static_cast<int64_t>(explicit_value));
 }
 
 ASTNode* create_enum_variant_list(ASTNode* variant)
@@ -1497,6 +1500,8 @@ std::string StructDefNode::toString() const
 
 std::string EnumVariantNode::toString() const
 {
+    if(hasExplicitValue)
+        return name + " = " + std::to_string(explicitValue);
     return name;
 }
 
@@ -1514,8 +1519,34 @@ std::string EnumVariantListNode::toString() const
 
 std::string EnumDefNode::toString() const
 {
+    auto backingTypeName = [](TypeNode::TypeKind kind) -> std::string {
+        switch(kind)
+        {
+        case TypeNode::TYPE_INT:
+            return "int";
+        case TypeNode::TYPE_I8:
+            return "i8";
+        case TypeNode::TYPE_I16:
+            return "i16";
+        case TypeNode::TYPE_I32:
+            return "i32";
+        case TypeNode::TYPE_I64:
+            return "i64";
+        case TypeNode::TYPE_U8:
+            return "u8";
+        case TypeNode::TYPE_U16:
+            return "u16";
+        case TypeNode::TYPE_U32:
+            return "u32";
+        case TypeNode::TYPE_U64:
+            return "u64";
+        default:
+            return "i32";
+        }
+    };
+
     std::string result = isPublic ? "pub enum " : "enum ";
-    result += name + " { ";
+    result += name + " : " + backingTypeName(backingType) + " { ";
     if(variants)
         result += variants->toString();
     result += " };\n";

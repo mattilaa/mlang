@@ -1,0 +1,10 @@
+// Expected compile error:
+// enum variant value '256' does not fit backing type 'u8'
+
+enum TooLargeExplicit : u8 {
+    A = 256
+};
+
+fn main() -> i32 {
+    return 0;
+}

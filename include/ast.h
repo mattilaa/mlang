@@ -1,6 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -902,8 +903,14 @@ class EnumVariantNode : public ASTNode
 {
 public:
     std::string name;
+    bool hasExplicitValue = false;
+    int64_t explicitValue = 0;
 
-    EnumVariantNode(const std::string& n) : name(n) {}
+    EnumVariantNode(const std::string& n, bool hasValue = false,
+                    int64_t value = 0)
+        : name(n), hasExplicitValue(hasValue), explicitValue(value)
+    {
+    }
     std::string toString() const override;
 };
 
@@ -925,11 +932,12 @@ public:
     std::string name;
     EnumVariantListNode* variants;
     bool isPublic;
+    TypeNode::TypeKind backingType;
     std::string sourceModule;
 
-    EnumDefNode(const std::string& n, EnumVariantListNode* v,
-                bool pub = false)
-        : name(n), variants(v), isPublic(pub)
+    EnumDefNode(const std::string& n, EnumVariantListNode* v, bool pub = false,
+                TypeNode::TypeKind backing = TypeNode::TYPE_I32)
+        : name(n), variants(v), isPublic(pub), backingType(backing)
     {
     }
     std::string toString() const override;
@@ -1272,8 +1280,10 @@ ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* create_match_arm_list(ASTNode* arm);
 ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
 ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
-ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public);
-ASTNode* create_enum_variant(char* name);
+ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public,
+                         int backing_type = TypeNode::TYPE_I32);
+ASTNode* create_enum_variant(char* name, int has_explicit_value = 0,
+                             long long explicit_value = 0);
 ASTNode* create_enum_variant_list(ASTNode* variant);
 ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);

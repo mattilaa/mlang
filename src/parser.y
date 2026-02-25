@@ -165,8 +165,6 @@ ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* create_match_arm_list(ASTNode* arm);
 ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
 ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
-ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public);
-ASTNode* create_enum_variant(char* name);
 ASTNode* create_enum_variant_list(ASTNode* variant);
 ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
@@ -292,6 +290,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %type <ast> map_iterator
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
+%type <ival> enum_base_type_opt enum_int_type
 
 %left PIPE_PIPE
 %left AMP_AMP
@@ -384,10 +383,27 @@ struct_def
     ;
 
 enum_def
-    : ENUM IDENTIFIER LBRACE enum_variant_list RBRACE SEMICOLON
-        { auto* node = create_enum_def($2, $4, 0); node->line = yylineno; $$ = node; }
-    | PUB ENUM IDENTIFIER LBRACE enum_variant_list RBRACE SEMICOLON
-        { auto* node = create_enum_def($3, $5, 1); node->line = yylineno; $$ = node; }
+    : ENUM IDENTIFIER enum_base_type_opt LBRACE enum_variant_list RBRACE SEMICOLON
+        { auto* node = create_enum_def($2, $5, 0, static_cast<int>($3)); node->line = yylineno; $$ = node; }
+    | PUB ENUM IDENTIFIER enum_base_type_opt LBRACE enum_variant_list RBRACE SEMICOLON
+        { auto* node = create_enum_def($3, $6, 1, static_cast<int>($4)); node->line = yylineno; $$ = node; }
+    ;
+
+enum_base_type_opt
+    : /* empty */ { $$ = TypeNode::TYPE_I32; }
+    | COLON enum_int_type { $$ = $2; }
+    ;
+
+enum_int_type
+    : INT { $$ = TypeNode::TYPE_INT; }
+    | I8  { $$ = TypeNode::TYPE_I8; }
+    | I16 { $$ = TypeNode::TYPE_I16; }
+    | I32 { $$ = TypeNode::TYPE_I32; }
+    | I64 { $$ = TypeNode::TYPE_I64; }
+    | U8  { $$ = TypeNode::TYPE_U8; }
+    | U16 { $$ = TypeNode::TYPE_U16; }
+    | U32 { $$ = TypeNode::TYPE_U32; }
+    | U64 { $$ = TypeNode::TYPE_U64; }
     ;
 
 enum_variant_list
@@ -396,7 +412,9 @@ enum_variant_list
     ;
 
 enum_variant
-    : IDENTIFIER { $$ = create_enum_variant($1); }
+    : IDENTIFIER { $$ = create_enum_variant($1, 0, 0); }
+    | IDENTIFIER ASSIGN INT_LITERAL { $$ = create_enum_variant($1, 1, $3); }
+    | IDENTIFIER ASSIGN MINUS INT_LITERAL { $$ = create_enum_variant($1, 1, -$4); }
     ;
 
 trait_def
