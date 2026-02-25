@@ -1165,6 +1165,7 @@ ASTNode* set_parameter_list_vararg(ASTNode* list);
 ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
+ASTNode* create_empty_statement_list();
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr,

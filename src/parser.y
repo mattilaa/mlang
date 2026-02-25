@@ -45,6 +45,7 @@ ASTNode* set_parameter_list_vararg(ASTNode* list);
 ASTNode* create_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* create_statement_list(ASTNode* stmt);
+ASTNode* create_empty_statement_list();
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_field_access(char* struct_name, char* field_name, int line);
@@ -497,6 +498,30 @@ function_def
         { auto* node = create_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
         { auto* node = create_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
+    | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
+        {
+            if(strcmp($2, "main") != 0)
+            {
+                fprintf(stderr, "%s:%d:%d: error: missing return type; only 'main' may omit return type\n",
+                        g_sourceFile, yylineno, yycolumn_token);
+                parseHadError = true;
+            }
+            auto* node = create_function_def(create_type_node(TypeNode::TYPE_I32), $2, $4, $7, 0, 0);
+            node->line = yylineno;
+            $$ = node;
+        }
+    | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
+        {
+            if(strcmp($3, "main") != 0)
+            {
+                fprintf(stderr, "%s:%d:%d: error: missing return type; only 'main' may omit return type\n",
+                        g_sourceFile, yylineno, yycolumn_token);
+                parseHadError = true;
+            }
+            auto* node = create_function_def(create_type_node(TypeNode::TYPE_I32), $3, $5, $8, 1, 0);
+            node->line = yylineno;
+            $$ = node;
+        }
     | EXTERN FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
         { auto* node = create_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
     | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
@@ -703,7 +728,8 @@ continue_statement
     ;
 
 block_statement
-    : LBRACE statement_list RBRACE { $$ = create_block_statement($2); }
+    : LBRACE statement_list RBRACE { $$ = create_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    | LBRACE RBRACE { $$ = create_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
     ;
 
 for_statement
@@ -811,7 +837,7 @@ if_statement
     | IF expression COLON statement else_if_list optional_else
         { $$ = create_if_statement($2, create_statement_list($4), $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF expression block_statement else_if_list optional_else
-        { $$ = create_if_statement($2, $3, $4, $5); }
+        { $$ = create_if_statement($2, $3, $4, $5); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration($5, $3, $7); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $9, $11, $12, $13); }
     | IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement else_if_list optional_else
@@ -838,7 +864,7 @@ else_if_list
 else_if
     : ELSE IF expression COLON block_statement { $$ = create_else_if($3, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF expression COLON statement { $$ = create_else_if($3, create_statement_list($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF expression block_statement { $$ = create_else_if($3, $4); }
+    | ELSE IF expression block_statement { $$ = create_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement
         { ASTNode* __init = create_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, $12); }
     | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement

@@ -3543,6 +3543,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         enterCleanupScope();
         const auto& blkStmts = blockNode->statements->statements;
+        if(blkStmts.empty())
+        {
+            reportWarning(blockNode->line, blockNode->col, "empty block");
+        }
         for(size_t si = 0; si < blkStmts.size(); si++)
         {
             generateStatement(blkStmts[si]);
@@ -4467,6 +4471,26 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         reportWarning(warnLine, warnCol,
                       "plain if/else-if with ':' is discouraged; use "
                       "'if cond { ... }' and reserve ':' for guard forms");
+    }
+    if(node->thenBranch && node->thenBranch->statements.empty())
+    {
+        int warnLine = (node->condition && node->condition->line > 0)
+                           ? node->condition->line
+                           : node->line;
+        int warnCol = (node->condition && node->condition->col > 0)
+                          ? node->condition->col
+                          : node->col;
+        reportWarning(warnLine, warnCol, "empty block");
+    }
+    if(node->elseBranch && node->elseBranch->statements.empty())
+    {
+        int warnLine = (node->condition && node->condition->line > 0)
+                           ? node->condition->line
+                           : node->line;
+        int warnCol = (node->condition && node->condition->col > 0)
+                          ? node->condition->col
+                          : node->col;
+        reportWarning(warnLine, warnCol, "empty block");
     }
 
     auto incomingNamedValues = namedValues;

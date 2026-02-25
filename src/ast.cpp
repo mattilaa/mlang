@@ -148,6 +148,11 @@ ASTNode* create_statement_list(ASTNode* stmt)
     return list;
 }
 
+ASTNode* create_empty_statement_list()
+{
+    return new StatementListNode();
+}
+
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt)
 {
     auto stmt_list = static_cast<StatementListNode*>(list);

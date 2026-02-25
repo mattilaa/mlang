@@ -35,6 +35,25 @@ fn test_compiler_open_change_close() -> i32 {
 }
 
 #[test]
+fn test_compiler_main_without_explicit_return_type_defaults_i32() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://main_no_arrow_defaults_i32.mla";
+    let src: string = "fn main() {\n  let i: i32 = 1;\n  if i == 1 {\n    println!(\"hello\");\n  }\n}";
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return 1; }
+    if cr.unwrap() != 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
 fn test_compiler_syntax_diag_get() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }
