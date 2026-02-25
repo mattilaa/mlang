@@ -1,0 +1,36 @@
+/// \file result.mla
+/// \brief Documentation anchors for builtin `Result<T, E>` methods.
+///
+/// The methods below are compiler-provided on every `Result<T, E>`.
+/// This file provides stable go-to-definition and Doxygen anchors.
+
+/// @defgroup result_methods Result Methods
+/// @brief Intrinsic instance methods for `Result<T, E>`.
+
+/// @brief Return true when this value is `Ok`.
+/// @ingroup result_methods
+pub fn is_ok(r: Result<i64, string>) -> bool {
+    return r.is_ok();
+}
+
+/// @brief Return true when this value is `Err`.
+/// @ingroup result_methods
+pub fn is_err(r: Result<i64, string>) -> bool {
+    return r.is_err();
+}
+
+/// @brief Extract the `Ok` payload.
+/// @ingroup result_methods
+///
+/// @warning Panics when called on `Err`.
+pub fn unwrap(r: Result<i64, string>) -> i64 {
+    return r.unwrap();
+}
+
+/// @brief Extract the `Err` payload.
+/// @ingroup result_methods
+///
+/// @warning Panics when called on `Ok`.
+pub fn unwrap_err(r: Result<i64, string>) -> string {
+    return r.unwrap_err();
+}

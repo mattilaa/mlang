@@ -75,6 +75,14 @@ For Vec (dynamic array) helpers, see:
   (`Vec::new`, `vec![...]`, `push/pop/clear`, `len/is_empty`,
    `contains/index_of`, `sort/sort_desc/reverse/dedup`, `first/last`).
 
+For builtin primitive/generic type docs and aliases, see:
+- `stdlib/types.mla`
+  (`f32`, `f64`, and aliases `float -> f32`, `double -> f64`).
+
+Type alias syntax (`use type`) is documented in:
+- `docs/stdlib_mlang_api.md`
+  (basic aliases, generic aliases, and block-scoped shadowing).
+
 See also:
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
   `move-only`) that borrow checking builds on.

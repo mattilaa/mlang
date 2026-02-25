@@ -1,0 +1,61 @@
+/// \file map.mla
+/// \brief Documentation anchors for map<K, V> intrinsic methods.
+///
+/// The methods below are compiler intrinsics available on every `map<K, V>`.
+/// This file provides stable go-to-definition targets and Doxygen docs.
+
+/// @defgroup map_methods Map Methods
+/// @brief Intrinsic instance methods for `map<K, V>`.
+
+/// @brief Return number of entries in the map.
+/// @ingroup map_methods
+///
+/// @return `i64` map size.
+pub fn len(m: map<string, i64>) -> i64 {
+    return m.len();
+}
+
+/// @brief Return all keys in the map as a list.
+/// @ingroup map_methods
+///
+/// ```mlang
+/// let scores: map<string, i64> = {"Alice": 95, "Bob": 87};
+/// for name in scores.keys() {
+///   println!("Name: {}", name);
+/// }
+/// ```
+///
+/// @return `list<K>` of keys.
+pub fn keys(m: map<string, i64>) -> list<string> {
+    return m.keys();
+}
+
+/// @brief Return all values in the map as a list.
+/// @ingroup map_methods
+///
+/// ```mlang
+/// let scores: map<string, i64> = {"Alice": 95, "Bob": 87};
+/// for score in scores.values() {
+///   println!("Score: {}", score);
+/// }
+/// ```
+///
+/// @return `list<V>` of values.
+pub fn values(m: map<string, i64>) -> list<i64> {
+    return m.values();
+}
+
+/// @brief Return key-value pairs as tuple entries.
+/// @ingroup map_methods
+///
+/// ```mlang
+/// let scores: map<string, i64> = {"Alice": 95, "Bob": 87};
+/// for entry in scores.entries() {
+///   println!("{} scored {}", entry.0, entry.1);
+/// }
+/// ```
+///
+/// @return `list<tuple<K, V>>` entries.
+pub fn entries(m: map<string, i64>) -> list<tuple<string, i64>> {
+    return m.entries();
+}

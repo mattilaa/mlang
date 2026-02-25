@@ -44,6 +44,13 @@ pub fn free(buf: string) -> void {
     String::free(buf);
 }
 
+/// @brief Append `suffix` to `buf` in-place.
+///
+/// This is equivalent to the builtin method call `buf.push_str(suffix)`.
+pub fn push_str(buf: string, suffix: string) -> void {
+    buf.push_str(suffix);
+}
+
 /// @brief Return UTF-8 string length in bytes.
 pub fn len(s: string) -> i64 {
     return __mlang_std_strbuf_len(s);

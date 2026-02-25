@@ -19,11 +19,14 @@ mod std::vec;
 ```
 
 The source-of-truth implementation files are:
+- `stdlib/types.mla`
 - `stdlib/std/fs.mla`
 - `stdlib/std/io.mla`
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/math.mla`
+- `stdlib/std/map.mla`
+- `stdlib/std/result.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
 - `stdlib/std/sync.mla`
@@ -31,6 +34,44 @@ The source-of-truth implementation files are:
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/thread.mla`
 - `stdlib/std/vec.mla`
+
+## Builtin Types and Aliases
+
+Builtin primitive and generic types are documented in:
+- `stdlib/types.mla`
+
+Floating-point canonical names:
+- `f32` (single precision)
+- `f64` (double precision)
+
+Compatibility aliases:
+- `float` is an alias for `f32`
+- `double` is an alias for `f64`
+
+## Type Alias Syntax (`use type`)
+
+MLang supports Rust-style type aliases:
+
+```mla
+use type Distance = f32;
+use type SomeMap = map<string, i32>;
+use type PairMap<K, V> = map<K, V>;
+```
+
+Aliases are lexical and can be shadowed in inner blocks:
+
+```mla
+use type Distance = f32;
+
+fn main() -> i32 {
+  {
+    use type Distance = i32;
+    let grid: Distance = 42; // i32
+  }
+  let meters: Distance = 1.5; // f32
+  return 0;
+}
+```
 
 ## std::fs
 
@@ -270,6 +311,29 @@ Module file: `stdlib/std/math.mla`
 ### Integer-specific
 - `sum_range(start: int, end: int) -> int`
 - `factorial(n: int) -> int`
+
+## std::map (Intrinsic Method Docs)
+
+Module file: `stdlib/std/map.mla`
+
+These are documentation/navigation anchors for compiler intrinsics available on
+`map<K, V>` values.
+
+### Map helpers
+- `len(m) -> i64`
+- `keys(m) -> list<K>`
+- `values(m) -> list<V>`
+- `entries(m) -> list<tuple<K, V>>`
+
+## std::result (Builtin Method Docs)
+
+Module file: `stdlib/std/result.mla`
+
+Documentation/navigation anchors for compiler-provided `Result<T, E>` methods:
+- `is_ok(r) -> bool`
+- `is_err(r) -> bool`
+- `unwrap(r) -> T`
+- `unwrap_err(r) -> E`
 
 ## std::process
 

@@ -21,7 +21,8 @@
  * @brief Values that are duplicated by assignment/passing.
  *
  * In phase 1, the following are classified as `Copy`:
- * - scalar numeric types (`int`, `i8..i64`, `u8..u64`, `float`, `double`)
+ * - scalar numeric types (`int`, `i8..i64`, `u8..u64`,
+ *   `f32`, `f64`, and aliases `float`, `double`)
  * - `bool`
  * - raw pointers (`ptr<T>`)
  * - enums

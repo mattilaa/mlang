@@ -524,6 +524,10 @@ fn string_intrinsic_location(member: string) -> string {
     if eq(member, "new") == 1: { target = "new"; }
     if eq(member, "with_capacity") == 1: { target = "with_capacity"; }
     if eq(member, "free") == 1: { target = "free"; }
+    if eq(member, "push_str") == 1: { target = "push_str"; }
+    if eq(member, "clone") == 1: { target = "clone"; }
+    if eq(member, "len") == 1: { target = "len"; }
+    if eq(member, "is_empty") == 1: { target = "is_empty"; }
     if len(target) == 0: { return String::new(); }
 
     let root: string = root_path_from_store();
@@ -550,6 +554,151 @@ fn string_intrinsic_location(member: string) -> string {
     if len(path) == 0: {
         let here: string = cwd();
         let p3: string = concat(here, "/stdlib/std/strbuf.mla");
+        if file_exists(p3) == 1: {
+            path = p3;
+        }
+    }
+    if len(path) == 0: { return String::new(); }
+
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    let pat: string = format!("pub fn {}", target);
+    return first_match_location(path, text, pat);
+}
+
+fn list_intrinsic_location(member: string) -> string {
+    var target: string = String::new();
+    if eq(member, "new") == 1: { target = "new"; }
+    if eq(member, "len") == 1: { target = "len"; }
+    if eq(member, "is_empty") == 1: { target = "is_empty"; }
+    if eq(member, "push") == 1: { target = "push"; }
+    if eq(member, "pop") == 1: { target = "pop"; }
+    if eq(member, "clear") == 1: { target = "clear"; }
+    if eq(member, "contains") == 1: { target = "contains"; }
+    if eq(member, "index_of") == 1: { target = "index_of"; }
+    if eq(member, "sort") == 1: { target = "sort"; }
+    if eq(member, "sort_desc") == 1: { target = "sort_desc"; }
+    if eq(member, "reverse") == 1: { target = "reverse"; }
+    if eq(member, "dedup") == 1: { target = "dedup"; }
+    if eq(member, "first") == 1: { target = "first"; }
+    if eq(member, "last") == 1: { target = "last"; }
+    if len(target) == 0: { return String::new(); }
+
+    let root: string = root_path_from_store();
+    var p1: string = String::new();
+    var p2: string = String::new();
+    if len(root) > 0: {
+        p1 = concat(root, "/stdlib/std/vec.mla");
+        p2 = concat(root, "/std/vec.mla");
+    }
+
+    var path: string = String::new();
+    if len(p1) > 0: {
+        if file_exists(p1) == 1: {
+            path = p1;
+        }
+    }
+    if len(path) == 0: {
+        if len(p2) > 0: {
+            if file_exists(p2) == 1: {
+                path = p2;
+            }
+        }
+    }
+    if len(path) == 0: {
+        let here: string = cwd();
+        let p3: string = concat(here, "/stdlib/std/vec.mla");
+        if file_exists(p3) == 1: {
+            path = p3;
+        }
+    }
+    if len(path) == 0: { return String::new(); }
+
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    let pat: string = format!("pub fn {}", target);
+    return first_match_location(path, text, pat);
+}
+
+fn map_intrinsic_location(member: string) -> string {
+    var target: string = String::new();
+    if eq(member, "len") == 1: { target = "len"; }
+    if eq(member, "keys") == 1: { target = "keys"; }
+    if eq(member, "values") == 1: { target = "values"; }
+    if eq(member, "entries") == 1: { target = "entries"; }
+    if len(target) == 0: { return String::new(); }
+
+    let root: string = root_path_from_store();
+    var p1: string = String::new();
+    var p2: string = String::new();
+    if len(root) > 0: {
+        p1 = concat(root, "/stdlib/std/map.mla");
+        p2 = concat(root, "/std/map.mla");
+    }
+
+    var path: string = String::new();
+    if len(p1) > 0: {
+        if file_exists(p1) == 1: {
+            path = p1;
+        }
+    }
+    if len(path) == 0: {
+        if len(p2) > 0: {
+            if file_exists(p2) == 1: {
+                path = p2;
+            }
+        }
+    }
+    if len(path) == 0: {
+        let here: string = cwd();
+        let p3: string = concat(here, "/stdlib/std/map.mla");
+        if file_exists(p3) == 1: {
+            path = p3;
+        }
+    }
+    if len(path) == 0: { return String::new(); }
+
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    let pat: string = format!("pub fn {}", target);
+    return first_match_location(path, text, pat);
+}
+
+fn result_intrinsic_location(member: string) -> string {
+    var target: string = String::new();
+    if eq(member, "is_ok") == 1: { target = "is_ok"; }
+    if eq(member, "is_err") == 1: { target = "is_err"; }
+    if eq(member, "unwrap") == 1: { target = "unwrap"; }
+    if eq(member, "unwrap_err") == 1: { target = "unwrap_err"; }
+    if len(target) == 0: { return String::new(); }
+
+    let root: string = root_path_from_store();
+    var p1: string = String::new();
+    var p2: string = String::new();
+    if len(root) > 0: {
+        p1 = concat(root, "/stdlib/std/result.mla");
+        p2 = concat(root, "/std/result.mla");
+    }
+
+    var path: string = String::new();
+    if len(p1) > 0: {
+        if file_exists(p1) == 1: {
+            path = p1;
+        }
+    }
+    if len(path) == 0: {
+        if len(p2) > 0: {
+            if file_exists(p2) == 1: {
+                path = p2;
+            }
+        }
+    }
+    if len(path) == 0: {
+        let here: string = cwd();
+        let p3: string = concat(here, "/stdlib/std/result.mla");
         if file_exists(p3) == 1: {
             path = p3;
         }
@@ -834,6 +983,234 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
     }
 
     return format!("{}::{}", prefix, word);
+}
+
+fn member_call_object_name(line_text: string, member: string) -> string {
+    let needle: string = format!(".{}(", member);
+    let pos: i64 = find(line_text, needle);
+    if pos <= 0: { return String::new(); }
+    var starti: i64 = pos;
+    let pos0: i64 = pos;
+    for k in 0..pos0 {
+        let p: i64 = pos0 - k - 1;
+        let ch: string = sub(line_text, p, 1);
+        if is_ident_char(ch) == 1: {
+            starti = p;
+            continue;
+        }
+        break;
+    }
+    if starti < pos: {
+        return sub(line_text, starti, pos - starti);
+    }
+    return String::new();
+}
+
+fn member_call_object_col1(line_text: string, member: string) -> i64 {
+    let needle: string = format!(".{}(", member);
+    let pos: i64 = find(line_text, needle);
+    if pos <= 0: { return -1; }
+    var starti: i64 = pos;
+    let pos0: i64 = pos;
+    for k in 0..pos0 {
+        let p: i64 = pos0 - k - 1;
+        let ch: string = sub(line_text, p, 1);
+        if is_ident_char(ch) == 1: {
+            starti = p;
+            continue;
+        }
+        break;
+    }
+    if starti < pos: {
+        return starti + 1;
+    }
+    return -1;
+}
+
+fn member_object_name_at_cursor(line_text: string, col0: i64) -> string {
+    let n: i64 = len(line_text);
+    if col0 <= 0: { return String::new(); }
+    var c: i64 = col0;
+    if c > n: { c = n; }
+    let left: string = sub(line_text, 0, c);
+    let dot: i64 = rfind(left, ".");
+    if dot <= 0: { return String::new(); }
+    var starti: i64 = dot;
+    for k2 in 0..dot {
+        let p2: i64 = dot - k2 - 1;
+        let ch2: string = sub(left, p2, 1);
+        if is_ident_char(ch2) == 1: {
+            starti = p2;
+            continue;
+        }
+        break;
+    }
+    if starti < dot: {
+        return sub(left, starti, dot - starti);
+    }
+    return String::new();
+}
+
+fn member_object_col1_at_cursor(line_text: string, col0: i64) -> i64 {
+    let n: i64 = len(line_text);
+    if col0 <= 0: { return -1; }
+    var c: i64 = col0;
+    if c > n: { c = n; }
+    let left: string = sub(line_text, 0, c);
+    let dot: i64 = rfind(left, ".");
+    if dot <= 0: { return -1; }
+    var starti: i64 = dot;
+    for k2 in 0..dot {
+        let p2: i64 = dot - k2 - 1;
+        let ch2: string = sub(left, p2, 1);
+        if is_ident_char(ch2) == 1: {
+            starti = p2;
+            continue;
+        }
+        break;
+    }
+    if starti < dot: { return starti + 1; }
+    return -1;
+}
+
+fn type_head_name(type_text: string) -> string {
+    let n: i64 = len(type_text);
+    var i: i64 = 0;
+    for k in 0..n {
+        i = k;
+        let ch: string = sub(type_text, i, 1);
+        if is_ident_char(ch) == 1: {
+            break;
+        }
+        i = i + 1;
+    }
+    if i >= n: { return String::new(); }
+    var j: i64 = i;
+    for k2 in 0..(n - i) {
+        j = i + k2;
+        let ch: string = sub(type_text, j, 1);
+        if is_ident_char(ch) == 1: {
+            if j + 1 == n: {
+                j = n;
+            }
+            continue;
+        }
+        break;
+    }
+    if j <= i: { return String::new(); }
+    return sub(type_text, i, j - i);
+}
+
+fn extract_use_type_rhs_head(line_text: string, alias_name: string) -> string {
+    let pat: string = format!("use type {}", alias_name);
+    let p: i64 = find(line_text, pat);
+    if p < 0: { return String::new(); }
+    let pe: i64 = p + len(pat);
+    if pe < len(line_text): {
+        let ch: string = sub(line_text, pe, 1);
+        if is_ident_char(ch) == 1: {
+            return String::new();
+        }
+    }
+    let eqp: i64 = find(line_text, "=");
+    if eqp < 0: { return String::new(); }
+    var semi: i64 = find(line_text, ";");
+    if semi < 0: { semi = len(line_text); }
+    if eqp + 1 >= semi: { return String::new(); }
+    let rhs: string = sub(line_text, eqp + 1, semi - eqp - 1);
+    return type_head_name(rhs);
+}
+
+fn count_char(s: string, ch1: string) -> i64 {
+    if len(ch1) != 1: { return 0; }
+    let n: i64 = len(s);
+    var c: i64 = 0;
+    for i in 0..n {
+        let ch: string = sub(s, i, 1);
+        if eq(ch, ch1) == 1: {
+            c = c + 1;
+        }
+    }
+    return c;
+}
+
+fn visible_alias_target_head(text: string, upto_line0: i64, alias_name: string) -> string {
+    if len(alias_name) == 0: { return String::new(); }
+    if upto_line0 < 0: { return String::new(); }
+    var depth: i64 = 0;
+    let nlines: i64 = upto_line0 + 1;
+    for k in 0..nlines {
+        let i: i64 = upto_line0 - k;
+        let lt: string = line_text_at(text, i);
+        if depth == 0: {
+            let rhs_head: string = extract_use_type_rhs_head(lt, alias_name);
+            if len(rhs_head) > 0: { return rhs_head; }
+        }
+        depth = depth + count_char(lt, "}") - count_char(lt, "{");
+        if depth < 0: { depth = 0; }
+    }
+    return String::new();
+}
+
+fn receiver_builtin_family(type_text: string, doc_text: string, line0: i64) -> string {
+    var head: string = type_head_name(type_text);
+    if len(head) == 0: { return String::new(); }
+    for hops in 0..8 {
+        if eq(head, "list") == 1: { return "list"; }
+        if eq(head, "map") == 1: { return "map"; }
+        if eq(head, "Result") == 1: { return "Result"; }
+        if eq(head, "string") == 1: { return "string"; }
+        let next_head: string = visible_alias_target_head(doc_text, line0, head);
+        if len(next_head) == 0: { break; }
+        if eq(next_head, head) == 1: { break; }
+        head = next_head;
+    }
+    return String::new();
+}
+
+fn extract_declared_type_from_line(line_text: string, name: string) -> string {
+    if len(name) == 0: { return String::new(); }
+    let p1: string = format!("let {}:", name);
+    let p2: string = format!("var {}:", name);
+    var p: i64 = find(line_text, p1);
+    var plen: i64 = len(p1);
+    if p < 0: {
+        p = find(line_text, p2);
+        plen = len(p2);
+    }
+    if p < 0: { return String::new(); }
+    let ts: i64 = p + plen;
+    var te: i64 = len(line_text);
+    let eqp: i64 = find(line_text, "=");
+    if eqp >= 0: {
+        if eqp > ts: { te = eqp; }
+    }
+    let semi: i64 = find(line_text, ";");
+    if semi >= 0: {
+        if semi > ts: {
+            if semi < te: { te = semi; }
+        }
+    }
+    if te <= ts: { return String::new(); }
+    return sub(line_text, ts, te - ts);
+}
+
+fn visible_declared_type(text: string, upto_line0: i64, name: string) -> string {
+    if len(name) == 0: { return String::new(); }
+    if upto_line0 < 0: { return String::new(); }
+    var depth: i64 = 0;
+    let nlines: i64 = upto_line0 + 1;
+    for k in 0..nlines {
+        let i: i64 = upto_line0 - k;
+        let lt: string = line_text_at(text, i);
+        if depth == 0: {
+            let t: string = extract_declared_type_from_line(lt, name);
+            if len(t) > 0: { return t; }
+        }
+        depth = depth + count_char(lt, "}") - count_char(lt, "{");
+        if depth < 0: { depth = 0; }
+    }
+    return String::new();
 }
 
 fn symbol_kind_lsp(sig: string) -> i32 {
@@ -1253,6 +1630,7 @@ fn handle_definition(payload: string) -> string {
     if len(uri) == 0: { return "[]"; }
     if line < 0: { return "[]"; }
     if col < 0: { return "[]"; }
+    let s: Session = current_session();
 
     if ensure_text_store() == 0: {
         let query_text: string = text_store_get(g_text_store_handle, uri);
@@ -1298,6 +1676,163 @@ fn handle_definition(payload: string) -> string {
                                 if len(sloc3) > 0: { return format!("[{}]", sloc3); }
                             }
                         }
+                        if contains(line_text, format!(".{}(", word)) == 1: {
+                            let obj: string = member_object_name_at_cursor(line_text, col);
+                            let obj_col1: i64 = member_object_col1_at_cursor(line_text, col);
+                            if len(obj) > 0: {
+                                let decl_ti: string = visible_declared_type(query_text, line, obj);
+                                let decl_family: string = receiver_builtin_family(decl_ti, query_text, line);
+                                if contains(decl_ti, "Result<") == 1: {
+                                    let rloc_d: string = result_intrinsic_location(word);
+                                    if len(rloc_d) > 0: { return format!("[{}]", rloc_d); }
+                                }
+                                if eq(decl_family, "Result") == 1: {
+                                    let rloc_d2: string = result_intrinsic_location(word);
+                                    if len(rloc_d2) > 0: { return format!("[{}]", rloc_d2); }
+                                }
+                                if contains(decl_ti, "map<") == 1: {
+                                    let mloc_d: string = map_intrinsic_location(word);
+                                    if len(mloc_d) > 0: { return format!("[{}]", mloc_d); }
+                                }
+                                if eq(decl_family, "map") == 1: {
+                                    let mloc_d2: string = map_intrinsic_location(word);
+                                    if len(mloc_d2) > 0: { return format!("[{}]", mloc_d2); }
+                                }
+                                if contains(decl_ti, "list<") == 1: {
+                                    let lloc_d: string = list_intrinsic_location(word);
+                                    if len(lloc_d) > 0: { return format!("[{}]", lloc_d); }
+                                }
+                                if eq(decl_family, "list") == 1: {
+                                    let lloc_d2: string = list_intrinsic_location(word);
+                                    if len(lloc_d2) > 0: { return format!("[{}]", lloc_d2); }
+                                }
+                                if eq(decl_ti, "string") == 1: {
+                                    let sloc_d: string = string_intrinsic_location(word);
+                                    if len(sloc_d) > 0: { return format!("[{}]", sloc_d); }
+                                }
+                                if eq(decl_family, "string") == 1: {
+                                    let sloc_d2: string = string_intrinsic_location(word);
+                                    if len(sloc_d2) > 0: { return format!("[{}]", sloc_d2); }
+                                }
+                            }
+                            if len(obj) > 0: {
+                                if obj_col1 > 0: {
+                                    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, obj_col1);
+                                    if rr.is_ok(): {
+                                        let rs: ResolvedSymbol = rr.unwrap();
+                                        var ti: string = rs.type_info;
+                                        if len(ti) == 0: {
+                                            ti = rs.signature;
+                                        }
+                                        let family: string = receiver_builtin_family(ti, query_text, line);
+                                        if contains(ti, "Result<") == 1: {
+                                            let rloc_t: string = result_intrinsic_location(word);
+                                            if len(rloc_t) > 0: { return format!("[{}]", rloc_t); }
+                                        }
+                                        if eq(family, "Result") == 1: {
+                                            let rloc_t2: string = result_intrinsic_location(word);
+                                            if len(rloc_t2) > 0: { return format!("[{}]", rloc_t2); }
+                                        }
+                                        if contains(ti, "map<") == 1: {
+                                            let mloc_t: string = map_intrinsic_location(word);
+                                            if len(mloc_t) > 0: { return format!("[{}]", mloc_t); }
+                                        }
+                                        if eq(family, "map") == 1: {
+                                            let mloc_t2: string = map_intrinsic_location(word);
+                                            if len(mloc_t2) > 0: { return format!("[{}]", mloc_t2); }
+                                        }
+                                        if contains(ti, "list<") == 1: {
+                                            let lloc_t: string = list_intrinsic_location(word);
+                                            if len(lloc_t) > 0: { return format!("[{}]", lloc_t); }
+                                        }
+                                        if eq(family, "list") == 1: {
+                                            let lloc_t2: string = list_intrinsic_location(word);
+                                            if len(lloc_t2) > 0: { return format!("[{}]", lloc_t2); }
+                                        }
+                                        if eq(ti, "string") == 1: {
+                                            let sloc_t: string = string_intrinsic_location(word);
+                                            if len(sloc_t) > 0: { return format!("[{}]", sloc_t); }
+                                        }
+                                        if eq(family, "string") == 1: {
+                                            let sloc_t2: string = string_intrinsic_location(word);
+                                            if len(sloc_t2) > 0: { return format!("[{}]", sloc_t2); }
+                                        }
+                                    }
+                                }
+                            }
+                            let rloc: string = result_intrinsic_location(word);
+                            if len(rloc) > 0: { return format!("[{}]", rloc); }
+                            if eq(word, "len") == 1: {
+                                if len(obj) > 0: {
+                                    if contains(query_text, format!("{}: map<", obj)) == 1: {
+                                        let mloc0: string = map_intrinsic_location(word);
+                                        if len(mloc0) > 0: { return format!("[{}]", mloc0); }
+                                    }
+                                    if contains(query_text, format!("{}: string", obj)) == 1: {
+                                        let sloc0: string = string_intrinsic_location(word);
+                                        if len(sloc0) > 0: { return format!("[{}]", sloc0); }
+                                    }
+                                }
+                                var saw_probe_map: i32 = 0;
+                                var saw_probe_string: i32 = 0;
+                                var saw_probe_list: i32 = 0;
+                                for back in 1..80 {
+                                    let probe_col1: i64 = col + 1 - back;
+                                    if probe_col1 <= 0: { break; }
+                                    let rrp: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, probe_col1);
+                                    if rrp.is_err(): { continue; }
+                                    let rsp: ResolvedSymbol = rrp.unwrap();
+                                    var ti_probe: string = rsp.type_info;
+                                    if len(ti_probe) == 0: {
+                                        ti_probe = rsp.signature;
+                                    }
+                                    let fam_probe: string = receiver_builtin_family(ti_probe, query_text, line);
+                                    if contains(ti_probe, "map<") == 1: {
+                                        saw_probe_map = 1;
+                                    }
+                                    if eq(fam_probe, "map") == 1: {
+                                        saw_probe_map = 1;
+                                    }
+                                    if contains(ti_probe, "list<") == 1: {
+                                        saw_probe_list = 1;
+                                    }
+                                    if eq(fam_probe, "list") == 1: {
+                                        saw_probe_list = 1;
+                                    }
+                                    if eq(ti_probe, "string") == 1: {
+                                        saw_probe_string = 1;
+                                    }
+                                    if eq(fam_probe, "string") == 1: {
+                                        saw_probe_string = 1;
+                                    }
+                                }
+                                if saw_probe_map == 1: {
+                                    let mlocp: string = map_intrinsic_location(word);
+                                    if len(mlocp) > 0: { return format!("[{}]", mlocp); }
+                                }
+                                if saw_probe_string == 1: {
+                                    let slocp: string = string_intrinsic_location(word);
+                                    if len(slocp) > 0: { return format!("[{}]", slocp); }
+                                }
+                                if saw_probe_list == 1: {
+                                    let llocp: string = list_intrinsic_location(word);
+                                    if len(llocp) > 0: { return format!("[{}]", llocp); }
+                                }
+                                let lloc0: string = list_intrinsic_location(word);
+                                if len(lloc0) > 0: { return format!("[{}]", lloc0); }
+                                let mloc1: string = map_intrinsic_location(word);
+                                if len(mloc1) > 0: { return format!("[{}]", mloc1); }
+                                let sloc1: string = string_intrinsic_location(word);
+                                if len(sloc1) > 0: { return format!("[{}]", sloc1); }
+                            } else: {
+                                let mloc: string = map_intrinsic_location(word);
+                                if len(mloc) > 0: { return format!("[{}]", mloc); }
+                                let lloc: string = list_intrinsic_location(word);
+                                if len(lloc) > 0: { return format!("[{}]", lloc); }
+                                let sloc4: string = string_intrinsic_location(word);
+                                if len(sloc4) > 0: { return format!("[{}]", sloc4); }
+                            }
+                        }
                         let cloc: string = c_internals_location(word);
                         if len(cloc) > 0: { return format!("[{}]", cloc); }
                         let loc2: string = runtime_builtin_location(word);
@@ -1308,7 +1843,6 @@ fn handle_definition(payload: string) -> string {
         }
     }
 
-    let s: Session = current_session();
     let dr: Result<DefinitionLocation, string> =
         s.definition(uri, line + 1, col + 1);
     if dr.is_err(): { return "[]"; }
