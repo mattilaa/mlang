@@ -159,3 +159,16 @@ Supported fold operators:
 - `*`
 - `&&`
 - `||`
+
+### Lambda/Fold Examples
+
+Reference examples in the repository:
+- `examples/lambda_fold_demo.mla`
+- `examples/lambda_fold_patterns.mla`
+- `examples/lambda_fold_advanced.mla`
+
+These demonstrate:
+- typed inline lambdas with captures and arguments
+- nested lambdas over computed data
+- left/right folds over numeric and boolean lists
+- empty-list identity behavior for folds

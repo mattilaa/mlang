@@ -104,6 +104,12 @@ Includes:
   `if let ... == ...: guard`
 - empty-block warnings
 - `fn main() {}` defaulting to `fn main() -> i32 {}`
+- typed lambdas and fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`)
+
+Related example files:
+- `examples/lambda_fold_demo.mla`
+- `examples/lambda_fold_patterns.mla`
+- `examples/lambda_fold_advanced.mla`
 
 ## Networking + Robot Example
 

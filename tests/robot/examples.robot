@@ -46,6 +46,8 @@ ${MLANG}           ./build/mlang
 ...    examples/tuple_test.mla
 ...    examples/argparser_demo.mla
 ...    examples/type_alias_demo.mla
+...    examples/lambda_fold_patterns.mla
+...    examples/lambda_fold_advanced.mla
 ...    examples/std_fs_lines.mla
 ...    examples/std_fs_seek.mla
 ...    examples/std_fs_rw.mla
@@ -315,6 +317,39 @@ Slice Example Runs Correctly
     # Multiplication table row 7
     Should Contain    ${run.stdout}    7 * 0 = 0
     Should Contain    ${run.stdout}    7 * 9 = 63
+
+Lambda Fold Patterns Demo Runs Correctly
+    [Documentation]    Build and run examples/lambda_fold_patterns.mla and
+    ...                verify typed lambda and fold-expression outputs.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/lambda_fold_patterns_bin
+    ${build}=    Run Process    ${MLANG}    examples/lambda_fold_patterns.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building lambda_fold_patterns.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=lambda_fold_patterns exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    accumulator=10
+    Should Contain    ${run.stdout}    sum=10 product=24
+    Should Contain    ${run.stdout}    all_true=0 any_true=1
+    Should Contain    ${run.stdout}    empty_sum=0 empty_prod=1
+    Should Contain    ${run.stdout}    empty_all=1 empty_any=0
+
+Lambda Fold Advanced Demo Runs Correctly
+    [Documentation]    Build and run examples/lambda_fold_advanced.mla and
+    ...                verify nested lambda generation and fold reductions.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/lambda_fold_advanced_bin
+    ${build}=    Run Process    ${MLANG}    examples/lambda_fold_advanced.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building lambda_fold_advanced.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=lambda_fold_advanced exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    weight_sum=19
+    Should Contain    ${run.stdout}    weight_product=972
+    Should Contain    ${run.stdout}    all_even=0 any_big=1
+    Should Contain    ${run.stdout}    empty_sum=0 empty_mul=1 empty_all=1 empty_any=0
 
 Printf And GetChar Demo
     [Documentation]    Verify std::printf (printf/eprintf/fprintf) compile and

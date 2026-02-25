@@ -1,0 +1,36 @@
+fn main() -> i32 {
+    // 1) Typed lambda with two parameters
+    var accumulator: i32 = 0;
+    var add_pair = |a: i32, b: i32| {
+        accumulator += a + b;
+    };
+    add_pair(1, 2);
+    add_pair(3, 4);
+    println!("accumulator={}", accumulator);
+
+    // 2) Left/right numeric folds
+    let numbers_a: list<i32> = [1, 2, 3, 4];
+    let numbers_b: list<i32> = [1, 2, 3, 4];
+    let s: i32 = (... + numbers_a);
+    let p: i32 = (numbers_b * ...);
+    println!("sum={} product={}", s, p);
+
+    // 3) Boolean folds over derived flags
+    let flags: list<bool> = [true, true, false, true];
+    let all_true: bool = (... && flags);
+    let any_true: bool = (... || flags);
+    println!("all_true={} any_true={}", all_true, any_true);
+
+    // 4) Empty list identity behavior
+    let empty_i32: list<i32> = [];
+    let empty_sum: i32 = (... + empty_i32);
+    let empty_prod: i32 = (... * empty_i32);
+    println!("empty_sum={} empty_prod={}", empty_sum, empty_prod);
+
+    let empty_bool: list<bool> = [];
+    let empty_all: bool = (... && empty_bool);
+    let empty_any: bool = (... || empty_bool);
+    println!("empty_all={} empty_any={}", empty_all, empty_any);
+
+    return 0;
+}
