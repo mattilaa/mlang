@@ -1745,6 +1745,17 @@ std::string ForNode::toString() const
     return result;
 }
 
+std::string WhileNode::toString() const
+{
+    std::string result = "while " + condition->toString() + " {\n";
+    if(body)
+    {
+        result += body->toString();
+    }
+    result += "}\n";
+    return result;
+}
+
 std::string ArrayFillNode::toString() const
 {
     return "[" + (value ? value->toString() : "") + "; " +
@@ -1771,6 +1782,19 @@ ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
 
     auto* node = new ForNode(std::string(var_name),
                              static_cast<ExpressionNode*>(iterable), stmtList);
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
+                                int uses_colon_without_guard)
+{
+    auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
+    StatementListNode* stmtList =
+        blockBody ? blockBody->statements
+                  : dynamic_cast<StatementListNode*>(body);
+    auto* node = new WhileNode(static_cast<ExpressionNode*>(condition), stmtList,
+                               uses_colon_without_guard != 0);
     node->line = line;
     return node;
 }

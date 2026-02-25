@@ -774,6 +774,21 @@ public:
     std::string toString() const override;
 };
 
+class WhileNode : public StatementNode
+{
+public:
+    ExpressionNode* condition;
+    StatementListNode* body;
+    bool usesColonWithoutGuard;
+
+    WhileNode(ExpressionNode* c, StatementListNode* b,
+              bool usesColonNoGuard = false)
+        : condition(c), body(b), usesColonWithoutGuard(usesColonNoGuard)
+    {
+    }
+    std::string toString() const override;
+};
+
 class PrintNode : public StatementNode
 {
 public:
@@ -1264,6 +1279,8 @@ ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
                           int line);
 ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
                              int line);
+ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
+                                int uses_colon_without_guard);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);

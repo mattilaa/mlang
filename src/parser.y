@@ -116,6 +116,8 @@ ASTNode* create_list_element_list(ASTNode* element);
 ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
 ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
+                                int uses_colon_without_guard);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
@@ -250,7 +252,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
-%token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
+%token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE
@@ -280,7 +282,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement
-%type <ast> return_statement block_statement for_statement range_expression
+%type <ast> return_statement block_statement for_statement while_statement range_expression
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
@@ -675,6 +677,7 @@ statement
     | return_statement
     | if_statement
     | for_statement
+    | while_statement
     | block_statement
     | struct_init
     | print_statement
@@ -813,6 +816,19 @@ for_statement
         { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
     | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression INTO_ITER_ENUMERATE_METHOD block_statement
         { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+    ;
+
+while_statement
+    : WHILE expression COLON block_statement
+        { $$ = create_while_statement($2, $4, yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+    | WHILE expression COLON statement
+        { $$ = create_while_statement($2, create_statement_list($4), yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+    | WHILE expression COLON expression block_statement
+        { $$ = create_while_statement(create_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+    | WHILE expression COLON expression statement
+        { $$ = create_while_statement(create_binary_op(AMP_AMP, $2, $4), create_statement_list($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+    | WHILE expression block_statement
+        { $$ = create_while_statement($2, $3, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     ;
 
 range_expression

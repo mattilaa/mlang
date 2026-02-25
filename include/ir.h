@@ -50,6 +50,10 @@ public:
     {
         warnPlainColonIf = enabled;
     }
+    void setWarnPlainColonWhile(bool enabled)
+    {
+        warnPlainColonWhile = enabled;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -103,6 +107,7 @@ private:
     bool testMode = false;
     bool includeTests = true;
     bool warnPlainColonIf = true;
+    bool warnPlainColonWhile = true;
     std::string sourceFileName;
 
     // Visibility tracking for functions
@@ -272,6 +277,7 @@ private:
     void generateDerefAssignment(DerefAssignmentNode* node);
     void generateIfStatement(IfNode* node);
     void generateForStatement(ForNode* node);
+    void generateWhileStatement(WhileNode* node);
     void generatePrintStatement(PrintNode* node);
     llvm::Value* generateFormatExpression(FormatNode* node);
     void generateAssertEq(AssertEqNode* node);

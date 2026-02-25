@@ -142,6 +142,14 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
                 collectUsedIdents(s, out);
         return;
     }
+    if(auto* whileN = dynamic_cast<WhileNode*>(node))
+    {
+        collectUsedIdents(whileN->condition, out);
+        if(whileN->body)
+            for(auto* s : whileN->body->statements)
+                collectUsedIdents(s, out);
+        return;
+    }
     if(auto* blk = dynamic_cast<BlockStatementNode*>(node))
     {
         if(blk->statements)
@@ -3767,6 +3775,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     {
         generateForStatement(forNode);
     }
+    else if(auto whileNode = dynamic_cast<WhileNode*>(node))
+    {
+        generateWhileStatement(whileNode);
+    }
     else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
     {
         enterCleanupScope();
@@ -5177,6 +5189,157 @@ void CodeGenerator::generateIfStatement(IfNode* node)
 // for-loop iterable, returning the underlying collection expression.
 // This lets "arr.iter().enumerate()" and "arr.into_iter()" work as
 // aliases for the plain collection "arr".
+void CodeGenerator::generateWhileStatement(WhileNode* node)
+{
+    if(node->usesColonWithoutGuard && warnPlainColonWhile)
+    {
+        int warnLine = (node->condition && node->condition->line > 0)
+                           ? node->condition->line
+                           : node->line;
+        int warnCol = (node->condition && node->condition->col > 0)
+                          ? node->condition->col
+                          : node->col;
+        reportWarning(warnLine, warnCol,
+                      "plain while with ':' is discouraged; use "
+                      "'while cond { ... }' and reserve ':' for guard forms");
+    }
+    if(node->body && node->body->statements.empty())
+    {
+        int warnLine = (node->condition && node->condition->line > 0)
+                           ? node->condition->line
+                           : node->line;
+        int warnCol = (node->condition && node->condition->col > 0)
+                          ? node->condition->col
+                          : node->col;
+        reportWarning(warnLine, warnCol, "empty block");
+    }
+
+    auto incomingMoved = movedVariables;
+    auto incomingPointerBorrowTarget = pointerBorrowTarget;
+    auto incomingActiveBorrowers = activeBorrowers;
+    auto incomingActiveMutBorrower = activeMutBorrower;
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "while.cond", function);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(context, "while.body");
+    llvm::BasicBlock* endBB = llvm::BasicBlock::Create(context, "while.end");
+
+    loopBreakBlocks.push_back(endBB);
+    loopContinueBlocks.push_back(condBB);
+
+    builder.CreateBr(condBB);
+    builder.SetInsertPoint(condBB);
+    llvm::Value* condValue = generateExpression(node->condition);
+    if(!condValue)
+    {
+        loopBreakBlocks.pop_back();
+        loopContinueBlocks.pop_back();
+        return;
+    }
+
+    llvm::Type* condType = condValue->getType();
+    if(!condType->isIntegerTy() && !condType->isFloatingPointTy())
+    {
+        std::string typeStr;
+        if(condType->isStructTy())
+            typeStr = condType->getStructName().str().empty()
+                          ? "struct"
+                          : condType->getStructName().str();
+        else if(condType->isPointerTy())
+            typeStr = "pointer";
+        else
+            typeStr = "non-boolean";
+
+        reportError(node->line,
+                    "while condition must be a boolean or numeric type, got '" +
+                        typeStr + "'");
+        loopBreakBlocks.pop_back();
+        loopContinueBlocks.pop_back();
+        return;
+    }
+
+    if(!condValue->getType()->isIntegerTy(1))
+    {
+        if(condValue->getType()->isFloatingPointTy())
+        {
+            condValue = builder.CreateFCmpONE(
+                condValue, llvm::ConstantFP::get(condValue->getType(), 0.0),
+                "whilecond");
+        }
+        else
+        {
+            condValue = builder.CreateICmpNE(
+                condValue, llvm::ConstantInt::get(condValue->getType(), 0),
+                "whilecond");
+        }
+    }
+
+    builder.CreateCondBr(condValue, bodyBB, endBB);
+
+    bodyBB->insertInto(function);
+    builder.SetInsertPoint(bodyBB);
+
+    if(node->body)
+    {
+        enterCleanupScope();
+        for(auto* stmt : node->body->statements)
+        {
+            generateStatement(stmt);
+            if(builder.GetInsertBlock()->getTerminator())
+                break;
+        }
+        exitCleanupScope();
+    }
+    llvm::BasicBlock* bodyEnd = builder.GetInsertBlock();
+    bool bodyFallsThrough = bodyEnd && !bodyEnd->getTerminator();
+    auto bodyMoved = movedVariables;
+    auto bodyPointerBorrowTarget = pointerBorrowTarget;
+    auto bodyActiveBorrowers = activeBorrowers;
+    auto bodyActiveMutBorrower = activeMutBorrower;
+
+    if(bodyFallsThrough)
+    {
+        builder.CreateBr(condBB);
+    }
+
+    endBB->insertInto(function);
+    builder.SetInsertPoint(endBB);
+
+    loopBreakBlocks.pop_back();
+    loopContinueBlocks.pop_back();
+
+    movedVariables = incomingMoved;
+    pointerBorrowTarget = incomingPointerBorrowTarget;
+    activeBorrowers = incomingActiveBorrowers;
+    activeMutBorrower = incomingActiveMutBorrower;
+
+    if(bodyFallsThrough)
+    {
+        movedVariables.insert(bodyMoved.begin(), bodyMoved.end());
+        for(const auto& kv : bodyPointerBorrowTarget)
+        {
+            if(pointerBorrowTarget.find(kv.first) ==
+               pointerBorrowTarget.end())
+            {
+                pointerBorrowTarget[kv.first] = kv.second;
+            }
+        }
+        for(const auto& kv : bodyActiveBorrowers)
+        {
+            auto& setRef = activeBorrowers[kv.first];
+            setRef.insert(kv.second.begin(), kv.second.end());
+        }
+        for(const auto& kv : bodyActiveMutBorrower)
+        {
+            if(activeMutBorrower.find(kv.first) == activeMutBorrower.end())
+            {
+                activeMutBorrower[kv.first] = kv.second;
+            }
+        }
+    }
+}
+
 static ExpressionNode* stripIterMethods(ExpressionNode* expr)
 {
     while(auto* mc = dynamic_cast<MethodCallNode*>(expr))
@@ -6974,6 +7137,11 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
             scan_stmt_list(forNode->body);
             return;
         }
+        if(auto* whileNode = dynamic_cast<WhileNode*>(s))
+        {
+            scan_stmt_list(whileNode->body);
+            return;
+        }
         if(auto* block = dynamic_cast<BlockStatementNode*>(s))
         {
             scan_stmt_list(block->statements);
@@ -7316,6 +7484,12 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         {
             resolve_expr(forNode->iterable, scope);
             resolve_stmt_list(forNode->body, scope);
+            return;
+        }
+        if(auto* whileNode = dynamic_cast<WhileNode*>(s))
+        {
+            resolve_expr(whileNode->condition, scope);
+            resolve_stmt_list(whileNode->body, scope);
             return;
         }
         if(auto* printNode = dynamic_cast<PrintNode*>(s))

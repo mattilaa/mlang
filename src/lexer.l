@@ -140,6 +140,7 @@ static int is_try_question_context()
 "match"         { return MATCH; }
 "enum"          { return ENUM; }
 "for"           { return FOR; }
+"while"         { return WHILE; }
 "in"            { return IN; }
 "break"         { return BREAK; }
 "continue"      { return CONTINUE; }

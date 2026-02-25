@@ -46,6 +46,7 @@ void printUsage(const char* programName)
               << "  -O3           Aggressive optimization\n"
               << "  --no-tests    Skip compiling #[test] functions\n"
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
+              << "  -Wno-colon-while Suppress warning for plain while with ':'\n"
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -Wl,<args>    Pass raw linker arguments\n"
@@ -660,6 +661,7 @@ int main(int argc, char** argv)
     bool verbose = false;
     bool debugMode = false;
     bool warnPlainColonIf = true;
+    bool warnPlainColonWhile = true;
     std::vector<std::string> linkArgs;
 
     for(int i = argStart; i < argc; ++i)
@@ -747,6 +749,10 @@ int main(int argc, char** argv)
         else if(arg == "-Wno-colon-if")
         {
             warnPlainColonIf = false;
+        }
+        else if(arg == "-Wno-colon-while")
+        {
+            warnPlainColonWhile = false;
         }
         else if(arg == "--no-run" && testMode)
         {
@@ -971,6 +977,7 @@ int main(int argc, char** argv)
         generator.setSourceFile(inputFile);
         generator.setTestMode(testMode);
         generator.setWarnPlainColonIf(warnPlainColonIf);
+        generator.setWarnPlainColonWhile(warnPlainColonWhile);
         if(!testMode)
             generator.setIncludeTests(includeTests);
 
