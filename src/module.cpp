@@ -463,6 +463,27 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
         }
 
+        // Import type aliases so they can be used in the current module.
+        if(!module->typeAliases.empty())
+        {
+            for(auto* aliasDef : module->typeAliases)
+            {
+                bool alreadyAdded = false;
+                for(auto* existing : program->typeAliases)
+                {
+                    if(existing->name == aliasDef->name)
+                    {
+                        alreadyAdded = true;
+                        break;
+                    }
+                }
+                if(!alreadyAdded)
+                {
+                    program->typeAliases.push_back(aliasDef);
+                }
+            }
+        }
+
         // For specific imports (not import all), verify the item is public
         if(!useDecl->importAll)
         {
@@ -510,6 +531,19 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                                        useDecl->moduleName + "'";
                             return false;
                         }
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            // Try to find as type alias
+            if(!found && !module->typeAliases.empty())
+            {
+                for(auto* aliasDef : module->typeAliases)
+                {
+                    if(aliasDef->name == useDecl->itemName)
+                    {
                         found = true;
                         break;
                     }

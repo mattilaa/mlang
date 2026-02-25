@@ -244,6 +244,8 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/std_jsonrpc_runtime_demo.mla`
 - JSON-RPC stdio worker runtime loop (`std::jsonrpc::run_stdio_loop`):
   `examples/std_jsonrpc_stdio_loop_demo.mla`
+- Type aliases (`use type Distance = f32;`, generic aliases):
+  `examples/type_alias_demo.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

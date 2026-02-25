@@ -144,6 +144,7 @@ static int is_try_question_context()
 "continue"      { return CONTINUE; }
 "mod"           { return MOD; }
 "use"           { return USE; }
+"type"          { return TYPE_KW; }
 "let"           { return LET; }
 "var"           { return VAR; }
 "void"          { return VOID; }
@@ -151,6 +152,8 @@ static int is_try_question_context()
 "true"          { return TRUE_LIT; }
 "false"         { return FALSE_LIT; }
 "int"           { return INT; }
+"f32"           { return FLOAT; }
+"f64"           { return DOUBLE; }
 "float"         { return FLOAT; }
 "double"        { return DOUBLE; }
 "string"        { return STRING; }

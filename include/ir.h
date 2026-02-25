@@ -114,6 +114,14 @@ private:
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
     // Current module being compiled (empty string for main module)
     std::string currentModule;
+    struct TypeAliasInfo
+    {
+        std::vector<std::string> typeParams;
+        TypeNode* aliasedType = nullptr;
+        int line = 0;
+        int col = 0;
+    };
+    std::map<std::string, TypeAliasInfo> typeAliases;
 
     // Stdio function support
     bool stdioInitialized;
@@ -186,6 +194,12 @@ private:
     getOrCreateMonomorphizedStruct(const std::string& genericName,
                                    const std::vector<TypeNode*>& typeArgs);
     void generateTestMain(const std::vector<FunctionDefNode*>& tests);
+    void buildTypeAliasTable(ProgramNode* program);
+    void resolveTypeAliasesInProgram(ProgramNode* program);
+    TypeNode* resolveTypeAliasNode(TypeNode* typeNode,
+                                   const std::set<std::string>& typeParams,
+                                   std::vector<std::string>& aliasStack);
+    TypeNode* cloneTypeNode(TypeNode* typeNode);
 
     // Type helpers
     llvm::Type* getLLVMType(TypeNode::TypeKind kind);

@@ -88,6 +88,8 @@ ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
+ASTNode* create_type_alias(char* name, ASTNode* type_params,
+                           ASTNode* aliased_type);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
@@ -218,7 +220,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR IN DOTDOT DOTDOTEQ BREAK CONTINUE
-%token MOD USE COLONCOLON
+%token MOD USE TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT PIPE PIPE_PIPE
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN
@@ -239,6 +241,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 
 %type <ast> program top_level_list top_level_item test_function_def
 %type <ast> inline_function_def
+%type <ast> type_alias_def
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
@@ -288,6 +291,7 @@ top_level_item
     | inline_function_def
     | mod_declaration
     | use_declaration
+    | type_alias_def
     | impl_block
     | global_var_statement
     ;
@@ -309,6 +313,13 @@ use_declaration
         { $$ = create_use_declaration($2, $4, yylineno); }
     | USE module_path COLONCOLON MULTIPLY SEMICOLON
         { $$ = create_use_all_declaration($2, yylineno); }
+    ;
+
+type_alias_def
+    : USE TYPE_KW IDENTIFIER ASSIGN type SEMICOLON
+        { auto* node = create_type_alias($3, NULL, $5); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+    | USE TYPE_KW IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
+        { auto* node = create_type_alias($3, $5, $8); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     ;
 
 struct_def
@@ -576,6 +587,7 @@ statement_list
 statement
     : let_statement
     | var_statement
+    | type_alias_def
     | static_var_statement
     | assignment_statement
     | expression_statement

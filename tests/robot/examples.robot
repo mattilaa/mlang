@@ -45,6 +45,7 @@ ${MLANG}           ./build/mlang
 ...    examples/tuple_example.mla
 ...    examples/tuple_test.mla
 ...    examples/argparser_demo.mla
+...    examples/type_alias_demo.mla
 ...    examples/std_fs_lines.mla
 ...    examples/std_fs_seek.mla
 ...    examples/std_fs_rw.mla

@@ -54,6 +54,10 @@ ASTNode* create_program(ASTNode* top_level_list)
         {
             program->globalVars.push_back(varDecl);
         }
+        else if(auto* aliasDef = dynamic_cast<TypeAliasNode*>(item))
+        {
+            program->typeAliases.push_back(aliasDef);
+        }
     }
 
     return program;
@@ -1471,6 +1475,10 @@ std::string ProgramNode::toString() const
     {
         result += use->toString() + "\n";
     }
+    for(const auto& aliasDef : typeAliases)
+    {
+        result += aliasDef->toString() + "\n";
+    }
     if(enumList)
     {
         result += enumList->toString();
@@ -1627,6 +1635,19 @@ ASTNode* create_use_all_declaration(char* module_name, int line)
     return node;
 }
 
+ASTNode* create_type_alias(char* name, ASTNode* type_params,
+                           ASTNode* aliased_type)
+{
+    auto* node =
+        new TypeAliasNode(std::string(name), static_cast<TypeNode*>(aliased_type));
+    if(type_params)
+    {
+        auto* params = static_cast<TypeParamListNode*>(type_params);
+        node->typeParams = params->params;
+    }
+    return node;
+}
+
 std::string ModDeclNode::toString() const
 {
     return "mod " + moduleName + ";";
@@ -1639,6 +1660,24 @@ std::string UseDeclNode::toString() const
         return "use " + moduleName + "::*;";
     }
     return "use " + moduleName + "::" + itemName + ";";
+}
+
+std::string TypeAliasNode::toString() const
+{
+    std::string out = "using " + name;
+    if(!typeParams.empty())
+    {
+        out += "<";
+        for(size_t i = 0; i < typeParams.size(); ++i)
+        {
+            if(i > 0)
+                out += ", ";
+            out += typeParams[i];
+        }
+        out += ">";
+    }
+    out += " = " + (aliasedType ? aliasedType->toString() : "<?>") + ";";
+    return out;
 }
 
 // Break and Continue statement creation

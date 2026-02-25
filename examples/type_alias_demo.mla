@@ -1,0 +1,34 @@
+/// Demonstrates type aliases:
+/// - concrete alias: use type Distance = f32;
+/// - implicit generic alias: use type SomeMap = map<K, V>;
+/// - explicit generic alias: use type VecAlias<T> = list<T>;
+
+use type Distance = f32;
+use type SomeMap = map<K, V>;
+use type VecAlias<T> = list<T>;
+
+fn average(a: Distance, b: Distance) -> Distance {
+    return (a + b) / 2.0f;
+}
+
+fn main() -> i32 {
+    let d1: Distance = 10.0f;
+    let d2: Distance = 14.0f;
+    println!("avg={}", average(d1, d2));
+
+    let scores: SomeMap<string, i32> = {"Alice": 95, "Bob": 87};
+    println!("alice={}", scores["Alice"]);
+
+    let ids: VecAlias<i32> = [7, 8, 9];
+    println!("ids.len={}", ids.len());
+
+    {
+        use type Distance = i32;
+        let grid: Distance = 42;
+        println!("grid={}", grid);
+    }
+
+    let precise: Distance = 1.5f;
+    println!("precise={}", precise);
+    return 0;
+}

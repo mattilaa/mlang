@@ -27,6 +27,7 @@ class EnumListNode;
 class EnumVariantNode;
 class EnumVariantListNode;
 class EnumLiteralNode;
+class TypeAliasNode;
 
 // Base AST node
 class ASTNode
@@ -1103,6 +1104,20 @@ public:
     std::string toString() const override;
 };
 
+class TypeAliasNode : public StatementNode
+{
+public:
+    std::string name;
+    std::vector<std::string> typeParams;
+    TypeNode* aliasedType;
+
+    TypeAliasNode(const std::string& n, TypeNode* t)
+        : name(n), aliasedType(t)
+    {
+    }
+    std::string toString() const override;
+};
+
 // Top-level nodes
 class TopLevelListNode : public ASTNode
 {
@@ -1121,6 +1136,7 @@ public:
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
     std::vector<VarDeclNode*> globalVars;
+    std::vector<TypeAliasNode*> typeAliases;
 
     std::string toString() const override;
 };
@@ -1200,6 +1216,8 @@ ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
+ASTNode* create_type_alias(char* name, ASTNode* type_params,
+                           ASTNode* aliased_type);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
