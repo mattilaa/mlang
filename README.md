@@ -246,6 +246,8 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/std_jsonrpc_stdio_loop_demo.mla`
 - ANSI terminal escape helpers (`std::esc`):
   `examples/std_esc_demo.mla`
+- Terminal capabilities + termios helpers (`std::term`):
+  `examples/std_term_demo.mla`
 - Type aliases (`use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
 

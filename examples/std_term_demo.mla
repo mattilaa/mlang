@@ -1,0 +1,14 @@
+mod std::term;
+
+use std::term::TerminalCaps;
+use std::term::stdout_caps;
+
+fn main() -> i32 {
+    let c: TerminalCaps = stdout_caps();
+    println!("TERM={}", c.term_name);
+    println!("is_tty={}", c.is_tty);
+    println!("rows={}, cols={}", c.rows, c.cols);
+    println!("color_level={}", c.color_level);
+    println!("truecolor={}", c.truecolor);
+    return 0;
+}

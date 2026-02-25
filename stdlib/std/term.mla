@@ -1,0 +1,138 @@
+/// \file term.mla
+/// \brief Terminal capability and termios helpers for MLang (std::term).
+///
+/// Provides:
+/// - tty detection (`stdin/stdout/stderr`)
+/// - terminal size queries (`rows/cols`)
+/// - color capability detection (none/16/256/truecolor)
+/// - stdin raw-mode enable/restore (termios)
+
+extern pub fn __mlang_std_term_term_name() -> string;
+extern pub fn __mlang_std_term_stdin_is_tty() -> i32;
+extern pub fn __mlang_std_term_stdout_is_tty() -> i32;
+extern pub fn __mlang_std_term_stderr_is_tty() -> i32;
+extern pub fn __mlang_std_term_stdout_rows() -> i32;
+extern pub fn __mlang_std_term_stdout_cols() -> i32;
+extern pub fn __mlang_std_term_stderr_rows() -> i32;
+extern pub fn __mlang_std_term_stderr_cols() -> i32;
+extern pub fn __mlang_std_term_stdout_color_level() -> i32;
+extern pub fn __mlang_std_term_stderr_color_level() -> i32;
+extern pub fn __mlang_std_term_stdout_truecolor() -> i32;
+extern pub fn __mlang_std_term_stderr_truecolor() -> i32;
+extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
+extern pub fn __mlang_std_term_stdin_enable_raw() -> i32;
+extern pub fn __mlang_std_term_stdin_restore() -> i32;
+
+use type ColorLevel = i32;
+
+pub struct TermSize {
+    var rows: i32;
+    var cols: i32;
+};
+
+pub struct TerminalCaps {
+    var is_tty: i32;
+    var rows: i32;
+    var cols: i32;
+    var color_level: ColorLevel;
+    var truecolor: i32;
+    var term_name: string;
+};
+
+/// @brief Color level constants.
+pub fn color_none() -> ColorLevel { return 0; }
+pub fn color_16() -> ColorLevel { return 16; }
+pub fn color_256() -> ColorLevel { return 256; }
+pub fn color_truecolor() -> ColorLevel { return 16777216; }
+
+/// @brief Terminal `$TERM` value, or `"unknown"`.
+pub fn term_name() -> string {
+    return __mlang_std_term_term_name();
+}
+
+pub fn stdin_is_tty() -> i32 {
+    return __mlang_std_term_stdin_is_tty();
+}
+
+pub fn stdout_is_tty() -> i32 {
+    return __mlang_std_term_stdout_is_tty();
+}
+
+pub fn stderr_is_tty() -> i32 {
+    return __mlang_std_term_stderr_is_tty();
+}
+
+pub fn stdout_size() -> TermSize {
+    return TermSize {
+        rows: __mlang_std_term_stdout_rows(),
+        cols: __mlang_std_term_stdout_cols()
+    };
+}
+
+pub fn stderr_size() -> TermSize {
+    return TermSize {
+        rows: __mlang_std_term_stderr_rows(),
+        cols: __mlang_std_term_stderr_cols()
+    };
+}
+
+pub fn stdout_color_level() -> ColorLevel {
+    return __mlang_std_term_stdout_color_level();
+}
+
+pub fn stderr_color_level() -> ColorLevel {
+    return __mlang_std_term_stderr_color_level();
+}
+
+pub fn stdout_truecolor() -> i32 {
+    return __mlang_std_term_stdout_truecolor();
+}
+
+pub fn stderr_truecolor() -> i32 {
+    return __mlang_std_term_stderr_truecolor();
+}
+
+/// @brief Convenience check for ANSI escape support on stdout.
+/// Returns `1` when stdout is a TTY and ANSI colors are not explicitly
+/// disabled (e.g. via `NO_COLOR`), otherwise `0`.
+pub fn supports_ansi() -> i32 {
+    return __mlang_std_term_stdout_supports_ansi();
+}
+
+/// @brief Snapshot terminal capabilities for stdout.
+pub fn stdout_caps() -> TerminalCaps {
+    let s: TermSize = stdout_size();
+    return TerminalCaps {
+        is_tty: stdout_is_tty(),
+        rows: s.rows,
+        cols: s.cols,
+        color_level: stdout_color_level(),
+        truecolor: stdout_truecolor(),
+        term_name: term_name()
+    };
+}
+
+/// @brief Snapshot terminal capabilities for stderr.
+pub fn stderr_caps() -> TerminalCaps {
+    let s: TermSize = stderr_size();
+    return TerminalCaps {
+        is_tty: stderr_is_tty(),
+        rows: s.rows,
+        cols: s.cols,
+        color_level: stderr_color_level(),
+        truecolor: stderr_truecolor(),
+        term_name: term_name()
+    };
+}
+
+/// @brief Enable raw mode for stdin using termios.
+/// @return `0` on success, non-zero on failure.
+pub fn stdin_enable_raw() -> i32 {
+    return __mlang_std_term_stdin_enable_raw();
+}
+
+/// @brief Restore stdin termios state saved by `stdin_enable_raw`.
+/// @return `0` on success, non-zero on failure.
+pub fn stdin_restore() -> i32 {
+    return __mlang_std_term_stdin_restore();
+}
