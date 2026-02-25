@@ -191,6 +191,56 @@ fn test_compiler_definition_cross_document_mod() -> i32 {
 }
 
 #[test]
+fn test_compiler_definition_type_alias() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://definition_type_alias.mla";
+    let src: string = "use type SomeMap = map<string, i32>;\nfn main() -> i32 {\n  let scores: SomeMap = {\"Alice\": 95, \"Bob\": 87};\n  return 0;\n}";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "SomeMap" in "let scores: SomeMap = ...".
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 3, 15);
+    if dr.is_err(): { return 1; }
+    let def: DefinitionLocation = dr.unwrap();
+
+    if contains(def.name, "SomeMap") == 0: { return 1; }
+    if def.line != 1: { return 1; }
+    if def.column <= 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_scoped_type_alias_shadowing() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://definition_scoped_type_alias_shadowing.mla";
+    let src: string = "use type Distance = f32;\nfn main() -> i32 {\n  {\n    use type Distance = i32;\n    let grid: Distance = 42;\n    println!(\"grid={}\", grid);\n  }\n  return 0;\n}";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // Cursor on "Distance" in "let grid: Distance = 42;" should resolve to line 4.
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 5, 15);
+    if dr.is_err(): { return 1; }
+    let def: DefinitionLocation = dr.unwrap();
+
+    if contains(def.name, "Distance") == 0: { return 1; }
+    if def.line != 4: { return 1; }
+    if def.column <= 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
 fn test_compiler_semantic_scope_and_use_import() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }

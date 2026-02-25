@@ -63,7 +63,7 @@ struct SyntaxDiagnostic {
 
 struct SemanticSymbol {
     std::string name;
-    int kind = 0; // 1 fn, 2 var/let, 3 struct, 4 mod
+    int kind = 0; // 1 fn, 2 var/let, 3 struct, 4 mod, 5 type alias
     std::string stable_id;
     std::string uri;
     int line = 0;
@@ -732,6 +732,10 @@ static void addSemanticSymbol(DocumentSemantic& out,
             case 4:
                 kind_match = line.find("mod " + s.name) != std::string_view::npos;
                 break;
+            case 5:
+                kind_match = line.find("use type " + s.name) != std::string_view::npos ||
+                             line.find("type " + s.name) != std::string_view::npos;
+                break;
             default:
                 kind_match = line.find(s.name) != std::string_view::npos;
                 break;
@@ -905,6 +909,11 @@ static void collectStatementSymbols(DocumentSemantic& out,
                               typeToString(var_decl->type), {});
             continue;
         }
+        if (auto* alias_decl = dynamic_cast<TypeAliasNode*>(stmt)) {
+            addSemanticSymbol(out, lines, alias_decl->name, 5, line_no, depth,
+                              typeToString(alias_decl->aliasedType), {});
+            continue;
+        }
         if (auto* init = dynamic_cast<StructInitNode*>(stmt)) {
             addSemanticSymbol(out, lines, init->varName, 2, line_no, depth,
                               init->typeName, {});
@@ -984,6 +993,17 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             u.item = use->itemName;
             u.wildcard = use->importAll;
             out.uses.push_back(std::move(u));
+        }
+    }
+
+    if (!program->typeAliases.empty()) {
+        for (TypeAliasNode* alias : program->typeAliases) {
+            if (!alias) {
+                continue;
+            }
+            addSemanticSymbol(out, lines, alias->name, 5,
+                              alias->line > 0 ? alias->line : 1, 0,
+                              typeToString(alias->aliasedType), {});
         }
     }
 
@@ -1359,6 +1379,29 @@ static const SemanticSymbol* findVisibleVarByName(const DocumentSemantic& curren
         return best_local_var;
     }
     return best_fallback_var;
+}
+
+static const SemanticSymbol* findVisibleTypeAliasByName(const DocumentSemantic& current,
+                                                        std::string_view name,
+                                                        int query_line,
+                                                        int query_depth) {
+    const SemanticSymbol* best_alias = nullptr;
+    for (const SemanticSymbol& sym : current.symbols) {
+        if (sym.kind != 5 || sym.name != name) {
+            continue;
+        }
+        const int sym_depth = lineDepthAt(current, sym.line);
+        if (sym.line > query_line || sym_depth > query_depth) {
+            continue;
+        }
+        const int best_depth = best_alias ? lineDepthAt(current, best_alias->line) : -1;
+        if (!best_alias ||
+            sym_depth > best_depth ||
+            (sym_depth == best_depth && sym.line > best_alias->line)) {
+            best_alias = &sym;
+        }
+    }
+    return best_alias;
 }
 
 static std::string ownerTypeFromMethodSignature(std::string_view signature) {
@@ -1821,6 +1864,13 @@ static std::optional<ResolvedQuerySymbol> resolveSymbolAtPosition(
         findVisibleVarByName(current, token, line, query_depth);
     if (best_local_var) {
         return ResolvedQuerySymbol{*best_local_var, 1, true};
+    }
+
+    // Prefer closest visible type alias declaration (supports block shadowing).
+    const SemanticSymbol* best_alias =
+        findVisibleTypeAliasByName(current, token, line, query_depth);
+    if (best_alias) {
+        return ResolvedQuerySymbol{*best_alias, 1, true};
     }
 
     // Then global-like declarations in current document.
@@ -2316,6 +2366,8 @@ static const char* symbolKindName(int kind) {
         return "struct";
     case 4:
         return "mod";
+    case 5:
+        return "type";
     default:
         return "symbol";
     }
