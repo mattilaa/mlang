@@ -1,0 +1,39 @@
+// Enum backing type examples (valid)
+
+enum ErrorCode : i64 {
+    Ok = 0,
+    Io = 5,
+    Big = 9223372036854775807
+};
+
+enum ByteState : u8 {
+    Init = 0,
+    Ready = 1,
+    Max = 255
+};
+
+fn describe_error(e: ErrorCode) -> i32 {
+    return match e {
+        ErrorCode::Ok => 0,
+        ErrorCode::Io => 5,
+        ErrorCode::Big => 9,
+        _ => -1
+    };
+}
+
+fn describe_state(s: ByteState) -> i32 {
+    return match s {
+        ByteState::Init => 1,
+        ByteState::Ready => 2,
+        ByteState::Max => 3,
+        _ => 0
+    };
+}
+
+fn main() -> i32 {
+    let e: ErrorCode = ErrorCode::Big;
+    let s: ByteState = ByteState::Max;
+    if describe_error(e) != 9 { return 1; }
+    if describe_state(s) != 3 { return 2; }
+    return 0;
+}

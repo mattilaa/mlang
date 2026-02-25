@@ -1,0 +1,11 @@
+// Expected compile error:
+// enum implicit value overflows backing type 'u8'
+
+enum TooLargeImplicit : u8 {
+    A = 255,
+    B
+};
+
+fn main() -> i32 {
+    return 0;
+}

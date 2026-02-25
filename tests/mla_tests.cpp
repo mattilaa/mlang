@@ -111,6 +111,30 @@ protected:
         return output;
     }
 
+    std::string compilePathCapture(const fs::path& srcPath, int& exitCode)
+    {
+        std::string cmd = compilerPath + " -o " + outputExe + " " +
+                          srcPath.string() + " 2>&1";
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if(!pipe)
+        {
+            exitCode = -1;
+            return "";
+        }
+        std::string output;
+        char buffer[256];
+        while(fgets(buffer, sizeof(buffer), pipe) != nullptr)
+        {
+            output += buffer;
+        }
+        int rc = pclose(pipe);
+        if(WIFEXITED(rc))
+            exitCode = WEXITSTATUS(rc);
+        else
+            exitCode = -1;
+        return output;
+    }
+
     // Run the compiled executable and capture stdout
     std::string run()
     {
