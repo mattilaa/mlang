@@ -1404,6 +1404,76 @@ std::string CodeGenerator::getStructTypeName(ExpressionNode* expr) const
     return {};
 }
 
+std::string CodeGenerator::getEnumTypeName(ExpressionNode* expr, int line)
+{
+    if(auto* lit = dynamic_cast<EnumLiteralNode*>(expr))
+        return lit->enumName;
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = enumVariableTypes.find(id->name);
+        if(it != enumVariableTypes.end())
+            return it->second;
+        return {};
+    }
+
+    return {};
+}
+
+llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
+                                            const std::string& enumName,
+                                            int line)
+{
+    auto enumIt = enumValues.find(enumName);
+    if(enumIt == enumValues.end())
+    {
+        reportError(line, "unknown enum: '" + enumName + "'");
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString("<enum>");
+#else
+        return builder.CreateGlobalStringPtr("<enum>");
+#endif
+    }
+
+    TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+    auto bkIt = enumBaseTypes.find(enumName);
+    if(bkIt != enumBaseTypes.end())
+        baseKind = bkIt->second;
+    llvm::Type* enumTy = getLLVMType(baseKind);
+
+    llvm::Value* enumValNorm = enumVal;
+    if(enumValNorm->getType() != enumTy && enumValNorm->getType()->isIntegerTy())
+    {
+        enumValNorm = builder.CreateIntCast(enumValNorm, enumTy,
+                                            !enumIsUnsigned(baseKind),
+                                            "enum.str.cast");
+    }
+
+    std::string unknownText = "<" + enumName + ":unknown>";
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* out = builder.CreateGlobalString(unknownText);
+#else
+    llvm::Value* out = builder.CreateGlobalStringPtr(unknownText);
+#endif
+
+    for(const auto& kv : enumIt->second)
+    {
+        llvm::Value* variantConst = llvm::ConstantInt::get(
+            enumTy, kv.second, !enumIsUnsigned(baseKind));
+        llvm::Value* isMatch =
+            builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
+        std::string text = enumName + "::" + kv.first;
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* variantStr = builder.CreateGlobalString(text);
+#else
+        llvm::Value* variantStr = builder.CreateGlobalStringPtr(text);
+#endif
+        out = builder.CreateSelect(isMatch, variantStr, out, "enum.str.sel");
+    }
+
+    return out;
+}
+
 llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
 {
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
@@ -1542,6 +1612,12 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             }
             return new StructTypeRefNode(structIt->second);
         }
+        if(kind == TypeNode::TYPE_INT)
+        {
+            auto enumIt = enumVariableTypes.find(id->name);
+            if(enumIt != enumVariableTypes.end())
+                return new StructTypeRefNode(enumIt->second);
+        }
         if(kind == TypeNode::TYPE_LIST)
         {
             auto listIt = listElementTypes.find(id->name);
@@ -1663,7 +1739,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         }
     }
 
-    reportError(line, "cannot determine type of expression");
+    // Non-lvalue expression; callers that require an lvalue type should emit
+    // a context-specific diagnostic.
     return nullptr;
 }
 
@@ -1692,6 +1769,13 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
                                       int line)
 {
     llvm::Type* argType = value->getType();
+    std::string enumTypeName = getEnumTypeName(expr, line);
+    if(!enumTypeName.empty())
+    {
+        cFormat += "%s";
+        argValues.push_back(buildEnumString(value, enumTypeName, line));
+        return;
+    }
 
     if(argType->isStructTy())
     {
@@ -3367,6 +3451,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
+    enumVariableTypes.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -3406,8 +3491,12 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(paramNode->type))
             {
-                structVariableTypes[std::string(arg.getName())] =
-                    structType->structName;
+                if(enumValues.find(structType->structName) != enumValues.end())
+                    enumVariableTypes[std::string(arg.getName())] =
+                        structType->structName;
+                else
+                    structVariableTypes[std::string(arg.getName())] =
+                        structType->structName;
             }
             if(auto* genStructType =
                    dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
@@ -4460,7 +4549,7 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
 
 void CodeGenerator::generateIfStatement(IfNode* node)
 {
-    if(node->usesColonWithoutGuard)
+    if(node->usesColonWithoutGuard && warnPlainColonIf)
     {
         int warnLine = (node->condition && node->condition->line > 0)
                            ? node->condition->line
@@ -4497,6 +4586,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto incomingConstantVariables = constantVariables;
     auto incomingVariableTypes = variableTypes;
     auto incomingStructVariableTypes = structVariableTypes;
+    auto incomingEnumVariableTypes = enumVariableTypes;
     auto incomingListElementTypes = listElementTypes;
     auto incomingMapKeyValueTypes = mapKeyValueTypes;
     auto incomingPointerElementTypes = pointerElementTypes;
@@ -4510,6 +4600,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         constantVariables = incomingConstantVariables;
         variableTypes = incomingVariableTypes;
         structVariableTypes = incomingStructVariableTypes;
+        enumVariableTypes = incomingEnumVariableTypes;
         listElementTypes = incomingListElementTypes;
         mapKeyValueTypes = incomingMapKeyValueTypes;
         pointerElementTypes = incomingPointerElementTypes;
@@ -4535,6 +4626,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     auto condConstantVariables = constantVariables;
     auto condVariableTypes = variableTypes;
     auto condStructVariableTypes = structVariableTypes;
+    auto condEnumVariableTypes = enumVariableTypes;
     auto condListElementTypes = listElementTypes;
     auto condMapKeyValueTypes = mapKeyValueTypes;
     auto condPointerElementTypes = pointerElementTypes;
@@ -4593,6 +4685,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     constantVariables = condConstantVariables;
     variableTypes = condVariableTypes;
     structVariableTypes = condStructVariableTypes;
+    enumVariableTypes = condEnumVariableTypes;
     listElementTypes = condListElementTypes;
     mapKeyValueTypes = condMapKeyValueTypes;
     pointerElementTypes = condPointerElementTypes;
@@ -4626,6 +4719,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     constantVariables = incomingConstantVariables;
     variableTypes = incomingVariableTypes;
     structVariableTypes = incomingStructVariableTypes;
+    enumVariableTypes = incomingEnumVariableTypes;
     listElementTypes = incomingListElementTypes;
     mapKeyValueTypes = incomingMapKeyValueTypes;
     pointerElementTypes = incomingPointerElementTypes;
@@ -4680,6 +4774,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     constantVariables = incomingConstantVariables;
     variableTypes = incomingVariableTypes;
     structVariableTypes = incomingStructVariableTypes;
+    enumVariableTypes = incomingEnumVariableTypes;
     listElementTypes = incomingListElementTypes;
     mapKeyValueTypes = incomingMapKeyValueTypes;
     pointerElementTypes = incomingPointerElementTypes;
@@ -7049,6 +7144,7 @@ bool CodeGenerator::canConvertType(llvm::Type* actualType,
 void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
     recordScopedPointerVariable(node->name);
+    enumVariableTypes.erase(node->name);
 
     // Inline closure: let inc = || { ... }
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
@@ -7207,6 +7303,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 structVariableTypes[node->name] = sit->second;
                 registerStructCleanupIfNeeded(node->name, sit->second);
             }
+            auto eit = enumVariableTypes.find(id->name);
+            if(eit != enumVariableTypes.end())
+            {
+                enumVariableTypes[node->name] = eit->second;
+            }
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
@@ -7239,6 +7340,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             if(mc2->methodName == "clone")
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
+        }
+        if(auto* enumLit = dynamic_cast<EnumLiteralNode*>(node->expression))
+        {
+            enumVariableTypes[node->name] = enumLit->enumName;
         }
 
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
@@ -7564,6 +7669,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             builder.CreateStore(initValue, alloca);
             namedValues[node->name] = alloca;
             variableTypes[node->name] = TypeNode::TYPE_INT;
+            enumVariableTypes[node->name] = structRef->structName;
             constantVariables.insert(node->name);
             return;
         }
@@ -7645,6 +7751,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
     recordScopedPointerVariable(node->name);
+    enumVariableTypes.erase(node->name);
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
@@ -7951,6 +8058,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 structVariableTypes[node->name] = sit->second;
                 registerStructCleanupIfNeeded(node->name, sit->second);
             }
+            auto eit = enumVariableTypes.find(id->name);
+            if(eit != enumVariableTypes.end())
+            {
+                enumVariableTypes[node->name] = eit->second;
+            }
             auto lit = listElementTypes.find(id->name);
             if(lit != listElementTypes.end())
                 listElementTypes[node->name] = lit->second;
@@ -7983,6 +8095,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             if(mc2->methodName == "clone")
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
+        }
+        if(auto* enumLit = dynamic_cast<EnumLiteralNode*>(node->initExpr))
+        {
+            enumVariableTypes[node->name] = enumLit->enumName;
         }
 
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
@@ -8347,6 +8463,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
             namedValues[node->name] = alloca;
             variableTypes[node->name] = TypeNode::TYPE_INT;
+            enumVariableTypes[node->name] = structRef->structName;
             return;
         }
 
@@ -10325,6 +10442,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     auto savedVarScopeDepth       = variableScopeDepth;
     auto savedVarTypes            = variableTypes;
     auto savedStructVarTypes      = structVariableTypes;
+    auto savedEnumVarTypes        = enumVariableTypes;
     auto savedCleanupScopes       = cleanupScopes;
     auto savedPtrBorrowScopes     = pointerBorrowScopes;
     auto savedVarDepthScopes      = variableScopeDepthScopes;
@@ -10346,6 +10464,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
+    enumVariableTypes.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -10386,6 +10505,7 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     variableScopeDepth       = std::move(savedVarScopeDepth);
     variableTypes            = std::move(savedVarTypes);
     structVariableTypes      = std::move(savedStructVarTypes);
+    enumVariableTypes        = std::move(savedEnumVarTypes);
     cleanupScopes            = std::move(savedCleanupScopes);
     pointerBorrowScopes      = std::move(savedPtrBorrowScopes);
     variableScopeDepthScopes = std::move(savedVarDepthScopes);
@@ -11433,6 +11553,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     variableScopeDepth.clear();
     variableTypes.clear();
     structVariableTypes.clear();
+    enumVariableTypes.clear();
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -11474,8 +11595,13 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                 if(auto* structType =
                        dynamic_cast<StructTypeRefNode*>(paramNode->type))
                 {
-                    structVariableTypes[std::string(arg.getName())] =
-                        structType->structName;
+                    if(enumValues.find(structType->structName) !=
+                       enumValues.end())
+                        enumVariableTypes[std::string(arg.getName())] =
+                            structType->structName;
+                    else
+                        structVariableTypes[std::string(arg.getName())] =
+                            structType->structName;
                 }
                 if(auto* genStructType =
                        dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
@@ -12534,6 +12660,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     auto savedConstantVariables = constantVariables;
                     auto savedVariableTypes = variableTypes;
                     auto savedStructVariableTypes = structVariableTypes;
+                    auto savedEnumVariableTypes = enumVariableTypes;
                     auto savedListElementTypes = listElementTypes;
                     auto savedMapKeyValueTypes = mapKeyValueTypes;
                     auto savedTupleElementTypes = tupleElementTypes;
@@ -12556,6 +12683,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     constantVariables = savedConstantVariables;
                     variableTypes = savedVariableTypes;
                     structVariableTypes = savedStructVariableTypes;
+                    enumVariableTypes = savedEnumVariableTypes;
                     listElementTypes = savedListElementTypes;
                     mapKeyValueTypes = savedMapKeyValueTypes;
                     tupleElementTypes = savedTupleElementTypes;
@@ -13522,8 +13650,16 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
         {
-            variableTypes[name] = TypeNode::TYPE_STRUCT;
-            structVariableTypes[name] = structRef->structName;
+            if(enumValues.find(structRef->structName) != enumValues.end())
+            {
+                variableTypes[name] = TypeNode::TYPE_INT;
+                enumVariableTypes[name] = structRef->structName;
+            }
+            else
+            {
+                variableTypes[name] = TypeNode::TYPE_STRUCT;
+                structVariableTypes[name] = structRef->structName;
+            }
         }
         else if(auto* genRef =
                     dynamic_cast<GenericStructTypeRefNode*>(type))
@@ -13573,6 +13709,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedNamedValues = namedValues;
         auto savedVariableTypes = variableTypes;
         auto savedStructVariableTypes = structVariableTypes;
+        auto savedEnumVariableTypes = enumVariableTypes;
         auto savedListElementTypes = listElementTypes;
         auto savedMapKeyValueTypes = mapKeyValueTypes;
         auto savedTupleElementTypes = tupleElementTypes;
@@ -13604,6 +13741,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         namedValues = savedNamedValues;
         variableTypes = savedVariableTypes;
         structVariableTypes = savedStructVariableTypes;
+        enumVariableTypes = savedEnumVariableTypes;
         listElementTypes = savedListElementTypes;
         mapKeyValueTypes = savedMapKeyValueTypes;
         tupleElementTypes = savedTupleElementTypes;

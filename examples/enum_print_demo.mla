@@ -1,0 +1,20 @@
+// Demonstrates enum printing in println!/format!.
+
+enum Status : u8 {
+    Invalid = 1,
+    Success = 2
+};
+
+fn main() -> i32 {
+    println!("literal: {}", Status::Invalid);
+
+    let s: Status = Status::Success;
+    println!("variable: {}", s);
+
+    // Raw integer value that does not map to a declared variant.
+    let raw: i32 = 77;
+    let unknown: Status = raw;
+    println!("unknown: {}", unknown);
+
+    return 0;
+}

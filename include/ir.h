@@ -46,6 +46,10 @@ public:
     {
         sourceFileName = file;
     }
+    void setWarnPlainColonIf(bool enabled)
+    {
+        warnPlainColonIf = enabled;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -86,6 +90,8 @@ private:
     std::map<std::string, std::vector<TypeNode*>> tupleElementTypes;
     // Track struct variable types (var name -> struct type name)
     std::map<std::string, std::string> structVariableTypes;
+    // Track enum variable types (var name -> enum type name)
+    std::map<std::string, std::string> enumVariableTypes;
     std::map<std::string, std::string> globalStructVariableTypes;
     // Track enum variants: enum name -> variant name -> value
     std::map<std::string, std::map<std::string, int64_t>> enumValues;
@@ -94,6 +100,7 @@ private:
     bool debugEnabled;
     bool testMode = false;
     bool includeTests = true;
+    bool warnPlainColonIf = true;
     std::string sourceFileName;
 
     // Visibility tracking for functions
@@ -324,6 +331,9 @@ private:
                                         bool pretty, int line);
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
+    std::string getEnumTypeName(ExpressionNode* expr, int line);
+    llvm::Value* buildEnumString(llvm::Value* enumVal,
+                                 const std::string& enumName, int line);
     llvm::Value* getLValuePointer(ExpressionNode* expr, int line);
     TypeNode* getLValueType(ExpressionNode* expr, int line);
     TypeNode* getPointerElementType(ExpressionNode* expr, int line);
