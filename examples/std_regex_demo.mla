@@ -1,0 +1,37 @@
+mod std::regex;
+mod std::strbuf;
+
+use std::regex::Regex;
+use std::strbuf::sub;
+use std::strbuf::free;
+
+fn main() -> i32 {
+    let r: Result<Regex, string> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    if r.is_err(): {
+        println!("compile failed: {}", r.unwrap_err());
+        return 1;
+    }
+
+    let re: Regex = r.unwrap();
+    let text: string = "user-42";
+
+    if re.is_match(text) == 0: {
+        println!("no match");
+        re.close();
+        return 1;
+    }
+
+    let g1s: i64 = re.match_start(text, 1);
+    let g1e: i64 = re.match_end(text, 1);
+    let g2s: i64 = re.match_start(text, 2);
+    let g2e: i64 = re.match_end(text, 2);
+
+    let name: string = sub(text, g1s, g1e - g1s);
+    let id: string = sub(text, g2s, g2e - g2s);
+    println!("name={} id={}", name, id);
+
+    free(id);
+    free(name);
+    re.close();
+    return 0;
+}

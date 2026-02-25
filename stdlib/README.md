@@ -30,6 +30,9 @@ Currently provided:
    `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`,
    `try_clone`, `from_handle`/`raw_handle` for multithread handoff, and
    listener backlog tuning via `set_backlog`).
+- `std/regex.mla`: POSIX regular expression helpers
+  (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`)
+  with error retrieval via `std::regex::last_error()`.
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`

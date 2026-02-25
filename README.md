@@ -195,6 +195,8 @@ Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
 TCP networking API (`std::net::TcpListener`, `std::net::TcpStream`,
 non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
+Regex API (`std::regex::Regex`, compile/match/find/captures) example:
+`examples/std_regex_demo.mla`.
 Multithreaded TCP server/client examples:
 `examples/std_net_mt_server.mla` and `examples/std_net_mt_client.mla`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
@@ -238,6 +240,8 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/std_fs_demo.mla`
 - TCP loopback client/server over libc sockets:
   `examples/std_net_demo.mla`
+- Regex compile + match + group extraction:
+  `examples/std_regex_demo.mla`
 - JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):
   `examples/std_json_demo.mla`
 - JSON-RPC/LSP stdio transport + cancellation/runtime queues (`std::jsonrpc`):

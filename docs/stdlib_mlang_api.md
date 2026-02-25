@@ -11,6 +11,7 @@ mod std::jsonrpc;
 mod std::math;
 mod std::net;
 mod std::process;
+mod std::regex;
 mod std::sync;
 mod std::term;
 mod std::time;
@@ -29,6 +30,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
+- `stdlib/std/regex.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
@@ -384,6 +386,27 @@ Module file: `stdlib/std/process.mla`
 - `ExitStatus::code(self: ExitStatus) -> i32`
 - `ExitStatus::signaled(self: ExitStatus) -> int`
 - `ExitStatus::signal(self: ExitStatus) -> i32`
+
+## std::regex
+
+Module file: `stdlib/std/regex.mla`
+
+### Types
+- `Regex`
+
+### Compile / lifetime
+- `Regex::compile(pattern: string) -> Result<Regex, string>`
+- `Regex::close(self: Regex) -> i32`
+
+### Matching
+- `Regex::is_match(self: Regex, text: string) -> i32`
+- `Regex::find_start(self: Regex, text: string) -> i64`
+- `Regex::find_end(self: Regex, text: string) -> i64`
+- `Regex::match_start(self: Regex, text: string, group_index: i64) -> i64`
+- `Regex::match_end(self: Regex, text: string, group_index: i64) -> i64`
+
+### Errors
+- `last_error() -> string`
 
 ## std::sync
 

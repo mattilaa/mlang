@@ -43,6 +43,11 @@ For TCP networking, see:
   (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
   `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`).
 
+For POSIX regular expressions, see:
+- `stdlib/std/regex.mla`
+  (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`,
+   plus `last_error` for backend diagnostics).
+
 For child process integration, see:
 - `stdlib/std/process.mla`
   (`spawn`, `spawn_inherit`, child stdin/stdout/stderr pipes,
@@ -110,7 +115,9 @@ See also:
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
-  (`std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::term`, `std::thread`, `std::time`, `std::vec`).
+  (`std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
+  `std::process`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
+  `std::thread`, `std::time`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
