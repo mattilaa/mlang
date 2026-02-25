@@ -32,6 +32,40 @@ The source-of-truth implementation files are:
 - `stdlib/std/thread.mla`
 - `stdlib/std/vec.mla`
 
+## Built-in Collection Methods (Compiler Intrinsics)
+
+These methods are language/compiler intrinsics and are available directly on
+collection/string values (including values typed through `use type` aliases).
+
+### `string`
+- `s.len() -> i64`
+- `s.is_empty() -> int`
+
+### `list<T>` / `Vec<T>`
+
+`Vec<T>` is a type alias for `list<T>`, so both expose the same method surface.
+
+- `v.len() -> i64`
+- `v.is_empty() -> bool`
+- `v.push(value) -> void`
+- `v.pop() -> T`
+- `v.clear() -> void`
+- `v.contains(value) -> bool`
+- `v.index_of(value) -> i64`
+- `v.sort() -> void`
+- `v.sort_desc() -> void`
+- `v.reverse() -> void`
+- `v.dedup() -> void`
+- `v.first() -> T`
+- `v.last() -> T`
+
+### `map<K, V>`
+- `m.len() -> i64`
+- `m.keys()` iterator for `for key in m.keys() { ... }`
+- `m.values()` iterator for `for val in m.values() { ... }`
+- `m.entries()` iterator for `for entry in m.entries() { ... }`
+  where `entry` is a tuple `(K, V)` and can be accessed via `.0` / `.1`
+
 ## std::fs
 
 Module file: `stdlib/std/fs.mla`
@@ -411,8 +445,9 @@ Module file: `stdlib/std/thread.mla`
 Module file: `stdlib/std/vec.mla`
 
 `Vec<T>` is a type alias for `list<T>`. The two are interchangeable in all
-contexts. All methods listed below are compiler intrinsics backed by
-`libmlang_std`.
+contexts. Methods listed below are compiler intrinsics backed by `libmlang_std`
+and are also summarized in "Built-in Collection Methods (Compiler Intrinsics)"
+above.
 
 ### Constructors
 

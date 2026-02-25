@@ -75,11 +75,32 @@ For Vec (dynamic array) helpers, see:
   (`Vec::new`, `vec![...]`, `push/pop/clear`, `len/is_empty`,
    `contains/index_of`, `sort/sort_desc/reverse/dedup`, `first/last`).
 
+## Language Highlights
+
+Recent language features are documented in:
+- `docs/language_syntax.md`
+
+Includes:
+- `use type` aliases (including generic aliases) and block-scoped shadowing
+- alias-overlap diagnostics with `file:row:column` locations
+- `f32` / `f64` primitives and `float` / `double` aliases
+- modern `if/else if/else` block syntax without mandatory `:`
+- guarded `if` forms, including `if let ... = ...: guard` and
+  `if let ... == ...: guard`
+- empty-block warnings
+- `fn main() {}` defaulting to `fn main() -> i32 {}`
+
+## Networking + Robot Example
+
+For the multithreaded TCP server/client examples and local Robot run commands,
+see the root project `README.md` section:
+- `Multithreaded TCP Demo (Local)`
+
 See also:
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::fs`, `std::io`, `std::json`, `std::math`, `std::net`, `std::process`, `std::strbuf`, `std::sync`, `std::thread`, `std::time`, `std::vec`).
+- `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
-- `docs/language_attributes.md` for attribute documentation.
