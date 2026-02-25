@@ -1,0 +1,157 @@
+fn source(v: i32) -> i32 { return v; }
+
+#[test]
+fn test_if_let_typed_block_complex_guard() -> i32 {
+    let outer: i32 = 12;
+    var seen: i32 = 0;
+    if let i: i32 = source(7): (i >= 0 && i < 10) || ((i > 20 && i < 30) || (i > 50 && i < 100)): {
+        seen = i;
+    }
+    else: {
+        return 1;
+    }
+    if seen != 7: { return 1; }
+    if outer != 12: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_let_typed_single_statement() -> i32 {
+    var seen: i32 = 0;
+    if let i: i32 = source(3): i == 3: seen = i;
+    else: seen = 99;
+    if seen != 3: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_let_untyped_block() -> i32 {
+    let outer: i32 = 44;
+    var seen: i32 = 0;
+    if let i = source(6): (i >= 0 && i < 10): {
+        seen = i;
+    }
+    else: {
+        return 1;
+    }
+    if seen != 6: { return 1; }
+    if outer != 44: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_let_untyped_single_statement() -> i32 {
+    var seen: i32 = 0;
+    if let i = source(8): i == 8: seen = i;
+    else: seen = 77;
+    if seen != 8: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_var_typed_block_mutable_shadow() -> i32 {
+    let outer: i32 = 5;
+    var seen: i32 = 0;
+    if var i: i32 = source(1): i == 1: {
+        i = 15;
+        seen = i;
+    }
+    else: {
+        return 1;
+    }
+    if seen != 15: { return 1; }
+    if outer != 5: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_var_typed_single_statement() -> i32 {
+    var seen: i32 = 0;
+    if var i: i32 = source(2): i == 2: seen = i;
+    else: seen = 66;
+    if seen != 2: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_var_untyped_block() -> i32 {
+    let outer: i32 = 9;
+    var seen: i32 = 0;
+    if var i = source(4): i == 4: {
+        i = 11;
+        seen = i;
+    }
+    else: {
+        return 1;
+    }
+    if seen != 11: { return 1; }
+    if outer != 9: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_var_untyped_single_statement() -> i32 {
+    var seen: i32 = 0;
+    if var i = source(9): i == 9: seen = i;
+    else: seen = 55;
+    if seen != 9: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_else_if_chain_let_and_var_combinations() -> i32 {
+    let outer: i32 = 12;
+    var branch: i32 = 0;
+    if let i: i32 = source(40): (i >= 0 && i < 10): {
+        branch = 1;
+    }
+    else if let i = source(18): (i > 20 && i < 30): {
+        branch = 2;
+    }
+    else if var i: i32 = source(25): (i > 20 && i < 30) || (i > 50 && i < 100): {
+        i = 42;
+        branch = i;
+    }
+    else if var i = source(60): (i > 50 && i < 100): {
+        branch = 4;
+    }
+    else: {
+        return 1;
+    }
+    if branch != 42: { return 1; }
+    if outer != 12: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_if_else_if_else_block_without_colon() -> i32 {
+    let x: i32 = 2;
+    var branch: i32 = 0;
+    if x == 1 {
+        branch = 1;
+    } else if x == 2 {
+        branch = 2;
+    } else {
+        branch = 3;
+    }
+    if branch != 2: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_nested_no_colon_if_blocks() -> i32 {
+    let x: i32 = 3;
+    let y: i32 = 9;
+    var seen: i32 = 0;
+    if x > 0 {
+        if y > 5 {
+            seen = 1;
+        } else {
+            seen = 2;
+        }
+    } else {
+        seen = 3;
+    }
+    if seen != 1: { return 1; }
+    return 0;
+}

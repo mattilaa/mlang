@@ -871,6 +871,45 @@ static void collectStatementSymbols(DocumentSemantic& out,
                                     StatementListNode* list,
                                     int depth);
 
+static int inferIfInitDeclLine(const std::vector<std::string_view>& lines,
+                               std::string_view name,
+                               int anchor_line) {
+    if (name.empty()) {
+        return 1;
+    }
+    const std::string if_let = "if let " + std::string(name);
+    const std::string if_var = "if var " + std::string(name);
+    const std::string else_if_let = "else if let " + std::string(name);
+    const std::string else_if_var = "else if var " + std::string(name);
+
+    int best = 1;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const int line_no = static_cast<int>(i) + 1;
+        if (anchor_line > 1 && line_no >= anchor_line) {
+            continue;
+        }
+        const std::string_view line = lines[i];
+        if (line.find(if_let) != std::string_view::npos ||
+            line.find(if_var) != std::string_view::npos ||
+            line.find(else_if_let) != std::string_view::npos ||
+            line.find(else_if_var) != std::string_view::npos) {
+            if (line_no > best) {
+                best = line_no;
+            }
+        }
+    }
+    return best;
+}
+
+static int inferFirstElseIfLine(const std::vector<std::string_view>& lines) {
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (lines[i].find("else if ") != std::string_view::npos) {
+            return static_cast<int>(i) + 1;
+        }
+    }
+    return 1;
+}
+
 static void collectIfSymbols(DocumentSemantic& out,
                              const std::vector<std::string_view>& lines,
                              IfNode* node,
@@ -878,9 +917,40 @@ static void collectIfSymbols(DocumentSemantic& out,
     if (!node) {
         return;
     }
+    if (node->conditionInit) {
+        int init_line = node->conditionInit->line > 0 ? node->conditionInit->line : 1;
+        int anchor_line = 1;
+        if (node->thenBranch && !node->thenBranch->statements.empty() &&
+            node->thenBranch->statements[0] &&
+            node->thenBranch->statements[0]->line > 0) {
+            anchor_line = node->thenBranch->statements[0]->line;
+        } else if (node->elseIfBranch) {
+            anchor_line = inferFirstElseIfLine(lines);
+        }
+        if (auto* let_decl = dynamic_cast<LetDeclNode*>(node->conditionInit)) {
+            if (init_line <= 1) {
+                init_line = inferIfInitDeclLine(lines, let_decl->name, anchor_line);
+            }
+            addSemanticSymbolAtLine(out, lines, let_decl->name, 2, init_line,
+                                    depth + 1, typeToString(let_decl->type), "__if_init");
+        } else if (auto* var_decl = dynamic_cast<VarDeclNode*>(node->conditionInit)) {
+            if (init_line <= 1) {
+                init_line = inferIfInitDeclLine(lines, var_decl->name, anchor_line);
+            }
+            addSemanticSymbolAtLine(out, lines, var_decl->name, 2, init_line,
+                                    depth + 1, typeToString(var_decl->type), "__if_init");
+        } else if (auto* init = dynamic_cast<StructInitNode*>(node->conditionInit)) {
+            if (init_line <= 1) {
+                init_line = inferIfInitDeclLine(lines, init->varName, anchor_line);
+            }
+            addSemanticSymbolAtLine(out, lines, init->varName, 2, init_line,
+                                    depth + 1, init->typeName, "__if_init");
+        }
+    }
     collectStatementSymbols(out, lines, node->thenBranch, depth + 1);
     if (node->elseIfBranch) {
-        collectIfSymbols(out, lines, node->elseIfBranch, depth + 1);
+        // `else if` is a sibling branch in the same surrounding scope.
+        collectIfSymbols(out, lines, node->elseIfBranch, depth);
     }
     if (node->elseBranch) {
         collectStatementSymbols(out, lines, node->elseBranch, depth + 1);
@@ -900,28 +970,28 @@ static void collectStatementSymbols(DocumentSemantic& out,
         }
         const int line_no = stmt->line > 0 ? stmt->line : 1;
         if (auto* let_decl = dynamic_cast<LetDeclNode*>(stmt)) {
-            addSemanticSymbol(out, lines, let_decl->name, 2, line_no, depth,
-                              typeToString(let_decl->type), {});
+            addSemanticSymbolAtLine(out, lines, let_decl->name, 2, line_no, depth,
+                                    typeToString(let_decl->type), {});
             continue;
         }
         if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
-            addSemanticSymbol(out, lines, var_decl->name, 2, line_no, depth,
-                              typeToString(var_decl->type), {});
+            addSemanticSymbolAtLine(out, lines, var_decl->name, 2, line_no, depth,
+                                    typeToString(var_decl->type), {});
             continue;
         }
         if (auto* alias_decl = dynamic_cast<TypeAliasNode*>(stmt)) {
-            addSemanticSymbol(out, lines, alias_decl->name, 5, line_no, depth,
-                              typeToString(alias_decl->aliasedType), {});
+            addSemanticSymbolAtLine(out, lines, alias_decl->name, 5, line_no, depth,
+                                    typeToString(alias_decl->aliasedType), {});
             continue;
         }
         if (auto* init = dynamic_cast<StructInitNode*>(stmt)) {
-            addSemanticSymbol(out, lines, init->varName, 2, line_no, depth,
-                              init->typeName, {});
+            addSemanticSymbolAtLine(out, lines, init->varName, 2, line_no, depth,
+                                    init->typeName, {});
             continue;
         }
         if (auto* for_node = dynamic_cast<ForNode*>(stmt)) {
-            addSemanticSymbol(out, lines, for_node->varName, 2, line_no,
-                              depth + 1, {}, {});
+            addSemanticSymbolAtLine(out, lines, for_node->varName, 2, line_no,
+                                    depth + 1, {}, {});
             collectStatementSymbols(out, lines, for_node->body, depth + 1);
             continue;
         }
@@ -1344,20 +1414,29 @@ static const SemanticSymbol* findVisibleVarByName(const DocumentSemantic& curren
                                                   std::string_view name,
                                                   int query_line,
                                                   int query_depth) {
+    auto symbolDepthForLookup = [&](const SemanticSymbol& sym) -> int {
+        // Condition-initializer symbols in `if let/var ... : guard` live in
+        // branch-local scope that cannot be represented by line-only depth.
+        if (sym.signature == "__if_init") {
+            return sym.depth;
+        }
+        return lineDepthAt(current, sym.line);
+    };
+
     const SemanticSymbol* best_local_var = nullptr;
     const SemanticSymbol* best_fallback_var = nullptr;
     for (const SemanticSymbol& sym : current.symbols) {
         if (sym.kind != 2 || sym.name != name) {
             continue;
         }
-        const int sym_depth = lineDepthAt(current, sym.line);
+        const int sym_depth = symbolDepthForLookup(sym);
         if (sym.line > query_line || sym_depth > query_depth) {
             continue;
         }
         const bool is_decl = isLikelyVarDeclarationSymbol(current, sym);
         if (!is_decl) {
             const int best_fallback_depth = best_fallback_var
-                                                ? lineDepthAt(current, best_fallback_var->line)
+                                                ? symbolDepthForLookup(*best_fallback_var)
                                                 : -1;
             if (!best_fallback_var ||
                 sym_depth > best_fallback_depth ||
@@ -1368,7 +1447,7 @@ static const SemanticSymbol* findVisibleVarByName(const DocumentSemantic& curren
             continue;
         }
         const int best_depth =
-            best_local_var ? lineDepthAt(current, best_local_var->line) : -1;
+            best_local_var ? symbolDepthForLookup(*best_local_var) : -1;
         if (!best_local_var ||
             sym_depth > best_depth ||
             (sym_depth == best_depth && sym.line > best_local_var->line)) {

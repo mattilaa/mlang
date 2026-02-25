@@ -273,6 +273,43 @@ fn test_compiler_semantic_scope_and_use_import() -> i32 {
 }
 
 #[test]
+fn test_compiler_if_let_guard_scopes_and_shadowing() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://if_let_guard_scope.mla";
+    let src: string = "fn some_func() -> i32 { return 1; }\nfn main() -> i32 {\n  let i: i32 = 12;\n  if let i: i32 = some_func(): (i >= 0 && i < 10) || ((i > 20 && i < 30) || (i > 50 && i < 100)): {\n    let t: i32 = i;\n  }\n  else if var i: i32 = some_func(): (i < 0 && i > -10): {\n    i = 15;\n  }\n  return i;\n}";
+
+    let od: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    // "i" in "let t: i32 = i;" should resolve to if-let binder on line 4.
+    let d1r: Result<DefinitionLocation, string> = s.definition(uri, 5, 18);
+    if d1r.is_err(): { return 1; }
+    let d1: DefinitionLocation = d1r.unwrap();
+    if contains(d1.name, "i") == 0: { return 1; }
+    if d1.line != 4: { return 1; }
+
+    // "i" in "i = 15;" should resolve to else-if var binder on line 7.
+    let d2r: Result<DefinitionLocation, string> = s.definition(uri, 8, 5);
+    if d2r.is_err(): { return 1; }
+    let d2: DefinitionLocation = d2r.unwrap();
+    if contains(d2.name, "i") == 0: { return 1; }
+    if d2.line != 7: { return 1; }
+
+    // "i" in "return i;" should resolve to outer binding on line 3.
+    let d3r: Result<DefinitionLocation, string> = s.definition(uri, 10, 10);
+    if d3r.is_err(): { return 1; }
+    let d3: DefinitionLocation = d3r.unwrap();
+    if contains(d3.name, "i") == 0: { return 1; }
+    if d3.line != 3: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
 fn test_compiler_definition_from_workspace_module_paths() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }

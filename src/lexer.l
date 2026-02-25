@@ -235,6 +235,7 @@ static int is_try_question_context()
 "/"             { return DIVIDE; }
 "%"             { return MODULO; }
 "&mut"          { return AMP_MUT; }
+"&&"            { return AMP_AMP; }
 "&"             { return AMP; }
 "||"            { return PIPE_PIPE; }
 "|"             { return PIPE; }

@@ -123,6 +123,7 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
     }
     if(auto* ifN = dynamic_cast<IfNode*>(node))
     {
+        collectUsedIdents(ifN->conditionInit, out);
         collectUsedIdents(ifN->condition, out);
         if(ifN->thenBranch)
             for(auto* s : ifN->thenBranch->statements)
@@ -3737,6 +3738,32 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         return nullptr;
     }
 
+    auto toBoolValue = [&](llvm::Value* v, const char* name) -> llvm::Value*
+    {
+        if(v->getType()->isIntegerTy(1))
+            return v;
+        if(v->getType()->isIntegerTy())
+            return builder.CreateICmpNE(
+                v, llvm::ConstantInt::get(v->getType(), 0), name);
+        if(v->getType()->isFloatingPointTy())
+            return builder.CreateFCmpONE(
+                v, llvm::ConstantFP::get(v->getType(), 0.0), name);
+        reportError(node->line,
+                    "logical operations require numeric or boolean operands");
+        return nullptr;
+    };
+
+    if(node->op == BinaryOpNode::OP_AND || node->op == BinaryOpNode::OP_OR)
+    {
+        llvm::Value* Lb = toBoolValue(L, "lbool");
+        llvm::Value* Rb = toBoolValue(R, "rbool");
+        if(!Lb || !Rb)
+            return nullptr;
+        return (node->op == BinaryOpNode::OP_AND)
+                   ? builder.CreateAnd(Lb, Rb, "andtmp")
+                   : builder.CreateOr(Lb, Rb, "ortmp");
+    }
+
     // Check if we're dealing with floating point or integer types
     bool isFloat =
         L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy();
@@ -3851,6 +3878,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     case BinaryOpNode::OP_NE:
         return isFloat ? builder.CreateFCmpONE(L, R, "cmptmp")
                        : builder.CreateICmpNE(L, R, "cmptmp");
+    case BinaryOpNode::OP_AND:
+    case BinaryOpNode::OP_OR:
+        // Handled before numeric op checks.
+        return nullptr;
     }
     return nullptr;
 }
@@ -4425,14 +4456,64 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
 
 void CodeGenerator::generateIfStatement(IfNode* node)
 {
+    if(node->usesColonWithoutGuard)
+    {
+        int warnLine = (node->condition && node->condition->line > 0)
+                           ? node->condition->line
+                           : node->line;
+        int warnCol = (node->condition && node->condition->col > 0)
+                          ? node->condition->col
+                          : node->col;
+        reportWarning(warnLine, warnCol,
+                      "plain if/else-if with ':' is discouraged; use "
+                      "'if cond { ... }' and reserve ':' for guard forms");
+    }
+
+    auto incomingNamedValues = namedValues;
+    auto incomingConstantVariables = constantVariables;
+    auto incomingVariableTypes = variableTypes;
+    auto incomingStructVariableTypes = structVariableTypes;
+    auto incomingListElementTypes = listElementTypes;
+    auto incomingMapKeyValueTypes = mapKeyValueTypes;
+    auto incomingPointerElementTypes = pointerElementTypes;
     auto incomingMoved = movedVariables;
     auto incomingPointerBorrowTarget = pointerBorrowTarget;
     auto incomingActiveBorrowers = activeBorrowers;
     auto incomingActiveMutBorrower = activeMutBorrower;
+    auto restoreIncomingState = [&]()
+    {
+        namedValues = incomingNamedValues;
+        constantVariables = incomingConstantVariables;
+        variableTypes = incomingVariableTypes;
+        structVariableTypes = incomingStructVariableTypes;
+        listElementTypes = incomingListElementTypes;
+        mapKeyValueTypes = incomingMapKeyValueTypes;
+        pointerElementTypes = incomingPointerElementTypes;
+        movedVariables = incomingMoved;
+        pointerBorrowTarget = incomingPointerBorrowTarget;
+        activeBorrowers = incomingActiveBorrowers;
+        activeMutBorrower = incomingActiveMutBorrower;
+    };
+
+    if(node->conditionInit)
+    {
+        generateStatement(node->conditionInit);
+    }
 
     llvm::Value* condValue = generateExpression(node->condition);
     if(!condValue)
+    {
+        restoreIncomingState();
         return;
+    }
+
+    auto condNamedValues = namedValues;
+    auto condConstantVariables = constantVariables;
+    auto condVariableTypes = variableTypes;
+    auto condStructVariableTypes = structVariableTypes;
+    auto condListElementTypes = listElementTypes;
+    auto condMapKeyValueTypes = mapKeyValueTypes;
+    auto condPointerElementTypes = pointerElementTypes;
 
     // Check that condition is a valid boolean type
     llvm::Type* condType = condValue->getType();
@@ -4451,6 +4532,7 @@ void CodeGenerator::generateIfStatement(IfNode* node)
         reportError(node->line,
                     "if condition must be a boolean or numeric type, got '" +
                         typeStr + "'");
+        restoreIncomingState();
         return;
     }
 
@@ -4483,6 +4565,13 @@ void CodeGenerator::generateIfStatement(IfNode* node)
 
     // Generate 'then' block
     builder.SetInsertPoint(thenBB);
+    namedValues = condNamedValues;
+    constantVariables = condConstantVariables;
+    variableTypes = condVariableTypes;
+    structVariableTypes = condStructVariableTypes;
+    listElementTypes = condListElementTypes;
+    mapKeyValueTypes = condMapKeyValueTypes;
+    pointerElementTypes = condPointerElementTypes;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
@@ -4509,6 +4598,13 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     // Generate 'else' block
     elseBB->insertInto(function);
     builder.SetInsertPoint(elseBB);
+    namedValues = incomingNamedValues;
+    constantVariables = incomingConstantVariables;
+    variableTypes = incomingVariableTypes;
+    structVariableTypes = incomingStructVariableTypes;
+    listElementTypes = incomingListElementTypes;
+    mapKeyValueTypes = incomingMapKeyValueTypes;
+    pointerElementTypes = incomingPointerElementTypes;
     movedVariables = incomingMoved;
     pointerBorrowTarget = incomingPointerBorrowTarget;
     activeBorrowers = incomingActiveBorrowers;
@@ -4555,6 +4651,14 @@ void CodeGenerator::generateIfStatement(IfNode* node)
     // Generate merge block
     mergeBB->insertInto(function);
     builder.SetInsertPoint(mergeBB);
+
+    namedValues = incomingNamedValues;
+    constantVariables = incomingConstantVariables;
+    variableTypes = incomingVariableTypes;
+    structVariableTypes = incomingStructVariableTypes;
+    listElementTypes = incomingListElementTypes;
+    mapKeyValueTypes = incomingMapKeyValueTypes;
+    pointerElementTypes = incomingPointerElementTypes;
 
     if(thenFallsThrough || elseFallsThrough)
     {
@@ -6273,6 +6377,7 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
             return;
         if(auto* ifNode = dynamic_cast<IfNode*>(s))
         {
+            scan_stmt(ifNode->conditionInit);
             scan_stmt_list(ifNode->thenBranch);
             scan_stmt(ifNode->elseIfBranch);
             scan_stmt_list(ifNode->elseBranch);
@@ -6614,6 +6719,7 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         }
         if(auto* ifNode = dynamic_cast<IfNode*>(s))
         {
+            resolve_stmt(ifNode->conditionInit, scope);
             resolve_expr(ifNode->condition, scope);
             resolve_stmt_list(ifNode->thenBranch, scope);
             resolve_stmt(ifNode->elseIfBranch, scope);
@@ -7516,6 +7622,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
     recordScopedPointerVariable(node->name);
     clearPointerBorrow(node->name);
+    // `var` is always mutable, including when shadowing a previous `let`.
+    constantVariables.erase(node->name);
     if(node->initExpr)
     {
         consumeMoveFromExpression(node->initExpr, node->line,

@@ -256,7 +256,9 @@ public:
         OP_LE,
         OP_GE,
         OP_EQ,
-        OP_NE
+        OP_NE,
+        OP_AND,
+        OP_OR
     };
 
     OpType op;
@@ -717,14 +719,18 @@ public:
 class IfNode : public StatementNode
 {
 public:
+    StatementNode* conditionInit;
     ExpressionNode* condition;
     StatementListNode* thenBranch;
     IfNode* elseIfBranch;
     StatementListNode* elseBranch;
+    bool usesColonWithoutGuard;
 
-    IfNode(ExpressionNode* c, StatementListNode* t, IfNode* ei = nullptr,
-           StatementListNode* e = nullptr)
-        : condition(c), thenBranch(t), elseIfBranch(ei), elseBranch(e)
+    IfNode(StatementNode* ci, ExpressionNode* c, StatementListNode* t,
+           IfNode* ei = nullptr, StatementListNode* e = nullptr,
+           bool usesColonNoGuard = false)
+        : conditionInit(ci), condition(c), thenBranch(t), elseIfBranch(ei),
+          elseBranch(e), usesColonWithoutGuard(usesColonNoGuard)
     {
     }
     std::string toString() const override;
@@ -1185,6 +1191,11 @@ ASTNode* create_result_constructor(char* variant, ASTNode* type_args,
                                    ASTNode* args, int line);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch,
                              ASTNode* else_if_branch, ASTNode* else_branch);
+ASTNode* create_if_statement_with_init(ASTNode* condition_init,
+                                       ASTNode* condition,
+                                       ASTNode* then_branch,
+                                       ASTNode* else_if_branch,
+                                       ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
@@ -1207,6 +1218,8 @@ ASTNode* add_list_element(ASTNode* list, ASTNode* element);
 ASTNode* create_expression_statement(ASTNode* expr);
 ASTNode* create_block_statement(ASTNode* stmt_list);
 ASTNode* create_else_if(ASTNode* condition, ASTNode* body);
+ASTNode* create_else_if_with_init(ASTNode* condition_init, ASTNode* condition,
+                                  ASTNode* body);
 ASTNode* add_else_if(ASTNode* else_if_list, ASTNode* else_if);
 ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
                           int line);
