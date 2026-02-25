@@ -422,7 +422,8 @@ static int fetch_git_dep(const DepSpec& dep,
 }
 
 static int build_git_dep(const DepSpec& dep,
-                         const std::filesystem::path& depsDir)
+                         const std::filesystem::path& depsDir,
+                         bool useNinja)
 {
     std::filesystem::path path = depsDir / dep.name;
     if(!std::filesystem::exists(path))
@@ -433,6 +434,8 @@ static int build_git_dep(const DepSpec& dep,
         std::filesystem::path buildDir = path / "build";
         std::string cfg = "cmake -S " + path.string() + " -B " +
                           buildDir.string();
+        if(useNinja)
+            cfg += " -G Ninja";
         if(!dep.cmakeArgs.empty())
         {
             for(const auto& arg : split_semicolon(dep.cmakeArgs))
@@ -718,6 +721,7 @@ int PackageManager::run(int argc, char** argv)
     if(sub == "build")
     {
         std::string optFlag;
+        bool useNinja = false;
         for(int i = 3; i < argc; ++i)
         {
             std::string arg = argv[i];
@@ -725,11 +729,15 @@ int PackageManager::run(int argc, char** argv)
             {
                 optFlag = arg;
             }
+            else if(arg == "--ninja")
+            {
+                useNinja = true;
+            }
             else
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg build [-O0|-O1|-O2|-O3]\n";
+                          << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n";
                 return 1;
             }
         }
@@ -760,7 +768,7 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& dep : deps)
         {
-            if(build_git_dep(dep, depsDir) != 0)
+            if(build_git_dep(dep, depsDir, useNinja) != 0)
                 return 1;
         }
 

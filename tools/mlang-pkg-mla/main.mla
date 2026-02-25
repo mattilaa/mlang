@@ -65,7 +65,7 @@ fn print_usage() -> void {
     println!("  add <name> [--git URL] [--rev REV] [--tag TAG]");
     println!("  add <name> [--pkg-config NAME] [--system]");
     println!("  fetch");
-    println!("  build [-O0|-O1|-O2|-O3]");
+    println!("  build [-O0|-O1|-O2|-O3] [--ninja]");
 }
 
 fn run_inherit(program: string, args: list<string>) -> i32 {
@@ -610,7 +610,7 @@ fn fetch_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
     return 0;
 }
 
-fn build_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
+fn build_git_dep(dep: DepSpec, deps_dir: string, use_ninja: i32) -> i32 {
     let path: string = format!("{}/{}", deps_dir, dep.name);
     if (file_exists(path) == 0) {
         return 1;
@@ -618,7 +618,15 @@ fn build_git_dep(dep: DepSpec, deps_dir: string) -> i32 {
 
     if (eq(dep.build, "cmake") == 1) {
         let build_dir: string = format!("{}/build", path);
-        var cfg_args: list<string> = ["-S", path, "-B", build_dir];
+        var cfg_args: list<string> = [];
+        if (use_ninja == 1) {
+            cfg_args.push("-G");
+            cfg_args.push("Ninja");
+        }
+        cfg_args.push("-S");
+        cfg_args.push(path);
+        cfg_args.push("-B");
+        cfg_args.push(build_dir);
         if (len(dep.cmake_args) > 0) {
             let args: list<string> = split_semicolon(dep.cmake_args);
             for a in args {
@@ -818,6 +826,7 @@ fn run_fetch(manifest_path: string) -> i32 {
 
 fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: string, backend: string) -> i32 {
     var opt_flag: string = "";
+    var use_ninja: i32 = 0;
     let n: i64 = argv.len();
     var i: i64 = start_idx + 1;
     while (i < n) {
@@ -827,8 +836,13 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
             i = i + 1;
             continue;
         }
+        if (eq(arg, "--ninja") == 1) {
+            use_ninja = 1;
+            i = i + 1;
+            continue;
+        }
         println!("Unknown option for 'pkg build': {}", arg);
-        println!("Usage: mlang-pkg-mla build [-O0|-O1|-O2|-O3]");
+        println!("Usage: mlang-pkg-mla build [-O0|-O1|-O2|-O3] [--ninja]");
         return 1;
     }
 
@@ -850,7 +864,7 @@ fn run_build(argc: i32, argv: list<string>, start_idx: i64, manifest_path: strin
         }
     }
     for dep in deps {
-        if (build_git_dep(dep, "build/deps") != 0) {
+        if (build_git_dep(dep, "build/deps", use_ninja) != 0) {
             return 1;
         }
     }

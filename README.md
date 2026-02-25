@@ -93,6 +93,8 @@ Build and run:
 /tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
 /tmp/mlang-pkg-mla --backend ./build/mlang fetch
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2
+# Optional for CMake-based deps:
+/tmp/mlang-pkg-mla --backend ./build/mlang build -O2 --ninja
 ```
 
 ## Stdlib Linking
@@ -168,7 +170,7 @@ example, and run it (the program uses libcurl to fetch a URL).
 cd examples/package_manager_git_cjson
 ../../build/mlang pkg fetch
 ../../build/mlang pkg build
-# Or: ../../build/mlang pkg build -O3
+# Or: ../../build/mlang pkg build -O3 --ninja
 ./build/cjson_demo
 # Optional URL override:
 # ./build/cjson_demo --url https://www.someplace.com
