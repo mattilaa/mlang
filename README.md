@@ -254,6 +254,8 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/std_term_demo.mla`
 - Type aliases (`use type Distance = f32;`, generic aliases):
   `examples/type_alias_demo.mla`
+- Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
+  `examples/lambda_fold_demo.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

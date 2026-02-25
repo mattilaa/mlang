@@ -3860,6 +3860,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateBinaryOp(binOp);
     }
+    else if(auto* foldOp = dynamic_cast<FoldExpressionNode*>(node))
+    {
+        return generateFoldExpression(foldOp);
+    }
     else if(auto unaryOp = dynamic_cast<UnaryOpNode*>(node))
     {
         return generateUnaryOp(unaryOp);
@@ -4116,6 +4120,206 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         return nullptr;
     }
     return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
+{
+    auto* listId = dynamic_cast<IdentifierNode*>(node->packExpr);
+    if(!listId)
+    {
+        reportError(node->line,
+                    "fold expression currently requires a list variable");
+        return nullptr;
+    }
+
+    auto kindIt = variableTypes.find(listId->name);
+    if(kindIt == variableTypes.end() || kindIt->second != TypeNode::TYPE_LIST)
+    {
+        reportError(node->line,
+                    "fold expression requires list operand");
+        return nullptr;
+    }
+
+    auto elemTypeIt = listElementTypes.find(listId->name);
+    if(elemTypeIt == listElementTypes.end() || !elemTypeIt->second)
+    {
+        reportError(node->line,
+                    "cannot infer element type for fold expression");
+        return nullptr;
+    }
+
+    llvm::Type* elemType = getLLVMTypeFromNode(elemTypeIt->second);
+    if(!elemType)
+        return nullptr;
+
+    if(node->op == BinaryOpNode::OP_PLUS || node->op == BinaryOpNode::OP_MULTIPLY)
+    {
+        if(!(elemType->isIntegerTy() || elemType->isFloatingPointTy()))
+        {
+            reportError(node->line,
+                        "fold '+'/'*' requires numeric list elements");
+            return nullptr;
+        }
+    }
+
+    llvm::Value* listVal = generateExpression(node->packExpr);
+    if(!listVal || !listVal->getType()->isStructTy())
+    {
+        reportError(node->line, "invalid fold operand");
+        return nullptr;
+    }
+
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+    llvm::Type* boolTy = llvm::Type::getInt1Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* elemPtrTy = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* elemPtrTy = llvm::PointerType::get(elemType, 0);
+#endif
+
+    llvm::Value* lenVal =
+        builder.CreateExtractValue(listVal, {0}, listId->name + ".fold.len");
+    llvm::Value* dataRaw =
+        builder.CreateExtractValue(listVal, {1}, listId->name + ".fold.data");
+#if LLVM_VERSION_MAJOR >= 15
+    elemPtrTy = llvm::PointerType::get(elemType, 0);
+#endif
+    llvm::Value* dataPtr =
+        builder.CreateBitCast(dataRaw, elemPtrTy, listId->name + ".fold.ptr");
+
+    llvm::Type* accType = elemType;
+    if(node->op == BinaryOpNode::OP_AND || node->op == BinaryOpNode::OP_OR)
+        accType = boolTy;
+
+    auto makeIdentity = [&]() -> llvm::Constant*
+    {
+        switch(node->op)
+        {
+        case BinaryOpNode::OP_PLUS:
+            if(elemType->isFloatingPointTy())
+                return llvm::ConstantFP::get(elemType, 0.0);
+            return llvm::ConstantInt::get(elemType, 0);
+        case BinaryOpNode::OP_MULTIPLY:
+            if(elemType->isFloatingPointTy())
+                return llvm::ConstantFP::get(elemType, 1.0);
+            return llvm::ConstantInt::get(elemType, 1);
+        case BinaryOpNode::OP_AND:
+            return llvm::ConstantInt::getTrue(context);
+        case BinaryOpNode::OP_OR:
+            return llvm::ConstantInt::getFalse(context);
+        default:
+            return nullptr;
+        }
+    };
+
+    llvm::Constant* identity = makeIdentity();
+    if(!identity)
+    {
+        reportError(node->line, "unsupported fold operator");
+        return nullptr;
+    }
+
+    auto toBoolValue = [&](llvm::Value* v, const char* name) -> llvm::Value*
+    {
+        if(v->getType()->isIntegerTy(1))
+            return v;
+        if(v->getType()->isIntegerTy())
+            return builder.CreateICmpNE(v, llvm::ConstantInt::get(v->getType(), 0),
+                                        name);
+        if(v->getType()->isFloatingPointTy())
+            return builder.CreateFCmpONE(v, llvm::ConstantFP::get(v->getType(), 0.0),
+                                         name);
+        reportError(node->line,
+                    "logical fold requires numeric or boolean list elements");
+        return static_cast<llvm::Value*>(nullptr);
+    };
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::AllocaInst* accAlloca =
+        builder.CreateAlloca(accType, nullptr, "fold.acc");
+    llvm::AllocaInst* idxAlloca =
+        builder.CreateAlloca(i64Type, nullptr, "fold.idx");
+    builder.CreateStore(identity, accAlloca);
+
+    if(node->isRightFold)
+        builder.CreateStore(lenVal, idxAlloca);
+    else
+        builder.CreateStore(llvm::ConstantInt::get(i64Type, 0), idxAlloca);
+
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "fold.cond", function);
+    llvm::BasicBlock* bodyBB =
+        llvm::BasicBlock::Create(context, "fold.body", function);
+    llvm::BasicBlock* endBB =
+        llvm::BasicBlock::Create(context, "fold.end", function);
+    builder.CreateBr(condBB);
+
+    builder.SetInsertPoint(condBB);
+    llvm::Value* idxVal = builder.CreateLoad(i64Type, idxAlloca, "fold.idx.cur");
+    llvm::Value* cond = nullptr;
+    if(node->isRightFold)
+        cond = builder.CreateICmpSGT(idxVal, llvm::ConstantInt::get(i64Type, 0),
+                                     "fold.cond.right");
+    else
+        cond = builder.CreateICmpSLT(idxVal, lenVal, "fold.cond.left");
+    builder.CreateCondBr(cond, bodyBB, endBB);
+
+    builder.SetInsertPoint(bodyBB);
+    llvm::Value* elemIdx = idxVal;
+    if(node->isRightFold)
+    {
+        elemIdx = builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
+                                    "fold.elem.idx");
+    }
+    llvm::Value* elemPtr = builder.CreateGEP(elemType, dataPtr, elemIdx, "fold.elem.ptr");
+    llvm::Value* elemVal = builder.CreateLoad(elemType, elemPtr, "fold.elem");
+    llvm::Value* accVal = builder.CreateLoad(accType, accAlloca, "fold.acc.cur");
+
+    llvm::Value* nextAcc = nullptr;
+    switch(node->op)
+    {
+    case BinaryOpNode::OP_PLUS:
+        nextAcc = elemType->isFloatingPointTy()
+                      ? builder.CreateFAdd(accVal, elemVal, "fold.add")
+                      : builder.CreateAdd(accVal, elemVal, "fold.add");
+        break;
+    case BinaryOpNode::OP_MULTIPLY:
+        nextAcc = elemType->isFloatingPointTy()
+                      ? builder.CreateFMul(accVal, elemVal, "fold.mul")
+                      : builder.CreateMul(accVal, elemVal, "fold.mul");
+        break;
+    case BinaryOpNode::OP_AND:
+    {
+        llvm::Value* b = toBoolValue(elemVal, "fold.and.bool");
+        if(!b)
+            return nullptr;
+        nextAcc = builder.CreateAnd(accVal, b, "fold.and");
+        break;
+    }
+    case BinaryOpNode::OP_OR:
+    {
+        llvm::Value* b = toBoolValue(elemVal, "fold.or.bool");
+        if(!b)
+            return nullptr;
+        nextAcc = builder.CreateOr(accVal, b, "fold.or");
+        break;
+    }
+    default:
+        reportError(node->line, "unsupported fold operator");
+        return nullptr;
+    }
+
+    builder.CreateStore(nextAcc, accAlloca);
+    llvm::Value* nextIdx = node->isRightFold
+                               ? builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
+                                                   "fold.idx.next")
+                               : builder.CreateAdd(idxVal, llvm::ConstantInt::get(i64Type, 1),
+                                                   "fold.idx.next");
+    builder.CreateStore(nextIdx, idxAlloca);
+    builder.CreateBr(condBB);
+
+    builder.SetInsertPoint(endBB);
+    return builder.CreateLoad(accType, accAlloca, "fold.result");
 }
 
 llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
@@ -10248,7 +10452,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(node->name == "atomic_i64_free")
         return generateAtomicI64Free(node);
 
-    // Inline closure call: inc()
+    // Inline closure/lambda call: inc(...)
     {
         auto closIt = closureVariables.find(node->name);
         if(closIt != closureVariables.end())
@@ -10262,6 +10466,140 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return nullptr;
             }
             ClosureNode* closure = closIt->second;
+            size_t expectedArgs =
+                (closure->parameters ? closure->parameters->parameters.size() : 0);
+            if(node->arguments.size() != expectedArgs)
+            {
+                reportError(node->line,
+                            "inline lambda '" + node->name + "' expects " +
+                                std::to_string(expectedArgs) + " argument(s), got " +
+                                std::to_string(node->arguments.size()));
+                activeInlineClosures.erase(node->name);
+                return nullptr;
+            }
+
+            auto savedNamedValues = namedValues;
+            auto savedConstantVariables = constantVariables;
+            auto savedVariableTypes = variableTypes;
+            auto savedStructVariableTypes = structVariableTypes;
+            auto savedEnumVariableTypes = enumVariableTypes;
+            auto savedListElementTypes = listElementTypes;
+            auto savedMapKeyValueTypes = mapKeyValueTypes;
+            auto savedPointerElementTypes = pointerElementTypes;
+
+            auto restoreInlineState = [&]()
+            {
+                namedValues = savedNamedValues;
+                constantVariables = savedConstantVariables;
+                variableTypes = savedVariableTypes;
+                structVariableTypes = savedStructVariableTypes;
+                enumVariableTypes = savedEnumVariableTypes;
+                listElementTypes = savedListElementTypes;
+                mapKeyValueTypes = savedMapKeyValueTypes;
+                pointerElementTypes = savedPointerElementTypes;
+            };
+
+            // Bind lambda arguments to local parameter variables.
+            for(size_t i = 0; i < expectedArgs; ++i)
+            {
+                auto* param = closure->parameters->parameters[i];
+                llvm::Value* argVal = generateExpression(node->arguments[i]);
+                if(!argVal)
+                {
+                    restoreInlineState();
+                    activeInlineClosures.erase(node->name);
+                    return nullptr;
+                }
+                consumeMoveFromExpression(node->arguments[i], node->line,
+                                          "passing argument to inline lambda '" +
+                                              node->name + "'");
+                llvm::Type* expectedType = getLLVMTypeFromNode(param->type);
+                if(!expectedType)
+                {
+                    restoreInlineState();
+                    activeInlineClosures.erase(node->name);
+                    return nullptr;
+                }
+                if(argVal->getType() != expectedType)
+                {
+                    int cost = 0;
+                    if(!canConvertType(argVal->getType(), expectedType, cost))
+                    {
+                        reportError(node->line,
+                                    "argument " + std::to_string(i + 1) +
+                                        " has wrong type for inline lambda '" +
+                                        node->name + "'");
+                        restoreInlineState();
+                        activeInlineClosures.erase(node->name);
+                        return nullptr;
+                    }
+                    if(argVal->getType()->isIntegerTy() &&
+                       expectedType->isIntegerTy())
+                    {
+                        unsigned srcBits = argVal->getType()->getIntegerBitWidth();
+                        unsigned dstBits = expectedType->getIntegerBitWidth();
+                        if(srcBits > dstBits)
+                            argVal = builder.CreateTrunc(argVal, expectedType,
+                                                         "lam.arg.trunc");
+                        else if(srcBits < dstBits)
+                            argVal = builder.CreateSExt(argVal, expectedType,
+                                                        "lam.arg.sext");
+                    }
+                    else if(argVal->getType()->isIntegerTy() &&
+                            expectedType->isFloatingPointTy())
+                    {
+                        argVal = builder.CreateSIToFP(argVal, expectedType,
+                                                      "lam.arg.sitofp");
+                    }
+                    else if(argVal->getType()->isFloatingPointTy() &&
+                            expectedType->isIntegerTy())
+                    {
+                        argVal = builder.CreateFPToSI(argVal, expectedType,
+                                                      "lam.arg.fptosi");
+                    }
+                    else if(argVal->getType()->isFloatingPointTy() &&
+                            expectedType->isFloatingPointTy())
+                    {
+                        argVal = builder.CreateFPCast(argVal, expectedType,
+                                                      "lam.arg.fpcast");
+                    }
+                    else if(argVal->getType()->isPointerTy() &&
+                            expectedType->isPointerTy())
+                    {
+                        argVal = builder.CreateBitCast(argVal, expectedType,
+                                                       "lam.arg.ptrcast");
+                    }
+                }
+
+                llvm::AllocaInst* alloca = builder.CreateAlloca(
+                    expectedType, nullptr, param->name + ".lam.addr");
+                builder.CreateStore(argVal, alloca);
+                namedValues[param->name] = alloca;
+                recordVariableScopeDepth(param->name);
+                variableTypes[param->name] = param->type->kind;
+
+                if(auto* structType = dynamic_cast<StructTypeRefNode*>(param->type))
+                {
+                    if(enumValues.find(structType->structName) != enumValues.end())
+                        enumVariableTypes[param->name] = structType->structName;
+                    else
+                        structVariableTypes[param->name] = structType->structName;
+                }
+                if(auto* genListType =
+                       dynamic_cast<GenericListTypeNode*>(param->type))
+                {
+                    listElementTypes[param->name] = genListType->elementType;
+                }
+                if(auto* mapType = dynamic_cast<MapTypeNode*>(param->type))
+                {
+                    mapKeyValueTypes[param->name] =
+                        std::make_pair(mapType->keyType, mapType->valueType);
+                }
+                if(auto* ptrType = dynamic_cast<PointerTypeNode*>(param->type))
+                {
+                    pointerElementTypes[param->name] = ptrType->elementType;
+                }
+            }
 
             // Clear loop context so break/continue don't escape the closure.
             auto savedBreak    = loopBreakBlocks;
@@ -10284,6 +10622,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
             loopBreakBlocks  = std::move(savedBreak);
             loopContinueBlocks = std::move(savedContinue);
+            restoreInlineState();
             activeInlineClosures.erase(node->name);
             return nullptr; // inline closures return void
         }
@@ -10699,6 +11038,13 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
 llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
 {
+    if(node->parameters && !node->parameters->parameters.empty())
+    {
+        reportError(node->line,
+                    "thread_spawn closure does not support parameters");
+        return nullptr;
+    }
+
     static int closureSeq = 0;
     std::string closureName =
         "__mlang_closure_" + std::to_string(closureSeq++);

@@ -1,0 +1,20 @@
+fn main() -> i32 {
+    var total: i32 = 0;
+    var add_to_total = |x: i32| {
+        total += x;
+    };
+    add_to_total(3);
+    add_to_total(9);
+    println!("total={}", total);
+
+    let nums: list<i32> = [1, 2, 3, 4];
+    let sum: i32 = (... + nums);
+    let mul: i32 = (nums * ...);
+    println!("sum={} mul={}", sum, mul);
+
+    let flags: list<bool> = [true, true, false];
+    let all_true: bool = (... && flags);
+    let any_true: bool = (... || flags);
+    println!("all_true={} any_true={}", all_true, any_true);
+    return 0;
+}

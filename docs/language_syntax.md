@@ -129,3 +129,33 @@ fn main() -> i32 {
 
 `fn main() { ... }` defaults to `-> i32` and returns `0` if no explicit return
 is provided.
+
+## Lambda + Fold Expressions
+
+Inline typed lambda (captures outer variables, callable via bound name):
+
+```mla
+var total: i32 = 0;
+var add = |x: i32| {
+    total += x;
+};
+add(5);
+```
+
+Fold expressions over list values (C++-style shape):
+
+```mla
+let xs: list<i32> = [1, 2, 3];
+let sum: i32 = (... + xs);   // left fold
+let mul: i32 = (xs * ...);   // right fold
+
+let bs: list<bool> = [true, false];
+let all_true: bool = (... && bs);
+let any_true: bool = (... || bs);
+```
+
+Supported fold operators:
+- `+`
+- `*`
+- `&&`
+- `||`

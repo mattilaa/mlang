@@ -289,6 +289,7 @@ private:
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
+    llvm::Value* generateFoldExpression(FoldExpressionNode* node);
     llvm::Value* generateUnaryOp(UnaryOpNode* node);
     llvm::Value* generateIntLiteral(IntLiteralNode* node);
     llvm::Value* generateBoolLiteral(BoolLiteralNode* node);

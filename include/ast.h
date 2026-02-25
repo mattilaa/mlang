@@ -273,6 +273,23 @@ public:
     std::string toString() const override;
 };
 
+// Fold expression node (C++-style shape over list values):
+//   (... + xs)  /  (xs + ...)
+class FoldExpressionNode : public ExpressionNode
+{
+public:
+    BinaryOpNode::OpType op;
+    ExpressionNode* packExpr;
+    bool isRightFold;
+
+    FoldExpressionNode(BinaryOpNode::OpType o, ExpressionNode* pack,
+                       bool rightFold)
+        : op(o), packExpr(pack), isRightFold(rightFold)
+    {
+    }
+    std::string toString() const override;
+};
+
 class UnaryOpNode : public ExpressionNode
 {
 public:
@@ -498,8 +515,12 @@ public:
 class ClosureNode : public ExpressionNode
 {
 public:
+    ParameterListNode* parameters; // optional parameters for |x: T| { ... }
     StatementListNode* body; // may be null for empty body
-    ClosureNode(StatementListNode* b) : body(b) {}
+    ClosureNode(ParameterListNode* p, StatementListNode* b)
+        : parameters(p), body(b)
+    {
+    }
     std::string toString() const override;
 };
 
@@ -1197,6 +1218,7 @@ ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* create_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
 ASTNode* create_unary_op(int op, ASTNode* operand);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
                                    int line);
@@ -1292,6 +1314,8 @@ ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name,
 ASTNode* create_enum_variant_list(ASTNode* variant);
 ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
 ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
+ASTNode* create_closure(ASTNode* body);
+ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);

@@ -90,6 +90,7 @@ ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* create_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* create_try_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
@@ -171,6 +172,7 @@ ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_closure(ASTNode* body);
+ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
                                ASTNode* body, int line);
 ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
@@ -1081,6 +1083,26 @@ primary_expression
         { $$ = create_closure(NULL); }
     | PIPE_PIPE LBRACE statement_list RBRACE
         { $$ = create_closure($3); }
+    | PIPE parameters PIPE LBRACE RBRACE
+        { $$ = create_closure_with_params($2, NULL); }
+    | PIPE parameters PIPE LBRACE statement_list RBRACE
+        { $$ = create_closure_with_params($2, $5); }
+    | LPAREN ELLIPSIS PLUS expression RPAREN
+        { $$ = create_fold_expression(PLUS, $4, 0); }
+    | LPAREN expression PLUS ELLIPSIS RPAREN
+        { $$ = create_fold_expression(PLUS, $2, 1); }
+    | LPAREN ELLIPSIS MULTIPLY expression RPAREN
+        { $$ = create_fold_expression(MULTIPLY, $4, 0); }
+    | LPAREN expression MULTIPLY ELLIPSIS RPAREN
+        { $$ = create_fold_expression(MULTIPLY, $2, 1); }
+    | LPAREN ELLIPSIS AMP_AMP expression RPAREN
+        { $$ = create_fold_expression(AMP_AMP, $4, 0); }
+    | LPAREN expression AMP_AMP ELLIPSIS RPAREN
+        { $$ = create_fold_expression(AMP_AMP, $2, 1); }
+    | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN
+        { $$ = create_fold_expression(PIPE_PIPE, $4, 0); }
+    | LPAREN expression PIPE_PIPE ELLIPSIS RPAREN
+        { $$ = create_fold_expression(PIPE_PIPE, $2, 1); }
     ;
 
 /* Struct literal: StructName { field: value, ... } */

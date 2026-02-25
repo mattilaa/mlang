@@ -285,6 +285,31 @@ ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right)
                             static_cast<ExpressionNode*>(right));
 }
 
+ASTNode* create_fold_expression(int op, ASTNode* pack_expr, int is_right_fold)
+{
+    BinaryOpNode::OpType opType;
+    switch(op)
+    {
+    case PLUS:
+        opType = BinaryOpNode::OP_PLUS;
+        break;
+    case MULTIPLY:
+        opType = BinaryOpNode::OP_MULTIPLY;
+        break;
+    case AMP_AMP:
+        opType = BinaryOpNode::OP_AND;
+        break;
+    case PIPE_PIPE:
+        opType = BinaryOpNode::OP_OR;
+        break;
+    default:
+        throw std::runtime_error("Unsupported fold operator");
+    }
+    return new FoldExpressionNode(opType,
+                                  static_cast<ExpressionNode*>(pack_expr),
+                                  is_right_fold != 0);
+}
+
 ASTNode* create_unary_op(int op, ASTNode* operand)
 {
     UnaryOpNode::OpType opType;
@@ -799,11 +824,21 @@ ASTNode* create_reference_type(ASTNode* element_type, int is_mutable)
 
 ASTNode* create_closure(ASTNode* body)
 {
-    return new ClosureNode(static_cast<StatementListNode*>(body));
+    return new ClosureNode(nullptr, static_cast<StatementListNode*>(body));
+}
+
+ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body)
+{
+    return new ClosureNode(static_cast<ParameterListNode*>(params),
+                           static_cast<StatementListNode*>(body));
 }
 
 std::string ClosureNode::toString() const
 {
+    if(parameters && !parameters->parameters.empty())
+    {
+        return "|" + parameters->toString() + "| { ... }";
+    }
     return "|| { ... }";
 }
 
@@ -1266,6 +1301,33 @@ std::string BinaryOpNode::toString() const
     }
     return "(" + left->toString() + " " + op_str + " " + right->toString() +
            ")";
+}
+
+std::string FoldExpressionNode::toString() const
+{
+    std::string op_str;
+    switch(op)
+    {
+    case BinaryOpNode::OP_PLUS:
+        op_str = "+";
+        break;
+    case BinaryOpNode::OP_MULTIPLY:
+        op_str = "*";
+        break;
+    case BinaryOpNode::OP_AND:
+        op_str = "&&";
+        break;
+    case BinaryOpNode::OP_OR:
+        op_str = "||";
+        break;
+    default:
+        op_str = "?";
+        break;
+    }
+
+    if(isRightFold)
+        return "(" + packExpr->toString() + " " + op_str + " ...)";
+    return "(... " + op_str + " " + packExpr->toString() + ")";
 }
 
 std::string UnaryOpNode::toString() const
