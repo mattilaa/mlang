@@ -13,8 +13,13 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from mlang_frontend.diagnostics import analyze_text
-from mlang_frontend.semantic import completion_symbols, hover_symbol
-from mlang_frontend.source_map import line_char_to_offset
+from mlang_frontend.semantic import (
+    completion_symbols,
+    definition_at,
+    hover_symbol,
+    references_at,
+)
+from mlang_frontend.source_map import line_char_to_offset, offset_to_line_char
 
 
 @dataclass
@@ -141,14 +146,28 @@ class JsonRpcServer:
             return f"local variable ({container})" if container else "local variable"
         return "variable"
 
+    @staticmethod
+    def _location_from_offsets(uri: str, text: str, start: int, end: int) -> dict[str, Any]:
+        s_line, s_char = offset_to_line_char(text, start)
+        e_line, e_char = offset_to_line_char(text, end)
+        return {
+            "uri": uri,
+            "range": {
+                "start": {"line": s_line, "character": s_char},
+                "end": {"line": e_line, "character": e_char},
+            },
+        }
+
     def _handle_initialize(self, req_id: Any) -> None:
         self._respond(
             req_id,
             {
-                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.2.0"},
+                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.3.0"},
                 "capabilities": {
                     "textDocumentSync": 2,
                     "hoverProvider": True,
+                    "definitionProvider": True,
+                    "referencesProvider": True,
                     "completionProvider": {
                         "resolveProvider": False,
                         "triggerCharacters": [".", ":"],
@@ -268,6 +287,50 @@ class JsonRpcServer:
             items = [it for it in items if it["label"].startswith(typed)]
         self._respond(req_id, {"isIncomplete": False, "items": items})
 
+    def _handle_definition(self, req_id: Any, params: dict[str, Any]) -> None:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, None)
+            return
+
+        pos = params.get("position", {})
+        offset = line_char_to_offset(
+            doc.text, int(pos.get("line", 0)), int(pos.get("character", 0))
+        )
+        sym = definition_at(doc.text, offset)
+        if sym is None:
+            self._respond(req_id, None)
+            return
+
+        loc = self._location_from_offsets(uri, doc.text, sym.start_offset, sym.end_offset)
+        self._respond(req_id, loc)
+
+    def _handle_references(self, req_id: Any, params: dict[str, Any]) -> None:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, [])
+            return
+
+        pos = params.get("position", {})
+        offset = line_char_to_offset(
+            doc.text, int(pos.get("line", 0)), int(pos.get("character", 0))
+        )
+        include_decl = params.get("context", {}).get("includeDeclaration", True)
+
+        occs = references_at(doc.text, offset)
+        if not include_decl:
+            occs = [o for o in occs if not o.is_declaration]
+
+        locs = [
+            self._location_from_offsets(uri, doc.text, o.start_offset, o.end_offset)
+            for o in occs
+        ]
+        self._respond(req_id, locs)
+
     def _handle_diagnostic(self, req_id: Any, params: dict[str, Any]) -> None:
         text_doc = params.get("textDocument", {})
         uri = text_doc.get("uri", "")
@@ -288,6 +351,10 @@ class JsonRpcServer:
             self._handle_hover(req_id, params)
         elif method == "textDocument/completion":
             self._handle_completion(req_id, params)
+        elif method == "textDocument/definition":
+            self._handle_definition(req_id, params)
+        elif method == "textDocument/references":
+            self._handle_references(req_id, params)
         elif method == "textDocument/diagnostic":
             self._handle_diagnostic(req_id, params)
         else:

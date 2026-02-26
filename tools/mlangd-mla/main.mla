@@ -2174,6 +2174,124 @@ fn handle_range_formatting(payload: string) -> string {
     );
 }
 
+fn extract_on_type_character(payload: string) -> string {
+    let key: string = "\"ch\":\"";
+    let p: i64 = find(payload, key);
+    if p < 0: { return String::new(); }
+    let start: i64 = p + len(key);
+    let tail: string = sub(payload, start, len(payload) - start);
+    let q: i64 = find(tail, "\"");
+    if q < 0: { return String::new(); }
+    let raw: string = sub(tail, 0, q);
+    if eq(raw, "\\n") == 1: { return "\n"; }
+    if eq(raw, "\\t") == 1: { return "\t"; }
+    return raw;
+}
+
+fn is_space_or_tab(ch: string) -> bool {
+    if eq(ch, " ") == 1: { return true; }
+    if eq(ch, "\t") == 1: { return true; }
+    return false;
+}
+
+fn leading_whitespace_len(line: string) -> i64 {
+    let n: i64 = len(line);
+    var i: i64 = 0;
+    while i < n: {
+        let ch: string = sub(line, i, 1);
+        if is_space_or_tab(ch) == false: { break; }
+        i = i + 1;
+    }
+    return i;
+}
+
+fn trim_right_ws(line: string) -> string {
+    var n: i64 = len(line);
+    while n > 0: {
+        let ch: string = sub(line, n - 1, 1);
+        if is_space_or_tab(ch) == false: { break; }
+        n = n - 1;
+    }
+    return sub(line, 0, n);
+}
+
+fn make_indent_unit(tab_size: i64, insert_spaces: int) -> string {
+    if insert_spaces == 0: {
+        return "\t";
+    }
+    var out: string = String::new();
+    var n: i64 = tab_size;
+    if n <= 0: { n = 4; }
+    while n > 0: {
+        out = concat(out, " ");
+        n = n - 1;
+    }
+    return out;
+}
+
+fn handle_on_type_formatting(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let ch: string = extract_on_type_character(payload);
+    if eq(ch, "\n") == 0: { return "[]"; }
+
+    let line0: i64 = extract_position_line(payload);
+    let col0: i64 = extract_position_character(payload);
+    if line0 < 0: { return "[]"; }
+    if col0 < 0: { return "[]"; }
+
+    let text: string = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0: { return "[]"; }
+
+    let cur_line: string = line_text_at(text, line0);
+    let cur_len: i64 = len(cur_line);
+    var end_col: i64 = col0;
+    if end_col > cur_len: { end_col = cur_len; }
+    let existing_prefix: string = sub(cur_line, 0, end_col);
+
+    var prev_line_idx: i64 = line0 - 1;
+    var prev_line: string = String::new();
+    while prev_line_idx >= 0: {
+        let cand: string = line_text_at(text, prev_line_idx);
+        let trimmed: string = trim_right_ws(cand);
+        if len(trimmed) > 0: {
+            prev_line = cand;
+            break;
+        }
+        prev_line_idx = prev_line_idx - 1;
+    }
+
+    if len(prev_line) == 0: {
+        if len(existing_prefix) == 0: { return "[]"; }
+        return format!(
+            "[{{\"range\":{{\"start\":{{\"line\":{},\"character\":0}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"\"}}]",
+            line0, line0, end_col
+        );
+    }
+
+    let base_ws_len: i64 = leading_whitespace_len(prev_line);
+    let base_indent: string = sub(prev_line, 0, base_ws_len);
+    let prev_trimmed: string = trim_right_ws(prev_line);
+    let prev_n: i64 = len(prev_trimmed);
+    var desired: string = base_indent;
+    if prev_n > 0: {
+        let last: string = sub(prev_trimmed, prev_n - 1, 1);
+        if eq(last, "{") == 1 || eq(last, "(") == 1 || eq(last, "[") == 1 || eq(last, ":") == 1: {
+            let tab_size: i64 = extract_format_tab_size(payload);
+            let insert_spaces: int = extract_format_insert_spaces(payload);
+            desired = concat(desired, make_indent_unit(tab_size, insert_spaces));
+        }
+    }
+
+    if eq(desired, existing_prefix) == 1: { return "[]"; }
+    let desired_e: string = json_escape(desired);
+    return format!(
+        "[{{\"range\":{{\"start\":{{\"line\":{},\"character\":0}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
+        line0, line0, end_col, desired_e
+    );
+}
+
 fn dispatch_result_json(payload: string) -> string {
     let method: string = extract_method(payload);
     log_write(log_level_verbose(), format!("request method={}", method));
@@ -2188,7 +2306,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -2244,6 +2362,7 @@ fn dispatch_result_json(payload: string) -> string {
     if eq(method, "textDocument/implementation") == 1: { return handle_implementation(payload); }
     if eq(method, "textDocument/formatting") == 1: { return handle_formatting(payload); }
     if eq(method, "textDocument/rangeFormatting") == 1: { return handle_range_formatting(payload); }
+    if eq(method, "textDocument/onTypeFormatting") == 1: { return handle_on_type_formatting(payload); }
     if eq(method, "textDocument/codeAction") == 1: { return handle_code_action(payload); }
     if eq(method, "textDocument/semanticTokens/full") == 1: { return handle_semantic_tokens_full(payload); }
 

@@ -1,8 +1,15 @@
-"""Small semantic helpers for LSP hover and completion."""
+"""Small semantic helpers for LSP hover/completion/queries."""
 
 from __future__ import annotations
 
-from .symbols import Symbol, resolve_symbol, visible_symbols
+from .symbols import (
+    Symbol,
+    SymbolOccurrence,
+    definition_symbol,
+    references_for_symbol,
+    resolve_symbol,
+    visible_symbols,
+)
 
 
 def completion_symbols(text: str, offset: int) -> list[Symbol]:
@@ -21,4 +28,15 @@ def completion_symbols(text: str, offset: int) -> list[Symbol]:
 
 def hover_symbol(text: str, name: str, offset: int) -> Symbol | None:
     return resolve_symbol(text, name, offset)
+
+
+def definition_at(text: str, offset: int) -> Symbol | None:
+    return definition_symbol(text, offset)
+
+
+def references_at(text: str, offset: int) -> list[SymbolOccurrence]:
+    sym = definition_symbol(text, offset)
+    if sym is None:
+        return []
+    return references_for_symbol(text, sym)
 

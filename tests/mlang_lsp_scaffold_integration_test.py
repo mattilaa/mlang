@@ -129,6 +129,8 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         )
         caps = init.get("capabilities", {})
         self.assertTrue(caps.get("hoverProvider"))
+        self.assertTrue(caps.get("definitionProvider"))
+        self.assertTrue(caps.get("referencesProvider"))
         self.assertIn("completionProvider", caps)
 
         self.h.notify("initialized", {})
@@ -262,6 +264,51 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
             {"textDocument": {"uri": uri}, "position": {"line": 3, "character": 4}},
         )
         self.assertIn("local variable", hover["contents"]["value"])
+
+    def test_definition_and_references(self) -> None:
+        self.h.request(
+            "initialize",
+            {"processId": None, "rootUri": None, "capabilities": {}},
+        )
+        self.h.notify("initialized", {})
+
+        uri = "file:///tmp/refs.mlang"
+        source = "fn main() {\n  let x = 1\n  x\n  x\n}\n"
+        self.h.notify(
+            "textDocument/didOpen",
+            {"textDocument": {"uri": uri, "languageId": "mlang", "version": 1, "text": source}},
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        definition = self.h.request(
+            "textDocument/definition",
+            {"textDocument": {"uri": uri}, "position": {"line": 2, "character": 2}},
+        )
+        self.assertEqual(definition["uri"], uri)
+        self.assertEqual(definition["range"]["start"]["line"], 1)
+        self.assertEqual(definition["range"]["start"]["character"], 6)
+
+        references = self.h.request(
+            "textDocument/references",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": 2, "character": 2},
+                "context": {"includeDeclaration": True},
+            },
+        )
+        starts = sorted((r["range"]["start"]["line"], r["range"]["start"]["character"]) for r in references)
+        self.assertEqual(starts, [(1, 6), (2, 2), (3, 2)])
+
+        references_no_decl = self.h.request(
+            "textDocument/references",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": 2, "character": 2},
+                "context": {"includeDeclaration": False},
+            },
+        )
+        starts_no_decl = sorted((r["range"]["start"]["line"], r["range"]["start"]["character"]) for r in references_no_decl)
+        self.assertEqual(starts_no_decl, [(2, 2), (3, 2)])
 
 
 if __name__ == "__main__":
