@@ -1,6 +1,8 @@
 mod std::unordered;
 use std::unordered::HashMapI64I64;
 use std::unordered::HashSetI64;
+use std::unordered::QuickMapI64I64;
+use std::unordered::QuickMapVecI64I64;
 
 #[test]
 fn test_hash_map_basic_insert_get_remove() -> i32 {
@@ -59,5 +61,43 @@ fn test_hash_set_basic() -> i32 {
     if s.contains(8) != 0: { return 1; }
 
     s.close();
+    return 0;
+}
+
+#[test]
+fn test_quick_map_api() -> i32 {
+    let q: QuickMapI64I64 = QuickMapI64I64::new();
+
+    q.set(1, 10);
+    q.set(2, 20);
+    q.set(1, 11);
+
+    if q.len() != 2: { return 1; }
+    if q.has(1) == 0: { return 1; }
+    if q.get(1, -1) != 11: { return 1; }
+    if q.get(99, -1) != -1: { return 1; }
+    if q.del(2) == 0: { return 1; }
+    if q.has(2) != 0: { return 1; }
+
+    q.close();
+    return 0;
+}
+
+#[test]
+fn test_quick_map_vec_api() -> i32 {
+    let q: QuickMapVecI64I64 = QuickMapVecI64I64::new();
+
+    q.set(1, 10);
+    q.set(2, 20);
+    q.set(1, 11);
+
+    if q.len() != 2: { return 1; }
+    if q.has(1) == 0: { return 1; }
+    if q.get(1, -1) != 11: { return 1; }
+    if q.get(99, -1) != -1: { return 1; }
+    if q.del(2) == 0: { return 1; }
+    if q.has(2) != 0: { return 1; }
+
+    q.close();
     return 0;
 }

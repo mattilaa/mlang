@@ -41,5 +41,5 @@ Currently provided:
   (`stdin/stdout/stderr` tty detection, size, color level/truecolor, and
    stdin raw mode enable/restore, plus `supports_ansi()` convenience check).
 - `std/unordered.mla`: hash-backed unordered containers
-  (`HashMapI64I64`, `HashSetI64`) plus C++-style wrappers
+  (`HashMapI64I64`, `QuickMapI64I64`, `QuickMapVecI64I64`, `HashSetI64`) plus C++-style wrappers
   (`UnorderedMap<K,V>`, `UnorderedSet<T>`, `Vector<T>`).

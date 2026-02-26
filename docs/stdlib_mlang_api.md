@@ -86,6 +86,14 @@ Hash-backed runtime containers:
   - `new()`, `close()`
   - `insert(key, value)`, `contains(key)`, `get_or(key, default_value)`
   - `remove(key)`, `len()`, `keys()`, `values()`
+- `QuickMapI64I64` (convenience API over `HashMapI64I64`)
+  - `new()`, `close()`
+  - `set(key, value)`, `get(key, fallback)`, `has(key)`, `del(key)`
+  - `len()`, `keys()`, `values()`
+- `QuickMapVecI64I64` (vector-backed convenience map)
+  - `new()`, `close()`
+  - `set(key, value)`, `get(key, fallback)`, `has(key)`, `del(key)`
+  - `len()`, `keys()`, `values()`
 - `HashSetI64`
   - `new()`, `close()`
   - `insert(key)`, `contains(key)`, `remove(key)`, `len()`, `keys()`

@@ -330,3 +330,171 @@ mlang_list_t __mlang_std_unordered_set_i64_keys(int64_t handle)
 {
     return __mlang_std_unordered_map_i64_i64_keys(handle);
 }
+
+/* QuickMapVec<i64, i64>: vector-backed map (linear search). */
+typedef struct
+{
+    int64_t key;
+    int64_t value;
+} kv_i64_i64_t;
+
+typedef struct
+{
+    int64_t len;
+    int64_t cap;
+    kv_i64_i64_t* items;
+} vec_map_i64_i64_t;
+
+static int vec_map_grow(vec_map_i64_i64_t* m, int64_t min_cap)
+{
+    if(!m)
+        return -1;
+    int64_t target = m->cap;
+    if(target < 8)
+        target = 8;
+    while(target < min_cap)
+        target *= 2;
+    if(target <= m->cap)
+        return 0;
+    kv_i64_i64_t* next =
+        (kv_i64_i64_t*)realloc(m->items, (size_t)target * sizeof(kv_i64_i64_t));
+    if(!next)
+        return -1;
+    m->items = next;
+    m->cap = target;
+    return 0;
+}
+
+int64_t __mlang_std_unordered_vecmap_i64_i64_new(void)
+{
+    vec_map_i64_i64_t* m =
+        (vec_map_i64_i64_t*)calloc(1, sizeof(vec_map_i64_i64_t));
+    if(!m)
+        return 0;
+    if(vec_map_grow(m, 8) != 0)
+    {
+        free(m);
+        return 0;
+    }
+    return (int64_t)(intptr_t)m;
+}
+
+int __mlang_std_unordered_vecmap_i64_i64_free(int64_t handle)
+{
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m)
+        return -1;
+    free(m->items);
+    free(m);
+    return 0;
+}
+
+int __mlang_std_unordered_vecmap_i64_i64_set(int64_t handle, int64_t key,
+                                              int64_t value)
+{
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m)
+        return -1;
+    for(int64_t i = 0; i < m->len; ++i)
+    {
+        if(m->items[i].key == key)
+        {
+            m->items[i].value = value;
+            return 0; /* updated */
+        }
+    }
+    if(vec_map_grow(m, m->len + 1) != 0)
+        return -1;
+    m->items[m->len].key = key;
+    m->items[m->len].value = value;
+    m->len += 1;
+    return 1; /* inserted */
+}
+
+int __mlang_std_unordered_vecmap_i64_i64_has(int64_t handle, int64_t key)
+{
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m)
+        return 0;
+    for(int64_t i = 0; i < m->len; ++i)
+    {
+        if(m->items[i].key == key)
+            return 1;
+    }
+    return 0;
+}
+
+int64_t __mlang_std_unordered_vecmap_i64_i64_get_or(int64_t handle, int64_t key,
+                                                     int64_t default_value)
+{
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m)
+        return default_value;
+    for(int64_t i = 0; i < m->len; ++i)
+    {
+        if(m->items[i].key == key)
+            return m->items[i].value;
+    }
+    return default_value;
+}
+
+int __mlang_std_unordered_vecmap_i64_i64_del(int64_t handle, int64_t key)
+{
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m)
+        return 0;
+    for(int64_t i = 0; i < m->len; ++i)
+    {
+        if(m->items[i].key == key)
+        {
+            m->items[i] = m->items[m->len - 1];
+            m->len -= 1;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int64_t __mlang_std_unordered_vecmap_i64_i64_len(int64_t handle)
+{
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m)
+        return 0;
+    return m->len;
+}
+
+mlang_list_t __mlang_std_unordered_vecmap_i64_i64_keys(int64_t handle)
+{
+    mlang_list_t out;
+    out.len = 0;
+    out.data = NULL;
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m || m->len <= 0)
+        return out;
+    int64_t* keys = (int64_t*)malloc((size_t)m->len * sizeof(int64_t));
+    if(!keys)
+        return out;
+    for(int64_t i = 0; i < m->len; ++i)
+        keys[i] = m->items[i].key;
+    out.len = m->len;
+    out.data = keys;
+    return out;
+}
+
+mlang_list_t __mlang_std_unordered_vecmap_i64_i64_values(int64_t handle)
+{
+    mlang_list_t out;
+    out.len = 0;
+    out.data = NULL;
+    vec_map_i64_i64_t* m = (vec_map_i64_i64_t*)(intptr_t)handle;
+    if(!m || m->len <= 0)
+        return out;
+    int64_t* vals = (int64_t*)malloc((size_t)m->len * sizeof(int64_t));
+    if(!vals)
+        return out;
+    for(int64_t i = 0; i < m->len; ++i)
+        vals[i] = m->items[i].value;
+    out.len = m->len;
+    out.data = vals;
+    return out;
+}

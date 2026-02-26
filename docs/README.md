@@ -95,7 +95,7 @@ For Vec (dynamic array) helpers, see:
 
 For C++-style unordered/vector wrapper types, see:
 - `stdlib/std/unordered.mla`
-  (`HashMapI64I64`, `HashSetI64`, `UnorderedMap<K,V>`, `UnorderedSet<T>`,
+  (`HashMapI64I64`, `QuickMapI64I64`, `QuickMapVecI64I64`, `HashSetI64`, `UnorderedMap<K,V>`, `UnorderedSet<T>`,
    `Vector<T>`).
 
 ## Language Highlights
