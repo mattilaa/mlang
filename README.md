@@ -216,6 +216,13 @@ Skip compiling tests in normal builds:
 mlang --no-tests main.mla
 ```
 
+GoogleTest-like non-fatal expectations are available via `std::testing`:
+- `expect_true(cond)`
+- `expect_false(cond)`
+- `expect_eq(expected, actual)` (typed overloads)
+- fatal verify variants are also available:
+  `verify_true`, `verify_false`, `verify_eq` (and `VERIFY_*` aliases)
+
 Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
 The example uses `var user_input` directly (no `&mut` required) and trims with

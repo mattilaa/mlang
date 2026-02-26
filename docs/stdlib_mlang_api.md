@@ -18,6 +18,7 @@ mod std::term;
 mod std::time;
 mod std::fs;
 mod std::strbuf;
+mod std::testing;
 mod std::thread;
 mod std::unordered;
 mod std::vec;
@@ -38,6 +39,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
 - `stdlib/std/strbuf.mla`
+- `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
 - `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
@@ -131,6 +133,43 @@ fn bench_vec_push_pop() -> i32 {
 Executed via benchmark runner:
 - `mlang bench tests`
 - `mlang bench tests/bench_stdlib.mla --bench-iters 200000 --bench-warmup 20000`
+
+## std::testing
+
+Module file: `stdlib/std/testing.mla`
+
+GoogleTest-like non-fatal expectation helpers:
+- `expect_true(cond: bool)`
+- `expect_false(cond: bool)`
+- `expect_eq(expected, actual)` overloads for `i32`, `i64`, `bool`, `string`, `f32`, `f64`
+- uppercase aliases: `EXPECT_TRUE`, `EXPECT_FALSE`, `EXPECT_EQ`
+
+Fatal verify helpers (abort on failure):
+- `verify_true(cond: bool)`
+- `verify_false(cond: bool)`
+- `verify_eq(expected, actual)` overloads for `i32`, `i64`, `bool`, `string`, `f32`, `f64`
+- uppercase aliases: `VERIFY_TRUE`, `VERIFY_FALSE`, `VERIFY_EQ`
+
+Counters/result helpers:
+- `reset()`
+- `checks() -> i32`
+- `failures() -> i32`
+- `result() -> i32` (`0` when no failures, else `1`)
+
+Typical test usage:
+
+```mla
+mod std::testing;
+use std::testing::*;
+
+#[test]
+fn test_demo() -> i32 {
+    reset();
+    expect_true(2 > 1);
+    expect_eq("ok", "ok");
+    return result();
+}
+```
 
 ## std::esc
 

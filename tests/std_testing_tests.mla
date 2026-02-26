@@ -1,0 +1,49 @@
+mod std::testing;
+
+use std::testing::*;
+
+#[test]
+fn test_expect_helpers_pass() -> i32 {
+    reset();
+
+    expect_true(1 < 2);
+    expect_false(3 < 2);
+    expect_eq(42, 42);
+    expect_eq("mlang", "mlang");
+    EXPECT_TRUE(true);
+    EXPECT_FALSE(false);
+
+    if failures() != 0 { return 1; }
+    if checks() != 6 { return 1; }
+    return result();
+}
+
+#[test]
+fn test_expect_helpers_record_nonfatal_failures() -> i32 {
+    reset();
+
+    expect_true(false);
+    expect_false(true);
+    expect_eq(1, 2);
+    expect_eq("a", "b");
+
+    if checks() != 4 { return 1; }
+    if failures() != 4 { return 1; }
+    return result() == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_verify_helpers_pass() -> i32 {
+    reset();
+
+    verify_true(10 > 2);
+    verify_false(2 > 10);
+    verify_eq(7, 7);
+    verify_eq("ok", "ok");
+    VERIFY_TRUE(true);
+    VERIFY_FALSE(false);
+    VERIFY_EQ(3, 3);
+
+    if failures() != 0 { return 1; }
+    return 0;
+}

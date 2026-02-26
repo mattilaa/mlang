@@ -133,6 +133,7 @@ Recent branch-level additions reflected in these docs:
 - Terminal helpers (`std::term`, `std::esc`) including ANSI auto-disable on non-TTY
 - Regex module (`std::regex`)
 - Hash-based unordered containers + quickmap variants (`std::unordered`)
+- GoogleTest-like test expectation helpers (`std::testing`)
 - MLang package-manager frontend updates including optional Ninja build flag
 
 Related example files:
@@ -152,6 +153,7 @@ See also:
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::bench`, `std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
   `std::process`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
+  `std::testing`,
   `std::thread`, `std::time`, `std::unordered`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
 - `docs/language_attributes.md` for Rust-like attributes such as
