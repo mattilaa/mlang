@@ -310,6 +310,63 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         starts_no_decl = sorted((r["range"]["start"]["line"], r["range"]["start"]["character"]) for r in references_no_decl)
         self.assertEqual(starts_no_decl, [(2, 2), (3, 2)])
 
+    def test_cross_file_definition_and_references(self) -> None:
+        self.h.request(
+            "initialize",
+            {"processId": None, "rootUri": None, "capabilities": {}},
+        )
+        self.h.notify("initialized", {})
+
+        defs_uri = "file:///tmp/defs.mlang"
+        use_uri = "file:///tmp/use.mlang"
+
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": defs_uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "fn helper() {}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": use_uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "fn main() {\n  helper()\n  helper()\n}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        definition = self.h.request(
+            "textDocument/definition",
+            {
+                "textDocument": {"uri": use_uri},
+                "position": {"line": 1, "character": 3},
+            },
+        )
+        self.assertEqual(definition["uri"], defs_uri)
+        self.assertEqual(definition["range"]["start"]["line"], 0)
+
+        refs = self.h.request(
+            "textDocument/references",
+            {
+                "textDocument": {"uri": use_uri},
+                "position": {"line": 1, "character": 3},
+                "context": {"includeDeclaration": True},
+            },
+        )
+        by_uri = sorted((r["uri"], r["range"]["start"]["line"]) for r in refs)
+        self.assertEqual(by_uri, [(defs_uri, 0), (use_uri, 1), (use_uri, 2)])
+
 
 if __name__ == "__main__":
     os.environ.setdefault("PYTHONUNBUFFERED", "1")

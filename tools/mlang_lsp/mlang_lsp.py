@@ -20,6 +20,7 @@ from mlang_frontend.semantic import (
     references_at,
 )
 from mlang_frontend.source_map import line_char_to_offset, offset_to_line_char
+from mlang_frontend.workspace import WorkspaceIndex
 
 
 @dataclass
@@ -33,6 +34,7 @@ class Document:
 class JsonRpcServer:
     def __init__(self) -> None:
         self._documents: dict[str, Document] = {}
+        self._workspace = WorkspaceIndex()
         self._running = True
         self._shutdown_requested = False
 
@@ -162,7 +164,7 @@ class JsonRpcServer:
         self._respond(
             req_id,
             {
-                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.3.0"},
+                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.4.0"},
                 "capabilities": {
                     "textDocumentSync": 2,
                     "hoverProvider": True,
@@ -185,12 +187,14 @@ class JsonRpcServer:
         uri = text_doc.get("uri", "")
         if not uri:
             return
+        text = text_doc.get("text", "")
         self._documents[uri] = Document(
             uri=uri,
-            text=text_doc.get("text", ""),
+            text=text,
             version=int(text_doc.get("version", 0)),
             language_id=text_doc.get("languageId", "mlang"),
         )
+        self._workspace.update_document(uri, text)
         self._publish_diagnostics(uri)
 
     @staticmethod
@@ -223,6 +227,7 @@ class JsonRpcServer:
             text = self._apply_change(text, change)
         doc.text = text
         doc.version = int(text_doc.get("version", doc.version))
+        self._workspace.update_document(uri, text)
         self._publish_diagnostics(uri)
 
     def _handle_hover(self, req_id: Any, params: dict[str, Any]) -> None:
@@ -244,6 +249,14 @@ class JsonRpcServer:
             return
 
         sym = hover_symbol(doc.text, token, offset) if token else None
+        if sym is None and token:
+            global_ref = self._workspace.find_global(token, prefer_uri=uri)
+            if global_ref is not None:
+                detail = self._symbol_detail(global_ref.symbol.kind, global_ref.symbol.container)
+                value = f"{detail} `{global_ref.symbol.name}`"
+                self._respond(req_id, {"contents": {"kind": "markdown", "value": value}})
+                return
+
         if sym is None:
             if token:
                 value = f"Symbol `{token}`."
@@ -274,7 +287,9 @@ class JsonRpcServer:
         offset = line_char_to_offset(doc.text, line, character)
 
         items = self._keyword_items()
+        seen = {it["label"] for it in items}
         for sym in completion_symbols(doc.text, offset):
+            seen.add(sym.name)
             items.append(
                 {
                     "label": sym.name,
@@ -282,6 +297,29 @@ class JsonRpcServer:
                     "detail": self._symbol_detail(sym.kind, sym.container),
                 }
             )
+
+        # Also offer cross-file globals.
+        for name in list(seen):
+            _ = name
+        for candidate_name in sorted(
+            {
+                s.symbol.name
+                for n in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", doc.text)
+                if (s := self._workspace.find_global(n, prefer_uri=uri)) is not None
+            }
+        ):
+            if candidate_name not in seen:
+                g = self._workspace.find_global(candidate_name, prefer_uri=uri)
+                if g is None:
+                    continue
+                items.append(
+                    {
+                        "label": candidate_name,
+                        "kind": self._symbol_kind_to_lsp(g.symbol.kind),
+                        "detail": "workspace global",
+                    }
+                )
+                seen.add(candidate_name)
 
         if typed:
             items = [it for it in items if it["label"].startswith(typed)]
@@ -299,13 +337,29 @@ class JsonRpcServer:
         offset = line_char_to_offset(
             doc.text, int(pos.get("line", 0)), int(pos.get("character", 0))
         )
+        token = self._word_at(doc.text, offset)
+
         sym = definition_at(doc.text, offset)
-        if sym is None:
+        if sym is not None:
+            loc = self._location_from_offsets(uri, doc.text, sym.start_offset, sym.end_offset)
+            self._respond(req_id, loc)
+            return
+
+        g = self._workspace.find_global(token, prefer_uri=uri)
+        if g is None:
             self._respond(req_id, None)
             return
 
-        loc = self._location_from_offsets(uri, doc.text, sym.start_offset, sym.end_offset)
-        self._respond(req_id, loc)
+        gdoc = self._documents.get(g.uri)
+        if gdoc is None:
+            self._respond(req_id, None)
+            return
+        self._respond(
+            req_id,
+            self._location_from_offsets(
+                g.uri, gdoc.text, g.symbol.start_offset, g.symbol.end_offset
+            ),
+        )
 
     def _handle_references(self, req_id: Any, params: dict[str, Any]) -> None:
         text_doc = params.get("textDocument", {})
@@ -321,14 +375,35 @@ class JsonRpcServer:
         )
         include_decl = params.get("context", {}).get("includeDeclaration", True)
 
-        occs = references_at(doc.text, offset)
+        local_occ = references_at(doc.text, offset)
+        if local_occ:
+            if not include_decl:
+                local_occ = [o for o in local_occ if not o.is_declaration]
+            locs = [
+                self._location_from_offsets(uri, doc.text, o.start_offset, o.end_offset)
+                for o in local_occ
+            ]
+            self._respond(req_id, locs)
+            return
+
+        token = self._word_at(doc.text, offset)
+        g = self._workspace.find_global(token, prefer_uri=uri)
+        if g is None:
+            self._respond(req_id, [])
+            return
+
+        occs = self._workspace.references_for_global(g.symbol.name)
         if not include_decl:
             occs = [o for o in occs if not o.is_declaration]
 
-        locs = [
-            self._location_from_offsets(uri, doc.text, o.start_offset, o.end_offset)
-            for o in occs
-        ]
+        locs: list[dict[str, Any]] = []
+        for o in occs:
+            odoc = self._documents.get(o.uri)
+            if odoc is None:
+                continue
+            locs.append(
+                self._location_from_offsets(o.uri, odoc.text, o.start_offset, o.end_offset)
+            )
         self._respond(req_id, locs)
 
     def _handle_diagnostic(self, req_id: Any, params: dict[str, Any]) -> None:
@@ -383,6 +458,7 @@ class JsonRpcServer:
             uri = text_doc.get("uri", "")
             if uri in self._documents:
                 del self._documents[uri]
+                self._workspace.remove_document(uri)
                 self._publish_diagnostics(uri)
             return
 

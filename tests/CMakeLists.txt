@@ -108,3 +108,13 @@ if(Python3_Interpreter_FOUND)
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 endif()
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME mlang_frontend_workspace
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/mlang_frontend_workspace_test.py
+    )
+    set_tests_properties(mlang_frontend_workspace
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endif()
