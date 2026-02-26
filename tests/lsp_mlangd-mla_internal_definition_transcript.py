@@ -37,6 +37,9 @@ def main() -> int:
         root = Path(td)
         (root / "stdlib" / "std").mkdir(parents=True, exist_ok=True)
         (root / "stdlib" / "src").mkdir(parents=True, exist_ok=True)
+        (root / "stdlib" / "types.mla").write_text(
+            (repo_root / "stdlib" / "types.mla").read_text()
+        )
         (root / "stdlib" / "std" / "strbuf.mla").write_text(
             (repo_root / "stdlib" / "std" / "strbuf.mla").read_text()
         )
@@ -50,6 +53,7 @@ def main() -> int:
             "fn test_defs() -> i32 {\n"
             "  let iv: i32 = 1;\n"
             "  let value: string = String::new();\n"
+            "  let letters: list<string> = [\"alpha\", \"beta\"];\n"
             "  let num: int = 1;\n"
             "  return 0;\n"
             "}\n"
@@ -96,13 +100,32 @@ def main() -> int:
             )
             assert isinstance(type_res, list) and type_res, f"string type definition missing: {type_res!r}"
             type_uri = type_res[0].get("uri", "")
-            assert type_uri.endswith("/mlang_c_types.h"), f"string type uri mismatch: {type_res!r}"
+            assert type_uri.endswith("/stdlib/types.mla"), f"string type uri mismatch: {type_res!r}"
             type_target = Path(type_uri.removeprefix("file://"))
             type_start = type_res[0].get("range", {}).get("start", {})
             type_target_line = int(type_start.get("line", -1))
             assert type_target_line >= 0, f"string type target line missing: {type_res!r}"
             type_line_text = type_target.read_text().splitlines()[type_target_line]
-            assert "mlang_string" in type_line_text, f"string type target text mismatch: {type_line_text!r}"
+            assert "@builtin string" in type_line_text, f"string type target text mismatch: {type_line_text!r}"
+
+            generic_line, generic_char = position_of(text, "list<string>")
+            generic_char += len("list<")
+            generic_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": generic_line, "character": generic_char},
+                },
+            )
+            assert isinstance(generic_res, list) and generic_res, f"generic string type definition missing: {generic_res!r}"
+            generic_uri = generic_res[0].get("uri", "")
+            assert generic_uri.endswith("/stdlib/types.mla"), f"generic string type uri mismatch: {generic_res!r}"
+            generic_target = Path(generic_uri.removeprefix("file://"))
+            generic_start = generic_res[0].get("range", {}).get("start", {})
+            generic_target_line = int(generic_start.get("line", -1))
+            assert generic_target_line >= 0, f"generic string type target line missing: {generic_res!r}"
+            generic_line_text = generic_target.read_text().splitlines()[generic_target_line]
+            assert "@builtin string" in generic_line_text, f"generic string type target text mismatch: {generic_line_text!r}"
 
             i32_line, i32_char = position_of(text, "i32 =")
             i32_res = client.request(
@@ -114,12 +137,13 @@ def main() -> int:
             )
             assert isinstance(i32_res, list) and i32_res, f"i32 definition missing: {i32_res!r}"
             i32_uri = i32_res[0].get("uri", "")
+            assert i32_uri.endswith("/stdlib/types.mla"), f"i32 type uri mismatch: {i32_res!r}"
             i32_target = Path(i32_uri.removeprefix("file://"))
             i32_start = i32_res[0].get("range", {}).get("start", {})
             i32_target_line = int(i32_start.get("line", -1))
             assert i32_target_line >= 0, f"i32 target line missing: {i32_res!r}"
             i32_line_text = i32_target.read_text().splitlines()[i32_target_line]
-            assert "int32_t" in i32_line_text, f"i32 target text mismatch: {i32_line_text!r}"
+            assert "@builtin i32" in i32_line_text, f"i32 target text mismatch: {i32_line_text!r}"
 
             int_line, int_char = position_of(text, "int =")
             int_res = client.request(
@@ -131,12 +155,13 @@ def main() -> int:
             )
             assert isinstance(int_res, list) and int_res, f"int definition missing: {int_res!r}"
             int_uri = int_res[0].get("uri", "")
+            assert int_uri.endswith("/stdlib/types.mla"), f"int type uri mismatch: {int_res!r}"
             int_target = Path(int_uri.removeprefix("file://"))
             int_start = int_res[0].get("range", {}).get("start", {})
             int_target_line = int(int_start.get("line", -1))
             assert int_target_line >= 0, f"int target line missing: {int_res!r}"
             int_line_text = int_target.read_text().splitlines()[int_target_line]
-            assert "int32_t" in int_line_text, f"int target text mismatch: {int_line_text!r}"
+            assert "@builtin int" in int_line_text, f"int target text mismatch: {int_line_text!r}"
         finally:
             client.close()
 
