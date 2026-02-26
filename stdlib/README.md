@@ -11,6 +11,8 @@ Currently provided:
 - `test.mla`: test framework helpers (test::assert, test::run_all).
 
 - `std/math.mla`: generic math helpers (backed by libmlang_std).
+- `std/bench.mla`: benchmark helpers for anti-optimization barriers
+  (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
 - `std/thread.mla`: thread/concurrency helpers (join/mutex/atomic wrappers).
 - `std/io.mla`: stdin/stdout helpers with synchronization support
   (`stdin()`, `stdout()`, `lock(stdout())`, `write_sync`, `writeln_sync`)

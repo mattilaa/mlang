@@ -1,0 +1,23 @@
+/// \file bench.mla
+/// \brief Benchmark helpers similar to Google Benchmark primitives.
+///
+/// These helpers reduce risk that optimizer removes benchmarked work.
+
+extern pub fn __mlang_std_bench_do_not_optimize_i64(v: i64) -> void;
+extern pub fn __mlang_std_bench_do_not_optimize_i32(v: i32) -> void;
+extern pub fn __mlang_std_bench_clobber_memory() -> void;
+
+/// Prevent optimizer from eliding i64 value flow.
+pub fn do_not_optimize_i64(v: i64) -> void {
+    __mlang_std_bench_do_not_optimize_i64(v);
+}
+
+/// Prevent optimizer from eliding i32 value flow.
+pub fn do_not_optimize_i32(v: i32) -> void {
+    __mlang_std_bench_do_not_optimize_i32(v);
+}
+
+/// Act as a compiler memory barrier in benchmarks.
+pub fn clobber_memory() -> void {
+    __mlang_std_bench_clobber_memory();
+}

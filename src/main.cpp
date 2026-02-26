@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
+#include <exception>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -67,6 +68,10 @@ void printUsage(const char* programName)
               << "\nTesting:\n"
               << "  " << programName << " test [path]\n"
               << "  " << programName << " run tests\n"
+              << "\nBenchmarking:\n"
+              << "  " << programName << " bench [path]\n"
+              << "  " << programName
+              << " bench [path] --bench-iters N --bench-warmup N\n"
               << "\nExamples:\n"
               << "  " << programName
               << " test.mla              # Compile to a.out\n"
@@ -729,8 +734,11 @@ int main(int argc, char** argv)
     }
 
     bool testMode = false;
+    bool benchmarkMode = false;
     bool runTests = false;
     bool includeTests = true;
+    int benchIterations = 100000;
+    int benchWarmup = 10000;
     int argStart = 1;
 
     if(std::string(argv[1]) == "test")
@@ -745,6 +753,13 @@ int main(int argc, char** argv)
         testMode = true;
         runTests = true;
         argStart = 3;
+    }
+    else if(std::string(argv[1]) == "bench")
+    {
+        testMode = true;
+        benchmarkMode = true;
+        runTests = true;
+        argStart = 2;
     }
 
     // Parse command line arguments
@@ -855,6 +870,30 @@ int main(int argc, char** argv)
         {
             runTests = false;
         }
+        else if(arg == "--bench-iters" && i + 1 < argc && testMode)
+        {
+            try
+            {
+                benchIterations = std::max(1, std::stoi(argv[++i]));
+            }
+            catch(const std::exception&)
+            {
+                std::cerr << "Invalid value for --bench-iters" << std::endl;
+                return 1;
+            }
+        }
+        else if(arg == "--bench-warmup" && i + 1 < argc && testMode)
+        {
+            try
+            {
+                benchWarmup = std::max(0, std::stoi(argv[++i]));
+            }
+            catch(const std::exception&)
+            {
+                std::cerr << "Invalid value for --bench-warmup" << std::endl;
+                return 1;
+            }
+        }
         else if(arg[0] != '-')
         {
             inputFile = arg;
@@ -900,14 +939,23 @@ int main(int argc, char** argv)
                 if(p.filename() == "__mlang_test_root.mla")
                     continue;
                 std::string filename = p.filename().string();
-                if(filename.rfind("test_", 0) != 0)
-                    continue;
+                if(benchmarkMode)
+                {
+                    if(filename.rfind("bench_", 0) != 0)
+                        continue;
+                }
+                else
+                {
+                    if(filename.rfind("test_", 0) != 0)
+                        continue;
+                }
                 files.push_back(p);
             }
             if(files.empty())
             {
-                std::cerr << "Error: No .mla test files found in " << inputFile
-                          << std::endl;
+                std::cerr << "Error: No .mla "
+                          << (benchmarkMode ? "benchmark" : "test")
+                          << " files found in " << inputFile << std::endl;
                 return 1;
             }
 
@@ -932,12 +980,14 @@ int main(int argc, char** argv)
             inputFile = generatedTestRoot;
             if(outputFile == "a.out")
             {
-                outputFile = (inPath / "__mlang_test_bin").string();
+                outputFile = benchmarkMode
+                                 ? (inPath / "__mlang_bench_bin").string()
+                                 : (inPath / "__mlang_test_bin").string();
             }
         }
         else if(outputFile == "a.out")
         {
-            outputFile = "mlang_test_bin";
+            outputFile = benchmarkMode ? "mlang_bench_bin" : "mlang_test_bin";
         }
     }
 
@@ -1073,6 +1123,9 @@ int main(int argc, char** argv)
         CodeGenerator generator(context, builder, module, debugMode);
         generator.setSourceFile(inputFile);
         generator.setTestMode(testMode);
+        generator.setBenchmarkMode(benchmarkMode);
+        generator.setBenchmarkIterations(benchIterations);
+        generator.setBenchmarkWarmupIterations(benchWarmup);
         generator.setWarnPlainColonIf(warnPlainColonIf);
         generator.setWarnPlainColonWhile(warnPlainColonWhile);
         if(!testMode)
@@ -1259,7 +1312,13 @@ int main(int argc, char** argv)
     if(testMode && runTests && !emitObjectOnly && !emitAssembly &&
        !emitLLVMIR && !emitBitcode)
     {
-        int rc = std::system(outputFile.c_str());
+        std::string execPath = outputFile;
+        if(execPath.find('/') == std::string::npos &&
+           execPath.find('\\') == std::string::npos)
+        {
+            execPath = "./" + execPath;
+        }
+        int rc = std::system(execPath.c_str());
         int exitCode = 1;
         if(rc != -1 && WIFEXITED(rc))
             exitCode = WEXITSTATUS(rc);

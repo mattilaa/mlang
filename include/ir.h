@@ -42,6 +42,18 @@ public:
     {
         includeTests = enabled;
     }
+    void setBenchmarkMode(bool enabled)
+    {
+        benchmarkMode = enabled;
+    }
+    void setBenchmarkIterations(int value)
+    {
+        benchmarkIterations = value > 0 ? value : 100000;
+    }
+    void setBenchmarkWarmupIterations(int value)
+    {
+        benchmarkWarmupIterations = value >= 0 ? value : 10000;
+    }
     void setSourceFile(const std::string& file)
     {
         sourceFileName = file;
@@ -105,6 +117,9 @@ private:
     bool hasError;
     bool debugEnabled;
     bool testMode = false;
+    bool benchmarkMode = false;
+    int benchmarkIterations = 100000;
+    int benchmarkWarmupIterations = 10000;
     bool includeTests = true;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
@@ -208,6 +223,7 @@ private:
     getOrCreateMonomorphizedStruct(const std::string& genericName,
                                    const std::vector<TypeNode*>& typeArgs);
     void generateTestMain(const std::vector<FunctionDefNode*>& tests);
+    void generateBenchmarkMain(const std::vector<FunctionDefNode*>& tests);
     void buildTypeAliasTable(ProgramNode* program);
     void resolveTypeAliasesInProgram(ProgramNode* program);
     TypeNode* resolveTypeAliasNode(TypeNode* typeNode,

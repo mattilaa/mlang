@@ -3350,7 +3350,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             }
         }
-        generateTestMain(testFunctions);
+        if(benchmarkMode)
+            generateBenchmarkMain(testFunctions);
+        else
+            generateTestMain(testFunctions);
     }
 
     // Generate a C-compatible main wrapper if needed.
@@ -3578,6 +3581,157 @@ void CodeGenerator::generateTestMain(
     builder.CreateCall(printfFunc, {summaryFmt, totalCount, passCount, total});
 
     builder.CreateRet(total);
+}
+
+void CodeGenerator::generateBenchmarkMain(
+    const std::vector<FunctionDefNode*>& tests)
+{
+    initializeStdioFunctions();
+
+    llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+    llvm::FunctionType* mainType =
+        llvm::FunctionType::get(i32Type, {}, false);
+    llvm::Function* mainFn =
+        llvm::Function::Create(mainType, llvm::Function::ExternalLinkage,
+                               "main", module.get());
+
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", mainFn);
+    builder.SetInsertPoint(entry);
+
+    llvm::FunctionCallee nowNsFunc = module->getOrInsertFunction(
+        "__mlang_std_time_now_ns", llvm::FunctionType::get(i64Type, {}, false));
+
+    llvm::AllocaInst* failures =
+        builder.CreateAlloca(i32Type, nullptr, "bench_failures");
+    builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), failures);
+
+    auto make_cstr = [&](const std::string& s, const char* name) -> llvm::Value*
+    {
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString(s, name);
+#else
+        return builder.CreateGlobalStringPtr(s, name);
+#endif
+    };
+
+    llvm::Value* headerFmt = make_cstr(
+        "[BENCH] %-30s %12s %12s %10s\n", "bench.header.fmt");
+    llvm::Value* lineFmt = make_cstr(
+        "[BENCH] %-30s %12lld %12lld %10d\n", "bench.line.fmt");
+    llvm::Value* failFmt = make_cstr(
+        "[BENCH-FAIL] %-25s failures=%d\n", "bench.fail.fmt");
+
+    llvm::Value* nsTotalHdr = make_cstr("total_ns", "bench.hdr.total");
+    llvm::Value* nsPerOpHdr = make_cstr("ns/op", "bench.hdr.nsop");
+    llvm::Value* itersHdr = make_cstr("iters", "bench.hdr.iters");
+    llvm::Value* warmupLabel =
+        make_cstr("warmup(iters)", "bench.warmup.label");
+    llvm::Value* warmupFmt =
+        make_cstr("[BENCH] %-30s %12d\n", "bench.warmup.fmt");
+    builder.CreateCall(printfFunc,
+                       {warmupFmt, warmupLabel,
+                        llvm::ConstantInt::get(i32Type, benchmarkWarmupIterations)});
+    builder.CreateCall(printfFunc,
+                       {headerFmt, make_cstr("name", "bench.hdr.name"),
+                        nsTotalHdr, nsPerOpHdr, itersHdr});
+
+    for(auto* testFn : tests)
+    {
+        if(!testFn || testFn->isExtern)
+            continue;
+        llvm::Function* callee =
+            module->getFunction(functionSymbolName(testFn));
+        if(!callee)
+            continue;
+
+        llvm::Value* testName = make_cstr(testFn->name, "bench.name");
+        llvm::AllocaInst* localFails =
+            builder.CreateAlloca(i32Type, nullptr, "bench.local_fails");
+        builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), localFails);
+
+        auto emitLoop = [&](int loopCount) {
+            llvm::AllocaInst* idx =
+                builder.CreateAlloca(i32Type, nullptr, "bench.i");
+            builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), idx);
+
+            llvm::BasicBlock* condBB =
+                llvm::BasicBlock::Create(context, "bench.cond", mainFn);
+            llvm::BasicBlock* bodyBB =
+                llvm::BasicBlock::Create(context, "bench.body", mainFn);
+            llvm::BasicBlock* endBB =
+                llvm::BasicBlock::Create(context, "bench.end", mainFn);
+            builder.CreateBr(condBB);
+
+            builder.SetInsertPoint(condBB);
+            llvm::Value* iCur = builder.CreateLoad(i32Type, idx, "bench.i.cur");
+            llvm::Value* cond = builder.CreateICmpSLT(
+                iCur, llvm::ConstantInt::get(i32Type, loopCount), "bench.loopcond");
+            builder.CreateCondBr(cond, bodyBB, endBB);
+
+            builder.SetInsertPoint(bodyBB);
+            llvm::Value* rc = builder.CreateCall(callee, {});
+            if(!callee->getReturnType()->isVoidTy())
+            {
+                llvm::Value* rcI32 = rc;
+                if(rcI32->getType() != i32Type && rcI32->getType()->isIntegerTy())
+                    rcI32 = builder.CreateIntCast(rcI32, i32Type, true, "bench.rc.cast");
+                llvm::Value* isFail = builder.CreateICmpNE(
+                    rcI32, llvm::ConstantInt::get(i32Type, 0), "bench.isfail");
+                llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "bench.failinc");
+                llvm::Value* cur = builder.CreateLoad(i32Type, localFails, "bench.fail.cur");
+                builder.CreateStore(builder.CreateAdd(cur, failInc), localFails);
+            }
+            llvm::Value* iNext = builder.CreateAdd(
+                iCur, llvm::ConstantInt::get(i32Type, 1), "bench.i.next");
+            builder.CreateStore(iNext, idx);
+            builder.CreateBr(condBB);
+
+            builder.SetInsertPoint(endBB);
+        };
+
+        if(benchmarkWarmupIterations > 0)
+            emitLoop(benchmarkWarmupIterations);
+
+        llvm::Value* startNs = builder.CreateCall(nowNsFunc, {}, "bench.start");
+        emitLoop(benchmarkIterations);
+        llvm::Value* endNs = builder.CreateCall(nowNsFunc, {}, "bench.end");
+
+        llvm::Value* elapsedNs = builder.CreateSub(endNs, startNs, "bench.elapsed");
+        llvm::Value* iterI64 = llvm::ConstantInt::get(i64Type, benchmarkIterations);
+        llvm::Value* nsPerOp = builder.CreateSDiv(elapsedNs, iterI64, "bench.nsop");
+
+        builder.CreateCall(printfFunc, {lineFmt, testName, elapsedNs, nsPerOp,
+                                        llvm::ConstantInt::get(i32Type, benchmarkIterations)});
+
+        llvm::Value* lf = builder.CreateLoad(i32Type, localFails, "bench.localfails");
+        llvm::Value* hasFails = builder.CreateICmpNE(
+            lf, llvm::ConstantInt::get(i32Type, 0), "bench.hasfails");
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, "bench.ok", mainFn);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, "bench.fail", mainFn);
+        llvm::BasicBlock* contBB =
+            llvm::BasicBlock::Create(context, "bench.cont", mainFn);
+        builder.CreateCondBr(hasFails, failBB, okBB);
+
+        builder.SetInsertPoint(failBB);
+        builder.CreateCall(printfFunc, {failFmt, testName, lf});
+        llvm::Value* totalFailCur =
+            builder.CreateLoad(i32Type, failures, "bench.totalfail.cur");
+        builder.CreateStore(builder.CreateAdd(totalFailCur, lf), failures);
+        builder.CreateBr(contBB);
+
+        builder.SetInsertPoint(okBB);
+        builder.CreateBr(contBB);
+
+        builder.SetInsertPoint(contBB);
+    }
+
+    llvm::Value* totalFails =
+        builder.CreateLoad(i32Type, failures, "bench.failures.total");
+    builder.CreateRet(totalFails);
 }
 
 void CodeGenerator::ensureResultBuiltin(ProgramNode* program)

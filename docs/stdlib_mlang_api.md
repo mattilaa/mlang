@@ -8,6 +8,7 @@ mod std::io;
 mod std::esc;
 mod std::json;
 mod std::jsonrpc;
+mod std::bench;
 mod std::math;
 mod std::net;
 mod std::process;
@@ -28,6 +29,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/io.mla`
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
+- `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
@@ -102,6 +104,33 @@ Compatibility wrapper structs (builtin-backed):
 - `UnorderedMap<K, V> { data: map<K, V> }`
 - `UnorderedSet<T> { data: list<T> }`
 - `Vector<T> { data: list<T> }`
+
+## std::bench
+
+Module file: `stdlib/std/bench.mla`
+
+Google-benchmark style anti-optimization helpers:
+- `do_not_optimize_i64(v)`
+- `do_not_optimize_i32(v)`
+- `clobber_memory()`
+
+Typical benchmark usage:
+
+```mla
+mod std::bench;
+
+#[test]
+fn bench_vec_push_pop() -> i32 {
+    let x: i64 = 123;
+    do_not_optimize_i64(x);
+    clobber_memory();
+    return 0;
+}
+```
+
+Executed via benchmark runner:
+- `mlang bench tests`
+- `mlang bench tests/bench_stdlib.mla --bench-iters 200000 --bench-warmup 20000`
 
 ## std::esc
 

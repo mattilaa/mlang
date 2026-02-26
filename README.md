@@ -198,7 +198,17 @@ mlang test tests
 
 # Alternative entry point
 mlang run tests
+
+# Benchmark #[test] functions in files prefixed with bench_*
+mlang bench tests
+mlang bench tests/bench_stdlib.mla --bench-iters 200000 --bench-warmup 20000
 ```
+
+Benchmark anti-optimization helpers (Google Benchmark style) are available in
+`std::bench`:
+- `do_not_optimize_i64(v)`
+- `do_not_optimize_i32(v)`
+- `clobber_memory()`
 
 Skip compiling tests in normal builds:
 

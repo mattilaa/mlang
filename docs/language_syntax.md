@@ -111,6 +111,46 @@ if flag {
 Diagnostic:
 - `file.mla:row:column: warning: empty block`
 
+## `while` Guard Syntax
+
+Plain form (preferred):
+
+```mla
+while i < n {
+    i += 1;
+}
+```
+
+Guarded form:
+
+```mla
+while i < n: j < i && (n == m) {
+    i += 1;
+}
+```
+
+Notes:
+- `:` is optional for plain `while cond { ... }`.
+- Using `:` without a trailing guard expression is accepted but warns that it is redundant.
+
+## Enums with Explicit Backing Type
+
+Enums can declare explicit integer backing storage:
+
+```mla
+enum Status : i64 {
+    Invalid = 1,
+    Success = 2,
+};
+```
+
+Compatibility and diagnostics:
+- Values must fit the declared backing type.
+- Compiler errors include `file.mla:row:column` locations for invalid values.
+- Compatible enum values can be referenced across enums when representable in
+  the target enum backing type.
+- Nested enum declarations (`Outer::Inner`) are supported.
+
 ## `main` Return Type Defaulting
 
 Both forms are supported:

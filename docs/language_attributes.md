@@ -35,11 +35,17 @@ fn main() -> i32 {
 Applies to function definitions and marks them as test functions for:
 - `mlang test`
 - `mlang run tests`
+- `mlang bench` (benchmark runner for `#[test]` functions)
 
 Rules:
 - Parameters are not allowed.
 - Return type must be `void` or `i32`.
 - In test mode, `main` is not allowed (tests get a generated runner entrypoint).
+- In benchmark mode, the same `#[test]` functions are executed in timed loops.
+
+Benchmark runner flags:
+- `--bench-iters N` measured iterations per benchmark
+- `--bench-warmup N` warmup iterations before timing
 
 Example:
 
@@ -51,6 +57,20 @@ fn test_addition() -> i32 {
         return 0;
     }
     return 1;
+}
+```
+
+Benchmark example:
+
+```mla
+mod std::bench;
+
+#[test]
+fn bench_counter() -> i32 {
+    let v: i64 = 42;
+    do_not_optimize_i64(v);
+    clobber_memory();
+    return 0;
 }
 ```
 
