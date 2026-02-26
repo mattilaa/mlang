@@ -81,3 +81,20 @@ add_custom_target(run_tests
 if(TARGET mlang)
     add_dependencies(run_tests mlang)
 endif()
+
+# Python scaffold tests (frontend + LSP transport).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME mlang_frontend_parser
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/mlang_frontend_parser_test.py
+    )
+    add_test(
+        NAME mlang_lsp_scaffold_integration
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/mlang_lsp_scaffold_integration_test.py
+    )
+    set_tests_properties(mlang_frontend_parser mlang_lsp_scaffold_integration
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endif()
