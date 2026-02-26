@@ -49,6 +49,7 @@ ${MLANG}           ./build/mlang
 ...    examples/type_alias_demo.mla
 ...    examples/lambda_fold_patterns.mla
 ...    examples/lambda_fold_advanced.mla
+...    examples/testing_mock_example.mla
 ...    examples/std_fs_lines.mla
 ...    examples/std_fs_seek.mla
 ...    examples/std_fs_rw.mla
@@ -260,6 +261,19 @@ Inline Attrs Demo Runs Correctly
     Should Contain    ${run.stdout}    clamp(-3, 0..10): 0
     Should Contain    ${run.stdout}    clamp(5,  0..10): 5
     Should Contain    ${run.stdout}    sum of clamp(i,2..4)^2 for i=1..5: 49
+
+Testing Mock Example Runs Correctly
+    [Documentation]    Build and run examples/testing_mock_example.mla and verify
+    ...                std::testing mock expectations pass.
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/testing_mock_example_bin
+    ${build}=    Run Process    ${MLANG}    examples/testing_mock_example.mla    -o    ${bin}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building testing_mock_example.mla (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=testing_mock_example exited with rc=${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    checks=3 failures=0
 
 Argparser Demo Runs Correctly
     [Documentation]    Build and run examples/argparser_demo.mla with various CLI args;

@@ -15,7 +15,8 @@ Currently provided:
   (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
 - `std/testing.mla`: GoogleTest-like expectation helpers
   (`expect_true`, `expect_false`, `expect_eq`, `EXPECT_*`) with non-fatal
-  failure counting via `reset/checks/failures/result`.
+  failure counting via `reset/checks/failures/result`, plus lightweight mocks
+  (`Mock`, `mock_new`, `mock_expect_call`, `mock_called`, `mock_verify`).
 - `std/thread.mla`: thread/concurrency helpers (join/mutex/atomic wrappers).
 - `std/io.mla`: stdin/stdout helpers with synchronization support
   (`stdin()`, `stdout()`, `lock(stdout())`, `write_sync`, `writeln_sync`)

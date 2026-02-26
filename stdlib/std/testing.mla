@@ -33,10 +33,26 @@ extern pub fn __mlang_std_testing_verify_eq_f32(expected: f32,
                                                 actual: f32) -> void;
 extern pub fn __mlang_std_testing_verify_eq_f64(expected: f64,
                                                 actual: f64) -> void;
+extern pub fn __mlang_std_testing_mock_create() -> i64;
+extern pub fn __mlang_std_testing_mock_destroy(handle: i64) -> void;
+extern pub fn __mlang_std_testing_mock_reset(handle: i64) -> void;
+extern pub fn __mlang_std_testing_mock_expect_called(handle: i64,
+                                                     name: string,
+                                                     expected_calls: i32) -> void;
+extern pub fn __mlang_std_testing_mock_called(handle: i64,
+                                              name: string) -> void;
+extern pub fn __mlang_std_testing_mock_actual_calls(handle: i64,
+                                                    name: string) -> i32;
+extern pub fn __mlang_std_testing_mock_verify(handle: i64) -> i32;
 
 fn bool_to_i32(v: bool) -> i32 {
     return int(v);
 }
+
+/// Mock handle used by std::testing mock helpers.
+pub struct Mock {
+    var handle: i64;
+};
 
 /// Reset per-test expectation counters.
 pub fn reset() -> void {
@@ -218,4 +234,54 @@ pub fn VERIFY_EQ(expected: f32, actual: f32) -> void {
 /// GoogleTest-style fatal alias.
 pub fn VERIFY_EQ(expected: f64, actual: f64) -> void {
     verify_eq(expected, actual);
+}
+
+/// Create a new mock state object.
+///
+/// Example:
+/// @code{.mla}
+/// mod std::testing;
+/// use std::testing::*;
+///
+/// let m: Mock = mock_new();
+/// mock_expect_call(m.handle, "send", 2);
+/// mock_called(m.handle, "send");
+/// mock_called(m.handle, "send");
+/// expect_true(mock_verify(m.handle));
+/// mock_free(m.handle);
+/// @endcode
+pub fn mock_new() -> Mock {
+    return Mock { handle: __mlang_std_testing_mock_create() };
+}
+
+/// Free native resources associated with a mock.
+pub fn mock_free(handle: i64) -> void {
+    __mlang_std_testing_mock_destroy(handle);
+}
+
+/// Clear all expectations/call counters from a mock.
+pub fn mock_reset(handle: i64) -> void {
+    __mlang_std_testing_mock_reset(handle);
+}
+
+/// Set expected invocation count for a call name.
+pub fn mock_expect_call(handle: i64, name: string, expected_calls: i32) -> void {
+    __mlang_std_testing_mock_expect_called(handle, name, expected_calls);
+}
+
+/// Record one invocation for a call name.
+pub fn mock_called(handle: i64, name: string) -> void {
+    __mlang_std_testing_mock_called(handle, name);
+}
+
+/// Return the currently recorded call count for a call name.
+pub fn mock_calls(handle: i64, name: string) -> i32 {
+    return __mlang_std_testing_mock_actual_calls(handle, name);
+}
+
+/// Verify all mock expectations and record failures in test counters.
+///
+/// Returns true when all expected call counts match actual call counts.
+pub fn mock_verify(handle: i64) -> bool {
+    return __mlang_std_testing_mock_verify(handle) != 0;
 }

@@ -702,6 +702,110 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     return 1;
 }
 
+static int decode_system_exit_code(int rc)
+{
+    if(rc < 0)
+        return 1;
+    if(WIFEXITED(rc))
+        return WEXITSTATUS(rc);
+    return 1;
+}
+
+static std::optional<int>
+run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
+                        bool benchmarkMode, bool runTests, int benchIterations,
+                        int benchWarmup, bool warnPlainColonIf,
+                        bool warnPlainColonWhile,
+                        const std::vector<std::string>& linkArgs)
+{
+    std::error_code tec;
+    std::vector<std::filesystem::path> files;
+    for(std::filesystem::directory_iterator it(inPath, tec), end; it != end;
+        ++it)
+    {
+        if(!it->is_regular_file(tec))
+            continue;
+        auto p = it->path();
+        if(p.extension() != ".mla")
+            continue;
+        if(p.filename() == "__mlang_test_root.mla")
+            continue;
+        std::string filename = p.filename().string();
+        if(benchmarkMode)
+        {
+            if(filename.rfind("bench_", 0) != 0)
+                continue;
+        }
+        else
+        {
+            bool isPrefixed = filename.rfind("test_", 0) == 0;
+            bool isSuffixed = filename.size() >= 10 &&
+                              filename.compare(filename.size() - 10, 10,
+                                               "_tests.mla") == 0;
+            if(!isPrefixed && !isSuffixed)
+                continue;
+        }
+        if(!benchmarkMode)
+        {
+            std::ifstream in(p);
+            if(!in)
+                continue;
+            std::string contents((std::istreambuf_iterator<char>(in)),
+                                 std::istreambuf_iterator<char>());
+            if(contents.find("#[test]") == std::string::npos)
+                continue;
+        }
+        files.push_back(p);
+    }
+
+    if(files.empty())
+    {
+        std::cerr << "Error: No .mla " << (benchmarkMode ? "benchmark" : "test")
+                  << " files found in " << inPath.string() << std::endl;
+        return 1;
+    }
+
+    std::sort(files.begin(), files.end());
+    int failedSuites = 0;
+    for(const auto& file : files)
+    {
+        std::cout << "[SUITE] " << file.filename().string() << std::endl;
+        std::string cmd;
+        if(benchmarkMode)
+        {
+            cmd = shell_quote(argv0 ? argv0 : "mlang") + " bench " +
+                  shell_quote(file.string());
+            cmd += " --bench-iters " + std::to_string(benchIterations);
+            cmd += " --bench-warmup " + std::to_string(benchWarmup);
+        }
+        else
+        {
+            cmd = shell_quote(argv0 ? argv0 : "mlang") + " --tests " +
+                  shell_quote(file.string());
+            if(!runTests)
+                cmd += " --no-run";
+            if(!warnPlainColonIf)
+                cmd += " -Wno-colon-if";
+            if(!warnPlainColonWhile)
+                cmd += " -Wno-colon-while";
+        }
+        for(const auto& la : linkArgs)
+            cmd += " " + shell_quote(la);
+
+        int rc = decode_system_exit_code(std::system(cmd.c_str()));
+        if(rc == 0)
+            std::cout << "[SUITE PASS] " << file.filename().string()
+                      << std::endl;
+        else
+        {
+            ++failedSuites;
+            std::cout << "[SUITE FAIL] " << file.filename().string()
+                      << " rc=" << rc << std::endl;
+        }
+    }
+    return failedSuites == 0 ? 0 : 1;
+}
+
 int main(int argc, char** argv)
 {
 #ifndef MLANG_VERSION
@@ -919,6 +1023,13 @@ int main(int argc, char** argv)
         }
     }
 
+    if(testMode)
+    {
+        // Tests intentionally use colon-form if/while in many fixtures.
+        warnPlainColonIf = false;
+        warnPlainColonWhile = false;
+    }
+
     if(inputFile.empty())
     {
         if(testMode)
@@ -940,68 +1051,13 @@ int main(int argc, char** argv)
         std::filesystem::path inPath = inputFile;
         if(std::filesystem::is_directory(inPath, tec))
         {
-            std::vector<std::filesystem::path> files;
-            for(std::filesystem::directory_iterator it(inPath, tec), end;
-                it != end; ++it)
-            {
-                if(!it->is_regular_file(tec))
-                    continue;
-                auto p = it->path();
-                if(p.extension() != ".mla")
-                    continue;
-                if(p.filename() == "__mlang_test_root.mla")
-                    continue;
-                std::string filename = p.filename().string();
-                if(benchmarkMode)
-                {
-                    if(filename.rfind("bench_", 0) != 0)
-                        continue;
-                }
-                else
-                {
-                    bool isPrefixed = filename.rfind("test_", 0) == 0;
-                    bool isSuffixed =
-                        filename.size() >= 10 &&
-                        filename.compare(filename.size() - 10, 10,
-                                         "_tests.mla") == 0;
-                    if(!isPrefixed && !isSuffixed)
-                        continue;
-                }
-                files.push_back(p);
-            }
-            if(files.empty())
-            {
-                std::cerr << "Error: No .mla "
-                          << (benchmarkMode ? "benchmark" : "test")
-                          << " files found in " << inputFile << std::endl;
-                return 1;
-            }
-
-            std::filesystem::path rootFile =
-                inPath / "__mlang_test_root.mla";
-            std::ofstream out(rootFile);
-            if(!out)
-            {
-                std::cerr << "Error: Failed to create test root file: "
-                          << rootFile << std::endl;
-                return 1;
-            }
-            for(const auto& f : files)
-            {
-                std::string modName = f.stem().string();
-                out << "mod " << modName << ";\n";
-                out << "use " << modName << "::*;\n";
-            }
-            out.close();
-
-            generatedTestRoot = rootFile.string();
-            inputFile = generatedTestRoot;
-            if(outputFile == "a.out")
-            {
-                outputFile = benchmarkMode
-                                 ? (inPath / "__mlang_bench_bin").string()
-                                 : (inPath / "__mlang_test_bin").string();
-            }
+            auto rc = run_test_directory_mode(argv[0], inPath, benchmarkMode,
+                                              runTests, benchIterations,
+                                              benchWarmup, warnPlainColonIf,
+                                              warnPlainColonWhile, linkArgs);
+            if(rc.has_value())
+                return *rc;
+            return 1;
         }
         else if(outputFile == "a.out")
         {

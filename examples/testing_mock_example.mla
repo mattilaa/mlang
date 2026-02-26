@@ -1,0 +1,21 @@
+mod std::testing;
+
+use std::testing::*;
+
+fn main() -> i32 {
+    reset();
+
+    let api: Mock = mock_new();
+    mock_expect_call(api.handle, "connect", 1);
+    mock_expect_call(api.handle, "send", 2);
+
+    // "System under test" would call these in real code.
+    mock_called(api.handle, "connect");
+    mock_called(api.handle, "send");
+    mock_called(api.handle, "send");
+
+    expect_true(mock_verify(api.handle));
+    println!("checks={} failures={}", checks(), failures());
+    mock_free(api.handle);
+    return result();
+}

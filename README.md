@@ -226,6 +226,8 @@ GoogleTest-like non-fatal expectations are available via `std::testing`:
 - `expect_eq(expected, actual)` (typed overloads)
 - fatal verify variants are also available:
   `verify_true`, `verify_false`, `verify_eq` (and `VERIFY_*` aliases)
+- lightweight mock API is also available:
+  `Mock`, `mock_new`, `mock_expect_call`, `mock_called`, `mock_verify`
 
 Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
@@ -301,6 +303,8 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/type_alias_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
   `examples/lambda_fold_demo.mla`
+- Unit-testing mock expectations (`std::testing::Mock`):
+  `examples/testing_mock_example.mla`
 - Sundaram sieve with real hash-set membership (`HashSetI64`):
   `examples/sieve_sundaram.mla`
 

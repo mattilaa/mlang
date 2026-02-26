@@ -47,3 +47,38 @@ fn test_verify_helpers_pass() -> i32 {
     if failures() != 0 { return 1; }
     return 0;
 }
+
+#[test]
+fn test_mock_expectations_pass() -> i32 {
+    reset();
+
+    let m: Mock = mock_new();
+    mock_expect_call(m.handle, "fetch", 2);
+    mock_expect_call(m.handle, "save", 1);
+
+    mock_called(m.handle, "fetch");
+    mock_called(m.handle, "save");
+    mock_called(m.handle, "fetch");
+
+    expect_true(mock_calls(m.handle, "fetch") == 2);
+    expect_true(mock_calls(m.handle, "save") == 1);
+    expect_true(mock_verify(m.handle));
+    mock_free(m.handle);
+
+    if failures() != 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_mock_expectations_report_mismatch() -> i32 {
+    reset();
+
+    let m: Mock = mock_new();
+    mock_expect_call(m.handle, "publish", 3);
+    mock_called(m.handle, "publish");
+
+    expect_false(mock_verify(m.handle));
+    mock_free(m.handle);
+
+    return failures() > 0 ? 0 : 1;
+}
