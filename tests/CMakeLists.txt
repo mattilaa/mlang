@@ -1,24 +1,16 @@
-# MLA Language Test Suite
-#
-# This can be used in two ways:
-# 1. As part of the main build: included via add_subdirectory(tests) from parent
-# 2. Standalone: cmake -DMLA_COMPILER=/path/to/mlang .
-#
 cmake_minimum_required(VERSION 3.14)
 
-# Check if we're being included from parent or built standalone
+# MLang-native test suites.
+# Runs .mla test files directly through the compiler in --tests mode.
+
 if(NOT TARGET mlang)
-    # Standalone build
-    project(MLATests)
+    project(MLATestsNative)
 
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-    # User must provide compiler path
-    set(MLA_COMPILER "" CACHE FILEPATH "Path to the mlang compiler executable")
-
+    set(MLA_COMPILER "" CACHE FILEPATH "Path to mlang compiler executable")
     if(NOT MLA_COMPILER)
-        # Try to find it in common locations
         find_program(MLA_COMPILER_FOUND mlang
             PATHS
                 ${CMAKE_CURRENT_SOURCE_DIR}/../build
@@ -30,85 +22,62 @@ if(NOT TARGET mlang)
             set(MLA_COMPILER ${MLA_COMPILER_FOUND})
         else()
             message(FATAL_ERROR
-                "Could not find mlang compiler. Please specify with -DMLA_COMPILER=/path/to/mlang\n"
-                "Or build from the project root with: cmake -DBUILD_TESTS=ON .."
-            )
+                "Could not find mlang compiler. Specify -DMLA_COMPILER=/path/to/mlang")
         endif()
     endif()
-
-    message(STATUS "Using MLA compiler: ${MLA_COMPILER}")
-
-    # Verify compiler exists
     if(NOT EXISTS ${MLA_COMPILER})
         message(FATAL_ERROR "MLA compiler not found at: ${MLA_COMPILER}")
     endif()
 
-    set(STANDALONE_BUILD TRUE)
+    set(MLA_COMPILER_CMD ${MLA_COMPILER})
+    set(MLANG_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../build)
     enable_testing()
+else()
+    set(MLA_COMPILER_CMD $<TARGET_FILE:mlang>)
+    set(MLANG_LIB_DIR ${CMAKE_BINARY_DIR})
 endif()
 
-# Include FetchContent for downloading GoogleTest
-include(FetchContent)
+option(MLA_REGISTER_ALL_MLANG_SUITES
+       "Register all *_tests.mla/test_*.mla as CTest suites"
+       OFF)
 
-# Fetch GoogleTest
-FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.14.0
-)
-
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(googletest)
-
-# Create the test executable
-add_executable(mla_tests
-    mla_tests.cpp
-)
-
-# Link GoogleTest
-target_link_libraries(mla_tests
-    GTest::gtest
-    GTest::gtest_main
-)
-
-# Set C++ standard
-target_compile_features(mla_tests PRIVATE cxx_std_17)
-
-# Pass the compiler path to the test executable
-if(STANDALONE_BUILD)
-    target_compile_definitions(mla_tests PRIVATE
-        DEFAULT_COMPILER_PATH="${MLA_COMPILER}"
+if(MLA_REGISTER_ALL_MLANG_SUITES)
+    file(GLOB MLA_TEST_FILES
+        RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+        "*_tests.mla"
+        "test_*.mla"
     )
 else()
-    # When built as part of main project, use the built mlang
-    target_compile_definitions(mla_tests PRIVATE
-        DEFAULT_COMPILER_PATH="$<TARGET_FILE:mlang>"
-    )
-    # Make sure mlang is built before tests
-    add_dependencies(mla_tests mlang)
+    set(MLA_TEST_FILES "mla_tests.mla")
 endif()
 
-# Add test discovery
-include(GoogleTest)
+list(SORT MLA_TEST_FILES)
 
-if(STANDALONE_BUILD)
-    gtest_discover_tests(mla_tests
-        PROPERTIES
-            ENVIRONMENT "MLA_COMPILER=${MLA_COMPILER}"
-    )
-else()
-    gtest_discover_tests(mla_tests
-        PROPERTIES
-            ENVIRONMENT "MLA_COMPILER=$<TARGET_FILE:mlang>"
-    )
+if(MLA_TEST_FILES STREQUAL "")
+    message(FATAL_ERROR "No MLang test suite files found")
 endif()
 
-# Custom target to run tests
+foreach(test_file ${MLA_TEST_FILES})
+    get_filename_component(suite_name ${test_file} NAME_WE)
+    add_test(
+        NAME mla_suite_${suite_name}
+        COMMAND ${MLA_COMPILER_CMD}
+                --tests
+                ${CMAKE_CURRENT_SOURCE_DIR}/${test_file}
+                -L ${MLANG_LIB_DIR}
+                -lmlang_std
+    )
+    set_tests_properties(mla_suite_${suite_name}
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endforeach()
+
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS mla_tests
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running MLA tests..."
+    COMMENT "Running MLang-native test suites..."
 )
+if(TARGET mlang)
+    add_dependencies(run_tests mlang)
+endif()

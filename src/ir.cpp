@@ -1,6 +1,7 @@
 #include "ir.h"
 #include <cctype>
 #include <cstring>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -492,6 +493,39 @@ static std::string displayTypeName(TypeNode* type)
     return "unknown";
 }
 
+static std::string normalizeTestSuiteName(std::string name)
+{
+    if(name.empty())
+        return "Main";
+
+    for(char& c : name)
+    {
+        if(c == ':' || c == '/' || c == '\\' || c == '-' || c == ' ')
+            c = '.';
+    }
+    while(name.find("..") != std::string::npos)
+        name.replace(name.find(".."), 2, ".");
+    if(!name.empty() && name.front() == '.')
+        name.erase(name.begin());
+    if(!name.empty() && name.back() == '.')
+        name.pop_back();
+    if(name.empty())
+        return "Main";
+    return name;
+}
+
+static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
+{
+    if(sourceFileName.empty())
+        return "Main";
+    std::error_code ec;
+    std::filesystem::path p(sourceFileName);
+    std::string stem = p.stem().string();
+    if(ec || stem.empty() || stem == "__mlang_test_root")
+        return "Main";
+    return normalizeTestSuiteName(stem);
+}
+
 static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
 {
     if(kind == TypeNode::TYPE_INT)
@@ -636,6 +670,11 @@ static bool inferExprKindForReturn(
         if(!inferExprKindForReturn(unary->operand, localKinds, fnReturnKinds,
                                    operandKind))
             return false;
+        if(unary->op == UnaryOpNode::OP_NOT)
+        {
+            outKind = TypeNode::TYPE_BOOL;
+            return true;
+        }
         outKind = normalizeInferredKind(operandKind);
         return true;
     }
@@ -3705,6 +3744,7 @@ void CodeGenerator::generateTestMain(
     llvm::Value* failFmt = make_cstr("[FAIL] %s (rc=%d)\n", "test.fail.fmt");
     llvm::Value* summaryFmt =
         make_cstr("[SUMMARY] total=%d pass=%d fail=%d\n", "test.summary.fmt");
+    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
 
     for(auto* testFn : tests)
     {
@@ -3722,7 +3762,11 @@ void CodeGenerator::generateTestMain(
                               "tests.next");
         builder.CreateStore(totalNext, totalTests);
 
-        llvm::Value* testName = make_cstr(testFn->name, "test.name");
+        std::string suiteName = !testFn->sourceModule.empty()
+                                    ? normalizeTestSuiteName(testFn->sourceModule)
+                                    : defaultSuite;
+        std::string displayName = suiteName + "." + testFn->name;
+        llvm::Value* testName = make_cstr(displayName, "test.name");
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
         {
@@ -3838,6 +3882,7 @@ void CodeGenerator::generateBenchmarkMain(
     builder.CreateCall(printfFunc,
                        {headerFmt, make_cstr("name", "bench.hdr.name"),
                         nsTotalHdr, nsPerOpHdr, itersHdr});
+    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
 
     for(auto* testFn : tests)
     {
@@ -3848,7 +3893,11 @@ void CodeGenerator::generateBenchmarkMain(
         if(!callee)
             continue;
 
-        llvm::Value* testName = make_cstr(testFn->name, "bench.name");
+        std::string suiteName = !testFn->sourceModule.empty()
+                                    ? normalizeTestSuiteName(testFn->sourceModule)
+                                    : defaultSuite;
+        std::string displayName = suiteName + "." + testFn->name;
+        llvm::Value* testName = make_cstr(displayName, "bench.name");
         llvm::AllocaInst* localFails =
             builder.CreateAlloca(i32Type, nullptr, "bench.local_fails");
         builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), localFails);
@@ -5188,6 +5237,31 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
         }
         return isFloat ? builder.CreateFNeg(value, "negtmp")
                        : builder.CreateNeg(value, "negtmp");
+    }
+    case UnaryOpNode::OP_NOT:
+    {
+        llvm::Value* value = generateExpression(node->operand);
+        if(!value)
+            return nullptr;
+
+        if(value->getType()->isIntegerTy(1))
+            return builder.CreateNot(value, "nottmp");
+        if(value->getType()->isIntegerTy())
+        {
+            llvm::Value* asBool = builder.CreateICmpNE(
+                value, llvm::ConstantInt::get(value->getType(), 0), "not.bool");
+            return builder.CreateNot(asBool, "nottmp");
+        }
+        if(value->getType()->isFloatingPointTy())
+        {
+            llvm::Value* asBool = builder.CreateFCmpONE(
+                value, llvm::ConstantFP::get(value->getType(), 0.0), "not.bool");
+            return builder.CreateNot(asBool, "nottmp");
+        }
+
+        reportError(node->line,
+                    "unary '!' requires boolean or numeric operand");
+        return nullptr;
     }
     case UnaryOpNode::OP_ADDR:
     {

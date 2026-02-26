@@ -214,6 +214,7 @@ static int is_try_question_context()
 ">="            { return GE; }
 "=="            { return EQ; }
 "!="            { return NE; }
+"!"             { return NOT; }
 ":"             { return COLON; }
 ";"             { return SEMICOLON; }
 "{"             { return LBRACE; }

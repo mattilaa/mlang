@@ -296,6 +296,7 @@ public:
     enum OpType
     {
         OP_NEG,
+        OP_NOT,
         OP_ADDR,
         OP_ADDR_MUT, // &mut x — exclusive mutable borrow
         OP_DEREF

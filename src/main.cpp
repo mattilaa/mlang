@@ -47,6 +47,7 @@ void printUsage(const char* programName)
               << "  -O2           Standard optimization (default)\n"
               << "  -O3           Aggressive optimization\n"
               << "  --no-tests    Skip compiling #[test] functions\n"
+              << "  --tests       Compile and run #[test] for input path/file\n"
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
               << "  -Wno-colon-while Suppress warning for plain while with ':'\n"
               << "  -L <dir>      Add a library search path for linking\n"
@@ -66,6 +67,7 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n"
               << "\nTesting:\n"
+              << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
               << "  " << programName << " run tests\n"
               << "\nBenchmarking:\n"
@@ -761,6 +763,12 @@ int main(int argc, char** argv)
         runTests = true;
         argStart = 2;
     }
+    else if(std::string(argv[1]) == "--tests")
+    {
+        testMode = true;
+        runTests = true;
+        argStart = 2;
+    }
 
     // Parse command line arguments
     std::string inputFile;
@@ -858,6 +866,11 @@ int main(int argc, char** argv)
         {
             includeTests = false;
         }
+        else if(arg == "--tests")
+        {
+            testMode = true;
+            runTests = true;
+        }
         else if(arg == "-Wno-colon-if")
         {
             warnPlainColonIf = false;
@@ -946,7 +959,12 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    if(filename.rfind("test_", 0) != 0)
+                    bool isPrefixed = filename.rfind("test_", 0) == 0;
+                    bool isSuffixed =
+                        filename.size() >= 10 &&
+                        filename.compare(filename.size() - 10, 10,
+                                         "_tests.mla") == 0;
+                    if(!isPrefixed && !isSuffixed)
                         continue;
                 }
                 files.push_back(p);

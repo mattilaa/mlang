@@ -192,6 +192,10 @@ return `0` for pass, non-zero for failure.
 # Run tests in the ./tests directory
 mlang test
 
+# Alternative flag form (same behavior)
+mlang --tests
+mlang --tests tests/std_math_tests.mla
+
 # Run tests in a specific file or directory
 mlang test tests/test_sample.mla
 mlang test tests

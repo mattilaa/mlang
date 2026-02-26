@@ -318,6 +318,9 @@ ASTNode* create_unary_op(int op, ASTNode* operand)
     case MINUS:
         opType = UnaryOpNode::OP_NEG;
         break;
+    case NOT:
+        opType = UnaryOpNode::OP_NOT;
+        break;
     case AMP:
         opType = UnaryOpNode::OP_ADDR;
         break;
@@ -1337,6 +1340,9 @@ std::string UnaryOpNode::toString() const
     {
     case OP_NEG:
         op_str = "-";
+        break;
+    case OP_NOT:
+        op_str = "!";
         break;
     case OP_ADDR:
         op_str = "&";
