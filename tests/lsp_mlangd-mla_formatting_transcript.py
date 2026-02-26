@@ -93,10 +93,66 @@ def main() -> int:
             assert rs.get("line") == 1 and rs.get("character") == 0, f"rangeFormatting start mismatch: {rfirst!r}"
             assert re.get("line") == 1 and re.get("character") == 19, f"rangeFormatting end mismatch: {rfirst!r}"
             assert rnew.endswith(";"), f"expected trailing spaces trimmed in range formatting output: {rfirst!r}"
+
+            # On-type formatting: Enter after '{' should indent next line.
+            text_brace = (
+                "fn main() -> i32 {\n"
+                "\n"
+                "}\n"
+            )
+            client.notify(
+                "textDocument/didChange",
+                {
+                    "textDocument": {"uri": uri, "version": 2},
+                    "contentChanges": [{"text": text_brace}],
+                },
+            )
+            on_type_brace = client.request(
+                "textDocument/onTypeFormatting",
+                {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": 1, "character": 0},
+                    "ch": "\n",
+                    "options": {"tabSize": 4, "insertSpaces": True},
+                },
+            )
+            assert isinstance(on_type_brace, list), f"onTypeFormatting should return array: {on_type_brace!r}"
+            assert on_type_brace, f"onTypeFormatting should return edit after '{{': {on_type_brace!r}"
+            brace_edit = on_type_brace[0]
+            assert brace_edit.get("newText", "") == "    ", f"expected 4-space indent after '{{': {brace_edit!r}"
+
+            # On-type formatting: Enter after '(' should continuation-indent.
+            text_paren = (
+                "fn main() -> i32 {\n"
+                "    some(\n"
+                "\n"
+                "    );\n"
+                "}\n"
+            )
+            client.notify(
+                "textDocument/didChange",
+                {
+                    "textDocument": {"uri": uri, "version": 3},
+                    "contentChanges": [{"text": text_paren}],
+                },
+            )
+            on_type_paren = client.request(
+                "textDocument/onTypeFormatting",
+                {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": 2, "character": 0},
+                    "ch": "\n",
+                    "options": {"tabSize": 4, "insertSpaces": True},
+                },
+            )
+            assert isinstance(on_type_paren, list), f"onTypeFormatting should return array: {on_type_paren!r}"
+            assert on_type_paren, f"onTypeFormatting should return edit after '(': {on_type_paren!r}"
+            paren_edit = on_type_paren[0]
+            assert paren_edit.get("newText", "") == "        ", f"expected continuation indent after '(': {paren_edit!r}"
         finally:
             client.close()
 
-    print("PASS: mlangd-mla formatting transcript (document + range)")
+    print("PASS: mlangd-mla formatting transcript (document + range + onType)")
     return 0
 
 
