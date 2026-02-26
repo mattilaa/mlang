@@ -5,11 +5,12 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "tools" / "mlang_lsp" / "mlang_lsp.py"
+REQUEST_CANCELLED = -32800
 
 
 class LspHarness:
@@ -88,16 +89,36 @@ class LspHarness:
             raise RuntimeError("Missing payload body")
         return json.loads(body.decode("utf-8"))
 
-    def request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        req_id = self._next_id
-        self._next_id += 1
+    def request(
+        self,
+        method: str,
+        params: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        result, error, _notes = self.request_with_meta(method, params)
+        if error is not None:
+            raise RuntimeError(f"LSP error for {method}: {error}")
+        return result
+
+    def request_with_meta(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        *,
+        req_id: Optional[int] = None,
+        collect_methods: Optional[Set[str]] = None,
+    ) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+        if req_id is None:
+            req_id = self._next_id
+            self._next_id += 1
         self._write({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params})
+
+        notifications: List[Dict[str, Any]] = []
         while True:
             msg = self._read()
             if msg.get("id") == req_id:
-                if "error" in msg:
-                    raise RuntimeError(f"LSP error for {method}: {msg['error']}")
-                return msg.get("result")
+                return msg.get("result"), msg.get("error"), notifications
+            if collect_methods and msg.get("method") in collect_methods:
+                notifications.append(msg)
 
     def notify(self, method: str, params: Dict[str, Any]) -> None:
         self._write({"jsonrpc": "2.0", "method": method, "params": params})
@@ -366,6 +387,72 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         )
         by_uri = sorted((r["uri"], r["range"]["start"]["line"]) for r in refs)
         self.assertEqual(by_uri, [(defs_uri, 0), (use_uri, 1), (use_uri, 2)])
+
+    def test_references_progress_notifications(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        defs_uri = "file:///tmp/prog_defs.mlang"
+        use_uri = "file:///tmp/prog_use.mlang"
+        self.h.notify(
+            "textDocument/didOpen",
+            {"textDocument": {"uri": defs_uri, "languageId": "mlang", "version": 1, "text": "fn helper() {}\n"}},
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+        self.h.notify(
+            "textDocument/didOpen",
+            {"textDocument": {"uri": use_uri, "languageId": "mlang", "version": 1, "text": "fn main() { helper() }\n"}},
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        result, error, notes = self.h.request_with_meta(
+            "textDocument/references",
+            {
+                "textDocument": {"uri": use_uri},
+                "position": {"line": 0, "character": 14},
+                "context": {"includeDeclaration": True},
+                "workDoneToken": "tok-progress",
+            },
+            collect_methods={"$/progress"},
+        )
+        self.assertIsNone(error)
+        self.assertTrue(result)
+        kinds = [n.get("params", {}).get("value", {}).get("kind") for n in notes]
+        self.assertIn("begin", kinds)
+        self.assertIn("end", kinds)
+
+    def test_request_cancellation(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        uri = "file:///tmp/cancel.mlang"
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "fn main() {\n  let x = 1\n  x\n}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        rid = 9001
+        self.h.notify("$/cancelRequest", {"id": rid})
+        _res, err, _notes = self.h.request_with_meta(
+            "textDocument/references",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": 2, "character": 2},
+                "context": {"includeDeclaration": True},
+            },
+            req_id=rid,
+        )
+        self.assertIsNotNone(err)
+        assert err is not None
+        self.assertEqual(err.get("code"), REQUEST_CANCELLED)
 
 
 if __name__ == "__main__":

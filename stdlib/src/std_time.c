@@ -201,6 +201,30 @@ const char* __mlang_std_time_local_datetime(void)
     return buf;
 }
 
+const char* __mlang_std_time_test_timestamp(void)
+{
+    static char buf[20];
+    time_t t = time(NULL);
+    struct tm tmv;
+#if defined(_WIN32)
+    if(localtime_s(&tmv, &t) != 0)
+    {
+        strcpy(buf, "01/01/00/00/00");
+        return buf;
+    }
+#else
+    if(localtime_r(&t, &tmv) == NULL)
+    {
+        strcpy(buf, "01/01/00/00/00");
+        return buf;
+    }
+#endif
+
+    if(strftime(buf, sizeof(buf), "%d/%m/%H/%M/%S", &tmv) == 0)
+        strcpy(buf, "01/01/00/00/00");
+    return buf;
+}
+
 const char* __mlang_std_time_log_level_tag(int level, int color)
 {
     if(!color)

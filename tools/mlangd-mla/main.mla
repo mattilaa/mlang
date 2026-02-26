@@ -2175,8 +2175,12 @@ fn handle_range_formatting(payload: string) -> string {
 }
 
 fn extract_on_type_character(payload: string) -> string {
-    let key: string = "\"ch\"";
-    let p: i64 = find(payload, key);
+    var key: string = "\"ch\"";
+    var p: i64 = find(payload, key);
+    if p < 0: {
+        key = "\"character\"";
+        p = find(payload, key);
+    }
     if p < 0: { return String::new(); }
     var i: i64 = p + len(key);
     while i < len(payload): {
@@ -2203,6 +2207,8 @@ fn extract_on_type_character(payload: string) -> string {
     if q < 0: { return String::new(); }
     let raw: string = sub(tail, 0, q);
     if eq(raw, "\\n") == 1: { return "\n"; }
+    if eq(raw, "\\r") == 1: { return "\r"; }
+    if eq(raw, "\\r\\n") == 1: { return "\r\n"; }
     if eq(raw, "\\t") == 1: { return "\t"; }
     return raw;
 }
@@ -2253,7 +2259,7 @@ fn handle_on_type_formatting(payload: string) -> string {
     let uri: string = extract_text_document_uri(payload);
     if len(uri) == 0: { return "[]"; }
     let ch: string = extract_on_type_character(payload);
-    if eq(ch, "\n") == 0: { return "[]"; }
+    if eq(ch, "\n") == 0 && eq(ch, "\r") == 0 && eq(ch, "\r\n") == 0 && len(ch) != 0: { return "[]"; }
 
     let line0: i64 = extract_position_line(payload);
     let col0: i64 = extract_position_character(payload);

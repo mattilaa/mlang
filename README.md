@@ -29,6 +29,10 @@ UVim `<leader>f` formatting works through `textDocument/formatting`; `mlangd`
 now uses `mlang-format` and `.mlang-format` (`--style=file`) for buffer
 formatting.
 
+For Cursor/VSCode workspaces, `.vscode/settings.json` enables `formatOnType`
+for `mlang` and sets 4-space indentation so Enter/`o`/`O` keeps block and
+continuation indentation.
+
 Enable LSP debug telemetry (`cache clears`, `active docs`, `evictions`):
 
 ```sh

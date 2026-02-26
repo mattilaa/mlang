@@ -3740,11 +3740,24 @@ void CodeGenerator::generateTestMain(
 #endif
     };
 
-    llvm::Value* passFmt = make_cstr("[PASS] %s\n", "test.pass.fmt");
-    llvm::Value* failFmt = make_cstr("[FAIL] %s (rc=%d)\n", "test.fail.fmt");
+    llvm::Value* passFmt =
+        make_cstr("%s [PASS] %s\n", "test.pass.fmt");
+    llvm::Value* failFmt =
+        make_cstr("%s [FAIL] %s (rc=%d)\n", "test.fail.fmt");
     llvm::Value* summaryFmt =
-        make_cstr("[SUMMARY] total=%d pass=%d fail=%d\n", "test.summary.fmt");
+        make_cstr("%s [SUMMARY] total=%d pass=%d fail=%d\n",
+                  "test.summary.fmt");
     const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* i8PtrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* i8PtrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::FunctionCallee testTimestampFunc = module->getOrInsertFunction(
+        "__mlang_std_time_test_timestamp",
+        llvm::FunctionType::get(i8PtrType, {}, false));
 
     for(auto* testFn : tests)
     {
@@ -3770,7 +3783,9 @@ void CodeGenerator::generateTestMain(
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
         {
-            builder.CreateCall(printfFunc, {passFmt, testName});
+            builder.CreateCall(printfFunc,
+                               {passFmt, builder.CreateCall(testTimestampFunc, {}),
+                                testName});
             continue;
         }
 
@@ -3806,12 +3821,16 @@ void CodeGenerator::generateTestMain(
         builder.CreateCondBr(isFail, failBB, passBB);
 
         builder.SetInsertPoint(passBB);
-        builder.CreateCall(printfFunc, {passFmt, testName});
+        builder.CreateCall(printfFunc,
+                               {passFmt, builder.CreateCall(testTimestampFunc, {}),
+                                testName});
         builder.CreateBr(contBB);
 
         failBB->insertInto(mainFn);
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(printfFunc, {failFmt, testName, resultI32});
+        builder.CreateCall(printfFunc,
+                           {failFmt, builder.CreateCall(testTimestampFunc, {}),
+                            testName, resultI32});
         builder.CreateBr(contBB);
 
         contBB->insertInto(mainFn);
@@ -3824,7 +3843,9 @@ void CodeGenerator::generateTestMain(
         builder.CreateLoad(i32Type, totalTests, "tests.total");
     llvm::Value* passCount =
         builder.CreateSub(totalCount, total, "tests.pass");
-    builder.CreateCall(printfFunc, {summaryFmt, totalCount, passCount, total});
+    builder.CreateCall(printfFunc,
+                       {summaryFmt, builder.CreateCall(testTimestampFunc, {}),
+                        totalCount, passCount, total});
 
     builder.CreateRet(total);
 }

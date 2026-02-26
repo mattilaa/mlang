@@ -141,7 +141,7 @@ def main() -> int:
                 {
                     "textDocument": {"uri": uri},
                     "position": {"line": 2, "character": 0},
-                    "ch": "\n",
+                    "character": "\n",
                     "options": {"tabSize": 4, "insertSpaces": True},
                 },
             )

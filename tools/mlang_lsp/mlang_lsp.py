@@ -22,6 +22,8 @@ from mlang_frontend.semantic import (
 from mlang_frontend.source_map import line_char_to_offset, offset_to_line_char
 from mlang_frontend.workspace import WorkspaceIndex
 
+REQUEST_CANCELLED = -32800
+
 
 @dataclass
 class Document:
@@ -37,6 +39,7 @@ class JsonRpcServer:
         self._workspace = WorkspaceIndex()
         self._running = True
         self._shutdown_requested = False
+        self._cancelled_request_ids: set[Any] = set()
 
     def _read_message(self) -> dict[str, Any] | None:
         content_length = None
@@ -160,11 +163,58 @@ class JsonRpcServer:
             },
         }
 
+    def _is_cancelled(self, req_id: Any) -> bool:
+        return req_id in self._cancelled_request_ids
+
+    def _consume_cancelled(self, req_id: Any) -> bool:
+        if req_id in self._cancelled_request_ids:
+            self._cancelled_request_ids.remove(req_id)
+            return True
+        return False
+
+    def _progress_begin(self, token: Any, title: str, message: str) -> None:
+        if token is None:
+            return
+        self._notify(
+            "$/progress",
+            {
+                "token": token,
+                "value": {
+                    "kind": "begin",
+                    "title": title,
+                    "message": message,
+                    "percentage": 0,
+                },
+            },
+        )
+
+    def _progress_report(self, token: Any, message: str, pct: int) -> None:
+        if token is None:
+            return
+        self._notify(
+            "$/progress",
+            {
+                "token": token,
+                "value": {"kind": "report", "message": message, "percentage": pct},
+            },
+        )
+
+    def _progress_end(self, token: Any, message: str) -> None:
+        if token is None:
+            return
+        self._notify(
+            "$/progress",
+            {
+                "token": token,
+                "value": {"kind": "end", "message": message},
+            },
+        )
+
     def _handle_initialize(self, req_id: Any) -> None:
         self._respond(
             req_id,
             {
-                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.4.0"},
+                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.5.0"},
                 "capabilities": {
                     "textDocumentSync": 2,
                     "hoverProvider": True,
@@ -188,32 +238,15 @@ class JsonRpcServer:
         if not uri:
             return
         text = text_doc.get("text", "")
+        version = int(text_doc.get("version", 0))
         self._documents[uri] = Document(
             uri=uri,
             text=text,
-            version=int(text_doc.get("version", 0)),
+            version=version,
             language_id=text_doc.get("languageId", "mlang"),
         )
-        self._workspace.update_document(uri, text)
+        self._workspace.open_document(uri, text, version)
         self._publish_diagnostics(uri)
-
-    @staticmethod
-    def _apply_change(text: str, change: dict[str, Any]) -> str:
-        if "range" not in change:
-            return change.get("text", "")
-        rng = change["range"]
-        start = rng.get("start", {})
-        end = rng.get("end", {})
-        start_off = line_char_to_offset(
-            text, int(start.get("line", 0)), int(start.get("character", 0))
-        )
-        end_off = line_char_to_offset(
-            text, int(end.get("line", 0)), int(end.get("character", 0))
-        )
-        if end_off < start_off:
-            end_off = start_off
-        new_text = change.get("text", "")
-        return text[:start_off] + new_text + text[end_off:]
 
     def _handle_did_change(self, params: dict[str, Any]) -> None:
         text_doc = params.get("textDocument", {})
@@ -221,13 +254,17 @@ class JsonRpcServer:
         doc = self._documents.get(uri)
         if doc is None:
             return
+
+        new_version = int(text_doc.get("version", doc.version))
         changes = params.get("contentChanges", [])
-        text = doc.text
-        for change in changes:
-            text = self._apply_change(text, change)
-        doc.text = text
-        doc.version = int(text_doc.get("version", doc.version))
-        self._workspace.update_document(uri, text)
+        new_text = self._workspace.apply_changes(
+            uri, new_version, changes, line_char_to_offset
+        )
+        if new_text is None:
+            return
+
+        doc.text = new_text
+        doc.version = new_version
         self._publish_diagnostics(uri)
 
     def _handle_hover(self, req_id: Any, params: dict[str, Any]) -> None:
@@ -287,9 +324,7 @@ class JsonRpcServer:
         offset = line_char_to_offset(doc.text, line, character)
 
         items = self._keyword_items()
-        seen = {it["label"] for it in items}
         for sym in completion_symbols(doc.text, offset):
-            seen.add(sym.name)
             items.append(
                 {
                     "label": sym.name,
@@ -298,34 +333,15 @@ class JsonRpcServer:
                 }
             )
 
-        # Also offer cross-file globals.
-        for name in list(seen):
-            _ = name
-        for candidate_name in sorted(
-            {
-                s.symbol.name
-                for n in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", doc.text)
-                if (s := self._workspace.find_global(n, prefer_uri=uri)) is not None
-            }
-        ):
-            if candidate_name not in seen:
-                g = self._workspace.find_global(candidate_name, prefer_uri=uri)
-                if g is None:
-                    continue
-                items.append(
-                    {
-                        "label": candidate_name,
-                        "kind": self._symbol_kind_to_lsp(g.symbol.kind),
-                        "detail": "workspace global",
-                    }
-                )
-                seen.add(candidate_name)
-
         if typed:
             items = [it for it in items if it["label"].startswith(typed)]
         self._respond(req_id, {"isIncomplete": False, "items": items})
 
     def _handle_definition(self, req_id: Any, params: dict[str, Any]) -> None:
+        if self._consume_cancelled(req_id):
+            self._error(req_id, REQUEST_CANCELLED, "Request cancelled")
+            return
+
         text_doc = params.get("textDocument", {})
         uri = text_doc.get("uri", "")
         doc = self._documents.get(uri)
@@ -362,10 +378,18 @@ class JsonRpcServer:
         )
 
     def _handle_references(self, req_id: Any, params: dict[str, Any]) -> None:
+        if self._consume_cancelled(req_id):
+            self._error(req_id, REQUEST_CANCELLED, "Request cancelled")
+            return
+
+        token = params.get("workDoneToken")
+        self._progress_begin(token, "Finding references", "Scanning workspace")
+
         text_doc = params.get("textDocument", {})
         uri = text_doc.get("uri", "")
         doc = self._documents.get(uri)
         if doc is None:
+            self._progress_end(token, "No document")
             self._respond(req_id, [])
             return
 
@@ -383,16 +407,35 @@ class JsonRpcServer:
                 self._location_from_offsets(uri, doc.text, o.start_offset, o.end_offset)
                 for o in local_occ
             ]
+            self._progress_end(token, "Done")
             self._respond(req_id, locs)
             return
 
-        token = self._word_at(doc.text, offset)
-        g = self._workspace.find_global(token, prefer_uri=uri)
+        word = self._word_at(doc.text, offset)
+        g = self._workspace.find_global(word, prefer_uri=uri)
         if g is None:
+            self._progress_end(token, "No symbol")
             self._respond(req_id, [])
             return
 
-        occs = self._workspace.references_for_global(g.symbol.name)
+        def cancelled() -> bool:
+            return self._is_cancelled(req_id)
+
+        def on_progress(done: int, total: int) -> None:
+            pct = 100 if total <= 0 else int((done * 100) / total)
+            self._progress_report(token, f"Scanned {done}/{total} files", pct)
+
+        occs = self._workspace.references_for_global(
+            g.symbol.name,
+            is_cancelled=cancelled,
+            on_progress=on_progress,
+        )
+        if occs is None:
+            self._consume_cancelled(req_id)
+            self._progress_end(token, "Cancelled")
+            self._error(req_id, REQUEST_CANCELLED, "Request cancelled")
+            return
+
         if not include_decl:
             occs = [o for o in occs if not o.is_declaration]
 
@@ -404,6 +447,8 @@ class JsonRpcServer:
             locs.append(
                 self._location_from_offsets(o.uri, odoc.text, o.start_offset, o.end_offset)
             )
+
+        self._progress_end(token, "Done")
         self._respond(req_id, locs)
 
     def _handle_diagnostic(self, req_id: Any, params: dict[str, Any]) -> None:
@@ -440,6 +485,11 @@ class JsonRpcServer:
             self._running = False
             return
         if method == "initialized":
+            return
+        if method == "$/cancelRequest":
+            req_id = params.get("id")
+            if req_id is not None:
+                self._cancelled_request_ids.add(req_id)
             return
         if method == "textDocument/didOpen":
             self._handle_did_open(params)
