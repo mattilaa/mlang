@@ -35,11 +35,17 @@
 // @builtin u64
 // Unsigned 64-bit integer. Range: 0..18446744073709551615.
 
-// @builtin float
+// @builtin f32
 // 32-bit floating point (single precision).
 
-// @builtin double
+// @builtin f64
 // 64-bit floating point (double precision).
+
+// @builtin float
+// Alias of f32.
+
+// @builtin double
+// Alias of f64.
 
 // @builtin string
 // Default string type (alias of str8).

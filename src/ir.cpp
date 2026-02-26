@@ -4,6 +4,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <unordered_map>
 
 // Recursively collect all IdentifierNode names referenced in an AST subtree.
 // Used for Non-Lexical Lifetime (NLL) borrow expiration.
@@ -341,6 +342,347 @@ static bool fitsInEnumBaseType(TypeNode::TypeKind kind, int64_t value)
     const int64_t minVal = -(int64_t{1} << (bits - 1));
     const int64_t maxVal = (int64_t{1} << (bits - 1)) - 1;
     return value >= minVal && value <= maxVal;
+}
+
+static std::string inferredTypeName(TypeNode::TypeKind kind)
+{
+    switch(kind)
+    {
+    case TypeNode::TYPE_VOID:
+        return "void";
+    case TypeNode::TYPE_BOOL:
+        return "bool";
+    case TypeNode::TYPE_INT:
+        return "int";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_FLOAT:
+        return "f32";
+    case TypeNode::TYPE_DOUBLE:
+        return "f64";
+    case TypeNode::TYPE_STRING:
+        return "string";
+    case TypeNode::TYPE_STR8:
+        return "str8";
+    case TypeNode::TYPE_STR16:
+        return "str16";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    default:
+        return "unknown";
+    }
+}
+
+static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
+{
+    if(kind == TypeNode::TYPE_INT)
+        return TypeNode::TYPE_I32;
+    if(kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STR16)
+        return TypeNode::TYPE_STRING;
+    return kind;
+}
+
+static bool isIntegerInferKind(TypeNode::TypeKind kind)
+{
+    switch(normalizeInferredKind(kind))
+    {
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool isFloatInferKind(TypeNode::TypeKind kind)
+{
+    kind = normalizeInferredKind(kind);
+    return kind == TypeNode::TYPE_FLOAT || kind == TypeNode::TYPE_DOUBLE;
+}
+
+static bool mergeInferredKinds(TypeNode::TypeKind& acc, TypeNode::TypeKind next)
+{
+    acc = normalizeInferredKind(acc);
+    next = normalizeInferredKind(next);
+    if(acc == next)
+        return true;
+
+    if(isIntegerInferKind(acc) && isIntegerInferKind(next))
+    {
+        if(acc == TypeNode::TYPE_I64 || acc == TypeNode::TYPE_U64 ||
+           next == TypeNode::TYPE_I64 || next == TypeNode::TYPE_U64)
+            acc = TypeNode::TYPE_I64;
+        else
+            acc = TypeNode::TYPE_I32;
+        return true;
+    }
+    if((isIntegerInferKind(acc) || isFloatInferKind(acc)) &&
+       (isIntegerInferKind(next) || isFloatInferKind(next)))
+    {
+        if(acc == TypeNode::TYPE_DOUBLE || next == TypeNode::TYPE_DOUBLE)
+            acc = TypeNode::TYPE_DOUBLE;
+        else
+            acc = TypeNode::TYPE_FLOAT;
+        return true;
+    }
+    if((acc == TypeNode::TYPE_STRING && next == TypeNode::TYPE_STR8) ||
+       (acc == TypeNode::TYPE_STR8 && next == TypeNode::TYPE_STRING) ||
+       (acc == TypeNode::TYPE_STRING && next == TypeNode::TYPE_STR16) ||
+       (acc == TypeNode::TYPE_STR16 && next == TypeNode::TYPE_STRING) ||
+       (acc == TypeNode::TYPE_STR8 && next == TypeNode::TYPE_STR16) ||
+       (acc == TypeNode::TYPE_STR16 && next == TypeNode::TYPE_STR8))
+    {
+        acc = TypeNode::TYPE_STRING;
+        return true;
+    }
+    return false;
+}
+
+struct ReturnInferenceData
+{
+    std::vector<TypeNode::TypeKind> valueReturns;
+    bool hasBareReturn = false;
+    bool hasUnknownValueReturn = false;
+};
+
+static bool inferExprKindForReturn(
+    ExpressionNode* expr,
+    const std::unordered_map<std::string, TypeNode::TypeKind>& localKinds,
+    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
+    TypeNode::TypeKind& outKind)
+{
+    if(!expr)
+        return false;
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+    {
+        outKind = TypeNode::TYPE_BOOL;
+        return true;
+    }
+    if(dynamic_cast<IntLiteralNode*>(expr))
+    {
+        outKind = TypeNode::TYPE_I32;
+        return true;
+    }
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+    {
+        outKind = TypeNode::TYPE_FLOAT;
+        return true;
+    }
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+    {
+        outKind = TypeNode::TYPE_DOUBLE;
+        return true;
+    }
+    if(dynamic_cast<StringLiteralNode*>(expr))
+    {
+        outKind = TypeNode::TYPE_STRING;
+        return true;
+    }
+    if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+    {
+        outKind = normalizeInferredKind(castExpr->targetType);
+        return true;
+    }
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = localKinds.find(id->name);
+        if(it == localKinds.end())
+            return false;
+        outKind = normalizeInferredKind(it->second);
+        return true;
+    }
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        if(call->name == "String::new" || call->name == "String::with_capacity" ||
+           call->name == "String::from" || call->name == "String::to_utf8")
+        {
+            outKind = TypeNode::TYPE_STRING;
+            return true;
+        }
+        auto fit = fnReturnKinds.find(call->name);
+        if(fit == fnReturnKinds.end())
+            return false;
+        outKind = normalizeInferredKind(fit->second);
+        return true;
+    }
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        TypeNode::TypeKind operandKind = TypeNode::TYPE_VOID;
+        if(!inferExprKindForReturn(unary->operand, localKinds, fnReturnKinds,
+                                   operandKind))
+            return false;
+        outKind = normalizeInferredKind(operandKind);
+        return true;
+    }
+    if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
+    {
+        TypeNode::TypeKind t = TypeNode::TYPE_VOID;
+        TypeNode::TypeKind f = TypeNode::TYPE_VOID;
+        if(!inferExprKindForReturn(ternary->trueExpr, localKinds, fnReturnKinds, t))
+            return false;
+        if(!inferExprKindForReturn(ternary->falseExpr, localKinds, fnReturnKinds,
+                                   f))
+            return false;
+        t = normalizeInferredKind(t);
+        if(!mergeInferredKinds(t, f))
+            return false;
+        outKind = t;
+        return true;
+    }
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(bin->op == BinaryOpNode::OP_LT || bin->op == BinaryOpNode::OP_GT ||
+           bin->op == BinaryOpNode::OP_LE || bin->op == BinaryOpNode::OP_GE ||
+           bin->op == BinaryOpNode::OP_EQ || bin->op == BinaryOpNode::OP_NE ||
+           bin->op == BinaryOpNode::OP_AND || bin->op == BinaryOpNode::OP_OR)
+        {
+            outKind = TypeNode::TYPE_BOOL;
+            return true;
+        }
+
+        TypeNode::TypeKind l = TypeNode::TYPE_VOID;
+        TypeNode::TypeKind r = TypeNode::TYPE_VOID;
+        if(!inferExprKindForReturn(bin->left, localKinds, fnReturnKinds, l))
+            return false;
+        if(!inferExprKindForReturn(bin->right, localKinds, fnReturnKinds, r))
+            return false;
+        l = normalizeInferredKind(l);
+        if(!mergeInferredKinds(l, r))
+            return false;
+        outKind = l;
+        return true;
+    }
+    return false;
+}
+
+static void collectReturnKindsFromStmt(
+    StatementNode* stmt, std::unordered_map<std::string, TypeNode::TypeKind>& locals,
+    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
+    ReturnInferenceData& out);
+
+static void collectReturnKindsFromList(
+    StatementListNode* body, std::unordered_map<std::string, TypeNode::TypeKind>& locals,
+    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
+    ReturnInferenceData& out)
+{
+    if(!body)
+        return;
+    for(auto* stmt : body->statements)
+        collectReturnKindsFromStmt(stmt, locals, fnReturnKinds, out);
+}
+
+static void collectReturnKindsFromStmt(
+    StatementNode* stmt, std::unordered_map<std::string, TypeNode::TypeKind>& locals,
+    const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
+    ReturnInferenceData& out)
+{
+    if(!stmt)
+        return;
+
+    if(auto* ret = dynamic_cast<ReturnNode*>(stmt))
+    {
+        if(!ret->expression)
+        {
+            out.hasBareReturn = true;
+            return;
+        }
+        TypeNode::TypeKind k = TypeNode::TYPE_VOID;
+        if(inferExprKindForReturn(ret->expression, locals, fnReturnKinds, k))
+            out.valueReturns.push_back(normalizeInferredKind(k));
+        else
+            out.hasUnknownValueReturn = true;
+        return;
+    }
+    if(auto* letDecl = dynamic_cast<LetDeclNode*>(stmt))
+    {
+        if(letDecl->type)
+        {
+            locals[letDecl->name] = normalizeInferredKind(letDecl->type->kind);
+        }
+        else if(letDecl->expression)
+        {
+            TypeNode::TypeKind k = TypeNode::TYPE_VOID;
+            if(inferExprKindForReturn(letDecl->expression, locals, fnReturnKinds, k))
+                locals[letDecl->name] = normalizeInferredKind(k);
+        }
+        return;
+    }
+    if(auto* varDecl = dynamic_cast<VarDeclNode*>(stmt))
+    {
+        if(varDecl->type)
+        {
+            locals[varDecl->name] = normalizeInferredKind(varDecl->type->kind);
+        }
+        else if(varDecl->initExpr)
+        {
+            TypeNode::TypeKind k = TypeNode::TYPE_VOID;
+            if(inferExprKindForReturn(varDecl->initExpr, locals, fnReturnKinds, k))
+                locals[varDecl->name] = normalizeInferredKind(k);
+        }
+        return;
+    }
+    if(auto* block = dynamic_cast<BlockStatementNode*>(stmt))
+    {
+        auto blockLocals = locals;
+        collectReturnKindsFromList(block->statements, blockLocals, fnReturnKinds,
+                                   out);
+        return;
+    }
+    if(auto* ifNode = dynamic_cast<IfNode*>(stmt))
+    {
+        auto ifScopeLocals = locals;
+        if(ifNode->conditionInit)
+            collectReturnKindsFromStmt(ifNode->conditionInit, ifScopeLocals,
+                                       fnReturnKinds, out);
+
+        auto thenLocals = ifScopeLocals;
+        collectReturnKindsFromList(ifNode->thenBranch, thenLocals, fnReturnKinds,
+                                   out);
+
+        if(ifNode->elseIfBranch)
+        {
+            auto elseIfLocals = ifScopeLocals;
+            collectReturnKindsFromStmt(ifNode->elseIfBranch, elseIfLocals,
+                                       fnReturnKinds, out);
+        }
+        if(ifNode->elseBranch)
+        {
+            auto elseLocals = ifScopeLocals;
+            collectReturnKindsFromList(ifNode->elseBranch, elseLocals,
+                                       fnReturnKinds, out);
+        }
+        return;
+    }
+    if(auto* whileNode = dynamic_cast<WhileNode*>(stmt))
+    {
+        auto loopLocals = locals;
+        collectReturnKindsFromList(whileNode->body, loopLocals, fnReturnKinds, out);
+        return;
+    }
+    if(auto* forNode = dynamic_cast<ForNode*>(stmt))
+    {
+        auto loopLocals = locals;
+        collectReturnKindsFromList(forNode->body, loopLocals, fnReturnKinds, out);
+        return;
+    }
 }
 
 bool CodeGenerator::isCopyType(TypeNode* typeNode)
@@ -2473,6 +2815,141 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
             if(fn && fn->isTest && !fn->isExtern)
                 testFunctions.push_back(fn);
+        }
+    }
+
+    auto tryInferFunctionReturnType =
+        [&](FunctionDefNode* fn,
+            const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
+            TypeNode::TypeKind& inferred,
+            std::string& reason) -> bool
+    {
+        if(!fn || fn->isExtern || !fn->body)
+        {
+            reason = "function body is required for inferred return type";
+            return false;
+        }
+
+        std::unordered_map<std::string, TypeNode::TypeKind> localKinds;
+        if(fn->parameters)
+        {
+            for(auto* p : fn->parameters->parameters)
+            {
+                if(!p || !p->type)
+                    continue;
+                localKinds[p->name] = normalizeInferredKind(p->type->kind);
+            }
+        }
+
+        ReturnInferenceData data;
+        collectReturnKindsFromList(fn->body, localKinds, fnReturnKinds, data);
+
+        if(data.hasBareReturn && !data.valueReturns.empty())
+        {
+            reason = "function mixes 'return;' and 'return value;'; add explicit return type";
+            return false;
+        }
+
+        if(data.valueReturns.empty())
+        {
+            if(data.hasUnknownValueReturn)
+            {
+                reason = "cannot infer return type from return expressions; add explicit return type";
+                return false;
+            }
+            inferred = TypeNode::TYPE_VOID;
+            return true;
+        }
+
+        TypeNode::TypeKind merged = data.valueReturns.front();
+        for(size_t i = 1; i < data.valueReturns.size(); ++i)
+        {
+            TypeNode::TypeKind candidate = data.valueReturns[i];
+            TypeNode::TypeKind before = merged;
+            if(!mergeInferredKinds(merged, candidate))
+            {
+                reason = "incompatible return types '" +
+                         inferredTypeName(before) + "' and '" +
+                         inferredTypeName(candidate) +
+                         "'; add explicit return type";
+                return false;
+            }
+        }
+        if(data.hasUnknownValueReturn)
+        {
+            reason = "some return expressions could not be inferred; add explicit return type";
+            return false;
+        }
+
+        inferred = normalizeInferredKind(merged);
+        return true;
+    };
+
+    if(program->functionList)
+    {
+        std::unordered_map<std::string, TypeNode::TypeKind> fnReturnKinds;
+        for(auto* fn : program->functionList->functions)
+        {
+            if(!fn || fn->isExtern || !fn->returnType)
+                continue;
+            auto it = fnReturnKinds.find(fn->name);
+            if(it == fnReturnKinds.end())
+            {
+                fnReturnKinds[fn->name] =
+                    normalizeInferredKind(fn->returnType->kind);
+            }
+            else if(it->second != normalizeInferredKind(fn->returnType->kind))
+            {
+                // Ambiguous overload returns for name-only inference; drop entry.
+                fnReturnKinds.erase(it);
+            }
+        }
+
+        bool progress = true;
+        while(progress)
+        {
+            progress = false;
+            for(auto* fn : program->functionList->functions)
+            {
+                if(!fn || fn->isExtern || fn->returnType)
+                    continue;
+                if(fn->name == "main")
+                {
+                    fn->returnType = new TypeNode(TypeNode::TYPE_I32);
+                    fnReturnKinds[fn->name] = TypeNode::TYPE_I32;
+                    progress = true;
+                    continue;
+                }
+
+                TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
+                std::string reason;
+                if(!tryInferFunctionReturnType(fn, fnReturnKinds, inferredKind,
+                                               reason))
+                    continue;
+
+                fn->returnType = new TypeNode(inferredKind);
+                fnReturnKinds[fn->name] = inferredKind;
+                progress = true;
+            }
+        }
+
+        for(auto* fn : program->functionList->functions)
+        {
+            if(!fn || fn->isExtern || fn->returnType)
+                continue;
+            TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
+            std::string reason;
+            if(!tryInferFunctionReturnType(fn, fnReturnKinds, inferredKind, reason))
+            {
+                reportError(fn->line,
+                            "cannot infer return type for function '" + fn->name +
+                                "': " + reason);
+                fn->returnType = new TypeNode(TypeNode::TYPE_VOID);
+            }
+            else
+            {
+                fn->returnType = new TypeNode(inferredKind);
+            }
         }
     }
 

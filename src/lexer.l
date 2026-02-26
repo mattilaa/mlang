@@ -188,6 +188,8 @@ static int is_try_question_context()
 "#[inline(never)]"    { return INLINE_NEVER_ATTR; }
 "#[inline]"           { return INLINE_ATTR; }
 "int("          { return CAST_INT; }
+"f32("          { return CAST_FLOAT; }
+"f64("          { return CAST_DOUBLE; }
 "float("        { return CAST_FLOAT; }
 "double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }

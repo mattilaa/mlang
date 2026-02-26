@@ -625,6 +625,8 @@ fn c_type_target(word: string) -> string {
     if eq(word, "u64") == 1: { return "uint64_t"; }
     if eq(word, "int") == 1: { return "int32_t"; }
     if eq(word, "bool") == 1: { return "bool"; }
+    if eq(word, "f32") == 1: { return "mlang_float"; }
+    if eq(word, "f64") == 1: { return "mlang_double"; }
     if eq(word, "float") == 1: { return "mlang_float"; }
     if eq(word, "double") == 1: { return "mlang_double"; }
     if eq(word, "string") == 1: { return "mlang_string"; }
@@ -926,6 +928,10 @@ fn completion_kind_lsp(label: string) -> i32 {
     if eq(label, "u32") == 1: { return 22; }
     if eq(label, "u64") == 1: { return 22; }
     if eq(label, "bool") == 1: { return 22; }
+    if eq(label, "f32") == 1: { return 22; }
+    if eq(label, "f64") == 1: { return 22; }
+    if eq(label, "float") == 1: { return 22; }
+    if eq(label, "double") == 1: { return 22; }
     if eq(label, "string") == 1: { return 22; }
     return 6;
 }
@@ -953,6 +959,10 @@ fn completion_detail(label: string) -> string {
     if eq(label, "u32") == 1: { return "builtin 32-bit unsigned integer"; }
     if eq(label, "u64") == 1: { return "builtin 64-bit unsigned integer"; }
     if eq(label, "bool") == 1: { return "builtin boolean type"; }
+    if eq(label, "f32") == 1: { return "builtin 32-bit floating point"; }
+    if eq(label, "f64") == 1: { return "builtin 64-bit floating point"; }
+    if eq(label, "float") == 1: { return "alias of f32"; }
+    if eq(label, "double") == 1: { return "alias of f64"; }
     if eq(label, "string") == 1: { return "builtin UTF-8 string type"; }
     return String::new();
 }
@@ -966,6 +976,18 @@ fn completion_documentation(label: string) -> string {
     }
     if eq(label, "i64") == 1: {
         return "Signed 64-bit integer type for larger integer values.";
+    }
+    if eq(label, "f32") == 1: {
+        return "32-bit floating point type (single precision).";
+    }
+    if eq(label, "f64") == 1: {
+        return "64-bit floating point type (double precision).";
+    }
+    if eq(label, "float") == 1: {
+        return "Alias for f32.";
+    }
+    if eq(label, "double") == 1: {
+        return "Alias for f64.";
     }
     if eq(label, "bool") == 1: {
         return "Boolean type with true/false values.";

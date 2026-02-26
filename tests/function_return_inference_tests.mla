@@ -1,0 +1,58 @@
+fn infer_i32() {
+    return 1;
+}
+
+fn infer_string() {
+    return "hello";
+}
+
+fn infer_bool() {
+    return true;
+}
+
+fn infer_chain() {
+    return infer_i32();
+}
+
+fn infer_void() {
+    let x: i32 = 1;
+    let y: i32 = x + 1;
+    println!("y={}", y);
+}
+
+fn test_infer_i32() -> i32 {
+    let v: i32 = infer_i32();
+    if v != 1 {
+        return 1;
+    }
+    return 0;
+}
+
+fn test_infer_string() -> i32 {
+    let s: string = infer_string();
+    if s.len() != 5 {
+        return 1;
+    }
+    return 0;
+}
+
+fn test_infer_bool() -> i32 {
+    let b: bool = infer_bool();
+    if b == true {
+        return 0;
+    }
+    return 1;
+}
+
+fn test_infer_chain() -> i32 {
+    let v: i32 = infer_chain();
+    if v != 1 {
+        return 1;
+    }
+    return 0;
+}
+
+fn test_infer_void() -> i32 {
+    infer_void();
+    return 0;
+}

@@ -1100,6 +1100,39 @@ TEST_F(MLATest, CastFloatToInt)
     EXPECT_EQ(compileAndRun(code), "3\n");
 }
 
+TEST_F(MLATest, F32F64TypeKeywords)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let a: f32 = 1.5f;
+            let b: f64 = 2.25;
+            println!("{} {}", a, b);
+            return 0;
+        }
+    )";
+    std::string output = compileAndRun(code);
+    EXPECT_TRUE(output.find("1.500000") != std::string::npos);
+    EXPECT_TRUE(output.find("2.250000") != std::string::npos);
+}
+
+TEST_F(MLATest, F32F64CastAliases)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let i: i32 = 7;
+            let a: f32 = f32(i);
+            let b: f64 = f64(i);
+            let c: float = float(i);
+            let d: double = double(i);
+            println!("{} {} {} {}", a, b, c, d);
+            return 0;
+        }
+    )";
+    std::string output = compileAndRun(code);
+    EXPECT_TRUE(output.find("7.000000 7.000000 7.000000 7.000000") !=
+                std::string::npos);
+}
+
 // ============================================================================
 // Comment Tests
 // ============================================================================
@@ -1267,6 +1300,53 @@ TEST_F(MLATest, FloatModuloByZeroReportsError)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("modulo by zero"), std::string::npos);
+}
+
+TEST_F(MLATest, ReturnInferenceMixedReturnFormsReportsError)
+{
+    std::string code = R"(
+        fn bad(flag: bool) {
+            if flag == true {
+                return 1;
+            }
+            return;
+        }
+
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot infer return type for function 'bad'"),
+              std::string::npos);
+    EXPECT_NE(out.find("function mixes 'return;' and 'return value;'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, ReturnInferenceIncompatibleTypesReportsError)
+{
+    std::string code = R"(
+        fn bad(flag: bool) {
+            if flag == true {
+                return 1;
+            }
+            return "oops";
+        }
+
+        fn main() -> i32 {
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot infer return type for function 'bad'"),
+              std::string::npos);
+    EXPECT_NE(out.find("incompatible return types"), std::string::npos);
 }
 
 TEST_F(MLATest, OwnershipUseAfterMoveReportsError)

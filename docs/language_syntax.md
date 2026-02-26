@@ -130,6 +130,26 @@ fn main() -> i32 {
 `fn main() { ... }` defaults to `-> i32` and returns `0` if no explicit return
 is provided.
 
+## Function Return Type Inference
+
+Non-extern functions can omit `-> Type`, and the compiler infers the return
+type from `return` expressions.
+
+```mla
+fn some() {
+    return 1;         // inferred as i32
+}
+
+fn name() {
+    return "alice";   // inferred as string
+}
+```
+
+If no value is returned, the function is inferred as `void`.
+If return forms conflict (for example both `return;` and `return value;`) or
+types cannot be inferred consistently, the compiler emits an error and asks for
+an explicit return type.
+
 ## Lambda + Fold Expressions
 
 Inline typed lambda (captures outer variables, callable via bound name):

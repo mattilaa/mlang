@@ -555,25 +555,19 @@ function_def
         { auto* node = create_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
         {
-            if(strcmp($2, "main") != 0)
-            {
-                fprintf(stderr, "%s:%d:%d: error: missing return type; only 'main' may omit return type\n",
-                        g_sourceFile, yylineno, yycolumn_token);
-                parseHadError = true;
-            }
-            auto* node = create_function_def(create_type_node(TypeNode::TYPE_I32), $2, $4, $7, 0, 0);
+            TypeNode* inferred = nullptr;
+            if(strcmp($2, "main") == 0)
+                inferred = static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I32));
+            auto* node = create_function_def(inferred, $2, $4, $7, 0, 0);
             node->line = yylineno;
             $$ = node;
         }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
         {
-            if(strcmp($3, "main") != 0)
-            {
-                fprintf(stderr, "%s:%d:%d: error: missing return type; only 'main' may omit return type\n",
-                        g_sourceFile, yylineno, yycolumn_token);
-                parseHadError = true;
-            }
-            auto* node = create_function_def(create_type_node(TypeNode::TYPE_I32), $3, $5, $8, 1, 0);
+            TypeNode* inferred = nullptr;
+            if(strcmp($3, "main") == 0)
+                inferred = static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I32));
+            auto* node = create_function_def(inferred, $3, $5, $8, 1, 0);
             node->line = yylineno;
             $$ = node;
         }
@@ -1178,6 +1172,9 @@ cast_expression
     : CAST_INT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_INT, $2); }
     | CAST_FLOAT expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_FLOAT, $2); }
     | CAST_DOUBLE expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_DOUBLE, $2); }
+    | INT LPAREN expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_INT, $3); }
+    | FLOAT LPAREN expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_FLOAT, $3); }
+    | DOUBLE LPAREN expression RPAREN { $$ = create_cast_expression(TypeNode::TYPE_DOUBLE, $3); }
     ;
 
 list_literal
@@ -1241,7 +1238,8 @@ static bool is_reserved_type_keyword(const char* s)
         return false;
     return strcmp(s, "void") == 0 || strcmp(s, "bool") == 0 ||
            strcmp(s, "int") == 0 || strcmp(s, "float") == 0 ||
-           strcmp(s, "double") == 0 || strcmp(s, "string") == 0 ||
+           strcmp(s, "double") == 0 || strcmp(s, "f32") == 0 ||
+           strcmp(s, "f64") == 0 || strcmp(s, "string") == 0 ||
            strcmp(s, "str8") == 0 || strcmp(s, "str16") == 0 ||
            strcmp(s, "list") == 0 || strcmp(s, "map") == 0 ||
            strcmp(s, "tuple") == 0 || strcmp(s, "i8") == 0 ||
@@ -1253,12 +1251,58 @@ static bool is_reserved_type_keyword(const char* s)
 
 void yyerror(const char* s) {
     parseHadError = true;
+    int col = yycolumn_token > 0 ? yycolumn_token : 1;
     if(is_reserved_type_keyword(yytext))
     {
         fprintf(stderr,
-                "%s:%d: error: expected identifier, found keyword '%s'\n",
-                g_sourceFile, yylineno, yytext);
+                "%s:%d:%d: error: expected identifier, found keyword '%s'\n",
+                g_sourceFile, yylineno, col, yytext);
         return;
     }
-    fprintf(stderr, "%s:%d: error: %s\n", g_sourceFile, yylineno, s);
+    if(s && strstr(s, "syntax error") != NULL)
+    {
+        if(yytext && strcmp(yytext, ")") == 0)
+        {
+            fprintf(stderr,
+                    "%s:%d:%d: error: syntax error: unexpected ')' (possible extra closing ')' )\n",
+                    g_sourceFile, yylineno, col);
+            return;
+        }
+        if(yytext && strcmp(yytext, "]") == 0)
+        {
+            fprintf(stderr,
+                    "%s:%d:%d: error: syntax error: unexpected ']' (possible extra closing ']' )\n",
+                    g_sourceFile, yylineno, col);
+            return;
+        }
+        if(yytext && strcmp(yytext, ";") == 0)
+        {
+            fprintf(stderr,
+                    "%s:%d:%d: error: syntax error: possible missing closing ')' before ';'\n",
+                    g_sourceFile, yylineno, col);
+            return;
+        }
+        if(yytext && strcmp(yytext, "}") == 0)
+        {
+            fprintf(stderr,
+                    "%s:%d:%d: error: syntax error: possible missing closing ')' before '}'\n",
+                    g_sourceFile, yylineno, col);
+            return;
+        }
+        if(!yytext || yytext[0] == '\0')
+        {
+            fprintf(stderr,
+                    "%s:%d:%d: error: syntax error: unexpected end of file (possible missing ')' )\n",
+                    g_sourceFile, yylineno, col);
+            return;
+        }
+        if(yytext && strcmp(yytext, ",") == 0)
+        {
+            fprintf(stderr,
+                    "%s:%d:%d: error: syntax error: unexpected ',' (possible missing expression before or after ',')\n",
+                    g_sourceFile, yylineno, col);
+            return;
+        }
+    }
+    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, yylineno, col, s);
 }

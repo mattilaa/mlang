@@ -107,6 +107,7 @@ Includes:
   `if let ... == ...: guard`
 - empty-block warnings
 - `fn main() {}` defaulting to `fn main() -> i32 {}`
+- function return type inference for non-extern functions that omit `-> Type`
 - typed lambdas and fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`)
 
 Related example files:
