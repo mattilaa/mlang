@@ -1,14 +1,108 @@
 /// \file unordered.mla
-/// \brief C++-style unordered/vector container wrappers for MLang.
+/// \brief Unordered hash-table/set APIs and C++-style wrappers.
 ///
-/// This module exposes generic wrapper structs so code can use familiar
-/// container names while relying on builtin `map` / `list` operations.
+/// Real hash-backed containers:
+/// - `HashMapI64I64`
+/// - `HashSetI64`
 ///
-/// Notes:
-/// - `UnorderedMap<K, V>` wraps `map<K, V>` in `data`.
-/// - `UnorderedSet<T>` wraps `list<T>` in `data`; use `contains` + `dedup`
-///   for set-like behavior.
-/// - `Vector<T>` wraps `list<T>` in `data`.
+/// Compatibility wrappers:
+/// - `UnorderedMap<K,V> { data: map<K,V> }`
+/// - `UnorderedSet<T> { data: list<T> }`
+/// - `Vector<T> { data: list<T> }`
+
+extern pub fn __mlang_std_unordered_map_i64_i64_new() -> i64;
+extern pub fn __mlang_std_unordered_map_i64_i64_free(handle: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_insert(handle: i64, key: i64, value: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_contains(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_get_or(handle: i64, key: i64, default_value: i64) -> i64;
+extern pub fn __mlang_std_unordered_map_i64_i64_remove(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_map_i64_i64_len(handle: i64) -> i64;
+extern pub fn __mlang_std_unordered_map_i64_i64_keys(handle: i64) -> list<i64>;
+extern pub fn __mlang_std_unordered_map_i64_i64_values(handle: i64) -> list<i64>;
+
+extern pub fn __mlang_std_unordered_set_i64_new() -> i64;
+extern pub fn __mlang_std_unordered_set_i64_free(handle: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_insert(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_contains(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_remove(handle: i64, key: i64) -> i32;
+extern pub fn __mlang_std_unordered_set_i64_len(handle: i64) -> i64;
+extern pub fn __mlang_std_unordered_set_i64_keys(handle: i64) -> list<i64>;
+
+pub struct HashMapI64I64 {
+    var handle: i64;
+};
+
+pub struct HashSetI64 {
+    var handle: i64;
+};
+
+impl HashMapI64I64 {
+    pub fn new() -> HashMapI64I64 {
+        return HashMapI64I64 { handle: __mlang_std_unordered_map_i64_i64_new() };
+    }
+
+    pub fn close(self: HashMapI64I64) -> i32 {
+        return __mlang_std_unordered_map_i64_i64_free(self.handle);
+    }
+
+    pub fn insert(self: HashMapI64I64, key: i64, value: i64) -> i32 {
+        return __mlang_std_unordered_map_i64_i64_insert(self.handle, key, value);
+    }
+
+    pub fn contains(self: HashMapI64I64, key: i64) -> i32 {
+        return __mlang_std_unordered_map_i64_i64_contains(self.handle, key);
+    }
+
+    pub fn get_or(self: HashMapI64I64, key: i64, default_value: i64) -> i64 {
+        return __mlang_std_unordered_map_i64_i64_get_or(self.handle, key, default_value);
+    }
+
+    pub fn remove(self: HashMapI64I64, key: i64) -> i32 {
+        return __mlang_std_unordered_map_i64_i64_remove(self.handle, key);
+    }
+
+    pub fn len(self: HashMapI64I64) -> i64 {
+        return __mlang_std_unordered_map_i64_i64_len(self.handle);
+    }
+
+    pub fn keys(self: HashMapI64I64) -> list<i64> {
+        return __mlang_std_unordered_map_i64_i64_keys(self.handle);
+    }
+
+    pub fn values(self: HashMapI64I64) -> list<i64> {
+        return __mlang_std_unordered_map_i64_i64_values(self.handle);
+    }
+}
+
+impl HashSetI64 {
+    pub fn new() -> HashSetI64 {
+        return HashSetI64 { handle: __mlang_std_unordered_set_i64_new() };
+    }
+
+    pub fn close(self: HashSetI64) -> i32 {
+        return __mlang_std_unordered_set_i64_free(self.handle);
+    }
+
+    pub fn insert(self: HashSetI64, key: i64) -> i32 {
+        return __mlang_std_unordered_set_i64_insert(self.handle, key);
+    }
+
+    pub fn contains(self: HashSetI64, key: i64) -> i32 {
+        return __mlang_std_unordered_set_i64_contains(self.handle, key);
+    }
+
+    pub fn remove(self: HashSetI64, key: i64) -> i32 {
+        return __mlang_std_unordered_set_i64_remove(self.handle, key);
+    }
+
+    pub fn len(self: HashSetI64) -> i64 {
+        return __mlang_std_unordered_set_i64_len(self.handle);
+    }
+
+    pub fn keys(self: HashSetI64) -> list<i64> {
+        return __mlang_std_unordered_set_i64_keys(self.handle);
+    }
+}
 
 pub struct UnorderedMap<K, V> {
     var data: map<K, V>;

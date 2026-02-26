@@ -230,6 +230,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_argparser.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_regex.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_unordered.c
 )
 add_dependencies(mlang_std ParserTarget LexerTarget)
 target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)

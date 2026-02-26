@@ -81,11 +81,18 @@ for this builtin type, not a distinct type declaration.
 
 Module file: `stdlib/std/unordered.mla`
 
-Generic wrapper structs that provide C++-familiar container names while
-reusing existing MLang builtins via the `.data` field.
+Hash-backed runtime containers:
+- `HashMapI64I64`
+  - `new()`, `close()`
+  - `insert(key, value)`, `contains(key)`, `get_or(key, default_value)`
+  - `remove(key)`, `len()`, `keys()`, `values()`
+- `HashSetI64`
+  - `new()`, `close()`
+  - `insert(key)`, `contains(key)`, `remove(key)`, `len()`, `keys()`
 
+Compatibility wrapper structs (builtin-backed):
 - `UnorderedMap<K, V> { data: map<K, V> }`
-- `UnorderedSet<T> { data: list<T> }` (use `contains` and optional `dedup`)
+- `UnorderedSet<T> { data: list<T> }`
 - `Vector<T> { data: list<T> }`
 
 ## std::esc

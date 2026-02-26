@@ -280,7 +280,7 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/type_alias_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
   `examples/lambda_fold_demo.mla`
-- Sundaram sieve with C++-style container wrappers (`UnorderedSet`, `Vector`):
+- Sundaram sieve with real hash-set membership (`HashSetI64`):
   `examples/sieve_sundaram.mla`
 
 ## Rust-like Attributes
