@@ -53,6 +53,8 @@ def main() -> int:
             "fn test_defs() -> i32 {\n"
             "  let iv: i32 = 1;\n"
             "  let value: string = String::new();\n"
+            "  let cap: string = String::with_capacity(16);\n"
+            "  String::free(cap);\n"
             "  let letters: list<string> = [\"alpha\", \"beta\"];\n"
             "  let num: int = 1;\n"
             "  return 0;\n"
@@ -89,6 +91,62 @@ def main() -> int:
             assert new_target_line >= 0, f"String::new target line missing: {new_res!r}"
             new_line_text = new_target.read_text().splitlines()[new_target_line]
             assert "pub fn new" in new_line_text, f"String::new target text mismatch: {new_line_text!r}"
+
+            cap_m_line, cap_m_char = position_of(text, "String::with_capacity")
+            cap_m_char += len("String::")
+            cap_m_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": cap_m_line, "character": cap_m_char},
+                },
+            )
+            assert isinstance(cap_m_res, list) and cap_m_res, f"String::with_capacity definition missing: {cap_m_res!r}"
+            cap_m_uri = cap_m_res[0].get("uri", "")
+            assert cap_m_uri.endswith("/stdlib/std/strbuf.mla"), f"String::with_capacity uri mismatch: {cap_m_res!r}"
+            cap_m_target = Path(cap_m_uri.removeprefix("file://"))
+            cap_m_start = cap_m_res[0].get("range", {}).get("start", {})
+            cap_m_target_line = int(cap_m_start.get("line", -1))
+            assert cap_m_target_line >= 0, f"String::with_capacity target line missing: {cap_m_res!r}"
+            cap_m_line_text = cap_m_target.read_text().splitlines()[cap_m_target_line]
+            assert "pub fn with_capacity" in cap_m_line_text, f"String::with_capacity target text mismatch: {cap_m_line_text!r}"
+
+            free_m_line, free_m_char = position_of(text, "String::free")
+            free_m_char += len("String::")
+            free_m_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": free_m_line, "character": free_m_char},
+                },
+            )
+            assert isinstance(free_m_res, list) and free_m_res, f"String::free definition missing: {free_m_res!r}"
+            free_m_uri = free_m_res[0].get("uri", "")
+            assert free_m_uri.endswith("/stdlib/std/strbuf.mla"), f"String::free uri mismatch: {free_m_res!r}"
+            free_m_target = Path(free_m_uri.removeprefix("file://"))
+            free_m_start = free_m_res[0].get("range", {}).get("start", {})
+            free_m_target_line = int(free_m_start.get("line", -1))
+            assert free_m_target_line >= 0, f"String::free target line missing: {free_m_res!r}"
+            free_m_line_text = free_m_target.read_text().splitlines()[free_m_target_line]
+            assert "pub fn free" in free_m_line_text, f"String::free target text mismatch: {free_m_line_text!r}"
+
+            cap_t_line, cap_t_char = position_of(text, "String::with_capacity")
+            cap_t_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(doc)},
+                    "position": {"line": cap_t_line, "character": cap_t_char},
+                },
+            )
+            assert isinstance(cap_t_res, list) and cap_t_res, f"String type in with_capacity missing: {cap_t_res!r}"
+            cap_t_uri = cap_t_res[0].get("uri", "")
+            assert cap_t_uri.endswith("/stdlib/types.mla"), f"String type uri mismatch: {cap_t_res!r}"
+            cap_t_target = Path(cap_t_uri.removeprefix("file://"))
+            cap_t_start = cap_t_res[0].get("range", {}).get("start", {})
+            cap_t_target_line = int(cap_t_start.get("line", -1))
+            assert cap_t_target_line >= 0, f"String type line missing: {cap_t_res!r}"
+            cap_t_line_text = cap_t_target.read_text().splitlines()[cap_t_target_line]
+            assert "@builtin string" in cap_t_line_text, f"String type target text mismatch: {cap_t_line_text!r}"
 
             type_line, type_char = position_of(text, "string =")
             type_res = client.request(

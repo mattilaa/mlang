@@ -12,6 +12,9 @@ String allocation intrinsics are also available:
 - `String::with_capacity(cap)`
 - `String::free(buf)`
 
+`String` here is a compiler wrapper namespace over the builtin `string` type
+(not a separate type).
+
 For higher-level string helpers and UTF conversions, see:
 - `stdlib/std/strbuf.mla`
   (`len`, `is_empty`, `clone`, `eq`, `compare`, `starts_with`, `ends_with`,

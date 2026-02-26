@@ -43,6 +43,9 @@
 
 // @builtin string
 // Default string type (alias of str8).
+// `String` is the compiler-provided wrapper namespace for string intrinsics
+// (e.g. `String::new`, `String::with_capacity`, `String::free`).
+// It is not a separate runtime type.
 
 // @builtin str8
 // UTF-8 string type.

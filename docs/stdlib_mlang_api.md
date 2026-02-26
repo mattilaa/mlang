@@ -44,6 +44,9 @@ These methods are language/compiler intrinsics and are available directly on
 collection/string values (including values typed through `use type` aliases).
 
 ### `string`
+`String` in `String::new/with_capacity/free` is a compiler wrapper namespace
+for this builtin type, not a distinct type declaration.
+
 - `s.len() -> i64`
 - `s.is_empty() -> int`
 
@@ -497,6 +500,9 @@ Module file: `stdlib/std/time.mla`
 Module file: `stdlib/std/strbuf.mla`
 
 ### Allocation
+- `String::new() -> string` (compiler intrinsic wrapper)
+- `String::with_capacity(capacity: i64) -> string` (compiler intrinsic wrapper)
+- `String::free(buf: string) -> void` (compiler intrinsic wrapper)
 - `new() -> string`
 - `with_capacity(capacity: i64) -> string`
 - `free(buf: string) -> void`

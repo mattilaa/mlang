@@ -521,6 +521,10 @@ fn runtime_builtin_location(word: string) -> string {
 
 fn builtin_type_location(word: string) -> string {
     if len(word) == 0: { return String::new(); }
+    var lookup: string = word;
+    if eq(lookup, "String") == 1: {
+        lookup = "string";
+    }
     let root: string = root_path_from_store();
     let here: string = cwd();
     var p1: string = String::new();
@@ -562,7 +566,7 @@ fn builtin_type_location(word: string) -> string {
     let text_r: Result<string, string> = read_all_text(path);
     if text_r.is_err(): { return String::new(); }
     let text: string = text_r.unwrap();
-    let marker: string = format!("@builtin {}", word);
+    let marker: string = format!("@builtin {}", lookup);
     return first_match_location(path, text, marker);
 }
 
