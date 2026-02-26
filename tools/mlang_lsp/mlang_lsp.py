@@ -13,7 +13,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from mlang_frontend.diagnostics import analyze_text
-from mlang_frontend.parser import collect_symbols
+from mlang_frontend.semantic import completion_symbols, hover_symbol
 from mlang_frontend.source_map import line_char_to_offset
 
 
@@ -125,11 +125,27 @@ class JsonRpcServer:
         ]
         return [{"label": k, "kind": 14, "detail": "keyword"} for k in keywords]
 
+    @staticmethod
+    def _symbol_kind_to_lsp(sym_kind: str) -> int:
+        if sym_kind == "function":
+            return 3
+        if sym_kind == "local_variable":
+            return 6
+        return 6
+
+    @staticmethod
+    def _symbol_detail(sym_kind: str, container: str) -> str:
+        if sym_kind == "function":
+            return "function"
+        if sym_kind == "local_variable":
+            return f"local variable ({container})" if container else "local variable"
+        return "variable"
+
     def _handle_initialize(self, req_id: Any) -> None:
         self._respond(
             req_id,
             {
-                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.1.0"},
+                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.2.0"},
                 "capabilities": {
                     "textDocumentSync": 2,
                     "hoverProvider": True,
@@ -205,11 +221,20 @@ class JsonRpcServer:
         token = self._word_at(doc.text, offset)
         if token == "fn":
             value = "Define a function."
-        elif token:
-            value = f"Symbol `{token}`."
-        else:
-            self._respond(req_id, None)
+            self._respond(req_id, {"contents": {"kind": "markdown", "value": value}})
             return
+
+        sym = hover_symbol(doc.text, token, offset) if token else None
+        if sym is None:
+            if token:
+                value = f"Symbol `{token}`."
+                self._respond(req_id, {"contents": {"kind": "markdown", "value": value}})
+            else:
+                self._respond(req_id, None)
+            return
+
+        detail = self._symbol_detail(sym.kind, sym.container)
+        value = f"{detail} `{sym.name}`"
         self._respond(req_id, {"contents": {"kind": "markdown", "value": value}})
 
     def _handle_completion(self, req_id: Any, params: dict[str, Any]) -> None:
@@ -227,10 +252,17 @@ class JsonRpcServer:
         prefix = line_text[: min(character, len(line_text))]
         m = re.search(r"([A-Za-z_][A-Za-z0-9_]*)$", prefix)
         typed = m.group(1) if m else ""
+        offset = line_char_to_offset(doc.text, line, character)
 
         items = self._keyword_items()
-        for symbol in collect_symbols(doc.text):
-            items.append({"label": symbol, "kind": 6, "detail": "symbol"})
+        for sym in completion_symbols(doc.text, offset):
+            items.append(
+                {
+                    "label": sym.name,
+                    "kind": self._symbol_kind_to_lsp(sym.kind),
+                    "detail": self._symbol_detail(sym.kind, sym.container),
+                }
+            )
 
         if typed:
             items = [it for it in items if it["label"].startswith(typed)]

@@ -225,6 +225,44 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         self.assertIn("value", labels)
         self.assertNotIn("valeu", labels)
 
+    def test_scope_aware_completion_and_hover(self) -> None:
+        self.h.request(
+            "initialize",
+            {"processId": None, "rootUri": None, "capabilities": {}},
+        )
+        self.h.notify("initialized", {})
+
+        uri = "file:///tmp/scope.mlang"
+        source = (
+            "let top = 1\n"
+            "fn a() {\n"
+            "  let only_a = 1\n"
+            "  only_a\n"
+            "}\n"
+            "fn b() {\n"
+            "  let only_b = 2\n"
+            "}\n"
+        )
+        self.h.notify(
+            "textDocument/didOpen",
+            {"textDocument": {"uri": uri, "languageId": "mlang", "version": 1, "text": source}},
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        completion = self.h.request(
+            "textDocument/completion",
+            {"textDocument": {"uri": uri}, "position": {"line": 3, "character": 8}},
+        )
+        labels = {item.get("label") for item in completion.get("items", [])}
+        self.assertIn("only_a", labels)
+        self.assertNotIn("only_b", labels)
+
+        hover = self.h.request(
+            "textDocument/hover",
+            {"textDocument": {"uri": uri}, "position": {"line": 3, "character": 4}},
+        )
+        self.assertIn("local variable", hover["contents"]["value"])
+
 
 if __name__ == "__main__":
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
