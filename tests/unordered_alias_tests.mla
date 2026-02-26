@@ -1,0 +1,40 @@
+mod std::unordered;
+use std::unordered::*;
+
+#[test]
+fn test_unordered_map_alias_basic() -> i32 {
+    let scores: UnorderedMap<string, i32> =
+        UnorderedMap<string, i32> { data: {"Alice": 95, "Bob": 87} };
+    let raw: map<string, i32> = scores.data;
+    return raw["Alice"] == 95 ? 0 : 1;
+}
+
+#[test]
+fn test_unordered_set_alias_membership_flags() -> i32 {
+    var data: list<i32> = [];
+    data.push(7);
+    data.push(8);
+    data.push(7);
+
+    if data.contains(7) == false {
+        return 1;
+    }
+    if data.contains(9) {
+        return 1;
+    }
+    let seen: UnorderedSet<i32> = UnorderedSet<i32> { data: data };
+    let check: list<i32> = seen.data;
+    if check.len() != 3 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_vector_alias_methods() -> i32 {
+    var data: list<i32> = [];
+    data.push(7);
+    data.push(8);
+    data.push(9);
+    let ids: Vector<i32> = Vector<i32> { data: data };
+    let check: list<i32> = ids.data;
+    return check.len() == 3 ? 0 : 1;
+}

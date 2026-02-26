@@ -183,6 +183,17 @@ Mlang Test Sample Directory
     ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Expected sample tests to pass, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
+Mlang Bench Runner
+    [Documentation]    Run stdlib benchmark suite with bench mode and verify benchmark output.
+    ${run}=    Run Process    ${MLANG}    bench    ${EXECDIR}/tests/bench_stdlib.mla    --bench-iters    200    --bench-warmup    50
+    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=bench_stdlib failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    [BENCH]
+    Should Contain    ${run.stdout}    bench_vec_push_pop
+    Should Contain    ${run.stdout}    bench_quickmap_hash_set_get
+    Should Contain    ${run.stdout}    bench_quickmap_vec_set_get
+
 Type Inference Regression
     ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/type_inference_tests.mla
     ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}

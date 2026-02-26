@@ -45,6 +45,23 @@ Language aliases:
 - `float` aliases `f32`
 - `double` aliases `f64`
 
+## Type Name Property (`.name`)
+
+Values expose a read-only synthetic `.name` property for logging static type
+names:
+
+```mla
+let i: i32 = 12;
+println!("{}", i.name);  // i32
+```
+
+For collection values, the returned name includes inner types when available:
+- `list<i32>`
+- `map<string, i32>`
+
+If a struct defines a real field named `name`, normal field access is used
+instead of the synthetic type-name property.
+
 ## `if` / `else if` Syntax
 
 Plain block form (preferred):
@@ -110,6 +127,46 @@ if flag {
 
 Diagnostic:
 - `file.mla:row:column: warning: empty block`
+
+## `while` Guard Syntax
+
+Plain form (preferred):
+
+```mla
+while i < n {
+    i += 1;
+}
+```
+
+Guarded form:
+
+```mla
+while i < n: j < i && (n == m) {
+    i += 1;
+}
+```
+
+Notes:
+- `:` is optional for plain `while cond { ... }`.
+- Using `:` without a trailing guard expression is accepted but warns that it is redundant.
+
+## Enums with Explicit Backing Type
+
+Enums can declare explicit integer backing storage:
+
+```mla
+enum Status : i64 {
+    Invalid = 1,
+    Success = 2,
+};
+```
+
+Compatibility and diagnostics:
+- Values must fit the declared backing type.
+- Compiler errors include `file.mla:row:column` locations for invalid values.
+- Compatible enum values can be referenced across enums when representable in
+  the target enum backing type.
+- Nested enum declarations (`Outer::Inner`) are supported.
 
 ## `main` Return Type Defaulting
 

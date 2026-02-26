@@ -8,6 +8,7 @@ mod std::io;
 mod std::esc;
 mod std::json;
 mod std::jsonrpc;
+mod std::bench;
 mod std::math;
 mod std::net;
 mod std::process;
@@ -17,7 +18,9 @@ mod std::term;
 mod std::time;
 mod std::fs;
 mod std::strbuf;
+mod std::testing;
 mod std::thread;
+mod std::unordered;
 mod std::vec;
 ```
 
@@ -27,6 +30,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/io.mla`
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
+- `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/process.mla`
@@ -35,7 +39,9 @@ The source-of-truth implementation files are:
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
 - `stdlib/std/strbuf.mla`
+- `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
+- `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
 ## Built-in Collection Methods (Compiler Intrinsics)
@@ -74,6 +80,96 @@ for this builtin type, not a distinct type declaration.
 - `m.values()` iterator for `for val in m.values() { ... }`
 - `m.entries()` iterator for `for entry in m.entries() { ... }`
   where `entry` is a tuple `(K, V)` and can be accessed via `.0` / `.1`
+
+## std::unordered
+
+Module file: `stdlib/std/unordered.mla`
+
+Hash-backed runtime containers:
+- `HashMapI64I64`
+  - `new()`, `close()`
+  - `insert(key, value)`, `contains(key)`, `get_or(key, default_value)`
+  - `remove(key)`, `len()`, `keys()`, `values()`
+- `QuickMapI64I64` (convenience API over `HashMapI64I64`)
+  - `new()`, `close()`
+  - `set(key, value)`, `get(key, fallback)`, `has(key)`, `del(key)`
+  - `len()`, `keys()`, `values()`
+- `QuickMapVecI64I64` (vector-backed convenience map)
+  - `new()`, `close()`
+  - `set(key, value)`, `get(key, fallback)`, `has(key)`, `del(key)`
+  - `len()`, `keys()`, `values()`
+- `HashSetI64`
+  - `new()`, `close()`
+  - `insert(key)`, `contains(key)`, `remove(key)`, `len()`, `keys()`
+
+Compatibility wrapper structs (builtin-backed):
+- `UnorderedMap<K, V> { data: map<K, V> }`
+- `UnorderedSet<T> { data: list<T> }`
+- `Vector<T> { data: list<T> }`
+
+## std::bench
+
+Module file: `stdlib/std/bench.mla`
+
+Google-benchmark style anti-optimization helpers:
+- `do_not_optimize_i64(v)`
+- `do_not_optimize_i32(v)`
+- `clobber_memory()`
+
+Typical benchmark usage:
+
+```mla
+mod std::bench;
+
+#[test]
+fn bench_vec_push_pop() -> i32 {
+    let x: i64 = 123;
+    do_not_optimize_i64(x);
+    clobber_memory();
+    return 0;
+}
+```
+
+Executed via benchmark runner:
+- `mlang bench tests`
+- `mlang bench tests/bench_stdlib.mla --bench-iters 200000 --bench-warmup 20000`
+
+## std::testing
+
+Module file: `stdlib/std/testing.mla`
+
+GoogleTest-like non-fatal expectation helpers:
+- `expect_true(cond: bool)`
+- `expect_false(cond: bool)`
+- `expect_eq(expected, actual)` overloads for `i32`, `i64`, `bool`, `string`, `f32`, `f64`
+- uppercase aliases: `EXPECT_TRUE`, `EXPECT_FALSE`, `EXPECT_EQ`
+
+Fatal verify helpers (abort on failure):
+- `verify_true(cond: bool)`
+- `verify_false(cond: bool)`
+- `verify_eq(expected, actual)` overloads for `i32`, `i64`, `bool`, `string`, `f32`, `f64`
+- uppercase aliases: `VERIFY_TRUE`, `VERIFY_FALSE`, `VERIFY_EQ`
+
+Counters/result helpers:
+- `reset()`
+- `checks() -> i32`
+- `failures() -> i32`
+- `result() -> i32` (`0` when no failures, else `1`)
+
+Typical test usage:
+
+```mla
+mod std::testing;
+use std::testing::*;
+
+#[test]
+fn test_demo() -> i32 {
+    reset();
+    expect_true(2 > 1);
+    expect_eq("ok", "ok");
+    return result();
+}
+```
 
 ## std::esc
 

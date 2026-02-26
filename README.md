@@ -192,19 +192,40 @@ return `0` for pass, non-zero for failure.
 # Run tests in the ./tests directory
 mlang test
 
+# Alternative flag form (same behavior)
+mlang --tests
+mlang --tests tests/std_math_tests.mla
+
 # Run tests in a specific file or directory
 mlang test tests/test_sample.mla
 mlang test tests
 
 # Alternative entry point
 mlang run tests
+
+# Benchmark #[test] functions in files prefixed with bench_*
+mlang bench tests
+mlang bench tests/bench_stdlib.mla --bench-iters 200000 --bench-warmup 20000
 ```
+
+Benchmark anti-optimization helpers (Google Benchmark style) are available in
+`std::bench`:
+- `do_not_optimize_i64(v)`
+- `do_not_optimize_i32(v)`
+- `clobber_memory()`
 
 Skip compiling tests in normal builds:
 
 ```sh
 mlang --no-tests main.mla
 ```
+
+GoogleTest-like non-fatal expectations are available via `std::testing`:
+- `expect_true(cond)`
+- `expect_false(cond)`
+- `expect_eq(expected, actual)` (typed overloads)
+- fatal verify variants are also available:
+  `verify_true`, `verify_false`, `verify_eq` (and `VERIFY_*` aliases)
 
 Interactive `std::io` input example (manual run, not part of Robot example
 suite): `examples/std_io_input_demo.mla`.
@@ -280,6 +301,8 @@ Run the Robot Framework example suite (includes the multithreaded net case):
   `examples/type_alias_demo.mla`
 - Lambda + fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`):
   `examples/lambda_fold_demo.mla`
+- Sundaram sieve with real hash-set membership (`HashSetI64`):
+  `examples/sieve_sundaram.mla`
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

@@ -1,0 +1,56 @@
+mod std::unordered;
+mod std::bench;
+use std::unordered::QuickMapI64I64;
+use std::unordered::QuickMapVecI64I64;
+use std::bench::clobber_memory;
+use std::bench::do_not_optimize_i64;
+
+#[test]
+fn bench_vec_push_pop() -> i32 {
+    var v: list<i32> = [];
+    for i in 0..128 {
+        v.push(i);
+    }
+    for _i in 0..128 {
+        v.pop();
+    }
+    do_not_optimize_i64(v.len());
+    clobber_memory();
+    return v.len() == 0 ? 0 : 1;
+}
+
+#[test]
+fn bench_quickmap_hash_set_get() -> i32 {
+    let q: QuickMapI64I64 = QuickMapI64I64::new();
+    for i in 0..64 {
+        q.set(i, i * 2);
+    }
+
+    var acc: i64 = 0;
+    for i in 0..64 {
+        acc = acc + q.get(i, -1);
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    q.close();
+
+    return acc == 4032 ? 0 : 1;
+}
+
+#[test]
+fn bench_quickmap_vec_set_get() -> i32 {
+    let q: QuickMapVecI64I64 = QuickMapVecI64I64::new();
+    for i in 0..64 {
+        q.set(i, i * 2);
+    }
+
+    var acc: i64 = 0;
+    for i in 0..64 {
+        acc = acc + q.get(i, -1);
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    q.close();
+
+    return acc == 4032 ? 0 : 1;
+}

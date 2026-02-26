@@ -1,0 +1,57 @@
+/// Sundaram sieve example in MLang using real hash-set membership.
+///
+/// C++ sample parity notes:
+/// - `std::unordered_set<int>` -> `HashSetI64` from `std::unordered`.
+/// - `std::vector<int>` -> `list<i32>`.
+/// - Range/view pipelines are not first-class yet, so this uses explicit loops.
+
+mod std::unordered;
+use std::unordered::HashSetI64;
+
+fn sieve_sundaram(n: i32) -> list<i32> {
+    let struck: HashSetI64 = HashSetI64::new();
+
+    for j in 1..(n + 1) {
+        for i in 1..(j + 1) {
+            let out: i32 = i + j + 2 * i * j;
+            if out > n: {
+                break;
+            }
+            struck.insert(out);
+        }
+    }
+
+    var primes: list<i32> = [];
+    primes.push(2);
+
+    for x in 1..(n + 1) {
+        if struck.contains(x) == 0 {
+            primes.push(2 * x + 1);
+        }
+    }
+
+    primes.sort();
+    struck.close();
+    return primes;
+}
+
+fn print_i32_list(xs: list<i32>) -> void {
+    print!("[");
+    var first: bool = true;
+    for x in xs {
+        if first == false {
+            print!(", ");
+        }
+        print!("{}", x);
+        first = false;
+    }
+    println!("]");
+}
+
+fn main() -> i32 {
+    let primes: list<i32> = sieve_sundaram(16);
+    print_i32_list(primes);
+    // Expected:
+    // [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31]
+    return 0;
+}

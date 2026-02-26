@@ -1,0 +1,29 @@
+mod std::strbuf;
+
+use std::strbuf::*;
+
+struct Person {
+    var name: string;
+};
+
+#[test]
+fn test_type_name_property_primitive() -> i32 {
+    let i: i32 = 12;
+    return eq(i.name, "i32") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_type_name_property_collections() -> i32 {
+    let ids: list<i32> = [7, 8, 9];
+    if eq(ids.name, "list<i32>") != 1 { return 1; }
+
+    let scores: map<string, i32> = {"Alice": 95, "Bob": 87};
+    return contains(scores.name, "map<string, i32>") == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_type_name_property_does_not_break_real_name_field() -> i32 {
+    let p: Person = Person { name: "Ada" };
+    if eq(p.name, "Ada") != 1 { return 1; }
+    return eq(p.name.name, "string") == 1 ? 0 : 1;
+}

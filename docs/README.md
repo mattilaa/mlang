@@ -93,6 +93,15 @@ For Vec (dynamic array) helpers, see:
   (`Vec::new`, `vec![...]`, `push/pop/clear`, `len/is_empty`,
    `contains/index_of`, `sort/sort_desc/reverse/dedup`, `first/last`).
 
+For C++-style unordered/vector wrapper types, see:
+- `stdlib/std/unordered.mla`
+  (`HashMapI64I64`, `QuickMapI64I64`, `QuickMapVecI64I64`, `HashSetI64`, `UnorderedMap<K,V>`, `UnorderedSet<T>`,
+   `Vector<T>`).
+
+For benchmark anti-optimization helpers, see:
+- `stdlib/std/bench.mla`
+  (`do_not_optimize_i64`, `do_not_optimize_i32`, `clobber_memory`).
+
 ## Language Highlights
 
 Recent language features are documented in:
@@ -110,6 +119,23 @@ Includes:
 - function return type inference for non-extern functions that omit `-> Type`
 - typed lambdas and fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`)
 
+## Branch Feature Additions
+
+Recent branch-level additions reflected in these docs:
+- Benchmark runner mode for `#[test]` (`mlang bench`, warmup/iteration flags)
+- `std::bench` anti-optimization helpers for benchmark code
+- `use type` aliases with generic + block scope support and overlap diagnostics
+- Guarded `if/else if` and guarded `while` forms; optional plain-colon warnings
+- `fn main() {}` defaulting to `-> i32`, plus function return-type inference
+- `f32`/`f64` primitive names and `float`/`double` aliases
+- Lambda and fold expressions with example coverage
+- Enum backing types (`: i64`, `: u8`), range checks, and compatibility checks
+- Terminal helpers (`std::term`, `std::esc`) including ANSI auto-disable on non-TTY
+- Regex module (`std::regex`)
+- Hash-based unordered containers + quickmap variants (`std::unordered`)
+- GoogleTest-like test expectation helpers (`std::testing`)
+- MLang package-manager frontend updates including optional Ninja build flag
+
 Related example files:
 - `examples/lambda_fold_demo.mla`
 - `examples/lambda_fold_patterns.mla`
@@ -125,9 +151,10 @@ See also:
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
-  (`std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
+  (`std::bench`, `std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
   `std::process`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
-  `std::thread`, `std::time`, `std::vec`).
+  `std::testing`,
+  `std::thread`, `std::time`, `std::unordered`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.

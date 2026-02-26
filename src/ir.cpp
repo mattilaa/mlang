@@ -1,6 +1,7 @@
 #include "ir.h"
 #include <cctype>
 #include <cstring>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -385,6 +386,146 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
     }
 }
 
+static std::string displayTypeName(TypeNode* type)
+{
+    if(!type)
+        return "unknown";
+
+    if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
+    {
+        return ref->isMutable ? "&mut " + displayTypeName(ref->elementType)
+                              : "&" + displayTypeName(ref->elementType);
+    }
+    if(auto* ptr = dynamic_cast<PointerTypeNode*>(type))
+    {
+        return "ptr<" + displayTypeName(ptr->elementType) + ">";
+    }
+    if(auto* gl = dynamic_cast<GenericListTypeNode*>(type))
+    {
+        return "list<" + displayTypeName(gl->elementType) + ">";
+    }
+    if(auto* mapTy = dynamic_cast<MapTypeNode*>(type))
+    {
+        return "map<" + displayTypeName(mapTy->keyType) + ", " +
+               displayTypeName(mapTy->valueType) + ">";
+    }
+    if(auto* tupleTy = dynamic_cast<TupleTypeNode*>(type))
+    {
+        std::string out = "tuple<";
+        if(tupleTy->elementTypes)
+        {
+            for(size_t i = 0; i < tupleTy->elementTypes->types.size(); ++i)
+            {
+                if(i > 0)
+                    out += ", ";
+                out += displayTypeName(tupleTy->elementTypes->types[i]);
+            }
+        }
+        out += ">";
+        return out;
+    }
+    if(auto* s = dynamic_cast<StructTypeRefNode*>(type))
+    {
+        return s->structName;
+    }
+    if(auto* gs = dynamic_cast<GenericStructTypeRefNode*>(type))
+    {
+        std::string out = gs->structName + "<";
+        for(size_t i = 0; i < gs->typeArgs.size(); ++i)
+        {
+            if(i > 0)
+                out += ", ";
+            out += displayTypeName(gs->typeArgs[i]);
+        }
+        out += ">";
+        return out;
+    }
+
+    switch(type->kind)
+    {
+    case TypeNode::TYPE_VOID:
+        return "void";
+    case TypeNode::TYPE_BOOL:
+        return "bool";
+    case TypeNode::TYPE_INT:
+        return "int";
+    case TypeNode::TYPE_FLOAT:
+        return "f32";
+    case TypeNode::TYPE_DOUBLE:
+        return "f64";
+    case TypeNode::TYPE_STRING:
+        return "string";
+    case TypeNode::TYPE_STR8:
+        return "str8";
+    case TypeNode::TYPE_STR16:
+        return "str16";
+    case TypeNode::TYPE_LIST:
+        return "list";
+    case TypeNode::TYPE_MAP:
+        return "map";
+    case TypeNode::TYPE_TUPLE:
+        return "tuple";
+    case TypeNode::TYPE_PTR:
+        return "ptr";
+    case TypeNode::TYPE_STRUCT:
+        return "struct";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    case TypeNode::TYPE_REF:
+    case TypeNode::TYPE_REF_MUT:
+        return "reference";
+    }
+
+    return "unknown";
+}
+
+static std::string normalizeTestSuiteName(std::string name)
+{
+    if(name.empty())
+        return "Main";
+
+    for(char& c : name)
+    {
+        if(c == ':' || c == '/' || c == '\\' || c == '-' || c == ' ')
+            c = '.';
+    }
+    while(name.find("..") != std::string::npos)
+        name.replace(name.find(".."), 2, ".");
+    if(!name.empty() && name.front() == '.')
+        name.erase(name.begin());
+    if(!name.empty() && name.back() == '.')
+        name.pop_back();
+    if(name.empty())
+        return "Main";
+    return name;
+}
+
+static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
+{
+    if(sourceFileName.empty())
+        return "Main";
+    std::error_code ec;
+    std::filesystem::path p(sourceFileName);
+    std::string stem = p.stem().string();
+    if(ec || stem.empty() || stem == "__mlang_test_root")
+        return "Main";
+    return normalizeTestSuiteName(stem);
+}
+
 static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
 {
     if(kind == TypeNode::TYPE_INT)
@@ -529,6 +670,11 @@ static bool inferExprKindForReturn(
         if(!inferExprKindForReturn(unary->operand, localKinds, fnReturnKinds,
                                    operandKind))
             return false;
+        if(unary->op == UnaryOpNode::OP_NOT)
+        {
+            outKind = TypeNode::TYPE_BOOL;
+            return true;
+        }
         outKind = normalizeInferredKind(operandKind);
         return true;
     }
@@ -1868,6 +2014,51 @@ std::string CodeGenerator::getEnumTypeName(ExpressionNode* expr, int line)
     return {};
 }
 
+bool CodeGenerator::structHasFieldNamed(const std::string& structTypeName,
+                                        const std::string& fieldName) const
+{
+    auto it = structMembers.find(structTypeName);
+    if(it == structMembers.end())
+        return false;
+    for(const auto& member : it->second)
+    {
+        if(member.first == fieldName)
+            return true;
+    }
+    return false;
+}
+
+std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
+                                                    int line)
+{
+    if(!expr)
+        return "unknown";
+
+    if(dynamic_cast<IntLiteralNode*>(expr))
+        return "i64";
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+        return "bool";
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+        return "f32";
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+        return "f64";
+    if(dynamic_cast<StringLiteralNode*>(expr) ||
+       dynamic_cast<FormatNode*>(expr))
+        return "string";
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto enumIt = enumVariableTypes.find(id->name);
+        if(enumIt != enumVariableTypes.end())
+            return enumIt->second;
+    }
+
+    TypeNode* typeNode = getLValueType(expr, line);
+    if(typeNode)
+        return displayTypeName(typeNode);
+    return "unknown";
+}
+
 llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
                                             const std::string& enumName,
                                             int line)
@@ -2120,6 +2311,56 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
     {
+        if(fieldAccess->fieldName == "name")
+        {
+            bool hasRealNameField = false;
+            if(fieldAccess->object)
+            {
+                TypeNode* objType = getLValueType(fieldAccess->object, line);
+                if(objType && objType->kind == TypeNode::TYPE_STRUCT)
+                {
+                    std::string objStructTypeName;
+                    if(auto* structRef =
+                           dynamic_cast<StructTypeRefNode*>(objType))
+                    {
+                        objStructTypeName = structRef->structName;
+                    }
+                    else if(auto* genRef =
+                                dynamic_cast<GenericStructTypeRefNode*>(objType))
+                    {
+                        objStructTypeName = getOrCreateMonomorphizedStruct(
+                            genRef->structName, genRef->typeArgs);
+                    }
+                    hasRealNameField =
+                        structHasFieldNamed(objStructTypeName, "name");
+                }
+            }
+            else
+            {
+                auto kindIt = variableTypes.find(fieldAccess->structName);
+                if(kindIt == variableTypes.end())
+                {
+                    reportError(line, "unknown variable: '" +
+                                          fieldAccess->structName + "'");
+                    return nullptr;
+                }
+
+                if(kindIt->second == TypeNode::TYPE_STRUCT)
+                {
+                    auto typeIt = structVariableTypes.find(
+                        fieldAccess->structName);
+                    if(typeIt != structVariableTypes.end())
+                    {
+                        hasRealNameField =
+                            structHasFieldNamed(typeIt->second, "name");
+                    }
+                }
+            }
+
+            if(!hasRealNameField)
+                return new TypeNode(TypeNode::TYPE_STRING);
+        }
+
         std::string structTypeName;
         if(fieldAccess->object)
         {
@@ -3350,7 +3591,10 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             }
         }
-        generateTestMain(testFunctions);
+        if(benchmarkMode)
+            generateBenchmarkMain(testFunctions);
+        else
+            generateTestMain(testFunctions);
     }
 
     // Generate a C-compatible main wrapper if needed.
@@ -3500,6 +3744,7 @@ void CodeGenerator::generateTestMain(
     llvm::Value* failFmt = make_cstr("[FAIL] %s (rc=%d)\n", "test.fail.fmt");
     llvm::Value* summaryFmt =
         make_cstr("[SUMMARY] total=%d pass=%d fail=%d\n", "test.summary.fmt");
+    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
 
     for(auto* testFn : tests)
     {
@@ -3517,7 +3762,11 @@ void CodeGenerator::generateTestMain(
                               "tests.next");
         builder.CreateStore(totalNext, totalTests);
 
-        llvm::Value* testName = make_cstr(testFn->name, "test.name");
+        std::string suiteName = !testFn->sourceModule.empty()
+                                    ? normalizeTestSuiteName(testFn->sourceModule)
+                                    : defaultSuite;
+        std::string displayName = suiteName + "." + testFn->name;
+        llvm::Value* testName = make_cstr(displayName, "test.name");
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
         {
@@ -3578,6 +3827,162 @@ void CodeGenerator::generateTestMain(
     builder.CreateCall(printfFunc, {summaryFmt, totalCount, passCount, total});
 
     builder.CreateRet(total);
+}
+
+void CodeGenerator::generateBenchmarkMain(
+    const std::vector<FunctionDefNode*>& tests)
+{
+    initializeStdioFunctions();
+
+    llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+    llvm::FunctionType* mainType =
+        llvm::FunctionType::get(i32Type, {}, false);
+    llvm::Function* mainFn =
+        llvm::Function::Create(mainType, llvm::Function::ExternalLinkage,
+                               "main", module.get());
+
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", mainFn);
+    builder.SetInsertPoint(entry);
+
+    llvm::FunctionCallee nowNsFunc = module->getOrInsertFunction(
+        "__mlang_std_time_now_ns", llvm::FunctionType::get(i64Type, {}, false));
+
+    llvm::AllocaInst* failures =
+        builder.CreateAlloca(i32Type, nullptr, "bench_failures");
+    builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), failures);
+
+    auto make_cstr = [&](const std::string& s, const char* name) -> llvm::Value*
+    {
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString(s, name);
+#else
+        return builder.CreateGlobalStringPtr(s, name);
+#endif
+    };
+
+    llvm::Value* headerFmt = make_cstr(
+        "[BENCH] %-30s %12s %12s %10s\n", "bench.header.fmt");
+    llvm::Value* lineFmt = make_cstr(
+        "[BENCH] %-30s %12lld %12lld %10d\n", "bench.line.fmt");
+    llvm::Value* failFmt = make_cstr(
+        "[BENCH-FAIL] %-25s failures=%d\n", "bench.fail.fmt");
+
+    llvm::Value* nsTotalHdr = make_cstr("total_ns", "bench.hdr.total");
+    llvm::Value* nsPerOpHdr = make_cstr("ns/op", "bench.hdr.nsop");
+    llvm::Value* itersHdr = make_cstr("iters", "bench.hdr.iters");
+    llvm::Value* warmupLabel =
+        make_cstr("warmup(iters)", "bench.warmup.label");
+    llvm::Value* warmupFmt =
+        make_cstr("[BENCH] %-30s %12d\n", "bench.warmup.fmt");
+    builder.CreateCall(printfFunc,
+                       {warmupFmt, warmupLabel,
+                        llvm::ConstantInt::get(i32Type, benchmarkWarmupIterations)});
+    builder.CreateCall(printfFunc,
+                       {headerFmt, make_cstr("name", "bench.hdr.name"),
+                        nsTotalHdr, nsPerOpHdr, itersHdr});
+    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
+
+    for(auto* testFn : tests)
+    {
+        if(!testFn || testFn->isExtern)
+            continue;
+        llvm::Function* callee =
+            module->getFunction(functionSymbolName(testFn));
+        if(!callee)
+            continue;
+
+        std::string suiteName = !testFn->sourceModule.empty()
+                                    ? normalizeTestSuiteName(testFn->sourceModule)
+                                    : defaultSuite;
+        std::string displayName = suiteName + "." + testFn->name;
+        llvm::Value* testName = make_cstr(displayName, "bench.name");
+        llvm::AllocaInst* localFails =
+            builder.CreateAlloca(i32Type, nullptr, "bench.local_fails");
+        builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), localFails);
+
+        auto emitLoop = [&](int loopCount) {
+            llvm::AllocaInst* idx =
+                builder.CreateAlloca(i32Type, nullptr, "bench.i");
+            builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), idx);
+
+            llvm::BasicBlock* condBB =
+                llvm::BasicBlock::Create(context, "bench.cond", mainFn);
+            llvm::BasicBlock* bodyBB =
+                llvm::BasicBlock::Create(context, "bench.body", mainFn);
+            llvm::BasicBlock* endBB =
+                llvm::BasicBlock::Create(context, "bench.end", mainFn);
+            builder.CreateBr(condBB);
+
+            builder.SetInsertPoint(condBB);
+            llvm::Value* iCur = builder.CreateLoad(i32Type, idx, "bench.i.cur");
+            llvm::Value* cond = builder.CreateICmpSLT(
+                iCur, llvm::ConstantInt::get(i32Type, loopCount), "bench.loopcond");
+            builder.CreateCondBr(cond, bodyBB, endBB);
+
+            builder.SetInsertPoint(bodyBB);
+            llvm::Value* rc = builder.CreateCall(callee, {});
+            if(!callee->getReturnType()->isVoidTy())
+            {
+                llvm::Value* rcI32 = rc;
+                if(rcI32->getType() != i32Type && rcI32->getType()->isIntegerTy())
+                    rcI32 = builder.CreateIntCast(rcI32, i32Type, true, "bench.rc.cast");
+                llvm::Value* isFail = builder.CreateICmpNE(
+                    rcI32, llvm::ConstantInt::get(i32Type, 0), "bench.isfail");
+                llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "bench.failinc");
+                llvm::Value* cur = builder.CreateLoad(i32Type, localFails, "bench.fail.cur");
+                builder.CreateStore(builder.CreateAdd(cur, failInc), localFails);
+            }
+            llvm::Value* iNext = builder.CreateAdd(
+                iCur, llvm::ConstantInt::get(i32Type, 1), "bench.i.next");
+            builder.CreateStore(iNext, idx);
+            builder.CreateBr(condBB);
+
+            builder.SetInsertPoint(endBB);
+        };
+
+        if(benchmarkWarmupIterations > 0)
+            emitLoop(benchmarkWarmupIterations);
+
+        llvm::Value* startNs = builder.CreateCall(nowNsFunc, {}, "bench.start");
+        emitLoop(benchmarkIterations);
+        llvm::Value* endNs = builder.CreateCall(nowNsFunc, {}, "bench.end");
+
+        llvm::Value* elapsedNs = builder.CreateSub(endNs, startNs, "bench.elapsed");
+        llvm::Value* iterI64 = llvm::ConstantInt::get(i64Type, benchmarkIterations);
+        llvm::Value* nsPerOp = builder.CreateSDiv(elapsedNs, iterI64, "bench.nsop");
+
+        builder.CreateCall(printfFunc, {lineFmt, testName, elapsedNs, nsPerOp,
+                                        llvm::ConstantInt::get(i32Type, benchmarkIterations)});
+
+        llvm::Value* lf = builder.CreateLoad(i32Type, localFails, "bench.localfails");
+        llvm::Value* hasFails = builder.CreateICmpNE(
+            lf, llvm::ConstantInt::get(i32Type, 0), "bench.hasfails");
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, "bench.ok", mainFn);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, "bench.fail", mainFn);
+        llvm::BasicBlock* contBB =
+            llvm::BasicBlock::Create(context, "bench.cont", mainFn);
+        builder.CreateCondBr(hasFails, failBB, okBB);
+
+        builder.SetInsertPoint(failBB);
+        builder.CreateCall(printfFunc, {failFmt, testName, lf});
+        llvm::Value* totalFailCur =
+            builder.CreateLoad(i32Type, failures, "bench.totalfail.cur");
+        builder.CreateStore(builder.CreateAdd(totalFailCur, lf), failures);
+        builder.CreateBr(contBB);
+
+        builder.SetInsertPoint(okBB);
+        builder.CreateBr(contBB);
+
+        builder.SetInsertPoint(contBB);
+    }
+
+    llvm::Value* totalFails =
+        builder.CreateLoad(i32Type, failures, "bench.failures.total");
+    builder.CreateRet(totalFails);
 }
 
 void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
@@ -4832,6 +5237,31 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
         }
         return isFloat ? builder.CreateFNeg(value, "negtmp")
                        : builder.CreateNeg(value, "negtmp");
+    }
+    case UnaryOpNode::OP_NOT:
+    {
+        llvm::Value* value = generateExpression(node->operand);
+        if(!value)
+            return nullptr;
+
+        if(value->getType()->isIntegerTy(1))
+            return builder.CreateNot(value, "nottmp");
+        if(value->getType()->isIntegerTy())
+        {
+            llvm::Value* asBool = builder.CreateICmpNE(
+                value, llvm::ConstantInt::get(value->getType(), 0), "not.bool");
+            return builder.CreateNot(asBool, "nottmp");
+        }
+        if(value->getType()->isFloatingPointTy())
+        {
+            llvm::Value* asBool = builder.CreateFCmpONE(
+                value, llvm::ConstantFP::get(value->getType(), 0.0), "not.bool");
+            return builder.CreateNot(asBool, "nottmp");
+        }
+
+        reportError(node->line,
+                    "unary '!' requires boolean or numeric operand");
+        return nullptr;
     }
     case UnaryOpNode::OP_ADDR:
     {
@@ -8361,6 +8791,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 if(it != variableTypes.end())
                     return it->second;
             }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                TypeNode* fieldType = getLValueType(field, node->line);
+                if(fieldType)
+                    return fieldType->kind;
+            }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
                 if(call->name == "String::new" ||
@@ -9122,6 +9558,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 auto it = variableTypes.find(id->name);
                 if(it != variableTypes.end())
                     return it->second;
+            }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                TypeNode* fieldType = getLValueType(field, node->line);
+                if(fieldType)
+                    return fieldType->kind;
             }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
@@ -10425,6 +10867,55 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 
 llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 {
+    if(node->fieldName == "name")
+    {
+        bool hasRealNameField = false;
+        if(node->object)
+        {
+            TypeNode* objType = getLValueType(node->object, node->line);
+            if(objType && objType->kind == TypeNode::TYPE_STRUCT)
+            {
+                std::string objStructTypeName;
+                if(auto* structRef = dynamic_cast<StructTypeRefNode*>(objType))
+                {
+                    objStructTypeName = structRef->structName;
+                }
+                else if(auto* genRef =
+                            dynamic_cast<GenericStructTypeRefNode*>(objType))
+                {
+                    objStructTypeName = getOrCreateMonomorphizedStruct(
+                        genRef->structName, genRef->typeArgs);
+                }
+                hasRealNameField =
+                    structHasFieldNamed(objStructTypeName, "name");
+            }
+        }
+        else
+        {
+            auto structIt = structVariableTypes.find(node->structName);
+            if(structIt != structVariableTypes.end())
+            {
+                hasRealNameField = structHasFieldNamed(structIt->second, "name");
+            }
+        }
+
+        if(!hasRealNameField)
+        {
+            std::string typeName;
+            if(node->object)
+            {
+                typeName = expressionTypeNameForLog(node->object, node->line);
+            }
+            else
+            {
+                IdentifierNode tmp(node->structName);
+                tmp.line = node->line;
+                typeName = expressionTypeNameForLog(&tmp, node->line);
+            }
+            return builder.CreateGlobalStringPtr(typeName, "type.name");
+        }
+    }
+
     llvm::Value* structPtr;
     std::string structTypeName;
 
