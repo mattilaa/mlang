@@ -45,6 +45,23 @@ Language aliases:
 - `float` aliases `f32`
 - `double` aliases `f64`
 
+## Type Name Property (`.name`)
+
+Values expose a read-only synthetic `.name` property for logging static type
+names:
+
+```mla
+let i: i32 = 12;
+println!("{}", i.name);  // i32
+```
+
+For collection values, the returned name includes inner types when available:
+- `list<i32>`
+- `map<string, i32>`
+
+If a struct defines a real field named `name`, normal field access is used
+instead of the synthetic type-name property.
+
 ## `if` / `else if` Syntax
 
 Plain block form (preferred):

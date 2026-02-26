@@ -357,6 +357,9 @@ private:
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
+    bool structHasFieldNamed(const std::string& structTypeName,
+                             const std::string& fieldName) const;
+    std::string expressionTypeNameForLog(ExpressionNode* expr, int line);
     llvm::Value* buildEnumString(llvm::Value* enumVal,
                                  const std::string& enumName, int line);
     llvm::Value* getLValuePointer(ExpressionNode* expr, int line);

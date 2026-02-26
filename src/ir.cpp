@@ -385,6 +385,113 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
     }
 }
 
+static std::string displayTypeName(TypeNode* type)
+{
+    if(!type)
+        return "unknown";
+
+    if(auto* ref = dynamic_cast<ReferenceTypeNode*>(type))
+    {
+        return ref->isMutable ? "&mut " + displayTypeName(ref->elementType)
+                              : "&" + displayTypeName(ref->elementType);
+    }
+    if(auto* ptr = dynamic_cast<PointerTypeNode*>(type))
+    {
+        return "ptr<" + displayTypeName(ptr->elementType) + ">";
+    }
+    if(auto* gl = dynamic_cast<GenericListTypeNode*>(type))
+    {
+        return "list<" + displayTypeName(gl->elementType) + ">";
+    }
+    if(auto* mapTy = dynamic_cast<MapTypeNode*>(type))
+    {
+        return "map<" + displayTypeName(mapTy->keyType) + ", " +
+               displayTypeName(mapTy->valueType) + ">";
+    }
+    if(auto* tupleTy = dynamic_cast<TupleTypeNode*>(type))
+    {
+        std::string out = "tuple<";
+        if(tupleTy->elementTypes)
+        {
+            for(size_t i = 0; i < tupleTy->elementTypes->types.size(); ++i)
+            {
+                if(i > 0)
+                    out += ", ";
+                out += displayTypeName(tupleTy->elementTypes->types[i]);
+            }
+        }
+        out += ">";
+        return out;
+    }
+    if(auto* s = dynamic_cast<StructTypeRefNode*>(type))
+    {
+        return s->structName;
+    }
+    if(auto* gs = dynamic_cast<GenericStructTypeRefNode*>(type))
+    {
+        std::string out = gs->structName + "<";
+        for(size_t i = 0; i < gs->typeArgs.size(); ++i)
+        {
+            if(i > 0)
+                out += ", ";
+            out += displayTypeName(gs->typeArgs[i]);
+        }
+        out += ">";
+        return out;
+    }
+
+    switch(type->kind)
+    {
+    case TypeNode::TYPE_VOID:
+        return "void";
+    case TypeNode::TYPE_BOOL:
+        return "bool";
+    case TypeNode::TYPE_INT:
+        return "int";
+    case TypeNode::TYPE_FLOAT:
+        return "f32";
+    case TypeNode::TYPE_DOUBLE:
+        return "f64";
+    case TypeNode::TYPE_STRING:
+        return "string";
+    case TypeNode::TYPE_STR8:
+        return "str8";
+    case TypeNode::TYPE_STR16:
+        return "str16";
+    case TypeNode::TYPE_LIST:
+        return "list";
+    case TypeNode::TYPE_MAP:
+        return "map";
+    case TypeNode::TYPE_TUPLE:
+        return "tuple";
+    case TypeNode::TYPE_PTR:
+        return "ptr";
+    case TypeNode::TYPE_STRUCT:
+        return "struct";
+    case TypeNode::TYPE_I8:
+        return "i8";
+    case TypeNode::TYPE_I16:
+        return "i16";
+    case TypeNode::TYPE_I32:
+        return "i32";
+    case TypeNode::TYPE_I64:
+        return "i64";
+    case TypeNode::TYPE_U8:
+        return "u8";
+    case TypeNode::TYPE_U16:
+        return "u16";
+    case TypeNode::TYPE_U32:
+        return "u32";
+    case TypeNode::TYPE_U64:
+        return "u64";
+    case TypeNode::TYPE_REF:
+    case TypeNode::TYPE_REF_MUT:
+        return "reference";
+    }
+
+    return "unknown";
+}
+
 static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
 {
     if(kind == TypeNode::TYPE_INT)
@@ -1868,6 +1975,51 @@ std::string CodeGenerator::getEnumTypeName(ExpressionNode* expr, int line)
     return {};
 }
 
+bool CodeGenerator::structHasFieldNamed(const std::string& structTypeName,
+                                        const std::string& fieldName) const
+{
+    auto it = structMembers.find(structTypeName);
+    if(it == structMembers.end())
+        return false;
+    for(const auto& member : it->second)
+    {
+        if(member.first == fieldName)
+            return true;
+    }
+    return false;
+}
+
+std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
+                                                    int line)
+{
+    if(!expr)
+        return "unknown";
+
+    if(dynamic_cast<IntLiteralNode*>(expr))
+        return "i64";
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+        return "bool";
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+        return "f32";
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+        return "f64";
+    if(dynamic_cast<StringLiteralNode*>(expr) ||
+       dynamic_cast<FormatNode*>(expr))
+        return "string";
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto enumIt = enumVariableTypes.find(id->name);
+        if(enumIt != enumVariableTypes.end())
+            return enumIt->second;
+    }
+
+    TypeNode* typeNode = getLValueType(expr, line);
+    if(typeNode)
+        return displayTypeName(typeNode);
+    return "unknown";
+}
+
 llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
                                             const std::string& enumName,
                                             int line)
@@ -2120,6 +2272,56 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
     {
+        if(fieldAccess->fieldName == "name")
+        {
+            bool hasRealNameField = false;
+            if(fieldAccess->object)
+            {
+                TypeNode* objType = getLValueType(fieldAccess->object, line);
+                if(objType && objType->kind == TypeNode::TYPE_STRUCT)
+                {
+                    std::string objStructTypeName;
+                    if(auto* structRef =
+                           dynamic_cast<StructTypeRefNode*>(objType))
+                    {
+                        objStructTypeName = structRef->structName;
+                    }
+                    else if(auto* genRef =
+                                dynamic_cast<GenericStructTypeRefNode*>(objType))
+                    {
+                        objStructTypeName = getOrCreateMonomorphizedStruct(
+                            genRef->structName, genRef->typeArgs);
+                    }
+                    hasRealNameField =
+                        structHasFieldNamed(objStructTypeName, "name");
+                }
+            }
+            else
+            {
+                auto kindIt = variableTypes.find(fieldAccess->structName);
+                if(kindIt == variableTypes.end())
+                {
+                    reportError(line, "unknown variable: '" +
+                                          fieldAccess->structName + "'");
+                    return nullptr;
+                }
+
+                if(kindIt->second == TypeNode::TYPE_STRUCT)
+                {
+                    auto typeIt = structVariableTypes.find(
+                        fieldAccess->structName);
+                    if(typeIt != structVariableTypes.end())
+                    {
+                        hasRealNameField =
+                            structHasFieldNamed(typeIt->second, "name");
+                    }
+                }
+            }
+
+            if(!hasRealNameField)
+                return new TypeNode(TypeNode::TYPE_STRING);
+        }
+
         std::string structTypeName;
         if(fieldAccess->object)
         {
@@ -8515,6 +8717,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 if(it != variableTypes.end())
                     return it->second;
             }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                TypeNode* fieldType = getLValueType(field, node->line);
+                if(fieldType)
+                    return fieldType->kind;
+            }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
                 if(call->name == "String::new" ||
@@ -9276,6 +9484,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 auto it = variableTypes.find(id->name);
                 if(it != variableTypes.end())
                     return it->second;
+            }
+            if(auto* field = dynamic_cast<FieldAccessNode*>(expr))
+            {
+                TypeNode* fieldType = getLValueType(field, node->line);
+                if(fieldType)
+                    return fieldType->kind;
             }
             if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
             {
@@ -10579,6 +10793,55 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 
 llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
 {
+    if(node->fieldName == "name")
+    {
+        bool hasRealNameField = false;
+        if(node->object)
+        {
+            TypeNode* objType = getLValueType(node->object, node->line);
+            if(objType && objType->kind == TypeNode::TYPE_STRUCT)
+            {
+                std::string objStructTypeName;
+                if(auto* structRef = dynamic_cast<StructTypeRefNode*>(objType))
+                {
+                    objStructTypeName = structRef->structName;
+                }
+                else if(auto* genRef =
+                            dynamic_cast<GenericStructTypeRefNode*>(objType))
+                {
+                    objStructTypeName = getOrCreateMonomorphizedStruct(
+                        genRef->structName, genRef->typeArgs);
+                }
+                hasRealNameField =
+                    structHasFieldNamed(objStructTypeName, "name");
+            }
+        }
+        else
+        {
+            auto structIt = structVariableTypes.find(node->structName);
+            if(structIt != structVariableTypes.end())
+            {
+                hasRealNameField = structHasFieldNamed(structIt->second, "name");
+            }
+        }
+
+        if(!hasRealNameField)
+        {
+            std::string typeName;
+            if(node->object)
+            {
+                typeName = expressionTypeNameForLog(node->object, node->line);
+            }
+            else
+            {
+                IdentifierNode tmp(node->structName);
+                tmp.line = node->line;
+                typeName = expressionTypeNameForLog(&tmp, node->line);
+            }
+            return builder.CreateGlobalStringPtr(typeName, "type.name");
+        }
+    }
+
     llvm::Value* structPtr;
     std::string structTypeName;
 
