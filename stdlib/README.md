@@ -40,3 +40,5 @@ Currently provided:
 - `std/term.mla`: terminal capability + termios helpers
   (`stdin/stdout/stderr` tty detection, size, color level/truecolor, and
    stdin raw mode enable/restore, plus `supports_ansi()` convenience check).
+- `std/unordered.mla`: C++-style unordered/vector wrapper structs
+  (`UnorderedMap<K,V>`, `UnorderedSet<T>`, and `Vector<T>` with `.data`).

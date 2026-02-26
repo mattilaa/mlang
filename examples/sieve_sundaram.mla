@@ -1,0 +1,60 @@
+/// Sundaram sieve example in MLang.
+///
+/// C++ sample parity notes:
+/// - `std::unordered_set<int>` -> `UnorderedSet<i32>` from `std::unordered`.
+/// - `std::vector<int>` -> `Vector<i32>` from `std::unordered`.
+/// - Range/view pipelines are not first-class yet, so this uses explicit loops.
+
+mod std::unordered;
+use std::unordered::*;
+
+fn sieve_sundaram(n: i32) -> Vector<i32> {
+    // Track struck numbers of form i + j + 2ij (with i <= j).
+    var struck_data: list<i32> = [];
+    for j in 1..(n + 1) {
+        for i in 1..(j + 1) {
+            let out: i32 = i + j + 2 * i * j;
+            if out > n: {
+                break;
+            }
+            struck_data.push(out);
+        }
+    }
+    struck_data.sort();
+    struck_data.dedup();
+
+    // Collect surviving odds transformed to primes: p = 2x + 1.
+    var primes_data: list<i32> = [];
+    primes_data.push(2);
+
+    for x in 1..(n + 1) {
+        if struck_data.contains(x) == false {
+            primes_data.push(2 * x + 1);
+        }
+    }
+
+    primes_data.sort();
+    return Vector<i32> { data: primes_data };
+}
+
+fn print_i32_list(xs: Vector<i32>) -> void {
+    print!("[");
+    var first: bool = true;
+    let data: list<i32> = xs.data;
+    for x in data {
+        if first == false {
+            print!(", ");
+        }
+        print!("{}", x);
+        first = false;
+    }
+    println!("]");
+}
+
+fn main() -> i32 {
+    let primes: Vector<i32> = sieve_sundaram(16);
+    print_i32_list(primes);
+    // Expected:
+    // [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31]
+    return 0;
+}

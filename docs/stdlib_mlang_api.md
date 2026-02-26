@@ -18,6 +18,7 @@ mod std::time;
 mod std::fs;
 mod std::strbuf;
 mod std::thread;
+mod std::unordered;
 mod std::vec;
 ```
 
@@ -36,6 +37,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/time.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/thread.mla`
+- `stdlib/std/unordered.mla`
 - `stdlib/std/vec.mla`
 
 ## Built-in Collection Methods (Compiler Intrinsics)
@@ -74,6 +76,17 @@ for this builtin type, not a distinct type declaration.
 - `m.values()` iterator for `for val in m.values() { ... }`
 - `m.entries()` iterator for `for entry in m.entries() { ... }`
   where `entry` is a tuple `(K, V)` and can be accessed via `.0` / `.1`
+
+## std::unordered
+
+Module file: `stdlib/std/unordered.mla`
+
+Generic wrapper structs that provide C++-familiar container names while
+reusing existing MLang builtins via the `.data` field.
+
+- `UnorderedMap<K, V> { data: map<K, V> }`
+- `UnorderedSet<T> { data: list<T> }` (use `contains` and optional `dedup`)
+- `Vector<T> { data: list<T> }`
 
 ## std::esc
 

@@ -1,0 +1,23 @@
+/// \file unordered.mla
+/// \brief C++-style unordered/vector container wrappers for MLang.
+///
+/// This module exposes generic wrapper structs so code can use familiar
+/// container names while relying on builtin `map` / `list` operations.
+///
+/// Notes:
+/// - `UnorderedMap<K, V>` wraps `map<K, V>` in `data`.
+/// - `UnorderedSet<T>` wraps `list<T>` in `data`; use `contains` + `dedup`
+///   for set-like behavior.
+/// - `Vector<T>` wraps `list<T>` in `data`.
+
+pub struct UnorderedMap<K, V> {
+    var data: map<K, V>;
+};
+
+pub struct UnorderedSet<T> {
+    var data: list<T>;
+};
+
+pub struct Vector<T> {
+    var data: list<T>;
+};

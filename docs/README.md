@@ -93,6 +93,10 @@ For Vec (dynamic array) helpers, see:
   (`Vec::new`, `vec![...]`, `push/pop/clear`, `len/is_empty`,
    `contains/index_of`, `sort/sort_desc/reverse/dedup`, `first/last`).
 
+For C++-style unordered/vector wrapper types, see:
+- `stdlib/std/unordered.mla`
+  (`UnorderedMap<K,V>`, `UnorderedSet<T>`, `Vector<T>`).
+
 ## Language Highlights
 
 Recent language features are documented in:
@@ -127,7 +131,7 @@ See also:
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
   `std::process`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
-  `std::thread`, `std::time`, `std::vec`).
+  `std::thread`, `std::time`, `std::unordered`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
 - `docs/language_attributes.md` for Rust-like attributes such as
   `#[derive(Debug)]` and `#[test]`.
