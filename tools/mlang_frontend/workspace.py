@@ -69,7 +69,6 @@ class WorkspaceIndex:
         return None if doc is None else doc.version
 
     def update_document(self, uri: str, text: str) -> None:
-        # Backward-compatible helper used by older callers.
         prev = self._docs.get(uri)
         version = 0 if prev is None else prev.version
         self._docs[uri] = WorkspaceDocument(text=text, version=version)
@@ -95,6 +94,27 @@ class WorkspaceIndex:
                 if sym.name == name:
                     return GlobalSymbolRef(uri=uri, symbol=sym)
         return None
+
+    def search_globals(self, query: str, limit: int = 200) -> list[GlobalSymbolRef]:
+        q = (query or "").strip().lower()
+        out: list[GlobalSymbolRef] = []
+
+        for uri, symbols in self._globals_by_uri.items():
+            for sym in symbols:
+                name_l = sym.name.lower()
+                if q and q not in name_l:
+                    continue
+                out.append(GlobalSymbolRef(uri=uri, symbol=sym))
+
+        out.sort(
+            key=lambda it: (
+                0 if it.symbol.name.lower() == q else 1,
+                0 if it.symbol.name.lower().startswith(q) else 1,
+                it.symbol.name,
+                it.uri,
+            )
+        )
+        return out[: max(0, limit)]
 
     def references_for_global(
         self,

@@ -20,6 +20,7 @@ from mlang_frontend.semantic import (
     references_at,
 )
 from mlang_frontend.source_map import line_char_to_offset, offset_to_line_char
+from mlang_frontend.symbols import build_symbols
 from mlang_frontend.workspace import WorkspaceIndex
 
 REQUEST_CANCELLED = -32800
@@ -138,10 +139,10 @@ class JsonRpcServer:
     @staticmethod
     def _symbol_kind_to_lsp(sym_kind: str) -> int:
         if sym_kind == "function":
-            return 3
+            return 12
         if sym_kind == "local_variable":
-            return 6
-        return 6
+            return 13
+        return 13
 
     @staticmethod
     def _symbol_detail(sym_kind: str, container: str) -> str:
@@ -214,12 +215,14 @@ class JsonRpcServer:
         self._respond(
             req_id,
             {
-                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.5.0"},
+                "serverInfo": {"name": "mlang-lsp-scaffold", "version": "0.6.0"},
                 "capabilities": {
                     "textDocumentSync": 2,
                     "hoverProvider": True,
                     "definitionProvider": True,
                     "referencesProvider": True,
+                    "documentSymbolProvider": True,
+                    "workspaceSymbolProvider": True,
                     "completionProvider": {
                         "resolveProvider": False,
                         "triggerCharacters": [".", ":"],
@@ -451,6 +454,51 @@ class JsonRpcServer:
         self._progress_end(token, "Done")
         self._respond(req_id, locs)
 
+    def _handle_document_symbol(self, req_id: Any, params: dict[str, Any]) -> None:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, [])
+            return
+
+        symbols = build_symbols(doc.text)
+        out: list[dict[str, Any]] = []
+        for s in symbols:
+            loc = self._location_from_offsets(uri, doc.text, s.start_offset, s.end_offset)
+            out.append(
+                {
+                    "name": s.name,
+                    "kind": self._symbol_kind_to_lsp(s.kind),
+                    "location": loc,
+                    "containerName": s.container,
+                }
+            )
+        self._respond(req_id, out)
+
+    def _handle_workspace_symbol(self, req_id: Any, params: dict[str, Any]) -> None:
+        query = params.get("query", "")
+        refs = self._workspace.search_globals(str(query), limit=200)
+        out: list[dict[str, Any]] = []
+        for ref in refs:
+            doc = self._documents.get(ref.uri)
+            if doc is None:
+                continue
+            out.append(
+                {
+                    "name": ref.symbol.name,
+                    "kind": self._symbol_kind_to_lsp(ref.symbol.kind),
+                    "location": self._location_from_offsets(
+                        ref.uri,
+                        doc.text,
+                        ref.symbol.start_offset,
+                        ref.symbol.end_offset,
+                    ),
+                    "containerName": ref.symbol.container,
+                }
+            )
+        self._respond(req_id, out)
+
     def _handle_diagnostic(self, req_id: Any, params: dict[str, Any]) -> None:
         text_doc = params.get("textDocument", {})
         uri = text_doc.get("uri", "")
@@ -475,6 +523,10 @@ class JsonRpcServer:
             self._handle_definition(req_id, params)
         elif method == "textDocument/references":
             self._handle_references(req_id, params)
+        elif method == "textDocument/documentSymbol":
+            self._handle_document_symbol(req_id, params)
+        elif method == "workspace/symbol":
+            self._handle_workspace_symbol(req_id, params)
         elif method == "textDocument/diagnostic":
             self._handle_diagnostic(req_id, params)
         else:

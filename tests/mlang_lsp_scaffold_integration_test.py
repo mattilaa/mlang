@@ -454,6 +454,52 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         assert err is not None
         self.assertEqual(err.get("code"), REQUEST_CANCELLED)
 
+    def test_document_symbol_and_workspace_symbol(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        defs_uri = "file:///tmp/symbols_defs.mlang"
+        use_uri = "file:///tmp/symbols_use.mlang"
+
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": defs_uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "let global_value = 1\nfn helper() {}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": use_uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "fn main() {\n  let local_value = helper()\n}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        doc_symbols = self.h.request(
+            "textDocument/documentSymbol",
+            {"textDocument": {"uri": use_uri}},
+        )
+        names = {item.get("name") for item in doc_symbols}
+        self.assertIn("main", names)
+        self.assertIn("local_value", names)
+
+        ws_symbols = self.h.request("workspace/symbol", {"query": "help"})
+        ws_names = [item.get("name") for item in ws_symbols]
+        self.assertIn("helper", ws_names)
+
+
 
 if __name__ == "__main__":
     os.environ.setdefault("PYTHONUNBUFFERED", "1")

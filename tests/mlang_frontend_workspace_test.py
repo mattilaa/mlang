@@ -70,6 +70,14 @@ class MlangFrontendWorkspaceTest(unittest.TestCase):
         self.assertEqual(ws.text("file:///stale.mlang"), old)
         self.assertEqual(ws.version("file:///stale.mlang"), 5)
 
+    def test_search_globals_ranks_exact_prefix_then_contains(self) -> None:
+        ws = WorkspaceIndex()
+        ws.open_document("file:///a.mlang", "fn helper() {}\nfn help_me() {}\n", 1)
+        ws.open_document("file:///b.mlang", "fn my_helper() {}\n", 1)
+        out = ws.search_globals("help")
+        names = [r.symbol.name for r in out]
+        self.assertEqual(names[:3], ["help_me", "helper", "my_helper"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
