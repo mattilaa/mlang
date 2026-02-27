@@ -712,6 +712,26 @@ MLang Frontend Directory Mode Forwards Compact Linker Flags
     Should Contain    ${log_text}    -L/tmp/mlang_lib
     Should Contain    ${log_text}    -lmydep
 
+MLang Frontend Directory Mode Rejects Unknown Option
+    [Documentation]    Verify test/bench directory mode rejects unknown options instead of silently dropping them.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_unknown
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_unknown_suite
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${bench_code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/bench_case.mla    ${bench_code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    ${suite_dir}    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option:
+
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.
