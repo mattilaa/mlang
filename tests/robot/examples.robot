@@ -511,16 +511,38 @@ MLang Frontend Bench Inline Flag Parsing Works
     Should Contain    ${run.stdout}    [BENCH]
 
 MLang Frontend Bench Warmup Validation
-    [Documentation]    Verify frontend rejects negative warmup values before backend compile.
+    [Documentation]    Verify frontend rejects non-numeric warmup values before backend compile.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_validate
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
-    ...    bench    --bench-warmup    -1    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    bench    --bench-warmup    nope    ${EXECDIR}/tests/bench_stdlib.mla
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Invalid value for --bench-warmup
+
+MLang Frontend Bench Accepts Signed Numeric Warmup
+    [Documentation]    Verify frontend accepts signed numeric warmup values (backend clamps like C++).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_signed
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-iters    5    --bench-warmup    -1    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+
+MLang Frontend Bench Accepts Zero Iterations Value
+    [Documentation]    Verify frontend accepts numeric zero for --bench-iters (backend applies C++ clamp).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_iters_zero
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-iters    0    --bench-warmup    0    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
 
 MLang Frontend Bench Directory Forwards Default Iteration Flags
     [Documentation]    Verify frontend bench directory mode forwards C++ default --bench-iters/--bench-warmup when not provided.

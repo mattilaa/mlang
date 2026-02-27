@@ -347,11 +347,12 @@ fn is_digit_char(ch: string) -> i32 {
     return 0;
 }
 
-fn is_nonnegative_decimal(s: string) -> i32 {
+fn is_signed_decimal(s: string) -> i32 {
     let n: i64 = len(s);
     if n <= 0 { return 0; }
     var start: i64 = 0;
-    if eq(sub(s, 0, 1), "+") == 1 {
+    let first: string = sub(s, 0, 1);
+    if eq(first, "+") == 1 || eq(first, "-") == 1 {
         if n == 1 { return 0; }
         start = 1;
     }
@@ -359,19 +360,6 @@ fn is_nonnegative_decimal(s: string) -> i32 {
         if is_digit_char(sub(s, i, 1)) == 0 { return 0; }
     }
     return 1;
-}
-
-fn is_positive_decimal(s: string) -> i32 {
-    if is_nonnegative_decimal(s) == 0 { return 0; }
-    let n: i64 = len(s);
-    var start: i64 = 0;
-    if eq(sub(s, 0, 1), "+") == 1 {
-        start = 1;
-    }
-    for i in start..n {
-        if eq(sub(s, i, 1), "0") == 0 { return 1; }
-    }
-    return 0;
 }
 
 fn option_takes_value(a: string) -> i32 {
@@ -589,7 +577,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let a: string = passthrough[i];
         let inline_iters: string = parse_inline_bench_value(a, "--bench-iters");
         if len(inline_iters) > 0 {
-            if is_positive_decimal(inline_iters) == 0 {
+            if is_signed_decimal(inline_iters) == 0 {
                 eprintln!("Invalid value for --bench-iters");
                 return 1;
             }
@@ -600,7 +588,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         let inline_warmup: string = parse_inline_bench_value(a, "--bench-warmup");
         if len(inline_warmup) > 0 {
-            if is_nonnegative_decimal(inline_warmup) == 0 {
+            if is_signed_decimal(inline_warmup) == 0 {
                 eprintln!("Invalid value for --bench-warmup");
                 return 1;
             }
@@ -617,12 +605,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             }
             let v: string = passthrough[i + 1];
             if eq(a, "--bench-iters") == 1 {
-                if is_positive_decimal(v) == 0 {
+                if is_signed_decimal(v) == 0 {
                     eprintln!("Invalid value for --bench-iters");
                     return 1;
                 }
             } else if eq(a, "--bench-warmup") == 1 {
-                if is_nonnegative_decimal(v) == 0 {
+                if is_signed_decimal(v) == 0 {
                     eprintln!("Invalid value for --bench-warmup");
                     return 1;
                 }
