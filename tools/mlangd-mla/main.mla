@@ -1575,6 +1575,14 @@ fn handle_definition(payload: string) -> string {
     return out;
 }
 
+fn handle_declaration(payload: string) -> string {
+    return handle_definition(payload);
+}
+
+fn handle_type_definition(payload: string) -> string {
+    return handle_definition(payload);
+}
+
 fn handle_references(payload: string) -> string {
     if ensure_session() != 0: { return "[]"; }
     let uri: string = extract_text_document_uri(payload);
@@ -2638,7 +2646,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":true}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":true}},\"definitionProvider\":true,\"declarationProvider\":true,\"typeDefinitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -2663,6 +2671,12 @@ fn dispatch_result_json(payload: string) -> string {
     }
     if eq(method, "textDocument/definition") == 1: {
         return handle_definition(payload);
+    }
+    if eq(method, "textDocument/declaration") == 1: {
+        return handle_declaration(payload);
+    }
+    if eq(method, "textDocument/typeDefinition") == 1: {
+        return handle_type_definition(payload);
     }
     if eq(method, "textDocument/references") == 1: {
         return handle_references(payload);
