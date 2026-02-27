@@ -443,6 +443,46 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
     return 1;
 }
 
+fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<string> {
+    var out: list<string> = [];
+    let n: i64 = args.len();
+    var i: i64 = 0;
+    while i < n: {
+        let a: string = args[i];
+        if eq(a, "-L") == 1 || eq(a, "-l") == 1 || eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
+            if i + 1 < n {
+                if eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
+                    if benchmark_mode == 1 {
+                        out.push(a);
+                        out.push(args[i + 1]);
+                    }
+                } else {
+                    out.push(a);
+                    out.push(args[i + 1]);
+                }
+                i = i + 2;
+                continue;
+            }
+            i = i + 1;
+            continue;
+        }
+        if starts_with(a, "-Wl,") == 1 {
+            out.push(a);
+            i = i + 1;
+            continue;
+        }
+        if benchmark_mode == 0 {
+            if eq(a, "--no-run") == 1 || eq(a, "-Wno-colon-if") == 1 || eq(a, "-Wno-colon-while") == 1 {
+                out.push(a);
+                i = i + 1;
+                continue;
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
 fn parse_options(argv: list<string>) -> FrontendState {
     var out: FrontendState = FrontendState {
         backend: "mlang",
@@ -666,7 +706,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
     if path_is_directory(input_path) == 1 {
-        return run_test_directory_mode(st.backend, input_path, mode_bench, extra_args);
+        let suite_args: list<string> = sanitize_dir_suite_args(extra_args, mode_bench);
+        return run_test_directory_mode(st.backend, input_path, mode_bench, suite_args);
     }
 
     var single: list<string> = [];
