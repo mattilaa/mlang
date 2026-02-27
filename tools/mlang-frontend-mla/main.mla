@@ -257,6 +257,27 @@ fn getenv_value(name: string) -> string {
     return rr.unwrap();
 }
 
+fn tiny_hash_u31(s: string) -> i64 {
+    var h: i64 = 216613626;
+    let n: i64 = len(s);
+    for i in 0..n {
+        let ch: string = sub(s, i, 1);
+        let v: i64 = find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_-.:", ch);
+        let add: i64 = v >= 0 ? (v + 1) : 97;
+        h = (h * 131 + add) % 2147483647;
+    }
+    if h < 0 {
+        h = 0 - h;
+    }
+    return h;
+}
+
+fn pkg_frontend_bin_path(backend: string, src: string) -> string {
+    let seed: string = format!("{}|{}", backend, src);
+    let h: i64 = tiny_hash_u31(seed);
+    return format!("/tmp/mlang-pkg-mla-{}", h);
+}
+
 fn find_pkg_frontend_source(backend: string) -> string {
     let c1: string = "tools/mlang-pkg-mla/main.mla";
     if file_exists(c1) == 1 { return c1; }
@@ -271,15 +292,14 @@ fn find_pkg_frontend_source(backend: string) -> string {
 fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     let src: string = find_pkg_frontend_source(backend);
     if len(src) == 0 { return -1; }
-    let tmp_bin: string = "/tmp/mlang-pkg-mla-bin";
-    let compile_args: list<string> = [
+    let tmp_bin: string = pkg_frontend_bin_path(backend, src);
+    let compile_base: list<string> = [
         src,
         "-Wno-colon-if",
         "-Wno-colon-while",
-        "-L", parent_dir(backend),
-        "-lmlang_std",
         "-o", tmp_bin
     ];
+    let compile_args: list<string> = ensure_stdlib_link_args(compile_base, backend);
     let compile_rc: i32 = run_inherit(backend, compile_args);
     if compile_rc != 0 {
         return -1;
@@ -385,6 +405,9 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
     var files: list<string> = [];
     for f in files_all {
         if len(trim(f)) == 0 { continue; }
+        let name: string = basename(f);
+        if eq(name, "__mlang_test_root.mla") == 1 { continue; }
+        if eq(name, "__mlang_test_root_modonly.mla") == 1 { continue; }
         if benchmark_mode == 1 {
             if is_bench_suite_file(f) == 0 { continue; }
             files.push(f);
