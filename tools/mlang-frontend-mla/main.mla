@@ -692,7 +692,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             extra_args.push(a);
             if i + 1 >= n {
                 eprintln!("Unknown option: {}", a);
-                print_usage(program);
+                let _ = run_inherit(st.backend, ["--help"]);
                 return 1;
             }
             let v: string = passthrough[i + 1];
@@ -734,7 +734,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             extra_args.push(a);
         } else {
             eprintln!("Unknown option: {}", a);
-            print_usage(program);
+            let _ = run_inherit(st.backend, ["--help"]);
             return 1;
         }
         i = i + 1;
