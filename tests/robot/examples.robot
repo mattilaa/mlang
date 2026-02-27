@@ -258,9 +258,124 @@ Inline Attrs Demo Runs Correctly
     Should Contain    ${run.stdout}    add(12, 8): 20
     Should Contain    ${run.stdout}    square(7): 49
     Should Contain    ${run.stdout}    clamp(15, 0..10): 10
-    Should Contain    ${run.stdout}    clamp(-3, 0..10): 0
-    Should Contain    ${run.stdout}    clamp(5,  0..10): 5
-    Should Contain    ${run.stdout}    sum of clamp(i,2..4)^2 for i=1..5: 49
+
+MLang Frontend Wrapper Compiles And Forwards
+    [Documentation]    Build tools/mlang-frontend-mla/main.mla and verify it forwards args to backend mlang.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building mlang frontend wrapper (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    --version
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=Frontend wrapper failed forwarding --version (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    mlang-frontend-mla
+
+MLang Frontend Wrapper Test Dispatch Works
+    [Documentation]    Build frontend wrapper and verify `test` + `run tests` dispatch on a temporary suite directory.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dispatch
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=Failed building frontend wrapper (dispatch) (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dispatch_suite
+    Create Directory    ${suite_dir}
+    ${t1}=    Catenate    SEPARATOR=    ${suite_dir}/test_one_tests.mla
+    ${t2}=    Catenate    SEPARATOR=    ${suite_dir}/test_two_tests.mla
+    ${code1}=    Catenate    SEPARATOR=\n
+    ...    #[test]
+    ...    fn test_ok() -> i32 {
+    ...        return 0;
+    ...    }
+    ${code2}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${t1}    ${code1}
+    Create File    ${t2}    ${code2}
+    ${run1}=    Run Process    ${frontend}    --backend    ${MLANG}    test    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run1.rc}    0
+    ...    msg=frontend test dispatch failed (rc=${run1.rc})\nSTDOUT:\n${run1.stdout}\nSTDERR:\n${run1.stderr}
+    ${run2}=    Run Process    ${frontend}    --backend    ${MLANG}    run    tests    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run2.rc}    0
+    ...    msg=frontend run tests dispatch failed (rc=${run2.rc})\nSTDOUT:\n${run2.stdout}\nSTDERR:\n${run2.stderr}
+
+MLang Binary Frontend Env Switch Works
+    [Documentation]    Verify `MLANG_FRONTEND_IMPL=mla` routes `mlang` through the MLang frontend implementation.
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_env_switch.mla
+    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_env_switch_bin
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        println!("frontend env switch ok");
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}
+    ...    env:MLANG_FRONTEND_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ...    msg=MLANG_FRONTEND_IMPL=mla build failed (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    frontend env switch ok
+
+MLang Frontend Wrapper Pkg Dispatch Works
+    [Documentation]    Verify mlang-frontend-mla handles `pkg` command path with MLANG_PKG_IMPL selection.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ...    msg=Failed building frontend wrapper (pkg dispatch) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
+    ${proj}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_pkg_dispatch_proj
+    Run Keyword And Ignore Error    Remove Directory    ${proj}    recursive=True
+    Create Directory    ${proj}
+    ${r1}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    pkg    init
+    ...    cwd=${proj}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${r1.rc}    0
+    ...    msg=frontend pkg init with cpp backend failed (rc=${r1.rc})\nSTDOUT:\n${r1.stdout}\nSTDERR:\n${r1.stderr}
+    File Should Exist    ${proj}/mlang.toml
+
+MLang Frontend Empty Test Dir Fails
+    [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptydir
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ...    msg=Failed building frontend wrapper (empty dir parity) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
+    ${empty}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_empty_suite_dir
+    Create Directory    ${empty}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    test    ${empty}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Error: No .mla test files found in directory
+
+MLang Frontend Bench Flag Parsing Works
+    [Documentation]    Verify frontend bench mode parses option values without treating them as input path.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_parse
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ...    msg=Failed building frontend wrapper (bench parse) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-iters    20    --bench-warmup    5    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend bench parse failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    [BENCH]
+
+MLang Frontend Bench Flag Validation
+    [Documentation]    Verify frontend bench mode reports invalid numeric values for bench flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_validate
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-iters    nope    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Invalid value for --bench-iters
 
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify

@@ -28,6 +28,7 @@ mod while_guard_tests;
 mod try_operator_tests;
 mod unordered_alias_tests;
 mod if_let_var_combinations_tests;
+mod if_while_expression_precedence_tests;
 mod std_regex_tests;
 mod static_storage_tests;
 mod std_net_tests;

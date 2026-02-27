@@ -1,3 +1,6 @@
+mod std::strbuf;
+use std::strbuf::eq;
+
 #[test]
 fn test_main_default_return_works() -> i32 {
     let x: i32 = 1;
@@ -25,4 +28,57 @@ fn test_basic_list_and_map_types() -> i32 {
     let scores: map<string, i32> = {"Alice": 95, "Bob": 87};
     if scores.len() != 2 { return 1; }
     return scores["Alice"] == 95 ? 0 : 1;
+}
+
+struct TestInnerState {
+    var values: list<i64>;
+};
+
+struct TestOuterState {
+    var inner: TestInnerState;
+};
+
+#[test]
+fn test_struct_field_list_mutation_methods() -> i32 {
+    var st: TestInnerState = TestInnerState { values: [] };
+    st.values.push(7);
+    st.values.push(9);
+    if st.values.len() != 2 { return 1; }
+    if st.values.pop() != 9 { return 2; }
+    if st.values.len() != 1 { return 3; }
+    st.values.clear();
+    if st.values.is_empty() == 0 { return 4; }
+    return 0;
+}
+
+#[test]
+fn test_nested_struct_field_list_mutation_methods() -> i32 {
+    var st: TestOuterState = TestOuterState {
+        inner: TestInnerState { values: [] }
+    };
+    st.inner.values.push(11);
+    st.inner.values.push(22);
+    if st.inner.values.len() != 2 { return 1; }
+    if st.inner.values.pop() != 22 { return 2; }
+    if st.inner.values.len() != 1 { return 3; }
+    return 0;
+}
+
+struct ParseStateLike {
+    var passthrough: list<string>;
+    var backend: string;
+};
+
+#[test]
+fn test_struct_state_with_string_list_field_push_pattern() -> i32 {
+    var st: ParseStateLike = ParseStateLike {
+        passthrough: [],
+        backend: "mlang"
+    };
+    st.passthrough.push("--version");
+    st.passthrough.push("--help");
+    if st.passthrough.len() != 2 { return 1; }
+    if eq(st.passthrough.pop(), "--help") == 0 { return 2; }
+    if eq(st.passthrough.pop(), "--version") == 0 { return 3; }
+    return 0;
 }

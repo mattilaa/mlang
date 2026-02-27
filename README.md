@@ -65,6 +65,29 @@ Build executable:
 /tmp/mlangd-mla --stdio
 ```
 
+## Compiler Frontend (MLang Port Scaffold)
+Incremental frontend port lives at `tools/mlang-frontend-mla/main.mla`.
+Current scope:
+- parses frontend option `--backend`
+- command-dispatch parity for `test`, `run tests`, `bench`, `pkg`
+- directory suite mode for `test`/`bench` (runs suites one-by-one)
+- stdlib link auto-discovery for compile passthrough (`-L... -lmlang_std -lm`)
+
+```sh
+./build/mlang tools/mlang-frontend-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-frontend-mla
+/tmp/mlang-frontend-mla --backend ./build/mlang --help
+/tmp/mlang-frontend-mla --backend ./build/mlang examples/main.mla -o /tmp/main_bin
+/tmp/mlang-frontend-mla --backend ./build/mlang test tests
+/tmp/mlang-frontend-mla --backend ./build/mlang run tests tests
+/tmp/mlang-frontend-mla --backend ./build/mlang bench tests --bench-iters 200 --bench-warmup 20
+```
+
+You can route `mlang` itself through the MLang frontend implementation:
+
+```sh
+MLANG_FRONTEND_IMPL=mla ./build/mlang examples/main.mla -o /tmp/main_bin
+```
+
 `mlang` emits `mlang_commands.json` for editor tooling. You can add module
 search paths in `mlang.toml`:
 

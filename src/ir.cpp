@@ -14322,6 +14322,269 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     }
     else
     {
+        // Non-identifier receiver: support built-in container/string methods on
+        // struct fields (e.g. state.items.push(...), state.buf.push_str(...)).
+        TypeNode* recvType = getLValueType(node->object, node->line);
+        if(recvType && (recvType->kind == TypeNode::TYPE_STRING ||
+                        recvType->kind == TypeNode::TYPE_STR8))
+        {
+            llvm::Value* recvPtr = getLValuePointer(node->object, node->line);
+            if(!recvPtr)
+                return nullptr;
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* ptrType =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            if(node->methodName == "push_str")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "push_str expects one argument");
+                    return nullptr;
+                }
+                llvm::Value* currentStr =
+                    builder.CreateLoad(ptrType, recvPtr, "fieldstr.load");
+                llvm::Value* suffix = generateExpression(node->arguments[0]);
+                if(!suffix)
+                    return nullptr;
+                llvm::FunctionType* concatFnType =
+                    llvm::FunctionType::get(ptrType, {ptrType, ptrType}, false);
+                llvm::FunctionCallee concatFn = module->getOrInsertFunction(
+                    "__mlang_std_strbuf_concat", concatFnType);
+                llvm::Value* newStr =
+                    builder.CreateCall(concatFn, {currentStr, suffix},
+                                       "field.push_str.result");
+                builder.CreateStore(newStr, recvPtr);
+                return llvm::Constant::getNullValue(ptrType);
+            }
+            if(node->methodName == "clone")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "clone() takes no arguments");
+                    return nullptr;
+                }
+                llvm::Value* currentStr =
+                    builder.CreateLoad(ptrType, recvPtr, "fieldstr.load");
+                llvm::FunctionType* cloneFnType =
+                    llvm::FunctionType::get(ptrType, {ptrType}, false);
+                llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
+                    "__mlang_std_strbuf_clone", cloneFnType);
+                return builder.CreateCall(cloneFn, {currentStr}, "field.clone");
+            }
+            if(node->methodName == "len")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "len() takes no arguments");
+                    return nullptr;
+                }
+                llvm::Value* currentStr =
+                    builder.CreateLoad(ptrType, recvPtr, "fieldstr.load");
+                llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+                llvm::FunctionType* lenFnType =
+                    llvm::FunctionType::get(i64Type, {ptrType}, false);
+                llvm::FunctionCallee lenFn = module->getOrInsertFunction(
+                    "__mlang_std_strbuf_len", lenFnType);
+                return builder.CreateCall(lenFn, {currentStr}, "field.len");
+            }
+            if(node->methodName == "is_empty")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "is_empty() takes no arguments");
+                    return nullptr;
+                }
+                llvm::Value* currentStr =
+                    builder.CreateLoad(ptrType, recvPtr, "fieldstr.load");
+                llvm::Type* intType = llvm::Type::getInt32Ty(context);
+                llvm::FunctionType* emptyFnType =
+                    llvm::FunctionType::get(intType, {ptrType}, false);
+                llvm::FunctionCallee emptyFn = module->getOrInsertFunction(
+                    "__mlang_std_strbuf_is_empty", emptyFnType);
+                return builder.CreateCall(emptyFn, {currentStr},
+                                         "field.is_empty");
+            }
+            reportError(node->line, "string has no method named '" +
+                                        node->methodName + "'");
+            return nullptr;
+        }
+        if(recvType && recvType->kind == TypeNode::TYPE_LIST)
+        {
+            llvm::Value* recvPtr = getLValuePointer(node->object, node->line);
+            if(!recvPtr)
+                return nullptr;
+            TypeNode::TypeKind elemKind = TypeNode::TYPE_I32;
+            if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
+            {
+                if(gl->elementType)
+                    elemKind = gl->elementType->kind;
+            }
+            llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+            llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+            llvm::Type* voidType = llvm::Type::getVoidTy(context);
+#if LLVM_VERSION_MAJOR >= 15
+            llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+            llvm::Type* opaquePtrType =
+                llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+            bool elemIsI64 =
+                (elemKind == TypeNode::TYPE_I64 || elemKind == TypeNode::TYPE_U64);
+            bool elemIsStr =
+                (elemKind == TypeNode::TYPE_STRING || elemKind == TypeNode::TYPE_STR8);
+
+            if(node->methodName == "len")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "len() takes no arguments");
+                    return nullptr;
+                }
+                std::vector<llvm::Type*> listStructTypes = {i64Type,
+                                                            opaquePtrType};
+                llvm::StructType* listStructType =
+                    llvm::StructType::get(context, listStructTypes);
+                llvm::Value* listStruct =
+                    builder.CreateLoad(listStructType, recvPtr, "fieldlist.load");
+                return builder.CreateExtractValue(listStruct, 0,
+                                                  "fieldlist.len");
+            }
+            if(node->methodName == "is_empty")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "is_empty() takes no arguments");
+                    return nullptr;
+                }
+                std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
+                llvm::StructType* lsType = llvm::StructType::get(context, lsTypes);
+                llvm::Value* ls =
+                    builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
+                llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
+                return builder.CreateICmpEQ(
+                    cnt, llvm::ConstantInt::get(i64Type, 0),
+                    "fieldlist.is_empty");
+            }
+            if(node->methodName == "push")
+            {
+                if(node->arguments.size() != 1)
+                {
+                    reportError(node->line, "push() takes one argument");
+                    return nullptr;
+                }
+                llvm::Value* val = generateExpression(node->arguments[0]);
+                if(!val)
+                    return nullptr;
+                std::string fnName;
+                llvm::Type* valType = nullptr;
+                if(elemIsStr)
+                {
+                    fnName = "__mlang_std_vec_push_str";
+                    valType = opaquePtrType;
+                }
+                else if(elemIsI64)
+                {
+                    fnName = "__mlang_std_vec_push_i64";
+                    valType = i64Type;
+                    if(val->getType() != i64Type)
+                        val = builder.CreateSExt(val, i64Type);
+                }
+                else
+                {
+                    fnName = "__mlang_std_vec_push_i32";
+                    valType = i32Type;
+                    if(val->getType() != i32Type)
+                        val = builder.CreateTrunc(val, i32Type);
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType, valType},
+                                            false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(fnName, ft);
+                builder.CreateCall(fn, {recvPtr, val});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            if(node->methodName == "pop")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "pop() takes no arguments");
+                    return nullptr;
+                }
+                std::string fnName;
+                llvm::Type* retType = nullptr;
+                if(elemIsStr)
+                {
+                    fnName = "__mlang_std_vec_pop_str";
+                    retType = opaquePtrType;
+                }
+                else if(elemIsI64)
+                {
+                    fnName = "__mlang_std_vec_pop_i64";
+                    retType = i64Type;
+                }
+                else
+                {
+                    fnName = "__mlang_std_vec_pop_i32";
+                    retType = i32Type;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(retType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(fnName, ft);
+                return builder.CreateCall(fn, {recvPtr}, "fieldlist.pop");
+            }
+            if(node->methodName == "clear")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "clear() takes no arguments");
+                    return nullptr;
+                }
+                llvm::FunctionType* ft =
+                    llvm::FunctionType::get(voidType, {opaquePtrType}, false);
+                llvm::FunctionCallee fn = module->getOrInsertFunction(
+                    "__mlang_std_vec_clear", ft);
+                builder.CreateCall(fn, {recvPtr});
+                return llvm::Constant::getNullValue(voidType);
+            }
+            reportError(node->line, "Vec has no method named '" +
+                                        node->methodName + "'");
+            return nullptr;
+        }
+        if(recvType && recvType->kind == TypeNode::TYPE_MAP)
+        {
+            if(node->methodName == "len")
+            {
+                if(!node->arguments.empty())
+                {
+                    reportError(node->line, "len() takes no arguments");
+                    return nullptr;
+                }
+                llvm::Value* recvPtr = getLValuePointer(node->object, node->line);
+                if(!recvPtr)
+                    return nullptr;
+                llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+                llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+                llvm::Type* ptrType =
+                    llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+                std::vector<llvm::Type*> mapStructTypes = {i64Type, ptrType,
+                                                           ptrType};
+                llvm::StructType* mapStructType =
+                    llvm::StructType::get(context, mapStructTypes);
+                llvm::Value* mapStruct =
+                    builder.CreateLoad(mapStructType, recvPtr, "fieldmap.load");
+                return builder.CreateExtractValue(mapStruct, 0, "fieldmap.len");
+            }
+            reportError(node->line, "map has no method named '" +
+                                        node->methodName + "'");
+            return nullptr;
+        }
+
         // Chained case: a.b.method() - use helper to get struct pointer
         auto [ptr, typeName] = getStructPtrAndType(node->object, node->line);
         if(!ptr)

@@ -278,6 +278,10 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
+%type <ast> condition_expression condition_logical_or condition_logical_and
+%type <ast> condition_equality condition_relational condition_additive
+%type <ast> condition_multiplicative condition_unary condition_postfix
+%type <ast> condition_primary
 %type <ast> if_statement else_if_list else_if optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
@@ -813,15 +817,15 @@ for_statement
     ;
 
 while_statement
-    : WHILE expression COLON block_statement
+    : WHILE condition_expression COLON block_statement
         { $$ = create_while_statement($2, $4, yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
-    | WHILE expression COLON statement
+    | WHILE condition_expression COLON statement
         { $$ = create_while_statement($2, create_statement_list($4), yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
-    | WHILE expression COLON expression block_statement
+    | WHILE condition_expression COLON expression block_statement
         { $$ = create_while_statement(create_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
-    | WHILE expression COLON expression statement
+    | WHILE condition_expression COLON expression statement
         { $$ = create_while_statement(create_binary_op(AMP_AMP, $2, $4), create_statement_list($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
-    | WHILE expression block_statement
+    | WHILE condition_expression block_statement
         { $$ = create_while_statement($2, $3, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     ;
 
@@ -895,35 +899,35 @@ argument_list
     ;
 
 if_statement
-    : IF expression COLON block_statement else_if_list optional_else
+    : IF condition_expression COLON block_statement else_if_list optional_else
         { $$ = create_if_statement($2, $4, $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | IF expression COLON statement else_if_list optional_else
+    | IF condition_expression COLON statement else_if_list optional_else
         { $$ = create_if_statement($2, create_statement_list($4), $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | IF expression COLON expression block_statement else_if_list optional_else
+    | IF condition_expression COLON expression block_statement else_if_list optional_else
         { $$ = create_if_statement(create_binary_op(AMP_AMP, $2, $4), $5, $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | IF expression COLON expression statement else_if_list optional_else
+    | IF condition_expression COLON expression statement else_if_list optional_else
         { $$ = create_if_statement(create_binary_op(AMP_AMP, $2, $4), create_statement_list($5), $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | IF expression block_statement else_if_list optional_else
+    | IF condition_expression block_statement else_if_list optional_else
         { $$ = create_if_statement($2, $3, $4, $5); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
+    | IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration($5, $3, $7); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $9, $11, $12, $13); }
-    | IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement else_if_list optional_else
+    | IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration($5, $3, $7); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $9, create_statement_list($11), $12, $13); }
-    | IF LET IDENTIFIER ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
+    | IF LET IDENTIFIER ASSIGN expression COLON condition_expression COLON block_statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, $9, $10, $11); }
-    | IF LET IDENTIFIER ASSIGN expression COLON expression COLON statement else_if_list optional_else
+    | IF LET IDENTIFIER ASSIGN expression COLON condition_expression COLON statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, create_statement_list($9), $10, $11); }
-    | IF LET IDENTIFIER EQ expression COLON expression block_statement else_if_list optional_else
+    | IF LET IDENTIFIER EQ expression COLON condition_expression block_statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, $8, $9, $10); }
-    | IF LET IDENTIFIER EQ expression COLON expression statement else_if_list optional_else
+    | IF LET IDENTIFIER EQ expression COLON condition_expression statement else_if_list optional_else
         { ASTNode* __init = create_let_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, create_statement_list($8), $9, $10); }
-    | IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
+    | IF VAR IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement else_if_list optional_else
         { ASTNode* __init = create_var_declaration($5, $3, $7); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $9, $11, $12, $13); }
-    | IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement else_if_list optional_else
+    | IF VAR IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement else_if_list optional_else
         { ASTNode* __init = create_var_declaration($5, $3, $7); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $9, create_statement_list($11), $12, $13); }
-    | IF VAR IDENTIFIER ASSIGN expression COLON expression COLON block_statement else_if_list optional_else
+    | IF VAR IDENTIFIER ASSIGN expression COLON condition_expression COLON block_statement else_if_list optional_else
         { ASTNode* __init = create_var_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, $9, $10, $11); }
-    | IF VAR IDENTIFIER ASSIGN expression COLON expression COLON statement else_if_list optional_else
+    | IF VAR IDENTIFIER ASSIGN expression COLON condition_expression COLON statement else_if_list optional_else
         { ASTNode* __init = create_var_declaration(NULL, $3, $5); __init->line = @2.first_line; $$ = create_if_statement_with_init(__init, $7, create_statement_list($9), $10, $11); }
     ;
 
@@ -933,31 +937,163 @@ else_if_list
     ;
 
 else_if
-    : ELSE IF expression COLON block_statement { $$ = create_else_if($3, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF expression COLON statement { $$ = create_else_if($3, create_statement_list($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF expression COLON expression block_statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF expression COLON expression statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), create_statement_list($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF expression block_statement { $$ = create_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement
+    : ELSE IF condition_expression COLON block_statement { $$ = create_else_if($3, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression COLON statement { $$ = create_else_if($3, create_statement_list($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression COLON expression block_statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression COLON expression statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), create_statement_list($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression block_statement { $$ = create_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement
         { ASTNode* __init = create_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, $12); }
-    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement
+    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = create_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, create_statement_list($12)); }
-    | ELSE IF LET IDENTIFIER ASSIGN expression COLON expression COLON block_statement
+    | ELSE IF LET IDENTIFIER ASSIGN expression COLON condition_expression COLON block_statement
         { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, $10); }
-    | ELSE IF LET IDENTIFIER ASSIGN expression COLON expression COLON statement
+    | ELSE IF LET IDENTIFIER ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, create_statement_list($10)); }
-    | ELSE IF LET IDENTIFIER EQ expression COLON expression block_statement
+    | ELSE IF LET IDENTIFIER EQ expression COLON condition_expression block_statement
         { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, $9); }
-    | ELSE IF LET IDENTIFIER EQ expression COLON expression statement
+    | ELSE IF LET IDENTIFIER EQ expression COLON condition_expression statement
         { ASTNode* __init = create_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, create_statement_list($9)); }
-    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON block_statement
+    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement
         { ASTNode* __init = create_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, $12); }
-    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON expression COLON statement
+    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = create_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, create_statement_list($12)); }
-    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON expression COLON block_statement
+    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON condition_expression COLON block_statement
         { ASTNode* __init = create_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, $10); }
-    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON expression COLON statement
+    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = create_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $8, create_statement_list($10)); }
+    ;
+
+condition_expression
+    : condition_logical_or
+    ;
+
+condition_logical_or
+    : condition_logical_or PIPE_PIPE condition_logical_and
+        { $$ = create_binary_op(PIPE_PIPE, $1, $3); }
+    | condition_logical_and
+    ;
+
+condition_logical_and
+    : condition_logical_and AMP_AMP condition_equality
+        { $$ = create_binary_op(AMP_AMP, $1, $3); }
+    | condition_equality
+    ;
+
+condition_equality
+    : condition_equality EQ condition_relational
+        { $$ = create_binary_op(EQ, $1, $3); }
+    | condition_equality NE condition_relational
+        { $$ = create_binary_op(NE, $1, $3); }
+    | condition_relational
+    ;
+
+condition_relational
+    : condition_relational LT condition_additive
+        { $$ = create_binary_op(LT, $1, $3); }
+    | condition_relational GT condition_additive
+        { $$ = create_binary_op(GT, $1, $3); }
+    | condition_relational LE condition_additive
+        { $$ = create_binary_op(LE, $1, $3); }
+    | condition_relational GE condition_additive
+        { $$ = create_binary_op(GE, $1, $3); }
+    | condition_additive
+    ;
+
+condition_additive
+    : condition_additive PLUS condition_multiplicative
+        { $$ = create_binary_op(PLUS, $1, $3); }
+    | condition_additive MINUS condition_multiplicative
+        { $$ = create_binary_op(MINUS, $1, $3); }
+    | condition_multiplicative
+    ;
+
+condition_multiplicative
+    : condition_multiplicative MULTIPLY condition_unary
+        { $$ = create_binary_op(MULTIPLY, $1, $3); }
+    | condition_multiplicative DIVIDE condition_unary
+        { $$ = create_binary_op(DIVIDE, $1, $3); }
+    | condition_multiplicative MODULO condition_unary
+        { $$ = create_binary_op(MODULO, $1, $3); }
+    | condition_unary
+    ;
+
+condition_unary
+    : MINUS condition_unary
+        { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
+    | NOT condition_unary
+        { $$ = create_unary_op(NOT, $2); if($$) $$->line = yylineno; }
+    | AMP condition_unary
+        { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
+    | AMP_MUT condition_unary
+        { $$ = create_unary_op(AMP_MUT, $2); if($$) $$->line = yylineno; }
+    | MULTIPLY condition_unary
+        { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
+    | condition_postfix TRY_QUESTION
+        { $$ = create_try_expression($1, yylineno); }
+    | function_call TRY_QUESTION
+        { $$ = create_try_expression($1, yylineno); }
+    | condition_postfix
+    | function_call
+    | cast_expression
+    | list_literal
+    | map_literal
+    | index_expression
+    | tuple_literal
+    | map_iterator
+    ;
+
+condition_postfix
+    : condition_primary { $$ = $1; }
+    | condition_postfix DOT IDENTIFIER { $$ = create_field_access_expr($1, $3, yylineno); }
+    | condition_postfix DOT IDENTIFIER LPAREN RPAREN
+        { $$ = create_method_call_expr($1, $3, NULL, yylineno); }
+    | condition_postfix DOT IDENTIFIER LPAREN argument_list RPAREN
+        { $$ = create_method_call_expr($1, $3, $5, yylineno); }
+    | condition_postfix DOT INT_LITERAL { $$ = create_tuple_access($1, $3, yylineno); }
+    ;
+
+condition_primary
+    : INT_LITERAL { $$ = create_int_literal($1); }
+    | FLOAT_LITERAL { $$ = create_float_literal($1); }
+    | DOUBLE_LITERAL { $$ = create_double_literal($1); }
+    | STRING_LITERAL { $$ = create_string_literal($1); }
+    | TRUE_LIT { $$ = create_bool_literal(1); }
+    | FALSE_LIT { $$ = create_bool_literal(0); }
+    | FORMAT LPAREN STRING_LITERAL RPAREN
+        { $$ = create_format_expr($3, NULL, yylineno); }
+    | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = create_format_expr($3, $5, yylineno); }
+    | module_path
+        { $$ = create_enum_or_ident_from_path($1, yylineno); }
+    | LPAREN condition_expression RPAREN { $$ = $2; }
+    | match_expression { $$ = $1; }
+    | list_literal { $$ = $1; }
+    | map_literal { $$ = $1; }
+    | PIPE_PIPE LBRACE RBRACE
+        { $$ = create_closure(NULL); }
+    | PIPE_PIPE LBRACE statement_list RBRACE
+        { $$ = create_closure($3); }
+    | PIPE parameters PIPE LBRACE RBRACE
+        { $$ = create_closure_with_params($2, NULL); }
+    | PIPE parameters PIPE LBRACE statement_list RBRACE
+        { $$ = create_closure_with_params($2, $5); }
+    | LPAREN ELLIPSIS PLUS expression RPAREN
+        { $$ = create_fold_expression(PLUS, $4, 0); }
+    | LPAREN postfix_expression PLUS ELLIPSIS RPAREN
+        { $$ = create_fold_expression(PLUS, $2, 1); }
+    | LPAREN ELLIPSIS MULTIPLY expression RPAREN
+        { $$ = create_fold_expression(MULTIPLY, $4, 0); }
+    | LPAREN postfix_expression MULTIPLY ELLIPSIS RPAREN
+        { $$ = create_fold_expression(MULTIPLY, $2, 1); }
+    | LPAREN ELLIPSIS AMP_AMP expression RPAREN
+        { $$ = create_fold_expression(AMP_AMP, $4, 0); }
+    | LPAREN postfix_expression AMP_AMP ELLIPSIS RPAREN
+        { $$ = create_fold_expression(AMP_AMP, $2, 1); }
+    | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN
+        { $$ = create_fold_expression(PIPE_PIPE, $4, 0); }
+    | LPAREN postfix_expression PIPE_PIPE ELLIPSIS RPAREN
+        { $$ = create_fold_expression(PIPE_PIPE, $2, 1); }
     ;
 
 optional_else

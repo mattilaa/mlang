@@ -58,6 +58,8 @@ mod unordered_alias_tests;
 use unordered_alias_tests::*;
 mod if_let_var_combinations_tests;
 use if_let_var_combinations_tests::*;
+mod if_while_expression_precedence_tests;
+use if_while_expression_precedence_tests::*;
 mod std_regex_tests;
 use std_regex_tests::*;
 mod static_storage_tests;

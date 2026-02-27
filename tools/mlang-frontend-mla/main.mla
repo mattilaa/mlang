@@ -1,0 +1,599 @@
+/// \file main.mla
+/// \brief Incremental MLang port of the compiler frontend CLI.
+///
+/// This tool is a frontend wrapper that forwards compiler arguments to a
+/// backend compiler binary (default: `mlang`).
+///
+/// Usage:
+///   mlang-frontend-mla [--backend <mlang_bin>] [compiler args...]
+
+mod std::compiler;
+mod std::fs;
+mod std::process;
+mod std::strbuf;
+
+use std::compiler::version;
+use std::fs::file_exists;
+use std::fs::read_all_text;
+use std::process::Child;
+use std::process::ChildStdout;
+use std::process::ExitStatus;
+use std::process::spawn;
+use std::process::spawn_inherit;
+use std::strbuf::contains;
+use std::strbuf::eq;
+use std::strbuf::ends_with;
+use std::strbuf::find;
+use std::strbuf::len;
+use std::strbuf::rfind;
+use std::strbuf::starts_with;
+use std::strbuf::sub;
+use std::strbuf::trim;
+
+struct FrontendState {
+    var backend: string;
+    var passthrough: list<string>;
+    var show_help: i32;
+    var show_version: i32;
+    var parse_error: string;
+};
+
+fn print_usage(program: string) -> void {
+    println!("Usage: {} [--backend <mlang_bin>] [compiler args...]", program);
+    println!("Version: {}", version());
+    println!("");
+    println!("Frontend options:");
+    println!("  --backend <path>   Backend compiler executable (default: mlang)");
+    println!("  --version          Show version and exit");
+    println!("  -h, --help         Show this help message");
+    println!("");
+    println!("All remaining arguments are passed through to the backend compiler.");
+    println!("Examples:");
+    println!("  {} --backend ./build/mlang examples/main.mla -o /tmp/main_bin", program);
+    println!("  {} --backend ./build/mlang test tests", program);
+}
+
+fn run_inherit(program: string, args: list<string>) -> i32 {
+    let cr: Result<Child, string> = spawn_inherit(program, args);
+    if (cr.is_err()) {
+        eprintln!("failed to spawn '{}': {}", program, cr.unwrap_err());
+        return 1;
+    }
+    let child: Child = cr.unwrap();
+    let wr: Result<ExitStatus, string> = child.wait();
+    if (wr.is_err()) {
+        eprintln!("wait failed for '{}': {}", program, wr.unwrap_err());
+        child.close();
+        return 1;
+    }
+    let st: ExitStatus = wr.unwrap();
+    child.close();
+    if (st.exited() != 1) {
+        return 1;
+    }
+    return st.code();
+}
+
+fn run_capture_stdout(program: string, args: list<string>) -> Result<string, string> {
+    let cr: Result<Child, string> = spawn(program, args);
+    if (cr.is_err()) {
+        return Err<string, string>(format!("failed to spawn '{}': {}", program, cr.unwrap_err()));
+    }
+    let child: Child = cr.unwrap();
+    let or: Result<ChildStdout, string> = child.stdout();
+    if (or.is_err()) {
+        child.close();
+        return Err<string, string>("failed to capture stdout");
+    }
+    let out: ChildStdout = or.unwrap();
+
+    var buf: string = String::with_capacity(4096);
+    var text: string = String::new();
+    for _i in 0..8192 {
+        let rr: Result<i64, string> = out.read(buf, 4096);
+        if (rr.is_err()) {
+            out.close();
+            child.close();
+            String::free(buf);
+            return Err<string, string>("failed to read child stdout");
+        }
+        let n: i64 = rr.unwrap();
+        if (n <= 0) {
+            break;
+        }
+        text = format!("{}{}", text, sub(buf, 0, n));
+    }
+    out.close();
+    String::free(buf);
+
+    let wr: Result<ExitStatus, string> = child.wait();
+    if (wr.is_err()) {
+        child.close();
+        return Err<string, string>("wait failed");
+    }
+    let st: ExitStatus = wr.unwrap();
+    child.close();
+    if (st.success() != 1) {
+        return Err<string, string>(format!("command exited with {}", st.code()));
+    }
+    return Ok<string, string>(text);
+}
+
+fn shell_quote(s: string) -> string {
+    var out: string = "'";
+    let n: i64 = len(s);
+    for i in 0..n {
+        let ch: string = sub(s, i, 1);
+        if eq(ch, "'") == 1 {
+            out = concat(out, "'\\''");
+        } else {
+            out = concat(out, ch);
+        }
+    }
+    out = concat(out, "'");
+    return out;
+}
+
+fn split_lines(content: string) -> list<string> {
+    var out: list<string> = [];
+    var cur: string = String::new();
+    let n: i64 = len(content);
+    if n == 0 { return out; }
+    for i in 0..n {
+        let ch: string = sub(content, i, 1);
+        if eq(ch, "\n") == 1 {
+            out.push(cur);
+            cur = String::new();
+            continue;
+        }
+        if eq(ch, "\r") == 1 {
+            continue;
+        }
+        cur = concat(cur, ch);
+    }
+    if len(cur) > 0 {
+        out.push(cur);
+    }
+    return out;
+}
+
+fn basename(path: string) -> string {
+    let p: i64 = rfind(path, "/");
+    if p < 0 { return path; }
+    let n: i64 = len(path);
+    if p >= n - 1 { return path; }
+    return sub(path, p + 1, n - p - 1);
+}
+
+fn parent_dir(path: string) -> string {
+    let p: i64 = rfind(path, "/");
+    if p < 0 { return "."; }
+    if p == 0 { return "/"; }
+    return sub(path, 0, p);
+}
+
+fn stdlib_lib_exists(dir: string) -> i32 {
+    if file_exists(concat(dir, "/libmlang_std.a")) == 1 { return 1; }
+    if file_exists(concat(dir, "/libmlang_std.so")) == 1 { return 1; }
+    if file_exists(concat(dir, "/libmlang_std.dylib")) == 1 { return 1; }
+    return 0;
+}
+
+fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> {
+    var out: list<string> = [];
+    for a in args {
+        out.push(a);
+    }
+    var has_std: i32 = 0;
+    let na0: i64 = args.len();
+    for i in 0..na0 {
+        if eq(args[i], "-lmlang_std") == 1 || eq(args[i], "-lmlang_stdlib") == 1 {
+            has_std = 1;
+            break;
+        }
+    }
+    if has_std == 1 {
+        return out;
+    }
+
+    var candidates: list<string> = [];
+    let be_dir: string = parent_dir(backend);
+    candidates.push(be_dir);
+    candidates.push(concat(be_dir, "/../lib"));
+    candidates.push(concat(be_dir, "/../"));
+    candidates.push("/usr/local/lib");
+    candidates.push("/usr/local/lib/mlang");
+    candidates.push("/usr/lib");
+    candidates.push("/usr/lib/mlang");
+
+    var found: string = "";
+    for d in candidates {
+        if stdlib_lib_exists(d) == 1 {
+            found = d;
+            break;
+        }
+    }
+    if len(found) == 0 {
+        return out;
+    }
+
+    out.push(format!("-L{}", found));
+    out.push("-lmlang_std");
+    var has_m: i32 = 0;
+    let na1: i64 = out.len();
+    for i in 0..na1 {
+        if eq(out[i], "-lm") == 1 {
+            has_m = 1;
+            break;
+        }
+    }
+    if has_m == 0 {
+        out.push("-lm");
+    }
+    return out;
+}
+
+fn collect_dir_mla_files(path: string) -> list<string> {
+    let cmd: string = format!("find {} -maxdepth 1 -type f -name '*.mla' | sort", shell_quote(path));
+    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
+    if rr.is_err() {
+        return [];
+    }
+    return split_lines(rr.unwrap());
+}
+
+fn path_is_directory(path: string) -> i32 {
+    let cmd: string = format!("test -d {}", shell_quote(path));
+    let rc: i32 = run_inherit("/bin/sh", ["-lc", cmd]);
+    return rc == 0 ? 1 : 0;
+}
+
+fn getenv_value(name: string) -> string {
+    let cmd: string = format!("printf '%s' \"${}\"", name);
+    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
+    if rr.is_err() {
+        return String::new();
+    }
+    return rr.unwrap();
+}
+
+fn find_pkg_frontend_source(backend: string) -> string {
+    let c1: string = "tools/mlang-pkg-mla/main.mla";
+    if file_exists(c1) == 1 { return c1; }
+    let be_dir: string = parent_dir(backend);
+    let c2: string = concat(be_dir, "/../tools/mlang-pkg-mla/main.mla");
+    if file_exists(c2) == 1 { return c2; }
+    let c3: string = concat(be_dir, "/tools/mlang-pkg-mla/main.mla");
+    if file_exists(c3) == 1 { return c3; }
+    return String::new();
+}
+
+fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
+    let src: string = find_pkg_frontend_source(backend);
+    if len(src) == 0 { return -1; }
+    let tmp_bin: string = "/tmp/mlang-pkg-mla-bin";
+    let compile_args: list<string> = [
+        src,
+        "-Wno-colon-if",
+        "-Wno-colon-while",
+        "-L", parent_dir(backend),
+        "-lmlang_std",
+        "-o", tmp_bin
+    ];
+    let compile_rc: i32 = run_inherit(backend, compile_args);
+    if compile_rc != 0 {
+        return -1;
+    }
+    var run_args: list<string> = ["--backend", backend];
+    let n: i64 = passthrough.len();
+    for i in 0..n {
+        run_args.push(passthrough[i]);
+    }
+    return run_inherit(tmp_bin, run_args);
+}
+
+fn clone_args(args: list<string>) -> list<string> {
+    var out: list<string> = [];
+    let n: i64 = args.len();
+    for i in 0..n {
+        out.push(args[i]);
+    }
+    return out;
+}
+
+fn is_test_suite_file(path: string) -> i32 {
+    let name: string = basename(path);
+    if starts_with(name, "test_") == 1 { return 1; }
+    if ends_with(name, "_tests.mla") == 1 { return 1; }
+    return 0;
+}
+
+fn is_bench_suite_file(path: string) -> i32 {
+    let name: string = basename(path);
+    return starts_with(name, "bench_");
+}
+
+fn is_digit_char(ch: string) -> i32 {
+    if eq(ch, "0") == 1 { return 1; }
+    if eq(ch, "1") == 1 { return 1; }
+    if eq(ch, "2") == 1 { return 1; }
+    if eq(ch, "3") == 1 { return 1; }
+    if eq(ch, "4") == 1 { return 1; }
+    if eq(ch, "5") == 1 { return 1; }
+    if eq(ch, "6") == 1 { return 1; }
+    if eq(ch, "7") == 1 { return 1; }
+    if eq(ch, "8") == 1 { return 1; }
+    if eq(ch, "9") == 1 { return 1; }
+    return 0;
+}
+
+fn is_signed_decimal(s: string) -> i32 {
+    let n: i64 = len(s);
+    if n <= 0 { return 0; }
+    var start: i64 = 0;
+    let first: string = sub(s, 0, 1);
+    if eq(first, "+") == 1 || eq(first, "-") == 1 {
+        if n == 1 { return 0; }
+        start = 1;
+    }
+    for i in start..n {
+        if is_digit_char(sub(s, i, 1)) == 0 { return 0; }
+    }
+    return 1;
+}
+
+fn option_takes_value(a: string) -> i32 {
+    if eq(a, "-o") == 1 { return 1; }
+    if eq(a, "-L") == 1 { return 1; }
+    if eq(a, "-l") == 1 { return 1; }
+    if eq(a, "--bench-iters") == 1 { return 1; }
+    if eq(a, "--bench-warmup") == 1 { return 1; }
+    return 0;
+}
+
+fn file_has_test_attr(path: string) -> i32 {
+    let rr: Result<string, string> = read_all_text(path);
+    if rr.is_err() {
+        return 0;
+    }
+    return contains(rr.unwrap(), "#[test]");
+}
+
+fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, extra_args: list<string>) -> i32 {
+    let files_all: list<string> = collect_dir_mla_files(path);
+    var files: list<string> = [];
+    for f in files_all {
+        if len(trim(f)) == 0 { continue; }
+        if benchmark_mode == 1 {
+            if is_bench_suite_file(f) == 0 { continue; }
+            files.push(f);
+        } else {
+            if is_test_suite_file(f) == 0 { continue; }
+            if file_has_test_attr(f) == 0 { continue; }
+            files.push(f);
+        }
+    }
+
+    if files.len() == 0 {
+        if benchmark_mode == 1 {
+            eprintln!("Error: No .mla benchmark files found in directory: {}", path);
+        } else {
+            eprintln!("Error: No .mla test files found in directory: {}", path);
+        }
+        return 1;
+    }
+
+    var fail_count: i32 = 0;
+    for f in files {
+        println!("[SUITE] {}", f);
+        var cmd: list<string> = [];
+        if benchmark_mode == 1 {
+            cmd.push("bench");
+            cmd.push(f);
+        } else {
+            cmd.push("--tests");
+            cmd.push(f);
+        }
+        for a in extra_args {
+            cmd.push(a);
+        }
+        let rc: i32 = run_inherit(backend, cmd);
+        if rc == 0 {
+            println!("[SUITE PASS] {}", f);
+        } else {
+            println!("[SUITE FAIL] {} rc={}", f, rc);
+            fail_count = fail_count + 1;
+        }
+    }
+    return fail_count;
+}
+
+fn parse_options(argv: list<string>) -> FrontendState {
+    var out: FrontendState = FrontendState {
+        backend: "mlang",
+        passthrough: [],
+        show_help: 0,
+        show_version: 0,
+        parse_error: ""
+    };
+
+    let n: i64 = argv.len();
+    var i: i64 = 1;
+    while i < n: {
+        let arg: string = argv[i];
+        if (eq(arg, "--backend") == 1) {
+            if i + 1 >= n {
+                out.parse_error = "missing value after --backend";
+                return out;
+            }
+            out.backend = argv[i + 1];
+            i = i + 2;
+            continue;
+        }
+        if (eq(arg, "--help") == 1 || eq(arg, "-h") == 1) {
+            out.show_help = 1;
+            i = i + 1;
+            continue;
+        }
+        if (eq(arg, "--version") == 1) {
+            out.show_version = 1;
+            i = i + 1;
+            continue;
+        }
+        out.passthrough.push(arg);
+        i = i + 1;
+    }
+
+    return out;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    let _ = argc;
+    var argv: list<string> = [];
+    for a in args {
+        argv.push(format!("{}", a));
+    }
+
+    var program: string = "mlang-frontend-mla";
+    if (argv.len() > 0) {
+        program = argv[0];
+    }
+
+    let st: FrontendState = parse_options(argv);
+    if (eq(st.parse_error, "") == 0) {
+        eprintln!("{}: {}", program, st.parse_error);
+        print_usage(program);
+        return 2;
+    }
+
+    if (st.show_help == 1) {
+        print_usage(program);
+        return 0;
+    }
+    if (st.show_version == 1) {
+        println!("mlang-frontend-mla {}", version());
+        return 0;
+    }
+    let passthrough: list<string> = st.passthrough;
+    if (passthrough.len() == 0) {
+        print_usage(program);
+        return 1;
+    }
+    let first: string = passthrough[0];
+    if eq(first, "pkg") == 1 {
+        let impl_val: string = getenv_value("MLANG_PKG_IMPL");
+        let force_cpp: i32 = eq(impl_val, "cpp");
+        let prefer_mla: i32 = force_cpp == 1 ? 0 : 1;
+        if prefer_mla == 1 {
+            var pkg_args: list<string> = [];
+            let pkg_n: i64 = passthrough.len();
+            for pi in 0..pkg_n {
+                pkg_args.push(passthrough[pi]);
+            }
+            let mla_rc: i32 = run_pkg_frontend_mla(st.backend, pkg_args);
+            if mla_rc >= 0 {
+                return mla_rc;
+            }
+        }
+        var passthrough_args: list<string> = [];
+        let pass_n: i64 = passthrough.len();
+        for pi in 0..pass_n {
+            passthrough_args.push(passthrough[pi]);
+        }
+        return run_inherit(st.backend, passthrough_args);
+    }
+
+    var mode_test: i32 = 0;
+    var mode_bench: i32 = 0;
+    var idx: i64 = 0;
+    if eq(first, "test") == 1 {
+        mode_test = 1;
+        idx = 1;
+    } else if eq(first, "bench") == 1 {
+        mode_test = 1;
+        mode_bench = 1;
+        idx = 1;
+    } else if passthrough.len() >= 2 && eq(first, "run") == 1 && eq(passthrough[1], "tests") == 1 {
+        mode_test = 1;
+        idx = 2;
+    } else if eq(first, "--tests") == 1 {
+        mode_test = 1;
+        idx = 1;
+    }
+
+    if mode_test == 0 {
+        var compile_in: list<string> = [];
+        let compile_n: i64 = passthrough.len();
+        for ci in 0..compile_n {
+            compile_in.push(passthrough[ci]);
+        }
+        let compile_args: list<string> = ensure_stdlib_link_args(compile_in, st.backend);
+        return run_inherit(st.backend, compile_args);
+    }
+
+    var input_path: string = "tests";
+    var extra_args: list<string> = [];
+    var path_set: i32 = 0;
+    let n: i64 = passthrough.len();
+    var i: i64 = idx;
+    while i < n: {
+        let a: string = passthrough[i];
+        if option_takes_value(a) == 1 {
+            extra_args.push(a);
+            if i + 1 >= n {
+                eprintln!("missing value after {}", a);
+                return 2;
+            }
+            let v: string = passthrough[i + 1];
+            var bench_num_flag: i32 = 0;
+            if eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
+                bench_num_flag = 1;
+            }
+            if bench_num_flag == 1 {
+                if is_signed_decimal(v) == 0 {
+                    eprintln!("Invalid value for {}", a);
+                    return 1;
+                }
+            }
+            extra_args.push(v);
+            i = i + 2;
+            continue;
+        }
+        if starts_with(a, "-") == 0 && path_set == 0 {
+            input_path = a;
+            path_set = 1;
+        } else {
+            extra_args.push(a);
+        }
+        i = i + 1;
+    }
+    if mode_bench == 0 {
+        var has_no_colon_if: i32 = 0;
+        var has_no_colon_while: i32 = 0;
+        let ea_n: i64 = extra_args.len();
+        for j in 0..ea_n {
+            if eq(extra_args[j], "-Wno-colon-if") == 1 { has_no_colon_if = 1; }
+            if eq(extra_args[j], "-Wno-colon-while") == 1 { has_no_colon_while = 1; }
+        }
+        if has_no_colon_if == 0 { extra_args.push("-Wno-colon-if"); }
+        if has_no_colon_while == 0 { extra_args.push("-Wno-colon-while"); }
+    }
+    extra_args = ensure_stdlib_link_args(extra_args, st.backend);
+
+    if path_is_directory(input_path) == 1 {
+        return run_test_directory_mode(st.backend, input_path, mode_bench, extra_args);
+    }
+
+    var single: list<string> = [];
+    if mode_bench == 1 {
+        single.push("bench");
+        single.push(input_path);
+    } else {
+        single.push("--tests");
+        single.push(input_path);
+    }
+    for a in extra_args {
+        single.push(a);
+    }
+    return run_inherit(st.backend, single);
+}
