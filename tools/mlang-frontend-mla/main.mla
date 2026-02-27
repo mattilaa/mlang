@@ -420,16 +420,17 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
 
     if files.len() == 0 {
         if benchmark_mode == 1 {
-            eprintln!("Error: No .mla benchmark files found in directory: {}", path);
+            eprintln!("Error: No .mla benchmark files found in {}", path);
         } else {
-            eprintln!("Error: No .mla test files found in directory: {}", path);
+            eprintln!("Error: No .mla test files found in {}", path);
         }
         return 1;
     }
 
     var fail_count: i32 = 0;
     for f in files {
-        println!("[SUITE] {}", f);
+        let suite_name: string = basename(f);
+        println!("[SUITE] {}", suite_name);
         var cmd: list<string> = [];
         if benchmark_mode == 1 {
             cmd.push("bench");
@@ -443,13 +444,16 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
         }
         let rc: i32 = run_inherit(backend, cmd);
         if rc == 0 {
-            println!("[SUITE PASS] {}", f);
+            println!("[SUITE PASS] {}", suite_name);
         } else {
-            println!("[SUITE FAIL] {} rc={}", f, rc);
+            println!("[SUITE FAIL] {} rc={}", suite_name, rc);
             fail_count = fail_count + 1;
         }
     }
-    return fail_count;
+    if fail_count == 0 {
+        return 0;
+    }
+    return 1;
 }
 
 fn parse_options(argv: list<string>) -> FrontendState {
