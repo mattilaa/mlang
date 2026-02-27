@@ -753,7 +753,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if mode_bench == 0 {
         if has_no_colon_if == 0 { extra_args.push("-Wno-colon-if"); }
         if has_no_colon_while == 0 { extra_args.push("-Wno-colon-while"); }
-    } else {
+    }
+    let input_is_dir: i32 = path_is_directory(input_path);
+    if mode_bench == 1 && input_is_dir == 1 {
         if has_bench_iters == 0 {
             extra_args.push("--bench-iters");
             extra_args.push("100000");
@@ -763,7 +765,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             extra_args.push("10000");
         }
     }
-    if path_is_directory(input_path) == 1 {
+    if input_is_dir == 1 {
         let suite_args: list<string> = sanitize_dir_suite_args(extra_args, mode_bench);
         return run_test_directory_mode(st.backend, input_path, mode_bench, suite_args);
     }
