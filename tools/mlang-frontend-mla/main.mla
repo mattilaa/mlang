@@ -619,6 +619,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             i = i + 2;
             continue;
         }
+        if eq(a, "--no-run") == 1 {
+            if mode_bench == 0 {
+                extra_args.push(a);
+            }
+            i = i + 1;
+            continue;
+        }
         if starts_with(a, "-") == 0 {
             input_path = a;
             i = i + 1;
