@@ -337,6 +337,28 @@ MLang Frontend Wrapper Pkg Dispatch Works
     ...    msg=frontend pkg init with cpp backend failed (rc=${r1.rc})\nSTDOUT:\n${r1.stdout}\nSTDERR:\n${r1.stderr}
     File Should Exist    ${proj}/mlang.toml
 
+MLang Frontend Pkg Unknown Impl Uses Cpp Fallback
+    [Documentation]    Verify MLANG_PKG_IMPL unknown values do not prefer MLang pkg frontend (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_unknown
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_pkg_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_pkg_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    #!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    pkg    init
+    ...    env:MLANG_PKG_IMPL=unknown    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=unknown MLANG_PKG_IMPL should route pkg to backend directly (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    pkg init
+
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptydir

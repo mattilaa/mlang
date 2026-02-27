@@ -531,8 +531,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if eq(first, "pkg") == 1 {
         let impl_val: string = getenv_value("MLANG_PKG_IMPL");
         let force_cpp: i32 = eq(impl_val, "cpp");
-        let prefer_mla: i32 = force_cpp == 1 ? 0 : 1;
-        if prefer_mla == 1 {
+        var prefer_mla: i32 = 0;
+        if len(impl_val) == 0 || eq(impl_val, "mla") == 1 {
+            prefer_mla = 1;
+        }
+        if prefer_mla == 1 && force_cpp == 0 {
             var pkg_args: list<string> = [];
             let pkg_n: i64 = passthrough.len();
             for pi in 0..pkg_n {
