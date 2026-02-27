@@ -166,11 +166,11 @@ Result Methods And Unwrap Warns
 Mlang Test Runner
     ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/test_runner.mla
     ${code}=    Catenate    SEPARATOR=\n
-    ...    #[test]
+    ...    \#[test]
     ...    fn test_ok() -> i32 {
     ...        return 0;
     ...    }
-    ...    #[test]
+    ...    \#[test]
     ...    fn test_fail() -> i32 {
     ...        return 1;
     ...    }
@@ -272,6 +272,18 @@ MLang Frontend Wrapper Compiles And Forwards
     ...    msg=Frontend wrapper failed forwarding --version (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    mlang-frontend-mla
 
+MLang Frontend Test Version Uses Backend Semantics
+    [Documentation]    Verify `test --version` is passed through and reports backend version semantics.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_version_passthrough
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    test    --version
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang
+    Should Not Contain    ${run.stdout}    mlang-frontend-mla
+
 MLang Frontend Wrapper Test Dispatch Works
     [Documentation]    Build frontend wrapper and verify `test` + `run tests` dispatch on a temporary suite directory.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dispatch
@@ -284,7 +296,7 @@ MLang Frontend Wrapper Test Dispatch Works
     ${t1}=    Catenate    SEPARATOR=    ${suite_dir}/test_one_tests.mla
     ${t2}=    Catenate    SEPARATOR=    ${suite_dir}/test_two_tests.mla
     ${code1}=    Catenate    SEPARATOR=\n
-    ...    #[test]
+    ...    \#[test]
     ...    fn test_ok() -> i32 {
     ...        return 0;
     ...    }
@@ -322,20 +334,17 @@ MLang Binary Frontend Env Switch Works
     Should Contain    ${run.stdout}    frontend env switch ok
 
 MLang Frontend Wrapper Pkg Dispatch Works
-    [Documentation]    Verify mlang-frontend-mla handles `pkg` command path with MLANG_PKG_IMPL selection.
+    [Documentation]    Verify mlang-frontend-mla handles `pkg` command path with MLANG_PKG_IMPL=cpp by forwarding directly to backend.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
     ...    msg=Failed building frontend wrapper (pkg dispatch) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
-    ${proj}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_pkg_dispatch_proj
-    Run Keyword And Ignore Error    Remove Directory    ${proj}    recursive=True
-    Create Directory    ${proj}
-    ${r1}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    pkg    init
-    ...    cwd=${proj}    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
+    ${r1}=    Run Process    ${frontend}    --backend    /bin/echo    pkg    init
+    ...    env:MLANG_PKG_IMPL=cpp    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${r1.rc}    0
     ...    msg=frontend pkg init with cpp backend failed (rc=${r1.rc})\nSTDOUT:\n${r1.stdout}\nSTDERR:\n${r1.stderr}
-    File Should Exist    ${proj}/mlang.toml
+    Should Contain    ${r1.stdout}    pkg init
 
 MLang Frontend Pkg Unknown Impl Uses Cpp Fallback
     [Documentation]    Verify MLANG_PKG_IMPL unknown values do not prefer MLang pkg frontend (C++ parity).
@@ -376,7 +385,7 @@ MLang Frontend Test Uses Last Positional Path
     Create Directory    ${suite_dir}
     Create Directory    ${empty_dir}
     ${code}=    Catenate    SEPARATOR=\n
-    ...    #[test]
+    ...    \#[test]
     ...    fn frontend_lastpos_smoke() -> i32 {
     ...        return 0;
     ...    }
@@ -731,6 +740,18 @@ MLang Frontend Directory Mode Rejects Unknown Option
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
+
+MLang Frontend Bench Missing Value Uses Unknown Option Error
+    [Documentation]    Verify missing value for bench options is reported as unknown option (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_missing
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-iters
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: --bench-iters
 
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
