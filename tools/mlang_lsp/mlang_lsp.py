@@ -150,6 +150,14 @@ class JsonRpcServer:
         return [{"label": k, "kind": 14, "detail": "keyword"} for k in keywords]
 
     @staticmethod
+    def _semantic_token_types() -> list[str]:
+        return ["keyword", "function", "variable"]
+
+    @staticmethod
+    def _semantic_token_modifiers() -> list[str]:
+        return ["declaration"]
+
+    @staticmethod
     def _symbol_kind_to_lsp(sym_kind: str) -> int:
         if sym_kind == "function":
             return 12
@@ -235,8 +243,19 @@ class JsonRpcServer:
                     "definitionProvider": True,
                     "referencesProvider": True,
                     "renameProvider": True,
+                    "signatureHelpProvider": {
+                        "triggerCharacters": ["(", ","],
+                        "retriggerCharacters": [","],
+                    },
                     "documentSymbolProvider": True,
                     "workspaceSymbolProvider": True,
+                    "semanticTokensProvider": {
+                        "legend": {
+                            "tokenTypes": self._semantic_token_types(),
+                            "tokenModifiers": self._semantic_token_modifiers(),
+                        },
+                        "full": True,
+                    },
                     "completionProvider": {
                         "resolveProvider": False,
                         "triggerCharacters": [".", ":"],
@@ -513,6 +532,123 @@ class JsonRpcServer:
             )
         self._respond(req_id, out)
 
+    def _handle_signature_help(self, req_id: Any, params: dict[str, Any]) -> None:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, None)
+            return
+
+        pos = params.get("position", {})
+        line = int(pos.get("line", 0))
+        character = int(pos.get("character", 0))
+        line_text = self._get_line(doc.text, line)
+        prefix = line_text[: min(character, len(line_text))]
+
+        # Look for "name(arg1, arg2, ...<cursor>)"
+        m = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\(([^()]*)$", prefix)
+        if not m:
+            self._respond(req_id, None)
+            return
+
+        fn_name = m.group(1)
+        arg_text = m.group(2)
+        active_param = 0 if not arg_text.strip() else arg_text.count(",")
+
+        sig = {
+            "label": f"{fn_name}(...)",
+            "documentation": {"kind": "markdown", "value": f"Signature for `{fn_name}`."},
+            "parameters": [{"label": "arg1"}, {"label": "arg2"}, {"label": "arg3"}],
+        }
+        self._respond(
+            req_id,
+            {"signatures": [sig], "activeSignature": 0, "activeParameter": active_param},
+        )
+
+    def _handle_semantic_tokens_full(self, req_id: Any, params: dict[str, Any]) -> None:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, {"data": []})
+            return
+
+        type_index = {name: i for i, name in enumerate(self._semantic_token_types())}
+        mod_decl = 1 << self._semantic_token_modifiers().index("declaration")
+
+        raw_tokens: list[tuple[int, int, int, int, int]] = []
+        lines = doc.text.splitlines()
+
+        keyword_set = {
+            "fn",
+            "let",
+            "mut",
+            "return",
+            "if",
+            "else",
+            "while",
+            "for",
+            "true",
+            "false",
+        }
+
+        for line_no, line in enumerate(lines):
+            # Keywords
+            for m in re.finditer(r"\b[A-Za-z_][A-Za-z0-9_]*\b", line):
+                word = m.group(0)
+                if word in keyword_set:
+                    raw_tokens.append(
+                        (
+                            line_no,
+                            m.start(),
+                            len(word),
+                            type_index["keyword"],
+                            0,
+                        )
+                    )
+
+            # Function declarations: fn <name>
+            for m in re.finditer(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)", line):
+                name = m.group(1)
+                col = m.start(1)
+                raw_tokens.append(
+                    (
+                        line_no,
+                        col,
+                        len(name),
+                        type_index["function"],
+                        mod_decl,
+                    )
+                )
+
+            # Variable declarations: let <name>
+            for m in re.finditer(r"\blet\s+([A-Za-z_][A-Za-z0-9_]*)", line):
+                name = m.group(1)
+                col = m.start(1)
+                raw_tokens.append(
+                    (
+                        line_no,
+                        col,
+                        len(name),
+                        type_index["variable"],
+                        mod_decl,
+                    )
+                )
+
+        raw_tokens.sort(key=lambda t: (t[0], t[1]))
+        data: list[int] = []
+        prev_line = 0
+        prev_col = 0
+        for line_no, col, length, typ, mods in raw_tokens:
+            delta_line = line_no - prev_line
+            delta_col = col - prev_col if delta_line == 0 else col
+            data.extend([delta_line, delta_col, length, typ, mods])
+            prev_line = line_no
+            prev_col = col
+
+        self._respond(req_id, {"data": data})
+
     def _handle_prepare_rename(self, req_id: Any, params: dict[str, Any]) -> None:
         text_doc = params.get("textDocument", {})
         uri = text_doc.get("uri", "")
@@ -628,10 +764,14 @@ class JsonRpcServer:
             self._handle_prepare_rename(req_id, params)
         elif method == "textDocument/rename":
             self._handle_rename(req_id, params)
+        elif method == "textDocument/signatureHelp":
+            self._handle_signature_help(req_id, params)
         elif method == "textDocument/documentSymbol":
             self._handle_document_symbol(req_id, params)
         elif method == "workspace/symbol":
             self._handle_workspace_symbol(req_id, params)
+        elif method == "textDocument/semanticTokens/full":
+            self._handle_semantic_tokens_full(req_id, params)
         elif method == "textDocument/diagnostic":
             self._handle_diagnostic(req_id, params)
         else:

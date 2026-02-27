@@ -153,6 +153,8 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         self.assertTrue(caps.get("definitionProvider"))
         self.assertTrue(caps.get("referencesProvider"))
         self.assertTrue(caps.get("renameProvider"))
+        self.assertIn("signatureHelpProvider", caps)
+        self.assertIn("semanticTokensProvider", caps)
         self.assertIn("completionProvider", caps)
 
         self.h.notify("initialized", {})
@@ -584,6 +586,62 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         self.assertIn(use_uri, edit["changes"])
         self.assertEqual(edit["changes"][defs_uri][0]["newText"], "helper2")
         self.assertEqual(edit["changes"][use_uri][0]["newText"], "helper2")
+
+    def test_signature_help(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        uri = "file:///tmp/signature_help.mlang"
+        source = "fn main() {\n  helper(a, b)\n}\n"
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": source,
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        sig = self.h.request(
+            "textDocument/signatureHelp",
+            {"textDocument": {"uri": uri}, "position": {"line": 1, "character": 12}},
+        )
+        self.assertTrue(sig.get("signatures"))
+        self.assertEqual(sig.get("activeSignature"), 0)
+        self.assertEqual(sig.get("activeParameter"), 1)
+        self.assertIn("helper(", sig["signatures"][0]["label"])
+
+    def test_semantic_tokens_full(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        uri = "file:///tmp/sem_tokens.mlang"
+        source = "fn main() {\n  let value = 1\n  return value\n}\n"
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": source,
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        tokens = self.h.request(
+            "textDocument/semanticTokens/full",
+            {"textDocument": {"uri": uri}},
+        )
+        data = tokens.get("data", [])
+        self.assertIsInstance(data, list)
+        self.assertGreater(len(data), 0)
+        self.assertEqual(len(data) % 5, 0)
 
 
 
