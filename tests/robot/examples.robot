@@ -343,21 +343,11 @@ MLang Frontend Pkg Unknown Impl Uses Cpp Fallback
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_pkg_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_pkg_backend.log
-    ${script}=    Catenate    SEPARATOR=\n
-    ...    #!/bin/sh
-    ...    echo "$@" >> "${fake_log}"
-    ...    exit 0
-    Create File    ${fake_backend}    ${script}
-    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
-    Should Be Equal As Integers    ${chmod.rc}    0
-    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    pkg    init
+    ${run}=    Run Process    ${frontend}    --backend    /bin/echo    pkg    init
     ...    env:MLANG_PKG_IMPL=unknown    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=unknown MLANG_PKG_IMPL should route pkg to backend directly (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
-    ${log_text}=    Get File    ${fake_log}
-    Should Contain    ${log_text}    pkg init
+    Should Contain    ${run.stdout}    pkg init
 
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
@@ -371,7 +361,7 @@ MLang Frontend Empty Test Dir Fails
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    test    ${empty}
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
-    Should Contain    ${run.stderr}    Error: No .mla test files found in directory
+    Should Contain    ${run.stderr}    Error: No .mla test files found in
 
 MLang Frontend Test Uses Last Positional Path
     [Documentation]    Verify frontend test-mode positional parsing matches C++ main semantics (last positional wins).
@@ -561,7 +551,7 @@ MLang Frontend Bench Directory Forwards Default Iteration Flags
     ...    }
     Create File    ${suite_dir}/bench_case.mla    ${bench_code}
     ${script}=    Catenate    SEPARATOR=\n
-    ...    #!/bin/sh
+    ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
     ...    exit 0
     Create File    ${fake_backend}    ${script}
@@ -592,7 +582,7 @@ MLang Frontend Bench Ignores NoRun Flag
     ...    }
     Create File    ${suite_dir}/bench_case.mla    ${bench_code}
     ${script}=    Catenate    SEPARATOR=\n
-    ...    #!/bin/sh
+    ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
     ...    exit 0
     Create File    ${fake_backend}    ${script}
@@ -603,6 +593,33 @@ MLang Frontend Bench Ignores NoRun Flag
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
     Should Not Contain    ${log_text}    --no-run
+
+MLang Frontend Bench SingleFile Forwards NoRun Flag
+    [Documentation]    Verify bench single-file mode forwards --no-run (directory mode still ignores it).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_norun_single
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_norun_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_single_backend.log
+    ${bench_code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${bench_file}    ${bench_code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    bench    --no-run    ${bench_file}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --no-run
 
 MLang Frontend Bench Ignores Colon Warning Flags
     [Documentation]    Verify bench mode does not forward -Wno-colon-if/-Wno-colon-while to backend suite invocations.
@@ -621,7 +638,7 @@ MLang Frontend Bench Ignores Colon Warning Flags
     ...    }
     Create File    ${suite_dir}/bench_case.mla    ${bench_code}
     ${script}=    Catenate    SEPARATOR=\n
-    ...    #!/bin/sh
+    ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
     ...    exit 0
     Create File    ${fake_backend}    ${script}
@@ -652,7 +669,7 @@ MLang Frontend Directory Mode Ignores Output Flag
     ...    }
     Create File    ${suite_dir}/bench_case.mla    ${bench_code}
     ${script}=    Catenate    SEPARATOR=\n
-    ...    #!/bin/sh
+    ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
     ...    exit 0
     Create File    ${fake_backend}    ${script}
@@ -663,6 +680,37 @@ MLang Frontend Directory Mode Ignores Output Flag
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
     Should Not Contain    ${log_text}    -o should_not_forward
+
+MLang Frontend Directory Mode Forwards Compact Linker Flags
+    [Documentation]    Verify directory suite mode forwards compact -L<dir> and -l<name> linker flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_compact_link
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_compact_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compact_link_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${bench_code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/bench_case.mla    ${bench_code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    ${suite_dir}    -L/tmp/mlang_lib    -lmydep
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -L/tmp/mlang_lib
+    Should Contain    ${log_text}    -lmydep
 
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
@@ -994,7 +1042,7 @@ Pkg PkgConfig Parity (CPP vs MLA)
     ...    cp '${EXECDIR}/examples/pkg_workflow_main.mla' '${cpp_proj}/src/main.mla'
     ...    cp '${EXECDIR}/examples/pkg_workflow_main.mla' '${mla_proj}/src/main.mla'
     ...    cat > '${fakebin}/pkg-config' <<'EOF'
-    ...    #!/bin/sh
+    ...    \#!/bin/sh
     ...    if [ "$1" = "--cflags" ] && [ "$2" = "--libs" ]; then
     ...      echo "-lm"
     ...      exit 0

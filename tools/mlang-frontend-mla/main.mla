@@ -471,6 +471,16 @@ fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<stri
             i = i + 1;
             continue;
         }
+        if starts_with(a, "-L") == 1 && len(a) > 2 {
+            out.push(a);
+            i = i + 1;
+            continue;
+        }
+        if starts_with(a, "-l") == 1 && len(a) > 2 {
+            out.push(a);
+            i = i + 1;
+            continue;
+        }
         if benchmark_mode == 0 {
             if eq(a, "--no-run") == 1 || eq(a, "-Wno-colon-if") == 1 || eq(a, "-Wno-colon-while") == 1 {
                 out.push(a);
@@ -611,6 +621,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     var input_path: string = "tests";
     var extra_args: list<string> = [];
+    var bench_no_run: i32 = 0;
     let n: i64 = passthrough.len();
     var i: i64 = idx;
     while i < n: {
@@ -662,6 +673,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         if eq(a, "--no-run") == 1 {
             if mode_bench == 0 {
                 extra_args.push(a);
+            } else {
+                bench_no_run = 1;
             }
             i = i + 1;
             continue;
@@ -708,6 +721,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if path_is_directory(input_path) == 1 {
         let suite_args: list<string> = sanitize_dir_suite_args(extra_args, mode_bench);
         return run_test_directory_mode(st.backend, input_path, mode_bench, suite_args);
+    }
+    if mode_bench == 1 && bench_no_run == 1 {
+        extra_args.push("--no-run");
     }
 
     var single: list<string> = [];
