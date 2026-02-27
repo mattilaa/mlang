@@ -2401,6 +2401,16 @@ fn handle_semantic_tokens_full(payload: string) -> string {
     return format!("{{\"data\":{}}}", data);
 }
 
+fn handle_folding_range(payload: string) -> string {
+    if ensure_text_store() != 0: { return "[]"; }
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return "[]"; }
+    let text: string = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0: { return "[]"; }
+    // Initial provider hook for editor parity; ranges can be refined in next phase.
+    return "[]";
+}
+
 fn handle_implementation(payload: string) -> string {
     if ensure_text_store() != 0: { return "[]"; }
     if ensure_uri_store() != 0: { return "[]"; }
@@ -2646,7 +2656,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":true}},\"definitionProvider\":true,\"declarationProvider\":true,\"typeDefinitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":true}},\"definitionProvider\":true,\"declarationProvider\":true,\"typeDefinitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"foldingRangeProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -2710,6 +2720,9 @@ fn dispatch_result_json(payload: string) -> string {
     }
     if eq(method, "workspace/diagnostic") == 1: {
         return handle_workspace_diagnostic(payload);
+    }
+    if eq(method, "textDocument/foldingRange") == 1: {
+        return handle_folding_range(payload);
     }
 
     if eq(method, "textDocument/implementation") == 1: { return handle_implementation(payload); }
