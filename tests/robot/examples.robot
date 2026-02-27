@@ -351,6 +351,30 @@ MLang Frontend Empty Test Dir Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Error: No .mla test files found in directory
 
+MLang Frontend Test Uses Last Positional Path
+    [Documentation]    Verify frontend test-mode positional parsing matches C++ main semantics (last positional wins).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_lastpos
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_lastpos_suite
+    ${empty_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_lastpos_empty
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Run Keyword And Ignore Error    Remove Directory    ${empty_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    Create Directory    ${empty_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    #[test]
+    ...    fn frontend_lastpos_smoke() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_frontend_lastpos.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    test    ${suite_dir}    ${empty_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Error: No .mla test files found in directory
+
 MLang Frontend Bench Flag Parsing Works
     [Documentation]    Verify frontend bench mode parses option values without treating them as input path.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_parse

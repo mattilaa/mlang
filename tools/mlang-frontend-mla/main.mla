@@ -554,7 +554,6 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     var input_path: string = "tests";
     var extra_args: list<string> = [];
-    var path_set: i32 = 0;
     let n: i64 = passthrough.len();
     var i: i64 = idx;
     while i < n: {
@@ -603,9 +602,10 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             i = i + 2;
             continue;
         }
-        if starts_with(a, "-") == 0 && path_set == 0 {
+        if starts_with(a, "-") == 0 {
             input_path = a;
-            path_set = 1;
+            i = i + 1;
+            continue;
         } else {
             extra_args.push(a);
         }
