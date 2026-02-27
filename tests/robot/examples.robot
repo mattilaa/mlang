@@ -602,6 +602,39 @@ MLang Frontend Bench SingleFile Does Not Inject Default Iteration Flags
     Should Not Contain    ${log_text}    --bench-iters 100000
     Should Not Contain    ${log_text}    --bench-warmup 10000
 
+MLang Frontend Bench Directory Uses Last Iteration Flags
+    [Documentation]    Verify bench directory mode forwards only one effective bench-iters/warmup pair and last value wins.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_lastflags
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_lastflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_lastflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_lastflags_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${bench_code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/bench_case.mla    ${bench_code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    ${suite_dir}    --bench-iters    11    --bench-warmup    3    --bench-iters    22    --bench-warmup    7
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --bench-iters 22
+    Should Contain    ${log_text}    --bench-warmup 7
+    Should Not Contain    ${log_text}    --bench-iters 11
+    Should Not Contain    ${log_text}    --bench-warmup 3
+
 MLang Frontend Bench Ignores NoRun Flag
     [Documentation]    Verify frontend bench mode ignores --no-run (C++ parity) and does not forward it.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_norun

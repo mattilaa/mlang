@@ -304,6 +304,9 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     if compile_rc != 0 {
         return -1;
     }
+    if file_exists(tmp_bin) == 0 {
+        return -1;
+    }
     var run_args: list<string> = ["--backend", backend];
     let n: i64 = passthrough.len();
     for i in 0..n {
@@ -466,6 +469,10 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
 
 fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<string> {
     var out: list<string> = [];
+    var bench_iters_v: string = String::new();
+    var bench_warmup_v: string = String::new();
+    var have_bench_iters: i32 = 0;
+    var have_bench_warmup: i32 = 0;
     let n: i64 = args.len();
     var i: i64 = 0;
     while i < n: {
@@ -474,8 +481,13 @@ fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<stri
             if i + 1 < n {
                 if eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
                     if benchmark_mode == 1 {
-                        out.push(a);
-                        out.push(args[i + 1]);
+                        if eq(a, "--bench-iters") == 1 {
+                            bench_iters_v = args[i + 1];
+                            have_bench_iters = 1;
+                        } else {
+                            bench_warmup_v = args[i + 1];
+                            have_bench_warmup = 1;
+                        }
                     }
                 } else {
                     out.push(a);
@@ -510,6 +522,16 @@ fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<stri
             }
         }
         i = i + 1;
+    }
+    if benchmark_mode == 1 {
+        if have_bench_iters == 1 {
+            out.push("--bench-iters");
+            out.push(bench_iters_v);
+        }
+        if have_bench_warmup == 1 {
+            out.push("--bench-warmup");
+            out.push(bench_warmup_v);
+        }
     }
     return out;
 }
