@@ -642,13 +642,28 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     var has_no_colon_if: i32 = 0;
     var has_no_colon_while: i32 = 0;
+    var has_bench_iters: i32 = 0;
+    var has_bench_warmup: i32 = 0;
     let ea_n: i64 = extra_args.len();
     for j in 0..ea_n {
         if eq(extra_args[j], "-Wno-colon-if") == 1 { has_no_colon_if = 1; }
         if eq(extra_args[j], "-Wno-colon-while") == 1 { has_no_colon_while = 1; }
+        if eq(extra_args[j], "--bench-iters") == 1 { has_bench_iters = 1; }
+        if eq(extra_args[j], "--bench-warmup") == 1 { has_bench_warmup = 1; }
     }
-    if has_no_colon_if == 0 { extra_args.push("-Wno-colon-if"); }
-    if has_no_colon_while == 0 { extra_args.push("-Wno-colon-while"); }
+    if mode_bench == 0 {
+        if has_no_colon_if == 0 { extra_args.push("-Wno-colon-if"); }
+        if has_no_colon_while == 0 { extra_args.push("-Wno-colon-while"); }
+    } else {
+        if has_bench_iters == 0 {
+            extra_args.push("--bench-iters");
+            extra_args.push("100000");
+        }
+        if has_bench_warmup == 0 {
+            extra_args.push("--bench-warmup");
+            extra_args.push("10000");
+        }
+    }
     extra_args = ensure_stdlib_link_args(extra_args, st.backend);
 
     if path_is_directory(input_path) == 1 {
