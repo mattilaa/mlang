@@ -1286,8 +1286,61 @@ fn handle_did_open(payload: string) -> i32 {
     if text_store_upsert(g_text_store_handle, uri, text) != 0: {
         return 1;
     }
+    publish_diagnostics(uri);
     log_write(log_level_debug(), format!("didOpen uri={}", uri));
     return 0;
+}
+
+fn diagnostics_items_json(uri: string) -> string {
+    if ensure_session() != 0: { return "[]"; }
+    if len(uri) == 0: { return "[]"; }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return "[]"; }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+
+    var items: string = String::new();
+    items = concat(items, "[");
+    var j: i32 = 0;
+    for i in 0..n {
+        let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
+        if dr.is_err(): { continue; }
+        let d: SyntaxDiagnostic = match dr {
+            Ok(v) => v,
+            Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
+        };
+        let msg: string = json_escape(d.message);
+        let sl: i32 = lsp_line(d.line);
+        let sc: i32 = lsp_col(d.column);
+        let item: string = format!(
+            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
+            sl, sc, sl, sc, msg
+        );
+        if j > 0: {
+            items = format!("{},{}", items, item);
+        } else: {
+            items = format!("{}{}", items, item);
+        }
+        j = j + 1;
+    }
+    items = concat(items, "]");
+    return items;
+}
+
+fn publish_diagnostics(uri: string) -> void {
+    if len(uri) == 0: { return; }
+    let items: string = diagnostics_items_json(uri);
+    let uri_e: string = json_escape(uri);
+    let payload: string = format!(
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{{\"uri\":\"{}\",\"diagnostics\":{}}}}}",
+        uri_e, items
+    );
+    let transport: StdioTransport = stdio();
+    let _ = transport.write_frame(payload);
 }
 
 fn handle_did_change(payload: string) -> i32 {
@@ -1318,7 +1371,16 @@ fn handle_did_change(payload: string) -> i32 {
     if text_store_upsert(g_text_store_handle, uri, text) != 0: {
         return 1;
     }
+    publish_diagnostics(uri);
     log_write(log_level_debug(), format!("didChange uri={}", uri));
+    return 0;
+}
+
+fn handle_did_save(payload: string) -> i32 {
+    let uri: string = extract_text_document_uri(payload);
+    if len(uri) == 0: { return 1; }
+    publish_diagnostics(uri);
+    log_write(log_level_debug(), format!("didSave uri={}", uri));
     return 0;
 }
 
@@ -1339,6 +1401,13 @@ fn handle_did_close(payload: string) -> i32 {
     if g_text_store_handle != 0: {
         let _ = text_store_remove(g_text_store_handle, uri);
     }
+    let uri_e: string = json_escape(uri);
+    let payload2: string = format!(
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{{\"uri\":\"{}\",\"diagnostics\":[]}}}}",
+        uri_e
+    );
+    let transport2: StdioTransport = stdio();
+    let _ = transport2.write_frame(payload2);
     log_write(log_level_debug(), format!("didClose uri={}", uri));
     return 0;
 }
@@ -2006,10 +2075,8 @@ fn handle_diagnostic(payload: string) -> string {
         Ok(v) => v,
         Err(_e) => 0
     };
-    var items: string = String::new();
-    items = concat(items, "[");
+    let items: string = diagnostics_items_json(uri);
     var result_id: string = format!("v1|{}", n);
-    var j: i32 = 0;
     for i in 0..n {
         let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
         if dr.is_err(): { continue; }
@@ -2017,22 +2084,8 @@ fn handle_diagnostic(payload: string) -> string {
             Ok(v) => v,
             Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
         };
-        let msg: string = json_escape(d.message);
-        let sl: i32 = lsp_line(d.line);
-        let sc: i32 = lsp_col(d.column);
-        let item: string = format!(
-            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
-            sl, sc, sl, sc, msg
-        );
         result_id = format!("{}|{}:{}:{}", result_id, d.line, d.column, d.message);
-        if j > 0: {
-            items = format!("{},{}", items, item);
-        } else: {
-            items = format!("{}{}", items, item);
-        }
-        j = j + 1;
     }
-    items = concat(items, "]");
     if len(previous_result_id) > 0: {
         if eq(previous_result_id, result_id) == 1: {
             let result_id_e: string = json_escape(result_id);
@@ -2585,7 +2638,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":true}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -2598,6 +2651,10 @@ fn dispatch_result_json(payload: string) -> string {
     }
     if eq(method, "textDocument/didChange") == 1: {
         let _ = handle_did_change(payload);
+        return "";
+    }
+    if eq(method, "textDocument/didSave") == 1: {
+        let _ = handle_did_save(payload);
         return "";
     }
     if eq(method, "textDocument/didClose") == 1: {

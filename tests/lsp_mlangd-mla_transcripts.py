@@ -29,6 +29,7 @@ def main() -> int:
     run_step([py, "tests/lsp_mlangd-mla_completion_docs_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_completion_symbol_docs_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_diagnostic_transcript.py", "--mlangd", str(mlangd)])
+    run_step([py, "tests/lsp_mlangd-mla_publish_diagnostics_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_workspace_diagnostic_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_incremental_didchange_transcript.py", "--mlangd", str(mlangd)])
     run_step([py, "tests/lsp_mlangd-mla_progress_cancel_transcript.py", "--mlangd", str(mlangd)])
