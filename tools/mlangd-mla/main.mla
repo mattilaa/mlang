@@ -2049,6 +2049,96 @@ fn handle_diagnostic(payload: string) -> string {
     );
 }
 
+fn build_document_diagnostic_report(uri: string, previous_result_id: string) -> string {
+    if ensure_session() != 0: { return String::new(); }
+    if len(uri) == 0: { return String::new(); }
+
+    let s: Session = current_session();
+    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    if cr.is_err(): { return String::new(); }
+    let n: i32 = match cr {
+        Ok(v) => v,
+        Err(_e) => 0
+    };
+
+    var items: string = String::new();
+    items = concat(items, "[");
+    var result_id: string = format!("v1|{}", n);
+    var j: i32 = 0;
+    for i in 0..n {
+        let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
+        if dr.is_err(): { continue; }
+        let d: SyntaxDiagnostic = match dr {
+            Ok(v) => v,
+            Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
+        };
+        let msg: string = json_escape(d.message);
+        let sl: i32 = lsp_line(d.line);
+        let sc: i32 = lsp_col(d.column);
+        let item: string = format!(
+            "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
+            sl, sc, sl, sc, msg
+        );
+        result_id = format!("{}|{}:{}:{}", result_id, d.line, d.column, d.message);
+        if j > 0: {
+            items = format!("{},{}", items, item);
+        } else: {
+            items = format!("{}{}", items, item);
+        }
+        j = j + 1;
+    }
+    items = concat(items, "]");
+    if len(previous_result_id) > 0 {
+        if eq(previous_result_id, result_id) == 1 {
+            return "{\"kind\":\"unchanged\"}";
+        }
+    }
+    let result_id_e: string = json_escape(result_id);
+    let uri_e: string = json_escape(uri);
+    return format!(
+        "{{\"kind\":\"full\",\"uri\":\"{}\",\"version\":null,\"resultId\":\"{}\",\"items\":{}}}",
+        uri_e, result_id_e, items
+    );
+}
+
+fn handle_workspace_diagnostic(payload: string) -> string {
+    if ensure_uri_store() != 0: { return "{\"items\":[]}"; }
+    maybe_send_progress_begin("workspace/diagnostic", "collecting diagnostics");
+
+    let uri_count: i64 = uri_store_count(g_uri_store_handle);
+    if uri_count <= 0 {
+        maybe_send_progress_end("done");
+        return "{\"items\":[]}";
+    }
+
+    var out: string = String::new();
+    out = concat(out, "[");
+    var j: i32 = 0;
+
+    for ui in 0..uri_count {
+        if active_request_is_cancelled() == true {
+            maybe_send_progress_end("cancelled");
+            return "{\"items\":[]}";
+        }
+        let uri: string = uri_store_get(g_uri_store_handle, ui);
+        if len(uri) == 0: { continue; }
+        let rep: string = build_document_diagnostic_report(uri, String::new());
+        if len(rep) == 0: { continue; }
+        if j > 0 {
+            out = format!("{},{}", out, rep);
+        } else {
+            out = format!("{}{}", out, rep);
+        }
+        j = j + 1;
+        if (ui%16) == 0 {
+            maybe_send_progress_report(format!("processed {}/{} documents", ui + 1, uri_count));
+        }
+    }
+    out = concat(out, "]");
+    maybe_send_progress_end("done");
+    return format!("{{\"items\":{}}}", out);
+}
+
 fn handle_workspace_symbol(payload: string) -> string {
     if ensure_session() != 0: { return "[]"; }
     if ensure_uri_store() != 0: { return "[]"; }
@@ -2495,7 +2585,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":true,\"workspaceDiagnostics\":true}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -2546,6 +2636,9 @@ fn dispatch_result_json(payload: string) -> string {
     }
     if eq(method, "workspace/symbol") == 1: {
         return handle_workspace_symbol(payload);
+    }
+    if eq(method, "workspace/diagnostic") == 1: {
+        return handle_workspace_diagnostic(payload);
     }
 
     if eq(method, "textDocument/implementation") == 1: { return handle_implementation(payload); }
