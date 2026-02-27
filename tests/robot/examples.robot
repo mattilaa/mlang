@@ -573,6 +573,7 @@ MLang Frontend Bench Directory Forwards Default Iteration Flags
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    --bench-iters 100000
     Should Contain    ${log_text}    --bench-warmup 10000
+    Should Not Contain    ${log_text}    -lmlang_std
 
 MLang Frontend Bench Ignores NoRun Flag
     [Documentation]    Verify frontend bench mode ignores --no-run (C++ parity) and does not forward it.

@@ -659,8 +659,6 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             extra_args.push("10000");
         }
     }
-    extra_args = ensure_stdlib_link_args(extra_args, st.backend);
-
     if path_is_directory(input_path) == 1 {
         return run_test_directory_mode(st.backend, input_path, mode_bench, extra_args);
     }
