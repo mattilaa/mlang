@@ -121,6 +121,19 @@ class JsonRpcServer:
         return text[start:end]
 
     @staticmethod
+    def _word_range_at(text: str, offset: int) -> tuple[int, int]:
+        if not text:
+            return offset, offset
+        offset = max(0, min(offset, len(text)))
+        start = offset
+        end = offset
+        while start > 0 and (text[start - 1].isalnum() or text[start - 1] == "_"):
+            start -= 1
+        while end < len(text) and (text[end].isalnum() or text[end] == "_"):
+            end += 1
+        return start, end
+
+    @staticmethod
     def _keyword_items() -> list[dict[str, Any]]:
         keywords = [
             "fn",
@@ -221,6 +234,7 @@ class JsonRpcServer:
                     "hoverProvider": True,
                     "definitionProvider": True,
                     "referencesProvider": True,
+                    "renameProvider": True,
                     "documentSymbolProvider": True,
                     "workspaceSymbolProvider": True,
                     "completionProvider": {
@@ -499,6 +513,93 @@ class JsonRpcServer:
             )
         self._respond(req_id, out)
 
+    def _handle_prepare_rename(self, req_id: Any, params: dict[str, Any]) -> None:
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, None)
+            return
+
+        pos = params.get("position", {})
+        offset = line_char_to_offset(
+            doc.text, int(pos.get("line", 0)), int(pos.get("character", 0))
+        )
+        token = self._word_at(doc.text, offset)
+        if not token:
+            self._respond(req_id, None)
+            return
+
+        local = definition_at(doc.text, offset)
+        global_ref = self._workspace.find_global(token, prefer_uri=uri)
+        if local is None and global_ref is None:
+            self._respond(req_id, None)
+            return
+
+        start, end = self._word_range_at(doc.text, offset)
+        rng = self._location_from_offsets(uri, doc.text, start, end)["range"]
+        self._respond(req_id, {"range": rng, "placeholder": token})
+
+    def _handle_rename(self, req_id: Any, params: dict[str, Any]) -> None:
+        if self._consume_cancelled(req_id):
+            self._error(req_id, REQUEST_CANCELLED, "Request cancelled")
+            return
+
+        text_doc = params.get("textDocument", {})
+        uri = text_doc.get("uri", "")
+        doc = self._documents.get(uri)
+        if doc is None:
+            self._respond(req_id, None)
+            return
+
+        new_name = str(params.get("newName", "")).strip()
+        if not new_name:
+            self._respond(req_id, None)
+            return
+
+        pos = params.get("position", {})
+        offset = line_char_to_offset(
+            doc.text, int(pos.get("line", 0)), int(pos.get("character", 0))
+        )
+
+        local_occ = references_at(doc.text, offset)
+        changes: dict[str, list[dict[str, Any]]] = {}
+        if local_occ:
+            edits: list[dict[str, Any]] = []
+            for o in local_occ:
+                rng = self._location_from_offsets(
+                    uri, doc.text, o.start_offset, o.end_offset
+                )["range"]
+                edits.append({"range": rng, "newText": new_name})
+            changes[uri] = edits
+            self._respond(req_id, {"changes": changes})
+            return
+
+        token = self._word_at(doc.text, offset)
+        global_ref = self._workspace.find_global(token, prefer_uri=uri)
+        if global_ref is None:
+            self._respond(req_id, None)
+            return
+
+        occs = self._workspace.references_for_global(global_ref.symbol.name)
+        if occs is None:
+            self._error(req_id, REQUEST_CANCELLED, "Request cancelled")
+            return
+
+        for o in occs:
+            odoc = self._documents.get(o.uri)
+            if odoc is None:
+                continue
+            rng = self._location_from_offsets(
+                o.uri, odoc.text, o.start_offset, o.end_offset
+            )["range"]
+            changes.setdefault(o.uri, []).append({"range": rng, "newText": new_name})
+
+        if not changes:
+            self._respond(req_id, None)
+            return
+        self._respond(req_id, {"changes": changes})
+
     def _handle_diagnostic(self, req_id: Any, params: dict[str, Any]) -> None:
         text_doc = params.get("textDocument", {})
         uri = text_doc.get("uri", "")
@@ -523,6 +624,10 @@ class JsonRpcServer:
             self._handle_definition(req_id, params)
         elif method == "textDocument/references":
             self._handle_references(req_id, params)
+        elif method == "textDocument/prepareRename":
+            self._handle_prepare_rename(req_id, params)
+        elif method == "textDocument/rename":
+            self._handle_rename(req_id, params)
         elif method == "textDocument/documentSymbol":
             self._handle_document_symbol(req_id, params)
         elif method == "workspace/symbol":

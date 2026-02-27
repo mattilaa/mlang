@@ -152,6 +152,7 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         self.assertTrue(caps.get("hoverProvider"))
         self.assertTrue(caps.get("definitionProvider"))
         self.assertTrue(caps.get("referencesProvider"))
+        self.assertTrue(caps.get("renameProvider"))
         self.assertIn("completionProvider", caps)
 
         self.h.notify("initialized", {})
@@ -498,6 +499,91 @@ class MlangLspScaffoldIntegrationTest(unittest.TestCase):
         ws_symbols = self.h.request("workspace/symbol", {"query": "help"})
         ws_names = [item.get("name") for item in ws_symbols]
         self.assertIn("helper", ws_names)
+
+    def test_prepare_rename_and_rename_local(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        uri = "file:///tmp/rename_local.mlang"
+        source = "fn main() {\n  let old_name = 1\n  old_name\n}\n"
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": source,
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        prep = self.h.request(
+            "textDocument/prepareRename",
+            {"textDocument": {"uri": uri}, "position": {"line": 2, "character": 5}},
+        )
+        self.assertEqual(prep["placeholder"], "old_name")
+
+        edit = self.h.request(
+            "textDocument/rename",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": 2, "character": 5},
+                "newName": "new_name",
+            },
+        )
+        self.assertIn("changes", edit)
+        self.assertIn(uri, edit["changes"])
+        edits = edit["changes"][uri]
+        starts = sorted((e["range"]["start"]["line"], e["range"]["start"]["character"]) for e in edits)
+        self.assertEqual(starts, [(1, 6), (2, 2)])
+        self.assertTrue(all(e["newText"] == "new_name" for e in edits))
+
+    def test_rename_global_cross_file(self) -> None:
+        self.h.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        self.h.notify("initialized", {})
+
+        defs_uri = "file:///tmp/rename_defs.mlang"
+        use_uri = "file:///tmp/rename_use.mlang"
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": defs_uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "fn helper() {}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+        self.h.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": use_uri,
+                    "languageId": "mlang",
+                    "version": 1,
+                    "text": "fn main() {\n  helper()\n}\n",
+                }
+            },
+        )
+        self.h.read_until_notification("textDocument/publishDiagnostics")
+
+        edit = self.h.request(
+            "textDocument/rename",
+            {
+                "textDocument": {"uri": use_uri},
+                "position": {"line": 1, "character": 3},
+                "newName": "helper2",
+            },
+        )
+        self.assertIn("changes", edit)
+        self.assertIn(defs_uri, edit["changes"])
+        self.assertIn(use_uri, edit["changes"])
+        self.assertEqual(edit["changes"][defs_uri][0]["newText"], "helper2")
+        self.assertEqual(edit["changes"][use_uri][0]["newText"], "helper2")
 
 
 
