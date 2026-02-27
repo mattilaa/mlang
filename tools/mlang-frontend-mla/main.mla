@@ -407,7 +407,6 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
         if len(trim(f)) == 0 { continue; }
         let name: string = basename(f);
         if eq(name, "__mlang_test_root.mla") == 1 { continue; }
-        if eq(name, "__mlang_test_root_modonly.mla") == 1 { continue; }
         if benchmark_mode == 1 {
             if is_bench_suite_file(f) == 0 { continue; }
             files.push(f);

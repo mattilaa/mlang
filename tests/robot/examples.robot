@@ -423,6 +423,25 @@ MLang Frontend Skips Synthetic Test Root Files
     ...    msg=frontend should ignore synthetic root files (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    [SUITE PASS]
 
+MLang Frontend Keeps Modonly Root Candidate
+    [Documentation]    Verify frontend parity with C++: only __mlang_test_root.mla is skipped, modonly variant remains candidate.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_modonly
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_modonly_suite
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${modonly_bad}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        this is invalid syntax
+    ...    }
+    Create File    ${suite_dir}/__mlang_test_root_modonly.mla    ${modonly_bad}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    test    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    ...    msg=modonly root file should still be considered and fail parse (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+
 MLang Frontend Normalizes Multi-Suite Failure Exit Code
     [Documentation]    Verify frontend test-directory mode returns rc=1 when multiple suites fail (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_failnorm
