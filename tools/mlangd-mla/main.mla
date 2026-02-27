@@ -36,6 +36,7 @@ use std::jsonrpc::extract_text_document_text;
 use std::jsonrpc::extract_text_document_uri;
 use std::jsonrpc::extract_text_document_version;
 use std::jsonrpc::extract_workspace_query;
+use std::jsonrpc::cancel_is_marked;
 use std::jsonrpc::extract_range_text;
 use std::jsonrpc::find_implementation_pos;
 use std::jsonrpc::format_text_basic;
@@ -58,6 +59,8 @@ use std::jsonrpc::uri_store_remove;
 use std::jsonrpc::workspace_c_definition_search;
 use std::jsonrpc::workspace_symbol_search;
 use std::jsonrpc::run_stdio_loop;
+use std::jsonrpc::StdioTransport;
+use std::jsonrpc::stdio;
 use std::strbuf::concat;
 use std::strbuf::contains;
 use std::strbuf::eq;
@@ -87,6 +90,8 @@ var g_log_enabled: i32 = 0;
 var g_log_level: i32 = 2;
 var g_log_handle: i64 = 0;
 var g_log_color: i32 = 0;
+var g_active_request_id: i64 = 0;
+var g_active_request_set: i32 = 0;
 
 fn log_level_error() -> i32 { return 0; }
 fn log_level_warn() -> i32 { return 1; }
@@ -167,6 +172,37 @@ fn log_path_for_dir(dir: string) -> string {
         return concat(dir, "mlangd-mla.log");
     }
     return concat(dir, "/mlangd-mla.log");
+}
+
+fn active_request_is_cancelled() -> bool {
+    if g_active_request_set == 0: { return false; }
+    if cancel_is_marked(g_active_request_id) == 1: { return true; }
+    return false;
+}
+
+fn maybe_send_progress(kind: string, title: string, message: string) -> void {
+    if g_active_request_set == 0: { return; }
+    let k: string = json_escape(kind);
+    let title_e: string = json_escape(title);
+    let msg_e: string = json_escape(message);
+    let payload: string = format!(
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"$/progress\",\"params\":{{\"token\":{},\"value\":{{\"kind\":\"{}\",\"title\":\"{}\",\"message\":\"{}\"}}}}}}",
+        g_active_request_id, k, title_e, msg_e
+    );
+    let transport: StdioTransport = stdio();
+    let _ = transport.write_frame(payload);
+}
+
+fn maybe_send_progress_begin(title: string, message: string) -> void {
+    maybe_send_progress("begin", title, message);
+}
+
+fn maybe_send_progress_report(message: string) -> void {
+    maybe_send_progress("report", "mlangd-mla", message);
+}
+
+fn maybe_send_progress_end(message: string) -> void {
+    maybe_send_progress("end", "mlangd-mla", message);
 }
 
 fn setup_logging(args: list<str8>) -> i32 {
@@ -411,6 +447,70 @@ fn line_text_at(text: string, line0: i64) -> string {
         endi = start;
     }
     return sub(text, start, endi - start);
+}
+
+fn offset_for_line_col(text: string, line0: i64, col0: i64) -> i64 {
+    let n: i64 = len(text);
+    if n <= 0: { return 0; }
+    var target_line: i64 = line0;
+    if target_line < 0: { target_line = 0; }
+    var target_col: i64 = col0;
+    if target_col < 0: { target_col = 0; }
+
+    var line: i64 = 0;
+    var i: i64 = 0;
+    for k in 0..n {
+        if line >= target_line: { break; }
+        let ch: string = sub(text, k, 1);
+        i = k + 1;
+        if eq(ch, "\n") == 1: {
+            line = line + 1;
+        }
+    }
+    if i > n: { i = n; }
+
+    var col: i64 = 0;
+    for k in i..n {
+        if col >= target_col: { break; }
+        let ch2: string = sub(text, k, 1);
+        if eq(ch2, "\n") == 1: { break; }
+        i = k + 1;
+        col = col + 1;
+    }
+    if i < 0: { return 0; }
+    if i > n: { return n; }
+    return i;
+}
+
+fn did_change_has_range(payload: string) -> bool {
+    if contains(payload, "\"contentChanges\"") != 1: { return false; }
+    if contains(payload, "\"range\"") != 1: { return false; }
+    return true;
+}
+
+fn apply_incremental_change(previous_text: string, payload: string, new_text: string) -> string {
+    let start_line: i64 = extract_range_start_line(payload);
+    let start_col: i64 = extract_range_start_character(payload);
+    let end_line: i64 = extract_range_end_line(payload);
+    let end_col: i64 = extract_range_end_character(payload);
+    if start_line < 0: { return new_text; }
+    if start_col < 0: { return new_text; }
+    if end_line < 0: { return new_text; }
+    if end_col < 0: { return new_text; }
+
+    let n: i64 = len(previous_text);
+    if n <= 0: { return new_text; }
+    let start_off: i64 = offset_for_line_col(previous_text, start_line, start_col);
+    var end_off: i64 = offset_for_line_col(previous_text, end_line, end_col);
+    if end_off < start_off: { end_off = start_off; }
+    if start_off < 0: { return new_text; }
+    if start_off > n: { return new_text; }
+    if end_off > n: { end_off = n; }
+
+    let prefix: string = sub(previous_text, 0, start_off);
+    let suffix: string = sub(previous_text, end_off, n - end_off);
+    let merged: string = concat(prefix, new_text);
+    return concat(merged, suffix);
 }
 
 fn offset_to_line_col1(text: string, off: i64) -> i64 {
@@ -1198,9 +1298,18 @@ fn handle_did_change(payload: string) -> i32 {
         return 1;
     }
     let uri: string = extract_text_document_uri(payload);
-    let text: string = extract_first_change_text(payload);
+    let change_text: string = extract_first_change_text(payload);
     let version: i64 = extract_text_document_version(payload);
     if len(uri) == 0: { return 1; }
+
+    var text: string = change_text;
+    if did_change_has_range(payload) == true {
+        let old_text: string = text_store_get(g_text_store_handle, uri);
+        if len(old_text) > 0 {
+            text = apply_incremental_change(old_text, payload, change_text);
+        }
+    }
+
     let s: Session = current_session();
     let r: Result<i32, string> = s.change_document(uri, text, version);
     if r.is_err(): {
@@ -1786,18 +1895,28 @@ fn handle_rename(payload: string) -> string {
     if line < 0: { return "null"; }
     if col < 0: { return "null"; }
     if len(new_name) == 0: { return "null"; }
+    maybe_send_progress_begin("textDocument/rename", "collecting references");
 
     let s: Session = current_session();
     let safe_r: Result<i32, string> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
-    if safe_r.is_err(): { return "null"; }
+    if safe_r.is_err(): {
+        maybe_send_progress_end("failed");
+        return "null";
+    }
     let safe: i32 = match safe_r {
         Ok(v) => v,
         Err(_e) => 0
     };
-    if safe != 1: { return "null"; }
+    if safe != 1: {
+        maybe_send_progress_end("unsafe rename");
+        return "null";
+    }
 
     let sym_r: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
-    if sym_r.is_err(): { return "null"; }
+    if sym_r.is_err(): {
+        maybe_send_progress_end("resolve failed");
+        return "null";
+    }
     let sym: ResolvedSymbol = match sym_r {
         Ok(v) => v,
         Err(_e) => ResolvedSymbol {
@@ -1814,10 +1933,16 @@ fn handle_rename(payload: string) -> string {
         }
     };
     let old_len: i32 = len(sym.name);
-    if old_len <= 0: { return "null"; }
+    if old_len <= 0: {
+        maybe_send_progress_end("no symbol");
+        return "null";
+    }
 
     let refs_r: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
-    if refs_r.is_err(): { return "null"; }
+    if refs_r.is_err(): {
+        maybe_send_progress_end("reference query failed");
+        return "null";
+    }
     let n: i32 = match refs_r {
         Ok(v) => v,
         Err(_e) => 0
@@ -1828,6 +1953,10 @@ fn handle_rename(payload: string) -> string {
     var j: i32 = 0;
     let new_e: string = json_escape(new_name);
     for i in 0..n {
+        if active_request_is_cancelled() == true {
+            maybe_send_progress_end("cancelled");
+            return "null";
+        }
         let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err(): { continue; }
         let r: ReferenceLocation = match rr {
@@ -1849,9 +1978,16 @@ fn handle_rename(payload: string) -> string {
             changes = format!("{}{}", changes, change);
         }
         j = j + 1;
+        if (i%32) == 0 {
+            maybe_send_progress_report(format!("processed {} references", i + 1));
+        }
     }
     changes = concat(changes, "]");
-    if j <= 0: { return "null"; }
+    if j <= 0: {
+        maybe_send_progress_end("no edits");
+        return "null";
+    }
+    maybe_send_progress_end("done");
     return format!(
         "{{\"documentChanges\":{}}}",
         changes
@@ -1919,6 +2055,7 @@ fn handle_workspace_symbol(payload: string) -> string {
     let query: string = extract_workspace_query(payload);
     let uri_count: i64 = uri_store_count(g_uri_store_handle);
     if uri_count <= 0: { return "[]"; }
+    maybe_send_progress_begin("workspace/symbol", "scanning open documents");
 
     let s: Session = current_session();
     var out: string = String::new();
@@ -1926,6 +2063,10 @@ fn handle_workspace_symbol(payload: string) -> string {
     var j: i32 = 0;
 
     for ui in 0..uri_count {
+        if active_request_is_cancelled() == true {
+            maybe_send_progress_end("cancelled");
+            return "[]";
+        }
         let uri: string = uri_store_get(g_uri_store_handle, ui);
         if len(uri) == 0: { continue; }
         let cr: Result<i32, string> = s.document_symbol_count(uri);
@@ -1935,6 +2076,10 @@ fn handle_workspace_symbol(payload: string) -> string {
             Err(_e) => 0
         };
         for i in 0..n {
+            if active_request_is_cancelled() == true {
+                maybe_send_progress_end("cancelled");
+                return "[]";
+            }
             let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
             if sr.is_err(): { continue; }
             let sym: DocumentSymbol = match sr {
@@ -1966,18 +2111,22 @@ fn handle_workspace_symbol(payload: string) -> string {
             }
             j = j + 1;
         }
+        maybe_send_progress_report(format!("scanned {}/{} documents", ui + 1, uri_count));
     }
     if j == 0: {
         if len(query) > 0: {
             if ensure_text_store() == 0: {
                 let root_uri: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
                 if len(root_uri) > 0: {
-                    return workspace_symbol_search(root_uri, query);
+                    let ws: string = workspace_symbol_search(root_uri, query);
+                    maybe_send_progress_end("done");
+                    return ws;
                 }
             }
         }
     }
     out = concat(out, "]");
+    maybe_send_progress_end("done");
     return out;
 }
 
@@ -2028,14 +2177,21 @@ fn handle_semantic_tokens_full(payload: string) -> string {
     if ensure_session() != 0: { return "{\"data\":[]}"; }
     let uri: string = extract_text_document_uri(payload);
     if len(uri) == 0: { return "{\"data\":[]}"; }
+    maybe_send_progress_begin("textDocument/semanticTokens/full", "building tokens");
     let s: Session = current_session();
     let cr: Result<i32, string> = s.document_symbol_count(uri);
-    if cr.is_err(): { return "{\"data\":[]}"; }
+    if cr.is_err(): {
+        maybe_send_progress_end("failed");
+        return "{\"data\":[]}";
+    }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
-    if n <= 0: { return "{\"data\":[]}"; }
+    if n <= 0: {
+        maybe_send_progress_end("done");
+        return "{\"data\":[]}";
+    }
 
     var data: string = String::new();
     data = concat(data, "[");
@@ -2044,6 +2200,10 @@ fn handle_semantic_tokens_full(payload: string) -> string {
     var prev_col: i32 = 0;
 
     for i in 0..n {
+        if active_request_is_cancelled() == true {
+            maybe_send_progress_end("cancelled");
+            return "{\"data\":[]}";
+        }
         let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
         if sr.is_err(): { continue; }
         let sym: DocumentSymbol = match sr {
@@ -2080,9 +2240,13 @@ fn handle_semantic_tokens_full(payload: string) -> string {
         prev_line = line0;
         prev_col = col0;
         j = j + 1;
+        if (i%64) == 0 {
+            maybe_send_progress_report(format!("encoded {} symbols", i + 1));
+        }
     }
 
     data = concat(data, "]");
+    maybe_send_progress_end("done");
     return format!("{{\"data\":{}}}", data);
 }
 
@@ -2331,7 +2495,7 @@ fn dispatch_result_json(payload: string) -> string {
         }
         let ver_e: string = json_escape(version());
         return format!(
-            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
+            "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"documentOnTypeFormattingProvider\":{{\"firstTriggerCharacter\":\"\\\\n\",\"moreTriggerCharacter\":[\"}}\"]}},\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}},\"window\":{{\"workDoneProgress\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
         );
     }
@@ -2391,13 +2555,30 @@ fn dispatch_result_json(payload: string) -> string {
     if eq(method, "textDocument/codeAction") == 1: { return handle_code_action(payload); }
     if eq(method, "textDocument/semanticTokens/full") == 1: { return handle_semantic_tokens_full(payload); }
 
+    if eq(method, "$/progress") == 1: {
+        log_write(log_level_debug(), "$/progress notification");
+        return "";
+    }
+    if eq(method, "$/cancelRequest") == 1: {
+        log_write(log_level_debug(), "$/cancelRequest notification");
+        return "";
+    }
+
     return "";
 }
 
 /// Dispatcher hook consumed by std::jsonrpc::run_stdio_loop.
 fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
     let id: i64 = extract_request_id(request_payload);
+    g_active_request_id = id;
+    if id >= 0 {
+        g_active_request_set = 1;
+    } else {
+        g_active_request_set = 0;
+    }
     let result_json: string = dispatch_result_json(request_payload);
+    g_active_request_set = 0;
+    g_active_request_id = 0;
     if id < 0: {
         log_write(log_level_verbose(), "notification handled");
         return String::new();
