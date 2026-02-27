@@ -377,6 +377,33 @@ MLang Frontend Bench Flag Validation
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Invalid value for --bench-iters
 
+MLang Frontend Bench Inline Flag Parsing Works
+    [Documentation]    Verify frontend accepts --bench-iters=N and --bench-warmup=N inline forms.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_inline
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${iters}=    Set Variable    --bench-iters=20
+    ${warmup}=    Set Variable    --bench-warmup=5
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    ${iters}    ${warmup}    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend inline bench parse failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    [BENCH]
+
+MLang Frontend Bench Warmup Validation
+    [Documentation]    Verify frontend rejects negative warmup values before backend compile.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_validate
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-warmup    -1    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Invalid value for --bench-warmup
+
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.

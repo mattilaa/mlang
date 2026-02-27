@@ -327,12 +327,11 @@ fn is_digit_char(ch: string) -> i32 {
     return 0;
 }
 
-fn is_signed_decimal(s: string) -> i32 {
+fn is_nonnegative_decimal(s: string) -> i32 {
     let n: i64 = len(s);
     if n <= 0 { return 0; }
     var start: i64 = 0;
-    let first: string = sub(s, 0, 1);
-    if eq(first, "+") == 1 || eq(first, "-") == 1 {
+    if eq(sub(s, 0, 1), "+") == 1 {
         if n == 1 { return 0; }
         start = 1;
     }
@@ -342,6 +341,19 @@ fn is_signed_decimal(s: string) -> i32 {
     return 1;
 }
 
+fn is_positive_decimal(s: string) -> i32 {
+    if is_nonnegative_decimal(s) == 0 { return 0; }
+    let n: i64 = len(s);
+    var start: i64 = 0;
+    if eq(sub(s, 0, 1), "+") == 1 {
+        start = 1;
+    }
+    for i in start..n {
+        if eq(sub(s, i, 1), "0") == 0 { return 1; }
+    }
+    return 0;
+}
+
 fn option_takes_value(a: string) -> i32 {
     if eq(a, "-o") == 1 { return 1; }
     if eq(a, "-L") == 1 { return 1; }
@@ -349,6 +361,15 @@ fn option_takes_value(a: string) -> i32 {
     if eq(a, "--bench-iters") == 1 { return 1; }
     if eq(a, "--bench-warmup") == 1 { return 1; }
     return 0;
+}
+
+fn parse_inline_bench_value(arg: string, key: string) -> string {
+    let prefix: string = concat(key, "=");
+    if starts_with(arg, prefix) == 0 { return String::new(); }
+    let n: i64 = len(arg);
+    let p: i64 = len(prefix);
+    if n <= p { return String::new(); }
+    return sub(arg, p, n - p);
 }
 
 fn file_has_test_attr(path: string) -> i32 {
@@ -538,6 +559,28 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var i: i64 = idx;
     while i < n: {
         let a: string = passthrough[i];
+        let inline_iters: string = parse_inline_bench_value(a, "--bench-iters");
+        if len(inline_iters) > 0 {
+            if is_positive_decimal(inline_iters) == 0 {
+                eprintln!("Invalid value for --bench-iters");
+                return 1;
+            }
+            extra_args.push("--bench-iters");
+            extra_args.push(inline_iters);
+            i = i + 1;
+            continue;
+        }
+        let inline_warmup: string = parse_inline_bench_value(a, "--bench-warmup");
+        if len(inline_warmup) > 0 {
+            if is_nonnegative_decimal(inline_warmup) == 0 {
+                eprintln!("Invalid value for --bench-warmup");
+                return 1;
+            }
+            extra_args.push("--bench-warmup");
+            extra_args.push(inline_warmup);
+            i = i + 1;
+            continue;
+        }
         if option_takes_value(a) == 1 {
             extra_args.push(a);
             if i + 1 >= n {
@@ -545,13 +588,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 return 2;
             }
             let v: string = passthrough[i + 1];
-            var bench_num_flag: i32 = 0;
-            if eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
-                bench_num_flag = 1;
-            }
-            if bench_num_flag == 1 {
-                if is_signed_decimal(v) == 0 {
-                    eprintln!("Invalid value for {}", a);
+            if eq(a, "--bench-iters") == 1 {
+                if is_positive_decimal(v) == 0 {
+                    eprintln!("Invalid value for --bench-iters");
+                    return 1;
+                }
+            } else if eq(a, "--bench-warmup") == 1 {
+                if is_nonnegative_decimal(v) == 0 {
+                    eprintln!("Invalid value for --bench-warmup");
                     return 1;
                 }
             }
@@ -567,17 +611,15 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         i = i + 1;
     }
-    if mode_bench == 0 {
-        var has_no_colon_if: i32 = 0;
-        var has_no_colon_while: i32 = 0;
-        let ea_n: i64 = extra_args.len();
-        for j in 0..ea_n {
-            if eq(extra_args[j], "-Wno-colon-if") == 1 { has_no_colon_if = 1; }
-            if eq(extra_args[j], "-Wno-colon-while") == 1 { has_no_colon_while = 1; }
-        }
-        if has_no_colon_if == 0 { extra_args.push("-Wno-colon-if"); }
-        if has_no_colon_while == 0 { extra_args.push("-Wno-colon-while"); }
+    var has_no_colon_if: i32 = 0;
+    var has_no_colon_while: i32 = 0;
+    let ea_n: i64 = extra_args.len();
+    for j in 0..ea_n {
+        if eq(extra_args[j], "-Wno-colon-if") == 1 { has_no_colon_if = 1; }
+        if eq(extra_args[j], "-Wno-colon-while") == 1 { has_no_colon_while = 1; }
     }
+    if has_no_colon_if == 0 { extra_args.push("-Wno-colon-if"); }
+    if has_no_colon_while == 0 { extra_args.push("-Wno-colon-while"); }
     extra_args = ensure_stdlib_link_args(extra_args, st.backend);
 
     if path_is_directory(input_path) == 1 {
