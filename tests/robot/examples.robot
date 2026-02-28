@@ -1419,6 +1419,25 @@ MLang Frontend Directory Mode Rejects Bare Wl Flag
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: -Wl,
 
+MLang Frontend SingleFile Rejects Bare Wl Flag
+    [Documentation]    Verify C++ parity: bare -Wl, is rejected in single-file test mode as unknown.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_wl_bare
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_wl_bare.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn single_wl_bare_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    test    ${src}    -Wl,
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: -Wl,
+
 MLang Frontend Directory Mode Rejects Unknown Option
     [Documentation]    Verify test/bench directory mode rejects unknown options instead of silently dropping them.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_unknown
