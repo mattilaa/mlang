@@ -364,6 +364,56 @@ MLang Frontend BackendOption In Passthrough Is Not Parsed
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    dummy_input.mla --backend someone_else
 
+MLang Frontend TopLevelVersionShortCircuitsPassthrough
+    [Documentation]    Verify top-level --version before passthrough short-circuits and does not invoke backend.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_short
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_version_short_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_version_short_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --backend    ${fake_backend}
+    ...    --version    test
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang-frontend-mla
+    ${invoked}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
+    Should Be Equal    ${invoked}    ${False}
+
+MLang Frontend TopLevelHelpShortCircuitsPassthrough
+    [Documentation]    Verify top-level --help before passthrough short-circuits and does not invoke backend.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_help_short
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_help_short_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_help_short_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --backend    ${fake_backend}
+    ...    --help    test
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+    ${invoked}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
+    Should Be Equal    ${invoked}    ${False}
+
 MLang Frontend Test Version Uses Backend Semantics
     [Documentation]    Verify `test --version` is passed through and reports backend version semantics.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_version_passthrough
