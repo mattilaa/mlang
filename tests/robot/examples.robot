@@ -499,6 +499,32 @@ MLang Frontend TopLevelShortHelpShortCircuitsPassthrough
     ${invoked}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
     Should Be Equal    ${invoked}    ${False}
 
+MLang Frontend TopLevelVersion Before MissingBackendValue Succeeds
+    [Documentation]    Verify top-level --version short-circuits even if malformed --backend appears later.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_missing_backend
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --version    --backend
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang-frontend-mla
+    Should Not Contain    ${run.stderr}    missing value after --backend
+
+MLang Frontend TopLevelHelp Before MissingBackendValue Succeeds
+    [Documentation]    Verify top-level --help short-circuits even if malformed --backend appears later.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_help_before_missing_backend
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --help    --backend
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+    Should Not Contain    ${run.stderr}    missing value after --backend
+
 MLang Frontend PostPassthroughVersionIsForwarded
     [Documentation]    Verify --version after passthrough start is forwarded to backend, not treated as top-level frontend flag.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_post_passthrough_version

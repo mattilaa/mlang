@@ -641,13 +641,11 @@ fn parse_options(argv: list<string>) -> FrontendState {
         }
         if (eq(arg, "--help") == 1 || eq(arg, "-h") == 1) {
             out.show_help = 1;
-            i = i + 1;
-            continue;
+            return out;
         }
         if (eq(arg, "--version") == 1) {
             out.show_version = 1;
-            i = i + 1;
-            continue;
+            return out;
         }
         passthrough_started = 1;
         out.passthrough.push(arg);
