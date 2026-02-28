@@ -468,7 +468,7 @@ fn is_known_test_or_bench_flag(a: string) -> i32 {
     if eq(a, "--tests") == 1 { return 1; }
     if eq(a, "-Wno-colon-if") == 1 { return 1; }
     if eq(a, "-Wno-colon-while") == 1 { return 1; }
-    if starts_with(a, "-Wl,") == 1 { return 1; }
+    if starts_with(a, "-Wl,") == 1 && len(a) > 4 { return 1; }
     if starts_with(a, "-L") == 1 && len(a) > 2 { return 1; }
     if starts_with(a, "-l") == 1 && len(a) > 2 { return 1; }
     return 0;
@@ -569,7 +569,7 @@ fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<stri
             i = i + 1;
             continue;
         }
-        if starts_with(a, "-Wl,") == 1 {
+        if starts_with(a, "-Wl,") == 1 && len(a) > 4 {
             out.push(a);
             i = i + 1;
             continue;
