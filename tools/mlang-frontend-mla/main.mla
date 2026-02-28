@@ -365,6 +365,40 @@ fn is_signed_decimal(s: string) -> i32 {
     return 1;
 }
 
+fn is_effective_zero_decimal(s: string) -> i32 {
+    let n: i64 = len(s);
+    if n <= 0 { return 0; }
+    var start: i64 = 0;
+    let first: string = sub(s, 0, 1);
+    if eq(first, "+") == 1 || eq(first, "-") == 1 {
+        if n == 1 { return 0; }
+        start = 1;
+    }
+    var saw_digit: i32 = 0;
+    for i in start..n {
+        let ch: string = sub(s, i, 1);
+        if is_digit_char(ch) == 0 { return 0; }
+        saw_digit = 1;
+        if eq(ch, "0") == 0 { return 0; }
+    }
+    if saw_digit == 0 { return 0; }
+    return 1;
+}
+
+fn normalize_bench_iters_value(v: string) -> string {
+    if starts_with(v, "-") == 1 || is_effective_zero_decimal(v) == 1 {
+        return "1";
+    }
+    return v;
+}
+
+fn normalize_bench_warmup_value(v: string) -> string {
+    if starts_with(v, "-") == 1 {
+        return "0";
+    }
+    return v;
+}
+
 fn option_takes_value(a: string) -> i32 {
     if eq(a, "-o") == 1 { return 1; }
     if eq(a, "-L") == 1 { return 1; }
@@ -703,7 +737,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 return 1;
             }
             extra_args.push("--bench-iters");
-            extra_args.push(inline_iters);
+            extra_args.push(normalize_bench_iters_value(inline_iters));
             i = i + 1;
             continue;
         }
@@ -714,7 +748,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 return 1;
             }
             extra_args.push("--bench-warmup");
-            extra_args.push(inline_warmup);
+            extra_args.push(normalize_bench_warmup_value(inline_warmup));
             i = i + 1;
             continue;
         }
@@ -731,13 +765,16 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     eprintln!("Invalid value for --bench-iters");
                     return 1;
                 }
+                extra_args.push(normalize_bench_iters_value(v));
             } else if eq(a, "--bench-warmup") == 1 {
                 if is_signed_decimal(v) == 0 {
                     eprintln!("Invalid value for --bench-warmup");
                     return 1;
                 }
+                extra_args.push(normalize_bench_warmup_value(v));
+            } else {
+                extra_args.push(v);
             }
-            extra_args.push(v);
             i = i + 2;
             continue;
         }
