@@ -810,6 +810,30 @@ MLang Frontend Test Uses Last Positional Path
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Error: No .mla test files found in
 
+MLang Frontend RunTests Uses Last Positional Path
+    [Documentation]    Verify frontend run-tests positional parsing matches C++ semantics (last positional wins).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_lastpos
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_lastpos_suite
+    ${empty_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_lastpos_empty
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Run Keyword And Ignore Error    Remove Directory    ${empty_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    Create Directory    ${empty_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn frontend_runtests_lastpos_smoke() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_frontend_runtests_lastpos.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    run    tests    ${suite_dir}    ${empty_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Error: No .mla test files found in
+
 MLang Frontend Skips Synthetic Test Root Files
     [Documentation]    Verify frontend test directory mode ignores __mlang_test_root*.mla files during suite discovery.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_skiproot
