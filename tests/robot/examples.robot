@@ -716,6 +716,46 @@ MLang Frontend RunTests FinalNoRunSkips
     Should Not Contain    ${run.stdout}    [FAIL]
     Should Not Contain    ${run.stdout}    [SUMMARY]
 
+MLang Frontend DirectTests NoRunBeforeTests ThenRuns
+    [Documentation]    Verify direct --tests mode matches C++ parity: later --tests overrides earlier --no-run.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_norun_then_tests
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_norun_then_tests.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_should_fail_if_run() -> i32 {
+    ...        return 1;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    --tests    --no-run    --tests    ${src}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    [FAIL]
+    Should Contain    ${run.stdout}    [SUMMARY]
+
+MLang Frontend DirectTests FinalNoRunSkips
+    [Documentation]    Verify direct --tests mode matches C++ parity: repeated --tests/--no-run follows last-flag-wins semantics.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_final_norun
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_final_norun.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_should_fail_if_run_final_norun() -> i32 {
+    ...        return 1;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    --tests    --tests    --no-run    ${src}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Not Contain    ${run.stdout}    [FAIL]
+    Should Not Contain    ${run.stdout}    [SUMMARY]
+
 MLang Frontend Test Help Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --help before unknown option in test mode should succeed.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_help_order
