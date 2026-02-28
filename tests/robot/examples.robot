@@ -1670,6 +1670,37 @@ MLang Frontend RunTests Directory Forwards Split LinkerFlags
     Should Contain    ${log_text}    -L /tmp/mlang_run_tests_dir_link
     Should Contain    ${log_text}    -l mlangruntests
 
+MLang Frontend RunTests Directory Uses Sorted Suite Order
+    [Documentation]    Verify `run tests <dir>` executes suites in deterministic sorted filename order (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_sorted_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_sorted_order_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_sorted_order_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_sorted_order_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn sorted_order_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_z_sorted_tests.mla    ${code}
+    Create File    ${suite_dir}/test_a_sorted_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    run    tests    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Match Regexp    ${log_text}    (?s).*--tests ${suite_dir}/test_a_sorted_tests\\.mla.*--tests ${suite_dir}/test_z_sorted_tests\\.mla.*
+
 MLang Frontend RunTests Directory Forwards Compact LinkerFlags
     [Documentation]    Verify `run tests <dir> -Lfoo -lbar -Wl,...` forwards compact linker flags per-suite (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_compact_link
@@ -2981,6 +3012,36 @@ MLang Frontend Bench Directory Forwards Split LinkerFlags
     Should Contain    ${log_text}    bench ${suite_dir}/bench_case.mla
     Should Contain    ${log_text}    -L /tmp/mlang_bench_dir_split_lib
     Should Contain    ${log_text}    -l benchdirsplitdep
+
+MLang Frontend Bench Directory Uses Sorted Suite Order
+    [Documentation]    Verify `bench <dir>` executes suites in deterministic sorted filename order (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_dir_sorted_order
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_dir_sorted_order_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_sorted_order_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_sorted_order_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${bench_code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/bench_z_sorted.mla    ${bench_code}
+    Create File    ${suite_dir}/bench_a_sorted.mla    ${bench_code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    bench    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Match Regexp    ${log_text}    (?s).*bench ${suite_dir}/bench_a_sorted\\.mla.*bench ${suite_dir}/bench_z_sorted\\.mla.*
 
 MLang Frontend Bench Directory Forwards Compact LinkerFlags
     [Documentation]    Verify bench directory mode forwards compact -L/-l and -Wl flags per-suite (C++ parity).
