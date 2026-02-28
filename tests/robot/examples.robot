@@ -284,6 +284,18 @@ MLang Frontend Test Version Uses Backend Semantics
     Should Contain    ${run.stdout}    mlang
     Should Not Contain    ${run.stdout}    mlang-frontend-mla
 
+MLang Frontend Test Help Uses Backend Semantics
+    [Documentation]    Verify `test --help` is passed through and uses backend help text.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_help_passthrough
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    test    --help
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Not Contain    ${run.stdout}    mlang-frontend-mla
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Wrapper Test Dispatch Works
     [Documentation]    Build frontend wrapper and verify `test` + `run tests` dispatch on a temporary suite directory.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dispatch
@@ -721,6 +733,35 @@ MLang Frontend Bench Ignores Colon Warning Flags
     ${log_text}=    Get File    ${fake_log}
     Should Not Contain    ${log_text}    -Wno-colon-if
     Should Not Contain    ${log_text}    -Wno-colon-while
+
+MLang Frontend Bench SingleFile Forwards Colon Warning Flags
+    [Documentation]    Verify bench single-file mode preserves -Wno-colon-if/-Wno-colon-while for backend compile.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warn_single
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_warn_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_warn_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_warn_single_backend.log
+    ${bench_code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${bench_file}    ${bench_code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    ${bench_file}    -Wno-colon-if    -Wno-colon-while
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -Wno-colon-if
+    Should Contain    ${log_text}    -Wno-colon-while
 
 MLang Frontend Directory Mode Ignores Output Flag
     [Documentation]    Verify directory suite mode does not forward -o to per-suite backend invocations (C++ parity).
