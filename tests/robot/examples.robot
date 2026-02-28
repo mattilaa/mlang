@@ -771,6 +771,21 @@ MLang Frontend Empty Test Dir Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Error: No .mla test files found in
 
+MLang Frontend Empty Bench Dir Fails
+    [Documentation]    Verify frontend parity with C++ main: `bench <empty_dir>` returns nonzero.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptybench
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ...    msg=Failed building frontend wrapper (empty bench dir parity) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
+    ${empty}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_empty_bench_dir
+    Run Keyword And Ignore Error    Remove Directory    ${empty}    recursive=True
+    Create Directory    ${empty}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    bench    ${empty}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Error: No .mla benchmark files found in
+
 MLang Frontend Test Uses Last Positional Path
     [Documentation]    Verify frontend test-mode positional parsing matches C++ main semantics (last positional wins).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_lastpos
