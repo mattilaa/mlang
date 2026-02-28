@@ -1891,6 +1891,50 @@ MLang Frontend RunTests Missing BenchWarmup Value Uses Unknown Option Error
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-warmup
 
+MLang Frontend Test Inline Bench Flags Are Rejected
+    [Documentation]    Verify test mode rejects inline --bench-iters=N/--bench-warmup=N as unknown options (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_inline_benchflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_inline_benchflags.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn test_inline_benchflags_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${iters}=    Set Variable    --bench-iters=20
+    ${warmup}=    Set Variable    --bench-warmup=5
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    test    ${src}    ${iters}    ${warmup}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: --bench-iters=20
+    Should Contain    ${run.stdout}    Usage:
+
+MLang Frontend RunTests Inline Bench Flags Are Rejected
+    [Documentation]    Verify run tests mode rejects inline --bench-iters=N/--bench-warmup=N as unknown options (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_inline_benchflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_inline_benchflags.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_inline_benchflags_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${iters}=    Set Variable    --bench-iters=20
+    ${warmup}=    Set Variable    --bench-warmup=5
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    run    tests    ${src}    ${iters}    ${warmup}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: --bench-iters=20
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend RunTests Directory Invalid BenchIters Value Errors
     [Documentation]    Verify `run tests <dir>` reports invalid numeric value for --bench-iters (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_invalid_benchiters
