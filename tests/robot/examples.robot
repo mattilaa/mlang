@@ -2173,6 +2173,42 @@ MLang Frontend Bench Dir Requires Bench Prefix
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Error: No .mla benchmark files found in
 
+MLang Frontend Bench Directory Skips Synthetic Test Root Files
+    [Documentation]    Verify bench directory mode ignores __mlang_test_root.mla while still running valid bench_ suites (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_skiproot
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_skiproot_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_skiproot_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_skiproot_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${bad_root}=    Catenate    SEPARATOR=\n
+    ...    \#[bench]
+    ...    fn should_not_run_root() -> i32 {
+    ...        return 1;
+    ...    }
+    ${good_bench}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/__mlang_test_root.mla    ${bad_root}
+    Create File    ${suite_dir}/bench_ok.mla    ${good_bench}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    bench    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    bench ${suite_dir}/bench_ok.mla
+    Should Not Contain    ${log_text}    __mlang_test_root.mla
+
 MLang Frontend Test Uses Last Positional Path
     [Documentation]    Verify frontend test-mode positional parsing matches C++ main semantics (last positional wins).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_lastpos
