@@ -2914,6 +2914,30 @@ MLang Frontend Pkg Unknown Impl Uses Cpp Fallback
     ...    msg=unknown MLANG_PKG_IMPL should route pkg to backend directly (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    pkg init
 
+MLang Frontend Pkg Mla Mode Falls Back To Cpp Backend
+    [Documentation]    Verify `MLANG_PKG_IMPL=mla` falls back to backend `pkg` command when MLang pkg frontend compilation/run path fails.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_mla_fallback
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    /bin/echo    pkg    init
+    ...    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=MLANG_PKG_IMPL=mla should fall back to backend passthrough on mla frontend failure (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    pkg init
+
+MLang Frontend Pkg Default Mode Falls Back To Cpp Backend
+    [Documentation]    Verify default pkg mode (MLANG_PKG_IMPL unset) falls back to backend `pkg` command when MLang pkg frontend compilation/run path fails.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_default_fallback
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    /bin/echo    pkg    init
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=default pkg mode should fall back to backend passthrough on mla frontend failure (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    pkg init
+
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptydir
