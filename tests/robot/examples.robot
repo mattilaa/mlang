@@ -392,6 +392,18 @@ MLang Frontend Bench Unknown Before Help Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
 
+MLang Frontend Bench Help Before Unknown Succeeds
+    [Documentation]    Verify argument order parity: --help before unknown option in bench mode should succeed.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_help_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    bench    --help    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Wrapper Test Dispatch Works
     [Documentation]    Build frontend wrapper and verify `test` + `run tests` dispatch on a temporary suite directory.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dispatch
