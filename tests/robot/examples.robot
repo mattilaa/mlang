@@ -1614,6 +1614,70 @@ MLang Frontend DirectTests Directory Forwards NoRun
     Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_norun_tests.mla
     Should Contain    ${log_text}    --no-run
 
+MLang Frontend DirectTests Directory NoRunThenTests Does Not Forward NoRun
+    [Documentation]    Verify direct `--tests <dir>` keeps last-flag-wins semantics: `--tests --no-run --tests <dir>` does not forward --no-run.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_norun_then_tests
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_norun_then_tests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_then_tests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_then_tests_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_dir_norun_then_tests_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_directtests_dir_norun_then_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    --no-run    --tests    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_norun_then_tests.mla
+    Should Not Contain    ${log_text}    --no-run
+
+MLang Frontend DirectTests Directory TestsThenNoRun Forwards NoRun
+    [Documentation]    Verify direct `--tests <dir>` keeps last-flag-wins semantics: `--tests --tests --no-run <dir>` forwards --no-run.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_tests_then_norun
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_tests_then_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_tests_then_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_tests_then_norun_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_dir_tests_then_norun_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_directtests_dir_tests_then_norun.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    --tests    --no-run    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_tests_then_norun.mla
+    Should Contain    ${log_text}    --no-run
+
 MLang Frontend DirectTests Directory Does Not Forward NoTests
     [Documentation]    Verify direct `--tests <dir> --no-tests` does not forward --no-tests into per-suite calls (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_notests
@@ -1851,6 +1915,43 @@ MLang Frontend DirectTests Directory Skips Synthetic Test Root Files
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    --tests ${suite_dir}/test_ok_tests.mla
     Should Not Contain    ${log_text}    __mlang_test_root.mla
+
+MLang Frontend DirectTests Skips Modonly Root Candidate
+    [Documentation]    Verify direct `--tests <dir>` includes only suite-style files and skips __mlang_test_root_modonly.mla.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_modonly
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_modonly_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_modonly_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_modonly_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${modonly}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn should_still_be_candidate_modonly() -> i32 {
+    ...        return 0;
+    ...    }
+    ${good_test}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_modonly_companion() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/__mlang_test_root_modonly.mla    ${modonly}
+    Create File    ${suite_dir}/test_directtests_modonly_ok.mla    ${good_test}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    --tests    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Not Contain    ${log_text}    __mlang_test_root_modonly.mla
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_modonly_ok.mla
 
 MLang Frontend Bench DefaultPath Ignores NoRun
     [Documentation]    Verify `bench --no-run` without explicit path defaults to tests/ and does not forward --no-run.
