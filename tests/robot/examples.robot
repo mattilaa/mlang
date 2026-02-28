@@ -399,6 +399,24 @@ MLang Frontend Wrapper Test Dispatch Works
     Should Be Equal As Integers    ${run2.rc}    0
     ...    msg=frontend run tests dispatch failed (rc=${run2.rc})\nSTDOUT:\n${run2.stdout}\nSTDERR:\n${run2.stderr}
 
+MLang Frontend Tests Flag Works In Trailing Position
+    [Documentation]    Verify `<file> --tests` activates test mode even when --tests is not the first arg.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_flag_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    ${src}    --tests    --no-run
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend failed to honor trailing --tests flag (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+
 MLang Binary Frontend Env Switch Works
     [Documentation]    Verify `MLANG_FRONTEND_IMPL=mla` routes `mlang` through the MLang frontend implementation.
     ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_env_switch.mla
