@@ -947,6 +947,44 @@ MLang Frontend Bench Inline Flags Are Rejected
     Should Contain    ${run.stderr}    Unknown option: --bench-iters=20
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Bench SingleFile Rejects Bare Wl Flag
+    [Documentation]    Verify C++ parity: bare -Wl, is rejected in single-file bench mode as unknown.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_wl_bare
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_wl_bare.mla
+    Create File    ${src}    fn main() -> i32 { return 0; }
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    ${src}    -Wl,
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: -Wl,
+
+MLang Frontend Bench SingleFile Forwards Wl Flags
+    [Documentation]    Verify C++ parity: single-file bench mode forwards valid -Wl,<args> linker flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_wl
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_wl.mla
+    Create File    ${src}    fn main() -> i32 { return 0; }
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_wl_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_wl_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    ${src}    -Wl,-rpath,/tmp/mlang_bench_single
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -Wl,-rpath,/tmp/mlang_bench_single
+
 MLang Frontend Bench Warmup Validation
     [Documentation]    Verify frontend rejects non-numeric warmup values before backend compile.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_validate
