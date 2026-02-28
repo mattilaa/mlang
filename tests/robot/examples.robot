@@ -284,6 +284,64 @@ MLang Frontend Missing Backend Value Errors
     Should Contain    ${run.stderr}    missing value after --backend
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Last Backend Option Wins
+    [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_last_backend
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend1}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_last_backend_1.sh
+    ${fake_backend2}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_last_backend_2.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_last_backend.log
+    ${script1}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "backend1:$@" >> "${fake_log}"
+    ...    exit 7
+    ${script2}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "backend2:$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend1}    ${script1}
+    Create File    ${fake_backend2}    ${script2}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc
+    ...    chmod +x "${fake_backend1}" "${fake_backend2}"
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --backend    ${fake_backend1}
+    ...    --backend    ${fake_backend2}
+    ...    test    --version
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    backend2:--version
+    Should Not Contain    ${log_text}    backend1:
+
+MLang Frontend BackendOption In Passthrough Is Not Parsed
+    [Documentation]    Verify --backend after passthrough start is treated as regular passthrough arg (not frontend option).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_passthrough
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --backend    ${fake_backend}
+    ...    dummy_input.mla    --backend    someone_else
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    dummy_input.mla --backend someone_else
+
 MLang Frontend Test Version Uses Backend Semantics
     [Documentation]    Verify `test --version` is passed through and reports backend version semantics.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_version_passthrough
