@@ -2827,6 +2827,20 @@ MLang Frontend Empty Test Dir Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Error: No .mla test files found in
 
+MLang Frontend DirectTests Empty Test Dir Fails
+    [Documentation]    Verify frontend parity with C++ main: `--tests <empty_dir>` returns nonzero.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_emptydir
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${empty}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_empty_suite_dir
+    Run Keyword And Ignore Error    Remove Directory    ${empty}    recursive=True
+    Create Directory    ${empty}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    --tests    ${empty}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Error: No .mla test files found in
+
 MLang Frontend Test Dir Requires Test Attribute
     [Documentation]    Verify test directory mode ignores files lacking #[test] and errors when no test suites remain.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_attr
@@ -2960,6 +2974,30 @@ MLang Frontend RunTests Uses Last Positional Path
     Create File    ${suite_dir}/test_frontend_runtests_lastpos.mla    ${code}
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    run    tests    ${suite_dir}    ${empty_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Error: No .mla test files found in
+
+MLang Frontend DirectTests Uses Last Positional Path
+    [Documentation]    Verify direct --tests positional parsing matches C++ semantics (last positional wins).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_lastpos
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_lastpos_suite
+    ${empty_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_lastpos_empty
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Run Keyword And Ignore Error    Remove Directory    ${empty_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    Create Directory    ${empty_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn frontend_directtests_lastpos_smoke() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_frontend_directtests_lastpos.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    --tests    ${suite_dir}    ${empty_dir}
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Error: No .mla test files found in
