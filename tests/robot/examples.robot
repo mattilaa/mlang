@@ -1407,6 +1407,80 @@ MLang Frontend Directory Mode Does Not Forward NoTests
     Should Contain    ${log_text}    --tests ${suite_dir}/test_dir_notests_tests.mla
     Should Not Contain    ${log_text}    --no-tests
 
+MLang Frontend SingleFile Forwards CompileFlags In TestMode
+    [Documentation]    Verify single-file test mode forwards compile-related flags (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_compileflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_compileflags.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn compile_flags_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_compileflags_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    ${src}    -c    -S    -emit-llvm    -emit-bc    -O3    -v    --debug
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${src}
+    Should Contain    ${log_text}    -c
+    Should Contain    ${log_text}    -S
+    Should Contain    ${log_text}    -emit-llvm
+    Should Contain    ${log_text}    -emit-bc
+    Should Contain    ${log_text}    -O3
+    Should Contain    ${log_text}    -v
+    Should Contain    ${log_text}    --debug
+
+MLang Frontend Directory Mode Ignores CompileFlags In TestMode
+    [Documentation]    Verify directory test mode strips compile-only flags from per-suite backend calls (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_compileflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_compileflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compileflags_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn dir_compile_flags_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_dir_compileflags_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    test    ${suite_dir}    -c    -S    -emit-llvm    -emit-bc    -O3    -v    --debug
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_dir_compileflags_tests.mla
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-c( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-S( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-emit-llvm( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-emit-bc( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-O3( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-v( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )--debug( |$).*
+
 MLang Frontend Tests Flag Works In Trailing Position
     [Documentation]    Verify `<file> --tests` activates test mode even when --tests is not the first arg.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing
