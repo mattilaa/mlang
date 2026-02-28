@@ -320,6 +320,18 @@ MLang Frontend Bench Version Uses Backend Semantics
     Should Contain    ${run.stdout}    mlang
     Should Not Contain    ${run.stdout}    mlang-frontend-mla
 
+MLang Frontend Bench ShortHelp Uses Backend Semantics
+    [Documentation]    Verify `bench -h` is passed through and uses backend help text.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_shorthelp_passthrough
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    bench    -h
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Not Contain    ${run.stdout}    mlang-frontend-mla
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Wrapper Test Dispatch Works
     [Documentation]    Build frontend wrapper and verify `test` + `run tests` dispatch on a temporary suite directory.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dispatch
