@@ -751,6 +751,30 @@ MLang Frontend Test DefaultPath Forwards NoRun
     Should Contain    ${log_text}    --tests tests/
     Should Contain    ${log_text}    --no-run
 
+MLang Frontend Test DefaultPath Forwards LinkerFlags
+    [Documentation]    Verify `test -L<dir> -l<name>` without explicit path defaults to tests/ and forwards linker flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_default_link
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_link_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    test    -L/tmp/mlang_default_test_lib    -ldefaulttestdep
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests tests/
+    Should Contain    ${log_text}    -L/tmp/mlang_default_test_lib
+    Should Contain    ${log_text}    -ldefaulttestdep
+
 MLang Frontend RunTests DefaultPath Forwards NoRun
     [Documentation]    Verify `run tests --no-run` without explicit path defaults to tests/ and forwards --no-run.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_default_norun
