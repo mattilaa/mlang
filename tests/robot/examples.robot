@@ -1582,6 +1582,141 @@ MLang Frontend DirectTests DefaultPath Forwards LinkerFlags
     Should Contain    ${log_text}    -L/tmp/mlang_default_directtests_lib
     Should Contain    ${log_text}    -ldefaultdirecttestsdep
 
+MLang Frontend DirectTests Directory Forwards NoRun
+    [Documentation]    Verify direct `--tests <dir> --no-run` forwards --no-run to per-suite backend calls (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_norun
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_dir_norun_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_directtests_dir_norun_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    ${suite_dir}    --no-run
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_norun_tests.mla
+    Should Contain    ${log_text}    --no-run
+
+MLang Frontend DirectTests Directory Does Not Forward NoTests
+    [Documentation]    Verify direct `--tests <dir> --no-tests` does not forward --no-tests into per-suite calls (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_notests
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_notests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_notests_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_dir_notests_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_directtests_dir_notests_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    ${suite_dir}    --no-tests
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_notests_tests.mla
+    Should Not Contain    ${log_text}    --no-tests
+
+MLang Frontend DirectTests Directory Ignores CompileFlags
+    [Documentation]    Verify direct `--tests <dir>` strips compile-only flags from per-suite backend calls (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_compileflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_compileflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_compileflags_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_dir_compileflags_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_directtests_dir_compileflags_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    ${suite_dir}    -c    -S    -emit-llvm    -emit-bc    -O3    -v    --debug
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_compileflags_tests.mla
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-c( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-S( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-emit-llvm( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-emit-bc( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-O3( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-v( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )--debug( |$).*
+
+MLang Frontend DirectTests Directory Ignores OutputFlag
+    [Documentation]    Verify direct `--tests <dir> -o <file>` is ignored in directory mode (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_ignore_o
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_ignore_o_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_ignore_o_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_ignore_o_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn directtests_dir_ignore_o_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_directtests_dir_ignore_o_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    --tests    ${suite_dir}    -o    ${OUTPUT DIR}/ignored_directtests_dir_bin
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_directtests_dir_ignore_o_tests.mla
+    Should Not Contain    ${log_text}    -o
+    Should Not Contain    ${log_text}    ignored_directtests_dir_bin
+
 MLang Frontend Bench DefaultPath Ignores NoRun
     [Documentation]    Verify `bench --no-run` without explicit path defaults to tests/ and does not forward --no-run.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_norun
