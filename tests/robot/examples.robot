@@ -1509,6 +1509,105 @@ MLang Frontend RunTests Directory Forwards ColonWarningFlags
     Should Contain    ${log_text}    -Wno-colon-if
     Should Contain    ${log_text}    -Wno-colon-while
 
+MLang Frontend RunTests Directory Forwards Split LinkerFlags
+    [Documentation]    Verify `run tests <dir> -L <dir> -l <name>` forwards linker flags per-suite (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_split_link
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_split_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_split_link_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_split_link_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_split_link_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    run    tests    ${suite_dir}    -L    /tmp/mlang_run_tests_dir_link    -l    mlangruntests
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_runtests_dir_split_link_tests.mla
+    Should Contain    ${log_text}    -L /tmp/mlang_run_tests_dir_link
+    Should Contain    ${log_text}    -l mlangruntests
+
+MLang Frontend RunTests Directory Forwards Compact LinkerFlags
+    [Documentation]    Verify `run tests <dir> -Lfoo -lbar -Wl,...` forwards compact linker flags per-suite (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_compact_link
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_compact_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compact_link_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_compact_link_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_compact_link_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    run    tests    ${suite_dir}    -L/tmp/mlang_run_tests_dir_compact    -lmlangruncompact    -Wl,-rpath,/tmp/mlang_run_tests_dir_compact
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_runtests_dir_compact_link_tests.mla
+    Should Contain    ${log_text}    -L/tmp/mlang_run_tests_dir_compact
+    Should Contain    ${log_text}    -lmlangruncompact
+    Should Contain    ${log_text}    -Wl,-rpath,/tmp/mlang_run_tests_dir_compact
+
+MLang Frontend RunTests Directory Ignores OutputFlag
+    [Documentation]    Verify `run tests <dir> -o <file>` is ignored in directory mode (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_ignore_o
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_ignore_o_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_ignore_o_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_ignore_o_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_ignore_o_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_ignore_o_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    run    tests    ${suite_dir}    -o    ${OUTPUT DIR}/ignored_runtests_dir_bin
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_runtests_dir_ignore_o_tests.mla
+    Should Not Contain    ${log_text}    -o
+    Should Not Contain    ${log_text}    ignored_runtests_dir_bin
+
 MLang Frontend SingleFile Forwards CompileFlags In TestMode
     [Documentation]    Verify single-file test mode forwards compile-related flags (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_compileflags
