@@ -979,6 +979,33 @@ MLang Frontend Bench Accepts Zero Iterations Value
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
 
+MLang Frontend Bench Uses Last Positional Path
+    [Documentation]    Verify C++ parity: in bench mode, the last non-flag positional argument wins as input path.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_last_pos
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${first}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_last_first.mla
+    ${second}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_last_second.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_last_pos_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_last_pos_backend.log
+    Create File    ${first}    fn main() -> i32 { return 0; }
+    Create File    ${second}    fn main() -> i32 { return 0; }
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    ${first}    ${second}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    bench ${second}
+    Should Not Contain    ${log_text}    bench ${first}
+
 MLang Frontend Bench Directory Forwards Default Iteration Flags
     [Documentation]    Verify frontend bench directory mode forwards C++ default --bench-iters/--bench-warmup when not provided.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_defaults
