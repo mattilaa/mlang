@@ -1815,6 +1815,43 @@ MLang Frontend DirectTests Directory Uses Sorted Suite Order
     ${log_text}=    Get File    ${fake_log}
     Should Match Regexp    ${log_text}    (?s).*--tests ${suite_dir}/test_a_directtests_sorted_tests\\.mla.*--tests ${suite_dir}/test_z_directtests_sorted_tests\\.mla.*
 
+MLang Frontend DirectTests Directory Skips Synthetic Test Root Files
+    [Documentation]    Verify direct `--tests <dir>` ignores __mlang_test_root.mla while still running valid test_ suites (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_skiproot
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_skiproot_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_skiproot_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_skiproot_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${bad_root}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn should_not_run_root() -> i32 {
+    ...        return 1;
+    ...    }
+    ${good_test}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn should_run_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/__mlang_test_root.mla    ${bad_root}
+    Create File    ${suite_dir}/test_ok_tests.mla    ${good_test}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    --tests    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_ok_tests.mla
+    Should Not Contain    ${log_text}    __mlang_test_root.mla
+
 MLang Frontend Bench DefaultPath Ignores NoRun
     [Documentation]    Verify `bench --no-run` without explicit path defaults to tests/ and does not forward --no-run.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_norun
