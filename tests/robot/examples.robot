@@ -1023,6 +1023,53 @@ MLang Frontend Wrapper Test Dispatch Works
     Should Be Equal As Integers    ${run2.rc}    0
     ...    msg=frontend run tests dispatch failed (rc=${run2.rc})\nSTDOUT:\n${run2.stdout}\nSTDERR:\n${run2.stderr}
 
+MLang Frontend RunTests AbsoluteDirectory Works
+    [Documentation]    Verify `run tests <absolute_dir>` executes suite discovery for external directories (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_absdir
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${TEMPDIR}/frontend_runtests_absdir_suite
+    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${t1}=    Catenate    SEPARATOR=    ${suite_dir}/test_abs_tests.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn test_abs_ok() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${t1}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    run    tests    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend run tests absdir failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    [SUITE] test_abs_tests.mla
+    Should Contain    ${run.stdout}    [SUITE PASS] test_abs_tests.mla
+
+MLang Frontend RunTests NoRun AbsoluteDirectory Works
+    [Documentation]    Verify `run tests --no-run <absolute_dir>` keeps no-run semantics while discovering external suites.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_norun_absdir
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${TEMPDIR}/frontend_runtests_norun_absdir_suite
+    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${t1}=    Catenate    SEPARATOR=    ${suite_dir}/test_norun_abs_tests.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn test_norun_abs_ok() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${t1}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    run    tests    --no-run    ${suite_dir}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend run tests --no-run absdir failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stdout}    [SUITE] test_norun_abs_tests.mla
+    Should Contain    ${run.stdout}    [SUITE PASS] test_norun_abs_tests.mla
+    Should Not Contain    ${run.stdout}    [PASS]
+
 MLang Frontend Does Not Intercept NonRunTests Prefix
     [Documentation]    Verify only exact `run tests` is intercepted; other `run ...` forms are forwarded unchanged.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_non_runtests
