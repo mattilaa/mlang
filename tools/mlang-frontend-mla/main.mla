@@ -21,6 +21,7 @@ use std::process::ExitStatus;
 use std::process::spawn;
 use std::process::spawn_inherit;
 use std::strbuf::contains;
+use std::strbuf::compare;
 use std::strbuf::eq;
 use std::strbuf::ends_with;
 use std::strbuf::find;
@@ -363,6 +364,50 @@ fn is_signed_decimal(s: string) -> i32 {
         if is_digit_char(sub(s, i, 1)) == 0 { return 0; }
     }
     return 1;
+}
+
+fn normalize_signed_decimal(s: string) -> string {
+    let n: i64 = len(s);
+    if n <= 0 { return s; }
+    let first: string = sub(s, 0, 1);
+    var sign: string = String::new();
+    var start: i64 = 0;
+    if eq(first, "+") == 1 || eq(first, "-") == 1 {
+        sign = first;
+        start = 1;
+    }
+    while start < n: {
+        if eq(sub(s, start, 1), "0") == 1 {
+            start = start + 1;
+            continue;
+        }
+        break;
+    }
+    if start >= n {
+        return "0";
+    }
+    let digits: string = sub(s, start, n - start);
+    if eq(sign, "-") == 1 {
+        return concat("-", digits);
+    }
+    return digits;
+}
+
+fn abs_decimal_leq(s_abs: string, limit_abs: string) -> i32 {
+    let a_len: i64 = len(s_abs);
+    let l_len: i64 = len(limit_abs);
+    if a_len < l_len { return 1; }
+    if a_len > l_len { return 0; }
+    return compare(s_abs, limit_abs) <= 0;
+}
+
+fn fits_i32_decimal(s: string) -> i32 {
+    if eq(s, "0") == 1 { return 1; }
+    if starts_with(s, "-") == 1 {
+        let abs_s: string = sub(s, 1, len(s) - 1);
+        return abs_decimal_leq(abs_s, "2147483648");
+    }
+    return abs_decimal_leq(s, "2147483647");
 }
 
 fn is_effective_zero_decimal(s: string) -> i32 {
@@ -719,13 +764,23 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     eprintln!("Invalid value for --bench-iters");
                     return 1;
                 }
-                extra_args.push(normalize_bench_iters_value(v));
+                let v_norm: string = normalize_signed_decimal(v);
+                if fits_i32_decimal(v_norm) == 0 {
+                    eprintln!("Invalid value for --bench-iters");
+                    return 1;
+                }
+                extra_args.push(normalize_bench_iters_value(v_norm));
             } else if eq(a, "--bench-warmup") == 1 {
                 if is_signed_decimal(v) == 0 {
                     eprintln!("Invalid value for --bench-warmup");
                     return 1;
                 }
-                extra_args.push(normalize_bench_warmup_value(v));
+                let v_norm: string = normalize_signed_decimal(v);
+                if fits_i32_decimal(v_norm) == 0 {
+                    eprintln!("Invalid value for --bench-warmup");
+                    return 1;
+                }
+                extra_args.push(normalize_bench_warmup_value(v_norm));
             } else {
                 extra_args.push(v);
             }

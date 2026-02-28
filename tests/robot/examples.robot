@@ -826,6 +826,27 @@ MLang Frontend Bench Warmup Validation
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Invalid value for --bench-warmup
 
+MLang Frontend Bench Numeric Range Validation
+    [Documentation]    Verify frontend rejects out-of-range bench numeric values (std::stoi parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_range_validate
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${huge_pos}=    Set Variable    999999999999999999999999999999999999
+    ${huge_neg}=    Set Variable    -999999999999999999999999999999999999
+
+    ${run_i}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-iters    ${huge_pos}    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_i.rc}    0
+    Should Contain    ${run_i.stderr}    Invalid value for --bench-iters
+
+    ${run_w}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-warmup    ${huge_neg}    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_w.rc}    0
+    Should Contain    ${run_w.stderr}    Invalid value for --bench-warmup
+
 MLang Frontend Bench Accepts Signed Numeric Warmup
     [Documentation]    Verify frontend accepts signed numeric warmup values (backend clamps like C++).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_signed
