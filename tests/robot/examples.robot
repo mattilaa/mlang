@@ -1438,6 +1438,77 @@ MLang Frontend RunTests Directory Mode Does Not Forward NoTests
     Should Contain    ${log_text}    --tests ${suite_dir}/test_runtests_dir_notests_tests.mla
     Should Not Contain    ${log_text}    --no-tests
 
+MLang Frontend RunTests Directory Ignores CompileFlags In TestMode
+    [Documentation]    Verify `run tests <dir>` strips compile-only flags from per-suite backend calls (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_compileflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_compileflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compileflags_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_compile_flags_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_compileflags_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    run    tests    ${suite_dir}    -c    -S    -emit-llvm    -emit-bc    -O3    -v    --debug
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_runtests_dir_compileflags_tests.mla
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-c( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-S( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-emit-llvm( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-emit-bc( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-O3( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )-v( |$).*
+    Should Not Match Regexp    ${log_text}    (?s).*(^| )--debug( |$).*
+
+MLang Frontend RunTests Directory Forwards ColonWarningFlags
+    [Documentation]    Verify `run tests <dir> -Wno-colon-*` forwards colon warning suppression flags per suite (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_colonflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_colonflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_colonflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_colonflags_backend.log
+    Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_colon_flags_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_colonflags_tests.mla    ${code}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    run    tests    ${suite_dir}    -Wno-colon-if    -Wno-colon-while
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests ${suite_dir}/test_runtests_dir_colonflags_tests.mla
+    Should Contain    ${log_text}    -Wno-colon-if
+    Should Contain    ${log_text}    -Wno-colon-while
+
 MLang Frontend SingleFile Forwards CompileFlags In TestMode
     [Documentation]    Verify single-file test mode forwards compile-related flags (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_compileflags
