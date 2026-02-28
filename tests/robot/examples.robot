@@ -3,7 +3,7 @@ Library           Process
 Library           OperatingSystem
 
 *** Variables ***
-${MLANG}           ./build/mlang
+${MLANG}           ${EXECDIR}/build/mlang
 @{EXAMPLES}
 ...    examples/break_continue.mla
 ...    examples/c_lib_usage.mla
@@ -1749,6 +1749,12 @@ Multithreaded Net Server Client Roundtrip
     Start Process    ${server_bin}    --port    ${PORT}
     ...    alias=net_server    stdout=${server_out}    stderr=${server_err}
     Sleep    1s
+    ${server_out_text}=    Get File    ${server_out}
+    ${server_err_text}=    Get File    ${server_err}
+    ${bind_denied_out}=    Run Keyword And Return Status    Should Contain    ${server_out_text}    Operation not permitted
+    ${bind_denied_err}=    Run Keyword And Return Status    Should Contain    ${server_err_text}    Operation not permitted
+    ${bind_denied}=    Evaluate    ${bind_denied_out} or ${bind_denied_err}
+    Pass Execution If    ${bind_denied}    Skipping net roundtrip: socket bind is not permitted in this environment.
 
     ${client_run}=    Run Process    ${client_bin}    --port    ${PORT}
     ...    stdout=PIPE    stderr=PIPE
