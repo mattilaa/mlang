@@ -1136,6 +1136,41 @@ MLang Frontend Bench Missing Value Uses Unknown Option Error
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
 
+MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
+    [Documentation]    Verify missing value for -o/-L/-l in test mode reports unknown option and usage (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_missing_link_or_output
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_missing_link_or_output.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn missing_link_or_output_value_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+
+    ${run_o}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    test    ${src}    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_o.rc}    0
+    Should Contain    ${run_o.stderr}    Unknown option: -o
+    Should Contain    ${run_o.stdout}    Usage:
+
+    ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    test    ${src}    -L
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_L.rc}    0
+    Should Contain    ${run_L.stderr}    Unknown option: -L
+    Should Contain    ${run_L.stdout}    Usage:
+
+    ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    test    ${src}    -l
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_l.rc}    0
+    Should Contain    ${run_l.stderr}    Unknown option: -l
+    Should Contain    ${run_l.stdout}    Usage:
+
 MLang Frontend Unknown Option Prints Usage
     [Documentation]    Verify unknown test/bench options print usage text in addition to error (C++ parity style).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_usage
