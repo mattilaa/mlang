@@ -272,6 +272,18 @@ MLang Frontend Wrapper Compiles And Forwards
     ...    msg=Frontend wrapper failed forwarding --version (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    mlang-frontend-mla
 
+MLang Frontend Missing Backend Value Errors
+    [Documentation]    Verify frontend reports parse error and usage when --backend has no value.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    2
+    Should Contain    ${run.stderr}    missing value after --backend
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Test Version Uses Backend Semantics
     [Documentation]    Verify `test --version` is passed through and reports backend version semantics.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_version_passthrough
