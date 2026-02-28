@@ -3528,6 +3528,11 @@ MLang Frontend Bench Missing Value Uses Unknown Option Error
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
+    ${run_warmup}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    --bench-warmup
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_warmup.rc}    0
+    Should Contain    ${run_warmup.stderr}    Unknown option: --bench-warmup
 
 MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
     [Documentation]    Verify missing value for -o/-L/-l in test mode reports unknown option and usage (C++ parity).
