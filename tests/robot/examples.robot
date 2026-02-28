@@ -308,6 +308,18 @@ MLang Frontend Test Unknown Before Help Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
 
+MLang Frontend Test Unknown Before ShortHelp Fails
+    [Documentation]    Verify argument order parity: unknown option before -h in test mode should fail.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_unknown_shorthelp_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    --definitely-unknown-flag    -h
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option:
+
 MLang Frontend NoRun Before TrailingTests Fails
     [Documentation]    Verify left-to-right C++ parity: `--no-run` before trailing `--tests` is an unknown option.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_norun_before_trailing_tests
@@ -393,6 +405,18 @@ MLang Frontend RunTests Unknown Before Help Fails
     Should Be Equal As Integers    ${build.rc}    0
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    run    tests    --definitely-unknown-flag    --help
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option:
+
+MLang Frontend RunTests Unknown Before ShortHelp Fails
+    [Documentation]    Verify argument order parity: unknown option before -h in run tests mode should fail.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_unknown_shorthelp_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    run    tests    --definitely-unknown-flag    -h
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
@@ -525,6 +549,18 @@ MLang Frontend Bench Unknown Before Help Fails
     Should Be Equal As Integers    ${build.rc}    0
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    bench    --definitely-unknown-flag    --help
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option:
+
+MLang Frontend Bench Unknown Before ShortHelp Fails
+    [Documentation]    Verify argument order parity: unknown option before -h in bench mode should fail.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_unknown_shorthelp_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    bench    --definitely-unknown-flag    -h
     ...    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
