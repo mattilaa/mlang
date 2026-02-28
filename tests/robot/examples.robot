@@ -728,6 +728,18 @@ MLang Frontend Test Help Before Unknown Succeeds
     Should Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Test Help Before MissingValueOption Succeeds
+    [Documentation]    Verify `test --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_help_before_missing
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    --help    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Test ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in test mode should succeed.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_shorthelp_order
@@ -748,6 +760,18 @@ MLang Frontend Test Version Before Unknown Succeeds
     Should Be Equal As Integers    ${build.rc}    0
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    test    --version    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang
+
+MLang Frontend Test Version Before MissingValueOption Succeeds
+    [Documentation]    Verify `test --version -L` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_version_before_missing
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    --version    -L
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stdout}    mlang
@@ -1015,6 +1039,18 @@ MLang Frontend Bench Help Before MissingValueOption Succeeds
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stdout}    Usage:
+
+MLang Frontend Bench Version Before MissingValueOption Succeeds
+    [Documentation]    Verify `bench --version -o` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_version_before_missing
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    bench    --version    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang
 
 MLang Frontend Bench Unknown Before Version Fails
     [Documentation]    Verify argument order parity: unknown option before --version in bench mode should fail.
