@@ -659,18 +659,6 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         idx = 1;
     }
 
-    if mode_test == 1 {
-        let pn: i64 = passthrough.len();
-        for pi in idx..pn {
-            if eq(passthrough[pi], "--version") == 1 {
-                return run_inherit(st.backend, ["--version"]);
-            }
-            if eq(passthrough[pi], "--help") == 1 || eq(passthrough[pi], "-h") == 1 {
-                return run_inherit(st.backend, ["--help"]);
-            }
-        }
-    }
-
     if mode_test == 0 {
         var compile_in: list<string> = [];
         let compile_n: i64 = passthrough.len();
@@ -688,6 +676,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var i: i64 = idx;
     while i < n: {
         let a: string = passthrough[i];
+        if eq(a, "--version") == 1 {
+            return run_inherit(st.backend, ["--version"]);
+        }
+        if eq(a, "--help") == 1 || eq(a, "-h") == 1 {
+            return run_inherit(st.backend, ["--help"]);
+        }
         let inline_iters: string = parse_inline_bench_value(a, "--bench-iters");
         if len(inline_iters) > 0 {
             if is_signed_decimal(inline_iters) == 0 {
