@@ -2938,6 +2938,30 @@ MLang Frontend Pkg Default Mode Falls Back To Cpp Backend
     ...    msg=default pkg mode should fall back to backend passthrough on mla frontend failure (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    pkg init
 
+MLang Frontend Pkg Cpp Fallback Forwards Full Argument Vector
+    [Documentation]    Verify cpp pkg fallback preserves full pkg argument ordering/content.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_cpp_args
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    /bin/echo
+    ...    pkg    add    mydep    --git    https://example.com/repo.git    --rev    abc123    --tag    v1.2.3    --pkg-config    zlib    --system
+    ...    env:MLANG_PKG_IMPL=unknown    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Match Regexp    ${run.stdout}    (?s).*pkg add mydep --git https://example\\.com/repo\\.git --rev abc123 --tag v1\\.2\\.3 --pkg-config zlib --system.*
+
+MLang Frontend Pkg MlaFallback Forwards Full Argument Vector
+    [Documentation]    Verify preferred mla pkg path fallback still preserves full pkg argument ordering/content.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_mla_args
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    /bin/echo
+    ...    pkg    add    mydep    --git    https://example.com/repo.git    --rev    abc123    --tag    v1.2.3    --pkg-config    zlib    --system
+    ...    env:MLANG_PKG_IMPL=mla    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Match Regexp    ${run.stdout}    (?s).*pkg add mydep --git https://example\\.com/repo\\.git --rev abc123 --tag v1\\.2\\.3 --pkg-config zlib --system.*
+
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptydir
