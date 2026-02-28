@@ -1048,6 +1048,31 @@ MLang Frontend Bench SingleFile Forwards Compact Linker Flags
     Should Contain    ${log_text}    -L/tmp/mlang_bench_single_lib
     Should Contain    ${log_text}    -lbenchsingledep
 
+MLang Frontend Bench SingleFile Forwards Split Linker Flags
+    [Documentation]    Verify C++ parity: single-file bench mode forwards split -L <dir> and -l <name> flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_split_link
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_split_link.mla
+    Create File    ${src}    fn main() -> i32 { return 0; }
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_split_link_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    ${src}    -L    /tmp/mlang_bench_single_split_lib    -l    benchsinglesplitdep
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -L /tmp/mlang_bench_single_split_lib
+    Should Contain    ${log_text}    -l benchsinglesplitdep
+
 MLang Frontend Bench Warmup Validation
     [Documentation]    Verify frontend rejects non-numeric warmup values before backend compile.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_validate
@@ -1658,6 +1683,36 @@ MLang Frontend SingleFile Forwards Compact Linker Flags
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    -L/tmp/mlang_single_lib
     Should Contain    ${log_text}    -lsingledep
+
+MLang Frontend SingleFile Forwards Split Linker Flags
+    [Documentation]    Verify C++ parity: single-file test mode forwards split -L <dir> and -l <name> flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_split_link
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_split_link.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn single_split_link_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_split_link_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    test    ${src}    -L    /tmp/mlang_single_split_lib    -l    singlesplitdep
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -L /tmp/mlang_single_split_lib
+    Should Contain    ${log_text}    -l singlesplitdep
 
 MLang Frontend Directory Mode Rejects Unknown Option
     [Documentation]    Verify test/bench directory mode rejects unknown options instead of silently dropping them.
