@@ -308,6 +308,18 @@ MLang Frontend Test Unknown Before Help Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
 
+MLang Frontend Test Help Before Unknown Succeeds
+    [Documentation]    Verify argument order parity: --help before unknown option in test mode should succeed.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_help_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    --help    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend RunTests Help Uses Backend Semantics
     [Documentation]    Verify `run tests --help` is passed through and uses backend help text.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_help_passthrough
@@ -332,6 +344,18 @@ MLang Frontend RunTests Unknown Before Help Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option:
 
+MLang Frontend RunTests Help Before Unknown Succeeds
+    [Documentation]    Verify argument order parity: --help before unknown option in run tests mode should succeed.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_help_order
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    run    tests    --help    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Bench Help Uses Backend Semantics
     [Documentation]    Verify `bench --help` is passed through and uses backend help text.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_help_passthrough
@@ -355,6 +379,18 @@ MLang Frontend Bench Version Uses Backend Semantics
     Should Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stdout}    mlang
     Should Not Contain    ${run.stdout}    mlang-frontend-mla
+
+MLang Frontend Bench ValuePosition Version Is Invalid
+    [Documentation]    Verify `--bench-iters --version` treats --version as invalid value, not as version command.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_valuepos_version
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    bench    --bench-iters    --version    ${EXECDIR}/tests/bench_stdlib.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Invalid value for --bench-iters
 
 MLang Frontend RunTests Version Uses Backend Semantics
     [Documentation]    Verify `run tests --version` is passed through and reports backend version semantics.
