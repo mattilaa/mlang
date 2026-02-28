@@ -3423,6 +3423,75 @@ MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
     Should Contain    ${run_l.stderr}    Unknown option: -l
     Should Contain    ${run_l.stdout}    Usage:
 
+MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown Option Error
+    [Documentation]    Verify missing value for -o/-L/-l in run tests mode reports unknown option and usage (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_missing_link_or_output
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_missing_link_or_output.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_missing_link_or_output_value_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+
+    ${run_o}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    run    tests    ${src}    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_o.rc}    0
+    Should Contain    ${run_o.stderr}    Unknown option: -o
+    Should Contain    ${run_o.stdout}    Usage:
+
+    ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    run    tests    ${src}    -L
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_L.rc}    0
+    Should Contain    ${run_L.stderr}    Unknown option: -L
+    Should Contain    ${run_L.stdout}    Usage:
+
+    ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    run    tests    ${src}    -l
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_l.rc}    0
+    Should Contain    ${run_l.stderr}    Unknown option: -l
+    Should Contain    ${run_l.stdout}    Usage:
+
+MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown Option Error
+    [Documentation]    Verify missing value for -o/-L/-l in bench mode reports unknown option and usage (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_missing_link_or_output
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_missing_link_or_output.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+
+    ${run_o}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    ${src}    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_o.rc}    0
+    Should Contain    ${run_o.stderr}    Unknown option: -o
+    Should Contain    ${run_o.stdout}    Usage:
+
+    ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    ${src}    -L
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_L.rc}    0
+    Should Contain    ${run_L.stderr}    Unknown option: -L
+    Should Contain    ${run_L.stdout}    Usage:
+
+    ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    bench    ${src}    -l
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_l.rc}    0
+    Should Contain    ${run_l.stderr}    Unknown option: -l
+    Should Contain    ${run_l.stdout}    Usage:
+
 MLang Frontend Unknown Option Prints Usage
     [Documentation]    Verify unknown test/bench options print usage text in addition to error (C++ parity style).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_usage
