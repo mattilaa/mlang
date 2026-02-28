@@ -308,6 +308,18 @@ MLang Frontend MissingBackendBeforeVersionErrors
     Should Contain    ${run.stderr}    missing value after --backend
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend RepeatedBackendMissingValueErrors
+    [Documentation]    Verify a repeated top-level --backend without value is treated as a parse error.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend_repeat
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}    --backend
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    2
+    Should Contain    ${run.stderr}    missing value after --backend
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend NoPassthrough PrintsUsage
     [Documentation]    Verify wrapper with no passthrough args prints usage and exits nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_no_passthrough
@@ -387,6 +399,30 @@ MLang Frontend BackendOption In Passthrough Is Not Parsed
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    dummy_input.mla --backend someone_else
+
+MLang Frontend BackendWithoutValueInPassthroughIsForwarded
+    [Documentation]    Verify --backend after passthrough start is forwarded even when it has no following value.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_passthrough_novalue
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough_novalue.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough_novalue.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    --backend    ${fake_backend}
+    ...    dummy_input.mla    --backend
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    dummy_input.mla --backend
 
 MLang Frontend TopLevelVersionShortCircuitsPassthrough
     [Documentation]    Verify top-level --version before passthrough short-circuits and does not invoke backend.
