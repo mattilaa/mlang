@@ -795,6 +795,30 @@ MLang Frontend Bench DefaultPath Ignores NoRun
     Should Contain    ${log_text}    bench tests/bench_
     Should Not Contain    ${log_text}    --no-run
 
+MLang Frontend Bench DefaultPath Ignores ColonWarningFlags
+    [Documentation]    Verify `bench -Wno-colon-if/-Wno-colon-while` without explicit path defaults to tests/ and does not forward those flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_nowarn
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_nowarn_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_nowarn_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    bench    -Wno-colon-if    -Wno-colon-while
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    bench tests/bench_
+    Should Not Contain    ${log_text}    -Wno-colon-if
+    Should Not Contain    ${log_text}    -Wno-colon-while
+
 MLang Frontend RunTests Directory Forwards NoRun
     [Documentation]    Verify `run tests <dir> --no-run` forwards --no-run to each suite invocation.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_norun
