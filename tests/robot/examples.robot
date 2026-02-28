@@ -284,6 +284,30 @@ MLang Frontend Missing Backend Value Errors
     Should Contain    ${run.stderr}    missing value after --backend
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend MissingBackendBeforeHelpErrors
+    [Documentation]    Verify malformed --backend takes precedence over help when backend value is missing.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend_help
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    --help
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    2
+    Should Contain    ${run.stderr}    missing value after --backend
+    Should Contain    ${run.stdout}    Usage:
+
+MLang Frontend MissingBackendBeforeVersionErrors
+    [Documentation]    Verify malformed --backend takes precedence over version when backend value is missing.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend_version
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    --version
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    2
+    Should Contain    ${run.stderr}    missing value after --backend
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend NoPassthrough PrintsUsage
     [Documentation]    Verify wrapper with no passthrough args prints usage and exits nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_no_passthrough

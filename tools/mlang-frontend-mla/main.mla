@@ -630,7 +630,12 @@ fn parse_options(argv: list<string>) -> FrontendState {
                 out.parse_error = "missing value after --backend";
                 return out;
             }
-            out.backend = argv[i + 1];
+            let backend_value: string = argv[i + 1];
+            if starts_with(backend_value, "-") == 1 {
+                out.parse_error = "missing value after --backend";
+                return out;
+            }
+            out.backend = backend_value;
             i = i + 2;
             continue;
         }
