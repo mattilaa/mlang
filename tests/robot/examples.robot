@@ -407,6 +407,26 @@ MLang Frontend NoRun Before TrailingTests Fails
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --no-run
 
+MLang Frontend Test NoRunBeforeTests ThenRuns
+    [Documentation]    Verify C++ parity: in test mode, later --tests overrides earlier --no-run.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_norun_then_tests
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_norun_then_tests.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn should_fail_norun_then_tests() -> i32 {
+    ...        return 1;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    --no-run    --tests    ${src}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    [FAIL]
+    Should Contain    ${run.stdout}    [SUMMARY]
+
 MLang Frontend Test Help Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --help before unknown option in test mode should succeed.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_help_order
