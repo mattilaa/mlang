@@ -1499,6 +1499,35 @@ MLang Frontend SingleFile Rejects Bare Wl Flag
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: -Wl,
 
+MLang Frontend SingleFile Forwards Wl Flags
+    [Documentation]    Verify C++ parity: single-file test mode forwards valid -Wl,<args> linker flags.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_wl
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_wl.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn single_wl_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_wl_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_wl_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    test    ${src}    -Wl,-rpath,/tmp/mlang_rpath_single
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -Wl,-rpath,/tmp/mlang_rpath_single
+
 MLang Frontend Directory Mode Rejects Unknown Option
     [Documentation]    Verify test/bench directory mode rejects unknown options instead of silently dropping them.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_unknown
