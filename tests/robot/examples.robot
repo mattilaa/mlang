@@ -1860,6 +1860,86 @@ MLang Frontend RunTests Missing BenchWarmup Value Uses Unknown Option Error
     Should Not Be Equal As Integers    ${run.rc}    0
     Should Contain    ${run.stderr}    Unknown option: --bench-warmup
 
+MLang Frontend RunTests Directory Invalid BenchIters Value Errors
+    [Documentation]    Verify `run tests <dir>` reports invalid numeric value for --bench-iters (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_invalid_benchiters
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_invalid_benchiters_suite
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_invalid_benchiters_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_invalid_benchiters_tests.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    run    tests    ${suite_dir}    --bench-iters    nope
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Invalid value for --bench-iters
+
+MLang Frontend Test Directory Invalid BenchWarmup Value Errors
+    [Documentation]    Verify `test <dir>` reports invalid numeric value for --bench-warmup (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_dir_invalid_benchwarmup
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_dir_invalid_benchwarmup_suite
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn test_dir_invalid_benchwarmup_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_test_dir_invalid_benchwarmup_tests.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    ${suite_dir}    --bench-warmup    nope
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Invalid value for --bench-warmup
+
+MLang Frontend RunTests Directory Missing BenchIters Value Uses Unknown Option Error
+    [Documentation]    Verify `run tests <dir> --bench-iters` missing value reports unknown option (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_missing_benchiters
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_missing_benchiters_suite
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn runtests_dir_missing_benchiters_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_runtests_dir_missing_benchiters_tests.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    run    tests    ${suite_dir}    --bench-iters
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: --bench-iters
+
+MLang Frontend Test Directory Missing BenchWarmup Value Uses Unknown Option Error
+    [Documentation]    Verify `test <dir> --bench-warmup` missing value reports unknown option (C++ parity).
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_dir_missing_benchwarmup
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_dir_missing_benchwarmup_suite
+    Create Directory    ${suite_dir}
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn test_dir_missing_benchwarmup_case() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${suite_dir}/test_test_dir_missing_benchwarmup_tests.mla    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    test    ${suite_dir}    --bench-warmup
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: --bench-warmup
+
 MLang Frontend SingleFile Forwards CompileFlags In TestMode
     [Documentation]    Verify single-file test mode forwards compile-related flags (C++ parity).
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_compileflags
