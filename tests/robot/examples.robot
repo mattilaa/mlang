@@ -284,6 +284,28 @@ MLang Frontend Missing Backend Value Errors
     Should Contain    ${run.stderr}    missing value after --backend
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend NoPassthrough PrintsUsage
+    [Documentation]    Verify wrapper with no passthrough args prints usage and exits nonzero.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_no_passthrough
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    1
+    Should Contain    ${run.stdout}    Usage:
+
+MLang Frontend BackendOnly PrintsUsage
+    [Documentation]    Verify wrapper with only --backend still requires passthrough args and prints usage.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_only
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    1
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Last Backend Option Wins
     [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_last_backend
