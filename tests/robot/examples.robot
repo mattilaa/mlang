@@ -5024,6 +5024,64 @@ MLang Frontend Compile Mode Rejects BenchFlags Before Tests
     Should Contain    ${run.stderr}    Unknown option: --bench-iters
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Compile Mode TestsFlag Invalid BenchValue Fails Early
+    [Documentation]    Verify C++ parity: after --tests in compile stream, invalid bench values fail with explicit diagnostics.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_invalid_bench_value
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_invalid_bench_value.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_invalid_bench_value_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_invalid_bench_value_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    ${src}    --tests    --bench-iters    nope
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Invalid value for --bench-iters
+    ${exists}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
+    Should Be Equal    ${exists}    ${False}
+
+MLang Frontend Compile Mode TestsFlag BenchValue Is Normalized
+    [Documentation]    Verify C++ parity: after --tests in compile stream, bench values are clamped/normalized before forwarding.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_bench_normalize
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_bench_normalize.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_normalize_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_normalize_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" > "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    ${src}    --tests    --bench-iters    +0000    --bench-warmup    -7
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --bench-iters 1
+    Should Contain    ${log_text}    --bench-warmup 0
+
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.

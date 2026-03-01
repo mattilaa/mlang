@@ -821,7 +821,32 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     let _ = run_inherit(st.backend, ["--help"]);
                     return 1;
                 }
-                compile_in.push(passthrough[ci + 1]);
+                let cv: string = passthrough[ci + 1];
+                if compile_test_mode == 1 && eq(ca, "--bench-iters") == 1 {
+                    if is_signed_decimal(cv) == 0 {
+                        eprintln!("Invalid value for --bench-iters");
+                        return 1;
+                    }
+                    let cv_norm: string = normalize_signed_decimal(cv);
+                    if fits_i32_decimal(cv_norm) == 0 {
+                        eprintln!("Invalid value for --bench-iters");
+                        return 1;
+                    }
+                    compile_in.push(normalize_bench_iters_value(cv_norm));
+                } else if compile_test_mode == 1 && eq(ca, "--bench-warmup") == 1 {
+                    if is_signed_decimal(cv) == 0 {
+                        eprintln!("Invalid value for --bench-warmup");
+                        return 1;
+                    }
+                    let cv_norm: string = normalize_signed_decimal(cv);
+                    if fits_i32_decimal(cv_norm) == 0 {
+                        eprintln!("Invalid value for --bench-warmup");
+                        return 1;
+                    }
+                    compile_in.push(normalize_bench_warmup_value(cv_norm));
+                } else {
+                    compile_in.push(cv);
+                }
                 ci = ci + 2;
                 continue;
             }
