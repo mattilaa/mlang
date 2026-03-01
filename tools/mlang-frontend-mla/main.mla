@@ -135,6 +135,20 @@ fn shell_quote(s: string) -> string {
     return out;
 }
 
+fn build_shell_command(program: string, args: list<string>) -> string {
+    var cmd: string = shell_quote(program);
+    let n: i64 = args.len();
+    for i in 0..n {
+        cmd = concat(cmd, " ");
+        cmd = concat(cmd, shell_quote(args[i]));
+    }
+    return cmd;
+}
+
+fn run_shell_inherit(cmd: string) -> i32 {
+    return run_inherit("/bin/sh", ["-lc", cmd]);
+}
+
 fn split_lines(content: string) -> list<string> {
     var out: list<string> = [];
     var cur: string = String::new();
@@ -301,7 +315,8 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
         "-o", tmp_bin
     ];
     let compile_args: list<string> = ensure_stdlib_link_args(compile_base, backend);
-    let compile_rc: i32 = run_inherit(backend, compile_args);
+    let compile_cmd: string = build_shell_command(backend, compile_args);
+    let compile_rc: i32 = run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", compile_cmd));
     if compile_rc != 0 {
         return -1;
     }
@@ -313,7 +328,8 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     for i in 0..n {
         run_args.push(passthrough[i]);
     }
-    return run_inherit(tmp_bin, run_args);
+    let run_cmd: string = build_shell_command(tmp_bin, run_args);
+    return run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", run_cmd));
 }
 
 fn clone_args(args: list<string>) -> list<string> {
