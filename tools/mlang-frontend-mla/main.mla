@@ -263,6 +263,20 @@ fn path_is_directory(path: string) -> i32 {
     return rc == 0 ? 1 : 0;
 }
 
+fn file_mtime_ge(lhs: string, rhs: string) -> i32 {
+    let qlhs: string = shell_quote(lhs);
+    let qrhs: string = shell_quote(rhs);
+    var cmd: string = concat("test -e ", qlhs);
+    cmd = concat(cmd, " && test -e ");
+    cmd = concat(cmd, qrhs);
+    cmd = concat(cmd, " && ! test ");
+    cmd = concat(cmd, qlhs);
+    cmd = concat(cmd, " -ot ");
+    cmd = concat(cmd, qrhs);
+    let rc: i32 = run_inherit("/bin/sh", ["-lc", cmd]);
+    return rc == 0 ? 1 : 0;
+}
+
 fn getenv_value(name: string) -> string {
     let cmd: string = format!("printf '%s' \"${}\"", name);
     let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
@@ -287,10 +301,29 @@ fn tiny_hash_u31(s: string) -> i64 {
     return h;
 }
 
+fn tiny_hash_u31_alt(s: string) -> i64 {
+    var h: i64 = 16777619;
+    let n: i64 = len(s);
+    for i in 0..n {
+        let ch: string = sub(s, i, 1);
+        let v: i64 = find("9876543210ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba:.-_/",
+                          ch);
+        let add: i64 = v >= 0 ? (v + 3) : 131;
+        h = (h * 137 + add) % 2147483647;
+    }
+    if h < 0 {
+        h = 0 - h;
+    }
+    return h;
+}
+
 fn pkg_frontend_bin_path(backend: string, src: string) -> string {
     let seed: string = format!("{}|{}", backend, src);
-    let h: i64 = tiny_hash_u31(seed);
-    return format!("/tmp/mlang-pkg-mla-{}", h);
+    let h1: i64 = tiny_hash_u31(seed);
+    let h2: i64 = tiny_hash_u31_alt(seed);
+    let bl: i64 = len(backend);
+    let sl: i64 = len(src);
+    return format!("/tmp/mlang-pkg-mla-{}-{}-{}-{}", h1, h2, bl, sl);
 }
 
 fn find_pkg_frontend_source(backend: string) -> string {
@@ -308,20 +341,23 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     let src: string = find_pkg_frontend_source(backend);
     if len(src) == 0 { return -1; }
     let tmp_bin: string = pkg_frontend_bin_path(backend, src);
-    let compile_base: list<string> = [
-        src,
-        "-Wno-colon-if",
-        "-Wno-colon-while",
-        "-o", tmp_bin
-    ];
-    let compile_args: list<string> = ensure_stdlib_link_args(compile_base, backend);
-    let compile_cmd: string = build_shell_command(backend, compile_args);
-    let compile_rc: i32 = run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", compile_cmd));
-    if compile_rc != 0 {
-        return -1;
-    }
-    if file_exists(tmp_bin) == 0 {
-        return -1;
+    let need_compile: i32 = !(file_exists(tmp_bin) == 1 && file_mtime_ge(tmp_bin, src) == 1);
+    if need_compile == 1 {
+        let compile_base: list<string> = [
+            src,
+            "-Wno-colon-if",
+            "-Wno-colon-while",
+            "-o", tmp_bin
+        ];
+        let compile_args: list<string> = ensure_stdlib_link_args(compile_base, backend);
+        let compile_cmd: string = build_shell_command(backend, compile_args);
+        let compile_rc: i32 = run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", compile_cmd));
+        if compile_rc != 0 {
+            return -1;
+        }
+        if file_exists(tmp_bin) == 0 {
+            return -1;
+        }
     }
     var run_args: list<string> = ["--backend", backend];
     let n: i64 = passthrough.len();
