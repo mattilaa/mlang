@@ -424,6 +424,23 @@ MLang Frontend BackendWithoutValueInPassthroughIsForwarded
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    dummy_input.mla --backend
 
+MLang Frontend Normalizes Signaled Backend Exit To One
+    [Documentation]    Verify frontend maps signaled backend termination to exit code 1.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_signal_exit
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${signal_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_signal_backend.sh
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    kill -ABRT $$
+    Create File    ${signal_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${signal_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${signal_backend}    dummy_input.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    1
+
 MLang Frontend TopLevelVersionShortCircuitsPassthrough
     [Documentation]    Verify top-level --version before passthrough short-circuits and does not invoke backend.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_short
