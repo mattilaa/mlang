@@ -3377,6 +3377,41 @@ MLang Frontend Trailing Tests SingleFile Forwards LinkFlags
     Should Contain    ${log_text}    -L /tmp/mlang_trailing_lib
     Should Contain    ${log_text}    -l trailingdep
 
+MLang Frontend Trailing Tests SingleFile MissingLinkOrOutputValue Fails
+    [Documentation]    Verify C++ parity: trailing --tests single-file mode reports unknown option for missing -o/-L/-l values.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_single_missing_link_or_output
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_single_missing_link_or_output.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_single_missing_link_or_output_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+
+    ${run_o}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --tests    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_o.rc}    0
+    Should Contain    ${run_o.stderr}    Unknown option: -o
+    Should Contain    ${run_o.stdout}    Usage:
+
+    ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --tests    -L
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_L.rc}    0
+    Should Contain    ${run_L.stderr}    Unknown option: -L
+    Should Contain    ${run_L.stdout}    Usage:
+
+    ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --tests    -l
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_l.rc}    0
+    Should Contain    ${run_l.stderr}    Unknown option: -l
+    Should Contain    ${run_l.stdout}    Usage:
+
 MLang Frontend Trailing Tests Help Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, --help before unknown option short-circuits successfully.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_help_order
