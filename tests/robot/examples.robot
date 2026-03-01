@@ -441,6 +441,23 @@ MLang Frontend Normalizes Signaled Backend Exit To One
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    1
 
+MLang Frontend Preserves Normal Backend Exit Code
+    [Documentation]    Verify frontend forwards normal exited backend return code without normalization.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_exit_code
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${exit_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_exit_backend.sh
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    exit 7
+    Create File    ${exit_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${exit_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${exit_backend}    dummy_input.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    7
+
 MLang Frontend TopLevelVersionShortCircuitsPassthrough
     [Documentation]    Verify top-level --version before passthrough short-circuits and does not invoke backend.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_short
