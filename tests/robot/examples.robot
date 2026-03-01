@@ -5183,6 +5183,29 @@ MLang Frontend Compile Mode TestsFlag BenchValue Overflow Fails Early
     ${exists_w}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
     Should Be Equal    ${exists_w}    ${False}
 
+MLang Frontend Compile Mode TestsFlag BenchValue Position Treats VersionHelp As Value
+    [Documentation]    Verify C++ parity: after --tests in compile stream, --version/--help in bench value slot are invalid values.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_bench_valuepos
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_bench_valuepos.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run_i}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --tests    --bench-iters    --version
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_i.rc}    0
+    Should Contain    ${run_i.stderr}    Invalid value for --bench-iters
+    ${run_w}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --tests    --bench-warmup    --help
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_w.rc}    0
+    Should Contain    ${run_w.stderr}    Invalid value for --bench-warmup
+
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.
