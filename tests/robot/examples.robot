@@ -3080,6 +3080,19 @@ MLang Frontend Pkg MlaFallback Forwards Full Argument Vector
     Should Be Equal As Integers    ${run.rc}    0
     Should Match Regexp    ${run.stdout}    (?s).*pkg add mydep --git https://example\\.com/repo\\.git --rev abc123 --tag v1\\.2\\.3 --pkg-config zlib --system.*
 
+MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
+    [Documentation]    Verify pkg mla implementation path is taken when `MLANG_FRONTEND_IMPL=mla` is set globally.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_mla_env
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${repo_root}=    Catenate    SEPARATOR=    ${CURDIR}/../..
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    pkg    --help
+    ...    env:MLANG_PKG_IMPL=mla    env:MLANG_FRONTEND_IMPL=mla    cwd=${repo_root}    timeout=20s    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    1
+    ...    msg=frontend should route to mlang-pkg-mla under MLANG_FRONTEND_IMPL=mla (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    Should Contain    ${run.stderr}    Unknown pkg subcommand: --help
+
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptydir
