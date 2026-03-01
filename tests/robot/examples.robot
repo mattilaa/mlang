@@ -3228,6 +3228,38 @@ MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
     Should Contain    ${log_text}    -Wno-colon-if
     Should Contain    ${log_text}    -Wno-colon-while
 
+MLang Frontend Trailing Tests Flag Does Not Duplicate Explicit Colon Suppression
+    [Documentation]    Verify C++ parity: explicit -Wno-colon-* in trailing --tests stream are preserved without duplicate injection.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_nodup
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_colon_nodup.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_colon_nodup_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_nodup_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_nodup_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" > "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    ${src}    --tests    -Wno-colon-if    -Wno-colon-while
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    -Wno-colon-if
+    Should Contain    ${log_text}    -Wno-colon-while
+    Should Not Match Regexp    ${log_text}    (?s).*-Wno-colon-if.*-Wno-colon-if.*
+    Should Not Match Regexp    ${log_text}    (?s).*-Wno-colon-while.*-Wno-colon-while.*
+
 MLang Binary Frontend Env Switch Works
     [Documentation]    Verify `MLANG_FRONTEND_IMPL=mla` routes `mlang` through the MLang frontend implementation.
     ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_env_switch.mla
