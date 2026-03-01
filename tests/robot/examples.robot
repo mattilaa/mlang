@@ -458,6 +458,16 @@ MLang Frontend Preserves Normal Backend Exit Code
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    7
 
+MLang Frontend Missing Backend Executable Returns 127
+    [Documentation]    Verify frontend returns 127 when backend executable path does not exist.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_spawn_fail
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    /definitely/not/a/real/backend    dummy_input.mla
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    127
+
 MLang Frontend TopLevelVersionShortCircuitsPassthrough
     [Documentation]    Verify top-level --version before passthrough short-circuits and does not invoke backend.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_short
