@@ -353,7 +353,9 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
         let compile_cmd: string = build_shell_command(backend, compile_args);
         let compile_rc: i32 = run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", compile_cmd));
         if compile_rc != 0 {
-            return -1;
+            if file_exists(tmp_bin) == 0 {
+                return -1;
+            }
         }
         if file_exists(tmp_bin) == 0 {
             return -1;
