@@ -461,6 +461,19 @@ MLang Frontend CompileOnly TestsFlag NoRun IsAccepted
     Should Contain    ${log_text}    --tests
     Should Contain    ${log_text}    --no-run
 
+MLang Frontend CompileOnly TestsFlag UnknownOption Fails
+    [Documentation]    Verify C++ parity: bare compile-stream --tests rejects unknown options with usage.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_unknown
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    --tests    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option:
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Last Backend Option Wins
     [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_last_backend
