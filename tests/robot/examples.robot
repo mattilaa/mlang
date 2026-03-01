@@ -5114,6 +5114,44 @@ MLang Frontend Compile Mode TestsFlag Rejects Inline BenchForms
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    --help
 
+MLang Frontend Compile Mode TestsFlag BenchValue Overflow Fails Early
+    [Documentation]    Verify C++ parity: after --tests in compile stream, out-of-range bench values are rejected early.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_bench_overflow
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_bench_overflow.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_overflow_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_overflow_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${huge_pos}=    Set Variable    2147483648
+    ${run_i}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    ${src}    --tests    --bench-iters    ${huge_pos}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_i.rc}    0
+    Should Contain    ${run_i.stderr}    Invalid value for --bench-iters
+    ${exists_i}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
+    Should Be Equal    ${exists_i}    ${False}
+    ${huge_neg}=    Set Variable    -2147483649
+    ${run_w}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    ${src}    --tests    --bench-warmup    ${huge_neg}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_w.rc}    0
+    Should Contain    ${run_w.stderr}    Invalid value for --bench-warmup
+    ${exists_w}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
+    Should Be Equal    ${exists_w}    ${False}
+
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.
