@@ -4824,6 +4824,25 @@ MLang Frontend Compile Mode Rejects Inline Bench Flags
     Should Contain    ${run.stderr}    Unknown option: --bench-warmup=5
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Compile Mode Rejects NoRun Flag
+    [Documentation]    Verify C++ parity: non-test compile mode rejects --no-run as unknown option.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_norun_reject
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_norun_reject.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --no-run
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option: --no-run
+    Should Contain    ${run.stdout}    Usage:
+
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.
