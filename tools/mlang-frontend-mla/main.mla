@@ -800,6 +800,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let compile_n: i64 = passthrough.len();
         var compile_test_mode: i32 = 0;
         var saw_compile_input: i32 = 0;
+        var has_no_colon_if: i32 = 0;
+        var has_no_colon_while: i32 = 0;
         var ci: i64 = 0;
         while ci < compile_n: {
             let ca: string = passthrough[ci];
@@ -856,6 +858,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 continue;
             }
             compile_in.push(ca);
+            if eq(ca, "-Wno-colon-if") == 1 {
+                has_no_colon_if = 1;
+            }
+            if eq(ca, "-Wno-colon-while") == 1 {
+                has_no_colon_while = 1;
+            }
             if starts_with(ca, "-") == 0 {
                 saw_compile_input = 1;
             }
@@ -865,6 +873,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             eprintln!("Error: No input file specified");
             print_usage(program);
             return 1;
+        }
+        if compile_test_mode == 1 {
+            if has_no_colon_if == 0 {
+                compile_in.push("-Wno-colon-if");
+            }
+            if has_no_colon_while == 0 {
+                compile_in.push("-Wno-colon-while");
+            }
         }
         let compile_args: list<string> = ensure_stdlib_link_args(compile_in, st.backend);
         return run_inherit(st.backend, compile_args);
