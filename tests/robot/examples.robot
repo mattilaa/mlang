@@ -367,6 +367,31 @@ MLang Frontend CompileFlagsOnly PrintsNoInputError
     ${exists}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
     Should Be Equal    ${exists}    ${False}
 
+MLang Frontend CompileOnly LinkOrOutput WithValue StillNoInputError
+    [Documentation]    Verify C++ parity: -o/-L/-l with values but no input file still reports no-input error.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_link_or_output_no_input
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+
+    ${run_o}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    -o    out.bin
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run_o.rc}    1
+    Should Contain    ${run_o.stderr}    Error: No input file specified
+    Should Contain    ${run_o.stdout}    Usage:
+
+    ${run_L}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    -L    /tmp/somelib
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run_L.rc}    1
+    Should Contain    ${run_L.stderr}    Error: No input file specified
+    Should Contain    ${run_L.stdout}    Usage:
+
+    ${run_l}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    -l    somelib
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run_l.rc}    1
+    Should Contain    ${run_l.stderr}    Error: No input file specified
+    Should Contain    ${run_l.stdout}    Usage:
+
 MLang Frontend Last Backend Option Wins
     [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_last_backend
