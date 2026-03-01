@@ -301,6 +301,15 @@ Run the Robot Framework example suite (includes the multithreaded net case):
 ./tests/run_examples_robot.sh
 ```
 
+### Running the new Multithreaded TCP Robot slice
+
+To exercise the freshly documented frontend parity and multithreaded TCP coverage:
+
+```sh
+robot --test "MLang Frontend Trailing Tests *" tests/robot/examples.robot
+robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
+```
+
 ## Examples
 - Scope-exit destructor + owned resource cleanup:
   `examples/scope_exit_drop_demo.mla`

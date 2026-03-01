@@ -135,6 +135,7 @@ Recent branch-level additions reflected in these docs:
 - Hash-based unordered containers + quickmap variants (`std::unordered`)
 - GoogleTest-like test expectation helpers (`std::testing`)
 - MLang package-manager frontend updates including optional Ninja build flag
+- CLI parity coverage (`mlang-frontend-mla`) for compile/test arguments, trailing `--tests` handling, and Robot sub-suites (`MLang Frontend Trailing Tests *`, `MLang Frontend CompileOnly TestsFlag *`).
 
 Related example files:
 - `examples/lambda_fold_demo.mla`
