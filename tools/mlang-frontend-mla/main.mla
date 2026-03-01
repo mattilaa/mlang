@@ -799,11 +799,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         var compile_in: list<string> = [];
         let compile_n: i64 = passthrough.len();
         var compile_test_mode: i32 = 0;
-        for ci in 0..compile_n {
+        var saw_compile_input: i32 = 0;
+        var ci: i64 = 0;
+        while ci < compile_n: {
             let ca: string = passthrough[ci];
             if eq(ca, "--tests") == 1 {
                 compile_test_mode = 1;
                 compile_in.push(ca);
+                ci = ci + 1;
                 continue;
             }
             if compile_test_mode == 0 && is_test_or_bench_mode_only_flag(ca) == 1 {
@@ -811,7 +814,27 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 let _ = run_inherit(st.backend, ["--help"]);
                 return 1;
             }
+            if option_takes_value(ca) == 1 {
+                compile_in.push(ca);
+                if ci + 1 >= compile_n {
+                    eprintln!("Unknown option: {}", ca);
+                    let _ = run_inherit(st.backend, ["--help"]);
+                    return 1;
+                }
+                compile_in.push(passthrough[ci + 1]);
+                ci = ci + 2;
+                continue;
+            }
             compile_in.push(ca);
+            if starts_with(ca, "-") == 0 {
+                saw_compile_input = 1;
+            }
+            ci = ci + 1;
+        }
+        if compile_test_mode == 0 && saw_compile_input == 0 {
+            eprintln!("Error: No input file specified");
+            print_usage(program);
+            return 1;
         }
         let compile_args: list<string> = ensure_stdlib_link_args(compile_in, st.backend);
         return run_inherit(st.backend, compile_args);
