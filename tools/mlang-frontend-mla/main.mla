@@ -799,6 +799,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         var compile_in: list<string> = [];
         let compile_n: i64 = passthrough.len();
         var compile_test_mode: i32 = 0;
+        var compile_test_short_circuit: i32 = 0;
         var saw_compile_input: i32 = 0;
         var has_no_colon_if: i32 = 0;
         var has_no_colon_while: i32 = 0;
@@ -807,6 +808,17 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             let ca: string = passthrough[ci];
             if eq(ca, "--tests") == 1 {
                 compile_test_mode = 1;
+                compile_in.push(ca);
+                ci = ci + 1;
+                continue;
+            }
+            if compile_test_short_circuit == 1 {
+                compile_in.push(ca);
+                ci = ci + 1;
+                continue;
+            }
+            if compile_test_mode == 1 && (eq(ca, "--help") == 1 || eq(ca, "-h") == 1 || eq(ca, "--version") == 1) {
+                compile_test_short_circuit = 1;
                 compile_in.push(ca);
                 ci = ci + 1;
                 continue;

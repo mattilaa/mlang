@@ -3529,6 +3529,44 @@ MLang Frontend Trailing Tests Unknown Before ShortHelp Fails
     Should Contain    ${run.stderr}    Unknown option:
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Trailing Tests Help ShortCircuits MissingValueOption
+    [Documentation]    Verify C++ parity: in trailing --tests stream, --help short-circuits and ignores trailing missing-value options.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_help_missing_value
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_help_missing_value.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_help_missing_value_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    ${src}    --tests    --help    -o
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+
+MLang Frontend Trailing Tests Version ShortCircuits MissingValueOption
+    [Documentation]    Verify C++ parity: in trailing --tests stream, --version short-circuits and ignores trailing missing-value options.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_version_missing_value
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_version_missing_value.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_version_missing_value_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
+    ...    ${src}    --tests    --version    -L
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang
+
 MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
     [Documentation]    Verify C++ parity: trailing --tests in compile stream injects default -Wno-colon-if/-Wno-colon-while.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_defaults
