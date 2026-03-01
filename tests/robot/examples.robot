@@ -659,6 +659,29 @@ MLang Frontend TopLevelVersion Before UnknownToken ShortCircuits
     ${invoked}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
     Should Be Equal    ${invoked}    ${False}
 
+MLang Frontend TopLevelShortHelp Before UnknownToken ShortCircuits
+    [Documentation]    Verify top-level -h short-circuits frontend parsing even with trailing unknown passthrough token.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_before_unknown_token
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_shorthelp_before_unknown_token_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_shorthelp_before_unknown_token_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    -h    --definitely-unknown-arg
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+    ${invoked}=    Run Keyword And Return Status    File Should Exist    ${fake_log}
+    Should Be Equal    ${invoked}    ${False}
+
 MLang Frontend UnknownToken Before TopLevelHelp Is Forwarded
     [Documentation]    Verify once passthrough starts, trailing --help is forwarded to backend and not consumed by frontend.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_help
@@ -680,6 +703,29 @@ MLang Frontend UnknownToken Before TopLevelHelp Is Forwarded
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
     Should Contain    ${log_text}    --definitely-unknown-arg --help
+    Should Not Contain    ${run.stdout}    Usage:
+
+MLang Frontend UnknownToken Before TopLevelShortHelp Is Forwarded
+    [Documentation]    Verify once passthrough starts, trailing -h is forwarded to backend and not consumed by frontend.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_shorthelp
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_shorthelp_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_shorthelp_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    Run Keyword And Ignore Error    Remove File    ${fake_log}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    --definitely-unknown-arg    -h
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --definitely-unknown-arg -h
     Should Not Contain    ${run.stdout}    Usage:
 
 MLang Frontend UnknownToken Before TopLevelVersion Is Forwarded
