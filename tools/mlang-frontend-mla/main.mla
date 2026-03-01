@@ -809,6 +809,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 ci = ci + 1;
                 continue;
             }
+            if compile_test_mode == 1 && (starts_with(ca, "--bench-iters=") == 1 || starts_with(ca, "--bench-warmup=") == 1) {
+                eprintln!("Unknown option: {}", ca);
+                let _ = run_inherit(st.backend, ["--help"]);
+                return 1;
+            }
             if compile_test_mode == 0 && is_test_or_bench_mode_only_flag(ca) == 1 {
                 eprintln!("Unknown option: {}", ca);
                 let _ = run_inherit(st.backend, ["--help"]);
