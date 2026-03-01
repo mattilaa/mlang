@@ -3345,6 +3345,38 @@ MLang Frontend Trailing Tests SingleFile Forwards OutputOption
     Should Contain    ${log_text}    -Wno-colon-if
     Should Contain    ${log_text}    -Wno-colon-while
 
+MLang Frontend Trailing Tests SingleFile Forwards LinkFlags
+    [Documentation]    Verify C++ parity: in trailing --tests single-file mode, -L/-l are forwarded.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_single_linkflags
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_single_linkflags.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_single_linkflags_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_single_linkflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_single_linkflags_backend.log
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" > "${fake_log}"
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
+    ...    ${src}    --tests    -L    /tmp/mlang_trailing_lib    -l    trailingdep
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ${log_text}=    Get File    ${fake_log}
+    Should Contain    ${log_text}    --tests
+    Should Contain    ${log_text}    ${src}
+    Should Contain    ${log_text}    -L /tmp/mlang_trailing_lib
+    Should Contain    ${log_text}    -l trailingdep
+
 MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
     [Documentation]    Verify C++ parity: trailing --tests in compile stream injects default -Wno-colon-if/-Wno-colon-while.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_defaults
