@@ -329,6 +329,7 @@ MLang Frontend NoPassthrough PrintsUsage
     ${run}=    Run Process    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    1
+    Should Contain    ${run.stderr}    Error: No input file specified
     Should Contain    ${run.stdout}    Usage:
 
 MLang Frontend BackendOnly PrintsUsage
@@ -340,6 +341,7 @@ MLang Frontend BackendOnly PrintsUsage
     ${run}=    Run Process    ${frontend}    --backend    ${MLANG}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    1
+    Should Contain    ${run.stderr}    Error: No input file specified
     Should Contain    ${run.stdout}    Usage:
 
 MLang Frontend Last Backend Option Wins

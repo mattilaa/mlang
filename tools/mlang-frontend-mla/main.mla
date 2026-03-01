@@ -747,6 +747,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     let passthrough: list<string> = st.passthrough;
     if (passthrough.len() == 0) {
+        eprintln!("Error: No input file specified");
         print_usage(program);
         return 1;
     }
