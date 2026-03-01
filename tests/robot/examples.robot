@@ -3220,6 +3220,26 @@ MLang Frontend Tests Flag Works In Trailing Position
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=frontend failed to honor trailing --tests flag (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
+MLang Frontend Trailing Tests Flag Unknown Option Fails
+    [Documentation]    Verify C++ parity: trailing --tests stream still rejects unknown options with usage.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_unknown.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    \#[test]
+    ...    fn trailing_flag_unknown_test() -> i32 {
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}    --tests    --definitely-unknown-flag
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    Unknown option:
+    Should Contain    ${run.stdout}    Usage:
+
 MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
     [Documentation]    Verify C++ parity: trailing --tests in compile stream injects default -Wno-colon-if/-Wno-colon-while.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_defaults
