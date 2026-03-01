@@ -565,6 +565,28 @@ MLang Frontend TopLevelVersion Before Help Uses Version
     Should Contain    ${run.stdout}    mlang-frontend-mla
     Should Not Contain    ${run.stdout}    Usage:
 
+MLang Frontend TopLevelShortHelp Before Version Uses Help
+    [Documentation]    Verify top-level flag order parity: -h before --version short-circuits as help.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_before_version
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    -h    --version    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    Usage:
+    Should Not Contain    ${run.stdout}    mlang-frontend-mla 
+
+MLang Frontend TopLevelVersion Before ShortHelp Uses Version
+    [Documentation]    Verify top-level flag order parity: --version before -h short-circuits as version.
+    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_shorthelp
+    ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0
+    ${run}=    Run Process    ${frontend}    --version    -h    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stdout}    mlang-frontend-mla
+    Should Not Contain    ${run.stdout}    Usage:
+
 MLang Frontend TopLevelVersion Before MissingBackendValue Succeeds
     [Documentation]    Verify top-level --version short-circuits even if malformed --backend appears later.
     ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_missing_backend
