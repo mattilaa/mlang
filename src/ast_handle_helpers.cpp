@@ -128,4 +128,19 @@ ASTNode* mla_ast_map_literal(ASTNode* entries)
     return create_map_literal_impl(entries);
 }
 
+ASTNode* mla_ast_struct_field_init_list(char* field_name, ASTNode* value)
+{
+    return create_struct_field_init_list_impl(field_name, value);
+}
+
+ASTNode* mla_ast_struct_field_init_list_add(ASTNode* list, char* field_name, ASTNode* value)
+{
+    return add_struct_field_init_impl(list, field_name, value);
+}
+
+ASTNode* mla_ast_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line)
+{
+    return create_struct_literal_impl(struct_name, type_args, fields, line);
+}
+
 } // extern "C"

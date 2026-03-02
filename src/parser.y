@@ -168,9 +168,9 @@ ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_pa
 ASTNode* create_trait_def(char* name, int line);
 ASTNode* create_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
-ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
-ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
-ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value);
+ASTNode* mla_ast_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
+ASTNode* mla_ast_struct_field_init_list(char* field_name, ASTNode* value);
+ASTNode* mla_ast_struct_field_init_list_add(ASTNode* list, char* field_name, ASTNode* value);
 ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 ASTNode* create_match_pattern(char* name, char* binding, int line);
 ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
@@ -1266,17 +1266,17 @@ primary_expression
 /* Struct literal: StructName { field: value, ... } */
 struct_literal
     : IDENTIFIER LBRACE struct_field_init_list RBRACE
-        { $$ = create_struct_literal($1, NULL, $3, yylineno); }
+        { $$ = mla_ast_struct_literal($1, NULL, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LBRACE struct_field_init_list RBRACE
-        { $$ = create_struct_literal($1, $3, $6, yylineno); }
+        { $$ = mla_ast_struct_literal($1, $3, $6, yylineno); }
     ;
 
 struct_field_init_list
     : /* empty */ { $$ = NULL; }
     | IDENTIFIER COLON expression
-        { $$ = create_struct_field_init_list($1, $3); }
+        { $$ = mla_ast_struct_field_init_list($1, $3); }
     | struct_field_init_list COMMA IDENTIFIER COLON expression
-        { $$ = add_struct_field_init($1, $3, $5); }
+        { $$ = mla_ast_struct_field_init_list_add($1, $3, $5); }
     ;
 
 postfix_expression
