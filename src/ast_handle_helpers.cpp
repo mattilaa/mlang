@@ -163,4 +163,34 @@ ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count)
     return create_array_fill_impl(value, count);
 }
 
+ASTNode* mla_ast_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line)
+{
+    return create_result_constructor_impl(variant, type_args, args, line);
+}
+
+ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long explicit_value)
+{
+    return create_enum_variant_impl(name, has_explicit_value, explicit_value);
+}
+
+ASTNode* mla_ast_enum_variant_list_create(ASTNode* variant)
+{
+    return create_enum_variant_list_impl(variant);
+}
+
+ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant)
+{
+    return add_enum_variant_impl(list, variant);
+}
+
+ASTNode* mla_ast_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name)
+{
+    return create_enum_variant_ref_impl(name, ref_enum_name, ref_variant_name);
+}
+
+ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line)
+{
+    return create_enum_literal_impl(enum_name, variant_name, line);
+}
+
 } // extern "C"

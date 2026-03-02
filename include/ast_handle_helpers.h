@@ -27,6 +27,12 @@ ASTNode* mla_ast_list_literal(ASTNode* elements);
 ASTNode* mla_ast_list_element_list(ASTNode* element);
 ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
 ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
+ASTNode* mla_ast_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
+ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long explicit_value);
+ASTNode* mla_ast_enum_variant_list_create(ASTNode* variant);
+ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
+ASTNode* mla_ast_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name);
+ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 }
 
 #endif // AST_HANDLE_HELPERS_H

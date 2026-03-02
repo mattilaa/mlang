@@ -5,7 +5,7 @@
 #include "ast.h"
 
 ASTNode* create_identifier_at(char* name, int line, int col);
-ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
+ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 
 static char* join_module_path(char* left, char* right)
 {
@@ -40,7 +40,7 @@ static ASTNode* create_enum_or_ident_from_path(char* path, int line)
     if(!variant)
         return create_identifier_at(path, line, 0);
 
-    return create_enum_literal(enumName, variant, line);
+    return mla_ast_enum_literal(enumName, variant, line);
 }
 
 extern int yylex();
@@ -76,7 +76,6 @@ ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* mla_ast_statement_list_create(ASTNode* stmt);
 ASTNode* create_empty_statement_list();
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
-ASTNode* mla_ast_statement_list_create(ASTNode* stmt);
 ASTNode* mla_ast_statement_list_add(ASTNode* list, ASTNode* stmt);
 ASTNode* create_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_field_access(char* struct_name, char* field_name, int line);
@@ -101,7 +100,11 @@ ASTNode* mla_argument_list_create(ASTNode* arg);
 ASTNode* mla_argument_list_add(ASTNode* list, ASTNode* arg);
 ASTNode* mla_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* mla_function_call_from_list(char* name, ASTNode* args, int line);
-ASTNode* create_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
+ASTNode* mla_ast_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
+ASTNode* mla_ast_list_literal(ASTNode* elements);
+ASTNode* mla_ast_list_element_list(ASTNode* element);
+ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
+ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_if_statement_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -178,9 +181,9 @@ ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* create_match_arm_list(ASTNode* arm);
 ASTNode* add_match_arm(ASTNode* list, ASTNode* arm);
 ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
-ASTNode* create_enum_variant_list(ASTNode* variant);
-ASTNode* add_enum_variant(ASTNode* list, ASTNode* variant);
-ASTNode* create_enum_literal(char* enum_name, char* variant_name, int line);
+ASTNode* mla_ast_enum_variant_list(ASTNode* variant);
+ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
+ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_closure(ASTNode* body);
@@ -425,16 +428,16 @@ enum_int_type
     ;
 
 enum_variant_list
-    : enum_variant { $$ = create_enum_variant_list($1); }
-    | enum_variant_list COMMA enum_variant { $$ = add_enum_variant($1, $3); }
+    : enum_variant { $$ = mla_ast_enum_variant_list($1); }
+    | enum_variant_list COMMA enum_variant { $$ = mla_ast_enum_variant_list_add($1, $3); }
     ;
 
 enum_variant
-    : IDENTIFIER { $$ = create_enum_variant($1, 0, 0); }
-    | IDENTIFIER ASSIGN INT_LITERAL { $$ = create_enum_variant($1, 1, $3); }
-    | IDENTIFIER ASSIGN MINUS INT_LITERAL { $$ = create_enum_variant($1, 1, -$4); }
+    : IDENTIFIER { $$ = mla_ast_enum_variant($1, 0, 0); }
+    | IDENTIFIER ASSIGN INT_LITERAL { $$ = mla_ast_enum_variant($1, 1, $3); }
+    | IDENTIFIER ASSIGN MINUS INT_LITERAL { $$ = mla_ast_enum_variant($1, 1, -$4); }
     | IDENTIFIER ASSIGN module_path COLONCOLON IDENTIFIER
-        { $$ = create_enum_variant_ref($1, $3, $5); }
+        { $$ = mla_ast_enum_variant_ref($1, $3, $5); }
     ;
 
 trait_def
@@ -1311,9 +1314,9 @@ function_call
     | module_path LPAREN argument_list RPAREN
         { $$ = mla_function_call_from_list($1, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
-        { $$ = create_result_constructor($1, $3, NULL, yylineno); }
+        { $$ = mla_ast_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
-        { $$ = create_result_constructor($1, $3, $6, yylineno); }
+        { $$ = mla_ast_result_constructor($1, $3, $6, yylineno); }
     ;
 
 cast_expression
