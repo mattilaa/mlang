@@ -358,4 +358,94 @@ ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable)
     return create_reference_type(element_type, is_mutable);
 }
 
+ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug)
+{
+    return create_struct_def(name, base_name, members, is_public, derive_debug);
+}
+
+ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug)
+{
+    return create_generic_struct_def(name, base_name, type_params, members, is_public, derive_debug);
+}
+
+ASTNode* mla_ast_enum_def(char* name, ASTNode* variants, int is_public, int backing_type)
+{
+    return create_enum_def(name, variants, is_public, backing_type);
+}
+
+ASTNode* mla_ast_assignment(char* name, ASTNode* expr, int line)
+{
+    return create_assignment(name, expr, line);
+}
+
+ASTNode* mla_ast_field_access(char* struct_name, char* field_name, int line)
+{
+    return create_field_access(struct_name, field_name, line);
+}
+
+ASTNode* mla_ast_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line)
+{
+    return create_field_assignment(struct_name, field_name, expr, line);
+}
+
+ASTNode* mla_ast_chained_field_assignment(ASTNode* target, ASTNode* expr, int line)
+{
+    return create_chained_field_assignment(target, expr, line);
+}
+
+ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line)
+{
+    return create_field_access_expr(object, field_name, line);
+}
+
+ASTNode* mla_ast_return_stmt(ASTNode* expr)
+{
+    return create_return_stmt(expr);
+}
+
+ASTNode* mla_ast_literal_int(int value)
+{
+    return create_int_literal(value);
+}
+
+ASTNode* mla_ast_literal_bool(int value)
+{
+    return create_bool_literal(value);
+}
+
+ASTNode* mla_ast_literal_float(float value)
+{
+    return create_float_literal(value);
+}
+
+ASTNode* mla_ast_literal_double(float value)
+{
+    return create_double_literal(value);
+}
+
+ASTNode* mla_ast_literal_string(char* value)
+{
+    return create_string_literal(value);
+}
+
+ASTNode* mla_ast_binary_op(int op, ASTNode* left, ASTNode* right)
+{
+    return create_binary_op(op, left, right);
+}
+
+ASTNode* mla_ast_fold_expression(int op, ASTNode* pack_expr, int is_right_fold)
+{
+    return create_fold_expression(op, pack_expr, is_right_fold);
+}
+
+ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line)
+{
+    return create_ternary_expression(cond, t, f, line);
+}
+
+ASTNode* mla_ast_try_expression(ASTNode* expr, int line)
+{
+    return create_try_expression(expr, line);
+}
+
 } // extern "C"

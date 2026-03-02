@@ -63,8 +63,26 @@ ASTNode* mla_ast_tuple_type(ASTNode* type_list);
 ASTNode* mla_ast_type_list(ASTNode* type);
 ASTNode* mla_ast_struct_type_ref(char* name);
 ASTNode* mla_ast_generic_struct_type_ref(char* name, ASTNode* type_args);
-ASTNode* mla_ast_pointer_type(ASTNode* element_type);
-ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable);
+    ASTNode* mla_ast_pointer_type(ASTNode* element_type);
+    ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable);
+    ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
+    ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
+    ASTNode* mla_ast_enum_def(char* name, ASTNode* variants, int is_public, int backing_type);
+    ASTNode* mla_ast_assignment(char* name, ASTNode* expr, int line);
+    ASTNode* mla_ast_field_access(char* struct_name, char* field_name, int line);
+    ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line);
+    ASTNode* mla_ast_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
+    ASTNode* mla_ast_chained_field_assignment(ASTNode* target, ASTNode* expr, int line);
+ASTNode* mla_ast_return_stmt(ASTNode* expr);
+ASTNode* mla_ast_literal_int(int value);
+ASTNode* mla_ast_literal_bool(int value);
+ASTNode* mla_ast_literal_float(float value);
+ASTNode* mla_ast_literal_double(float value);
+ASTNode* mla_ast_literal_string(char* value);
+ASTNode* mla_ast_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* mla_ast_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
+ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
+ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
 }
 
 #endif // AST_HANDLE_HELPERS_H

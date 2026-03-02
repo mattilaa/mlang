@@ -78,23 +78,23 @@ ASTNode* mla_ast_statement_list_create(ASTNode* stmt);
 ASTNode* create_empty_statement_list();
 ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
 ASTNode* mla_ast_statement_list_add(ASTNode* list, ASTNode* stmt);
-ASTNode* create_assignment(char* name, ASTNode* expr, int line);
+ASTNode* mla_ast_assignment(char* name, ASTNode* expr, int line);
 ASTNode* create_field_access(char* struct_name, char* field_name, int line);
-ASTNode* create_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
-ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr, int line);
-ASTNode* create_return_stmt(ASTNode* expr);
-ASTNode* create_int_literal(int value);
-ASTNode* create_bool_literal(int value);
-ASTNode* create_float_literal(float value);
-ASTNode* create_double_literal(float value);
-ASTNode* create_string_literal(char* value);
+ASTNode* mla_ast_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
+ASTNode* mla_ast_chained_field_assignment(ASTNode* target, ASTNode* expr, int line);
+ASTNode* mla_ast_return_stmt(ASTNode* expr);
+ASTNode* mla_ast_literal_int(int value);
+ASTNode* mla_ast_literal_bool(int value);
+ASTNode* mla_ast_literal_float(float value);
+ASTNode* mla_ast_literal_double(float value);
+ASTNode* mla_ast_literal_string(char* value);
 ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_identifier_at(char* name, int line, int col);
-ASTNode* create_binary_op(int op, ASTNode* left, ASTNode* right);
-ASTNode* create_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
-ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
-ASTNode* create_try_expression(ASTNode* expr, int line);
+ASTNode* mla_ast_binary_op(int op, ASTNode* left, ASTNode* right);
+ASTNode* mla_ast_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
+ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
+ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* mla_argument_list_create(ASTNode* arg);
@@ -111,8 +111,8 @@ ASTNode* create_if_statement_with_init(ASTNode* condition_init, ASTNode* conditi
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
-ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
-ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
+ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line);
+ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
@@ -185,7 +185,7 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
-ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
+ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
 ASTNode* mla_ast_trait_def(char* name, int line);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
@@ -220,15 +220,15 @@ static ASTNode* make_compound_assign(ASTNode* lhs, int op, ASTNode* rhs,
         // Fresh IdentifierNode for the read side — must not reuse lhs pointer.
         auto* readExpr = new IdentifierNode(id->name);
         readExpr->line = line;
-        return create_assignment(const_cast<char*>(id->name.c_str()),
-                                 create_binary_op(op, readExpr, rhs), line);
+        return mla_ast_assignment(const_cast<char*>(id->name.c_str()),
+                                 mla_ast_binary_op(op, readExpr, rhs), line);
     }
     // Compound assignment on field/index LHS: build a chained assignment where
     // the lhs node serves as the write target and a clone serves as the read.
     // For now we reuse lhs in the read position (DAG), which is safe as long as
     // the AST is read-only after construction and nodes are never freed.
     return create_chained_field_assignment(
-        lhs, create_binary_op(op, lhs, rhs), line);
+        lhs, mla_ast_binary_op(op, lhs, rhs), line);
 }
 ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 
@@ -394,37 +394,37 @@ type_alias_def
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($2, NULL, $4, 0, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($2, NULL, $4, 0, 0); node->line = yylineno; $$ = node; }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($2, $4, $6, 0, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($2, $4, $6, 0, 0); node->line = yylineno; $$ = node; }
     | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($3, NULL, $5, 1, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($3, NULL, $5, 1, 0); node->line = yylineno; $$ = node; }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($3, $5, $7, 1, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($3, $5, $7, 1, 0); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($3, NULL, $5, 0, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($3, NULL, $5, 0, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($3, $5, $7, 0, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($3, $5, $7, 0, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($4, NULL, $6, 1, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($4, NULL, $6, 1, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_struct_def($4, $6, $8, 1, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_struct_def($4, $6, $8, 1, 1); node->line = yylineno; $$ = node; }
     /* Generic struct definitions */
     | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_generic_struct_def($2, NULL, $4, $7, 0, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0); node->line = yylineno; $$ = node; }
     | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_generic_struct_def($3, NULL, $5, $8, 1, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_generic_struct_def($3, NULL, $5, $8, 0, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1); node->line = yylineno; $$ = node; }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = create_generic_struct_def($4, NULL, $6, $9, 1, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1); node->line = yylineno; $$ = node; }
     ;
 
 enum_def
     : ENUM IDENTIFIER enum_base_type_opt LBRACE enum_variant_list RBRACE SEMICOLON
-        { auto* node = create_enum_def($2, $5, 0, static_cast<int>($3)); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_enum_def($2, $5, 0, static_cast<int>($3)); node->line = yylineno; $$ = node; }
     | PUB ENUM IDENTIFIER enum_base_type_opt LBRACE enum_variant_list RBRACE SEMICOLON
-        { auto* node = create_enum_def($3, $6, 1, static_cast<int>($4)); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_enum_def($3, $6, 1, static_cast<int>($4)); node->line = yylineno; $$ = node; }
     ;
 
 enum_base_type_opt
@@ -776,9 +776,9 @@ assignment_statement
     : postfix_expression ASSIGN expression SEMICOLON
         {
             if(auto* id = dynamic_cast<IdentifierNode*>($1))
-                $$ = create_assignment(const_cast<char*>(id->name.c_str()), $3, yylineno);
+                $$ = mla_ast_assignment(const_cast<char*>(id->name.c_str()), $3, yylineno);
             else
-                $$ = create_chained_field_assignment($1, $3, yylineno);
+                $$ = mla_ast_chained_field_assignment($1, $3, yylineno);
         }
     | postfix_expression PLUS_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, PLUS, $3, yylineno); }
@@ -799,8 +799,8 @@ expression_statement
     ;
 
 return_statement
-    : RETURN expression SEMICOLON { $$ = create_return_stmt($2); }
-    | RETURN SEMICOLON { $$ = create_return_stmt(NULL); }
+    : RETURN expression SEMICOLON { $$ = mla_ast_return_stmt($2); }
+    | RETURN SEMICOLON { $$ = mla_ast_return_stmt(NULL); }
     ;
 
 break_statement
@@ -852,9 +852,9 @@ while_statement
     | WHILE condition_expression COLON statement
         { $$ = mla_ast_while_statement($2, mla_ast_statement_list_create($4), yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression COLON expression block_statement
-        { $$ = mla_ast_while_statement(create_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement(mla_ast_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression COLON expression statement
-        { $$ = mla_ast_while_statement(create_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement(mla_ast_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression block_statement
         { $$ = mla_ast_while_statement($2, $3, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     ;
@@ -865,21 +865,21 @@ range_expression
     | primary_expression DOTDOTEQ primary_expression
         { $$ = create_range_expression($1, $3, 1); }
     | primary_expression DOTDOT primary_expression PLUS primary_expression
-        { $$ = create_range_expression($1, create_binary_op(PLUS, $3, $5), 0); }
+        { $$ = create_range_expression($1, mla_ast_binary_op(PLUS, $3, $5), 0); }
     | primary_expression DOTDOT primary_expression MINUS primary_expression
-        { $$ = create_range_expression($1, create_binary_op(MINUS, $3, $5), 0); }
+        { $$ = create_range_expression($1, mla_ast_binary_op(MINUS, $3, $5), 0); }
     | primary_expression DOTDOTEQ primary_expression PLUS primary_expression
-        { $$ = create_range_expression($1, create_binary_op(PLUS, $3, $5), 1); }
+        { $$ = create_range_expression($1, mla_ast_binary_op(PLUS, $3, $5), 1); }
     | primary_expression DOTDOTEQ primary_expression MINUS primary_expression
-        { $$ = create_range_expression($1, create_binary_op(MINUS, $3, $5), 1); }
+        { $$ = create_range_expression($1, mla_ast_binary_op(MINUS, $3, $5), 1); }
     | primary_expression PLUS primary_expression DOTDOT primary_expression
-        { $$ = create_range_expression(create_binary_op(PLUS, $1, $3), $5, 0); }
+        { $$ = create_range_expression(mla_ast_binary_op(PLUS, $1, $3), $5, 0); }
     | primary_expression MINUS primary_expression DOTDOT primary_expression
-        { $$ = create_range_expression(create_binary_op(MINUS, $1, $3), $5, 0); }
+        { $$ = create_range_expression(mla_ast_binary_op(MINUS, $1, $3), $5, 0); }
     | primary_expression PLUS primary_expression DOTDOTEQ primary_expression
-        { $$ = create_range_expression(create_binary_op(PLUS, $1, $3), $5, 1); }
+        { $$ = create_range_expression(mla_ast_binary_op(PLUS, $1, $3), $5, 1); }
     | primary_expression MINUS primary_expression DOTDOTEQ primary_expression
-        { $$ = create_range_expression(create_binary_op(MINUS, $1, $3), $5, 1); }
+        { $$ = create_range_expression(mla_ast_binary_op(MINUS, $1, $3), $5, 1); }
     ;
 
 struct_init
@@ -934,9 +934,9 @@ if_statement
     | IF condition_expression COLON statement else_if_list optional_else
         { $$ = create_if_statement($2, mla_ast_statement_list_create($4), $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF condition_expression COLON expression block_statement else_if_list optional_else
-        { $$ = create_if_statement(create_binary_op(AMP_AMP, $2, $4), $5, $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+        { $$ = create_if_statement(mla_ast_binary_op(AMP_AMP, $2, $4), $5, $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF condition_expression COLON expression statement else_if_list optional_else
-        { $$ = create_if_statement(create_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+        { $$ = create_if_statement(mla_ast_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), $6, $7); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF condition_expression block_statement else_if_list optional_else
         { $$ = create_if_statement($2, $3, $4, $5); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement else_if_list optional_else
@@ -969,8 +969,8 @@ else_if_list
 else_if
     : ELSE IF condition_expression COLON block_statement { $$ = create_else_if($3, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF condition_expression COLON statement { $$ = create_else_if($3, mla_ast_statement_list_create($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF condition_expression COLON expression block_statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF condition_expression COLON expression statement { $$ = create_else_if(create_binary_op(AMP_AMP, $3, $5), mla_ast_statement_list_create($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression COLON expression block_statement { $$ = create_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression COLON expression statement { $$ = create_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), mla_ast_statement_list_create($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF condition_expression block_statement { $$ = create_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement
         { ASTNode* __init = create_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = create_else_if_with_init(__init, $10, $12); }
@@ -1000,51 +1000,51 @@ condition_expression
 
 condition_logical_or
     : condition_logical_or PIPE_PIPE condition_logical_and
-        { $$ = create_binary_op(PIPE_PIPE, $1, $3); }
+        { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
     | condition_logical_and
     ;
 
 condition_logical_and
     : condition_logical_and AMP_AMP condition_equality
-        { $$ = create_binary_op(AMP_AMP, $1, $3); }
+        { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
     | condition_equality
     ;
 
 condition_equality
     : condition_equality EQ condition_relational
-        { $$ = create_binary_op(EQ, $1, $3); }
+        { $$ = mla_ast_binary_op(EQ, $1, $3); }
     | condition_equality NE condition_relational
-        { $$ = create_binary_op(NE, $1, $3); }
+        { $$ = mla_ast_binary_op(NE, $1, $3); }
     | condition_relational
     ;
 
 condition_relational
     : condition_relational LT condition_additive
-        { $$ = create_binary_op(LT, $1, $3); }
+        { $$ = mla_ast_binary_op(LT, $1, $3); }
     | condition_relational GT condition_additive
-        { $$ = create_binary_op(GT, $1, $3); }
+        { $$ = mla_ast_binary_op(GT, $1, $3); }
     | condition_relational LE condition_additive
-        { $$ = create_binary_op(LE, $1, $3); }
+        { $$ = mla_ast_binary_op(LE, $1, $3); }
     | condition_relational GE condition_additive
-        { $$ = create_binary_op(GE, $1, $3); }
+        { $$ = mla_ast_binary_op(GE, $1, $3); }
     | condition_additive
     ;
 
 condition_additive
     : condition_additive PLUS condition_multiplicative
-        { $$ = create_binary_op(PLUS, $1, $3); }
+        { $$ = mla_ast_binary_op(PLUS, $1, $3); }
     | condition_additive MINUS condition_multiplicative
-        { $$ = create_binary_op(MINUS, $1, $3); }
+        { $$ = mla_ast_binary_op(MINUS, $1, $3); }
     | condition_multiplicative
     ;
 
 condition_multiplicative
     : condition_multiplicative MULTIPLY condition_unary
-        { $$ = create_binary_op(MULTIPLY, $1, $3); }
+        { $$ = mla_ast_binary_op(MULTIPLY, $1, $3); }
     | condition_multiplicative DIVIDE condition_unary
-        { $$ = create_binary_op(DIVIDE, $1, $3); }
+        { $$ = mla_ast_binary_op(DIVIDE, $1, $3); }
     | condition_multiplicative MODULO condition_unary
-        { $$ = create_binary_op(MODULO, $1, $3); }
+        { $$ = mla_ast_binary_op(MODULO, $1, $3); }
     | condition_unary
     ;
 
@@ -1060,9 +1060,9 @@ condition_unary
     | MULTIPLY condition_unary
         { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
     | condition_postfix TRY_QUESTION
-        { $$ = create_try_expression($1, yylineno); }
+        { $$ = mla_ast_try_expression($1, yylineno); }
     | function_call TRY_QUESTION
-        { $$ = create_try_expression($1, yylineno); }
+        { $$ = mla_ast_try_expression($1, yylineno); }
     | condition_postfix
     | function_call
     | cast_expression
@@ -1075,7 +1075,7 @@ condition_unary
 
 condition_postfix
     : condition_primary { $$ = $1; }
-    | condition_postfix DOT IDENTIFIER { $$ = create_field_access_expr($1, $3, yylineno); }
+    | condition_postfix DOT IDENTIFIER { $$ = mla_ast_field_access_expr($1, $3, yylineno); }
     | condition_postfix DOT IDENTIFIER LPAREN RPAREN
         { $$ = create_method_call_expr($1, $3, NULL, yylineno); }
     | condition_postfix DOT IDENTIFIER LPAREN argument_list RPAREN
@@ -1084,12 +1084,12 @@ condition_postfix
     ;
 
 condition_primary
-    : INT_LITERAL { $$ = create_int_literal($1); }
-    | FLOAT_LITERAL { $$ = create_float_literal($1); }
-    | DOUBLE_LITERAL { $$ = create_double_literal($1); }
-    | STRING_LITERAL { $$ = create_string_literal($1); }
-    | TRUE_LIT { $$ = create_bool_literal(1); }
-    | FALSE_LIT { $$ = create_bool_literal(0); }
+    : INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
+    | DOUBLE_LITERAL { $$ = mla_ast_literal_double($1); }
+    | STRING_LITERAL { $$ = mla_ast_literal_string($1); }
+    | TRUE_LIT { $$ = mla_ast_literal_bool(1); }
+    | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
         { $$ = create_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
@@ -1109,21 +1109,21 @@ condition_primary
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | LPAREN ELLIPSIS PLUS expression RPAREN
-        { $$ = create_fold_expression(PLUS, $4, 0); }
+        { $$ = mla_ast_fold_expression(PLUS, $4, 0); }
     | LPAREN postfix_expression PLUS ELLIPSIS RPAREN
-        { $$ = create_fold_expression(PLUS, $2, 1); }
+        { $$ = mla_ast_fold_expression(PLUS, $2, 1); }
     | LPAREN ELLIPSIS MULTIPLY expression RPAREN
-        { $$ = create_fold_expression(MULTIPLY, $4, 0); }
+        { $$ = mla_ast_fold_expression(MULTIPLY, $4, 0); }
     | LPAREN postfix_expression MULTIPLY ELLIPSIS RPAREN
-        { $$ = create_fold_expression(MULTIPLY, $2, 1); }
+        { $$ = mla_ast_fold_expression(MULTIPLY, $2, 1); }
     | LPAREN ELLIPSIS AMP_AMP expression RPAREN
-        { $$ = create_fold_expression(AMP_AMP, $4, 0); }
+        { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
     | LPAREN postfix_expression AMP_AMP ELLIPSIS RPAREN
-        { $$ = create_fold_expression(AMP_AMP, $2, 1); }
+        { $$ = mla_ast_fold_expression(AMP_AMP, $2, 1); }
     | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN
-        { $$ = create_fold_expression(PIPE_PIPE, $4, 0); }
+        { $$ = mla_ast_fold_expression(PIPE_PIPE, $4, 0); }
     | LPAREN postfix_expression PIPE_PIPE ELLIPSIS RPAREN
-        { $$ = create_fold_expression(PIPE_PIPE, $2, 1); }
+        { $$ = mla_ast_fold_expression(PIPE_PIPE, $2, 1); }
     ;
 
 optional_else
@@ -1139,7 +1139,7 @@ expression
 
 ternary_expression
     : binary_expression QUESTION ternary_expression COLON ternary_expression
-        { $$ = create_ternary_expression($1, $3, $5, yylineno); }
+        { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
     | binary_expression
     | unary_expression
     ;
@@ -1156,9 +1156,9 @@ unary_expression
     | MULTIPLY unary_expression
         { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
     | postfix_expression TRY_QUESTION
-        { $$ = create_try_expression($1, yylineno); }
+        { $$ = mla_ast_try_expression($1, yylineno); }
     | function_call TRY_QUESTION
-        { $$ = create_try_expression($1, yylineno); }
+        { $$ = mla_ast_try_expression($1, yylineno); }
     | postfix_expression
     | function_call
     | cast_expression
@@ -1191,17 +1191,17 @@ match_atom
     ;
 
 match_binary_expression
-    : match_target PLUS match_target { $$ = create_binary_op(PLUS, $1, $3); }
-    | match_target MINUS match_target { $$ = create_binary_op(MINUS, $1, $3); }
-    | match_target MULTIPLY match_target { $$ = create_binary_op(MULTIPLY, $1, $3); }
-    | match_target DIVIDE match_target { $$ = create_binary_op(DIVIDE, $1, $3); }
-    | match_target MODULO match_target { $$ = create_binary_op(MODULO, $1, $3); }
-    | match_target LT match_target { $$ = create_binary_op(LT, $1, $3); }
-    | match_target GT match_target { $$ = create_binary_op(GT, $1, $3); }
-    | match_target LE match_target { $$ = create_binary_op(LE, $1, $3); }
-    | match_target GE match_target { $$ = create_binary_op(GE, $1, $3); }
-    | match_target EQ match_target { $$ = create_binary_op(EQ, $1, $3); }
-    | match_target NE match_target { $$ = create_binary_op(NE, $1, $3); }
+    : match_target PLUS match_target { $$ = mla_ast_binary_op(PLUS, $1, $3); }
+    | match_target MINUS match_target { $$ = mla_ast_binary_op(MINUS, $1, $3); }
+    | match_target MULTIPLY match_target { $$ = mla_ast_binary_op(MULTIPLY, $1, $3); }
+    | match_target DIVIDE match_target { $$ = mla_ast_binary_op(DIVIDE, $1, $3); }
+    | match_target MODULO match_target { $$ = mla_ast_binary_op(MODULO, $1, $3); }
+    | match_target LT match_target { $$ = mla_ast_binary_op(LT, $1, $3); }
+    | match_target GT match_target { $$ = mla_ast_binary_op(GT, $1, $3); }
+    | match_target LE match_target { $$ = mla_ast_binary_op(LE, $1, $3); }
+    | match_target GE match_target { $$ = mla_ast_binary_op(GE, $1, $3); }
+    | match_target EQ match_target { $$ = mla_ast_binary_op(EQ, $1, $3); }
+    | match_target NE match_target { $$ = mla_ast_binary_op(NE, $1, $3); }
     ;
 
 match_arm_list
@@ -1227,26 +1227,26 @@ match_pattern
                 $$ = create_match_pattern($1, NULL, yylineno);
         }
     | INT_LITERAL
-        { $$ = create_match_literal_pattern(create_int_literal($1), yylineno); }
+        { $$ = create_match_literal_pattern(mla_ast_literal_int($1), yylineno); }
     | FLOAT_LITERAL
-        { $$ = create_match_literal_pattern(create_float_literal($1), yylineno); }
+        { $$ = create_match_literal_pattern(mla_ast_literal_float($1), yylineno); }
     | DOUBLE_LITERAL
-        { $$ = create_match_literal_pattern(create_double_literal($1), yylineno); }
+        { $$ = create_match_literal_pattern(mla_ast_literal_double($1), yylineno); }
     | STRING_LITERAL
-        { $$ = create_match_literal_pattern(create_string_literal($1), yylineno); }
+        { $$ = create_match_literal_pattern(mla_ast_literal_string($1), yylineno); }
     | TRUE_LIT
-        { $$ = create_match_literal_pattern(create_bool_literal(1), yylineno); }
+        { $$ = create_match_literal_pattern(mla_ast_literal_bool(1), yylineno); }
     | FALSE_LIT
-        { $$ = create_match_literal_pattern(create_bool_literal(0), yylineno); }
+        { $$ = create_match_literal_pattern(mla_ast_literal_bool(0), yylineno); }
     ;
 
 primary_expression
-    : INT_LITERAL { $$ = create_int_literal($1); }
-    | FLOAT_LITERAL { $$ = create_float_literal($1); }
-    | DOUBLE_LITERAL { $$ = create_double_literal($1); }
-    | STRING_LITERAL { $$ = create_string_literal($1); }
-    | TRUE_LIT { $$ = create_bool_literal(1); }
-    | FALSE_LIT { $$ = create_bool_literal(0); }
+    : INT_LITERAL { $$ = mla_ast_literal_int($1); }
+    | FLOAT_LITERAL { $$ = mla_ast_literal_float($1); }
+    | DOUBLE_LITERAL { $$ = mla_ast_literal_double($1); }
+    | STRING_LITERAL { $$ = mla_ast_literal_string($1); }
+    | TRUE_LIT { $$ = mla_ast_literal_bool(1); }
+    | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
         { $$ = create_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
@@ -1266,21 +1266,21 @@ primary_expression
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | LPAREN ELLIPSIS PLUS expression RPAREN
-        { $$ = create_fold_expression(PLUS, $4, 0); }
+        { $$ = mla_ast_fold_expression(PLUS, $4, 0); }
     | LPAREN expression PLUS ELLIPSIS RPAREN
-        { $$ = create_fold_expression(PLUS, $2, 1); }
+        { $$ = mla_ast_fold_expression(PLUS, $2, 1); }
     | LPAREN ELLIPSIS MULTIPLY expression RPAREN
-        { $$ = create_fold_expression(MULTIPLY, $4, 0); }
+        { $$ = mla_ast_fold_expression(MULTIPLY, $4, 0); }
     | LPAREN expression MULTIPLY ELLIPSIS RPAREN
-        { $$ = create_fold_expression(MULTIPLY, $2, 1); }
+        { $$ = mla_ast_fold_expression(MULTIPLY, $2, 1); }
     | LPAREN ELLIPSIS AMP_AMP expression RPAREN
-        { $$ = create_fold_expression(AMP_AMP, $4, 0); }
+        { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
     | LPAREN expression AMP_AMP ELLIPSIS RPAREN
-        { $$ = create_fold_expression(AMP_AMP, $2, 1); }
+        { $$ = mla_ast_fold_expression(AMP_AMP, $2, 1); }
     | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN
-        { $$ = create_fold_expression(PIPE_PIPE, $4, 0); }
+        { $$ = mla_ast_fold_expression(PIPE_PIPE, $4, 0); }
     | LPAREN expression PIPE_PIPE ELLIPSIS RPAREN
-        { $$ = create_fold_expression(PIPE_PIPE, $2, 1); }
+        { $$ = mla_ast_fold_expression(PIPE_PIPE, $2, 1); }
     ;
 
 /* Struct literal: StructName { field: value, ... } */
@@ -1301,7 +1301,7 @@ struct_field_init_list
 
 postfix_expression
     : primary_expression { $$ = $1; }
-    | postfix_expression DOT IDENTIFIER { $$ = create_field_access_expr($1, $3, yylineno); }
+    | postfix_expression DOT IDENTIFIER { $$ = mla_ast_field_access_expr($1, $3, yylineno); }
     | postfix_expression DOT IDENTIFIER LPAREN RPAREN
         { $$ = create_method_call_expr($1, $3, NULL, yylineno); }
     | postfix_expression DOT IDENTIFIER LPAREN argument_list RPAREN
@@ -1310,19 +1310,19 @@ postfix_expression
     ;
 
 binary_expression
-    : expression PLUS expression { $$ = create_binary_op(PLUS, $1, $3); }
-    | expression MINUS expression { $$ = create_binary_op(MINUS, $1, $3); }
-    | expression MULTIPLY expression { $$ = create_binary_op(MULTIPLY, $1, $3); }
-    | expression DIVIDE expression { $$ = create_binary_op(DIVIDE, $1, $3); }
-    | expression MODULO expression { $$ = create_binary_op(MODULO, $1, $3); }
-    | expression LT expression { $$ = create_binary_op(LT, $1, $3); }
-    | expression GT expression { $$ = create_binary_op(GT, $1, $3); }
-    | expression LE expression { $$ = create_binary_op(LE, $1, $3); }
-    | expression GE expression { $$ = create_binary_op(GE, $1, $3); }
-    | expression EQ expression { $$ = create_binary_op(EQ, $1, $3); }
-    | expression NE expression { $$ = create_binary_op(NE, $1, $3); }
-    | expression AMP_AMP expression { $$ = create_binary_op(AMP_AMP, $1, $3); }
-    | expression PIPE_PIPE expression { $$ = create_binary_op(PIPE_PIPE, $1, $3); }
+    : expression PLUS expression { $$ = mla_ast_binary_op(PLUS, $1, $3); }
+    | expression MINUS expression { $$ = mla_ast_binary_op(MINUS, $1, $3); }
+    | expression MULTIPLY expression { $$ = mla_ast_binary_op(MULTIPLY, $1, $3); }
+    | expression DIVIDE expression { $$ = mla_ast_binary_op(DIVIDE, $1, $3); }
+    | expression MODULO expression { $$ = mla_ast_binary_op(MODULO, $1, $3); }
+    | expression LT expression { $$ = mla_ast_binary_op(LT, $1, $3); }
+    | expression GT expression { $$ = mla_ast_binary_op(GT, $1, $3); }
+    | expression LE expression { $$ = mla_ast_binary_op(LE, $1, $3); }
+    | expression GE expression { $$ = mla_ast_binary_op(GE, $1, $3); }
+    | expression EQ expression { $$ = mla_ast_binary_op(EQ, $1, $3); }
+    | expression NE expression { $$ = mla_ast_binary_op(NE, $1, $3); }
+    | expression AMP_AMP expression { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
+    | expression PIPE_PIPE expression { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
     ;
 
 function_call
