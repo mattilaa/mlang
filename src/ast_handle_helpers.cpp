@@ -108,4 +108,24 @@ ASTNode* mla_ast_statement_list_add(ASTNode* list, ASTNode* stmt)
     return add_statement_impl(list, stmt);
 }
 
+ASTNode* mla_ast_map_entry(ASTNode* key, ASTNode* value)
+{
+    return create_map_entry_impl(key, value);
+}
+
+ASTNode* mla_ast_map_entry_list_create(ASTNode* entry)
+{
+    return create_map_entry_list_impl(entry);
+}
+
+ASTNode* mla_ast_map_entry_list_add(ASTNode* list, ASTNode* entry)
+{
+    return add_map_entry_impl(list, entry);
+}
+
+ASTNode* mla_ast_map_literal(ASTNode* entries)
+{
+    return create_map_literal_impl(entries);
+}
+
 } // extern "C"

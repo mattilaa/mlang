@@ -141,10 +141,14 @@ ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);
 ASTNode* create_generic_list_type(ASTNode* element_type);
 ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
-ASTNode* create_map_literal(ASTNode* entries);
+ASTNode* mla_ast_map_literal(ASTNode* entries);
 ASTNode* create_map_entry_list(ASTNode* entry);
 ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
 ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
+ASTNode* mla_ast_map_entry(ASTNode* key, ASTNode* value);
+ASTNode* mla_ast_map_entry_list_create(ASTNode* entry);
+ASTNode* mla_ast_map_entry_list_add(ASTNode* list, ASTNode* entry);
+ASTNode* mla_ast_map_literal(ASTNode* entries);
 ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
 ASTNode* create_tuple_type(ASTNode* type_list);
 ASTNode* create_type_list(ASTNode* type);
@@ -1339,17 +1343,17 @@ list_elements
     ;
 
 map_literal
-    : LBRACE map_entries RBRACE { $$ = create_map_literal($2); }
-    | LBRACE RBRACE { $$ = create_map_literal(NULL); }
+    : LBRACE map_entries RBRACE { $$ = mla_ast_map_literal($2); }
+    | LBRACE RBRACE { $$ = mla_ast_map_literal(NULL); }
     ;
 
 map_entries
-    : map_entry { $$ = create_map_entry_list($1); }
-    | map_entries COMMA map_entry { $$ = add_map_entry($1, $3); }
+    : map_entry { $$ = mla_ast_map_entry_list_create($1); }
+    | map_entries COMMA map_entry { $$ = mla_ast_map_entry_list_add($1, $3); }
     ;
 
 map_entry
-    : expression COLON expression { $$ = create_map_entry($1, $3); }
+    : expression COLON expression { $$ = mla_ast_map_entry($1, $3); }
     ;
 
 index_expression
