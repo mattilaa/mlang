@@ -133,9 +133,9 @@ ASTNode* create_list_type();
 ASTNode* mla_ast_list_literal(ASTNode* elements);
 ASTNode* mla_ast_list_element_list(ASTNode* element);
 ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
-ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
-ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
-ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
+ASTNode* mla_ast_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
+ASTNode* mla_ast_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line,
                                 int uses_colon_without_guard);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
@@ -205,8 +205,8 @@ ASTNode* create_pointer_type(ASTNode* element_type);
 ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_closure(ASTNode* body);
 ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
-ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
-                               ASTNode* body, int line);
+ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
+                            ASTNode* body, int line);
 ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
 
 // Desugar `lhs op= rhs` into `lhs = lhs op rhs`.
@@ -818,45 +818,45 @@ block_statement
 
 for_statement
     : FOR IDENTIFIER IN range_expression block_statement
-        { $$ = create_for_range($2, $4, $5, yylineno); }
+        { $$ = mla_ast_for_range($2, $4, $5, yylineno); }
     | FOR IDENTIFIER IN primary_expression block_statement
-        { $$ = create_for_iterator($2, $4, $5, yylineno); }
+        { $$ = mla_ast_for_iterator($2, $4, $5, yylineno); }
     | FOR IDENTIFIER IN primary_expression KEYS_METHOD block_statement
-        { $$ = create_for_iterator($2, create_map_keys_iterator($4, yylineno), $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, create_map_keys_iterator($4, yylineno), $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression VALUES_METHOD block_statement
-        { $$ = create_for_iterator($2, create_map_values_iterator($4, yylineno), $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, create_map_values_iterator($4, yylineno), $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression ENTRIES_METHOD block_statement
-        { $$ = create_for_iterator($2, create_map_entries_iterator($4, yylineno), $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, create_map_entries_iterator($4, yylineno), $6, yylineno); }
     /* for x in coll.iter() / .into_iter() — strip the no-op method */
     | FOR IDENTIFIER IN primary_expression ITER_METHOD block_statement
-        { $$ = create_for_iterator($2, $4, $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, $4, $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression INTO_ITER_METHOD block_statement
-        { $$ = create_for_iterator($2, $4, $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, $4, $6, yylineno); }
     /* for (i, x) in coll  — enumerate style (index var, value var) */
     | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression block_statement
-        { $$ = create_for_enumerate($3, $5, $8, $9, yylineno); }
+        { $$ = mla_ast_for_enumerate($3, $5, $8, $9, yylineno); }
     | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN range_expression block_statement
-        { $$ = create_for_enumerate($3, $5, $8, $9, yylineno); }
+        { $$ = mla_ast_for_enumerate($3, $5, $8, $9, yylineno); }
     /* for (i, x) in coll.enumerate() / .iter().enumerate() / .into_iter().enumerate() */
     | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression ENUMERATE_METHOD block_statement
-        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+        { $$ = mla_ast_for_enumerate($3, $5, $8, $10, yylineno); }
     | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression ITER_ENUMERATE_METHOD block_statement
-        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+        { $$ = mla_ast_for_enumerate($3, $5, $8, $10, yylineno); }
     | FOR LPAREN IDENTIFIER COMMA IDENTIFIER RPAREN IN primary_expression INTO_ITER_ENUMERATE_METHOD block_statement
-        { $$ = create_for_enumerate($3, $5, $8, $10, yylineno); }
+        { $$ = mla_ast_for_enumerate($3, $5, $8, $10, yylineno); }
     ;
 
 while_statement
     : WHILE condition_expression COLON block_statement
-        { $$ = create_while_statement($2, $4, yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement($2, $4, yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression COLON statement
-        { $$ = create_while_statement($2, mla_ast_statement_list_create($4), yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement($2, mla_ast_statement_list_create($4), yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression COLON expression block_statement
-        { $$ = create_while_statement(create_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement(create_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression COLON expression statement
-        { $$ = create_while_statement(create_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement(create_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression block_statement
-        { $$ = create_while_statement($2, $3, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
+        { $$ = mla_ast_while_statement($2, $3, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     ;
 
 range_expression

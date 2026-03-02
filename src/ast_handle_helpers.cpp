@@ -268,4 +268,24 @@ ASTNode* mla_ast_match_expression(ASTNode* target, ASTNode* arms, int line)
     return create_match_expression(target, arms, line);
 }
 
+ASTNode* mla_ast_for_range(char* var_name, ASTNode* range, ASTNode* body, int line)
+{
+    return create_for_range(var_name, range, body, line);
+}
+
+ASTNode* mla_ast_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line)
+{
+    return create_for_iterator(var_name, iterable, body, line);
+}
+
+ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable, ASTNode* body, int line)
+{
+    return create_for_enumerate(index_var, val_var, iterable, body, line);
+}
+
+ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line, int uses_colon_without_guard)
+{
+    return create_while_statement(condition, body, line, uses_colon_without_guard);
+}
+
 } // extern "C"

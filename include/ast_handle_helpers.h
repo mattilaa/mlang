@@ -47,6 +47,10 @@ ASTNode* mla_ast_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* mla_ast_match_arm_list(ASTNode* arm);
 ASTNode* mla_ast_add_match_arm(ASTNode* list, ASTNode* arm);
 ASTNode* mla_ast_match_expression(ASTNode* target, ASTNode* arms, int line);
+ASTNode* mla_ast_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
+ASTNode* mla_ast_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable, ASTNode* body, int line);
+ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line, int uses_colon_without_guard);
 }
 
 #endif // AST_HANDLE_HELPERS_H
