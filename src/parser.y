@@ -95,6 +95,10 @@ ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int li
 ASTNode* create_try_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
+ASTNode* mla_argument_list_create(ASTNode* arg);
+ASTNode* mla_argument_list_add(ASTNode* list, ASTNode* arg);
+ASTNode* mla_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, int line);
+ASTNode* mla_function_call_from_list(char* name, ASTNode* args, int line);
 ASTNode* create_result_constructor(char* variant, ASTNode* type_args, ASTNode* args, int line);
 ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_if_statement_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
@@ -894,8 +898,8 @@ assert_eq_statement
     ;
 
 argument_list
-    : expression { $$ = create_argument_list($1); }
-    | argument_list COMMA expression { $$ = add_argument($1, $3); }
+    : expression { $$ = mla_argument_list_create($1); }
+    | argument_list COMMA expression { $$ = mla_argument_list_add($1, $3); }
     ;
 
 if_statement
@@ -1297,9 +1301,9 @@ binary_expression
 
 function_call
     : module_path LPAREN RPAREN
-        { $$ = create_function_call($1, NULL, NULL, yylineno); }
+        { $$ = mla_function_call_simple($1, NULL, NULL, yylineno); }
     | module_path LPAREN argument_list RPAREN
-        { $$ = create_function_call_multi($1, $3, yylineno); }
+        { $$ = mla_function_call_from_list($1, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         { $$ = create_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN

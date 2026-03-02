@@ -1,7 +1,22 @@
 #include "ast.h"
+#include "ast_handle_helpers.h"
 #include "parser.hpp"
 #include <cstring>
 #include <stdexcept>
+
+namespace {
+
+inline int64_t node_to_handle(ASTNode* node)
+{
+    return reinterpret_cast<int64_t>(node);
+}
+
+inline ASTNode* handle_to_node(int64_t handle)
+{
+    return reinterpret_cast<ASTNode*>(handle);
+}
+
+} // namespace
 
 ASTNode* create_program_impl(ASTNode* top_level_list)
 {

@@ -77,4 +77,24 @@ int64_t mla_function_call_add_arg(int64_t call, int64_t expr)
     return call;
 }
 
+ASTNode* mla_ast_argument_list_create(ASTNode* arg)
+{
+    return create_argument_list_impl(arg);
+}
+
+ASTNode* mla_ast_argument_list_add(ASTNode* list, ASTNode* arg)
+{
+    return add_argument_impl(list, arg);
+}
+
+ASTNode* mla_ast_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, int line)
+{
+    return create_function_call_impl(name, arg1, arg2, line);
+}
+
+ASTNode* mla_ast_function_call_from_list(char* name, ASTNode* args, int line)
+{
+    return create_function_call_multi_impl(name, args, line);
+}
+
 } // extern "C"
