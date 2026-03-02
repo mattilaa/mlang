@@ -117,9 +117,9 @@ ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* create_list_type();
-ASTNode* create_list_literal(ASTNode* elements);
-ASTNode* create_list_element_list(ASTNode* element);
-ASTNode* add_list_element(ASTNode* list, ASTNode* element);
+ASTNode* mla_ast_list_literal(ASTNode* elements);
+ASTNode* mla_ast_list_element_list(ASTNode* element);
+ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
 ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body, int line);
 ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
 ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
@@ -187,7 +187,7 @@ ASTNode* create_closure(ASTNode* body);
 ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
                                ASTNode* body, int line);
-ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
+ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
 
 // Desugar `lhs op= rhs` into `lhs = lhs op rhs`.
 // Only simple identifier LHS is supported; for other LHS forms an error is
@@ -1326,20 +1326,20 @@ cast_expression
     ;
 
 list_literal
-    : LBRACKET list_elements RBRACKET { $$ = create_list_literal($2); }
-    | LBRACKET RBRACKET { $$ = create_list_literal(NULL); }
+    : LBRACKET list_elements RBRACKET { $$ = mla_ast_list_literal($2); }
+    | LBRACKET RBRACKET { $$ = mla_ast_list_literal(NULL); }
     | LBRACKET expression SEMICOLON expression RBRACKET
-        { $$ = create_array_fill($2, $4); }   /* [val; N] fill literal */
+        { $$ = mla_ast_array_fill($2, $4); }   /* [val; N] fill literal */
     /* vec![...] macro forms — same semantics as list literals */
-    | VEC_MACRO LBRACKET list_elements RBRACKET { $$ = create_list_literal($3); }
-    | VEC_MACRO LBRACKET RBRACKET               { $$ = create_list_literal(NULL); }
+    | VEC_MACRO LBRACKET list_elements RBRACKET { $$ = mla_ast_list_literal($3); }
+    | VEC_MACRO LBRACKET RBRACKET               { $$ = mla_ast_list_literal(NULL); }
     | VEC_MACRO LBRACKET expression SEMICOLON expression RBRACKET
-        { $$ = create_array_fill($3, $5); }   /* vec![val; N] fill macro */
+        { $$ = mla_ast_array_fill($3, $5); }   /* vec![val; N] fill macro */
     ;
 
 list_elements
-    : expression { $$ = create_list_element_list($1); }
-    | list_elements COMMA expression { $$ = add_list_element($1, $3); }
+    : expression { $$ = mla_ast_list_element_list($1); }
+    | list_elements COMMA expression { $$ = mla_ast_list_element_list_add($1, $3); }
     ;
 
 map_literal
@@ -1366,10 +1366,10 @@ tuple_literal
 
 tuple_elements
     : expression COMMA expression {
-        ASTNode* list = create_list_element_list($1);
-        $$ = add_list_element(list, $3);
+        ASTNode* list = mla_ast_list_element_list($1);
+        $$ = mla_ast_list_element_list_add(list, $3);
     }
-    | tuple_elements COMMA expression { $$ = add_list_element($1, $3); }
+    | tuple_elements COMMA expression { $$ = mla_ast_list_element_list_add($1, $3); }
     ;
 
 map_iterator

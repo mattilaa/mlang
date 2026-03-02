@@ -23,6 +23,10 @@ ASTNode* mla_ast_map_literal(ASTNode* entries);
 ASTNode* mla_ast_struct_field_init_list(char* field_name, ASTNode* value);
 ASTNode* mla_ast_struct_field_init_list_add(ASTNode* list, char* field_name, ASTNode* value);
 ASTNode* mla_ast_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
+ASTNode* mla_ast_list_literal(ASTNode* elements);
+ASTNode* mla_ast_list_element_list(ASTNode* element);
+ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
+ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
 }
 
 #endif // AST_HANDLE_HELPERS_H

@@ -143,4 +143,24 @@ ASTNode* mla_ast_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* 
     return create_struct_literal_impl(struct_name, type_args, fields, line);
 }
 
+ASTNode* mla_ast_list_literal(ASTNode* elements)
+{
+    return create_list_literal_impl(elements);
+}
+
+ASTNode* mla_ast_list_element_list(ASTNode* element)
+{
+    return create_list_element_list_impl(element);
+}
+
+ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element)
+{
+    return add_list_element_impl(list, element);
+}
+
+ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count)
+{
+    return create_array_fill_impl(value, count);
+}
+
 } // extern "C"
