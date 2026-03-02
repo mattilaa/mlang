@@ -1,0 +1,614 @@
+/// \file ast.mla
+/// \brief Lightweight AST definitions to bootstrap the MLang-native compiler port.
+
+extern fn __mlang_std_strbuf_len(s: string) -> i64;
+
+pub fn len(s: string) -> i64 {
+    return __mlang_std_strbuf_len(s);
+}
+
+/// Represents raw type information carried with AST nodes.
+pub struct TypeNode {
+    var kind: string;
+    var name: string;
+    var args: list<TypeNode>;
+};
+
+impl TypeNode {
+    pub fn new(kind: string, name: string, args: list<TypeNode>) -> TypeNode {
+        return TypeNode { kind: kind, name: name, args: args };
+    }
+
+    pub fn simple(name: string) -> TypeNode {
+        return TypeNode { kind: "simple", name: name, args: [] };
+    }
+
+    pub fn generic(name: string, args: list<TypeNode>) -> TypeNode {
+        return TypeNode { kind: "generic", name: name, args: args };
+    }
+}
+
+/// Parameters declared on functions or annotations.
+pub struct Parameter {
+    var name: string;
+    var typ: TypeNode;
+};
+
+impl Parameter {
+    pub fn new(name: string, typ: TypeNode) -> Parameter {
+        return Parameter { name: name, typ: typ };
+    }
+}
+
+/// Marker for a single statement; currently treated as a plain string capture.
+pub struct StatementNode {
+    var kind: string;
+    var text: string;
+};
+
+impl StatementNode {
+    pub fn new(kind: string, text: string) -> StatementNode {
+        return StatementNode { kind: kind, text: text };
+    }
+}
+
+/// Statement list comprised of zero or more statement nodes.
+pub struct StatementList {
+    var statements: list<StatementNode>;
+};
+
+impl StatementList {
+    pub fn new() -> StatementList {
+        return StatementList { statements: [] };
+    }
+
+    pub fn push(self: StatementList, stmt: StatementNode) -> StatementList {
+        var statements = self.statements;
+        statements.push(stmt);
+        return StatementList { statements: statements };
+    }
+
+    pub fn push_many(self: StatementList, stmts: list<StatementNode>) -> StatementList {
+        var statements = self.statements;
+        for statement in stmts {
+            statements.push(statement);
+        }
+        return StatementList { statements: statements };
+    }
+
+}
+
+/// Expression node used in statements and functions.
+pub struct ExpressionNode {
+    var kind: string;
+    var value: string;
+    var children: list<ExpressionNode>;
+};
+
+impl ExpressionNode {
+    pub fn new(kind: string) -> ExpressionNode {
+        return ExpressionNode { kind: kind, value: String::new(), children: [] };
+    }
+
+    pub fn with_value(self: ExpressionNode, value: string) -> ExpressionNode {
+        return ExpressionNode {
+            kind: self.kind,
+            value: value,
+            children: self.children
+        };
+    }
+
+    pub fn add_child(self: ExpressionNode, child: ExpressionNode) -> ExpressionNode {
+        var children = self.children;
+        children.push(child);
+        return ExpressionNode {
+            kind: self.kind,
+            value: self.value,
+            children: children
+        };
+    }
+
+}
+
+/// Builder helpers
+pub fn type_node_simple(name: string) -> TypeNode {
+    return TypeNode::simple(name);
+}
+
+pub fn type_node_generic(name: string, args: list<TypeNode>) -> TypeNode {
+    return TypeNode::generic(name, args);
+}
+
+pub fn make_parameter(name: string, typ: TypeNode) -> Parameter {
+    return Parameter::new(name, typ);
+}
+
+pub fn make_statement(kind: string, text: string) -> StatementNode {
+    return StatementNode::new(kind, text);
+}
+
+pub fn make_statement_list(stmts: list<StatementNode>) -> StatementList {
+    var result: StatementList = StatementList::new();
+    for stmt in stmts {
+        result.statements.push(stmt);
+    }
+    return result;
+}
+
+/// Parameter list wrapper so we can track varargs, etc.
+pub struct ParameterList {
+    var params: list<Parameter>;
+};
+
+impl ParameterList {
+    pub fn new() -> ParameterList {
+        return ParameterList { params: [] };
+    }
+}
+
+pub fn make_parameter_list(params: list<Parameter>) -> ParameterList {
+    var result: ParameterList = ParameterList::new();
+    for param in params {
+        result.params.push(param);
+    }
+    return result;
+}
+
+/// Argument list wrapper to hold expressions passed to calls.
+pub struct ArgumentList {
+    var args: list<ExpressionNode>;
+};
+
+impl ArgumentList {
+    pub fn new() -> ArgumentList {
+        return ArgumentList { args: [] };
+    }
+
+    pub fn push(self: ArgumentList, expr: ExpressionNode) -> ArgumentList {
+        var args = self.args;
+        args.push(expr);
+        return ArgumentList { args: args };
+    }
+
+    pub fn extend(self: ArgumentList, exprs: list<ExpressionNode>) -> ArgumentList {
+        var args = self.args;
+        for expr in exprs {
+            args.push(expr);
+        }
+        return ArgumentList { args: args };
+    }
+
+}
+
+pub fn make_argument_list(args: list<ExpressionNode>) -> ArgumentList {
+    var result: ArgumentList = ArgumentList::new();
+    for arg in args {
+        result.args.push(arg);
+    }
+    return result;
+}
+
+/// Function list helper to collect parsed functions.
+pub struct FunctionList {
+    var functions: list<FunctionDef>;
+};
+
+impl FunctionList {
+    pub fn new() -> FunctionList {
+        return FunctionList { functions: [] };
+    }
+}
+
+pub fn make_function_list(functions: list<FunctionDef>) -> FunctionList {
+    var result: FunctionList = FunctionList::new();
+    for func in functions {
+        result.functions.push(func);
+    }
+    return result;
+}
+
+/// Struct list helper for collecting struct definitions.
+pub struct StructList {
+    var structs: list<StructDef>;
+};
+
+impl StructList {
+    pub fn new() -> StructList {
+        return StructList { structs: [] };
+    }
+}
+
+pub fn make_struct_list(structs: list<StructDef>) -> StructList {
+    var result: StructList = StructList::new();
+    for s in structs {
+        result.structs.push(s);
+    }
+    return result;
+}
+
+/// Enum list helper for collecting enum definitions.
+pub struct EnumList {
+    var enums: list<EnumDef>;
+};
+
+impl EnumList {
+    pub fn new() -> EnumList {
+        return EnumList { enums: [] };
+    }
+}
+
+pub fn make_enum_list(enums: list<EnumDef>) -> EnumList {
+    var result: EnumList = EnumList::new();
+    for e in enums {
+        result.enums.push(e);
+    }
+    return result;
+}
+
+/// Top-level list/detail to capture program items before we resolve them.
+pub struct TopLevelItem {
+    var kind: string;
+    var name: string;
+    var payload: string;
+};
+
+impl TopLevelItem {
+    pub fn new(kind: string, name: string, payload: string) -> TopLevelItem {
+        return TopLevelItem { kind: kind, name: name, payload: payload };
+    }
+}
+
+pub struct TopLevelList {
+    var items: list<TopLevelItem>;
+};
+
+impl TopLevelList {
+    pub fn new() -> TopLevelList {
+        return TopLevelList { items: [] };
+    }
+}
+
+pub fn make_top_level_list(items: list<TopLevelItem>) -> TopLevelList {
+    var result: TopLevelList = TopLevelList::new();
+    for item in items {
+        result.items.push(item);
+    }
+    return result;
+}
+
+/// Match arm helper for match expressions.
+pub struct MatchArm {
+    var pattern: string;
+    var binding: string;
+    var expression: ExpressionNode;
+};
+
+impl MatchArm {
+    pub fn new(pattern: string, binding: string, expression: ExpressionNode) -> MatchArm {
+        return MatchArm { pattern: pattern, binding: binding, expression: expression };
+    }
+}
+
+pub struct MatchArmList {
+    var arms: list<MatchArm>;
+};
+
+impl MatchArmList {
+    pub fn new() -> MatchArmList {
+        return MatchArmList { arms: [] };
+    }
+}
+
+pub fn make_match_arm_list(arms: list<MatchArm>) -> MatchArmList {
+    var result: MatchArmList = MatchArmList::new();
+    for arm in arms {
+        result.arms.push(arm);
+    }
+    return result;
+}
+
+/// Map entry helper for map literals.
+pub struct MapEntry {
+    var key: ExpressionNode;
+    var value: ExpressionNode;
+};
+
+impl MapEntry {
+    pub fn new(key: ExpressionNode, value: ExpressionNode) -> MapEntry {
+        return MapEntry { key: key, value: value };
+    }
+}
+
+pub struct MapEntryList {
+    var entries: list<MapEntry>;
+};
+
+impl MapEntryList {
+    pub fn new() -> MapEntryList {
+        return MapEntryList { entries: [] };
+    }
+}
+
+pub fn make_map_entry_list(entries: list<MapEntry>) -> MapEntryList {
+    var result: MapEntryList = MapEntryList::new();
+    for entry in entries {
+        result.entries.push(entry);
+    }
+    return result;
+}
+
+/// Struct field initializer list.
+pub struct StructFieldInit {
+    var name: string;
+    var value: ExpressionNode;
+};
+
+impl StructFieldInit {
+    pub fn new(name: string, value: ExpressionNode) -> StructFieldInit {
+        return StructFieldInit { name: name, value: value };
+    }
+}
+
+pub struct StructFieldInitList {
+    var fields: list<StructFieldInit>;
+};
+
+impl StructFieldInitList {
+    pub fn new() -> StructFieldInitList {
+        return StructFieldInitList { fields: [] };
+    }
+}
+
+pub fn make_struct_field_init_list(fields: list<StructFieldInit>) -> StructFieldInitList {
+    var result: StructFieldInitList = StructFieldInitList::new();
+    for field in fields {
+        result.fields.push(field);
+    }
+    return result;
+}
+
+pub fn make_function_def(name: string, return_type: TypeNode, params: list<Parameter>, body: StatementList,
+                        is_public: i32, is_extern: i32) -> FunctionDef {
+    return FunctionDef::new(name, return_type, params, body, is_public, is_extern);
+}
+
+pub fn create_function_def(name: string, return_type: TypeNode, params: list<Parameter>, body: StatementList,
+                        is_public: i32, is_extern: i32) -> FunctionDef {
+    return make_function_def(name, return_type, params, body, is_public, is_extern);
+}
+
+pub fn make_struct_def(name: string, members: list<StructMember>) -> StructDef {
+    var def: StructDef = StructDef::new(name);
+    for member in members {
+        def.members.push(member);
+    }
+    return def;
+}
+
+pub fn make_enum_def(name: string, variants: list<EnumVariant>) -> EnumDef {
+    var def: EnumDef = EnumDef::new(name);
+    for variant in variants {
+        def.variants.push(variant);
+    }
+    return def;
+}
+
+pub fn make_enum_variant(name: string, value: string) -> EnumVariant {
+    var variant: EnumVariant = EnumVariant::new(name);
+    if len(value) != 0 {
+        variant.value = value;
+        variant.has_value = 1;
+    }
+    return variant;
+}
+
+pub fn create_struct_member(name: string, typ: TypeNode) -> StructMember {
+    return StructMember::new(name, typ);
+}
+
+pub fn create_assignment(target: string, value: ExpressionNode) -> ExpressionNode {
+    var node: ExpressionNode = ExpressionNode::new("assignment");
+    node.value = target;
+    node.children.push(value);
+    return node;
+}
+
+pub fn create_binary_op(op: string, left: ExpressionNode, right: ExpressionNode) -> ExpressionNode {
+    var node: ExpressionNode = ExpressionNode::new("binary");
+    node.value = op;
+    node.children.push(left);
+    node.children.push(right);
+    return node;
+}
+/// Function definitions collected in the top-level program structure.
+pub struct FunctionDef {
+    var name: string;
+    var return_type: TypeNode;
+    var params: list<Parameter>;
+    var body: StatementList;
+    var is_public: i32;
+    var is_extern: i32;
+};
+
+impl FunctionDef {
+    pub fn new(name: string, return_type: TypeNode, params: list<Parameter>, body: StatementList,
+               is_public: i32, is_extern: i32) -> FunctionDef {
+        return FunctionDef {
+            name: name,
+            return_type: return_type,
+            params: params,
+            body: body,
+            is_public: is_public,
+            is_extern: is_extern
+        };
+    }
+}
+
+pub struct FunctionCall {
+    var name: string;
+    var argument_list: ArgumentList;
+    var line: i32;
+    var kind: string;
+};
+
+impl FunctionCall {
+    pub fn new(name: string, line: i32) -> FunctionCall {
+        return FunctionCall { name: name, argument_list: ArgumentList::new(), line: line, kind: "regular" };
+    }
+
+    pub fn with_kind(self: FunctionCall, kind: string) -> FunctionCall {
+        return FunctionCall {
+            name: self.name,
+            argument_list: self.argument_list,
+            line: self.line,
+            kind: kind
+        };
+    }
+
+    pub fn with_arguments(self: FunctionCall, args: ArgumentList) -> FunctionCall {
+        return FunctionCall {
+            name: self.name,
+            argument_list: args,
+            line: self.line,
+            kind: self.kind
+        };
+    }
+
+    pub fn add_argument(self: FunctionCall, expr: ExpressionNode) -> FunctionCall {
+        return FunctionCall {
+            name: self.name,
+            argument_list: self.argument_list.push(expr),
+            line: self.line,
+            kind: self.kind
+        };
+    }
+}
+
+
+/// Struct member definition.
+pub struct StructMember {
+    var name: string;
+    var typ: TypeNode;
+};
+
+impl StructMember {
+    pub fn new(name: string, typ: TypeNode) -> StructMember {
+        return StructMember { name: name, typ: typ };
+    }
+}
+
+/// Struct definition node.
+pub struct StructDef {
+    var name: string;
+    var base_name: string;
+    var members: list<StructMember>;
+    var is_public: i32;
+    var derive_debug: i32;
+    var source_module: string;
+    var type_params: list<string>;
+};
+
+impl StructDef {
+    pub fn new(name: string) -> StructDef {
+        return StructDef {
+            name: name,
+            base_name: String::new(),
+            members: [],
+            is_public: 0,
+            derive_debug: 0,
+            source_module: String::new(),
+            type_params: []
+        };
+    }
+}
+
+/// Enum variant definition.
+pub struct EnumVariant {
+    var name: string;
+    var value: string;
+    var has_value: i32;
+};
+
+impl EnumVariant {
+    pub fn new(name: string) -> EnumVariant {
+        return EnumVariant { name: name, value: String::new(), has_value: 0 };
+    }
+}
+
+/// Enum definition node.
+pub struct EnumDef {
+    var name: string;
+    var variants: list<EnumVariant>;
+    var is_public: i32;
+    var backing_type: string;
+    var source_module: string;
+};
+
+impl EnumDef {
+    pub fn new(name: string) -> EnumDef {
+        return EnumDef { name: name, variants: [], is_public: 0, backing_type: String::new(), source_module: String::new() };
+    }
+}
+
+/// Type alias definition.
+pub struct TypeAlias {
+    var name: string;
+    var aliased: TypeNode;
+    var type_params: list<string>;
+};
+
+impl TypeAlias {
+    pub fn new(name: string, aliased: TypeNode) -> TypeAlias {
+        return TypeAlias { name: name, aliased: aliased, type_params: [] };
+    }
+}
+
+/// Module declaration entry.
+pub struct ModuleDecl {
+    var module_name: string;
+    var file_path: string;
+};
+
+impl ModuleDecl {
+    pub fn new(name: string) -> ModuleDecl {
+        return ModuleDecl { module_name: name, file_path: String::new() };
+    }
+}
+
+/// Use/import declaration.
+pub struct UseDecl {
+    var module_name: string;
+    var item_name: string;
+    var import_all: i32;
+};
+
+impl UseDecl {
+    pub fn new(module_name: string, item_name: string, import_all: i32) -> UseDecl {
+        return UseDecl { module_name: module_name, item_name: item_name, import_all: import_all };
+    }
+}
+
+/// Holds the parsed program data (functions, structs, modules, etc.).
+pub struct Program {
+    var functions: list<FunctionDef>;
+    var imports: list<string>;
+    var modules: list<ModuleDecl>;
+    var structs: list<StructDef>;
+    var enums: list<EnumDef>;
+    var globals: list<string>;
+    var type_aliases: list<TypeAlias>;
+};
+
+impl Program {
+    pub fn new() -> Program {
+        return Program {
+            functions: [],
+            imports: [],
+            modules: [],
+            structs: [],
+            enums: [],
+            globals: [],
+            type_aliases: []
+        };
+    }
+}
