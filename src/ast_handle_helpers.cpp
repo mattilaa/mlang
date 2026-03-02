@@ -308,4 +308,54 @@ ASTNode* mla_ast_program(ASTNode* top_level_list)
     return create_program(top_level_list);
 }
 
+ASTNode* mla_ast_type_node(int type)
+{
+    return create_type_node(static_cast<TypeNode::TypeKind>(type));
+}
+
+ASTNode* mla_ast_list_type()
+{
+    return create_list_type();
+}
+
+ASTNode* mla_ast_generic_list_type(ASTNode* element_type)
+{
+    return create_generic_list_type(element_type);
+}
+
+ASTNode* mla_ast_map_type(ASTNode* key_type, ASTNode* value_type)
+{
+    return create_map_type(key_type, value_type);
+}
+
+ASTNode* mla_ast_tuple_type(ASTNode* type_list)
+{
+    return create_tuple_type(type_list);
+}
+
+ASTNode* mla_ast_type_list(ASTNode* type)
+{
+    return create_type_list(type);
+}
+
+ASTNode* mla_ast_struct_type_ref(char* name)
+{
+    return create_struct_type_ref(name);
+}
+
+ASTNode* mla_ast_generic_struct_type_ref(char* name, ASTNode* type_args)
+{
+    return create_generic_struct_type_ref(name, type_args);
+}
+
+ASTNode* mla_ast_pointer_type(ASTNode* element_type)
+{
+    return create_pointer_type(element_type);
+}
+
+ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable)
+{
+    return create_reference_type(element_type, is_mutable);
+}
+
 } // extern "C"

@@ -60,15 +60,15 @@ extern "C" {
 }
 
 // Function prototypes for AST node creation
-ASTNode* create_program(ASTNode* top_level_list);
-ASTNode* create_top_level_list(ASTNode* item);
-ASTNode* add_to_top_level_list(ASTNode* list, ASTNode* item);
+ASTNode* mla_ast_program(ASTNode* top_level_list);
+ASTNode* mla_ast_top_level_list(ASTNode* item);
+ASTNode* mla_ast_add_to_top_level_list(ASTNode* list, ASTNode* item);
 ASTNode* create_struct_list(ASTNode* struct_def);
 ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
-ASTNode* create_type_node(int type);
+ASTNode* mla_ast_type_node(int type);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
 ASTNode* set_parameter_list_vararg(ASTNode* list);
@@ -129,7 +129,7 @@ ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNo
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
-ASTNode* create_list_type();
+ASTNode* mla_ast_list_type();
 ASTNode* mla_ast_list_literal(ASTNode* elements);
 ASTNode* mla_ast_list_element_list(ASTNode* element);
 ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
@@ -159,8 +159,8 @@ ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
 ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);
-ASTNode* create_generic_list_type(ASTNode* element_type);
-ASTNode* create_map_type(ASTNode* key_type, ASTNode* value_type);
+ASTNode* mla_ast_generic_list_type(ASTNode* element_type);
+ASTNode* mla_ast_map_type(ASTNode* key_type, ASTNode* value_type);
 ASTNode* mla_ast_map_literal(ASTNode* entries);
 ASTNode* create_map_entry_list(ASTNode* entry);
 ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
@@ -170,15 +170,16 @@ ASTNode* mla_ast_map_entry_list_create(ASTNode* entry);
 ASTNode* mla_ast_map_entry_list_add(ASTNode* list, ASTNode* entry);
 ASTNode* mla_ast_map_literal(ASTNode* entries);
 ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
-ASTNode* create_tuple_type(ASTNode* type_list);
-ASTNode* create_type_list(ASTNode* type);
+ASTNode* mla_ast_tuple_type(ASTNode* type_list);
+ASTNode* mla_ast_type_list(ASTNode* type);
 ASTNode* add_type_to_list(ASTNode* list, ASTNode* type);
 ASTNode* create_tuple_literal(ASTNode* elements);
 ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
 ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
-ASTNode* create_struct_type_ref(char* name);
+ASTNode* mla_ast_struct_type_ref(char* name);
+ASTNode* mla_ast_generic_struct_type_ref(char* name, ASTNode* type_args);
 ASTNode* create_len_expression(ASTNode* expr, int line);
 ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 // Generic structs and impl blocks
@@ -191,7 +192,6 @@ ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 ASTNode* mla_ast_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
 ASTNode* mla_ast_struct_field_init_list(char* field_name, ASTNode* value);
 ASTNode* mla_ast_struct_field_init_list_add(ASTNode* list, char* field_name, ASTNode* value);
-ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
 ASTNode* create_match_pattern(char* name, char* binding, int line);
 ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
 ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
@@ -201,8 +201,8 @@ ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line);
 ASTNode* mla_ast_enum_variant_list(ASTNode* variant);
 ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
-ASTNode* create_pointer_type(ASTNode* element_type);
-ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
+ASTNode* mla_ast_pointer_type(ASTNode* element_type);
+ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_closure(ASTNode* body);
 ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
@@ -591,7 +591,7 @@ function_def
         {
             TypeNode* inferred = nullptr;
             if(strcmp($2, "main") == 0)
-                inferred = static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I32));
+                inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
             auto* node = mla_ast_function_def(inferred, $2, $4, $7, 0, 0);
             node->line = yylineno;
             $$ = node;
@@ -600,7 +600,7 @@ function_def
         {
             TypeNode* inferred = nullptr;
             if(strcmp($3, "main") == 0)
-                inferred = static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I32));
+                inferred = static_cast<TypeNode*>(mla_ast_type_node(TypeNode::TYPE_I32));
             auto* node = mla_ast_function_def(inferred, $3, $5, $8, 1, 0);
             node->line = yylineno;
             $$ = node;
@@ -640,53 +640,53 @@ parameters
 parameter
     : IDENTIFIER COLON type { $$ = create_parameter($3, $1); }
     | AMP IDENTIFIER
-        { $$ = create_parameter(create_struct_type_ref(strdup("Self")), $2); }
+        { $$ = create_parameter(mla_ast_struct_type_ref(strdup("Self")), $2); }
     ;
 
 type
-    : VOID   { $$ = create_type_node(TypeNode::TYPE_VOID); }
-    | BOOL   { $$ = create_type_node(TypeNode::TYPE_BOOL); }
-    | INT    { $$ = create_type_node(TypeNode::TYPE_INT); }
-    | FLOAT  { $$ = create_type_node(TypeNode::TYPE_FLOAT); }
-    | DOUBLE { $$ = create_type_node(TypeNode::TYPE_DOUBLE); }
-    | STRING { $$ = create_type_node(TypeNode::TYPE_STRING); }
-    | STR8   { $$ = create_type_node(TypeNode::TYPE_STR8); }
-    | STR16  { $$ = create_type_node(TypeNode::TYPE_STR16); }
-    | LIST   { $$ = create_list_type(); }
-    | LIST GENERIC_LT type GT { $$ = create_generic_list_type($3); }
-    | MAP GENERIC_LT type COMMA type GT { $$ = create_map_type($3, $5); }
+    : VOID   { $$ = mla_ast_type_node(TypeNode::TYPE_VOID); }
+    | BOOL   { $$ = mla_ast_type_node(TypeNode::TYPE_BOOL); }
+    | INT    { $$ = mla_ast_type_node(TypeNode::TYPE_INT); }
+    | FLOAT  { $$ = mla_ast_type_node(TypeNode::TYPE_FLOAT); }
+    | DOUBLE { $$ = mla_ast_type_node(TypeNode::TYPE_DOUBLE); }
+    | STRING { $$ = mla_ast_type_node(TypeNode::TYPE_STRING); }
+    | STR8   { $$ = mla_ast_type_node(TypeNode::TYPE_STR8); }
+    | STR16  { $$ = mla_ast_type_node(TypeNode::TYPE_STR16); }
+    | LIST   { $$ = mla_ast_list_type(); }
+    | LIST GENERIC_LT type GT { $$ = mla_ast_generic_list_type($3); }
+    | MAP GENERIC_LT type COMMA type GT { $$ = mla_ast_map_type($3, $5); }
     | tuple_type
-    | PTR GENERIC_LT type GT { $$ = create_pointer_type($3); }
-    | AMP type               { $$ = create_reference_type($2, 0); }
-    | AMP_MUT type           { $$ = create_reference_type($2, 1); }
+    | PTR GENERIC_LT type GT { $$ = mla_ast_pointer_type($3); }
+    | AMP type               { $$ = mla_ast_reference_type($2, 0); }
+    | AMP_MUT type           { $$ = mla_ast_reference_type($2, 1); }
     | LBRACKET type SEMICOLON expression RBRACKET
-        { $$ = create_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
-    | I8     { $$ = create_type_node(TypeNode::TYPE_I8); }
-    | I16    { $$ = create_type_node(TypeNode::TYPE_I16); }
-    | I32    { $$ = create_type_node(TypeNode::TYPE_I32); }
-    | I64    { $$ = create_type_node(TypeNode::TYPE_I64); }
-    | U8     { $$ = create_type_node(TypeNode::TYPE_U8); }
-    | U16    { $$ = create_type_node(TypeNode::TYPE_U16); }
-    | U32    { $$ = create_type_node(TypeNode::TYPE_U32); }
-    | U64    { $$ = create_type_node(TypeNode::TYPE_U64); }
-    | module_path { $$ = create_struct_type_ref($1); }
+        { $$ = mla_ast_generic_list_type($2); /* [T; N] is list<T>, N ignored */ }
+    | I8     { $$ = mla_ast_type_node(TypeNode::TYPE_I8); }
+    | I16    { $$ = mla_ast_type_node(TypeNode::TYPE_I16); }
+    | I32    { $$ = mla_ast_type_node(TypeNode::TYPE_I32); }
+    | I64    { $$ = mla_ast_type_node(TypeNode::TYPE_I64); }
+    | U8     { $$ = mla_ast_type_node(TypeNode::TYPE_U8); }
+    | U16    { $$ = mla_ast_type_node(TypeNode::TYPE_U16); }
+    | U32    { $$ = mla_ast_type_node(TypeNode::TYPE_U32); }
+    | U64    { $$ = mla_ast_type_node(TypeNode::TYPE_U64); }
+    | module_path { $$ = mla_ast_struct_type_ref($1); }
     | module_path GENERIC_LT type_list GT
         {
             auto* list = static_cast<TypeListNode*>($3);
             // Vec<T> is a built-in alias for list<T>; for N != 1 fall back to generic struct.
             if(strcmp($1, "Vec") == 0 && list && list->types.size() == 1)
-                $$ = create_generic_list_type(list->types[0]);
+                $$ = mla_ast_generic_list_type(list->types[0]);
             else
-                $$ = create_generic_struct_type_ref($1, $3);
+                $$ = mla_ast_generic_struct_type_ref($1, $3);
         }
     ;
 
 tuple_type
-    : TUPLE GENERIC_LT type_list GT { $$ = create_tuple_type($3); }
+    : TUPLE GENERIC_LT type_list GT { $$ = mla_ast_tuple_type($3); }
     ;
 
 type_list
-    : type { $$ = create_type_list($1); }
+    : type { $$ = mla_ast_type_list($1); }
     | type_list COMMA type { $$ = add_type_to_list($1, $3); }
     ;
 

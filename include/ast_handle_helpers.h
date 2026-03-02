@@ -55,6 +55,16 @@ ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNod
 ASTNode* mla_ast_top_level_list(ASTNode* item);
 ASTNode* mla_ast_add_to_top_level_list(ASTNode* list, ASTNode* item);
 ASTNode* mla_ast_program(ASTNode* top_level_list);
+ASTNode* mla_ast_type_node(int type);
+ASTNode* mla_ast_list_type();
+ASTNode* mla_ast_generic_list_type(ASTNode* element_type);
+ASTNode* mla_ast_map_type(ASTNode* key_type, ASTNode* value_type);
+ASTNode* mla_ast_tuple_type(ASTNode* type_list);
+ASTNode* mla_ast_type_list(ASTNode* type);
+ASTNode* mla_ast_struct_type_ref(char* name);
+ASTNode* mla_ast_generic_struct_type_ref(char* name, ASTNode* type_args);
+ASTNode* mla_ast_pointer_type(ASTNode* element_type);
+ASTNode* mla_ast_reference_type(ASTNode* element_type, int is_mutable);
 }
 
 #endif // AST_HANDLE_HELPERS_H
