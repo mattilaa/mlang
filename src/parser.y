@@ -67,7 +67,7 @@ ASTNode* create_struct_list(ASTNode* struct_def);
 ASTNode* add_struct_to_list(ASTNode* list, ASTNode* struct_def);
 ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
-ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
+ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
 ASTNode* create_type_node(int type);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
@@ -342,14 +342,14 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 
 program
     : top_level_list {
-        $$ = create_program($1);
+        $$ = mla_ast_program($1);
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
 
 top_level_list
-    : top_level_item { $$ = create_top_level_list($1); }
-    | top_level_list top_level_item { $$ = add_to_top_level_list($1, $2); }
+    : top_level_item { $$ = mla_ast_top_level_list($1); }
+    | top_level_list top_level_item { $$ = mla_ast_add_to_top_level_list($1, $2); }
     ;
 
 top_level_item
@@ -584,15 +584,15 @@ struct_method
 
 function_def
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { auto* node = create_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_function_def($7, $2, $4, $9, 0, 0); node->line = yylineno; $$ = node; }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { auto* node = create_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_function_def($8, $3, $5, $10, 1, 0); node->line = yylineno; $$ = node; }
     | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN LBRACE statement_list RBRACE
         {
             TypeNode* inferred = nullptr;
             if(strcmp($2, "main") == 0)
                 inferred = static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I32));
-            auto* node = create_function_def(inferred, $2, $4, $7, 0, 0);
+            auto* node = mla_ast_function_def(inferred, $2, $4, $7, 0, 0);
             node->line = yylineno;
             $$ = node;
         }
@@ -601,14 +601,14 @@ function_def
             TypeNode* inferred = nullptr;
             if(strcmp($3, "main") == 0)
                 inferred = static_cast<TypeNode*>(create_type_node(TypeNode::TYPE_I32));
-            auto* node = create_function_def(inferred, $3, $5, $8, 1, 0);
+            auto* node = mla_ast_function_def(inferred, $3, $5, $8, 1, 0);
             node->line = yylineno;
             $$ = node;
         }
     | EXTERN FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { auto* node = create_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_function_def($8, $3, $5, NULL, 0, 1); node->line = yylineno; $$ = node; }
     | EXTERN PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type SEMICOLON
-        { auto* node = create_function_def($9, $4, $6, NULL, 1, 1); node->line = yylineno; $$ = node; }
+        { auto* node = mla_ast_function_def($9, $4, $6, NULL, 1, 1); node->line = yylineno; $$ = node; }
     ;
 
 test_function_def

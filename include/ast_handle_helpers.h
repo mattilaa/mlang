@@ -51,6 +51,10 @@ ASTNode* mla_ast_for_range(char* var_name, ASTNode* range, ASTNode* body, int li
 ASTNode* mla_ast_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body, int line);
 ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable, ASTNode* body, int line);
 ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line, int uses_colon_without_guard);
+ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
+ASTNode* mla_ast_top_level_list(ASTNode* item);
+ASTNode* mla_ast_add_to_top_level_list(ASTNode* list, ASTNode* item);
+ASTNode* mla_ast_program(ASTNode* top_level_list);
 }
 
 #endif // AST_HANDLE_HELPERS_H

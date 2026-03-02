@@ -288,4 +288,24 @@ ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line, in
     return create_while_statement(condition, body, line, uses_colon_without_guard);
 }
 
+ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern)
+{
+    return create_function_def(type, name, params, body, is_public, is_extern);
+}
+
+ASTNode* mla_ast_top_level_list(ASTNode* item)
+{
+    return create_top_level_list(item);
+}
+
+ASTNode* mla_ast_add_to_top_level_list(ASTNode* list, ASTNode* item)
+{
+    return add_to_top_level_list(list, item);
+}
+
+ASTNode* mla_ast_program(ASTNode* top_level_list)
+{
+    return create_program(top_level_list);
+}
+
 } // extern "C"
