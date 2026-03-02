@@ -293,6 +293,103 @@ ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line, in
     return create_while_statement(condition, body, line, uses_colon_without_guard);
 }
 
+ASTNode* mla_ast_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch)
+{
+    return create_if_statement_impl(condition, then_branch, else_if_branch, else_branch);
+}
+
+ASTNode* mla_ast_if_statement_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch,
+                                        ASTNode* else_if_branch, ASTNode* else_branch)
+{
+    return create_if_statement_with_init_impl(condition_init, condition, then_branch,
+                                              else_if_branch, else_branch);
+}
+
+ASTNode* mla_ast_else_if(ASTNode* condition, ASTNode* body)
+{
+    return create_else_if_impl(condition, body);
+}
+
+ASTNode* mla_ast_else_if_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* body)
+{
+    return create_else_if_with_init_impl(condition_init, condition, body);
+}
+
+ASTNode* mla_ast_let_declaration(ASTNode* type, char* name, ASTNode* expr)
+{
+    return create_let_declaration_impl(type, name, expr);
+}
+
+ASTNode* mla_ast_var_declaration(ASTNode* type, char* name, ASTNode* expr)
+{
+    return create_var_declaration_impl(type, name, expr);
+}
+
+ASTNode* mla_ast_cast_expression(int type, ASTNode* expr)
+{
+    return create_cast_expression_impl(type, expr);
+}
+
+ASTNode* mla_ast_range_expression(ASTNode* start, ASTNode* end, int inclusive)
+{
+    return create_range_expression_impl(start, end, inclusive);
+}
+
+ASTNode* mla_ast_print_stmt(int kind, char* format_str, ASTNode* args, int line)
+{
+    return create_print_stmt_impl(kind, format_str, args, line);
+}
+
+ASTNode* mla_ast_print_expr_stmt(int kind, ASTNode* expr, int line)
+{
+    return create_print_expr_stmt_impl(kind, expr, line);
+}
+
+ASTNode* mla_ast_debug_print_stmt(char* format_str, ASTNode* args, int line)
+{
+    return create_debug_print_stmt_impl(format_str, args, line);
+}
+
+ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line)
+{
+    return create_assert_eq_impl(left, right, line);
+}
+
+ASTNode* mla_ast_break_stmt(int line)
+{
+    return create_break_stmt_impl(line);
+}
+
+ASTNode* mla_ast_continue_stmt(int line)
+{
+    return create_continue_stmt_impl(line);
+}
+
+ASTNode* mla_ast_expression_statement(ASTNode* expr)
+{
+    return create_expression_statement_impl(expr);
+}
+
+ASTNode* mla_ast_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line)
+{
+    return create_deref_assignment_impl(pointer_expr, expr, line);
+}
+
+ASTNode* mla_ast_mod_declaration(char* name, int line)
+{
+    return create_mod_declaration_impl(name, line);
+}
+
+ASTNode* mla_ast_use_declaration(char* module_name, char* item_name, int line)
+{
+    return create_use_declaration_impl(module_name, item_name, line);
+}
+
+ASTNode* mla_ast_use_all_declaration(char* module_name, int line)
+{
+    return create_use_all_declaration_impl(module_name, line);
+}
+
 ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern)
 {
     return create_function_def(type, name, params, body, is_public, is_extern);
