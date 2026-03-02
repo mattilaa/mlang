@@ -395,7 +395,7 @@ fn line_text_at(text: string, line0: i64) -> string {
     if found_start == 0: {
         if cur == line0: {
             start = n;
-        } else: {
+        } else {
             return String::new();
         }
     }
@@ -425,7 +425,7 @@ fn offset_to_line_col1(text: string, off: i64) -> i64 {
         if eq(ch, "\n") == 1: {
             line1 = line1 + 1;
             col1 = 1;
-        } else: {
+        } else {
             col1 = col1 + 1;
         }
     }
@@ -1256,9 +1256,9 @@ fn handle_code_action(payload: string) -> string {
                     "{{\"title\":\"Organize Imports\",\"kind\":\"source.organizeImports\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":0}}}},\"newText\":\"{}\"}}]}}}}}}",
                     uri_e, import_lines, new_block
                 );
-                if j > 0: {
+                if j > 0 {
                     out = format!("{},{}", out, action_oi);
-                } else: {
+                } else {
                     out = format!("{}{}", out, action_oi);
                 }
                 j = j + 1;
@@ -1275,7 +1275,7 @@ fn handle_code_action(payload: string) -> string {
         var semicolon_hint: i32 = 0;
         if contains(msg, "semicolon") == 1: {
             semicolon_hint = 1;
-        } else: {
+        } else {
             if contains(msg, "expected ';'") == 1: {
                 semicolon_hint = 1;
             }
@@ -1299,9 +1299,9 @@ fn handle_code_action(payload: string) -> string {
                                         "{{\"title\":\"Insert ';'\",\"kind\":\"quickfix\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\";\"}}]}}}}}}",
                                         uri_e, target_line, target_char, target_line, target_char
                                     );
-                                    if j > 0: {
+                                    if j > 0 {
                                         out = format!("{},{}", out, action_qf);
-                                    } else: {
+                                    } else {
                                         out = format!("{}{}", out, action_qf);
                                     }
                                     j = j + 1;
@@ -1452,9 +1452,9 @@ fn handle_references(payload: string) -> string {
             }
         }
         let loc: string = location_json(r.uri, r.line, r.column);
-        if j > 0: {
+        if j > 0 {
             out = format!("{},{}", out, loc);
-        } else: {
+        } else {
             out = format!("{}{}", out, loc);
         }
         j = j + 1;
@@ -1536,15 +1536,15 @@ fn handle_completion(payload: string) -> string {
                 "{{\"label\":\"{}\",\"kind\":{},\"detail\":\"{}\",\"documentation\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
                 label, kind, detail, doc
             );
-        } else: {
+        } else {
             item = format!(
                 "{{\"label\":\"{}\",\"kind\":{},\"detail\":\"{}\"}}",
                 label, kind, detail
             );
         }
-        if j > 0: {
+        if j > 0 {
             out = format!("{},{}", out, item);
-        } else: {
+        } else {
             out = format!("{}{}", out, item);
         }
         j = j + 1;
@@ -1593,7 +1593,7 @@ fn handle_document_symbol(payload: string) -> string {
         let prev: string = out;
         if i > 0: {
             out = format!("{},{}", out, item);
-        } else: {
+        } else {
             out = format!("{}{}", out, item);
         }
     }
@@ -1636,9 +1636,9 @@ fn handle_document_highlight(payload: string) -> string {
             range
         );
         let prev: string = out;
-        if j > 0: {
+        if j > 0 {
             out = format!("{},{}", out, item);
-        } else: {
+        } else {
             out = format!("{}{}", out, item);
         }
         j = j + 1;
@@ -1843,9 +1843,9 @@ fn handle_rename(payload: string) -> string {
             "{{\"textDocument\":{{\"uri\":\"{}\",\"version\":null}},\"edits\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]}}",
             uri_e, sl, sc, sl, ec, new_e
         );
-        if j > 0: {
+        if j > 0 {
             changes = format!("{},{}", changes, change);
-        } else: {
+        } else {
             changes = format!("{}{}", changes, change);
         }
         j = j + 1;
@@ -1889,9 +1889,9 @@ fn handle_diagnostic(payload: string) -> string {
             sl, sc, sl, sc, msg
         );
         result_id = format!("{}|{}:{}:{}", result_id, d.line, d.column, d.message);
-        if j > 0: {
+        if j > 0 {
             items = format!("{},{}", items, item);
-        } else: {
+        } else {
             items = format!("{}{}", items, item);
         }
         j = j + 1;
@@ -1959,9 +1959,9 @@ fn handle_workspace_symbol(payload: string) -> string {
                 "{{\"name\":\"{}\",\"kind\":{},\"location\":{}}}",
                 name_e, kind, loc
             );
-            if j > 0: {
+            if j > 0 {
                 out = format!("{},{}", out, item);
-            } else: {
+            } else {
                 out = format!("{}{}", out, item);
             }
             j = j + 1;
@@ -2072,9 +2072,9 @@ fn handle_semantic_tokens_full(payload: string) -> string {
         let ttype: i32 = semantic_token_type(sym.signature);
         let tmods: i32 = semantic_token_modifiers(sym.signature);
         let chunk: string = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
-        if j > 0: {
+        if j > 0 {
             data = format!("{},{}", data, chunk);
-        } else: {
+        } else {
             data = format!("{}{}", data, chunk);
         }
         prev_line = line0;
@@ -2113,12 +2113,18 @@ fn handle_implementation(payload: string) -> string {
         if len(candidate_text) == 0: { continue; }
         let packed: i64 = find_implementation_pos(query_text, line, col, candidate_text);
         if packed <= 0: { continue; }
-        let line1: i32 = packed / 4294967296;
-        let col1: i32 = packed%4294967296;
+        var divisor: i64 = 1;
+        var shift_iter: i32 = 0;
+        while shift_iter < 32 {
+            divisor = divisor * 2;
+            shift_iter = shift_iter + 1;
+        }
+        let line1: i32 = packed / divisor;
+        let col1: i32 = packed - line1 * divisor;
         let loc: string = location_json(doc_uri, line1, col1);
-        if j > 0: {
+        if j > 0 {
             out = format!("{},{}", out, loc);
-        } else: {
+        } else {
             out = format!("{}{}", out, loc);
         }
         j = j + 1;

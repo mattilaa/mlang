@@ -681,6 +681,12 @@ impl Program {
     }
 }
 
+pub fn create_struct_init(type_name: string, var_name: string) -> ExpressionNode {
+    var node: ExpressionNode = ExpressionNode::new("struct_init");
+    node.value = format("{}::{}", type_name, var_name);
+    return node;
+}
+
 extern fn mla_argument_list_create() -> i64;
 extern fn mla_argument_list_add(arg_list: i64, expr: i64) -> i64;
 extern fn mla_function_call_create(name: string, line: i32) -> i64;

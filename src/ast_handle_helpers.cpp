@@ -98,6 +98,11 @@ ASTNode* mla_ast_function_call_from_list(char* name, ASTNode* args, int line)
     return create_function_call_multi_impl(name, args, line);
 }
 
+ASTNode* mla_ast_struct_init(char* type_name, char* var_name)
+{
+    return create_struct_init_impl(type_name, var_name);
+}
+
 ASTNode* mla_ast_statement_list_create(ASTNode* stmt)
 {
     return create_statement_list_impl(stmt);
@@ -446,6 +451,56 @@ ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int l
 ASTNode* mla_ast_try_expression(ASTNode* expr, int line)
 {
     return create_try_expression(expr, line);
+}
+
+ASTNode* mla_ast_match_pattern(char* name, char* binding, int line)
+{
+    return create_match_pattern(name, binding, line);
+}
+
+ASTNode* mla_ast_match_literal_pattern(ASTNode* literal, int line)
+{
+    return create_match_literal_pattern(literal, line);
+}
+
+ASTNode* mla_ast_tuple_literal(ASTNode* elements)
+{
+    return create_tuple_literal(elements);
+}
+
+ASTNode* mla_ast_tuple_access(ASTNode* tuple, int index, int line)
+{
+    return create_tuple_access(tuple, index, line);
+}
+
+ASTNode* mla_ast_index_expression(ASTNode* base, ASTNode* index, int line)
+{
+    return create_index_expression(base, index, line);
+}
+
+ASTNode* mla_ast_map_keys_iterator(ASTNode* map_expr, int line)
+{
+    return create_map_keys_iterator(map_expr, line);
+}
+
+ASTNode* mla_ast_map_values_iterator(ASTNode* map_expr, int line)
+{
+    return create_map_values_iterator(map_expr, line);
+}
+
+ASTNode* mla_ast_map_entries_iterator(ASTNode* map_expr, int line)
+{
+    return create_map_entries_iterator(map_expr, line);
+}
+
+ASTNode* mla_ast_closure(ASTNode* body)
+{
+    return create_closure(body);
+}
+
+ASTNode* mla_ast_closure_with_params(ASTNode* params, ASTNode* body)
+{
+    return create_closure_with_params(params, body);
 }
 
 } // extern "C"

@@ -1218,26 +1218,26 @@ match_arm
 
 match_pattern
     : IDENTIFIER LPAREN IDENTIFIER RPAREN
-        { $$ = create_match_pattern($1, $3, yylineno); }
+        { $$ = mla_ast_match_pattern($1, $3, yylineno); }
     | module_path
         {
             if(strstr($1, "::"))
-                $$ = create_match_literal_pattern(create_enum_or_ident_from_path($1, yylineno), yylineno);
+                $$ = mla_ast_match_literal_pattern(create_enum_or_ident_from_path($1, yylineno), yylineno);
             else
-                $$ = create_match_pattern($1, NULL, yylineno);
+                $$ = mla_ast_match_pattern($1, NULL, yylineno);
         }
     | INT_LITERAL
-        { $$ = create_match_literal_pattern(mla_ast_literal_int($1), yylineno); }
+        { $$ = mla_ast_match_literal_pattern(mla_ast_literal_int($1), yylineno); }
     | FLOAT_LITERAL
-        { $$ = create_match_literal_pattern(mla_ast_literal_float($1), yylineno); }
+        { $$ = mla_ast_match_literal_pattern(mla_ast_literal_float($1), yylineno); }
     | DOUBLE_LITERAL
-        { $$ = create_match_literal_pattern(mla_ast_literal_double($1), yylineno); }
+        { $$ = mla_ast_match_literal_pattern(mla_ast_literal_double($1), yylineno); }
     | STRING_LITERAL
-        { $$ = create_match_literal_pattern(mla_ast_literal_string($1), yylineno); }
+        { $$ = mla_ast_match_literal_pattern(mla_ast_literal_string($1), yylineno); }
     | TRUE_LIT
-        { $$ = create_match_literal_pattern(mla_ast_literal_bool(1), yylineno); }
+        { $$ = mla_ast_match_literal_pattern(mla_ast_literal_bool(1), yylineno); }
     | FALSE_LIT
-        { $$ = create_match_literal_pattern(mla_ast_literal_bool(0), yylineno); }
+        { $$ = mla_ast_match_literal_pattern(mla_ast_literal_bool(0), yylineno); }
     ;
 
 primary_expression
