@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "ast_impl.h"
 #include "ast_handle_helpers.h"
 
 #include <string>
@@ -95,6 +96,16 @@ ASTNode* mla_ast_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, 
 ASTNode* mla_ast_function_call_from_list(char* name, ASTNode* args, int line)
 {
     return create_function_call_multi_impl(name, args, line);
+}
+
+ASTNode* mla_ast_statement_list_create(ASTNode* stmt)
+{
+    return create_statement_list_impl(stmt);
+}
+
+ASTNode* mla_ast_statement_list_add(ASTNode* list, ASTNode* stmt)
+{
+    return add_statement_impl(list, stmt);
 }
 
 } // extern "C"

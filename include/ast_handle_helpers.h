@@ -9,6 +9,8 @@ int64_t mla_argument_list_add(int64_t list, int64_t expr);
 int64_t mla_function_call_create(const char* name, int line);
 int64_t mla_function_call_set_args(int64_t call, int64_t args);
 int64_t mla_function_call_add_arg(int64_t call, int64_t expr);
+ASTNode* mla_ast_statement_list_create(ASTNode* stmt);
+ASTNode* mla_ast_statement_list_add(ASTNode* list, ASTNode* stmt);
 
 ASTNode* mla_ast_argument_list_create(ASTNode* arg);
 ASTNode* mla_ast_argument_list_add(ASTNode* list, ASTNode* arg);
