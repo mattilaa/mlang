@@ -1,0 +1,80 @@
+#include "ast.h"
+#include "ast_handle_helpers.h"
+
+#include <string>
+
+namespace {
+
+ASTNode* node_from_handle(int64_t handle)
+{
+    return reinterpret_cast<ASTNode*>(handle);
+}
+
+int64_t handle_from_node(ASTNode* node)
+{
+    return reinterpret_cast<int64_t>(node);
+}
+
+ExpressionNode* expression_from_handle(int64_t handle)
+{
+    return reinterpret_cast<ExpressionNode*>(handle);
+}
+
+ArgumentListNode* argument_list_from_handle(int64_t handle)
+{
+    return reinterpret_cast<ArgumentListNode*>(handle);
+}
+
+FunctionCallNode* function_call_from_handle(int64_t handle)
+{
+    return reinterpret_cast<FunctionCallNode*>(handle);
+}
+
+} // namespace
+
+extern "C" {
+
+int64_t mla_argument_list_create()
+{
+    return handle_from_node(new ArgumentListNode());
+}
+
+int64_t mla_argument_list_add(int64_t list, int64_t expr)
+{
+    auto* node = argument_list_from_handle(list);
+    if(node && expr)
+    {
+        node->args.push_back(expression_from_handle(expr));
+    }
+    return list;
+}
+
+int64_t mla_function_call_create(const char* name, int line)
+{
+    auto* node = new FunctionCallNode(name ? std::string(name) : std::string());
+    node->line = line;
+    return handle_from_node(node);
+}
+
+int64_t mla_function_call_set_args(int64_t call, int64_t args)
+{
+    auto* node = function_call_from_handle(call);
+    auto* argument_list = argument_list_from_handle(args);
+    if(node && argument_list)
+    {
+        node->arguments = argument_list->args;
+    }
+    return call;
+}
+
+int64_t mla_function_call_add_arg(int64_t call, int64_t expr)
+{
+    auto* node = function_call_from_handle(call);
+    if(node && expr)
+    {
+        node->arguments.push_back(expression_from_handle(expr));
+    }
+    return call;
+}
+
+} // extern "C"

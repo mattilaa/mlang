@@ -194,6 +194,17 @@ class ExpressionNode : public ASTNode
 {
 };
 
+class ArgumentListNode : public ASTNode
+{
+public:
+    std::vector<ExpressionNode*> args;
+
+    std::string toString() const override
+    {
+        return "ArgumentList";
+    }
+};
+
 class IntLiteralNode : public ExpressionNode
 {
 public:
@@ -1200,6 +1211,9 @@ public:
     std::string toString() const override;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 // Helper function declarations for parser
 ASTNode* create_program(ASTNode* top_level_list);
 ASTNode* create_top_level_list(ASTNode* item);
@@ -1212,6 +1226,7 @@ ASTNode* create_function_def(ASTNode* type, char* name, ASTNode* params,
                              ASTNode* body, int is_public, int is_extern);
 ASTNode* create_type_node(TypeNode::TypeKind type);
 ASTNode* create_pointer_type(ASTNode* element_type);
+ASTNode* create_reference_type(ASTNode* element_type, int is_mutable);
 ASTNode* create_parameter_list(ASTNode* param);
 ASTNode* create_empty_parameter_list();
 ASTNode* set_parameter_list_vararg(ASTNode* list);
@@ -1227,6 +1242,7 @@ ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);
 ASTNode* create_int_literal(int64_t value);
+ASTNode* create_bool_literal(int value);
 ASTNode* create_float_literal(float value);
 ASTNode* create_double_literal(double value);
 ASTNode* create_string_literal(char* value);
@@ -1266,10 +1282,12 @@ ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_method_call_expr(ASTNode* object, char* method_name,
                                  ASTNode* args, int line);
+ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 ASTNode* create_list_type();
 ASTNode* create_list_literal(ASTNode* elements);
 ASTNode* create_list_element_list(ASTNode* element);
 ASTNode* add_list_element(ASTNode* list, ASTNode* element);
+ASTNode* create_array_fill(ASTNode* value, ASTNode* count);
 ASTNode* create_expression_statement(ASTNode* expr);
 ASTNode* create_block_statement(ASTNode* stmt_list);
 ASTNode* create_else_if(ASTNode* condition, ASTNode* body);
@@ -1280,6 +1298,8 @@ ASTNode* create_for_range(char* var_name, ASTNode* range, ASTNode* body,
                           int line);
 ASTNode* create_for_iterator(char* var_name, ASTNode* iterable, ASTNode* body,
                              int line);
+ASTNode* create_for_enumerate(char* index_var, char* val_var,
+                             ASTNode* iterable, ASTNode* body, int line);
 ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
                                 int uses_colon_without_guard);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
@@ -1318,6 +1338,7 @@ ASTNode* create_field_assignment(char* struct_name, char* field_name,
 ASTNode* create_chained_field_assignment(ASTNode* target, ASTNode* expr,
                                          int line);
 ASTNode* create_match_pattern(char* name, char* binding, int line);
+ASTNode* create_len_expression(ASTNode* expr, int line);
 ASTNode* create_match_literal_pattern(ASTNode* literal, int line);
 ASTNode* create_match_arm(ASTNode* pattern, ASTNode* expr, int line);
 ASTNode* create_match_arm_list(ASTNode* arm);
@@ -1350,5 +1371,8 @@ ASTNode* create_struct_literal(char* struct_name, ASTNode* type_args,
 ASTNode* create_struct_field_init_list(char* field_name, ASTNode* value);
 ASTNode* add_struct_field_init(ASTNode* list, char* field_name, ASTNode* value);
 ASTNode* create_generic_struct_type_ref(char* name, ASTNode* type_args);
+#ifdef __cplusplus
+}
+#endif
 
 #endif // AST_H

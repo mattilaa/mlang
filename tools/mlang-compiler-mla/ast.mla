@@ -612,3 +612,39 @@ impl Program {
         };
     }
 }
+
+extern fn mla_argument_list_create() -> i64;
+extern fn mla_argument_list_add(arg_list: i64, expr: i64) -> i64;
+extern fn mla_function_call_create(name: string, line: i32) -> i64;
+extern fn mla_function_call_set_args(call: i64, arguments: i64) -> i64;
+extern fn mla_function_call_add_arg(call: i64, expr: i64) -> i64;
+
+pub fn argument_list_create(expr: i64) -> i64 {
+    var handle: i64 = mla_argument_list_create();
+    if(expr != 0) {
+        handle = mla_argument_list_add(handle, expr);
+    }
+    return handle;
+}
+
+pub fn argument_list_push(handle: i64, expr: i64) -> i64 {
+    if(expr == 0) {
+        return handle;
+    }
+    return mla_argument_list_add(handle, expr);
+}
+
+pub fn function_call_create(name: string, line: i32, argument_list: i64) -> i64 {
+    var call: i64 = mla_function_call_create(name, line);
+    if(argument_list != 0) {
+        call = mla_function_call_set_args(call, argument_list);
+    }
+    return call;
+}
+
+pub fn function_call_add_argument(call: i64, expr: i64) -> i64 {
+    if(expr == 0) {
+        return call;
+    }
+    return mla_function_call_add_arg(call, expr);
+}
