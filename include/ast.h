@@ -320,6 +320,27 @@ public:
     std::string toString() const override;
 };
 
+class UpdateExpressionNode : public ExpressionNode
+{
+public:
+    enum Kind
+    {
+        KIND_INCREMENT,
+        KIND_DECREMENT
+    };
+
+    Kind kind;
+    bool isPrefix;
+    ExpressionNode* operand;
+
+    UpdateExpressionNode(Kind k, bool prefix, ExpressionNode* expr)
+        : kind(k), isPrefix(prefix), operand(expr)
+    {
+    }
+
+    std::string toString() const override;
+};
+
 class TernaryNode : public ExpressionNode
 {
 public:

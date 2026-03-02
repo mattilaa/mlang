@@ -351,6 +351,18 @@ ASTNode* create_unary_op_impl(int op, ASTNode* operand)
     return new UnaryOpNode(opType, static_cast<ExpressionNode*>(operand));
 }
 
+ASTNode* create_update_expression_impl(int kind, int is_prefix, ASTNode* operand,
+                                       int line)
+{
+    UpdateExpressionNode::Kind opKind =
+        (kind == 1) ? UpdateExpressionNode::KIND_DECREMENT
+                    : UpdateExpressionNode::KIND_INCREMENT;
+    auto* node = new UpdateExpressionNode(
+        opKind, is_prefix != 0, static_cast<ExpressionNode*>(operand));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_ternary_expression_impl(ASTNode* cond, ASTNode* t, ASTNode* f,
                                    int line)
 {
@@ -1359,6 +1371,14 @@ std::string UnaryOpNode::toString() const
         break;
     }
     return "(" + op_str + operand->toString() + ")";
+}
+
+std::string UpdateExpressionNode::toString() const
+{
+    std::string op_str = (kind == UpdateExpressionNode::KIND_INCREMENT) ? "++" : "--";
+    if(isPrefix)
+        return "(" + op_str + operand->toString() + ")";
+    return "(" + operand->toString() + op_str + ")";
 }
 
 std::string TernaryNode::toString() const

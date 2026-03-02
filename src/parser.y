@@ -69,10 +69,10 @@ ASTNode* create_function_list(ASTNode* function);
 ASTNode* add_function_to_list(ASTNode* list, ASTNode* function);
 ASTNode* mla_ast_function_def(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_extern);
 ASTNode* mla_ast_type_node(int type);
-ASTNode* create_parameter_list(ASTNode* param);
-ASTNode* create_empty_parameter_list();
+ASTNode* mla_ast_parameter_list(ASTNode* param);
+ASTNode* mla_ast_empty_parameter_list();
 ASTNode* set_parameter_list_vararg(ASTNode* list);
-ASTNode* create_parameter(ASTNode* type, char* name);
+ASTNode* mla_ast_parameter(ASTNode* type, char* name);
 ASTNode* add_parameter(ASTNode* list, ASTNode* param);
 ASTNode* mla_ast_statement_list_create(ASTNode* stmt);
 ASTNode* create_empty_statement_list();
@@ -127,8 +127,8 @@ ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
-ASTNode* create_struct_init(char* type_name, char* var_name);
-ASTNode* create_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
+ASTNode* mla_ast_struct_init(char* type_name, char* var_name);
+ASTNode* mla_ast_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* mla_ast_list_type();
 ASTNode* mla_ast_list_literal(ASTNode* elements);
 ASTNode* mla_ast_list_element_list(ASTNode* element);
@@ -146,7 +146,7 @@ ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params,
 ASTNode* mla_ast_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_print_expr_stmt(int kind, ASTNode* expr, int line);
-ASTNode* create_argument_list(ASTNode* arg);
+ASTNode* mla_ast_argument_list(ASTNode* arg);
 
 ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long explicit_value);
 ASTNode* mla_ast_enum_variant_list(ASTNode* variant);
@@ -155,33 +155,33 @@ ASTNode* mla_ast_enum_variant_ref(char* name, char* ref_enum_name, char* ref_var
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
-ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
+ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* mla_ast_break_stmt(int line);
 ASTNode* mla_ast_continue_stmt(int line);
 ASTNode* mla_ast_generic_list_type(ASTNode* element_type);
 ASTNode* mla_ast_map_type(ASTNode* key_type, ASTNode* value_type);
 ASTNode* mla_ast_map_literal(ASTNode* entries);
-ASTNode* create_map_entry_list(ASTNode* entry);
+ASTNode* mla_ast_map_entry_list(ASTNode* entry);
 ASTNode* add_map_entry(ASTNode* list, ASTNode* entry);
-ASTNode* create_map_entry(ASTNode* key, ASTNode* value);
+ASTNode* mla_ast_map_entry(ASTNode* key, ASTNode* value);
 ASTNode* mla_ast_map_entry(ASTNode* key, ASTNode* value);
 ASTNode* mla_ast_map_entry_list_create(ASTNode* entry);
 ASTNode* mla_ast_map_entry_list_add(ASTNode* list, ASTNode* entry);
 ASTNode* mla_ast_map_literal(ASTNode* entries);
-ASTNode* create_index_expression(ASTNode* base, ASTNode* index, int line);
+ASTNode* mla_ast_index_expression(ASTNode* base, ASTNode* index, int line);
 ASTNode* mla_ast_tuple_type(ASTNode* type_list);
 ASTNode* mla_ast_type_list(ASTNode* type);
 ASTNode* add_type_to_list(ASTNode* list, ASTNode* type);
-ASTNode* create_tuple_literal(ASTNode* elements);
-ASTNode* create_tuple_access(ASTNode* tuple, int index, int line);
+ASTNode* mla_ast_tuple_literal(ASTNode* elements);
+ASTNode* mla_ast_tuple_access(ASTNode* tuple, int index, int line);
 ASTNode* create_map_keys_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_values_iterator(ASTNode* map_expr, int line);
 ASTNode* create_map_entries_iterator(ASTNode* map_expr, int line);
 ASTNode* mla_ast_struct_type_ref(char* name);
 ASTNode* mla_ast_generic_struct_type_ref(char* name, ASTNode* type_args);
 ASTNode* create_len_expression(ASTNode* expr, int line);
-ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int line);
+ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int line);
 // Generic structs and impl blocks
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
@@ -208,6 +208,8 @@ ASTNode* create_closure_with_params(ASTNode* params, ASTNode* body);
 ASTNode* mla_ast_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
                             ASTNode* body, int line);
 ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
+ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand,
+                                   int line);
 
 // Desugar `lhs op= rhs` into `lhs = lhs op rhs`.
 // Only simple identifier LHS is supported; for other LHS forms an error is
@@ -258,6 +260,17 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
         }
     }
 }
+enum UpdateKind
+{
+    UPDATE_INCREMENT = 0,
+    UPDATE_DECREMENT = 1
+};
+
+enum UpdatePosition
+{
+    UPDATE_PREFIX = 1,
+    UPDATE_POSTFIX = 0
+};
 %}
 
 %union {
@@ -285,6 +298,7 @@ static void bind_impl_self_types(ImplBlockNode* implBlock)
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
+%token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE NOT
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN
 %token LT GT LE GE EQ NE
@@ -626,21 +640,21 @@ inline_function_def
     ;
 
 parameter_list
-    : /* empty */ { $$ = create_empty_parameter_list(); }
+    : /* empty */ { $$ = mla_ast_empty_parameter_list(); }
     | parameters
     | parameters COMMA ELLIPSIS { $$ = set_parameter_list_vararg($1); }
-    | ELLIPSIS { $$ = set_parameter_list_vararg(create_empty_parameter_list()); }
+    | ELLIPSIS { $$ = set_parameter_list_vararg(mla_ast_empty_parameter_list()); }
     ;
 
 parameters
-    : parameter { $$ = create_parameter_list($1); }
+    : parameter { $$ = mla_ast_parameter_list($1); }
     | parameters COMMA parameter { $$ = add_parameter($1, $3); }
     ;
 
 parameter
-    : IDENTIFIER COLON type { $$ = create_parameter($3, $1); }
+    : IDENTIFIER COLON type { $$ = mla_ast_parameter($3, $1); }
     | AMP IDENTIFIER
-        { $$ = create_parameter(mla_ast_struct_type_ref(strdup("Self")), $2); }
+        { $$ = mla_ast_parameter(mla_ast_struct_type_ref(strdup("Self")), $2); }
     ;
 
 type
@@ -822,11 +836,11 @@ for_statement
     | FOR IDENTIFIER IN primary_expression block_statement
         { $$ = mla_ast_for_iterator($2, $4, $5, yylineno); }
     | FOR IDENTIFIER IN primary_expression KEYS_METHOD block_statement
-        { $$ = mla_ast_for_iterator($2, create_map_keys_iterator($4, yylineno), $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, mla_ast_map_keys_iterator($4, yylineno), $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression VALUES_METHOD block_statement
-        { $$ = mla_ast_for_iterator($2, create_map_values_iterator($4, yylineno), $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, mla_ast_map_values_iterator($4, yylineno), $6, yylineno); }
     | FOR IDENTIFIER IN primary_expression ENTRIES_METHOD block_statement
-        { $$ = mla_ast_for_iterator($2, create_map_entries_iterator($4, yylineno), $6, yylineno); }
+        { $$ = mla_ast_for_iterator($2, mla_ast_map_entries_iterator($4, yylineno), $6, yylineno); }
     /* for x in coll.iter() / .into_iter() — strip the no-op method */
     | FOR IDENTIFIER IN primary_expression ITER_METHOD block_statement
         { $$ = mla_ast_for_iterator($2, $4, $6, yylineno); }
@@ -884,7 +898,7 @@ range_expression
 
 struct_init
     : IDENTIFIER IDENTIFIER SEMICOLON
-        { $$ = create_struct_init($1, $2); }
+        { $$ = mla_ast_struct_init($1, $2); }
     ;
 
 print_statement
@@ -1077,10 +1091,10 @@ condition_postfix
     : condition_primary { $$ = $1; }
     | condition_postfix DOT IDENTIFIER { $$ = mla_ast_field_access_expr($1, $3, yylineno); }
     | condition_postfix DOT IDENTIFIER LPAREN RPAREN
-        { $$ = create_method_call_expr($1, $3, NULL, yylineno); }
+        { $$ = mla_ast_method_call_expr($1, $3, NULL, yylineno); }
     | condition_postfix DOT IDENTIFIER LPAREN argument_list RPAREN
-        { $$ = create_method_call_expr($1, $3, $5, yylineno); }
-    | condition_postfix DOT INT_LITERAL { $$ = create_tuple_access($1, $3, yylineno); }
+        { $$ = mla_ast_method_call_expr($1, $3, $5, yylineno); }
+    | condition_postfix DOT INT_LITERAL { $$ = mla_ast_tuple_access($1, $3, yylineno); }
     ;
 
 condition_primary
@@ -1091,9 +1105,9 @@ condition_primary
     | TRUE_LIT { $$ = mla_ast_literal_bool(1); }
     | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
-        { $$ = create_format_expr($3, NULL, yylineno); }
+        { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = create_format_expr($3, $5, yylineno); }
+        { $$ = mla_ast_format_expr($3, $5, yylineno); }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
     | LPAREN condition_expression RPAREN { $$ = $2; }
@@ -1145,7 +1159,11 @@ ternary_expression
     ;
 
 unary_expression
-    : MINUS unary_expression
+    : PLUS_PLUS unary_expression
+        { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_PREFIX, $2, yylineno); }
+    | MINUS_MINUS unary_expression
+        { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_PREFIX, $2, yylineno); }
+    | MINUS unary_expression
         { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
     | NOT unary_expression
         { $$ = create_unary_op(NOT, $2); if($$) $$->line = yylineno; }
@@ -1248,9 +1266,9 @@ primary_expression
     | TRUE_LIT { $$ = mla_ast_literal_bool(1); }
     | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
-        { $$ = create_format_expr($3, NULL, yylineno); }
+        { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = create_format_expr($3, $5, yylineno); }
+        { $$ = mla_ast_format_expr($3, $5, yylineno); }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
     | LPAREN expression RPAREN { $$ = $2; }
@@ -1303,10 +1321,12 @@ postfix_expression
     : primary_expression { $$ = $1; }
     | postfix_expression DOT IDENTIFIER { $$ = mla_ast_field_access_expr($1, $3, yylineno); }
     | postfix_expression DOT IDENTIFIER LPAREN RPAREN
-        { $$ = create_method_call_expr($1, $3, NULL, yylineno); }
+        { $$ = mla_ast_method_call_expr($1, $3, NULL, yylineno); }
     | postfix_expression DOT IDENTIFIER LPAREN argument_list RPAREN
-        { $$ = create_method_call_expr($1, $3, $5, yylineno); }
-    | postfix_expression DOT INT_LITERAL { $$ = create_tuple_access($1, $3, yylineno); }
+        { $$ = mla_ast_method_call_expr($1, $3, $5, yylineno); }
+    | postfix_expression DOT INT_LITERAL { $$ = mla_ast_tuple_access($1, $3, yylineno); }
+    | postfix_expression PLUS_PLUS { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_POSTFIX, $1, yylineno); }
+    | postfix_expression MINUS_MINUS { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_POSTFIX, $1, yylineno); }
     ;
 
 binary_expression
@@ -1377,11 +1397,11 @@ map_entry
     ;
 
 index_expression
-    : primary_expression LBRACKET expression RBRACKET { $$ = create_index_expression($1, $3, yylineno); }
+    : primary_expression LBRACKET expression RBRACKET { $$ = mla_ast_index_expression($1, $3, yylineno); }
     ;
 
 tuple_literal
-    : LPAREN tuple_elements RPAREN { $$ = create_tuple_literal($2); }
+    : LPAREN tuple_elements RPAREN { $$ = mla_ast_tuple_literal($2); }
     ;
 
 tuple_elements
@@ -1393,9 +1413,9 @@ tuple_elements
     ;
 
 map_iterator
-    : primary_expression KEYS_METHOD { $$ = create_map_keys_iterator($1, yylineno); }
-    | primary_expression VALUES_METHOD { $$ = create_map_values_iterator($1, yylineno); }
-    | primary_expression ENTRIES_METHOD { $$ = create_map_entries_iterator($1, yylineno); }
+    : primary_expression KEYS_METHOD { $$ = mla_ast_map_keys_iterator($1, yylineno); }
+    | primary_expression VALUES_METHOD { $$ = mla_ast_map_values_iterator($1, yylineno); }
+    | primary_expression ENTRIES_METHOD { $$ = mla_ast_map_entries_iterator($1, yylineno); }
     ;
 
 %%

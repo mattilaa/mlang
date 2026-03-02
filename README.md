@@ -157,6 +157,16 @@ Use Make instead of Ninja:
 ./scripts/build_install_lsp.sh --use-make
 ```
 
+## Documentation
+
+The repository ships a Doxygen-based documentation build. Run the helper from the top level to regenerate HTML under `docs/out`:
+
+```sh
+doxygen docs/Doxyfile
+```
+
+The generated site mirrors the Markdown sources under `docs/` (stdlib APIs, language syntax, Rust-like attributes) and the `stdlib/std/` modules themselves, so you can include the latest stdlib/`use type` descriptions, `std::regex` helpers, `std::term` + `std::esc` details, unordered/quickmap coverage, and testing/bench API tables. Open `docs/out/index.html` in a browser after running the command.
+
 ## AddressSanitizer Verification
 After a clean workspace, run the helper script that configures an AddressSanitizer build, compiles the stdlib, and exercises `mlang` on a representative input so you can confirm the compiler no longer crashes under ASan:
 

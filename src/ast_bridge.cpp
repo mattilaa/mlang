@@ -178,6 +178,11 @@ ASTNode* create_unary_op(int op, ASTNode* operand)
     return create_unary_op_impl(op, operand);
 }
 
+ASTNode* create_update_expression(int kind, int is_prefix, ASTNode* operand, int line)
+{
+    return create_update_expression_impl(kind, is_prefix, operand, line);
+}
+
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line)
 {
     return create_ternary_expression_impl(cond, t, f, line);

@@ -39,6 +39,7 @@ ASTNode* create_identifier_at_impl(char* name, int line, int col);
 ASTNode* create_binary_op_impl(int op, ASTNode* left, ASTNode* right);
 ASTNode* create_fold_expression_impl(int op, ASTNode* pack_expr, int is_right_fold);
 ASTNode* create_unary_op_impl(int op, ASTNode* operand);
+ASTNode* create_update_expression_impl(int kind, int is_prefix, ASTNode* operand, int line);
 ASTNode* create_ternary_expression_impl(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* create_try_expression_impl(ASTNode* expr, int line);
 ASTNode* create_function_call_impl(char* name, ASTNode* arg1, ASTNode* arg2, int line);

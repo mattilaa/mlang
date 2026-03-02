@@ -98,6 +98,21 @@ ASTNode* mla_ast_function_call_from_list(char* name, ASTNode* args, int line)
     return create_function_call_multi_impl(name, args, line);
 }
 
+ASTNode* mla_ast_parameter(ASTNode* type, char* name)
+{
+    return create_parameter_impl(type, name);
+}
+
+ASTNode* mla_ast_parameter_list(ASTNode* param)
+{
+    return create_parameter_list_impl(param);
+}
+
+ASTNode* mla_ast_empty_parameter_list()
+{
+    return create_empty_parameter_list_impl();
+}
+
 ASTNode* mla_ast_struct_init(char* type_name, char* var_name)
 {
     return create_struct_init_impl(type_name, var_name);
@@ -500,6 +515,31 @@ ASTNode* mla_ast_field_access_expr(ASTNode* object, char* field_name, int line)
     return create_field_access_expr(object, field_name, line);
 }
 
+ASTNode* mla_ast_identifier(char* name)
+{
+    return create_identifier_impl(name);
+}
+
+ASTNode* mla_ast_identifier_line(char* name, int line)
+{
+    return create_identifier_line_impl(name, line);
+}
+
+ASTNode* mla_ast_identifier_at(char* name, int line, int col)
+{
+    return create_identifier_at_impl(name, line, col);
+}
+
+ASTNode* mla_ast_struct_list(ASTNode* struct_def)
+{
+    return create_struct_list_impl(struct_def);
+}
+
+ASTNode* mla_ast_function_list(ASTNode* function)
+{
+    return create_function_list_impl(function);
+}
+
 ASTNode* mla_ast_return_stmt(ASTNode* expr)
 {
     return create_return_stmt(expr);
@@ -550,6 +590,11 @@ ASTNode* mla_ast_try_expression(ASTNode* expr, int line)
     return create_try_expression(expr, line);
 }
 
+ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line)
+{
+    return create_update_expression_impl(kind, is_prefix, operand, line);
+}
+
 ASTNode* mla_ast_match_pattern(char* name, char* binding, int line)
 {
     return create_match_pattern(name, binding, line);
@@ -598,6 +643,21 @@ ASTNode* mla_ast_closure(ASTNode* body)
 ASTNode* mla_ast_closure_with_params(ASTNode* params, ASTNode* body)
 {
     return create_closure_with_params(params, body);
+}
+
+ASTNode* mla_ast_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line)
+{
+    return create_method_call_expr_impl(object, method_name, args, line);
+}
+
+ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int line)
+{
+    return create_method_call_impl(object, method, args, line);
+}
+
+ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line)
+{
+    return create_format_expr_impl(format_str, args, line);
 }
 
 } // extern "C"

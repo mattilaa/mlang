@@ -15,6 +15,14 @@ ASTNode* mla_ast_argument_list_add(ASTNode* list, ASTNode* arg);
 ASTNode* mla_ast_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* mla_ast_function_call_from_list(char* name, ASTNode* args, int line);
 ASTNode* mla_ast_struct_init(char* type_name, char* var_name);
+ASTNode* mla_ast_identifier(char* name);
+ASTNode* mla_ast_identifier_line(char* name, int line);
+ASTNode* mla_ast_identifier_at(char* name, int line, int col);
+ASTNode* mla_ast_struct_list(ASTNode* struct_def);
+ASTNode* mla_ast_function_list(ASTNode* function);
+ASTNode* mla_ast_parameter(ASTNode* type, char* name);
+ASTNode* mla_ast_parameter_list(ASTNode* param);
+ASTNode* mla_ast_empty_parameter_list();
 ASTNode* mla_ast_statement_list_create(ASTNode* stmt);
 ASTNode* mla_ast_statement_list_add(ASTNode* list, ASTNode* stmt);
 ASTNode* mla_ast_map_entry(ASTNode* key, ASTNode* value);
@@ -105,6 +113,7 @@ ASTNode* mla_ast_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* mla_ast_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
 ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
+ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line);
 ASTNode* mla_ast_tuple_literal(ASTNode* elements);
 ASTNode* mla_ast_tuple_access(ASTNode* tuple, int index, int line);
 ASTNode* mla_ast_index_expression(ASTNode* base, ASTNode* index, int line);
@@ -113,6 +122,9 @@ ASTNode* mla_ast_map_values_iterator(ASTNode* map_expr, int line);
 ASTNode* mla_ast_map_entries_iterator(ASTNode* map_expr, int line);
 ASTNode* mla_ast_closure(ASTNode* body);
 ASTNode* mla_ast_closure_with_params(ASTNode* params, ASTNode* body);
+ASTNode* mla_ast_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
+ASTNode* mla_ast_method_call(ASTNode* object, char* method, ASTNode* args, int line);
+ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line);
 }
 
 #endif // AST_HANDLE_HELPERS_H
