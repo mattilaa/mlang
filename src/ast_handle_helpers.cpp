@@ -243,4 +243,29 @@ ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params, ASTNode* aliased_t
     return create_type_alias_impl(name, type_params, aliased_type);
 }
 
+ASTNode* mla_ast_block_statement(ASTNode* stmt_list)
+{
+    return create_block_statement(stmt_list);
+}
+
+ASTNode* mla_ast_match_arm(ASTNode* pattern, ASTNode* expr, int line)
+{
+    return create_match_arm(pattern, expr, line);
+}
+
+ASTNode* mla_ast_match_arm_list(ASTNode* arm)
+{
+    return create_match_arm_list(arm);
+}
+
+ASTNode* mla_ast_add_match_arm(ASTNode* list, ASTNode* arm)
+{
+    return add_match_arm(list, arm);
+}
+
+ASTNode* mla_ast_match_expression(ASTNode* target, ASTNode* arms, int line)
+{
+    return create_match_expression(target, arms, line);
+}
+
 } // extern "C"

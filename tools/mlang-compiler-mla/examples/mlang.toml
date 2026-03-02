@@ -1,0 +1,2 @@
+[tool.mlang]
+module_paths = [".."]

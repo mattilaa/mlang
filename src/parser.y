@@ -812,8 +812,8 @@ continue_statement
     ;
 
 block_statement
-    : LBRACE statement_list RBRACE { $$ = create_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
-    | LBRACE RBRACE { $$ = create_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    : LBRACE statement_list RBRACE { $$ = mla_ast_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    | LBRACE RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
     ;
 
 for_statement
@@ -1172,7 +1172,7 @@ unary_expression
 
 match_expression
     : MATCH match_target LBRACE match_arm_list RBRACE
-        { $$ = create_match_expression($2, $4, yylineno); }
+        { $$ = mla_ast_match_expression($2, $4, yylineno); }
     ;
 
 match_target
@@ -1205,15 +1205,15 @@ match_binary_expression
     ;
 
 match_arm_list
-    : match_arm { $$ = create_match_arm_list($1); }
-    | match_arm_list COMMA match_arm { $$ = add_match_arm($1, $3); }
+    : match_arm { $$ = mla_ast_match_arm_list($1); }
+    | match_arm_list COMMA match_arm { $$ = mla_ast_add_match_arm($1, $3); }
     ;
 
 match_arm
     : match_pattern FAT_ARROW expression
-        { $$ = create_match_arm($1, $3, yylineno); }
+        { $$ = mla_ast_match_arm($1, $3, yylineno); }
     | match_pattern ASSIGN GT expression
-        { $$ = create_match_arm($1, $4, yylineno); }
+        { $$ = mla_ast_match_arm($1, $4, yylineno); }
     ;
 
 match_pattern

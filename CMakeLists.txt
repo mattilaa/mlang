@@ -211,6 +211,7 @@ target_link_libraries(mlang ${llvm_libs})
 
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_handle_helpers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast_bridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
     ${LEXER_OUT}

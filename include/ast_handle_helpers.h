@@ -42,6 +42,11 @@ ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params, ASTNode* aliased_t
 ASTNode* mla_ast_trait_def(char* name, int line);
 ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
 ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
+ASTNode* mla_ast_block_statement(ASTNode* stmt_list);
+ASTNode* mla_ast_match_arm(ASTNode* pattern, ASTNode* expr, int line);
+ASTNode* mla_ast_match_arm_list(ASTNode* arm);
+ASTNode* mla_ast_add_match_arm(ASTNode* list, ASTNode* arm);
+ASTNode* mla_ast_match_expression(ASTNode* target, ASTNode* arms, int line);
 }
 
 #endif // AST_HANDLE_HELPERS_H

@@ -266,6 +266,20 @@ impl TopLevelList {
     pub fn new() -> TopLevelList {
         return TopLevelList { items: [] };
     }
+
+    pub fn push(self: TopLevelList, item: TopLevelItem) -> TopLevelList {
+        var items = self.items;
+        items.push(item);
+        return TopLevelList { items: items };
+    }
+
+    pub fn push_many(self: TopLevelList, more: list<TopLevelItem>) -> TopLevelList {
+        var items = self.items;
+        for item in more {
+            items.push(item);
+        }
+        return TopLevelList { items: items };
+    }
 }
 
 pub fn make_top_level_list(items: list<TopLevelItem>) -> TopLevelList {
@@ -274,6 +288,14 @@ pub fn make_top_level_list(items: list<TopLevelItem>) -> TopLevelList {
         result.items.push(item);
     }
     return result;
+}
+
+pub fn make_program(functions: list<FunctionDef>, structs: list<StructDef>, enums: list<EnumDef>) -> Program {
+    var program: Program = Program::new();
+    program.functions = functions;
+    program.structs = structs;
+    program.enums = enums;
+    return program;
 }
 
 /// Match arm helper for match expressions.
@@ -296,6 +318,20 @@ pub struct MatchArmList {
 impl MatchArmList {
     pub fn new() -> MatchArmList {
         return MatchArmList { arms: [] };
+    }
+
+    pub fn push(self: MatchArmList, arm: MatchArm) -> MatchArmList {
+        var arms = self.arms;
+        arms.push(arm);
+        return MatchArmList { arms: arms };
+    }
+
+    pub fn push_many(self: MatchArmList, more: list<MatchArm>) -> MatchArmList {
+        var arms = self.arms;
+        for arm in more {
+            arms.push(arm);
+        }
+        return MatchArmList { arms: arms };
     }
 }
 
@@ -327,6 +363,12 @@ impl MapEntryList {
     pub fn new() -> MapEntryList {
         return MapEntryList { entries: [] };
     }
+
+    pub fn push(self: MapEntryList, entry: MapEntry) -> MapEntryList {
+        var entries = self.entries;
+        entries.push(entry);
+        return MapEntryList { entries: entries };
+    }
 }
 
 pub fn make_map_entry_list(entries: list<MapEntry>) -> MapEntryList {
@@ -357,6 +399,12 @@ impl StructFieldInitList {
     pub fn new() -> StructFieldInitList {
         return StructFieldInitList { fields: [] };
     }
+
+    pub fn push(self: StructFieldInitList, field: StructFieldInit) -> StructFieldInitList {
+        var fields = self.fields;
+        fields.push(field);
+        return StructFieldInitList { fields: fields };
+    }
 }
 
 pub fn make_struct_field_init_list(fields: list<StructFieldInit>) -> StructFieldInitList {
@@ -365,6 +413,26 @@ pub fn make_struct_field_init_list(fields: list<StructFieldInit>) -> StructField
         result.fields.push(field);
     }
     return result;
+}
+
+pub fn make_enum_def_with_variants(name: string, variants: list<EnumVariant>) -> EnumDef {
+    var def: EnumDef = EnumDef::new(name);
+    def.variants = variants;
+    return def;
+}
+
+impl EnumDef {
+    pub fn with_variant(self: EnumDef, variant: EnumVariant) -> EnumDef {
+        var variants = self.variants;
+        variants.push(variant);
+        return EnumDef {
+            name: self.name,
+            variants: variants,
+            is_public: self.is_public,
+            backing_type: self.backing_type,
+            source_module: self.source_module
+        };
+    }
 }
 
 pub fn make_function_def(name: string, return_type: TypeNode, params: list<Parameter>, body: StatementList,

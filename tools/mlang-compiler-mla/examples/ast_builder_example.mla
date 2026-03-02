@@ -1,0 +1,44 @@
+/// Simple example demonstrating the new AST helpers.
+fn build_example_program() -> Program {
+    var ret_stmt = make_statement("stmt", "return 0;");
+    var body = make_statement_list([ret_stmt]);
+
+    var param_type = type_node_simple("i32");
+    var param = make_parameter("value", param_type);
+    var params = [param];
+
+    var function = make_function_def("compute", type_node_simple("i32"), params, body, 1, 0);
+
+    var member = create_struct_member("id", type_node_simple("i32"));
+    var entity = make_struct_def("Entity", [member]);
+
+    let variant_ok = make_enum_variant("Ok", "0");
+    let variant_err = make_enum_variant("Error", "1");
+    let status = make_enum_def_with_variants("Status", [variant_ok, variant_err]);
+
+    let arm = MatchArm::new("x", "value", ExpressionNode::new("literal"));
+    var match_list = MatchArmList::new();
+    match_list = match_list.push(arm);
+
+    let entry = MapEntry::new(ExpressionNode::new("literal"), ExpressionNode::new("literal"));
+    var map_entries = MapEntryList::new();
+    map_entries = map_entries.push(entry);
+
+    let field = StructFieldInit::new("field", ExpressionNode::new("literal"));
+    var field_list = StructFieldInitList::new();
+    field_list = field_list.push(field);
+
+    let top_item = TopLevelItem::new("function", "compute", "payload");
+    var top_list = TopLevelList::new();
+    top_list = top_list.push(top_item);
+
+    println!("Match arms: {}, map entries: {}, struct fields: {}", match_list.arms.len(), map_entries.entries.len(), field_list.fields.len());
+
+    return make_program([function], [entity], [status]);
+}
+
+fn main() -> i32 {
+    let program = build_example_program();
+    println!("Program built with {} functions", program.functions.len());
+    return 0;
+}

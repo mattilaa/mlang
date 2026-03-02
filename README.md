@@ -310,6 +310,10 @@ Run the Robot Framework example suite (includes the multithreaded net case):
 ./tests/run_examples_robot.sh
 ```
 
+`tests/run_examples_robot.sh` writes logs and machine-readable output into `results/`
+(and any temporary binaries under `*bin`), but those directories/files are ignored by
+`.gitignore`, so the working tree stays clean after the suite finishes.
+
 ### Running the new Multithreaded TCP Robot slice
 
 To exercise the freshly documented frontend parity and multithreaded TCP coverage:
