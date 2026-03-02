@@ -1,0 +1,9 @@
+[package]
+name = "pkgcfg_cpp_app"
+version = "0.2.28"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+fakelib = { pkg_config = "fakelib" }

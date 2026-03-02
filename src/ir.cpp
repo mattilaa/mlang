@@ -6749,7 +6749,14 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     }
 
     TypeNode* elemTypeNode = it->second;
-    llvm::Type* elementType = getLLVMType(elemTypeNode->kind);
+    llvm::Type* elementType = getLLVMTypeFromNode(elemTypeNode);
+    if(!elementType)
+    {
+        reportError(node->line,
+                    "list iteration has unsupported element type for '" +
+                        listId->name + "'");
+        return;
+    }
 
     // Load list pointer (which points to the list struct)
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);

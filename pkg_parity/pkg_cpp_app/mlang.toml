@@ -1,0 +1,9 @@
+[package]
+name = "pkg_cpp_app"
+version = "0.2.28"
+entry = "src/main.mla"
+
+[dependencies]
+
+depmini = { git = "/Users/mattilaa/projects/mlang/pkg_parity/depmini" }
+[c-dependencies]

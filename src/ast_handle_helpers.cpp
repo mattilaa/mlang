@@ -173,6 +173,11 @@ ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long expl
     return create_enum_variant_impl(name, has_explicit_value, explicit_value);
 }
 
+ASTNode* mla_ast_enum_variant_list(ASTNode* variant)
+{
+    return create_enum_variant_list_impl(variant);
+}
+
 ASTNode* mla_ast_enum_variant_list_create(ASTNode* variant)
 {
     return create_enum_variant_list_impl(variant);
@@ -217,7 +222,7 @@ ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method)
 {
     return add_struct_method_impl(list, method);
 }
- 
+
 ASTNode* mla_ast_trait_def(char* name, int line)
 {
     return create_trait_def_impl(name, line);
@@ -231,6 +236,11 @@ ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait
 ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method)
 {
     return add_impl_method_impl(impl, method);
+}
+
+ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params, ASTNode* aliased_type)
+{
+    return create_type_alias_impl(name, type_params, aliased_type);
 }
 
 } // extern "C"

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
+#include "ast_handle_helpers.h"
 
 ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
@@ -117,6 +118,15 @@ ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
+ASTNode* mla_ast_trait_def(char* name, int line);
+ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
+ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
+
+ASTNode* mla_ast_struct_member_list(ASTNode* member);
+ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
+ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
+ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* create_list_type();
@@ -131,12 +141,19 @@ ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
-ASTNode* create_type_alias(char* name, ASTNode* type_params,
+ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params,
                            ASTNode* aliased_type);
 ASTNode* create_print_stmt(int kind, char* format_str, ASTNode* args, int line);
 ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
 ASTNode* create_argument_list(ASTNode* arg);
+
+ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long explicit_value);
+ASTNode* mla_ast_enum_variant_list(ASTNode* variant);
+ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
+ASTNode* mla_ast_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name);
+ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
+
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
 ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
@@ -370,9 +387,9 @@ use_declaration
 
 type_alias_def
     : USE TYPE_KW IDENTIFIER ASSIGN type SEMICOLON
-        { auto* node = create_type_alias($3, NULL, $5); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+        { auto* node = mla_ast_type_alias($3, NULL, $5); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     | USE TYPE_KW IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
-        { auto* node = create_type_alias($3, $5, $8); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+        { auto* node = mla_ast_type_alias($3, $5, $8); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     ;
 
 struct_def
@@ -907,8 +924,8 @@ assert_eq_statement
     ;
 
 argument_list
-    : expression { $$ = mla_argument_list_create($1); }
-    | argument_list COMMA expression { $$ = mla_argument_list_add($1, $3); }
+    : expression { $$ = mla_ast_argument_list_create($1); }
+    | argument_list COMMA expression { $$ = mla_ast_argument_list_add($1, $3); }
     ;
 
 if_statement
@@ -1310,9 +1327,9 @@ binary_expression
 
 function_call
     : module_path LPAREN RPAREN
-        { $$ = mla_function_call_simple($1, NULL, NULL, yylineno); }
+        { $$ = mla_ast_function_call_simple($1, NULL, NULL, yylineno); }
     | module_path LPAREN argument_list RPAREN
-        { $$ = mla_function_call_from_list($1, $3, yylineno); }
+        { $$ = mla_ast_function_call_from_list($1, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
         { $$ = mla_ast_result_constructor($1, $3, NULL, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN

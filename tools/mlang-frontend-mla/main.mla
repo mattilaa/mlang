@@ -43,15 +43,53 @@ fn print_usage(program: string) -> void {
     println!("Usage: {} [--backend <mlang_bin>] [compiler args...]", program);
     println!("Version: {}", version());
     println!("");
-    println!("Frontend options:");
-    println!("  --backend <path>   Backend compiler executable (default: mlang)");
-    println!("  --version          Show version and exit");
-    println!("  -h, --help         Show this help message");
+    println!("Options:");
+    println!("  -o <file>     Output file name (default: a.out)");
+    println!("  -c            Compile to object file only (don't link)");
+    println!("  -S            Emit assembly file");
+    println!("  -emit-llvm    Emit LLVM IR file (.ll)");
+    println!("  -emit-bc      Emit LLVM bitcode file (.bc)");
+    println!("  -O0           No optimization");
+    println!("  -O1           Basic optimization");
+    println!("  -O2           Standard optimization (default)");
+    println!("  -O3           Aggressive optimization");
+    println!("  --no-tests    Skip compiling #[test] functions");
+    println!("  --tests       Compile and run #[test] for input path/file");
+    println!("  -Wno-colon-if Suppress warning for plain if/else-if with ':'");
+    println!("  -Wno-colon-while Suppress warning for plain while with ':'");
+    println!("  -L <dir>      Add a library search path for linking");
+    println!("  -l <name>     Link with library (e.g. -l m)");
+    println!("  -Wl,<args>    Pass raw linker arguments");
+    println!("  -v            Verbose output");
+    println!("  --debug       Enable debug-only logging");
+    println!("  --version     Show version and exit");
+    println!("  -h, --help    Show this help message");
     println!("");
-    println!("All remaining arguments are passed through to the backend compiler.");
+    println!("Package manager:");
+    println!("  {} pkg init", program);
+    println!("  {} pkg add <name> [--git URL] [--rev REV] [--tag TAG]", program);
+    println!("  {} pkg add <name> [--pkg-config NAME] [--system]", program);
+    println!("  {} pkg fetch", program);
+    println!("  {} pkg build [-O0|-O1|-O2|-O3] [--ninja]", program);
+    println!("");
+    println!("Testing:");
+    println!("  {} --tests [path]", program);
+    println!("  {} test [path]", program);
+    println!("  {} run tests", program);
+    println!("");
+    println!("Benchmarking:");
+    println!("  {} bench [path]", program);
+    println!("  {} bench [path] --bench-iters N --bench-warmup N", program);
+    println!("");
     println!("Examples:");
-    println!("  {} --backend ./build/mlang examples/main.mla -o /tmp/main_bin", program);
-    println!("  {} --backend ./build/mlang test tests", program);
+    println!("  {} test.mla              # Compile to a.out", program);
+    println!("  {} -o myprogram test.mla # Compile to myprogram", program);
+    println!("  {} -S test.mla           # Emit assembly", program);
+    println!("  {} -emit-llvm test.mla   # Emit LLVM IR", program);
+    println!("");
+    println!("Stdlib linking:");
+    println!("  {} main.mla -L ~/.local/lib -lmlang_std", program);
+    println!("  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib)");
 }
 
 fn run_inherit(program: string, args: list<string>) -> i32 {
@@ -187,6 +225,16 @@ fn parent_dir(path: string) -> string {
     return sub(path, 0, p);
 }
 
+fn join_path(base: string, tail: string) -> string {
+    if len(base) == 0 {
+        return tail;
+    }
+    if ends_with(base, "/") == 1 {
+        return concat(base, tail);
+    }
+    return concat(concat(base, "/"), tail);
+}
+
 fn stdlib_lib_exists(dir: string) -> i32 {
     if file_exists(concat(dir, "/libmlang_std.a")) == 1 { return 1; }
     if file_exists(concat(dir, "/libmlang_std.so")) == 1 { return 1; }
@@ -253,6 +301,21 @@ fn default_stdlib_paths() -> list<string> {
     out.push("/usr/local/share/mlang/stdlib");
     out.push("/usr/share/mlang/stdlib");
     return out;
+}
+
+fn extend_unique(dest: list<string>, src: list<string>) -> list<string> {
+    var out: list<string> = [];
+    for v in dest { out.push(v); }
+    for v in src {
+        if list_contains(out, v) == 0 {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+fn append_stdlib_paths(paths: list<string>) -> list<string> {
+    return extend_unique(paths, default_stdlib_paths());
 }
 
 fn default_stdlib_lib_paths() -> list<string> {
@@ -355,6 +418,124 @@ fn file_mtime_ge(lhs: string, rhs: string) -> i32 {
     cmd = concat(cmd, qrhs);
     let rc: i32 = run_inherit("/bin/sh", ["-lc", cmd]);
     return rc == 0 ? 1 : 0;
+}
+
+fn abspath(path: string) -> string {
+    let trimmed: string = trim(path);
+    if len(trimmed) == 0 { return String::new(); }
+    var dir: string = trimmed;
+    if path_is_directory(trimmed) == 0 {
+        dir = parent_dir(trimmed);
+    }
+    if len(trim(dir)) == 0 { dir = "."; }
+    let cmd: string = format!("cd {} && pwd", shell_quote(dir));
+    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
+    if rr.is_err() {
+        return dir;
+    }
+    return trim(rr.unwrap());
+}
+
+fn split_toml_array(input: string) -> list<string> {
+    var out: list<string> = [];
+    var cur: string = String::new();
+    var in_quotes: i32 = 0;
+    let n: i64 = len(input);
+    for i in 0..n {
+        let ch: string = sub(input, i, 1);
+        if eq(ch, "\"") == 1 {
+            in_quotes = if in_quotes == 0 { 1 } else { 0 };
+            cur = concat(cur, ch);
+            continue;
+        }
+        if eq(ch, ",") == 1 && in_quotes == 0 {
+            let trimmed: string = trim(cur);
+            if len(trimmed) > 0 {
+                out.push(trimmed);
+            }
+            cur = String::new();
+            continue;
+        }
+        cur = concat(cur, ch);
+    }
+    let trimmed: string = trim(cur);
+    if len(trimmed) > 0 {
+        out.push(trimmed);
+    }
+    return out;
+}
+
+fn unquote(s: string) -> string {
+    let t: string = trim(s);
+    let n: i64 = len(t);
+    if n >= 2 && eq(sub(t, 0, 1), "\"") == 1 && eq(sub(t, n - 1, 1), "\"") == 1 {
+        return sub(t, 1, n - 2);
+    }
+    return t;
+}
+
+fn parse_module_paths_from_toml(manifest: string) -> list<string> {
+    let rr: Result<string, string> = read_all_text(manifest);
+    if rr.is_err() {
+        return [];
+    }
+    let lines: list<string> = split_lines(rr.unwrap());
+    var out: list<string> = [];
+    var section: string = String::new();
+    for line in lines {
+        let trimmed: string = trim(line);
+        if len(trimmed) == 0 { continue; }
+        if eq(sub(trimmed, 0, 1), "#") == 1 { continue; }
+        if len(trimmed) >= 2 && eq(sub(trimmed, 0, 1), "[") == 1 && eq(sub(trimmed, len(trimmed) - 1, 1), "]") == 1 {
+            section = sub(trimmed, 1, len(trimmed) - 2);
+            continue;
+        }
+        if eq(section, "package") == 0 && eq(section, "tool.mlang") == 0 {
+            continue;
+        }
+        let eq_idx: i64 = find(trimmed, "=");
+        if eq_idx < 0 { continue; }
+        let key: string = trim(sub(trimmed, 0, eq_idx));
+        if eq(key, "module_paths") == 0 {
+            continue;
+        }
+        let value: string = trim(sub(trimmed, eq_idx + 1, len(trimmed) - eq_idx - 1));
+        if len(value) == 0 { continue; }
+        if len(value) >= 2 && eq(sub(value, 0, 1), "[") == 1 && eq(sub(value, len(value) - 1, 1), "]") == 1 {
+            let inner: string = sub(value, 1, len(value) - 2);
+            for part in split_toml_array(inner) {
+                let path: string = unquote(part);
+                if len(path) > 0 {
+                    out.push(path);
+                }
+            }
+        } else {
+            let path: string = unquote(value);
+            if len(path) > 0 {
+                out.push(path);
+            }
+        }
+    }
+    return out;
+}
+
+fn find_manifest_path(start_dir: string) -> string {
+    var cur: string = abspath(start_dir);
+    if len(cur) == 0 {
+        cur = ".";
+    }
+    while len(cur) > 0: {
+        let candidate: string = join_path(cur, "mlang.toml");
+        if file_exists(candidate) == 1 {
+            return candidate;
+        }
+        let parent: string = parent_dir(cur);
+        if eq(parent, cur) == 1 {
+            break;
+        }
+        cur = parent;
+    }
+    return String::new();
 }
 
 fn getenv_value(name: string) -> string {

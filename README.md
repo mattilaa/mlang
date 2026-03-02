@@ -157,6 +157,15 @@ Use Make instead of Ninja:
 ./scripts/build_install_lsp.sh --use-make
 ```
 
+## AddressSanitizer Verification
+After a clean workspace, run the helper script that configures an AddressSanitizer build, compiles the stdlib, and exercises `mlang` on a representative input so you can confirm the compiler no longer crashes under ASan:
+
+```sh
+./scripts/run_asan.sh
+```
+
+The script wipes `build-asan`, configures CMake with the required `-fsanitize=address` flags, builds the project with Ninja, and then runs `mlang --version` followed by a smoke `-c tools/mlang-compiler-mla/ast.mla` compilation. You can override the default sanitizer tuning with `ASAN_OPTIONS` when invoking the script if you want stricter checks (e.g., `ASAN_OPTIONS=detect_container_overflow=1:strict_init_order=1 ./scripts/run_asan.sh`).
+
 ## Formatter
 `mlang-format` is now a separate binary compiled from Mlang source:
 `tools/mlang-format-mla/main.mla` (port in progress from Python).
