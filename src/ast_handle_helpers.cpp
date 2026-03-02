@@ -193,4 +193,44 @@ ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line)
     return create_enum_literal_impl(enum_name, variant_name, line);
 }
 
+ASTNode* mla_ast_struct_member_list(ASTNode* member)
+{
+    return create_struct_member_list_impl(member);
+}
+
+ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member)
+{
+    return add_struct_member_impl(list, member);
+}
+
+ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr)
+{
+    return create_struct_member_impl(is_var, type, name, init_expr);
+}
+
+ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static)
+{
+    return create_struct_method_impl(type, name, params, body, is_public, is_static);
+}
+
+ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method)
+{
+    return add_struct_method_impl(list, method);
+}
+ 
+ASTNode* mla_ast_trait_def(char* name, int line)
+{
+    return create_trait_def_impl(name, line);
+}
+
+ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name)
+{
+    return create_impl_block_impl(struct_name, type_params, trait_name);
+}
+
+ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method)
+{
+    return add_impl_method_impl(impl, method);
+}
+
 } // extern "C"

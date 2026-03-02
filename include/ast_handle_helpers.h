@@ -33,6 +33,14 @@ ASTNode* mla_ast_enum_variant_list_create(ASTNode* variant);
 ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
 ASTNode* mla_ast_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
+ASTNode* mla_ast_struct_member_list(ASTNode* member);
+ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
+ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
+ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
+ASTNode* mla_ast_trait_def(char* name, int line);
+ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
+ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 }
 
 #endif // AST_HANDLE_HELPERS_H

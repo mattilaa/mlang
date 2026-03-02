@@ -112,11 +112,11 @@ ASTNode* create_var_declaration(ASTNode* type, char* name, ASTNode* expr);
 ASTNode* create_cast_expression(int type, ASTNode* expr);
 ASTNode* create_field_access_expr(ASTNode* object, char* field_name, int line);
 ASTNode* create_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
-ASTNode* create_struct_member_list(ASTNode* member);
-ASTNode* add_struct_member(ASTNode* list, ASTNode* member);
-ASTNode* create_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
-ASTNode* create_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
-ASTNode* add_struct_method(ASTNode* list, ASTNode* method);
+ASTNode* mla_ast_struct_member_list(ASTNode* member);
+ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
+ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
+ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init(char* type_name, char* var_name);
 ASTNode* create_method_call_expr(ASTNode* object, char* method_name, ASTNode* args, int line);
 ASTNode* create_list_type();
@@ -168,9 +168,9 @@ ASTNode* create_method_call(ASTNode* object, char* method, ASTNode* args, int li
 ASTNode* create_type_param_list(char* param);
 ASTNode* add_type_param(ASTNode* list, char* param);
 ASTNode* create_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);
-ASTNode* create_trait_def(char* name, int line);
-ASTNode* create_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
-ASTNode* add_impl_method(ASTNode* impl, ASTNode* method);
+ASTNode* mla_ast_trait_def(char* name, int line);
+ASTNode* mla_ast_impl_block(char* struct_name, ASTNode* type_params, char* trait_name);
+ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 ASTNode* mla_ast_struct_literal(char* struct_name, ASTNode* type_args, ASTNode* fields, int line);
 ASTNode* mla_ast_struct_field_init_list(char* field_name, ASTNode* value);
 ASTNode* mla_ast_struct_field_init_list_add(ASTNode* list, char* field_name, ASTNode* value);
@@ -442,7 +442,7 @@ enum_variant
 
 trait_def
     : TRAIT IDENTIFIER LBRACE trait_method_decl_list RBRACE
-        { $$ = create_trait_def($2, yylineno); }
+        { $$ = mla_ast_trait_def($2, yylineno); }
     ;
 
 trait_method_decl_list
@@ -465,7 +465,7 @@ type_param_list
 impl_block
     : IMPL IDENTIFIER LBRACE impl_method_list RBRACE
         {
-            ASTNode* impl = create_impl_block($2, NULL);
+            ASTNode* impl = mla_ast_impl_block($2, NULL, NULL);
             // Copy methods from temp list
             $$ = impl;
             // Methods are added via impl_method_list
@@ -478,7 +478,7 @@ impl_block
         }
     | IMPL IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
         {
-            ASTNode* impl = create_impl_block($4, NULL, $2);
+            ASTNode* impl = mla_ast_impl_block($4, NULL, $2);
             auto* implBlock = static_cast<ImplBlockNode*>(impl);
             auto* methodList = static_cast<ImplBlockNode*>($6);
             if(methodList) {
@@ -489,7 +489,7 @@ impl_block
         }
     | IMPL LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
         {
-            ASTNode* impl = create_impl_block($5, $3);
+            ASTNode* impl = mla_ast_impl_block($5, $3, NULL);
             auto* implBlock = static_cast<ImplBlockNode*>(impl);
             auto* methodList = static_cast<ImplBlockNode*>($7);
             if(methodList) {
@@ -500,7 +500,7 @@ impl_block
         }
     | IMPL GENERIC_LT type_param_list GT IDENTIFIER LBRACE impl_method_list RBRACE
         {
-            ASTNode* impl = create_impl_block($5, $3);
+            ASTNode* impl = mla_ast_impl_block($5, $3, NULL);
             auto* implBlock = static_cast<ImplBlockNode*>(impl);
             auto* methodList = static_cast<ImplBlockNode*>($7);
             if(methodList) {
@@ -511,7 +511,7 @@ impl_block
         }
     | IMPL LT type_param_list GT IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
         {
-            ASTNode* impl = create_impl_block($7, $3, $5);
+            ASTNode* impl = mla_ast_impl_block($7, $3, $5);
             auto* implBlock = static_cast<ImplBlockNode*>(impl);
             auto* methodList = static_cast<ImplBlockNode*>($9);
             if(methodList) {
@@ -522,7 +522,7 @@ impl_block
         }
     | IMPL GENERIC_LT type_param_list GT IDENTIFIER FOR IDENTIFIER LBRACE impl_method_list RBRACE
         {
-            ASTNode* impl = create_impl_block($7, $3, $5);
+            ASTNode* impl = mla_ast_impl_block($7, $3, $5);
             auto* implBlock = static_cast<ImplBlockNode*>(impl);
             auto* methodList = static_cast<ImplBlockNode*>($9);
             if(methodList) {
@@ -534,35 +534,35 @@ impl_block
     ;
 
 impl_method_list
-    : /* empty */ { $$ = create_impl_block(strdup(""), NULL, NULL); }
+    : /* empty */ { $$ = mla_ast_impl_block(strdup(""), NULL, NULL); }
     | impl_method_list struct_method
         {
-            $$ = add_impl_method($1, $2);
+            $$ = mla_ast_impl_add_method($1, $2);
         }
     ;
     ;
 
 struct_member_list
-    : struct_member { $$ = create_struct_member_list($1); }
-    | struct_member_list struct_member { $$ = add_struct_member($1, $2); }
-    | struct_method { $$ = create_struct_member_list($1); }
-    | struct_member_list struct_method { $$ = add_struct_method($1, $2); }
+    : struct_member { $$ = mla_ast_struct_member_list($1); }
+    | struct_member_list struct_member { $$ = mla_ast_struct_member_list_add($1, $2); }
+    | struct_method { $$ = mla_ast_struct_member_list($1); }
+    | struct_member_list struct_method { $$ = mla_ast_struct_member_add_method($1, $2); }
     ;
 
 struct_member
     : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
-        { $$ = create_struct_member(0, $4, $2, $6); }
+        { $$ = mla_ast_struct_member(0, $4, $2, $6); }
     | VAR IDENTIFIER COLON type SEMICOLON
-        { $$ = create_struct_member(1, $4, $2, NULL); }
+        { $$ = mla_ast_struct_member(1, $4, $2, NULL); }
     | enum_def
         { $$ = $1; }
     ;
 
 struct_method
     : FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_struct_method($7, $2, $4, $9, 0, 0); }
+        { $$ = mla_ast_struct_method($7, $2, $4, $9, 0, 0); }
     | PUB FUNCTION IDENTIFIER LPAREN parameter_list RPAREN ARROW type LBRACE statement_list RBRACE
-        { $$ = create_struct_method($8, $3, $5, $10, 1, 0); }
+        { $$ = mla_ast_struct_method($8, $3, $5, $10, 1, 0); }
     ;
 
 function_def
