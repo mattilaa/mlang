@@ -313,6 +313,7 @@ private:
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateFoldExpression(FoldExpressionNode* node);
     llvm::Value* generateUnaryOp(UnaryOpNode* node);
+    llvm::Value* generateUpdateExpression(UpdateExpressionNode* node);
     llvm::Value* generateIntLiteral(IntLiteralNode* node);
     llvm::Value* generateBoolLiteral(BoolLiteralNode* node);
     llvm::Value* generateFloatLiteral(FloatLiteralNode* node);

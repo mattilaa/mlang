@@ -1,0 +1,47 @@
+// Demonstrates prefix and postfix ++/-- operators
+
+fn main() -> i32 {
+    // --- basic postfix ---
+    var x: i32 = 0;
+    x++;                            // x is now 1
+    println!("after x++: {}", x);  // 1
+
+    x--;                            // x is now 0
+    println!("after x--: {}", x);  // 0
+
+    // --- basic prefix ---
+    var y: i32 = 0;
+    ++y;                            // y is now 1
+    println!("after ++y: {}", y);  // 1
+
+    --y;                            // y is now 0
+    println!("after --y: {}", y);  // 0
+
+    // --- postfix returns old value ---
+    var a: i32 = 5;
+    let old: i32 = a++;
+    println!("old={}, a={}", old, a);  // old=5, a=6
+
+    // --- prefix returns new value ---
+    var b: i32 = 5;
+    let new_val: i32 = ++b;
+    println!("new_val={}, b={}", new_val, b);  // new_val=6, b=6
+
+    // --- counting loop with ++ ---
+    var sum: i32 = 0;
+    var i: i32 = 1;
+    while i <= 10: {
+        sum = sum + i;
+        i++;
+    }
+    println!("sum 1..10 = {}", sum);  // 55
+
+    // --- countdown with -- ---
+    var n: i32 = 5;
+    while n > 0: {
+        println!("countdown: {}", n);
+        n--;
+    }
+
+    return 0;
+}

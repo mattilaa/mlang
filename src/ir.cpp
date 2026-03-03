@@ -4762,6 +4762,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateUnaryOp(unaryOp);
     }
+    else if(auto* updateOp = dynamic_cast<UpdateExpressionNode*>(node))
+    {
+        return generateUpdateExpression(updateOp);
+    }
     else if(auto ternary = dynamic_cast<TernaryNode*>(node))
     {
         return generateTernaryExpression(ternary);
@@ -5311,6 +5315,44 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
     }
     }
     return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
+{
+    // Load the current value (also gives us the concrete LLVM type).
+    llvm::Value* oldVal = generateExpression(node->operand);
+    if(!oldVal)
+        return nullptr;
+
+    llvm::Type* ty = oldVal->getType();
+    if(!ty->isIntegerTy() && !ty->isFloatingPointTy())
+    {
+        reportError(node->line, "++/-- requires a numeric operand");
+        return nullptr;
+    }
+
+    llvm::Value* ptr = getLValuePointer(node->operand, node->line);
+    if(!ptr)
+    {
+        reportError(node->line, "++/-- requires an assignable variable");
+        return nullptr;
+    }
+
+    llvm::Value* one = ty->isFloatingPointTy()
+        ? llvm::ConstantFP::get(ty, 1.0)
+        : llvm::ConstantInt::get(ty, 1);
+
+    bool isInc = (node->kind == UpdateExpressionNode::KIND_INCREMENT);
+    llvm::Value* newVal = ty->isFloatingPointTy()
+        ? (isInc ? builder.CreateFAdd(oldVal, one, "upd.new")
+                 : builder.CreateFSub(oldVal, one, "upd.new"))
+        : (isInc ? builder.CreateAdd(oldVal, one, "upd.new")
+                 : builder.CreateSub(oldVal, one, "upd.new"));
+
+    builder.CreateStore(newVal, ptr);
+
+    // prefix: return new value; postfix: return old value
+    return node->isPrefix ? newVal : oldVal;
 }
 
 llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)

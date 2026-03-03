@@ -1,0 +1,83 @@
+// Tests for prefix/postfix ++/-- (UpdateExpression)
+
+#[test]
+fn test_postfix_increment() -> i32 {
+    var x: i32 = 5;
+    let old: i32 = x++;
+    if old != 5: { return 1; }
+    if x != 6: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_postfix_decrement() -> i32 {
+    var x: i32 = 5;
+    let old: i32 = x--;
+    if old != 5: { return 1; }
+    if x != 4: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_prefix_increment() -> i32 {
+    var x: i32 = 5;
+    let new_val: i32 = ++x;
+    if new_val != 6: { return 1; }
+    if x != 6: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_prefix_decrement() -> i32 {
+    var x: i32 = 5;
+    let new_val: i32 = --x;
+    if new_val != 4: { return 1; }
+    if x != 4: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_increment_in_loop() -> i32 {
+    var sum: i32 = 0;
+    var i: i32 = 0;
+    while i < 5: {
+        sum = sum + 1;
+        i++;
+    }
+    if sum != 5: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_decrement_in_loop() -> i32 {
+    var count: i32 = 0;
+    var i: i32 = 5;
+    while i > 0: {
+        count = count + 1;
+        i--;
+    }
+    if count != 5: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_prefix_vs_postfix_distinction() -> i32 {
+    var a: i32 = 10;
+    var b: i32 = 10;
+    let post: i32 = a++;
+    let pre: i32  = ++b;
+    // post == 10 (old), a == 11; pre == 11 (new), b == 11
+    if post != 10: { return 1; }
+    if a != 11: { return 1; }
+    if pre != 11: { return 1; }
+    if b != 11: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_increment_i64() -> i32 {
+    var x: i64 = 100;
+    x++;
+    if x != 101: { return 1; }
+    return 0;
+}

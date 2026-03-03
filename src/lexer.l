@@ -229,6 +229,8 @@ static int is_try_question_context()
 [0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
 [0-9]+          { yylval.ival = strtoll(yytext, NULL, 10); return INT_LITERAL; }
+"++"            { return PLUS_PLUS; }
+"--"            { return MINUS_MINUS; }
 "+="            { return PLUS_ASSIGN; }
 "-="            { return MINUS_ASSIGN; }
 "*="            { return MULTIPLY_ASSIGN; }
