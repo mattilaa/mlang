@@ -2196,7 +2196,8 @@ static int is_delim_after_colon_or_comma(char c)
 
 static int is_op_single_char(char c)
 {
-    return c == '=' || c == '+' || c == '-' || c == '*' || c == '/';
+    return c == '=' || c == '+' || c == '-' || c == '*' || c == '/' ||
+           c == '%';
 }
 
 static int is_ident_char_local(char c)
@@ -2558,10 +2559,54 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
             continue;
         }
 
+        if(c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
+        {
+            size_t j = i + 1u;
+            while(is_space_char(text[j]))
+                ++j;
+            if(text[j] == '=')
+            {
+                trim_inline_spaces(out, &w);
+                if(space_around_operators == 1)
+                {
+                    if(w > 0u && out[w - 1u] != ' ' && out[w - 1u] != '\n' &&
+                       out[w - 1u] != '(' && out[w - 1u] != '[' &&
+                       out[w - 1u] != '{' && out[w - 1u] != ',' &&
+                       out[w - 1u] != ':')
+                    {
+                        if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                            goto oom;
+                    }
+                }
+                if(append_char_dyn(&out, &cap, &w, c) != 0 ||
+                   append_char_dyn(&out, &cap, &w, '=') != 0)
+                    goto oom;
+                i = j;
+                while(is_space_char(text[i + 1u]))
+                    ++i;
+                if(space_around_operators == 1)
+                {
+                    char nx = text[i + 1u];
+                    if(nx != '\0' && nx != '\n' && nx != ')' && nx != ']' &&
+                       nx != '}' && nx != ',' && nx != ';')
+                    {
+                        if(append_char_dyn(&out, &cap, &w, ' ') != 0)
+                            goto oom;
+                    }
+                }
+                continue;
+            }
+        }
+
         int op_len = 0;
         if(c == '.' && n1 == '.')
         {
             op_len = (text[i + 2u] == '=') ? 3 : 2;
+        }
+        else if((c == '+' || c == '-' || c == '*' || c == '/' || c == '%') &&
+                n1 == '=')
+        {
+            op_len = 2;
         }
         else if((c == '=' || c == '!') && n1 == '=')
         {

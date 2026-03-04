@@ -25,6 +25,8 @@ def main() -> int:
             "    }\n"
             "    for i    in 1..n + 1 {\n"
             "        result = result * i;\n"
+            "        result*=2;\n"
+            "        result * = 3;\n"
             "    }\n"
             "    return result;\n"
             "}\n"
@@ -51,6 +53,12 @@ def main() -> int:
         )
         assert "    for i in 1..n + 1 {\n" in out, (
             "expected for/in spacing normalization"
+        )
+        assert "        result *= 2;\n" in out, (
+            "expected compound assignment operator spacing normalization"
+        )
+        assert "        result *= 3;\n" in out, (
+            "expected spaced compound assignment to normalize to '*='"
         )
         assert "    if result < 10: {\n" in out, (
             "expected default relational operator spacing normalization"
