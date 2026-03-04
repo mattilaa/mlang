@@ -1570,19 +1570,10 @@ static int ends_with_c_source(const char* path)
     if(!path)
         return 0;
     size_t n = strlen(path);
+    /* MLang only interfaces with C -- skip C++ source files */
     if(n >= 2u && strcmp(path + n - 2u, ".h") == 0)
         return 1;
-    if(n >= 4u && strcmp(path + n - 4u, ".hh") == 0)
-        return 1;
     if(n >= 2u && strcmp(path + n - 2u, ".c") == 0)
-        return 1;
-    if(n >= 5u && strcmp(path + n - 5u, ".hpp") == 0)
-        return 1;
-    if(n >= 5u && strcmp(path + n - 5u, ".cpp") == 0)
-        return 1;
-    if(n >= 5u && strcmp(path + n - 5u, ".cxx") == 0)
-        return 1;
-    if(n >= 3u && strcmp(path + n - 3u, ".cc") == 0)
         return 1;
     return 0;
 }

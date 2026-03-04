@@ -1603,6 +1603,109 @@ struct TextDefinitionFallback {
     std::string name;
 };
 
+struct ImportDefinitionFallback {
+    int line = 1;
+    int column = 1;
+    std::string name;
+    std::string uri;
+};
+
+static bool moduleHasSegment(std::string_view module_name, std::string_view token) {
+    if (module_name.empty() || token.empty()) {
+        return false;
+    }
+    size_t start = 0;
+    while (start <= module_name.size()) {
+        const size_t sep = module_name.find("::", start);
+        const size_t end = (sep == std::string_view::npos) ? module_name.size() : sep;
+        const std::string_view seg = module_name.substr(start, end - start);
+        if (seg == token) {
+            return true;
+        }
+        if (sep == std::string_view::npos) {
+            break;
+        }
+        start = sep + 2;
+    }
+    return false;
+}
+
+static std::optional<ImportDefinitionFallback> importDefinitionFromText(
+    const mlang::compiler_api::DocumentSemantic& current,
+    int line,
+    int column) {
+    if (line <= 0 || column <= 0) {
+        return std::nullopt;
+    }
+    const std::vector<std::string_view> lines = splitLines(current.text);
+    const size_t line_idx = static_cast<size_t>(line - 1);
+    if (line_idx >= lines.size()) {
+        return std::nullopt;
+    }
+
+    const std::optional<size_t> offset = offsetFromLineColumn(current.text, line, column);
+    if (!offset.has_value()) {
+        return std::nullopt;
+    }
+    const std::optional<TokenSpan> token_span = tokenSpanAtOffset(current.text, *offset);
+    if (!token_span.has_value()) {
+        return std::nullopt;
+    }
+    const std::string_view token = token_span->token;
+
+    const std::string line_trim = trimWs(lines[line_idx]);
+    bool is_use = false;
+    bool is_mod = false;
+    std::string rest;
+    if (startsWith(line_trim, "use ")) {
+        is_use = true;
+        rest = trimWs(std::string_view(line_trim).substr(4));
+    } else if (startsWith(line_trim, "mod ")) {
+        is_mod = true;
+        rest = trimWs(std::string_view(line_trim).substr(4));
+    } else {
+        return std::nullopt;
+    }
+
+    const size_t semi = rest.find(';');
+    if (semi != std::string::npos) {
+        rest = trimWs(std::string_view(rest).substr(0, semi));
+    }
+    if (rest.empty()) {
+        return std::nullopt;
+    }
+
+    std::string module_name = rest;
+    if (is_use) {
+        if (endsWith(module_name, "::*")) {
+            module_name.resize(module_name.size() - 3);
+        } else if (!resolveModuleFilePath(current.uri, module_name).has_value()) {
+            const size_t sep = module_name.rfind("::");
+            if (sep == std::string::npos) {
+                return std::nullopt;
+            }
+            module_name = module_name.substr(0, sep);
+        }
+    }
+
+    if (!is_mod && !is_use) {
+        return std::nullopt;
+    }
+    if (!moduleHasSegment(module_name, token)) {
+        return std::nullopt;
+    }
+
+    const auto file_path = resolveModuleFilePath(current.uri, module_name);
+    if (!file_path.has_value()) {
+        return std::nullopt;
+    }
+
+    ImportDefinitionFallback out;
+    out.name = module_name;
+    out.uri = fileUriFromPath(*file_path);
+    return out;
+}
+
 static bool parseSelfTypeFromSignatureLine(std::string_view line,
                                            std::string& out_type) {
     const size_t fn_pos = line.find("fn ");
@@ -3362,6 +3465,27 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
     const std::optional<mlang::compiler_api::ResolvedQuerySymbol> def =
         mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
     if (!def.has_value()) {
+        const std::optional<mlang::compiler_api::ImportDefinitionFallback> import_fb =
+            mlang::compiler_api::importDefinitionFromText(*current, line, column);
+        if (import_fb.has_value()) {
+            *out_line = import_fb->line;
+            *out_column = import_fb->column;
+            *out_name_length = static_cast<int>(import_fb->name.size());
+            const size_t copy_len =
+                std::min(static_cast<size_t>(out_name_capacity - 1), import_fb->name.size());
+            if (copy_len > 0) {
+                std::memcpy(out_name, import_fb->name.data(), copy_len);
+            }
+            out_name[copy_len] = '\0';
+            *out_uri_length = static_cast<int>(import_fb->uri.size());
+            const size_t uri_copy_len =
+                std::min(static_cast<size_t>(out_uri_capacity - 1), import_fb->uri.size());
+            if (uri_copy_len > 0) {
+                std::memcpy(out_uri, import_fb->uri.data(), uri_copy_len);
+            }
+            out_uri[uri_copy_len] = '\0';
+            return static_cast<int>(mlang::compiler_api::Status::Ok);
+        }
         mlang::compiler_api::TextDefinitionFallback fb;
         if (!mlang::compiler_api::fallbackDefinitionFromText(*current, line, column, fb)) {
             return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);

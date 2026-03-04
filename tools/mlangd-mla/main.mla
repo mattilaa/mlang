@@ -614,6 +614,164 @@ fn string_intrinsic_location(member: string) -> string {
     return first_match_location(path, text, pat);
 }
 
+/// @brief Replace all "::" occurrences with "/" for module-to-path conversion.
+fn colon_to_slash(s: string) -> string {
+    var result: string = String::new();
+    var remaining: string = s;
+    for i in 0..50 {
+        let idx: i64 = find(remaining, "::");
+        if idx < 0: { break; }
+        result = concat(result, sub(remaining, 0, idx));
+        result = concat(result, "/");
+        let tail_len: i64 = len(remaining) - idx - 2;
+        remaining = sub(remaining, idx + 2, tail_len);
+    }
+    result = concat(result, remaining);
+    return result;
+}
+
+/// @brief Trim leading/trailing ASCII spaces and tabs.
+fn trim_ascii_ws(s: string) -> string {
+    var start: i64 = 0;
+    var end: i64 = len(s);
+    for _i in 0..5000 {
+        if start >= end: { break; }
+        let ch: string = sub(s, start, 1);
+        if eq(ch, " ") == 1 || eq(ch, "\t") == 1 {
+            start = start + 1;
+        } else {
+            break;
+        }
+    }
+    for _j in 0..5000 {
+        if end <= start: { break; }
+        let ch2: string = sub(s, end - 1, 1);
+        if eq(ch2, " ") == 1 || eq(ch2, "\t") == 1 {
+            end = end - 1;
+        } else {
+            break;
+        }
+    }
+    if end <= start: { return String::new(); }
+    return sub(s, start, end - start);
+}
+
+/// @brief Resolve a module name (e.g. "std::thread") to a file:// URI at line 1.
+/// Returns empty string when the file cannot be found.
+fn module_file_location(module_name: string) -> string {
+    let modn: string = trim_ascii_ws(module_name);
+    if len(modn) == 0: { return String::new(); }
+    let rel_path: string = colon_to_slash(modn);
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var path: string = String::new();
+    if len(root) > 0: {
+        let p1: string = format!("{}/stdlib/{}.mla", root, rel_path);
+        if file_exists(p1) == 1: { path = p1; }
+    }
+    if len(path) == 0: {
+        if len(root) > 0: {
+            let p2: string = format!("{}/{}.mla", root, rel_path);
+            if file_exists(p2) == 1: { path = p2; }
+        }
+    }
+    if len(path) == 0: {
+        let p3: string = format!("{}/stdlib/{}.mla", here, rel_path);
+        if file_exists(p3) == 1: { path = p3; }
+    }
+    if len(path) == 0: {
+        let p4: string = format!("{}/{}.mla", here, rel_path);
+        if file_exists(p4) == 1: { path = p4; }
+    }
+    if len(path) == 0: { return String::new(); }
+    return location_json(path_to_file_uri(path), 1, 1);
+}
+
+/// @brief Extract module name from a "use mod::path::*;" or "use mod::path::Item;" line.
+fn use_line_module_name(line_text: string) -> string {
+    let line: string = trim_ascii_ws(line_text);
+    if starts_with(line, "use ") == 0: { return String::new(); }
+    let rest0: string = sub(line, 4, len(line) - 4);
+    var end: i64 = len(rest0);
+    let semi: i64 = find(rest0, ";");
+    if semi >= 0: { end = semi; }
+    let rest: string = trim_ascii_ws(sub(rest0, 0, end));
+    if ends_with(rest, "::*") == 1: {
+        return sub(rest, 0, len(rest) - 3);
+    }
+    // Prefer full-path module imports ("use std::thread::detail;") when the
+    // target module file exists.
+    if len(module_file_location(rest)) > 0: {
+        return rest;
+    }
+    let last_sep: i64 = rfind(rest, "::");
+    if last_sep < 0: { return rest; }
+    return sub(rest, 0, last_sep);
+}
+
+/// @brief Extract module name from a "mod std::thread;" line.
+fn mod_line_module_name(line_text: string) -> string {
+    let line: string = trim_ascii_ws(line_text);
+    if starts_with(line, "mod ") == 0: { return String::new(); }
+    let rest0: string = sub(line, 4, len(line) - 4);
+    let semi: i64 = find(rest0, ";");
+    if semi >= 0: { return trim_ascii_ws(sub(rest0, 0, semi)); }
+    return trim_ascii_ws(rest0);
+}
+
+/// @brief Given a bare module qualifier word (e.g. "thread" from "thread::join()"),
+/// scan the file text for a matching use/mod declaration and return the full module
+/// name (e.g. "std::thread"), or empty string if not found.
+fn find_module_for_qualifier(text: string, word: string) -> string {
+    if len(word) == 0: { return String::new(); }
+    let n: i64 = len(text);
+    var cur: i64 = 0;
+    for _i in 0..5000 {
+        if cur >= n: { break; }
+        let rem: string = sub(text, cur, n - cur);
+        let nl: i64 = find(rem, "\n");
+        var llen: i64 = len(rem);
+        if nl >= 0: { llen = nl; }
+        let line: string = sub(rem, 0, llen);
+        cur = cur + llen + 1;
+        var mod_name: string = String::new();
+        let line_t: string = trim_ascii_ws(line);
+        if starts_with(line_t, "use ") == 1: {
+            mod_name = use_line_module_name(line_t);
+        }
+        if starts_with(line_t, "mod ") == 1: {
+            mod_name = mod_line_module_name(line_t);
+        }
+        if len(mod_name) > 0: {
+            let lsep: i64 = rfind(mod_name, "::");
+            var last_part: string = mod_name;
+            if lsep >= 0: {
+                last_part = sub(mod_name, lsep + 2, len(mod_name) - lsep - 2);
+            }
+            if eq(last_part, word) == 1: { return mod_name; }
+        }
+    }
+    return String::new();
+}
+
+/// @brief Resolve module import definition from a single source line.
+fn module_import_location_from_line(line_text: string) -> string {
+    let line_trim: string = trim_ascii_ws(line_text);
+    if starts_with(line_trim, "use ") == 1: {
+        let use_mod: string = use_line_module_name(line_trim);
+        if len(use_mod) > 0: {
+            return module_file_location(use_mod);
+        }
+    }
+    if starts_with(line_trim, "mod ") == 1: {
+        let mod_n: string = mod_line_module_name(line_trim);
+        if len(mod_n) > 0: {
+            return module_file_location(mod_n);
+        }
+    }
+    return String::new();
+}
+
 fn c_type_target(word: string) -> string {
     if eq(word, "i8") == 1: { return "int8_t"; }
     if eq(word, "i16") == 1: { return "int16_t"; }
@@ -963,6 +1121,10 @@ fn completion_detail(label: string) -> string {
     if eq(label, "f64") == 1: { return "builtin 64-bit floating point"; }
     if eq(label, "float") == 1: { return "alias of f32"; }
     if eq(label, "double") == 1: { return "alias of f64"; }
+    if eq(label, "Handle") == 1: { return "builtin generic runtime handle type"; }
+    if eq(label, "Thread") == 1: { return "builtin thread handle payload marker type"; }
+    if eq(label, "Mutex") == 1: { return "builtin mutex handle payload marker type"; }
+    if eq(label, "Atomic64") == 1: { return "builtin 64-bit atomic handle payload marker type"; }
     if eq(label, "string") == 1: { return "builtin UTF-8 string type"; }
     return String::new();
 }
@@ -991,6 +1153,18 @@ fn completion_documentation(label: string) -> string {
     }
     if eq(label, "bool") == 1: {
         return "Boolean type with true/false values.";
+    }
+    if eq(label, "Handle") == 1: {
+        return "Generic runtime handle wrapper used by thread/sync intrinsics (Handle<T>).";
+    }
+    if eq(label, "Thread") == 1: {
+        return "Opaque payload marker used with Handle<Thread> for spawned threads.";
+    }
+    if eq(label, "Mutex") == 1: {
+        return "Opaque payload marker used with Handle<Mutex> for mutex intrinsics.";
+    }
+    if eq(label, "Atomic64") == 1: {
+        return "Opaque payload marker used with Handle<Atomic64> for 64-bit atomic intrinsics.";
     }
     if eq(label, "string") == 1: {
         return "UTF-8 string type used by stdlib and formatting macros.";
@@ -1331,9 +1505,32 @@ fn handle_definition(payload: string) -> string {
         let query_text: string = text_store_get(g_text_store_handle, uri);
         if len(query_text) > 0: {
             let line_text: string = line_text_at(query_text, line);
+            let import_loc0: string = module_import_location_from_line(line_text);
+            if len(import_loc0) > 0: { return format!("[{}]", import_loc0); }
+            if line > 0: {
+                let line_prev: string = line_text_at(query_text, line - 1);
+                let import_loc1: string = module_import_location_from_line(line_prev);
+                if len(import_loc1) > 0: { return format!("[{}]", import_loc1); }
+            }
             if contains(line_text, "#[") == 1: {
                 let attr_loc: string = attribute_doc_location(line_text);
                 if len(attr_loc) > 0: { return format!("[{}]", attr_loc); }
+            }
+            let line_trim: string = trim_ascii_ws(line_text);
+            if starts_with(line_trim, "use ") == 1: {
+                let use_mod: string = use_line_module_name(line_trim);
+                if len(use_mod) > 0: {
+                    let use_loc: string = module_file_location(use_mod);
+                    if len(use_loc) > 0: { return format!("[{}]", use_loc); }
+                }
+            }
+            if starts_with(line_trim, "mod ") == 1: {
+                let mod_n: string = mod_line_module_name(line_trim);
+                if len(mod_n) > 0: {
+                    let mod_loc: string = module_file_location(mod_n);
+                    if len(mod_loc) > 0: { return format!("[{}]", mod_loc); }
+                }
+                return "[]";
             }
             let packed: string = extract_word_and_prefix(line_text, col);
             let sep: i64 = find(packed, "::");
@@ -1348,6 +1545,11 @@ fn handle_definition(payload: string) -> string {
                 }
                 if len(prefix) == 0: {
                     if len(word) > 0: {
+                        let qual_mod: string = find_module_for_qualifier(query_text, word);
+                        if len(qual_mod) > 0: {
+                            let qual_loc: string = module_file_location(qual_mod);
+                            if len(qual_loc) > 0: { return format!("[{}]", qual_loc); }
+                        }
                         let root_uri2: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
                         if len(root_uri2) > 0: {
                             let c_loc_ws: string = workspace_c_definition_search(root_uri2, word);

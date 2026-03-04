@@ -72,6 +72,20 @@
 // Pointer type: ptr<T>.
 // Take an address with &value and dereference with *ptr.
 
+// @builtin Handle
+// Generic runtime handle type: Handle<T>.
+// Used by thread/sync intrinsics such as Handle<Thread>, Handle<Mutex>,
+// and Handle<Atomic64>.
+
+// @builtin Thread
+// Opaque thread handle payload marker type used with Handle<Thread>.
+
+// @builtin Mutex
+// Opaque mutex handle payload marker type used with Handle<Mutex>.
+
+// @builtin Atomic64
+// Opaque 64-bit atomic handle payload marker type used with Handle<Atomic64>.
+
 // @builtin Result
 // Result<T, E> represents success (Ok) or failure (Err).
 // Construct with Ok<T, E>(value) or Err<T, E>(error).

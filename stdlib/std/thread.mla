@@ -18,6 +18,9 @@
 /// Note: `thread_spawn(...)` is a compiler intrinsic also reachable via the
 /// `thread::spawn` qualified name when given a closure or function identifier.
 
+mod std::thread::detail;
+use std::thread::detail::*;
+
 /// @brief Join a spawned thread handle.
 /// Returns thread exit status.
 pub fn join(handle: Handle<Thread>) -> int {
