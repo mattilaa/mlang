@@ -1,0 +1,65 @@
+/// \file math/detail.mla
+/// \brief C ABI bindings for std::math (implementation detail).
+///
+/// These symbols are resolved by the linker against libmlang_std.
+/// Do not call them directly -- use the public API in std::math instead.
+
+extern fn __mlang_std_math_add_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_add_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_add_f64(a: double, b: double) -> double;
+extern fn __mlang_std_math_subtract_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_subtract_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_subtract_f64(a: double, b: double) -> double;
+extern fn __mlang_std_math_multiply_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_multiply_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_multiply_f64(a: double, b: double) -> double;
+extern fn __mlang_std_math_square_i32(x: int) -> int;
+extern fn __mlang_std_math_square_f32(x: float) -> float;
+extern fn __mlang_std_math_square_f64(x: double) -> double;
+extern fn __mlang_std_math_sum_range_i32(start: int, end: int) -> int;
+extern fn __mlang_std_math_factorial_i32(n: int) -> int;
+extern fn __mlang_std_math_abs_i32(x: int) -> int;
+extern fn __mlang_std_math_abs_f32(x: float) -> float;
+extern fn __mlang_std_math_abs_f64(x: double) -> double;
+extern fn __mlang_std_math_min_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_min_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_min_f64(a: double, b: double) -> double;
+extern fn __mlang_std_math_max_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_max_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_max_f64(a: double, b: double) -> double;
+extern fn __mlang_std_math_clamp_i32(x: int, low: int, high: int) -> int;
+extern fn __mlang_std_math_clamp_f32(x: float, low: float, high: float) -> float;
+extern fn __mlang_std_math_clamp_f64(x: double, low: double, high: double) -> double;
+extern fn __mlang_std_math_pow_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_pow_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_pow_f64(a: double, b: double) -> double;
+extern fn __mlang_std_math_sqrt_i32(x: int) -> int;
+extern fn __mlang_std_math_sqrt_f32(x: float) -> float;
+extern fn __mlang_std_math_sqrt_f64(x: double) -> double;
+extern fn __mlang_std_math_sin_i32(x: int) -> int;
+extern fn __mlang_std_math_sin_f32(x: float) -> float;
+extern fn __mlang_std_math_sin_f64(x: double) -> double;
+extern fn __mlang_std_math_cos_i32(x: int) -> int;
+extern fn __mlang_std_math_cos_f32(x: float) -> float;
+extern fn __mlang_std_math_cos_f64(x: double) -> double;
+extern fn __mlang_std_math_tan_i32(x: int) -> int;
+extern fn __mlang_std_math_tan_f32(x: float) -> float;
+extern fn __mlang_std_math_tan_f64(x: double) -> double;
+extern fn __mlang_std_math_floor_i32(x: int) -> int;
+extern fn __mlang_std_math_floor_f32(x: float) -> float;
+extern fn __mlang_std_math_floor_f64(x: double) -> double;
+extern fn __mlang_std_math_ceil_i32(x: int) -> int;
+extern fn __mlang_std_math_ceil_f32(x: float) -> float;
+extern fn __mlang_std_math_ceil_f64(x: double) -> double;
+extern fn __mlang_std_math_round_i32(x: int) -> int;
+extern fn __mlang_std_math_round_f32(x: float) -> float;
+extern fn __mlang_std_math_round_f64(x: double) -> double;
+extern fn __mlang_std_math_log_i32(x: int) -> int;
+extern fn __mlang_std_math_log_f32(x: float) -> float;
+extern fn __mlang_std_math_log_f64(x: double) -> double;
+extern fn __mlang_std_math_exp_i32(x: int) -> int;
+extern fn __mlang_std_math_exp_f32(x: float) -> float;
+extern fn __mlang_std_math_exp_f64(x: double) -> double;
+extern fn __mlang_std_math_modulo_i32(a: int, b: int) -> int;
+extern fn __mlang_std_math_modulo_f32(a: float, b: float) -> float;
+extern fn __mlang_std_math_modulo_f64(a: double, b: double) -> double;

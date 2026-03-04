@@ -263,6 +263,15 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
         return false;
     }
 
+    // Process use declarations within the module itself so that symbols
+    // imported from sub-modules (e.g. `use std::math::detail::*;`) are
+    // merged into this module's function list before it is stored.
+    if(!processUseDeclarations(moduleAst, errorMsg))
+    {
+        loadingStack.erase(moduleName);
+        return false;
+    }
+
     // Store the module
     ModuleInfo info;
     info.name = moduleName;

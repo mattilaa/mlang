@@ -1,0 +1,28 @@
+/// \file io/detail.mla
+/// \brief C ABI bindings for std::io (implementation detail).
+///
+/// These symbols are resolved by the linker against libmlang_std.
+/// Do not call them directly -- use the public API in std::io instead.
+
+extern fn __mlang_std_io_stdout_lock() -> int;
+extern fn __mlang_std_io_stdout_unlock() -> int;
+extern fn __mlang_std_io_stdout_try_lock() -> int;
+extern fn __mlang_std_io_stdout_write(s: string) -> i64;
+extern fn __mlang_std_io_stdout_writeln(s: string) -> i64;
+extern fn __mlang_std_io_stderr_write(s: string) -> i64;
+extern fn __mlang_std_io_stderr_writeln(s: string) -> i64;
+extern fn __mlang_std_io_stdout_flush() -> int;
+extern fn __mlang_std_io_stderr_flush() -> int;
+extern fn __mlang_std_io_stdin_read_line(buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_stdin_read_line_nonblocking(buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_set_stdin_buffering(mode: int, size: i64) -> int;
+extern fn __mlang_std_io_set_stdout_buffering(mode: int, size: i64) -> int;
+extern fn __mlang_std_io_set_stderr_buffering(mode: int, size: i64) -> int;
+extern fn __mlang_std_io_get_char() -> i32;
+extern fn __mlang_std_io_cursor_new(capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_free(handle: i64) -> void;
+extern fn __mlang_std_io_cursor_read(handle: i64, buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_write(handle: i64, s: string) -> i64;
+extern fn __mlang_std_io_cursor_seek(handle: i64, offset: i64, whence: int) -> i64;
+extern fn __mlang_std_io_cursor_read_line(handle: i64, buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_cursor_to_string(handle: i64) -> string;

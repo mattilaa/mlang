@@ -39,67 +39,13 @@
 /// The `extern fn` declarations below are for documentation only —
 /// they are wired directly in the code generator.
 
-// ------------------------------------------------------------------ //
-// vec! macro stub — for editor go-to-definition (gd) support.        //
-// The macro itself is a compiler built-in; this declaration acts as  //
-// the navigation anchor so `gd` on `vec` jumps here.                 //
-// ------------------------------------------------------------------ //
-
-/// @defgroup vec_macros Vec Macros
-/// @brief Compiler-built-in macros for Vec construction.
-
-/// @brief Create a Vec\<T\> from a list of elements.
-/// @ingroup vec_macros
-///
-/// Two forms are supported:
-///
-/// **Literal form** — construct from a comma-separated list:
-/// ```mlang
-/// var v = vec![1, 2, 3];          // Vec<i64>, inferred
-/// var v: Vec<i32> = vec![1, 2, 3]; // Vec<i32>, explicit type
-/// ```
-///
-/// **Fill form** — N copies of a single value:
-/// ```mlang
-/// var zeros = vec![0; 8];  // [0, 0, 0, 0, 0, 0, 0, 0]
-/// ```
-///
-/// The element type is inferred from the initialiser unless an explicit
-/// `Vec<T>` annotation is provided on the variable.
-///
-/// @return A new `list<T>` containing the specified elements.
-extern fn vec() -> void;
-
-// ------------------------------------------------------------------ //
-// Native C backing functions (wired via ir.cpp method dispatch).      //
-// These are listed here for documentation / linter visibility.        //
-// ------------------------------------------------------------------ //
-
-extern fn __mlang_std_vec_push_i32(vec_ptr: ptr<i8>, val: i32) -> void;
-extern fn __mlang_std_vec_push_i64(vec_ptr: ptr<i8>, val: i64) -> void;
-extern fn __mlang_std_vec_push_str(vec_ptr: ptr<i8>, val: string) -> void;
-extern fn __mlang_std_vec_pop_i32(vec_ptr: ptr<i8>) -> i32;
-extern fn __mlang_std_vec_pop_i64(vec_ptr: ptr<i8>) -> i64;
-extern fn __mlang_std_vec_pop_str(vec_ptr: ptr<i8>) -> string;
-extern fn __mlang_std_vec_clear(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_contains_i32(vec_ptr: ptr<i8>, val: i32) -> int;
-extern fn __mlang_std_vec_contains_i64(vec_ptr: ptr<i8>, val: i64) -> int;
-extern fn __mlang_std_vec_index_of_i32(vec_ptr: ptr<i8>, val: i32) -> i64;
-extern fn __mlang_std_vec_index_of_i64(vec_ptr: ptr<i8>, val: i64) -> i64;
-extern fn __mlang_std_vec_sort_i32(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_sort_i64(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_sort_desc_i32(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_sort_desc_i64(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_reverse_i32(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_reverse_i64(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_reverse_str(vec_ptr: ptr<i8>) -> void;
-extern fn __mlang_std_vec_dedup_i32(vec_ptr: ptr<i8>) -> void;
+mod std::vec::detail;
+use std::vec::detail::*;
 
 // ------------------------------------------------------------------ //
 // Method stubs — compiler intrinsics, documented for gd/hover.       //
 // Vec<T> methods are wired in the code generator and backed by       //
-// libmlang_std. These extern fn declarations are LSP navigation      //
-// anchors; pressing gd on any method name jumps here.               //
+// libmlang_std.  See std::vec::detail for the raw C ABI bindings.   //
 // ------------------------------------------------------------------ //
 
 /// @defgroup vec_methods Vec Methods
