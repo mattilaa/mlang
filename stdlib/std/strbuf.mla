@@ -41,6 +41,12 @@ pub fn clone(s: string) -> string {
     return __mlang_std_strbuf_clone(s);
 }
 
+/// @brief Construct a new string from an existing UTF-8 string.
+/// Mirrors compiler intrinsic semantics used by `String::from(...)`.
+pub fn from(s: string) -> string {
+    return __mlang_std_strbuf_clone(s);
+}
+
 /// @brief Compare two strings for equality (`1` true, `0` false).
 pub fn eq(a: string, b: string) -> int {
     return __mlang_std_strbuf_eq(a, b);

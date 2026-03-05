@@ -574,6 +574,7 @@ fn string_intrinsic_location(member: string) -> string {
     var target: string = String::new();
     if eq(member, "new") == 1: { target = "new"; }
     if eq(member, "with_capacity") == 1: { target = "with_capacity"; }
+    if eq(member, "from") == 1: { target = "from"; }
     if eq(member, "free") == 1: { target = "free"; }
     if len(target) == 0: { return String::new(); }
 
@@ -605,13 +606,111 @@ fn string_intrinsic_location(member: string) -> string {
             path = p3;
         }
     }
-    if len(path) == 0: { return String::new(); }
+    if len(path) == 0: {
+        // String::from is compiler intrinsic lowered via __mlang_std_strbuf_clone.
+        if eq(target, "from") == 1: {
+            let root2: string = root_path_from_store();
+            let here2: string = cwd();
+            var dpath: string = String::new();
+            if len(root2) > 0: {
+                let d1: string = concat(root2, "/stdlib/std/strbuf/detail.mla");
+                if file_exists(d1) == 1: { dpath = d1; }
+            }
+            if len(dpath) == 0: {
+                if len(root2) > 0: {
+                    let d2: string = concat(root2, "/std/strbuf/detail.mla");
+                    if file_exists(d2) == 1: { dpath = d2; }
+                }
+            }
+            if len(dpath) == 0: {
+                let d3: string = concat(here2, "/stdlib/std/strbuf/detail.mla");
+                if file_exists(d3) == 1: { dpath = d3; }
+            }
+            if len(dpath) > 0: {
+                let dtext_r: Result<string, string> = read_all_text(dpath);
+                if dtext_r.is_ok(): {
+                    let dtext: string = dtext_r.unwrap();
+                    let dloc: string = first_match_location(dpath, dtext, "extern fn __mlang_std_strbuf_clone(");
+                    if len(dloc) > 0: { return dloc; }
+                }
+            }
+        }
+        return String::new();
+    }
 
     let text_r: Result<string, string> = read_all_text(path);
     if text_r.is_err(): { return String::new(); }
     let text: string = text_r.unwrap();
     let pat: string = format!("pub fn {}", target);
-    return first_match_location(path, text, pat);
+    let loc: string = first_match_location(path, text, pat);
+    if len(loc) > 0: { return loc; }
+
+    if eq(target, "from") == 1: {
+        let root2: string = root_path_from_store();
+        let here2: string = cwd();
+        var dpath2: string = String::new();
+        if len(root2) > 0: {
+            let d1b: string = concat(root2, "/stdlib/std/strbuf/detail.mla");
+            if file_exists(d1b) == 1: { dpath2 = d1b; }
+        }
+        if len(dpath2) == 0: {
+            if len(root2) > 0: {
+                let d2b: string = concat(root2, "/std/strbuf/detail.mla");
+                if file_exists(d2b) == 1: { dpath2 = d2b; }
+            }
+        }
+        if len(dpath2) == 0: {
+            let d3b: string = concat(here2, "/stdlib/std/strbuf/detail.mla");
+            if file_exists(d3b) == 1: { dpath2 = d3b; }
+        }
+        if len(dpath2) > 0: {
+            let dtext_r2: Result<string, string> = read_all_text(dpath2);
+            if dtext_r2.is_ok(): {
+                let dtext2: string = dtext_r2.unwrap();
+                let dloc2: string = first_match_location(dpath2, dtext2, "extern fn __mlang_std_strbuf_clone(");
+                if len(dloc2) > 0: { return dloc2; }
+            }
+        }
+    }
+    return String::new();
+}
+
+fn associated_type_method_location(query_text: string, type_name: string, method: string) -> string {
+    if len(query_text) == 0: { return String::new(); }
+    if len(type_name) == 0: { return String::new(); }
+    if len(method) == 0: { return String::new(); }
+
+    let type_mod: string = find_module_for_qualifier(query_text, type_name);
+    if len(type_mod) == 0: { return String::new(); }
+
+    let rel_path: string = colon_to_slash(type_mod);
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var path: string = String::new();
+    if len(root) > 0: {
+        let p1: string = format!("{}/stdlib/{}.mla", root, rel_path);
+        if file_exists(p1) == 1: { path = p1; }
+    }
+    if len(path) == 0: {
+        if len(root) > 0: {
+            let p2: string = format!("{}/{}.mla", root, rel_path);
+            if file_exists(p2) == 1: { path = p2; }
+        }
+    }
+    if len(path) == 0: {
+        let p3: string = format!("{}/stdlib/{}.mla", here, rel_path);
+        if file_exists(p3) == 1: { path = p3; }
+    }
+    if len(path) == 0: {
+        let p4: string = format!("{}/{}.mla", here, rel_path);
+        if file_exists(p4) == 1: { path = p4; }
+    }
+    if len(path) == 0: { return String::new(); }
+
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    return first_match_location(path, text, format!("fn {}(", method));
 }
 
 fn thread_intrinsic_location(name: string) -> string {
@@ -1637,6 +1736,8 @@ fn handle_definition(payload: string) -> string {
                         let loc: string = string_intrinsic_location(word);
                         if len(loc) > 0: { return format!("[{}]", loc); }
                     }
+                    let assoc_loc: string = associated_type_method_location(query_text, prefix, word);
+                    if len(assoc_loc) > 0: { return format!("[{}]", assoc_loc); }
                 }
                 if len(prefix) == 0: {
                     if len(word) > 0: {
