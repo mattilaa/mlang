@@ -121,6 +121,35 @@ static std::string stableSymbolId(const SemanticSymbol& sym) {
     return "sym_" + std::string(hex);
 }
 
+static std::string stableFallbackId(std::string_view uri,
+                                    std::string_view name,
+                                    int line,
+                                    int column,
+                                    std::string_view category) {
+    std::string key;
+    key.reserve(uri.size() + name.size() + category.size() + 48);
+    key += "fallback|";
+    key += std::string(category);
+    key += "|";
+    key += std::string(uri);
+    key += "|";
+    key += std::string(name);
+    key += "|";
+    key += std::to_string(line);
+    key += "|";
+    key += std::to_string(column);
+
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char c : key) {
+        hash ^= static_cast<std::uint64_t>(c);
+        hash *= 1099511628211ULL;
+    }
+
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(hash));
+    return "sym_fb_" + std::string(hex);
+}
+
 static bool isIdentStart(char c) {
     const unsigned char uc = static_cast<unsigned char>(c);
     return std::isalpha(uc) != 0 || c == '_';
@@ -1743,6 +1772,24 @@ static bool parseSelfTypeFromSignatureLine(std::string_view line,
         ++end;
     }
     std::string ty(params.substr(start, end - start));
+    // Normalize reference receiver spellings:
+    //   "&mut Self" -> "Self"
+    //   "&Type"     -> "Type"
+    if (!ty.empty() && ty.front() == '&') {
+        ty.erase(0, 1);
+        while (!ty.empty() &&
+               std::isspace(static_cast<unsigned char>(ty.front())) != 0) {
+            ty.erase(ty.begin());
+        }
+        if (startsWith(ty, "mut")) {
+            size_t pos = 3;
+            while (pos < ty.size() &&
+                   std::isspace(static_cast<unsigned char>(ty[pos])) != 0) {
+                ++pos;
+            }
+            ty = ty.substr(pos);
+        }
+    }
     const size_t generic = ty.find('<');
     if (generic != std::string::npos) {
         ty = ty.substr(0, generic);
@@ -1755,6 +1802,115 @@ static bool parseSelfTypeFromSignatureLine(std::string_view line,
         return false;
     }
     out_type = std::move(ty);
+    return true;
+}
+
+static bool findTraitDeclaration(std::string_view text,
+                                 std::string_view trait_name,
+                                 int& out_line,
+                                 int& out_col) {
+    if (trait_name.empty()) {
+        return false;
+    }
+    const std::vector<std::string_view> lines = splitLines(text);
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string_view line = lines[i];
+        const size_t trait_pos = line.find("trait ");
+        if (trait_pos == std::string_view::npos) {
+            continue;
+        }
+        const int col = findIdentifierColumn(line, trait_name);
+        if (col <= 0) {
+            continue;
+        }
+        out_line = static_cast<int>(i) + 1;
+        out_col = col;
+        return true;
+    }
+    return false;
+}
+
+static bool fallbackTraitDefinitionFromImplLine(
+    const mlang::compiler_api::DocumentSemantic& current,
+    int line,
+    int column,
+    TextDefinitionFallback& out) {
+    if (line <= 0 || column <= 0) {
+        return false;
+    }
+    const std::vector<std::string_view> lines = splitLines(current.text);
+    const size_t idx = static_cast<size_t>(line - 1);
+    if (idx >= lines.size()) {
+        return false;
+    }
+    const std::string_view raw_line = lines[idx];
+    const std::string line_trim = trimWs(raw_line);
+    if (!startsWith(line_trim, "impl ")) {
+        return false;
+    }
+
+    const std::optional<size_t> offset = offsetFromLineColumn(current.text, line, column);
+    if (!offset.has_value()) {
+        return false;
+    }
+    const std::optional<TokenSpan> token_span = tokenSpanAtOffset(current.text, *offset);
+    if (!token_span.has_value()) {
+        return false;
+    }
+    const std::string_view token = token_span->token;
+
+    size_t pos = 5; // after "impl "
+    while (pos < line_trim.size() &&
+           std::isspace(static_cast<unsigned char>(line_trim[pos])) != 0) {
+        ++pos;
+    }
+    if (pos >= line_trim.size()) {
+        return false;
+    }
+    if (line_trim[pos] == '<') {
+        int depth = 0;
+        while (pos < line_trim.size()) {
+            const char ch = line_trim[pos++];
+            if (ch == '<') {
+                ++depth;
+            } else if (ch == '>') {
+                --depth;
+                if (depth == 0) {
+                    break;
+                }
+            }
+        }
+        while (pos < line_trim.size() &&
+               std::isspace(static_cast<unsigned char>(line_trim[pos])) != 0) {
+            ++pos;
+        }
+    }
+
+    const size_t trait_start = pos;
+    if (trait_start >= line_trim.size() || !isIdentStart(line_trim[trait_start])) {
+        return false;
+    }
+    size_t trait_end = trait_start + 1;
+    while (trait_end < line_trim.size() && isIdentContinue(line_trim[trait_end])) {
+        ++trait_end;
+    }
+    const std::string trait_name(line_trim.substr(trait_start, trait_end - trait_start));
+    const size_t for_pos = line_trim.find(" for ", trait_end);
+    if (for_pos == std::string_view::npos) {
+        return false;
+    }
+    if (token != trait_name) {
+        return false;
+    }
+
+    int def_line = 0;
+    int def_col = 0;
+    if (!findTraitDeclaration(current.text, trait_name, def_line, def_col)) {
+        return false;
+    }
+    out.name = trait_name;
+    out.line = def_line;
+    out.column = def_col;
     return true;
 }
 
@@ -1941,7 +2097,12 @@ static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemant
         std::string owner;
         for (int y = std::min(line - 1, static_cast<int>(lines.size()) - 1);
              y >= 0; --y) {
-            if (parseSelfTypeFromSignatureLine(lines[static_cast<size_t>(y)], owner)) {
+            std::string parsed_owner;
+            if (parseSelfTypeFromSignatureLine(lines[static_cast<size_t>(y)], parsed_owner)) {
+                if (parsed_owner == "Self") {
+                    continue;
+                }
+                owner = std::move(parsed_owner);
                 break;
             }
             if (parseImplOwnerFromLine(lines[static_cast<size_t>(y)], owner)) {
@@ -1961,6 +2122,9 @@ static bool fallbackDefinitionFromText(const mlang::compiler_api::DocumentSemant
 
     int def_line = 0;
     int def_col = 0;
+    if (fallbackTraitDefinitionFromImplLine(current, line, column, out)) {
+        return true;
+    }
     if (findParameterInNearestFunction(current.text, line, out.name, def_line, def_col)) {
         out.line = def_line;
         out.column = def_col;
@@ -3549,12 +3713,28 @@ int __mlang_compiler_document_definition_id(mlang_compiler_session* session,
         return prep;
     }
 
-    const auto def = mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
-    if (!def.has_value()) {
-        return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+    const auto def =
+        mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
+    std::string id;
+    if (def.has_value()) {
+        id = def->symbol.stable_id;
+    } else {
+        const std::optional<mlang::compiler_api::ImportDefinitionFallback> import_fb =
+            mlang::compiler_api::importDefinitionFromText(*current, line, column);
+        if (import_fb.has_value()) {
+            id = mlang::compiler_api::stableFallbackId(
+                import_fb->uri, import_fb->name, import_fb->line, import_fb->column,
+                "import");
+        } else {
+            mlang::compiler_api::TextDefinitionFallback fb;
+            if (!mlang::compiler_api::fallbackDefinitionFromText(*current, line, column, fb)) {
+                return static_cast<int>(mlang::compiler_api::Status::SymbolNotFound);
+            }
+            id = mlang::compiler_api::stableFallbackId(
+                current->uri, fb.name, fb.line, fb.column, "text");
+        }
     }
 
-    const std::string& id = def->symbol.stable_id;
     *out_id_length = static_cast<int>(id.size());
     const size_t copy_len = std::min(static_cast<size_t>(out_id_capacity - 1), id.size());
     if (copy_len > 0) {

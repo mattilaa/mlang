@@ -161,6 +161,62 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
     }
 }
 
+static bool containsUpdateExpression(ASTNode* node)
+{
+    if(!node)
+        return false;
+    if(dynamic_cast<UpdateExpressionNode*>(node))
+        return true;
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(node))
+        return containsUpdateExpression(bin->left) ||
+               containsUpdateExpression(bin->right);
+    if(auto* un = dynamic_cast<UnaryOpNode*>(node))
+        return containsUpdateExpression(un->operand);
+    if(auto* tern = dynamic_cast<TernaryNode*>(node))
+        return containsUpdateExpression(tern->condition) ||
+               containsUpdateExpression(tern->trueExpr) ||
+               containsUpdateExpression(tern->falseExpr);
+    if(auto* idx = dynamic_cast<IndexExpressionNode*>(node))
+        return containsUpdateExpression(idx->base) ||
+               containsUpdateExpression(idx->index);
+    if(auto* cast = dynamic_cast<CastExpressionNode*>(node))
+        return containsUpdateExpression(cast->expression);
+    if(auto* tryE = dynamic_cast<TryExpressionNode*>(node))
+        return containsUpdateExpression(tryE->expression);
+    if(auto* call = dynamic_cast<FunctionCallNode*>(node))
+    {
+        for(auto* arg : call->arguments)
+        {
+            if(containsUpdateExpression(arg))
+                return true;
+        }
+        return false;
+    }
+    if(auto* mc = dynamic_cast<MethodCallNode*>(node))
+    {
+        if(containsUpdateExpression(mc->object))
+            return true;
+        for(auto* arg : mc->arguments)
+        {
+            if(containsUpdateExpression(arg))
+                return true;
+        }
+        return false;
+    }
+    if(auto* fa = dynamic_cast<FieldAccessNode*>(node))
+        return containsUpdateExpression(fa->object);
+    if(auto* fmt = dynamic_cast<FormatNode*>(node))
+    {
+        for(auto* arg : fmt->arguments)
+        {
+            if(containsUpdateExpression(arg))
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
@@ -3544,6 +3600,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
         {
             if(impl->typeParams.empty())
             {
+                if(!impl->traitName.empty())
+                {
+                    structImplementedTraits[impl->structName].insert(
+                        impl->traitName);
+                }
                 // Non-generic impl block - process immediately
                 for(auto method : impl->methods)
                 {
@@ -5319,18 +5380,6 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
 
 llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
 {
-    // Load the current value (also gives us the concrete LLVM type).
-    llvm::Value* oldVal = generateExpression(node->operand);
-    if(!oldVal)
-        return nullptr;
-
-    llvm::Type* ty = oldVal->getType();
-    if(!ty->isIntegerTy() && !ty->isFloatingPointTy())
-    {
-        reportError(node->line, "++/-- requires a numeric operand");
-        return nullptr;
-    }
-
     llvm::Value* ptr = getLValuePointer(node->operand, node->line);
     if(!ptr)
     {
@@ -5338,20 +5387,198 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
         return nullptr;
     }
 
-    llvm::Value* one = ty->isFloatingPointTy()
-        ? llvm::ConstantFP::get(ty, 1.0)
-        : llvm::ConstantInt::get(ty, 1);
+    // Load the current value (also gives us the concrete LLVM type).
+    llvm::Value* oldVal = generateExpression(node->operand);
+    if(!oldVal)
+        return nullptr;
 
+    llvm::Type* ty = oldVal->getType();
     bool isInc = (node->kind == UpdateExpressionNode::KIND_INCREMENT);
-    llvm::Value* newVal = ty->isFloatingPointTy()
-        ? (isInc ? builder.CreateFAdd(oldVal, one, "upd.new")
-                 : builder.CreateFSub(oldVal, one, "upd.new"))
-        : (isInc ? builder.CreateAdd(oldVal, one, "upd.new")
-                 : builder.CreateSub(oldVal, one, "upd.new"));
+    if(ty->isIntegerTy() || ty->isFloatingPointTy())
+    {
+        llvm::Value* one = ty->isFloatingPointTy()
+            ? llvm::ConstantFP::get(ty, 1.0)
+            : llvm::ConstantInt::get(ty, 1);
+        llvm::Value* newVal = ty->isFloatingPointTy()
+            ? (isInc ? builder.CreateFAdd(oldVal, one, "upd.new")
+                     : builder.CreateFSub(oldVal, one, "upd.new"))
+            : (isInc ? builder.CreateAdd(oldVal, one, "upd.new")
+                     : builder.CreateSub(oldVal, one, "upd.new"));
 
-    builder.CreateStore(newVal, ptr);
+        builder.CreateStore(newVal, ptr);
 
-    // prefix: return new value; postfix: return old value
+        // prefix: return new value; postfix: return old value
+        return node->isPrefix ? newVal : oldVal;
+    }
+
+    // Trait-based ++/-- for user-defined structs:
+    //   trait Increment { fn increment(&mut self) -> void; }   or
+    //   trait Increment { fn increment(self) -> Self; }
+    //   trait Decrement { fn decrement(&mut self) -> void; }   or
+    //   trait Decrement { fn decrement(self) -> Self; }
+    const std::string traitName = isInc ? "Increment" : "Decrement";
+    const std::string methodName = isInc ? "increment" : "decrement";
+
+    auto* structTy = llvm::dyn_cast<llvm::StructType>(ty);
+    if(!structTy || !structTy->hasName())
+    {
+        reportError(node->line,
+                    "++/-- requires a numeric operand or trait-based struct");
+        return nullptr;
+    }
+    const std::string structTypeName = structTy->getName().str();
+
+    auto traitIt = structImplementedTraits.find(structTypeName);
+    if(traitIt == structImplementedTraits.end() ||
+       traitIt->second.find(traitName) == traitIt->second.end())
+    {
+        reportError(node->line,
+                    "struct '" + structTypeName + "' must implement trait '" +
+                        traitName + "' to use " + (isInc ? "++" : "--"));
+        return nullptr;
+    }
+
+    auto structIt = structMethods.find(structTypeName);
+    if(structIt == structMethods.end())
+    {
+        reportError(node->line, "struct '" + structTypeName + "' has no methods");
+        return nullptr;
+    }
+    auto methodIt = structIt->second.find(methodName);
+    if(methodIt == structIt->second.end())
+    {
+        reportError(node->line,
+                    "trait '" + traitName + "' on struct '" + structTypeName +
+                        "' requires method '" + methodName + "'");
+        return nullptr;
+    }
+
+    StructMethodNode* methodNode = methodIt->second.second;
+    if(!methodNode)
+    {
+        reportError(node->line,
+                    "invalid method metadata for '" + structTypeName + "::" +
+                        methodName + "'");
+        return nullptr;
+    }
+    if(methodNode->isStatic)
+    {
+        reportError(node->line,
+                    "trait method '" + methodName + "' must not be static");
+        return nullptr;
+    }
+
+    // Find defining struct (method may come from a base struct).
+    std::string definingStruct = structTypeName;
+    std::string searchStruct = structTypeName;
+    while(!searchStruct.empty())
+    {
+        std::string candidate = searchStruct + "_" + methodName;
+        if(module->getFunction(candidate))
+        {
+            definingStruct = searchStruct;
+            break;
+        }
+        auto baseIt = structBases.find(searchStruct);
+        if(baseIt != structBases.end())
+        {
+            searchStruct = baseIt->second;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    const std::string mangledName = definingStruct + "_" + methodName;
+    llvm::Function* callee = module->getFunction(mangledName);
+    if(!callee)
+    {
+        reportError(node->line, "unknown trait method: " + methodName);
+        return nullptr;
+    }
+
+    if(callee->empty() && monomorphizedTypes.count(definingStruct))
+    {
+        auto defStructIt = structMethods.find(definingStruct);
+        if(defStructIt != structMethods.end())
+        {
+            auto defMethodIt = defStructIt->second.find(methodName);
+            if(defMethodIt != defStructIt->second.end())
+            {
+                StructMethodNode* methodDef = defMethodIt->second.second;
+                if(methodDef && methodDef->body)
+                {
+                    llvm::BasicBlock* savedBlock = builder.GetInsertBlock();
+                    auto savedNamedValues = namedValues;
+                    auto savedConstantVariables = constantVariables;
+                    auto savedVariableTypes = variableTypes;
+                    auto savedStructVariableTypes = structVariableTypes;
+                    auto savedEnumVariableTypes = enumVariableTypes;
+                    auto savedListElementTypes = listElementTypes;
+                    auto savedMapKeyValueTypes = mapKeyValueTypes;
+                    auto savedTupleElementTypes = tupleElementTypes;
+                    auto savedPointerElementTypes = pointerElementTypes;
+                    auto savedMovedVariables = movedVariables;
+                    auto savedPointerBorrowTarget = pointerBorrowTarget;
+                    auto savedActiveBorrowers = activeBorrowers;
+                    auto savedActiveMutBorrower = activeMutBorrower;
+                    auto savedVariableScopeDepth = variableScopeDepth;
+                    auto savedCleanupScopes = cleanupScopes;
+                    auto savedPointerBorrowScopes = pointerBorrowScopes;
+                    auto savedVariableScopeDepthScopes =
+                        variableScopeDepthScopes;
+
+                    generateMethodDefinition(definingStruct, methodDef);
+
+                    namedValues = savedNamedValues;
+                    constantVariables = savedConstantVariables;
+                    variableTypes = savedVariableTypes;
+                    structVariableTypes = savedStructVariableTypes;
+                    enumVariableTypes = savedEnumVariableTypes;
+                    listElementTypes = savedListElementTypes;
+                    mapKeyValueTypes = savedMapKeyValueTypes;
+                    tupleElementTypes = savedTupleElementTypes;
+                    pointerElementTypes = savedPointerElementTypes;
+                    movedVariables = savedMovedVariables;
+                    pointerBorrowTarget = savedPointerBorrowTarget;
+                    activeBorrowers = savedActiveBorrowers;
+                    activeMutBorrower = savedActiveMutBorrower;
+                    variableScopeDepth = savedVariableScopeDepth;
+                    cleanupScopes = savedCleanupScopes;
+                    pointerBorrowScopes = savedPointerBorrowScopes;
+                    variableScopeDepthScopes = savedVariableScopeDepthScopes;
+                    if(savedBlock)
+                    {
+                        builder.SetInsertPoint(savedBlock);
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<llvm::Value*> args;
+    args.push_back(ptr);
+    llvm::Value* newVal = nullptr;
+    if(callee->getReturnType()->isVoidTy())
+    {
+        builder.CreateCall(callee, args);
+        newVal = builder.CreateLoad(ty, ptr, "upd.new");
+    }
+    else
+    {
+        llvm::Value* callVal = builder.CreateCall(callee, args, "upd.new");
+        if(callVal->getType() != ty)
+        {
+            reportError(node->line,
+                        "trait method '" + methodName +
+                            "' must return void or the receiver type");
+            return nullptr;
+        }
+        builder.CreateStore(callVal, ptr);
+        newVal = callVal;
+    }
+
     return node->isPrefix ? newVal : oldVal;
 }
 
@@ -15123,6 +15350,15 @@ llvm::Value* CodeGenerator::generateMapLiteral(MapLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
 {
+    if(containsUpdateExpression(node->index))
+    {
+        reportError(node->line,
+                    "index expression does not allow pre/post ++/--; update "
+                    "the index in a separate statement to avoid off-by-one "
+                    "and bounds bugs");
+        return nullptr;
+    }
+
     // Get the base (list or map variable)
     auto* baseId = dynamic_cast<IdentifierNode*>(node->base);
     if(!baseId)
@@ -16859,6 +17095,10 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     {
         for(auto* impl : implIt->second)
         {
+            if(!impl->traitName.empty())
+            {
+                structImplementedTraits[mangledName].insert(impl->traitName);
+            }
             for(auto* method : impl->methods)
             {
                 // Substitute types in return type
@@ -16930,6 +17170,10 @@ void CodeGenerator::monomorphizeImplBlock(
     const std::vector<TypeNode*>& typeArgs,
     const std::string& mangledStructName)
 {
+    if(impl && !impl->traitName.empty())
+    {
+        structImplementedTraits[mangledStructName].insert(impl->traitName);
+    }
     for(auto* method : impl->methods)
     {
         // Substitute types in return type

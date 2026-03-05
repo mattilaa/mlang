@@ -390,6 +390,8 @@ private:
     std::map<std::string,
              std::map<std::string, std::pair<bool, StructMethodNode*>>>
         structMethods;
+    // Track trait impls per concrete struct type name.
+    std::map<std::string, std::set<std::string>> structImplementedTraits;
 
     // List/Map iteration helpers
     void generateForListLiteralIteration(ForNode* node,

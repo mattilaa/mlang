@@ -1550,11 +1550,6 @@ fn handle_definition(payload: string) -> string {
                             let qual_loc: string = module_file_location(qual_mod);
                             if len(qual_loc) > 0: { return format!("[{}]", qual_loc); }
                         }
-                        let root_uri2: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
-                        if len(root_uri2) > 0: {
-                            let c_loc_ws: string = workspace_c_definition_search(root_uri2, word);
-                            if len(c_loc_ws) > 0: { return format!("[{}]", c_loc_ws); }
-                        }
                         if eq(word, "new") == 1: {
                             if contains(line_text, "String::new") == 1: {
                                 let sloc1: string = string_intrinsic_location(word);
@@ -1588,7 +1583,24 @@ fn handle_definition(payload: string) -> string {
     let s: Session = current_session();
     let dr: Result<DefinitionLocation, string> =
         s.definition(uri, line + 1, col + 1);
-    if dr.is_err(): { return "[]"; }
+    if dr.is_err(): {
+        if ensure_text_store() == 0: {
+            let line_text2: string = line_text_at(text_store_get(g_text_store_handle, uri), line);
+            let packed2: string = extract_word_and_prefix(line_text2, col);
+            let sep2: i64 = find(packed2, "::");
+            if sep2 >= 0: {
+                let word2: string = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
+                if len(word2) > 0: {
+                    let root_uri2: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                    if len(root_uri2) > 0: {
+                        let c_loc_ws: string = workspace_c_definition_search(root_uri2, word2);
+                        if len(c_loc_ws) > 0: { return format!("[{}]", c_loc_ws); }
+                    }
+                }
+            }
+        }
+        return "[]";
+    }
 
     let d: DefinitionLocation = match dr {
         Ok(v) => v,

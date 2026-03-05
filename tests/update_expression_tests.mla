@@ -81,3 +81,76 @@ fn test_increment_i64() -> i32 {
     if x != 101: { return 1; }
     return 0;
 }
+
+trait Increment {
+    fn increment(self: &mut Self) -> void;
+}
+
+trait Decrement {
+    fn decrement(self: &mut Self) -> void;
+}
+
+struct Counter {
+    var value: i32;
+};
+
+impl Increment for Counter {
+    fn increment(self: &mut Self) -> void {
+        self.value += 1;
+    }
+}
+
+impl Decrement for Counter {
+    fn decrement(self: &mut Self) -> void {
+        self.value -= 1;
+    }
+}
+
+#[test]
+fn test_trait_increment_decrement_mut_self_void() -> i32 {
+    var c: Counter = Counter { value: 1 };
+
+    let old: Counter = c++;
+    if old.value != 1: { return 1; }
+    if c.value != 2: { return 1; }
+
+    let new_val: Counter = ++c;
+    if new_val.value != 3: { return 1; }
+    if c.value != 3: { return 1; }
+
+    c--;
+    if c.value != 2: { return 1; }
+    --c;
+    if c.value != 1: { return 1; }
+    return 0;
+}
+
+struct CounterByValue {
+    var value: i32;
+};
+
+impl Increment for CounterByValue {
+    fn increment(self: CounterByValue) -> CounterByValue {
+        return CounterByValue { value: self.value + 1 };
+    }
+}
+
+impl Decrement for CounterByValue {
+    fn decrement(self: CounterByValue) -> CounterByValue {
+        return CounterByValue { value: self.value - 1 };
+    }
+}
+
+#[test]
+fn test_trait_increment_decrement_self_return_self() -> i32 {
+    var c: CounterByValue = CounterByValue { value: 10 };
+
+    let old: CounterByValue = c++;
+    if old.value != 10: { return 1; }
+    if c.value != 11: { return 1; }
+
+    let new_val: CounterByValue = --c;
+    if new_val.value != 10: { return 1; }
+    if c.value != 10: { return 1; }
+    return 0;
+}

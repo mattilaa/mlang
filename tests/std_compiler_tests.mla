@@ -374,6 +374,50 @@ fn test_compiler_definition_use_module_path_segment() -> i32 {
 }
 
 #[test]
+fn test_compiler_definition_trait_name_from_impl() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://definition_trait_from_impl.mla";
+    let src: string = "trait Decrement {\n  fn decrement(self: &mut Self) -> void;\n}\nstruct Counter { var value: i32; };\nimpl Decrement for Counter {\n  fn decrement(self: &mut Self) -> void {\n    self.value -= 1;\n  }\n}\n";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    // Cursor on "Decrement" in "impl Decrement for Counter".
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 5, 8);
+    if dr.is_err(): { return 1; }
+    let d: DefinitionLocation = dr.unwrap();
+    if contains(d.name, "Decrement") == 0: { return 1; }
+    if d.line != 1: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
+fn test_compiler_definition_impl_self_member_access_mut_self() -> i32 {
+    let sr: Result<Session, string> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: string = "mem://definition_impl_self_member_access.mla";
+    let src: string = "trait Decrement {\n  fn decrement(self: &mut Self) -> void;\n}\nstruct Counter { var value: i32; };\nimpl Decrement for Counter {\n  fn decrement(self: &mut Self) -> void {\n    self.value -= 1;\n  }\n}\n";
+    let o: Result<i32, string> = s.open_document(uri, "mlang", src, 1);
+    if o.is_err(): { return 1; }
+
+    // Cursor on "value" in "self.value -= 1;".
+    let dr: Result<DefinitionLocation, string> = s.definition(uri, 7, 12);
+    if dr.is_err(): { return 1; }
+    let d: DefinitionLocation = dr.unwrap();
+    if contains(d.name, "value") == 0: { return 1; }
+    if d.line != 4: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
 fn test_compiler_stable_symbol_id_and_references() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }

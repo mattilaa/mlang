@@ -35,3 +35,4 @@ mod std_net_tests;
 mod std_sync_tests;
 mod std_printf_tests;
 mod std_testing_tests;
+mod update_expression_tests;
