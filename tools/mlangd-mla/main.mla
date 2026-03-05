@@ -793,7 +793,68 @@ fn c_type_target(word: string) -> string {
     return String::new();
 }
 
+fn symbol_location_in_c_file(path: string, symbol: string) -> string {
+    if len(path) == 0: { return String::new(); }
+    if file_exists(path) != 1: { return String::new(); }
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    return first_match_location(path, text, symbol);
+}
+
+fn c_extern_binding_location(symbol: string) -> string {
+    if starts_with(symbol, "__mlang_") == 0: { return String::new(); }
+
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var loc: string = String::new();
+
+    if starts_with(symbol, "__mlang_compiler_") == 1: {
+        if len(root) > 0: {
+            loc = symbol_location_in_c_file(concat(root, "/src/compiler_api.cpp"), symbol);
+            if len(loc) > 0: { return loc; }
+        }
+        loc = symbol_location_in_c_file(concat(here, "/src/compiler_api.cpp"), symbol);
+        if len(loc) > 0: { return loc; }
+    }
+
+    if starts_with(symbol, "__mlang_std_compiler_") == 1: {
+        if len(root) > 0: {
+            loc = symbol_location_in_c_file(concat(root, "/stdlib/src/std_compiler_api.cpp"), symbol);
+            if len(loc) > 0: { return loc; }
+        }
+        loc = symbol_location_in_c_file(concat(here, "/stdlib/src/std_compiler_api.cpp"), symbol);
+        if len(loc) > 0: { return loc; }
+    }
+
+    if starts_with(symbol, "__mlang_std_") == 1: {
+        let rest: string = sub(symbol, 12, len(symbol) - 12);
+        let us: i64 = find(rest, "_");
+        var module_name: string = rest;
+        if us >= 0: {
+            module_name = sub(rest, 0, us);
+        }
+        if len(module_name) > 0: {
+            if len(root) > 0: {
+                loc = symbol_location_in_c_file(concat(root, format!("/stdlib/src/std_{}.c", module_name)), symbol);
+                if len(loc) > 0: { return loc; }
+                loc = symbol_location_in_c_file(concat(root, format!("/stdlib/src/std_{}.cpp", module_name)), symbol);
+                if len(loc) > 0: { return loc; }
+            }
+            loc = symbol_location_in_c_file(concat(here, format!("/stdlib/src/std_{}.c", module_name)), symbol);
+            if len(loc) > 0: { return loc; }
+            loc = symbol_location_in_c_file(concat(here, format!("/stdlib/src/std_{}.cpp", module_name)), symbol);
+            if len(loc) > 0: { return loc; }
+        }
+    }
+
+    return String::new();
+}
+
 fn c_internals_location(word: string) -> string {
+    let extern_loc: string = c_extern_binding_location(word);
+    if len(extern_loc) > 0: { return extern_loc; }
+
     let target: string = c_type_target(word);
     if len(target) == 0: { return String::new(); }
 
