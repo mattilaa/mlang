@@ -1,4 +1,6 @@
 build
+artifacts
+.pabotsuitenames
 results
 *bin
 *.a

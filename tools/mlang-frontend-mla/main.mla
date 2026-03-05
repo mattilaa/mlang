@@ -276,7 +276,8 @@ fn default_stdlib_paths() -> list<string> {
     var out: list<string> = [];
     let stdlib_path: string = getenv_value("MLANG_STDLIB_PATH");
     if len(stdlib_path) > 0 {
-        for p in split_env_paths(stdlib_path) {
+        let env_paths: list<string> = split_env_paths(stdlib_path);
+        for p in env_paths {
             if len(trim(p)) > 0 {
                 out.push(p);
             }
@@ -322,7 +323,8 @@ fn default_stdlib_lib_paths() -> list<string> {
     var out: list<string> = [];
     let lib_path: string = getenv_value("MLANG_STDLIB_LIB_PATH");
     if len(lib_path) > 0 {
-        for p in split_env_paths(lib_path) {
+        let env_lib_paths: list<string> = split_env_paths(lib_path);
+        for p in env_lib_paths {
             if len(trim(p)) > 0 {
                 out.push(p);
             }
@@ -346,10 +348,14 @@ fn default_stdlib_lib_paths() -> list<string> {
 
 fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> {
     var out: list<string> = [];
+    var has_stdlib: i32 = 0;
     for a in args {
+        if eq(a, "-lmlang_std") == 1 || eq(a, "-lmlang_stdlib") == 1 {
+            has_stdlib = 1;
+        }
         out.push(a);
     }
-    if list_contains(args, "-lmlang_std") == 1 || list_contains(args, "-lmlang_stdlib") == 1 {
+    if has_stdlib == 1 {
         return out;
     }
 
@@ -360,7 +366,8 @@ fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> 
         search_paths.push(concat(be_dir, "/../lib"));
         search_paths.push(concat(be_dir, "/../"));
     }
-    for p in default_stdlib_lib_paths() {
+    let stdlib_lib_paths: list<string> = default_stdlib_lib_paths();
+    for p in stdlib_lib_paths {
         search_paths.push(p);
     }
 
@@ -444,7 +451,11 @@ fn split_toml_array(input: string) -> list<string> {
     for i in 0..n {
         let ch: string = sub(input, i, 1);
         if eq(ch, "\"") == 1 {
-            in_quotes = if in_quotes == 0 { 1 } else { 0 };
+            if in_quotes == 0 {
+                in_quotes = 1;
+            } else {
+                in_quotes = 0;
+            }
             cur = concat(cur, ch);
             continue;
         }
@@ -503,7 +514,8 @@ fn parse_module_paths_from_toml(manifest: string) -> list<string> {
         if len(value) == 0 { continue; }
         if len(value) >= 2 && eq(sub(value, 0, 1), "[") == 1 && eq(sub(value, len(value) - 1, 1), "]") == 1 {
             let inner: string = sub(value, 1, len(value) - 2);
-            for part in split_toml_array(inner) {
+            let toml_parts: list<string> = split_toml_array(inner);
+            for part in toml_parts {
                 let path: string = unquote(part);
                 if len(path) > 0 {
                     out.push(path);

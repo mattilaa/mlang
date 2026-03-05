@@ -2,10 +2,14 @@
 #include "ir.h"
 #include "package_manager.h"
 #include "module.h"
+#include <array>
 #include <cctype>
+#include <chrono>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <cstdlib>
 #include <exception>
@@ -794,6 +798,68 @@ static int decode_system_exit_code(int rc)
     return 1;
 }
 
+static std::string log_date_prefix()
+{
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tmNow{};
+#if defined(_WIN32)
+    localtime_s(&tmNow, &t);
+#else
+    localtime_r(&t, &tmNow);
+#endif
+    std::ostringstream os;
+    os << std::setfill('0') << std::setw(2) << (tmNow.tm_mon + 1) << "/"
+       << std::setw(2) << tmNow.tm_mday << "/" << (tmNow.tm_year + 1900)
+       << ": ";
+    return os.str();
+}
+
+static bool has_log_date_prefix(const std::string& line)
+{
+    if(line.size() < 12)
+        return false;
+    auto is_digit = [](char c) { return c >= '0' && c <= '9'; };
+    return is_digit(line[0]) && is_digit(line[1]) && line[2] == '/' &&
+           is_digit(line[3]) && is_digit(line[4]) && line[5] == '/' &&
+           is_digit(line[6]) && is_digit(line[7]) && is_digit(line[8]) &&
+           is_digit(line[9]) && line[10] == ':' && line[11] == ' ';
+}
+
+static int run_command_with_dated_output(const std::string& cmd)
+{
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if(!pipe)
+        return 1;
+
+    std::array<char, 4096> buf{};
+    std::string pending;
+    while(fgets(buf.data(), static_cast<int>(buf.size()), pipe))
+    {
+        pending.append(buf.data());
+        size_t nl = std::string::npos;
+        while((nl = pending.find('\n')) != std::string::npos)
+        {
+            std::string line = pending.substr(0, nl);
+            pending.erase(0, nl + 1);
+            if(has_log_date_prefix(line))
+                std::cout << line << std::endl;
+            else
+                std::cout << log_date_prefix() << line << std::endl;
+        }
+    }
+    if(!pending.empty())
+    {
+        if(has_log_date_prefix(pending))
+            std::cout << pending << std::endl;
+        else
+            std::cout << log_date_prefix() << pending << std::endl;
+    }
+
+    int rc = pclose(pipe);
+    return decode_system_exit_code(rc);
+}
+
 static std::optional<int>
 run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
                         bool benchmarkMode, bool runTests, int benchIterations,
@@ -852,7 +918,8 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
     int failedSuites = 0;
     for(const auto& file : files)
     {
-        std::cout << "[SUITE] " << file.filename().string() << std::endl;
+        std::cout << log_date_prefix() << "[SUITE] " << file.filename().string()
+                  << std::endl;
         std::string cmd;
         if(benchmarkMode)
         {
@@ -875,15 +942,17 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
         for(const auto& la : linkArgs)
             cmd += " " + shell_quote(la);
 
-        int rc = decode_system_exit_code(std::system(cmd.c_str()));
+        int rc = benchmarkMode ? decode_system_exit_code(std::system(cmd.c_str()))
+                               : run_command_with_dated_output(cmd);
         if(rc == 0)
-            std::cout << "[SUITE PASS] " << file.filename().string()
-                      << std::endl;
+            std::cout << log_date_prefix() << "[SUITE PASS] "
+                      << file.filename().string() << std::endl;
         else
         {
             ++failedSuites;
-            std::cout << "[SUITE FAIL] " << file.filename().string()
-                      << " rc=" << rc << std::endl;
+            std::cout << log_date_prefix() << "[SUITE FAIL] "
+                      << file.filename().string() << " rc=" << rc
+                      << std::endl;
         }
     }
     return failedSuites == 0 ? 0 : 1;
@@ -970,6 +1039,7 @@ int main(int argc, char** argv)
     // Parse command line arguments
     std::string inputFile;
     std::string outputFile = "a.out";
+    bool outputPathExplicit = false;
     bool emitObjectOnly = false;
     bool emitAssembly = false;
     bool emitLLVMIR = false;
@@ -998,6 +1068,7 @@ int main(int argc, char** argv)
         else if(arg == "-o" && i + 1 < argc)
         {
             outputFile = argv[++i];
+            outputPathExplicit = true;
         }
         else if(arg == "-c")
         {
@@ -1138,6 +1209,13 @@ int main(int argc, char** argv)
     }
 
     std::string generatedTestRoot;
+    const char* artifactDirEnv = std::getenv("MLANG_ARTIFACT_DIR");
+    std::string artifactDir = artifactDirEnv ? std::string(artifactDirEnv) : "";
+    if(!artifactDir.empty())
+    {
+        std::error_code aec;
+        std::filesystem::create_directories(std::filesystem::path(artifactDir), aec);
+    }
     if(testMode)
     {
         std::error_code tec;
@@ -1154,7 +1232,17 @@ int main(int argc, char** argv)
         }
         else if(outputFile == "a.out")
         {
-            outputFile = benchmarkMode ? "mlang_bench_bin" : "mlang_test_bin";
+            std::string defaultName =
+                benchmarkMode ? "mlang_bench_bin" : "mlang_test_bin";
+            if(!outputPathExplicit && !artifactDir.empty())
+            {
+                outputFile =
+                    (std::filesystem::path(artifactDir) / defaultName).string();
+            }
+            else
+            {
+                outputFile = defaultName;
+            }
         }
     }
 
@@ -1485,10 +1573,7 @@ int main(int argc, char** argv)
         {
             execPath = "./" + execPath;
         }
-        int rc = std::system(execPath.c_str());
-        int exitCode = 1;
-        if(rc != -1 && WIFEXITED(rc))
-            exitCode = WEXITSTATUS(rc);
+        int exitCode = run_command_with_dated_output(execPath);
         if(!generatedTestRoot.empty())
         {
             std::error_code rmec;

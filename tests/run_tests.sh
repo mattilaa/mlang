@@ -125,7 +125,7 @@ echo "Using compiler: $COMPILER_PATH"
 echo "Using jobs: $JOBS"
 
 # Create build directory for tests
-BUILD_DIR="$SCRIPT_DIR/build"
+BUILD_DIR="${TEST_BUILD_DIR:-$SCRIPT_DIR/build}"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
