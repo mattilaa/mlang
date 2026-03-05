@@ -301,7 +301,7 @@ enum UpdatePosition
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE NOT
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN
-%token LT GT LE GE EQ NE
+%token LT GT LE GE EQ NE SPACESHIP
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
 %token GENERIC_LT
@@ -346,7 +346,7 @@ enum UpdatePosition
 
 %left PIPE_PIPE
 %left AMP_AMP
-%left LT GT LE GE EQ NE
+%left LT GT LE GE EQ NE SPACESHIP
 %left PLUS MINUS
 %left MULTIPLY DIVIDE MODULO
 
@@ -1041,6 +1041,8 @@ condition_relational
         { $$ = mla_ast_binary_op(LE, $1, $3); }
     | condition_relational GE condition_additive
         { $$ = mla_ast_binary_op(GE, $1, $3); }
+    | condition_relational SPACESHIP condition_additive
+        { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
     | condition_additive
     ;
 
@@ -1220,6 +1222,7 @@ match_binary_expression
     | match_target GE match_target { $$ = mla_ast_binary_op(GE, $1, $3); }
     | match_target EQ match_target { $$ = mla_ast_binary_op(EQ, $1, $3); }
     | match_target NE match_target { $$ = mla_ast_binary_op(NE, $1, $3); }
+    | match_target SPACESHIP match_target { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
     ;
 
 match_arm_list
@@ -1341,6 +1344,7 @@ binary_expression
     | expression GE expression { $$ = mla_ast_binary_op(GE, $1, $3); }
     | expression EQ expression { $$ = mla_ast_binary_op(EQ, $1, $3); }
     | expression NE expression { $$ = mla_ast_binary_op(NE, $1, $3); }
+    | expression SPACESHIP expression { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
     | expression AMP_AMP expression { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
     | expression PIPE_PIPE expression { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
     ;

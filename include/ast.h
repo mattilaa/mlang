@@ -269,6 +269,7 @@ public:
         OP_GE,
         OP_EQ,
         OP_NE,
+        OP_SPACESHIP,
         OP_AND,
         OP_OR
     };

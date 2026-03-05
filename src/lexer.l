@@ -210,6 +210,7 @@ static int is_try_question_context()
 ".enumerate()"  { return ENUMERATE_METHOD; }
 "<"             { return is_generic_struct_literal_start() ? GENERIC_LT : LT; }
 ">"             { return GT; }
+"<=>"           { return SPACESHIP; }
 "<="            { return LE; }
 ">="            { return GE; }
 "=="            { return EQ; }

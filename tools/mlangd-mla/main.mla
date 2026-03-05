@@ -1458,6 +1458,59 @@ fn completion_symbol_detail_in_uri(target_uri: string, label: string) -> string 
     return String::new();
 }
 
+fn doc_comment_above_symbol(text: string, line1: i32) -> string {
+    if len(text) == 0: { return String::new(); }
+    if line1 <= 1: { return String::new(); }
+    var out: string = String::new();
+    var found: i32 = 0;
+    var y: i64 = line1 - 2;
+    while y >= 0 {
+        let raw: string = line_text_at(text, y);
+        let line: string = trim_ascii_ws(raw);
+        if starts_with(line, "///") == 1 {
+            var body: string = sub(line, 3, len(line) - 3);
+            body = trim_ascii_ws(body);
+            if found == 0 {
+                out = body;
+            } else {
+                out = format!("{}\n{}", body, out);
+            }
+            found = 1;
+            y = y - 1;
+            continue;
+        }
+        if found == 1 {
+            break;
+        }
+        if len(line) == 0 {
+            y = y - 1;
+            continue;
+        }
+        break;
+    }
+    return out;
+}
+
+fn declaration_doc_in_text(text: string, label: string) -> string {
+    if len(text) == 0: { return String::new(); }
+    if len(label) == 0: { return String::new(); }
+    let n: i64 = line_count(text);
+    for i in 0..n {
+        let raw: string = line_text_at(text, i);
+        let line: string = trim_ascii_ws(raw);
+        if contains(line, format!("struct {}", label)) == 1: {
+            return doc_comment_above_symbol(text, i + 1);
+        }
+        if contains(line, format!("enum {}", label)) == 1: {
+            return doc_comment_above_symbol(text, i + 1);
+        }
+        if contains(line, format!("fn {}", label)) == 1: {
+            return doc_comment_above_symbol(text, i + 1);
+        }
+    }
+    return String::new();
+}
+
 fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
     if len(target_uri) == 0: { return String::new(); }
     if len(label) == 0: { return String::new(); }
@@ -1468,6 +1521,10 @@ fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
         Ok(v) => v,
         Err(_e) => 0
     };
+    var text_cache: string = String::new();
+    if ensure_text_store() == 0: {
+        text_cache = text_store_get(g_text_store_handle, target_uri);
+    }
     for i in 0..n {
         let sr: Result<DocumentSymbol, string> = s.document_symbol_get(target_uri, i);
         if sr.is_err(): { continue; }
@@ -1484,6 +1541,10 @@ fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
             }
         };
         if eq(sym.name, label) != 1: { continue; }
+        if len(text_cache) > 0 {
+            let doc_comment: string = doc_comment_above_symbol(text_cache, sym.line);
+            if len(doc_comment) > 0: { return doc_comment; }
+        }
         if len(sym.type_info) > 0: {
             if len(sym.signature) > 0: {
                 if eq(sym.type_info, sym.signature) != 1: {
@@ -1493,6 +1554,10 @@ fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
             return sym.type_info;
         }
         if len(sym.signature) > 0: { return sym.signature; }
+    }
+    if len(text_cache) > 0 {
+        let fallback_doc: string = declaration_doc_in_text(text_cache, label);
+        if len(fallback_doc) > 0: { return fallback_doc; }
     }
     return String::new();
 }

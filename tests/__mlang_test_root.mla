@@ -74,3 +74,5 @@ mod std_testing_tests;
 use std_testing_tests::*;
 mod update_expression_tests;
 use update_expression_tests::*;
+mod spaceship_operator_tests;
+use spaceship_operator_tests::*;

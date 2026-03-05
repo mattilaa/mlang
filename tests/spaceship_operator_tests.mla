@@ -1,0 +1,64 @@
+#[test]
+fn test_spaceship_numeric_i32() -> i32 {
+    let lt: i32 = 1 <=> 2;
+    let eqv: i32 = 7 <=> 7;
+    let gt: i32 = 9 <=> 3;
+    if lt != -1: { return 1; }
+    if eqv != 0: { return 1; }
+    if gt != 1: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_spaceship_numeric_float() -> i32 {
+    let lt: i32 = 1.5f <=> 2.0f;
+    let eqv: i32 = 3.0 <=> 3.0;
+    let gt: i32 = 9.25 <=> 2.5;
+    if lt != -1: { return 1; }
+    if eqv != 0: { return 1; }
+    if gt != 1: { return 1; }
+    return 0;
+}
+
+/// @brief Semantic-version style example type used by `<=>` trait tests.
+/// @note Added as a documented struct so editor completion can surface docs.
+struct Version {
+    /// @brief Major version component.
+    var major: i32;
+    /// @brief Minor version component.
+    var minor: i32;
+};
+
+trait Compare {
+    fn compare(self: &mut Self, other: Version) -> i32;
+}
+
+impl Compare for Version {
+    fn compare(self: &mut Self, other: Version) -> i32 {
+        if self.major < other.major: { return -1; }
+        if self.major > other.major: { return 1; }
+        if self.minor < other.minor: { return -1; }
+        if self.minor > other.minor: { return 1; }
+        return 0;
+    }
+}
+
+#[test]
+fn test_spaceship_trait_compare_by_ref() -> i32 {
+    let a1: Version = Version { major: 1, minor: 2 };
+    let b1: Version = Version { major: 1, minor: 3 };
+    let ab: i32 = a1 <=> b1;
+
+    let b2: Version = Version { major: 1, minor: 3 };
+    let a2: Version = Version { major: 1, minor: 2 };
+    let ba: i32 = b2 <=> a2;
+
+    let a3: Version = Version { major: 1, minor: 2 };
+    let c3: Version = Version { major: 1, minor: 2 };
+    let ac: i32 = a3 <=> c3;
+
+    if ab != -1: { return 1; }
+    if ba != 1: { return 1; }
+    if ac != 0: { return 1; }
+    return 0;
+}

@@ -759,6 +759,11 @@ static bool inferExprKindForReturn(
             outKind = TypeNode::TYPE_BOOL;
             return true;
         }
+        if(bin->op == BinaryOpNode::OP_SPACESHIP)
+        {
+            outKind = TypeNode::TYPE_INT;
+            return true;
+        }
 
         TypeNode::TypeKind l = TypeNode::TYPE_VOID;
         TypeNode::TypeKind r = TypeNode::TYPE_VOID;
@@ -4911,6 +4916,242 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     if(!L || !R)
         return nullptr;
 
+    if(node->op == BinaryOpNode::OP_SPACESHIP)
+    {
+        auto buildNumericSpaceship = [&](llvm::Value* lhs,
+                                         llvm::Value* rhs) -> llvm::Value* {
+            bool isFloat = lhs->getType()->isFloatingPointTy() ||
+                           rhs->getType()->isFloatingPointTy();
+
+            bool lhsIsNumeric = lhs->getType()->isIntegerTy() ||
+                                lhs->getType()->isFloatingPointTy();
+            bool rhsIsNumeric = rhs->getType()->isIntegerTy() ||
+                                rhs->getType()->isFloatingPointTy();
+            if(!lhsIsNumeric || !rhsIsNumeric)
+                return nullptr;
+
+            if(!isFloat && lhs->getType()->isIntegerTy() &&
+               rhs->getType()->isIntegerTy())
+            {
+                unsigned lhsBits = lhs->getType()->getIntegerBitWidth();
+                unsigned rhsBits = rhs->getType()->getIntegerBitWidth();
+                if(lhsBits != rhsBits)
+                {
+                    if(lhsBits > rhsBits)
+                        rhs = builder.CreateSExt(rhs, lhs->getType(),
+                                                 "spaceship.sext");
+                    else
+                        lhs = builder.CreateSExt(lhs, rhs->getType(),
+                                                 "spaceship.sext");
+                }
+            }
+
+            llvm::Value* isLt = nullptr;
+            llvm::Value* isGt = nullptr;
+            if(isFloat)
+            {
+                isLt = builder.CreateFCmpOLT(lhs, rhs, "spaceship.lt");
+                isGt = builder.CreateFCmpOGT(lhs, rhs, "spaceship.gt");
+            }
+            else
+            {
+                isLt = builder.CreateICmpSLT(lhs, rhs, "spaceship.lt");
+                isGt = builder.CreateICmpSGT(lhs, rhs, "spaceship.gt");
+            }
+
+            llvm::Type* i32Ty = llvm::Type::getInt32Ty(context);
+            llvm::Value* negOne = llvm::ConstantInt::getSigned(i32Ty, -1);
+            llvm::Value* posOne = llvm::ConstantInt::getSigned(i32Ty, 1);
+            llvm::Value* zero = llvm::ConstantInt::get(i32Ty, 0);
+            llvm::Value* gtOrEq =
+                builder.CreateSelect(isGt, posOne, zero, "spaceship.gtoreq");
+            return builder.CreateSelect(isLt, negOne, gtOrEq, "spaceship.res");
+        };
+
+        auto* lhsStructTy = llvm::dyn_cast<llvm::StructType>(L->getType());
+        auto* rhsStructTy = llvm::dyn_cast<llvm::StructType>(R->getType());
+
+        if(lhsStructTy || rhsStructTy)
+        {
+            if(!lhsStructTy || !rhsStructTy || !lhsStructTy->hasName() ||
+               !rhsStructTy->hasName() ||
+               lhsStructTy->getName() != rhsStructTy->getName())
+            {
+                reportError(node->line,
+                            "<=> on structs requires both operands to have the "
+                            "same struct type");
+                return nullptr;
+            }
+
+            const std::string structTypeName = lhsStructTy->getName().str();
+            const std::string traitName = "Compare";
+            const std::string methodName = "compare";
+
+            auto traitIt = structImplementedTraits.find(structTypeName);
+            if(traitIt == structImplementedTraits.end() ||
+               traitIt->second.find(traitName) == traitIt->second.end())
+            {
+                reportError(node->line,
+                            "struct '" + structTypeName +
+                                "' must implement trait '" + traitName +
+                                "' to use <=>");
+                return nullptr;
+            }
+
+            auto structIt = structMethods.find(structTypeName);
+            if(structIt == structMethods.end())
+            {
+                reportError(node->line,
+                            "struct '" + structTypeName + "' has no methods");
+                return nullptr;
+            }
+            auto methodIt = structIt->second.find(methodName);
+            if(methodIt == structIt->second.end() || !methodIt->second.second)
+            {
+                reportError(node->line,
+                            "trait '" + traitName + "' on struct '" +
+                                structTypeName + "' requires method '" +
+                                methodName + "'");
+                return nullptr;
+            }
+            if(methodIt->second.second->isStatic)
+            {
+                reportError(node->line,
+                            "trait method '" + methodName +
+                                "' must not be static");
+                return nullptr;
+            }
+
+            std::string definingStruct = structTypeName;
+            std::string searchStruct = structTypeName;
+            while(!searchStruct.empty())
+            {
+                std::string candidate = searchStruct + "_" + methodName;
+                if(module->getFunction(candidate))
+                {
+                    definingStruct = searchStruct;
+                    break;
+                }
+                auto baseIt = structBases.find(searchStruct);
+                if(baseIt != structBases.end())
+                    searchStruct = baseIt->second;
+                else
+                    break;
+            }
+
+            const std::string mangledName = definingStruct + "_" + methodName;
+            llvm::Function* callee = module->getFunction(mangledName);
+            if(!callee)
+            {
+                reportError(node->line,
+                            "unknown trait method: " + methodName);
+                return nullptr;
+            }
+            if(callee->arg_size() < 2)
+            {
+                reportError(node->line,
+                            "trait method '" + methodName +
+                                "' for <=> requires one argument");
+                return nullptr;
+            }
+
+            llvm::Value* lhsPtr = getLValuePointer(node->left, node->line);
+            if(!lhsPtr)
+            {
+                lhsPtr = builder.CreateAlloca(L->getType(), nullptr,
+                                              "spaceship.lhs.tmp");
+                builder.CreateStore(L, lhsPtr);
+            }
+
+            llvm::Value* rhsPtr = getLValuePointer(node->right, node->line);
+            if(!rhsPtr)
+            {
+                rhsPtr = builder.CreateAlloca(R->getType(), nullptr,
+                                              "spaceship.rhs.tmp");
+                builder.CreateStore(R, rhsPtr);
+            }
+
+            std::vector<llvm::Value*> args;
+            args.push_back(lhsPtr);
+
+            llvm::Value* arg1 = R;
+            llvm::Type* expectedTy = callee->getArg(1)->getType();
+            if(expectedTy->isPointerTy())
+            {
+                arg1 = rhsPtr;
+                if(arg1->getType() != expectedTy && arg1->getType()->isPointerTy())
+                    arg1 = builder.CreateBitCast(arg1, expectedTy,
+                                                 "spaceship.arg.ptrcast");
+            }
+            else if(arg1->getType() != expectedTy)
+            {
+                int convCost = 0;
+                if(!canConvertType(arg1->getType(), expectedTy, convCost))
+                {
+                    reportError(node->line,
+                                "argument type mismatch for trait method '" +
+                                    methodName + "'");
+                    return nullptr;
+                }
+                if(arg1->getType()->isIntegerTy() && expectedTy->isIntegerTy())
+                {
+                    arg1 = builder.CreateIntCast(arg1, expectedTy, true,
+                                                 "spaceship.arg.cast");
+                }
+                else if(arg1->getType()->isIntegerTy() &&
+                        expectedTy->isFloatingPointTy())
+                {
+                    arg1 = builder.CreateSIToFP(arg1, expectedTy,
+                                                "spaceship.arg.sitofp");
+                }
+                else if(arg1->getType()->isFloatingPointTy() &&
+                        expectedTy->isIntegerTy())
+                {
+                    arg1 = builder.CreateFPToSI(arg1, expectedTy,
+                                                "spaceship.arg.fptosi");
+                }
+                else if(arg1->getType()->isFloatingPointTy() &&
+                        expectedTy->isFloatingPointTy())
+                {
+                    arg1 = builder.CreateFPCast(arg1, expectedTy,
+                                                "spaceship.arg.fpcast");
+                }
+                else if(arg1->getType()->isPointerTy() && expectedTy->isPointerTy())
+                {
+                    arg1 = builder.CreateBitCast(arg1, expectedTy,
+                                                 "spaceship.arg.ptrcast");
+                }
+            }
+            args.push_back(arg1);
+
+            llvm::Value* cmpVal = builder.CreateCall(callee, args, "spaceship.call");
+            if(!cmpVal->getType()->isIntegerTy())
+            {
+                reportError(node->line,
+                            "trait method '" + methodName +
+                                "' used by <=> must return an integer");
+                return nullptr;
+            }
+            llvm::Type* i32Ty = llvm::Type::getInt32Ty(context);
+            if(cmpVal->getType() != i32Ty)
+            {
+                cmpVal = builder.CreateIntCast(cmpVal, i32Ty, true,
+                                               "spaceship.ret.cast");
+            }
+            return cmpVal;
+        }
+
+        llvm::Value* numericCmp = buildNumericSpaceship(L, R);
+        if(!numericCmp)
+        {
+            reportError(node->line,
+                        "<=> requires numeric operands or structs implementing "
+                        "trait 'Compare'");
+            return nullptr;
+        }
+        return numericCmp;
+    }
+
     // Check for struct types - cannot perform arithmetic on structs
     if(L->getType()->isStructTy())
     {
@@ -5076,6 +5317,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     case BinaryOpNode::OP_AND:
     case BinaryOpNode::OP_OR:
         // Handled before numeric op checks.
+        return nullptr;
+    case BinaryOpNode::OP_SPACESHIP:
+        // Handled in dedicated branch above (numeric + trait-based struct path).
         return nullptr;
     }
     return nullptr;

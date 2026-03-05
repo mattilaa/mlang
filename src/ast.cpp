@@ -285,6 +285,9 @@ ASTNode* create_binary_op_impl(int op, ASTNode* left, ASTNode* right)
     case NE:
         opType = BinaryOpNode::OP_NE;
         break;
+    case SPACESHIP:
+        opType = BinaryOpNode::OP_SPACESHIP;
+        break;
     case AMP_AMP:
         opType = BinaryOpNode::OP_AND;
         break;
@@ -1310,6 +1313,9 @@ std::string BinaryOpNode::toString() const
         break;
     case OP_NE:
         op_str = "!=";
+        break;
+    case OP_SPACESHIP:
+        op_str = "<=>";
         break;
     case OP_AND:
         op_str = "&&";
