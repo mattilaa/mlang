@@ -614,6 +614,40 @@ fn string_intrinsic_location(member: string) -> string {
     return first_match_location(path, text, pat);
 }
 
+fn thread_intrinsic_location(name: string) -> string {
+    if eq(name, "thread_spawn") == 0 &&
+       eq(name, "thread_join") == 0 &&
+       eq(name, "mutex_create") == 0 &&
+       eq(name, "mutex_lock") == 0 &&
+       eq(name, "mutex_unlock") == 0 &&
+       eq(name, "mutex_destroy") == 0 &&
+       eq(name, "atomic_i64_new") == 0 &&
+       eq(name, "atomic_i64_load") == 0 &&
+       eq(name, "atomic_i64_store") == 0 &&
+       eq(name, "atomic_i64_add") == 0 &&
+       eq(name, "atomic_i64_free") == 0 {
+        return String::new();
+    }
+
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var path: string = String::new();
+    if len(root) > 0: {
+        let p1: string = concat(root, "/stdlib/std/thread/detail.mla");
+        if file_exists(p1) == 1: { path = p1; }
+    }
+    if len(path) == 0: {
+        let p2: string = concat(here, "/stdlib/std/thread/detail.mla");
+        if file_exists(p2) == 1: { path = p2; }
+    }
+    if len(path) == 0: { return String::new(); }
+
+    let text_r: Result<string, string> = read_all_text(path);
+    if text_r.is_err(): { return String::new(); }
+    let text: string = text_r.unwrap();
+    return first_match_location(path, text, format!("extern fn {}(", name));
+}
+
 /// @brief Replace all "::" occurrences with "/" for module-to-path conversion.
 fn colon_to_slash(s: string) -> string {
     var result: string = String::new();
@@ -1631,6 +1665,8 @@ fn handle_definition(payload: string) -> string {
                         }
                         let btloc: string = builtin_type_location(word);
                         if len(btloc) > 0: { return format!("[{}]", btloc); }
+                        let thloc: string = thread_intrinsic_location(word);
+                        if len(thloc) > 0: { return format!("[{}]", thloc); }
                         let cloc: string = c_internals_location(word);
                         if len(cloc) > 0: { return format!("[{}]", cloc); }
                         let loc2: string = runtime_builtin_location(word);
