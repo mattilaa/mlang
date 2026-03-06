@@ -145,8 +145,6 @@ exec {mlang_bin!r} "$@"
 
 
 def _must_run_serial(test_name: str) -> bool:
-    if test_name.startswith("Examples.MLang Frontend "):
-        return True
     if test_name in {
         "Examples.Compile Errors For Conflicting Types",
         "Examples.Compile Errors For Reserved Type Keywords",
@@ -297,8 +295,8 @@ def main() -> int:
         latest_status[tn] = rc
         print_line(finished, "PASS" if rc == 0 else "FAIL", tn, elapsed)
 
-    flaky_failed = [tn for _i, tn in test_plan if latest_status.get(tn, 1) != 0]
-    for tn in flaky_failed:
+    failed_after_main = [tn for _i, tn in test_plan if latest_status.get(tn, 1) != 0]
+    for tn in failed_after_main:
         i = next((idx for idx, name in test_plan if name == tn), 0)
         print_line(i, "RUN ", f"{tn} [rerun]")
         rc, _tn2, elapsed, xml = _run_one(
@@ -314,15 +312,56 @@ def main() -> int:
         latest_status[tn] = rc
         print_line(finished, "PASS" if rc == 0 else "FAIL", f"{tn} [rerun]", elapsed)
 
+    # Verify flaky candidates sequentially once more to distinguish
+    # transient flakiness from still-reproducible failures.
+    flaky_candidates = [tn for tn in failed_after_main if latest_status.get(tn, 1) == 0]
+    if flaky_candidates:
+        print("")
+        print(f"FLAKY CHECK CANDIDATES ({len(flaky_candidates)}):")
+        for tn in flaky_candidates:
+            print(f"- {tn}")
+
+    flaky_verified: list[str] = []
+    flaky_reproduced: list[str] = []
+    for tn in flaky_candidates:
+        i = next((idx for idx, name in test_plan if name == tn), 0)
+        print_line(i, "RUN ", f"{tn} [flaky-check]")
+        rc, _tn2, elapsed, xml = _run_one(
+            args.python_bin,
+            args.suite,
+            args.mlang,
+            args.repo_root,
+            tn,
+            work / f"flaky_check_case_{i}",
+            i,
+        )
+        xmls.append(xml)
+        if rc == 0:
+            flaky_verified.append(tn)
+        else:
+            flaky_reproduced.append(tn)
+            latest_status[tn] = rc
+        print_line(
+            finished,
+            "PASS" if rc == 0 else "FAIL",
+            f"{tn} [flaky-check]",
+            elapsed,
+        )
+
     failed = 0
     for _i, tn in test_plan:
         if latest_status.get(tn, 1) != 0:
             failed += 1
     flaky = [tn for _i, tn in test_plan if first_status.get(tn, 0) != 0 and latest_status.get(tn, 1) == 0]
-    if flaky:
+    if flaky_verified:
         print("")
-        print(f"FLAKY RETRY SUMMARY ({len(flaky)}):")
-        for tn in flaky:
+        print(f"FLAKY RETRY SUMMARY ({len(flaky_verified)}):")
+        for tn in flaky_verified:
+            print(f"- {tn}")
+    if flaky_reproduced:
+        print("")
+        print(f"FLAKY FAIL SUMMARY ({len(flaky_reproduced)}):")
+        for tn in flaky_reproduced:
             print(f"- {tn}")
 
     xmls = [x for x in xmls if x.exists()]
