@@ -27,3 +27,24 @@ install_manifest.txt
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+
+# Generated robot/frontend test artifacts (root-level)
+fake_*.sh
+fake_*.log
+bench_*.mla
+compile_*.mla
+frontend_*.mla
+frontend_*_suite/
+sample_suite_dir/
+main_args.mla
+main_default_return.mla
+main_ternary_return.mla
+conflicting_types.mla
+reserved_keyword.mla
+result_unwrap_warn.mla
+test_runner.mla
+printf_demo.mla
+t.mla
+std_net_mt_server.err
+mlang_frontend_mla_bin*
+pkg_parity/depmini/
