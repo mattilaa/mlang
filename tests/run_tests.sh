@@ -12,6 +12,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPILER_PATH=""
 CTEST_ARGS=()
 JOBS=""
@@ -132,7 +133,7 @@ cd "$BUILD_DIR"
 # Configure with CMake
 echo ""
 echo "Configuring tests..."
-cmake -DMLA_COMPILER="$COMPILER_PATH" ..
+cmake -DMLA_COMPILER="$COMPILER_PATH" "$ROOT_DIR"
 
 # Build tests
 echo ""
