@@ -21,12 +21,14 @@ fn test_expect_helpers_pass() -> i32 {
 #[test]
 fn test_expect_helpers_record_nonfatal_failures() -> i32 {
     reset();
+    set_quiet(true);
 
     expect_true(false);
     expect_false(true);
     expect_eq(1, 2);
     expect_eq("a", "b");
 
+    set_quiet(false);
     if checks() != 4 { return 1; }
     if failures() != 4 { return 1; }
     return result() == 1 ? 0 : 1;
@@ -72,6 +74,7 @@ fn test_mock_expectations_pass() -> i32 {
 #[test]
 fn test_mock_expectations_report_mismatch() -> i32 {
     reset();
+    set_quiet(true);
 
     let m: Mock = mock_new();
     mock_expect_call(m.handle, "publish", 3);
@@ -79,6 +82,7 @@ fn test_mock_expectations_report_mismatch() -> i32 {
 
     expect_false(mock_verify(m.handle));
     mock_free(m.handle);
+    set_quiet(false);
 
     return failures() > 0 ? 0 : 1;
 }

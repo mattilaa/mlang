@@ -98,6 +98,7 @@ log_level_value() {
 COLOR_RESET=""
 COLOR_ERROR=""
 COLOR_INFO=""
+COLOR_PASS=""
 COLOR_VERBOSE=""
 COLOR_DEBUG=""
 COLOR_ENABLED=false
@@ -135,6 +136,7 @@ init_log_colors() {
     COLOR_RESET=$'\033[0m'
     COLOR_ERROR=$'\033[31m'
     COLOR_INFO=$'\033[34m'
+    COLOR_PASS=$'\033[32m'
     COLOR_VERBOSE=$'\033[36m'
     COLOR_DEBUG=$'\033[90m'
   fi
@@ -172,23 +174,46 @@ log_info() { log_emit "info" "$COLOR_INFO" "$*"; }
 log_verbose() { log_emit "verbose" "$COLOR_VERBOSE" "$*"; }
 log_debug() { log_emit "debug" "$COLOR_DEBUG" "$*"; }
 
+FAILED_CASES_TMP="$(mktemp)"
+
+cleanup_and_report_failed_cases() {
+  local rc="${1:-0}"
+  if [[ -n "${FAILED_CASES_TMP:-}" && -f "$FAILED_CASES_TMP" ]]; then
+    if [[ -s "$FAILED_CASES_TMP" ]]; then
+      echo ""
+      log_error "FAILED TEST CASE SUMMARY:"
+      while IFS= read -r tc; do
+        log_error "  - $tc"
+      done < "$FAILED_CASES_TMP"
+    fi
+    rm -f "$FAILED_CASES_TMP"
+  fi
+  return "$rc"
+}
+
+trap 'cleanup_and_report_failed_cases "$?"' EXIT
+
 report_failed_tests() {
   local label="$1"
   local tmp_log="$2"
   local failed_tmp
+  local found=1
   failed_tmp="$(mktemp)"
   awk '
+    function strip_ansi(s) {
+      gsub(/\033\[[0-9;]*[A-Za-z]/, "", s)
+      return s
+    }
     {
-      line = $0
+      line = strip_ansi($0)
       sub(/^[0-9][0-9]\/[0-9][0-9]\/[0-9][0-9][0-9][0-9]: /, "", line)
+      if (line ~ /^\[SUITE\] /) {
+        cur_suite = line
+        sub(/^\[SUITE\] /, "", cur_suite)
+        next
+      }
       if (line ~ /^\[  FAILED  \] /) {
         sub(/^\[  FAILED  \] /, "", line)
-        # Ignore std::testing helper diagnostics (not a failing test case by itself).
-        if (line ~ /^expect_true$/ || line ~ /^expect_false$/ ||
-            line ~ /^expect_eq\(i64\):/ || line ~ /^expect_eq\(string\):/ ||
-            line ~ /^mock_expect_call\('/) {
-          next
-        }
         print line
         next
       }
@@ -203,16 +228,29 @@ report_failed_tests() {
         print line
         next
       }
+      if (line ~ /^\[SUMMARY\] / && line ~ /fail=[1-9][0-9]*/) {
+        summary = line
+        if (cur_suite != "") {
+          print cur_suite " " summary
+        } else {
+          print summary
+        }
+        next
+      }
     }
   ' "$tmp_log" | sed '/^[[:space:]]*$/d' | sort -u > "$failed_tmp"
 
   if [[ -s "$failed_tmp" ]]; then
+    found=0
     log_error "$label failed test cases:"
     while IFS= read -r tc; do
       log_error "  - $tc"
+      printf "%s: %s\n" "$label" "$tc" >> "$FAILED_CASES_TMP"
     done < "$failed_tmp"
+    sort -u "$FAILED_CASES_TMP" -o "$FAILED_CASES_TMP"
   fi
   rm -f "$failed_tmp"
+  return "$found"
 }
 
 run_checked_command() {
@@ -221,20 +259,40 @@ run_checked_command() {
   local tmp_log
   tmp_log="$(mktemp)"
   set +e
-  "$@" 2>&1 | tee "$tmp_log"
-  local cmd_rc=${PIPESTATUS[0]}
+  if $COLOR_ENABLED; then
+    "$@" 2>&1 | tee "$tmp_log" | awk \
+      -v creset="$COLOR_RESET" \
+      -v cfail="$COLOR_ERROR" \
+      -v cpass="$COLOR_PASS" '
+      {
+        line = $0
+        gsub(/\[  FAILED  \]/, "[" cfail "  FAILED  " creset "]", line)
+        gsub(/\[  PASSED  \]/, "[" cpass "  PASSED  " creset "]", line)
+        gsub(/\[       OK \]/, "[" cpass "       OK " creset "]", line)
+        gsub(/\[PASS\]/, "[" cpass "PASS" creset "]", line)
+        gsub(/\[FAIL\]/, "[" cfail "FAIL" creset "]", line)
+        gsub(/\[SUITE PASS\]/, "[" cpass "SUITE PASS" creset "]", line)
+        gsub(/\[SUITE FAIL\]/, "[" cfail "SUITE FAIL" creset "]", line)
+        print line
+        fflush()
+      }
+    '
+    local cmd_rc=${PIPESTATUS[0]}
+  else
+    "$@" 2>&1 | tee "$tmp_log"
+    local cmd_rc=${PIPESTATUS[0]}
+  fi
   set -e
 
   if [[ $cmd_rc -ne 0 ]]; then
     log_error "$label failed with exit code $cmd_rc"
-    report_failed_tests "$label" "$tmp_log"
+    report_failed_tests "$label" "$tmp_log" || true
     rm -f "$tmp_log"
     return "$cmd_rc"
   fi
 
-  if grep -Eq '\[  FAILED  \]|\[FAIL\]|\[SUITE FAIL\]|\[SUMMARY\].*fail=[1-9][0-9]*' "$tmp_log"; then
+  if report_failed_tests "$label" "$tmp_log"; then
     log_error "$label reported test failures in output"
-    report_failed_tests "$label" "$tmp_log"
     rm -f "$tmp_log"
     return 1
   fi

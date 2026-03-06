@@ -5,6 +5,7 @@
 
 static int32_t g_testing_checks = 0;
 static int32_t g_testing_failures = 0;
+static int32_t g_testing_quiet = 0;
 
 typedef struct
 {
@@ -113,6 +114,7 @@ void __mlang_std_testing_reset(void)
 {
     g_testing_checks = 0;
     g_testing_failures = 0;
+    g_testing_quiet = 0;
 }
 
 int32_t __mlang_std_testing_checks(void)
@@ -128,6 +130,11 @@ int32_t __mlang_std_testing_failures(void)
 int32_t __mlang_std_testing_result(void)
 {
     return g_testing_failures == 0 ? 0 : 1;
+}
+
+void __mlang_std_testing_set_quiet(int32_t enabled)
+{
+    g_testing_quiet = enabled ? 1 : 0;
 }
 
 int64_t __mlang_std_testing_mock_create(void)
@@ -230,9 +237,12 @@ int32_t __mlang_std_testing_mock_verify(int64_t handle)
             continue;
         ok = 0;
         ++g_testing_failures;
-        fprintf(stderr,
-                "[  FAILED  ] mock_expect_call('%s'): expected=%d actual=%d\n",
-                e->name ? e->name : "", e->expected_calls, e->actual_calls);
+        if(!g_testing_quiet)
+        {
+            fprintf(stderr,
+                    "[  FAILED  ] mock_expect_call('%s'): expected=%d actual=%d\n",
+                    e->name ? e->name : "", e->expected_calls, e->actual_calls);
+        }
     }
     return ok;
 }
@@ -240,7 +250,8 @@ int32_t __mlang_std_testing_mock_verify(int64_t handle)
 static void testing_fail(const char* label)
 {
     ++g_testing_failures;
-    fprintf(stderr, "[  FAILED  ] %s\n", label);
+    if(!g_testing_quiet)
+        fprintf(stderr, "[  FAILED  ] %s\n", label);
 }
 
 void __mlang_std_testing_expect_true(int32_t cond)
@@ -265,9 +276,12 @@ void __mlang_std_testing_expect_eq_i32(int32_t expected, int32_t actual)
     if(expected == actual)
         return;
     ++g_testing_failures;
-    fprintf(stderr,
-            "[  FAILED  ] expect_eq(i32): expected=%d actual=%d\n",
-            expected, actual);
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_eq(i32): expected=%d actual=%d\n",
+                expected, actual);
+    }
 }
 
 void __mlang_std_testing_expect_eq_i64(int64_t expected, int64_t actual)
@@ -276,9 +290,12 @@ void __mlang_std_testing_expect_eq_i64(int64_t expected, int64_t actual)
     if(expected == actual)
         return;
     ++g_testing_failures;
-    fprintf(stderr,
-            "[  FAILED  ] expect_eq(i64): expected=%lld actual=%lld\n",
-            (long long)expected, (long long)actual);
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_eq(i64): expected=%lld actual=%lld\n",
+                (long long)expected, (long long)actual);
+    }
 }
 
 void __mlang_std_testing_expect_eq_bool(int32_t expected, int32_t actual)
@@ -289,9 +306,12 @@ void __mlang_std_testing_expect_eq_bool(int32_t expected, int32_t actual)
     if(expected == actual)
         return;
     ++g_testing_failures;
-    fprintf(stderr,
-            "[  FAILED  ] expect_eq(bool): expected=%d actual=%d\n",
-            expected, actual);
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_eq(bool): expected=%d actual=%d\n",
+                expected, actual);
+    }
 }
 
 void __mlang_std_testing_expect_eq_string(const char* expected,
@@ -303,9 +323,12 @@ void __mlang_std_testing_expect_eq_string(const char* expected,
     if(strcmp(exp, act) == 0)
         return;
     ++g_testing_failures;
-    fprintf(stderr,
-            "[  FAILED  ] expect_eq(string): expected='%s' actual='%s'\n",
-            exp, act);
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_eq(string): expected='%s' actual='%s'\n",
+                exp, act);
+    }
 }
 
 void __mlang_std_testing_expect_eq_f32(float expected, float actual)
@@ -314,9 +337,12 @@ void __mlang_std_testing_expect_eq_f32(float expected, float actual)
     if(expected == actual)
         return;
     ++g_testing_failures;
-    fprintf(stderr,
-            "[  FAILED  ] expect_eq(f32): expected=%f actual=%f\n",
-            expected, actual);
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_eq(f32): expected=%f actual=%f\n",
+                expected, actual);
+    }
 }
 
 void __mlang_std_testing_expect_eq_f64(double expected, double actual)
@@ -325,9 +351,12 @@ void __mlang_std_testing_expect_eq_f64(double expected, double actual)
     if(expected == actual)
         return;
     ++g_testing_failures;
-    fprintf(stderr,
-            "[  FAILED  ] expect_eq(f64): expected=%f actual=%f\n",
-            expected, actual);
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_eq(f64): expected=%f actual=%f\n",
+                expected, actual);
+    }
 }
 
 void __mlang_std_testing_verify_true(int32_t cond)

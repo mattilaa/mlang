@@ -5,6 +5,7 @@ extern pub fn __mlang_std_testing_reset() -> void;
 extern pub fn __mlang_std_testing_checks() -> i32;
 extern pub fn __mlang_std_testing_failures() -> i32;
 extern pub fn __mlang_std_testing_result() -> i32;
+extern pub fn __mlang_std_testing_set_quiet(enabled: i32) -> void;
 extern pub fn __mlang_std_testing_expect_true(cond: i32) -> void;
 extern pub fn __mlang_std_testing_expect_false(cond: i32) -> void;
 extern pub fn __mlang_std_testing_expect_eq_i32(expected: i32,
@@ -72,6 +73,12 @@ pub fn failures() -> i32 {
 /// Return 0 when no expectations failed, otherwise 1.
 pub fn result() -> i32 {
     return __mlang_std_testing_result();
+}
+
+/// Toggle diagnostic emission for failing non-fatal expectations.
+/// Counters still update while quiet mode is enabled.
+pub fn set_quiet(enabled: bool) -> void {
+    __mlang_std_testing_set_quiet(bool_to_i32(enabled));
 }
 
 /// Expect condition to be true. Records failure without aborting.
