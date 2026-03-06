@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "../mlang_c_types.h"
+#include "../include/mlang_c_types.h"
 
 int32_t c_add_i32(int32_t a, int32_t b)
 {

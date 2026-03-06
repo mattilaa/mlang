@@ -997,12 +997,16 @@ fn c_internals_location(word: string) -> string {
     var p2: string = String::new();
     var p3: string = String::new();
     var p4: string = String::new();
+    var p5: string = String::new();
+    var p6: string = String::new();
     if len(root) > 0: {
-        p1 = concat(root, "/mlang_c_types.h");
+        p1 = concat(root, "/include/mlang_c_types.h");
         p2 = concat(root, "/docs/runtime_builtins.h");
+        p5 = concat(root, "/mlang_c_types.h");
     }
-    p3 = concat(here, "/mlang_c_types.h");
+    p3 = concat(here, "/include/mlang_c_types.h");
     p4 = concat(here, "/docs/runtime_builtins.h");
+    p6 = concat(here, "/mlang_c_types.h");
 
     var path: string = String::new();
     if len(path) == 0: {
@@ -1016,6 +1020,20 @@ fn c_internals_location(word: string) -> string {
         if len(p3) > 0: {
             if file_exists(p3) == 1: {
                 path = p3;
+            }
+        }
+    }
+    if len(path) == 0: {
+        if len(p5) > 0: {
+            if file_exists(p5) == 1: {
+                path = p5;
+            }
+        }
+    }
+    if len(path) == 0: {
+        if len(p6) > 0: {
+            if file_exists(p6) == 1: {
+                path = p6;
             }
         }
     }

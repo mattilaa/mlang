@@ -46,7 +46,10 @@ def main() -> int:
         (root / "stdlib" / "src" / "std_math.c").write_text(
             (repo_root / "stdlib" / "src" / "std_math.c").read_text()
         )
-        (root / "mlang_c_types.h").write_text((repo_root / "mlang_c_types.h").read_text())
+        (root / "include").mkdir(parents=True, exist_ok=True)
+        (root / "include" / "mlang_c_types.h").write_text(
+            (repo_root / "include" / "mlang_c_types.h").read_text()
+        )
 
         doc = root / "internal_def.mla"
         text = (

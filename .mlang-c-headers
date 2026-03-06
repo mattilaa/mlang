@@ -2,6 +2,7 @@
 # - header: stdint.h
 # - include_dir: /usr/include
 # -I/opt/homebrew/include
+include_dir: include
 include_dir: .
 include_dir: /usr/include
 include_dir: /usr/local/include
