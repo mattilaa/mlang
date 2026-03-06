@@ -1,6 +1,7 @@
 *** Settings ***
 Library           Process
 Library           OperatingSystem
+Suite Setup       Initialize Artifact Dir
 
 *** Variables ***
 ${MLANG}           ${EXECDIR}/build/mlang
@@ -66,7 +67,7 @@ Compile All Examples
     END
 
 Compile Errors For Conflicting Types
-    ${tmp}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/conflicting_types.mla
+    ${tmp}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/conflicting_types.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    struct Foo { var x: i32; };
     ...    enum Foo { A };
@@ -76,7 +77,7 @@ Compile Errors For Conflicting Types
     Should Contain    ${result.stderr}    type name 'Foo' conflicts with earlier struct defined at line 1
 
 Compile Errors For Reserved Type Keywords
-    ${tmp}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/reserved_keyword.mla
+    ${tmp}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/reserved_keyword.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    struct list { var x: i32; };
     Create File    ${tmp}    ${code}
@@ -85,8 +86,8 @@ Compile Errors For Reserved Type Keywords
     Should Contain    ${result.stderr}    expected identifier, found keyword 'list'
 
 Main Accepts Command Line Arguments
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_args.mla
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_args_bin
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/main_args.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/main_args_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main(argc: i32, args: list<str8>) -> i32 {
     ...        println!("argc: {}", argc);
@@ -105,8 +106,8 @@ Main Accepts Command Line Arguments
     Should Contain    ${run.stdout}    world
 
 Main Return Uses Ternary
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_ternary_return.mla
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_ternary_return_bin
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/main_ternary_return.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/main_ternary_return_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        let x: i32 = 3;
@@ -119,8 +120,8 @@ Main Return Uses Ternary
     Should Be Equal As Integers    ${run.rc}    7
 
 Main Defaults To Zero Return
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_default_return.mla
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/main_default_return_bin
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/main_default_return.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/main_default_return_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        println!("no explicit return");
@@ -132,19 +133,19 @@ Main Defaults To Zero Return
     Should Be Equal As Integers    ${run.rc}    0
 
 Compile Error Returns Nonzero
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_error_nonzero.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_error_nonzero.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        let x: i32 = ;
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${OUTPUT DIR}/compile_error_bin    stdout=PIPE    stderr=PIPE
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/compile_error_bin    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${build.rc}    0    msg=Expected nonzero exit for compile error, got ${build.rc}\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
 
 Result Methods And Unwrap Warns
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/result_unwrap_warn.mla
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/result_unwrap_warn_bin
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        let r: Result<i32, string> = Ok<i32, string>(42);
@@ -164,7 +165,7 @@ Result Methods And Unwrap Warns
     Should Contain    ${run.stdout}    42
 
 Mlang Test Runner
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/test_runner.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/test_runner.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn test_ok() -> i32 {
@@ -176,11 +177,11 @@ Mlang Test Runner
     ...    }
     Create File    ${src}    ${code}
     ${run}=    Run Process    ${MLANG}    test    ${src}
-    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
+    ...    stdout=PIPE    stderr=PIPE    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    1    msg=Expected 1 failing test, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Mlang Test Sample Directory
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/sample_suite_dir
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/sample_suite_dir
     Create Directory    ${suite_dir}
     ${src}=    Catenate    SEPARATOR=    ${suite_dir}/sample_suite_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
@@ -198,13 +199,13 @@ Mlang Test Sample Directory
     ...    }
     Create File    ${src}    ${code}
     ${run}=    Run Process    ${MLANG}    test    ${suite_dir}
-    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
+    ...    stdout=PIPE    stderr=PIPE    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Expected sample tests to pass, got ${run.rc}\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Mlang Bench Runner
     [Documentation]    Run stdlib benchmark suite with bench mode and verify benchmark output.
     ${run}=    Run Process    ${MLANG}    bench    ${EXECDIR}/tests/bench_stdlib.mla    --bench-iters    200    --bench-warmup    50
-    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
+    ...    stdout=PIPE    stderr=PIPE    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=bench_stdlib failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    [BENCH]
@@ -214,14 +215,14 @@ Mlang Bench Runner
 
 Type Inference Regression
     ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/type_inference_tests.mla
-    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
+    ...    stdout=PIPE    stderr=PIPE    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0    msg=Type inference regression failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
 
 Closures Demo Runs Correctly
     [Documentation]    Build and run examples/closures_demo.mla, verify key
     ...                output lines for compound assignment, inline capturing
     ...                closures, and thread::spawn with a closure literal.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/closures_demo_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/closures_demo_bin
     ${build}=    Run Process    ${MLANG}    examples/closures_demo.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -255,7 +256,7 @@ Closure Tests Pass
     [Documentation]    Run tests/closure_tests.mla through the mlang test runner.
     ...                Covers compound assignment and inline capturing closures.
     ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/closure_tests.mla
-    ...    stdout=PIPE    stderr=PIPE    cwd=${OUTPUT DIR}    env:PATH=${OUTPUT DIR}:%{PATH}
+    ...    stdout=PIPE    stderr=PIPE    cwd=${ARTIFACT DIR}    env:PATH=${ARTIFACT DIR}:%{PATH}
     Should Be Equal As Integers    ${run.rc}    0
     ...    msg=closure_tests failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    pass=17
@@ -264,7 +265,7 @@ Inline Attrs Demo Runs Correctly
     [Documentation]    Build and run examples/inline_attrs.mla; verify that
     ...                #[inline], #[inline(always)], and #[inline(never)]
     ...                compile and produce correct output.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/inline_attrs_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/inline_attrs_bin
     ${build}=    Run Process    ${MLANG}    examples/inline_attrs.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -278,7 +279,7 @@ Inline Attrs Demo Runs Correctly
 
 MLang Frontend Wrapper Compiles And Forwards
     [Documentation]    Build tools/mlang-frontend-mla/main.mla and verify it forwards args to backend mlang.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -291,7 +292,7 @@ MLang Frontend Wrapper Compiles And Forwards
 
 MLang Frontend Missing Backend Value Errors
     [Documentation]    Verify frontend reports parse error and usage when --backend has no value.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_parse_err_backend
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -303,7 +304,7 @@ MLang Frontend Missing Backend Value Errors
 
 MLang Frontend MissingBackendBeforeHelpErrors
     [Documentation]    Verify malformed --backend takes precedence over help when backend value is missing.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend_help
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_parse_err_backend_help
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -315,7 +316,7 @@ MLang Frontend MissingBackendBeforeHelpErrors
 
 MLang Frontend MissingBackendBeforeVersionErrors
     [Documentation]    Verify malformed --backend takes precedence over version when backend value is missing.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend_version
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_parse_err_backend_version
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -327,7 +328,7 @@ MLang Frontend MissingBackendBeforeVersionErrors
 
 MLang Frontend RepeatedBackendMissingValueErrors
     [Documentation]    Verify a repeated top-level --backend without value is treated as a parse error.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_parse_err_backend_repeat
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_parse_err_backend_repeat
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -339,7 +340,7 @@ MLang Frontend RepeatedBackendMissingValueErrors
 
 MLang Frontend NoPassthrough PrintsUsage
     [Documentation]    Verify wrapper with no passthrough args prints usage and exits nonzero.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_no_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_no_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -351,7 +352,7 @@ MLang Frontend NoPassthrough PrintsUsage
 
 MLang Frontend BackendOnly PrintsUsage
     [Documentation]    Verify wrapper with only --backend still requires passthrough args and prints usage.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_only
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_only
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -363,12 +364,12 @@ MLang Frontend BackendOnly PrintsUsage
 
 MLang Frontend CompileFlagsOnly PrintsNoInputError
     [Documentation]    Verify C++ parity: compile mode with only flags errors with no-input message and does not invoke backend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_flags_only
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_flags_only
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_flags_only_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_flags_only_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_flags_only_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_flags_only_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "invoked:$@" >> "${fake_log}"
@@ -386,7 +387,7 @@ MLang Frontend CompileFlagsOnly PrintsNoInputError
 
 MLang Frontend CompileOnly LinkOrOutput WithValue StillNoInputError
     [Documentation]    Verify C++ parity: -o/-L/-l with values but no input file still reports no-input error.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_link_or_output_no_input
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_link_or_output_no_input
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -411,12 +412,12 @@ MLang Frontend CompileOnly LinkOrOutput WithValue StillNoInputError
 
 MLang Frontend CompileOnly TestsFlag WithoutInput IsAccepted
     [Documentation]    Verify C++ parity: compile-stream --tests without explicit input is accepted (defaults handled by backend).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_no_input
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_no_input
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_no_input_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_no_input_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_no_input_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_no_input_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -434,12 +435,12 @@ MLang Frontend CompileOnly TestsFlag WithoutInput IsAccepted
 
 MLang Frontend CompileOnly TestsFlag InvalidBenchValue FailsEarly
     [Documentation]    Verify C++ parity: compile-stream --tests without explicit input still validates bench option values early.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_invalid_bench
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_invalid_bench
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_invalid_bench_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_invalid_bench_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_invalid_bench_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_invalid_bench_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -457,12 +458,12 @@ MLang Frontend CompileOnly TestsFlag InvalidBenchValue FailsEarly
 
 MLang Frontend CompileOnly TestsFlag NoRun IsAccepted
     [Documentation]    Verify C++ parity: bare compile-stream --tests accepts and forwards --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_norun_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_norun_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -480,7 +481,7 @@ MLang Frontend CompileOnly TestsFlag NoRun IsAccepted
 
 MLang Frontend CompileOnly TestsFlag UnknownOption Fails
     [Documentation]    Verify C++ parity: bare compile-stream --tests rejects unknown options with usage.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_unknown
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_unknown
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -493,12 +494,12 @@ MLang Frontend CompileOnly TestsFlag UnknownOption Fails
 
 MLang Frontend CompileOnly TestsFlag OutputOption IsAcceptedAndIgnoredInDirMode
     [Documentation]    Verify C++ parity: bare compile-stream --tests accepts -o <file> but does not forward it per-suite in directory mode.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_output
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_output_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_only_tests_output_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_output_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_only_tests_output_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -516,7 +517,7 @@ MLang Frontend CompileOnly TestsFlag OutputOption IsAcceptedAndIgnoredInDirMode
 
 MLang Frontend CompileOnly TestsFlag MissingOutputValue Fails
     [Documentation]    Verify C++ parity: bare compile-stream --tests with missing -o value reports unknown option and usage.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_only_tests_missing_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_only_tests_missing_output
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -529,13 +530,13 @@ MLang Frontend CompileOnly TestsFlag MissingOutputValue Fails
 
 MLang Frontend Last Backend Option Wins
     [Documentation]    Verify wrapper parsing uses the last --backend value before passthrough args.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_last_backend
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_last_backend
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend1}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_last_backend_1.sh
-    ${fake_backend2}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_last_backend_2.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_last_backend.log
+    ${fake_backend1}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_last_backend_1.sh
+    ${fake_backend2}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_last_backend_2.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_last_backend.log
     ${script1}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "backend1:$@" >> "${fake_log}"
@@ -563,12 +564,12 @@ MLang Frontend Last Backend Option Wins
 
 MLang Frontend BackendOption In Passthrough Is Not Parsed
     [Documentation]    Verify --backend after passthrough start is treated as regular passthrough arg (not frontend option).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_backend_passthrough.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_backend_passthrough.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -587,12 +588,12 @@ MLang Frontend BackendOption In Passthrough Is Not Parsed
 
 MLang Frontend BackendWithoutValueInPassthroughIsForwarded
     [Documentation]    Verify --backend after passthrough start is forwarded even when it has no following value.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_passthrough_novalue
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_passthrough_novalue
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough_novalue.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_backend_passthrough_novalue.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_backend_passthrough_novalue.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_backend_passthrough_novalue.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -611,11 +612,11 @@ MLang Frontend BackendWithoutValueInPassthroughIsForwarded
 
 MLang Frontend Normalizes Signaled Backend Exit To One
     [Documentation]    Verify frontend maps signaled backend termination to exit code 1.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_signal_exit
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_signal_exit
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${signal_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_signal_backend.sh
+    ${signal_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_signal_backend.sh
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    kill -ABRT $$
@@ -628,11 +629,11 @@ MLang Frontend Normalizes Signaled Backend Exit To One
 
 MLang Frontend Preserves Normal Backend Exit Code
     [Documentation]    Verify frontend forwards normal exited backend return code without normalization.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_exit_code
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_exit_code
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${exit_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_exit_backend.sh
+    ${exit_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_exit_backend.sh
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    exit 7
@@ -645,7 +646,7 @@ MLang Frontend Preserves Normal Backend Exit Code
 
 MLang Frontend Missing Backend Executable Returns 127
     [Documentation]    Verify frontend returns 127 when backend executable path does not exist.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_backend_spawn_fail
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_backend_spawn_fail
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -655,12 +656,12 @@ MLang Frontend Missing Backend Executable Returns 127
 
 MLang Frontend TopLevelVersionShortCircuitsPassthrough
     [Documentation]    Verify top-level --version before passthrough short-circuits and does not invoke backend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_short
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_version_short
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_version_short_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_version_short_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_version_short_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_version_short_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -680,12 +681,12 @@ MLang Frontend TopLevelVersionShortCircuitsPassthrough
 
 MLang Frontend TopLevelHelpShortCircuitsPassthrough
     [Documentation]    Verify top-level --help before passthrough short-circuits and does not invoke backend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_help_short
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_help_short
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_help_short_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_help_short_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_help_short_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_help_short_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -705,12 +706,12 @@ MLang Frontend TopLevelHelpShortCircuitsPassthrough
 
 MLang Frontend TopLevelShortHelpShortCircuitsPassthrough
     [Documentation]    Verify top-level -h before passthrough short-circuits and does not invoke backend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_short
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_short
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_shorthelp_short_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_shorthelp_short_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_shorthelp_short_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_shorthelp_short_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -730,7 +731,7 @@ MLang Frontend TopLevelShortHelpShortCircuitsPassthrough
 
 MLang Frontend TopLevelHelp Before Version Uses Help
     [Documentation]    Verify top-level flag order parity: --help before --version short-circuits as help.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_help_before_version
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_help_before_version
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -741,7 +742,7 @@ MLang Frontend TopLevelHelp Before Version Uses Help
 
 MLang Frontend TopLevelVersion Before Help Uses Version
     [Documentation]    Verify top-level flag order parity: --version before --help short-circuits as version.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_help
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_version_before_help
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -752,7 +753,7 @@ MLang Frontend TopLevelVersion Before Help Uses Version
 
 MLang Frontend TopLevelShortHelp Before Version Uses Help
     [Documentation]    Verify top-level flag order parity: -h before --version short-circuits as help.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_before_version
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_before_version
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -763,7 +764,7 @@ MLang Frontend TopLevelShortHelp Before Version Uses Help
 
 MLang Frontend TopLevelVersion Before ShortHelp Uses Version
     [Documentation]    Verify top-level flag order parity: --version before -h short-circuits as version.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_shorthelp
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_version_before_shorthelp
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -774,7 +775,7 @@ MLang Frontend TopLevelVersion Before ShortHelp Uses Version
 
 MLang Frontend TopLevelVersion Before MissingBackendValue Succeeds
     [Documentation]    Verify top-level --version short-circuits even if malformed --backend appears later.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_missing_backend
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_version_before_missing_backend
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -787,7 +788,7 @@ MLang Frontend TopLevelVersion Before MissingBackendValue Succeeds
 
 MLang Frontend TopLevelHelp Before MissingBackendValue Succeeds
     [Documentation]    Verify top-level --help short-circuits even if malformed --backend appears later.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_help_before_missing_backend
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_help_before_missing_backend
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -800,12 +801,12 @@ MLang Frontend TopLevelHelp Before MissingBackendValue Succeeds
 
 MLang Frontend TopLevelHelp Before UnknownToken ShortCircuits
     [Documentation]    Verify top-level --help short-circuits frontend parsing even with trailing unknown passthrough token.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_help_before_unknown_token
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_help_before_unknown_token
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_help_before_unknown_token_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_help_before_unknown_token_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_help_before_unknown_token_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_help_before_unknown_token_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -823,12 +824,12 @@ MLang Frontend TopLevelHelp Before UnknownToken ShortCircuits
 
 MLang Frontend TopLevelVersion Before UnknownToken ShortCircuits
     [Documentation]    Verify top-level --version short-circuits frontend parsing even with trailing unknown passthrough token.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_version_before_unknown_token
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_version_before_unknown_token
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_version_before_unknown_token_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_version_before_unknown_token_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_version_before_unknown_token_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_version_before_unknown_token_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -846,12 +847,12 @@ MLang Frontend TopLevelVersion Before UnknownToken ShortCircuits
 
 MLang Frontend TopLevelShortHelp Before UnknownToken ShortCircuits
     [Documentation]    Verify top-level -h short-circuits frontend parsing even with trailing unknown passthrough token.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_before_unknown_token
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_toplevel_shorthelp_before_unknown_token
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_shorthelp_before_unknown_token_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_toplevel_shorthelp_before_unknown_token_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_shorthelp_before_unknown_token_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_toplevel_shorthelp_before_unknown_token_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -869,12 +870,12 @@ MLang Frontend TopLevelShortHelp Before UnknownToken ShortCircuits
 
 MLang Frontend UnknownToken Before TopLevelHelp Is Forwarded
     [Documentation]    Verify once passthrough starts, trailing --help is forwarded to backend and not consumed by frontend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_help
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_help
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_help_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_help_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_unknown_before_toplevel_help_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_unknown_before_toplevel_help_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -892,12 +893,12 @@ MLang Frontend UnknownToken Before TopLevelHelp Is Forwarded
 
 MLang Frontend UnknownToken Before TopLevelShortHelp Is Forwarded
     [Documentation]    Verify once passthrough starts, trailing -h is forwarded to backend and not consumed by frontend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_shorthelp
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_shorthelp
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_shorthelp_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_shorthelp_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_unknown_before_toplevel_shorthelp_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_unknown_before_toplevel_shorthelp_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -915,12 +916,12 @@ MLang Frontend UnknownToken Before TopLevelShortHelp Is Forwarded
 
 MLang Frontend UnknownToken Before TopLevelVersion Is Forwarded
     [Documentation]    Verify once passthrough starts, trailing --version is forwarded to backend and not consumed by frontend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_version
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_unknown_before_toplevel_version
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_version_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_unknown_before_toplevel_version_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_unknown_before_toplevel_version_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_unknown_before_toplevel_version_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -938,12 +939,12 @@ MLang Frontend UnknownToken Before TopLevelVersion Is Forwarded
 
 MLang Frontend PostPassthroughVersionIsForwarded
     [Documentation]    Verify --version after passthrough start is forwarded to backend, not treated as top-level frontend flag.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_post_passthrough_version
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_post_passthrough_version
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_post_passthrough_version_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_post_passthrough_version_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_post_passthrough_version_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_post_passthrough_version_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -962,12 +963,12 @@ MLang Frontend PostPassthroughVersionIsForwarded
 
 MLang Frontend PostPassthroughHelpIsForwarded
     [Documentation]    Verify --help after passthrough start is forwarded to backend, not treated as top-level frontend flag.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_post_passthrough_help
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_post_passthrough_help
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_post_passthrough_help_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_post_passthrough_help_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_post_passthrough_help_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_post_passthrough_help_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -986,12 +987,12 @@ MLang Frontend PostPassthroughHelpIsForwarded
 
 MLang Frontend PostPassthroughShortHelpIsForwarded
     [Documentation]    Verify -h after passthrough start is forwarded to backend, not treated as top-level frontend flag.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_post_passthrough_shorthelp
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_post_passthrough_shorthelp
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_post_passthrough_shorthelp_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_post_passthrough_shorthelp_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_post_passthrough_shorthelp_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_post_passthrough_shorthelp_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1010,7 +1011,7 @@ MLang Frontend PostPassthroughShortHelpIsForwarded
 
 MLang Frontend Test Version Uses Backend Semantics
     [Documentation]    Verify `test --version` is passed through and reports backend version semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_version_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_version_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1022,7 +1023,7 @@ MLang Frontend Test Version Uses Backend Semantics
 
 MLang Frontend Test Help Uses Backend Semantics
     [Documentation]    Verify `test --help` is passed through and uses backend help text.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_help_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_help_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1034,7 +1035,7 @@ MLang Frontend Test Help Uses Backend Semantics
 
 MLang Frontend Test Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help in test mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_unknown_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_unknown_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1046,7 +1047,7 @@ MLang Frontend Test Unknown Before Help Fails
 
 MLang Frontend Test Unknown Before ShortHelp Fails
     [Documentation]    Verify argument order parity: unknown option before -h in test mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_unknown_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_unknown_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1058,11 +1059,11 @@ MLang Frontend Test Unknown Before ShortHelp Fails
 
 MLang Frontend NoRun Before TrailingTests Fails
     [Documentation]    Verify left-to-right C++ parity: `--no-run` before trailing `--tests` is an unknown option.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_norun_before_trailing_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_norun_before_trailing_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_norun_before_trailing_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_norun_before_trailing_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -1075,11 +1076,11 @@ MLang Frontend NoRun Before TrailingTests Fails
 
 MLang Frontend Test NoRunBeforeTests ThenRuns
     [Documentation]    Verify C++ parity: in test mode, later --tests overrides earlier --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_norun_then_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_norun_then_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_norun_then_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_norun_then_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn should_fail_norun_then_tests() -> i32 {
@@ -1095,11 +1096,11 @@ MLang Frontend Test NoRunBeforeTests ThenRuns
 
 MLang Frontend RunTests NoRunBeforeTests ThenRuns
     [Documentation]    Verify C++ parity: in run tests mode, later --tests overrides earlier --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_norun_then_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_norun_then_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_norun_then_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_norun_then_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn should_fail_runtests_norun_then_tests() -> i32 {
@@ -1115,11 +1116,11 @@ MLang Frontend RunTests NoRunBeforeTests ThenRuns
 
 MLang Frontend Test FinalNoRunSkips
     [Documentation]    Verify C++ parity: repeated --tests/--no-run in test mode follows last-flag-wins semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_final_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_final_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_final_norun.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_final_norun.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn should_fail_if_run_final_norun() -> i32 {
@@ -1135,11 +1136,11 @@ MLang Frontend Test FinalNoRunSkips
 
 MLang Frontend RunTests FinalNoRunSkips
     [Documentation]    Verify C++ parity: repeated --tests/--no-run in run tests mode follows last-flag-wins semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_final_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_final_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_final_norun.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_final_norun.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn should_fail_if_run_runtests_final_norun() -> i32 {
@@ -1155,11 +1156,11 @@ MLang Frontend RunTests FinalNoRunSkips
 
 MLang Frontend DirectTests NoRunBeforeTests ThenRuns
     [Documentation]    Verify direct --tests mode matches C++ parity: later --tests overrides earlier --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_norun_then_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_norun_then_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_norun_then_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_norun_then_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn directtests_should_fail_if_run() -> i32 {
@@ -1175,11 +1176,11 @@ MLang Frontend DirectTests NoRunBeforeTests ThenRuns
 
 MLang Frontend DirectTests FinalNoRunSkips
     [Documentation]    Verify direct --tests mode matches C++ parity: repeated --tests/--no-run follows last-flag-wins semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_final_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_final_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_final_norun.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_final_norun.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn directtests_should_fail_if_run_final_norun() -> i32 {
@@ -1195,7 +1196,7 @@ MLang Frontend DirectTests FinalNoRunSkips
 
 MLang Frontend Test Help Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --help before unknown option in test mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_help_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_help_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1207,7 +1208,7 @@ MLang Frontend Test Help Before Unknown Succeeds
 
 MLang Frontend Test Help Before MissingValueOption Succeeds
     [Documentation]    Verify `test --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_help_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_help_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1219,7 +1220,7 @@ MLang Frontend Test Help Before MissingValueOption Succeeds
 
 MLang Frontend Test ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in test mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1231,7 +1232,7 @@ MLang Frontend Test ShortHelp Before Unknown Succeeds
 
 MLang Frontend Test ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `test -h -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_shorthelp_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_shorthelp_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1243,7 +1244,7 @@ MLang Frontend Test ShortHelp Before MissingValueOption Succeeds
 
 MLang Frontend Test Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in test mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1255,7 +1256,7 @@ MLang Frontend Test Version Before Unknown Succeeds
 
 MLang Frontend Test Version Before MissingValueOption Succeeds
     [Documentation]    Verify `test --version -L` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_version_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_version_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1267,7 +1268,7 @@ MLang Frontend Test Version Before MissingValueOption Succeeds
 
 MLang Frontend Test Unknown Before Version Fails
     [Documentation]    Verify argument order parity: unknown option before --version in test mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_unknown_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_unknown_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1279,7 +1280,7 @@ MLang Frontend Test Unknown Before Version Fails
 
 MLang Frontend DirectTests Help Uses Backend Semantics
     [Documentation]    Verify `--tests --help` is passed through and uses backend help text.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_help_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_help_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1291,7 +1292,7 @@ MLang Frontend DirectTests Help Uses Backend Semantics
 
 MLang Frontend DirectTests Version Uses Backend Semantics
     [Documentation]    Verify `--tests --version` is passed through and reports backend version semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_version_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_version_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1303,7 +1304,7 @@ MLang Frontend DirectTests Version Uses Backend Semantics
 
 MLang Frontend DirectTests Help Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --help before unknown option in direct --tests mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_help_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_help_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1315,7 +1316,7 @@ MLang Frontend DirectTests Help Before Unknown Succeeds
 
 MLang Frontend DirectTests Help Before MissingValueOption Succeeds
     [Documentation]    Verify `--tests --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_help_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_help_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1327,7 +1328,7 @@ MLang Frontend DirectTests Help Before MissingValueOption Succeeds
 
 MLang Frontend DirectTests Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help in direct --tests mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_unknown_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_unknown_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1339,7 +1340,7 @@ MLang Frontend DirectTests Unknown Before Help Fails
 
 MLang Frontend DirectTests ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in direct --tests mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1351,7 +1352,7 @@ MLang Frontend DirectTests ShortHelp Before Unknown Succeeds
 
 MLang Frontend DirectTests ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `--tests -h -L` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_shorthelp_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_shorthelp_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1363,7 +1364,7 @@ MLang Frontend DirectTests ShortHelp Before MissingValueOption Succeeds
 
 MLang Frontend DirectTests Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in direct --tests mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1375,7 +1376,7 @@ MLang Frontend DirectTests Version Before Unknown Succeeds
 
 MLang Frontend DirectTests Version Before MissingValueOption Succeeds
     [Documentation]    Verify `--tests --version -l` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_version_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_version_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1387,7 +1388,7 @@ MLang Frontend DirectTests Version Before MissingValueOption Succeeds
 
 MLang Frontend DirectTests Unknown Before Version Fails
     [Documentation]    Verify argument order parity: unknown option before --version in direct --tests mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_unknown_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_unknown_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1399,7 +1400,7 @@ MLang Frontend DirectTests Unknown Before Version Fails
 
 MLang Frontend RunTests Help Uses Backend Semantics
     [Documentation]    Verify `run tests --help` is passed through and uses backend help text.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_help_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_help_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1411,7 +1412,7 @@ MLang Frontend RunTests Help Uses Backend Semantics
 
 MLang Frontend RunTests Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help should still fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_unknown_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_unknown_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1423,7 +1424,7 @@ MLang Frontend RunTests Unknown Before Help Fails
 
 MLang Frontend RunTests Unknown Before ShortHelp Fails
     [Documentation]    Verify argument order parity: unknown option before -h in run tests mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_unknown_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_unknown_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1435,7 +1436,7 @@ MLang Frontend RunTests Unknown Before ShortHelp Fails
 
 MLang Frontend RunTests Help Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --help before unknown option in run tests mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_help_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_help_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1447,7 +1448,7 @@ MLang Frontend RunTests Help Before Unknown Succeeds
 
 MLang Frontend RunTests Help Before MissingValueOption Succeeds
     [Documentation]    Verify `run tests --help -o` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_help_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_help_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1459,7 +1460,7 @@ MLang Frontend RunTests Help Before MissingValueOption Succeeds
 
 MLang Frontend RunTests ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in run tests mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1471,7 +1472,7 @@ MLang Frontend RunTests ShortHelp Before Unknown Succeeds
 
 MLang Frontend RunTests ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `run tests -h -L` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_shorthelp_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_shorthelp_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1483,7 +1484,7 @@ MLang Frontend RunTests ShortHelp Before MissingValueOption Succeeds
 
 MLang Frontend RunTests Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in run tests mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1495,7 +1496,7 @@ MLang Frontend RunTests Version Before Unknown Succeeds
 
 MLang Frontend RunTests Version Before MissingValueOption Succeeds
     [Documentation]    Verify `run tests --version -L` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_version_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_version_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1507,7 +1508,7 @@ MLang Frontend RunTests Version Before MissingValueOption Succeeds
 
 MLang Frontend RunTests Unknown Before Version Fails
     [Documentation]    Verify argument order parity: unknown option before --version in run tests mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_unknown_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_unknown_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1519,7 +1520,7 @@ MLang Frontend RunTests Unknown Before Version Fails
 
 MLang Frontend Bench Help Uses Backend Semantics
     [Documentation]    Verify `bench --help` is passed through and uses backend help text.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_help_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_help_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1531,7 +1532,7 @@ MLang Frontend Bench Help Uses Backend Semantics
 
 MLang Frontend Bench Version Uses Backend Semantics
     [Documentation]    Verify `bench --version` is passed through and reports backend version semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_version_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_version_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1543,7 +1544,7 @@ MLang Frontend Bench Version Uses Backend Semantics
 
 MLang Frontend Bench ValuePosition Version Is Invalid
     [Documentation]    Verify `--bench-iters --version` treats --version as invalid value, not as version command.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_valuepos_version
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_valuepos_version
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1555,7 +1556,7 @@ MLang Frontend Bench ValuePosition Version Is Invalid
 
 MLang Frontend Bench WarmupValuePosition Help Is Invalid
     [Documentation]    Verify `--bench-warmup --help` treats --help as invalid value, not as help command.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_valuepos_help
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_warmup_valuepos_help
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1567,7 +1568,7 @@ MLang Frontend Bench WarmupValuePosition Help Is Invalid
 
 MLang Frontend RunTests Version Uses Backend Semantics
     [Documentation]    Verify `run tests --version` is passed through and reports backend version semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_version_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_version_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1579,7 +1580,7 @@ MLang Frontend RunTests Version Uses Backend Semantics
 
 MLang Frontend Bench ShortHelp Uses Backend Semantics
     [Documentation]    Verify `bench -h` is passed through and uses backend help text.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_shorthelp_passthrough
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_shorthelp_passthrough
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1591,7 +1592,7 @@ MLang Frontend Bench ShortHelp Uses Backend Semantics
 
 MLang Frontend Bench Unknown Before Help Fails
     [Documentation]    Verify argument order parity: unknown option before --help in bench mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_unknown_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_unknown_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1603,7 +1604,7 @@ MLang Frontend Bench Unknown Before Help Fails
 
 MLang Frontend Bench Unknown Before ShortHelp Fails
     [Documentation]    Verify argument order parity: unknown option before -h in bench mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_unknown_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_unknown_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1615,7 +1616,7 @@ MLang Frontend Bench Unknown Before ShortHelp Fails
 
 MLang Frontend Bench Help Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --help before unknown option in bench mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_help_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_help_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1627,7 +1628,7 @@ MLang Frontend Bench Help Before Unknown Succeeds
 
 MLang Frontend Bench ShortHelp Before Unknown Succeeds
     [Documentation]    Verify argument order parity: -h before unknown option in bench mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1639,7 +1640,7 @@ MLang Frontend Bench ShortHelp Before Unknown Succeeds
 
 MLang Frontend Bench ShortHelp Before MissingValueOption Succeeds
     [Documentation]    Verify `bench -h -l` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_shorthelp_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_shorthelp_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1651,7 +1652,7 @@ MLang Frontend Bench ShortHelp Before MissingValueOption Succeeds
 
 MLang Frontend Bench Version Before Unknown Succeeds
     [Documentation]    Verify argument order parity: --version before unknown option in bench mode should succeed.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1663,7 +1664,7 @@ MLang Frontend Bench Version Before Unknown Succeeds
 
 MLang Frontend Bench Help Before MissingValueOption Succeeds
     [Documentation]    Verify `bench --help -l` short-circuits to backend help and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_help_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_help_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1675,7 +1676,7 @@ MLang Frontend Bench Help Before MissingValueOption Succeeds
 
 MLang Frontend Bench Version Before MissingValueOption Succeeds
     [Documentation]    Verify `bench --version -o` short-circuits to backend version and ignores trailing missing-value options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_version_before_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_version_before_missing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1687,7 +1688,7 @@ MLang Frontend Bench Version Before MissingValueOption Succeeds
 
 MLang Frontend Bench Unknown Before Version Fails
     [Documentation]    Verify argument order parity: unknown option before --version in bench mode should fail.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_unknown_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_unknown_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1699,12 +1700,12 @@ MLang Frontend Bench Unknown Before Version Fails
 
 MLang Frontend Wrapper Test Dispatch Works
     [Documentation]    Build frontend wrapper and verify `test` + `run tests` dispatch on a temporary suite directory.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dispatch
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dispatch
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
     ...    msg=Failed building frontend wrapper (dispatch) (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dispatch_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dispatch_suite
     Create Directory    ${suite_dir}
     ${t1}=    Catenate    SEPARATOR=    ${suite_dir}/test_one_tests.mla
     ${t2}=    Catenate    SEPARATOR=    ${suite_dir}/test_two_tests.mla
@@ -1730,7 +1731,7 @@ MLang Frontend Wrapper Test Dispatch Works
 
 MLang Frontend RunTests AbsoluteDirectory Works
     [Documentation]    Verify `run tests <absolute_dir>` executes suite discovery for external directories (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_absdir
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_absdir
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1753,7 +1754,7 @@ MLang Frontend RunTests AbsoluteDirectory Works
 
 MLang Frontend RunTests NoRun AbsoluteDirectory Works
     [Documentation]    Verify `run tests --no-run <absolute_dir>` keeps no-run semantics while discovering external suites.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_norun_absdir
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_norun_absdir
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -1777,12 +1778,12 @@ MLang Frontend RunTests NoRun AbsoluteDirectory Works
 
 MLang Frontend Does Not Intercept NonRunTests Prefix
     [Documentation]    Verify only exact `run tests` is intercepted; other `run ...` forms are forwarded unchanged.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_non_runtests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_non_runtests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_non_runtests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_non_runtests_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_non_runtests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_non_runtests_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1800,12 +1801,12 @@ MLang Frontend Does Not Intercept NonRunTests Prefix
 
 MLang Frontend Test Defaults To Tests Directory
     [Documentation]    Verify `test` without explicit path defaults to `tests` directory (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_default_path
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_default_path
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_path_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_path_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_default_path_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_default_path_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1821,12 +1822,12 @@ MLang Frontend Test Defaults To Tests Directory
 
 MLang Frontend RunTests Defaults To Tests Directory
     [Documentation]    Verify `run tests` without explicit path defaults to `tests` directory (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_default_path
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_default_path
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_default_path_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_default_path_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_default_path_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_default_path_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1842,12 +1843,12 @@ MLang Frontend RunTests Defaults To Tests Directory
 
 MLang Frontend DirectTests Defaults To Tests Directory
     [Documentation]    Verify direct `--tests` without explicit path defaults to `tests` directory (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_default_path
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_default_path
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_default_path_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_default_path_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_default_path_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_default_path_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1863,12 +1864,12 @@ MLang Frontend DirectTests Defaults To Tests Directory
 
 MLang Frontend Bench Defaults To Tests Directory
     [Documentation]    Verify `bench` without explicit path defaults to `tests` directory (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_path
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_default_path
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_path_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_path_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_path_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_path_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1884,12 +1885,12 @@ MLang Frontend Bench Defaults To Tests Directory
 
 MLang Frontend Test DefaultPath Forwards NoRun
     [Documentation]    Verify `test --no-run` without explicit path defaults to tests/ and forwards --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_default_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_default_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_norun_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_default_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_default_norun_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1906,12 +1907,12 @@ MLang Frontend Test DefaultPath Forwards NoRun
 
 MLang Frontend Test DefaultPath Forwards LinkerFlags
     [Documentation]    Verify `test -L<dir> -l<name>` without explicit path defaults to tests/ and forwards linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_default_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_default_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_default_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_default_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_default_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1930,12 +1931,12 @@ MLang Frontend Test DefaultPath Forwards LinkerFlags
 
 MLang Frontend RunTests DefaultPath Forwards NoRun
     [Documentation]    Verify `run tests --no-run` without explicit path defaults to tests/ and forwards --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_default_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_default_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_default_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_default_norun_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_default_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_default_norun_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1952,12 +1953,12 @@ MLang Frontend RunTests DefaultPath Forwards NoRun
 
 MLang Frontend DirectTests DefaultPath Forwards NoRun
     [Documentation]    Verify direct `--tests --no-run` without explicit path defaults to tests/ and forwards --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_default_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_default_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_default_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_default_norun_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_default_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_default_norun_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1974,12 +1975,12 @@ MLang Frontend DirectTests DefaultPath Forwards NoRun
 
 MLang Frontend RunTests DefaultPath Forwards LinkerFlags
     [Documentation]    Verify `run tests -L<dir> -l<name>` without explicit path defaults to tests/ and forwards linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_default_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_default_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_default_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_default_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_default_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_default_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -1998,12 +1999,12 @@ MLang Frontend RunTests DefaultPath Forwards LinkerFlags
 
 MLang Frontend DirectTests DefaultPath Forwards LinkerFlags
     [Documentation]    Verify direct `--tests -L<dir> -l<name>` without explicit path defaults to tests/ and forwards linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_default_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_default_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_default_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_default_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_default_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_default_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2022,13 +2023,13 @@ MLang Frontend DirectTests DefaultPath Forwards LinkerFlags
 
 MLang Frontend DirectTests Directory Forwards NoRun
     [Documentation]    Verify direct `--tests <dir> --no-run` forwards --no-run to per-suite backend calls (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_norun_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_norun_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2054,13 +2055,13 @@ MLang Frontend DirectTests Directory Forwards NoRun
 
 MLang Frontend DirectTests Directory NoRunThenTests Does Not Forward NoRun
     [Documentation]    Verify direct `--tests <dir>` keeps last-flag-wins semantics: `--tests --no-run --tests <dir>` does not forward --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_norun_then_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_norun_then_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_norun_then_tests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_then_tests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_norun_then_tests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_norun_then_tests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_norun_then_tests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_norun_then_tests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2086,13 +2087,13 @@ MLang Frontend DirectTests Directory NoRunThenTests Does Not Forward NoRun
 
 MLang Frontend DirectTests Directory TestsThenNoRun Forwards NoRun
     [Documentation]    Verify direct `--tests <dir>` keeps last-flag-wins semantics: `--tests --tests --no-run <dir>` forwards --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_tests_then_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_tests_then_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_tests_then_norun_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_tests_then_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_tests_then_norun_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_tests_then_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_tests_then_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_tests_then_norun_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2118,13 +2119,13 @@ MLang Frontend DirectTests Directory TestsThenNoRun Forwards NoRun
 
 MLang Frontend DirectTests Directory Does Not Forward NoTests
     [Documentation]    Verify direct `--tests <dir> --no-tests` does not forward --no-tests into per-suite calls (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_notests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_notests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_notests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_notests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_notests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2150,13 +2151,13 @@ MLang Frontend DirectTests Directory Does Not Forward NoTests
 
 MLang Frontend DirectTests Directory Ignores CompileFlags
     [Documentation]    Verify direct `--tests <dir>` strips compile-only flags from per-suite backend calls (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_compileflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_compileflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_compileflags_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_compileflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_compileflags_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_compileflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_compileflags_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2188,13 +2189,13 @@ MLang Frontend DirectTests Directory Ignores CompileFlags
 
 MLang Frontend DirectTests Directory Ignores OutputFlag
     [Documentation]    Verify direct `--tests <dir> -o <file>` is ignored in directory mode (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_ignore_o
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_ignore_o
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_ignore_o_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_ignore_o_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_ignore_o_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_ignore_o_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_ignore_o_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_ignore_o_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2211,7 +2212,7 @@ MLang Frontend DirectTests Directory Ignores OutputFlag
     ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${chmod.rc}    0
     ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
-    ...    --tests    ${suite_dir}    -o    ${OUTPUT DIR}/ignored_directtests_dir_bin
+    ...    --tests    ${suite_dir}    -o    ${ARTIFACT DIR}/ignored_directtests_dir_bin
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
@@ -2221,13 +2222,13 @@ MLang Frontend DirectTests Directory Ignores OutputFlag
 
 MLang Frontend DirectTests Directory Forwards Split LinkerFlags
     [Documentation]    Verify direct `--tests <dir> -L <dir> -l <name>` forwards linker flags per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_split_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_split_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_split_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_split_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_split_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_split_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_split_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2254,13 +2255,13 @@ MLang Frontend DirectTests Directory Forwards Split LinkerFlags
 
 MLang Frontend DirectTests Directory Forwards Compact LinkerFlags
     [Documentation]    Verify direct `--tests <dir> -Lfoo -lbar -Wl,...` forwards compact linker flags per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_compact_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_compact_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_compact_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_compact_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_compact_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_compact_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_compact_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2288,13 +2289,13 @@ MLang Frontend DirectTests Directory Forwards Compact LinkerFlags
 
 MLang Frontend DirectTests Directory Uses Sorted Suite Order
     [Documentation]    Verify direct `--tests <dir>` executes suites in deterministic sorted filename order (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_dir_sorted_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_dir_sorted_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_dir_sorted_order_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_sorted_order_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_dir_sorted_order_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_dir_sorted_order_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_sorted_order_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_dir_sorted_order_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2319,13 +2320,13 @@ MLang Frontend DirectTests Directory Uses Sorted Suite Order
 
 MLang Frontend DirectTests Directory Skips Synthetic Test Root Files
     [Documentation]    Verify direct `--tests <dir>` ignores __mlang_test_root.mla while still running valid test_ suites (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_skiproot
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_skiproot
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_skiproot_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_skiproot_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_skiproot_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_skiproot_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_skiproot_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_skiproot_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bad_root}=    Catenate    SEPARATOR=\n
@@ -2356,13 +2357,13 @@ MLang Frontend DirectTests Directory Skips Synthetic Test Root Files
 
 MLang Frontend DirectTests Skips Modonly Root Candidate
     [Documentation]    Verify direct `--tests <dir>` includes only suite-style files and skips __mlang_test_root_modonly.mla.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_modonly
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_modonly
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_modonly_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_modonly_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_directtests_modonly_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_modonly_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_modonly_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_directtests_modonly_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${modonly}=    Catenate    SEPARATOR=\n
@@ -2393,12 +2394,12 @@ MLang Frontend DirectTests Skips Modonly Root Candidate
 
 MLang Frontend Bench DefaultPath Ignores NoRun
     [Documentation]    Verify `bench --no-run` without explicit path defaults to tests/ and does not forward --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_default_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_norun_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_norun_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2415,12 +2416,12 @@ MLang Frontend Bench DefaultPath Ignores NoRun
 
 MLang Frontend Bench DefaultPath Ignores ColonWarningFlags
     [Documentation]    Verify `bench -Wno-colon-if/-Wno-colon-while` without explicit path defaults to tests/ and does not forward those flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_nowarn
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_default_nowarn
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_nowarn_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_nowarn_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_nowarn_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_nowarn_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2439,12 +2440,12 @@ MLang Frontend Bench DefaultPath Ignores ColonWarningFlags
 
 MLang Frontend Bench DefaultPath Forwards LinkerFlags
     [Documentation]    Verify `bench -L<dir> -l<name>` without explicit path defaults to tests/ and forwards linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_default_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_default_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_default_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_default_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2463,13 +2464,13 @@ MLang Frontend Bench DefaultPath Forwards LinkerFlags
 
 MLang Frontend RunTests Directory Forwards NoRun
     [Documentation]    Verify `run tests <dir> --no-run` forwards --no-run to each suite invocation.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_norun_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_norun_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_norun_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2493,13 +2494,13 @@ MLang Frontend RunTests Directory Forwards NoRun
 
 MLang Frontend RunTests Directory NoRunThenTests Does Not Forward NoRun
     [Documentation]    Verify `run tests <dir> --no-run --tests` clears no-run and does not forward --no-run per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_norun_then_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_norun_then_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_norun_then_tests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_norun_then_tests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_norun_then_tests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_norun_then_tests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_norun_then_tests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_norun_then_tests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2525,13 +2526,13 @@ MLang Frontend RunTests Directory NoRunThenTests Does Not Forward NoRun
 
 MLang Frontend RunTests Directory TestsThenNoRun Forwards NoRun
     [Documentation]    Verify `run tests <dir> --tests --no-run` keeps no-run and forwards --no-run per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_tests_then_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_tests_then_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_tests_then_norun_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_tests_then_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_tests_then_norun_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_tests_then_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_tests_then_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_tests_then_norun_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2557,13 +2558,13 @@ MLang Frontend RunTests Directory TestsThenNoRun Forwards NoRun
 
 MLang Frontend Test Directory NoRunThenTests Does Not Forward NoRun
     [Documentation]    Verify `test <dir> --no-run --tests` clears no-run and does not forward --no-run per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_dir_norun_then_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_dir_norun_then_tests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_dir_norun_then_tests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_dir_norun_then_tests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_dir_norun_then_tests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_dir_norun_then_tests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_dir_norun_then_tests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_dir_norun_then_tests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2589,13 +2590,13 @@ MLang Frontend Test Directory NoRunThenTests Does Not Forward NoRun
 
 MLang Frontend Test Directory TestsThenNoRun Forwards NoRun
     [Documentation]    Verify `test <dir> --tests --no-run` keeps no-run and forwards --no-run per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_dir_tests_then_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_dir_tests_then_norun
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_dir_tests_then_norun_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_dir_tests_then_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_dir_tests_then_norun_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_dir_tests_then_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_dir_tests_then_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_dir_tests_then_norun_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2621,18 +2622,18 @@ MLang Frontend Test Directory TestsThenNoRun Forwards NoRun
 
 MLang Frontend SingleFile Forwards NoTests
     [Documentation]    Verify single-file test mode forwards `--no-tests` to backend (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_notests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_notests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_notests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_notests_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_notests_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2650,18 +2651,18 @@ MLang Frontend SingleFile Forwards NoTests
 
 MLang Frontend Test SingleFile Forwards NoTests
     [Documentation]    Verify `test <file> --no-tests` forwards --no-tests in single-file test mode (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_single_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_single_notests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_single_notests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_single_notests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_single_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_single_notests_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_single_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_single_notests_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2679,18 +2680,18 @@ MLang Frontend Test SingleFile Forwards NoTests
 
 MLang Frontend RunTests SingleFile Forwards NoTests
     [Documentation]    Verify `run tests <file> --no-tests` forwards --no-tests in single-file test mode (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_single_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_single_notests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_single_notests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_single_notests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_single_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_single_notests_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_single_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_single_notests_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -2708,13 +2709,13 @@ MLang Frontend RunTests SingleFile Forwards NoTests
 
 MLang Frontend Directory Mode Does Not Forward NoTests
     [Documentation]    Verify directory test mode does not forward `--no-tests` into per-suite invocations (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_notests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_notests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_notests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_notests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_notests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2739,13 +2740,13 @@ MLang Frontend Directory Mode Does Not Forward NoTests
 
 MLang Frontend RunTests Directory Mode Does Not Forward NoTests
     [Documentation]    Verify `run tests <dir> --no-tests` does not forward `--no-tests` into per-suite invocations (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_notests
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_notests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_notests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_notests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_notests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2770,13 +2771,13 @@ MLang Frontend RunTests Directory Mode Does Not Forward NoTests
 
 MLang Frontend RunTests Directory Ignores CompileFlags In TestMode
     [Documentation]    Verify `run tests <dir>` strips compile-only flags from per-suite backend calls (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_compileflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_compileflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_compileflags_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compileflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compileflags_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_compileflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_compileflags_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2808,13 +2809,13 @@ MLang Frontend RunTests Directory Ignores CompileFlags In TestMode
 
 MLang Frontend RunTests Directory Forwards ColonWarningFlags
     [Documentation]    Verify `run tests <dir> -Wno-colon-*` forwards colon warning suppression flags per suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_colonflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_colonflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_colonflags_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_colonflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_colonflags_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_colonflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_colonflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_colonflags_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2841,13 +2842,13 @@ MLang Frontend RunTests Directory Forwards ColonWarningFlags
 
 MLang Frontend RunTests Directory Forwards Split LinkerFlags
     [Documentation]    Verify `run tests <dir> -L <dir> -l <name>` forwards linker flags per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_split_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_split_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_split_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_split_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_split_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_split_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_split_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2874,13 +2875,13 @@ MLang Frontend RunTests Directory Forwards Split LinkerFlags
 
 MLang Frontend RunTests Directory Uses Sorted Suite Order
     [Documentation]    Verify `run tests <dir>` executes suites in deterministic sorted filename order (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_sorted_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_sorted_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_sorted_order_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_sorted_order_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_sorted_order_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_sorted_order_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_sorted_order_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_sorted_order_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2905,13 +2906,13 @@ MLang Frontend RunTests Directory Uses Sorted Suite Order
 
 MLang Frontend RunTests Directory Forwards Compact LinkerFlags
     [Documentation]    Verify `run tests <dir> -Lfoo -lbar -Wl,...` forwards compact linker flags per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_compact_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_compact_link
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_compact_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compact_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_compact_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_compact_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_compact_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2939,13 +2940,13 @@ MLang Frontend RunTests Directory Forwards Compact LinkerFlags
 
 MLang Frontend RunTests Directory Ignores OutputFlag
     [Documentation]    Verify `run tests <dir> -o <file>` is ignored in directory mode (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_ignore_o
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_ignore_o
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_ignore_o_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_ignore_o_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_ignore_o_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_ignore_o_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_ignore_o_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_ignore_o_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -2961,7 +2962,7 @@ MLang Frontend RunTests Directory Ignores OutputFlag
     Create File    ${fake_backend}    ${script}
     ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${chmod.rc}    0
-    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    run    tests    ${suite_dir}    -o    ${OUTPUT DIR}/ignored_runtests_dir_bin
+    ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}    run    tests    ${suite_dir}    -o    ${ARTIFACT DIR}/ignored_runtests_dir_bin
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
@@ -2971,19 +2972,19 @@ MLang Frontend RunTests Directory Ignores OutputFlag
 
 MLang Frontend Test SingleFile Forwards BenchTuningFlags
     [Documentation]    Verify test single-file mode forwards --bench-iters/--bench-warmup (accepted by C++ parser in testMode).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_single_benchflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_single_benchflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_single_benchflags.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_single_benchflags.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn test_single_benchflags_case() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_single_benchflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_test_single_benchflags_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_single_benchflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_test_single_benchflags_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -3002,13 +3003,13 @@ MLang Frontend Test SingleFile Forwards BenchTuningFlags
 
 MLang Frontend RunTests Directory Ignores BenchTuningFlags
     [Documentation]    Verify `run tests <dir>` accepts but does not forward --bench-iters/--bench-warmup (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_benchflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_benchflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_benchflags_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_benchflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_runtests_dir_benchflags_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_benchflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_benchflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_runtests_dir_benchflags_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -3035,11 +3036,11 @@ MLang Frontend RunTests Directory Ignores BenchTuningFlags
 
 MLang Frontend Test Invalid BenchIters Value Errors
     [Documentation]    Verify test mode reports invalid numeric value for --bench-iters (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_invalid_benchiters
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_invalid_benchiters
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_invalid_benchiters.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_invalid_benchiters.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn test_invalid_benchiters_case() -> i32 {
@@ -3054,11 +3055,11 @@ MLang Frontend Test Invalid BenchIters Value Errors
 
 MLang Frontend RunTests Invalid BenchWarmup Value Errors
     [Documentation]    Verify run tests mode reports invalid numeric value for --bench-warmup (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_invalid_benchwarmup
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_invalid_benchwarmup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_invalid_benchwarmup.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_invalid_benchwarmup.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn runtests_invalid_benchwarmup_case() -> i32 {
@@ -3073,7 +3074,7 @@ MLang Frontend RunTests Invalid BenchWarmup Value Errors
 
 MLang Frontend Test Missing BenchIters Value Uses Unknown Option Error
     [Documentation]    Verify test mode missing value after --bench-iters reports unknown option (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_missing_benchiters
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_missing_benchiters
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -3084,7 +3085,7 @@ MLang Frontend Test Missing BenchIters Value Uses Unknown Option Error
 
 MLang Frontend RunTests Missing BenchWarmup Value Uses Unknown Option Error
     [Documentation]    Verify run tests mode missing value after --bench-warmup reports unknown option (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_missing_benchwarmup
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_missing_benchwarmup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -3095,11 +3096,11 @@ MLang Frontend RunTests Missing BenchWarmup Value Uses Unknown Option Error
 
 MLang Frontend Test Inline Bench Flags Are Rejected
     [Documentation]    Verify test mode rejects inline --bench-iters=N/--bench-warmup=N as unknown options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_inline_benchflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_inline_benchflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_inline_benchflags.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_inline_benchflags.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn test_inline_benchflags_case() -> i32 {
@@ -3117,11 +3118,11 @@ MLang Frontend Test Inline Bench Flags Are Rejected
 
 MLang Frontend RunTests Inline Bench Flags Are Rejected
     [Documentation]    Verify run tests mode rejects inline --bench-iters=N/--bench-warmup=N as unknown options (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_inline_benchflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_inline_benchflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_inline_benchflags.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_inline_benchflags.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn runtests_inline_benchflags_case() -> i32 {
@@ -3139,11 +3140,11 @@ MLang Frontend RunTests Inline Bench Flags Are Rejected
 
 MLang Frontend RunTests Directory Invalid BenchIters Value Errors
     [Documentation]    Verify `run tests <dir>` reports invalid numeric value for --bench-iters (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_invalid_benchiters
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_invalid_benchiters
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_invalid_benchiters_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_invalid_benchiters_suite
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
@@ -3159,11 +3160,11 @@ MLang Frontend RunTests Directory Invalid BenchIters Value Errors
 
 MLang Frontend Test Directory Invalid BenchWarmup Value Errors
     [Documentation]    Verify `test <dir>` reports invalid numeric value for --bench-warmup (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_dir_invalid_benchwarmup
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_dir_invalid_benchwarmup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_dir_invalid_benchwarmup_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_dir_invalid_benchwarmup_suite
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
@@ -3179,11 +3180,11 @@ MLang Frontend Test Directory Invalid BenchWarmup Value Errors
 
 MLang Frontend RunTests Directory Missing BenchIters Value Uses Unknown Option Error
     [Documentation]    Verify `run tests <dir> --bench-iters` missing value reports unknown option (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_dir_missing_benchiters
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_dir_missing_benchiters
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_dir_missing_benchiters_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_dir_missing_benchiters_suite
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
@@ -3199,11 +3200,11 @@ MLang Frontend RunTests Directory Missing BenchIters Value Uses Unknown Option E
 
 MLang Frontend Test Directory Missing BenchWarmup Value Uses Unknown Option Error
     [Documentation]    Verify `test <dir> --bench-warmup` missing value reports unknown option (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_dir_missing_benchwarmup
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_dir_missing_benchwarmup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_dir_missing_benchwarmup_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_dir_missing_benchwarmup_suite
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
@@ -3219,19 +3220,19 @@ MLang Frontend Test Directory Missing BenchWarmup Value Uses Unknown Option Erro
 
 MLang Frontend SingleFile Forwards CompileFlags In TestMode
     [Documentation]    Verify single-file test mode forwards compile-related flags (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_compileflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_compileflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_compileflags.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_compileflags.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn compile_flags_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_compileflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_compileflags_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_compileflags_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -3255,13 +3256,13 @@ MLang Frontend SingleFile Forwards CompileFlags In TestMode
 
 MLang Frontend Directory Mode Ignores CompileFlags In TestMode
     [Documentation]    Verify directory test mode strips compile-only flags from per-suite backend calls (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_compileflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_compileflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_compileflags_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compileflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compileflags_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_compileflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_compileflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_compileflags_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${code}=    Catenate    SEPARATOR=\n
@@ -3293,11 +3294,11 @@ MLang Frontend Directory Mode Ignores CompileFlags In TestMode
 
 MLang Frontend Tests Flag Works In Trailing Position
     [Documentation]    Verify `<file> --tests` activates test mode even when --tests is not the first arg.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_flag_test() -> i32 {
@@ -3311,11 +3312,11 @@ MLang Frontend Tests Flag Works In Trailing Position
 
 MLang Frontend Trailing Tests Flag Unknown Option Fails
     [Documentation]    Verify C++ parity: trailing --tests stream still rejects unknown options with usage.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_unknown.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_unknown.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_flag_unknown_test() -> i32 {
@@ -3331,19 +3332,19 @@ MLang Frontend Trailing Tests Flag Unknown Option Fails
 
 MLang Frontend Trailing Tests SingleFile Forwards OutputOption
     [Documentation]    Verify C++ parity: in trailing --tests single-file mode, -o <file> is forwarded.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_single_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_single_output
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_single_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_single_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_single_output_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_single_output_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_single_output_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_single_output_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_single_output_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -3364,19 +3365,19 @@ MLang Frontend Trailing Tests SingleFile Forwards OutputOption
 
 MLang Frontend Trailing Tests SingleFile Forwards LinkFlags
     [Documentation]    Verify C++ parity: in trailing --tests single-file mode, -L/-l are forwarded.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_single_linkflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_single_linkflags
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_single_linkflags.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_single_linkflags.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_single_linkflags_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_single_linkflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_single_linkflags_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_single_linkflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_single_linkflags_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -3396,11 +3397,11 @@ MLang Frontend Trailing Tests SingleFile Forwards LinkFlags
 
 MLang Frontend Trailing Tests SingleFile MissingLinkOrOutputValue Fails
     [Documentation]    Verify C++ parity: trailing --tests single-file mode reports unknown option for missing -o/-L/-l values.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_single_missing_link_or_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_single_missing_link_or_output
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_single_missing_link_or_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_single_missing_link_or_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_single_missing_link_or_output_test() -> i32 {
@@ -3431,11 +3432,11 @@ MLang Frontend Trailing Tests SingleFile MissingLinkOrOutputValue Fails
 
 MLang Frontend Trailing Tests Help Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, --help before unknown option short-circuits successfully.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_help_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_help_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_help_order.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_help_order.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_help_order_test() -> i32 {
@@ -3450,11 +3451,11 @@ MLang Frontend Trailing Tests Help Before Unknown Succeeds
 
 MLang Frontend Trailing Tests Unknown Before Help Fails
     [Documentation]    Verify C++ parity: in trailing --tests stream, unknown option before --help fails.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown_help_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown_help_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_unknown_help_order.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_unknown_help_order.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_unknown_help_order_test() -> i32 {
@@ -3470,11 +3471,11 @@ MLang Frontend Trailing Tests Unknown Before Help Fails
 
 MLang Frontend Trailing Tests Version Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, --version before unknown option short-circuits successfully.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_version_order.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_version_order.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_version_order_test() -> i32 {
@@ -3489,11 +3490,11 @@ MLang Frontend Trailing Tests Version Before Unknown Succeeds
 
 MLang Frontend Trailing Tests Unknown Before Version Fails
     [Documentation]    Verify C++ parity: in trailing --tests stream, unknown option before --version fails.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown_version_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown_version_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_unknown_version_order.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_unknown_version_order.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_unknown_version_order_test() -> i32 {
@@ -3509,11 +3510,11 @@ MLang Frontend Trailing Tests Unknown Before Version Fails
 
 MLang Frontend Trailing Tests ShortHelp Before Unknown Succeeds
     [Documentation]    Verify C++ parity: in trailing --tests stream, -h before unknown option short-circuits successfully.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_shorthelp_order.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_shorthelp_order.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_shorthelp_order_test() -> i32 {
@@ -3528,11 +3529,11 @@ MLang Frontend Trailing Tests ShortHelp Before Unknown Succeeds
 
 MLang Frontend Trailing Tests Unknown Before ShortHelp Fails
     [Documentation]    Verify C++ parity: in trailing --tests stream, unknown option before -h fails.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown_shorthelp_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_unknown_shorthelp_order
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_unknown_shorthelp_order.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_unknown_shorthelp_order.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_unknown_shorthelp_order_test() -> i32 {
@@ -3548,11 +3549,11 @@ MLang Frontend Trailing Tests Unknown Before ShortHelp Fails
 
 MLang Frontend Trailing Tests Help ShortCircuits MissingValueOption
     [Documentation]    Verify C++ parity: in trailing --tests stream, --help short-circuits and ignores trailing missing-value options.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_help_missing_value
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_help_missing_value
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_help_missing_value.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_help_missing_value.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_help_missing_value_test() -> i32 {
@@ -3567,11 +3568,11 @@ MLang Frontend Trailing Tests Help ShortCircuits MissingValueOption
 
 MLang Frontend Trailing Tests Version ShortCircuits MissingValueOption
     [Documentation]    Verify C++ parity: in trailing --tests stream, --version short-circuits and ignores trailing missing-value options.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_version_missing_value
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_version_missing_value
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_version_missing_value.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_version_missing_value.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_version_missing_value_test() -> i32 {
@@ -3586,11 +3587,11 @@ MLang Frontend Trailing Tests Version ShortCircuits MissingValueOption
 
 MLang Frontend Trailing Tests ShortHelp ShortCircuits MissingValueOption
     [Documentation]    Verify C++ parity: in trailing --tests stream, -h short-circuits and ignores trailing missing-value options.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_shorthelp_missing_value
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_shorthelp_missing_value
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_shorthelp_missing_value.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_shorthelp_missing_value.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_shorthelp_missing_value_test() -> i32 {
@@ -3605,19 +3606,19 @@ MLang Frontend Trailing Tests ShortHelp ShortCircuits MissingValueOption
 
 MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
     [Documentation]    Verify C++ parity: trailing --tests in compile stream injects default -Wno-colon-if/-Wno-colon-while.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_defaults
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_defaults
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_colon_defaults.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_colon_defaults.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_colon_defaults_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_defaults_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_defaults_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_colon_defaults_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_colon_defaults_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -3636,19 +3637,19 @@ MLang Frontend Trailing Tests Flag Injects Default Colon Suppression
 
 MLang Frontend Trailing Tests Flag Does Not Duplicate Explicit Colon Suppression
     [Documentation]    Verify C++ parity: explicit -Wno-colon-* in trailing --tests stream are preserved without duplicate injection.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_nodup
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_nodup
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_colon_nodup.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_colon_nodup.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_colon_nodup_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_nodup_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_nodup_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_colon_nodup_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_colon_nodup_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -3668,19 +3669,19 @@ MLang Frontend Trailing Tests Flag Does Not Duplicate Explicit Colon Suppression
 
 MLang Frontend Trailing Tests Flag Injects Only Missing Colon Suppression
     [Documentation]    Verify C++ parity: trailing --tests with one explicit -Wno-colon-* injects only the missing counterpart.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_partial
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_tests_trailing_colon_partial
     ${build}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_tests_trailing_colon_partial.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_tests_trailing_colon_partial.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn trailing_colon_partial_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_partial_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_tests_trailing_colon_partial_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_colon_partial_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_tests_trailing_colon_partial_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -3700,8 +3701,8 @@ MLang Frontend Trailing Tests Flag Injects Only Missing Colon Suppression
 
 MLang Binary Frontend Env Switch Works
     [Documentation]    Verify `MLANG_FRONTEND_IMPL=mla` routes `mlang` through the MLang frontend implementation.
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_env_switch.mla
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_env_switch_bin
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_env_switch.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_env_switch_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        println!("frontend env switch ok");
@@ -3718,7 +3719,7 @@ MLang Binary Frontend Env Switch Works
 
 MLang Frontend Wrapper Pkg Dispatch Works
     [Documentation]    Verify mlang-frontend-mla handles `pkg` command path with MLANG_PKG_IMPL=cpp by forwarding directly to backend.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3731,7 +3732,7 @@ MLang Frontend Wrapper Pkg Dispatch Works
 
 MLang Frontend Pkg Unknown Impl Uses Cpp Fallback
     [Documentation]    Verify MLANG_PKG_IMPL unknown values do not prefer MLang pkg frontend (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_unknown
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_unknown
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3743,7 +3744,7 @@ MLang Frontend Pkg Unknown Impl Uses Cpp Fallback
 
 MLang Frontend Pkg Mla Mode Falls Back To Cpp Backend
     [Documentation]    Verify `MLANG_PKG_IMPL=mla` falls back to backend `pkg` command when MLang pkg frontend compilation/run path fails.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_mla_fallback
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_mla_fallback
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3755,7 +3756,7 @@ MLang Frontend Pkg Mla Mode Falls Back To Cpp Backend
 
 MLang Frontend Pkg Default Mode Falls Back To Cpp Backend
     [Documentation]    Verify default pkg mode (MLANG_PKG_IMPL unset) falls back to backend `pkg` command when MLang pkg frontend compilation/run path fails.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_default_fallback
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_default_fallback
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3767,7 +3768,7 @@ MLang Frontend Pkg Default Mode Falls Back To Cpp Backend
 
 MLang Frontend Pkg Cpp Fallback Forwards Full Argument Vector
     [Documentation]    Verify cpp pkg fallback preserves full pkg argument ordering/content.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_cpp_args
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_cpp_args
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3779,7 +3780,7 @@ MLang Frontend Pkg Cpp Fallback Forwards Full Argument Vector
 
 MLang Frontend Pkg MlaFallback Forwards Full Argument Vector
     [Documentation]    Verify preferred mla pkg path fallback still preserves full pkg argument ordering/content.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_mla_args
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_mla_args
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3792,7 +3793,7 @@ MLang Frontend Pkg MlaFallback Forwards Full Argument Vector
 MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
     [Documentation]    Verify pkg command under `MLANG_FRONTEND_IMPL=mla` does not silently succeed.
     ...    Accept either direct pkg-mla unknown-subcommand output or compile/fallback error output.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_pkg_mla_env
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_mla_env
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -3809,12 +3810,12 @@ MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
 
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptydir
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_emptydir
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
     ...    msg=Failed building frontend wrapper (empty dir parity) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
-    ${empty}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_empty_suite_dir
+    ${empty}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_empty_suite_dir
     Create Directory    ${empty}
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    test    ${empty}
     ...    stdout=PIPE    stderr=PIPE
@@ -3823,11 +3824,11 @@ MLang Frontend Empty Test Dir Fails
 
 MLang Frontend DirectTests Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `--tests <empty_dir>` returns nonzero.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_emptydir
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_emptydir
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${empty}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_empty_suite_dir
+    ${empty}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_empty_suite_dir
     Run Keyword And Ignore Error    Remove Directory    ${empty}    recursive=True
     Create Directory    ${empty}
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    --tests    ${empty}
@@ -3837,11 +3838,11 @@ MLang Frontend DirectTests Empty Test Dir Fails
 
 MLang Frontend Test Dir Requires Test Attribute
     [Documentation]    Verify test directory mode ignores files lacking #[test] and errors when no test suites remain.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_test_attr
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_test_attr
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_test_attr_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_test_attr_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${plain}=    Catenate    SEPARATOR=\n
@@ -3856,11 +3857,11 @@ MLang Frontend Test Dir Requires Test Attribute
 
 MLang Frontend DirectTests Dir Requires Test Attribute
     [Documentation]    Verify direct --tests directory mode ignores files lacking #[test] and errors when no test suites remain.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_attr
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_attr
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_attr_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_attr_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${plain}=    Catenate    SEPARATOR=\n
@@ -3875,12 +3876,12 @@ MLang Frontend DirectTests Dir Requires Test Attribute
 
 MLang Frontend Empty Bench Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `bench <empty_dir>` returns nonzero.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_emptybench
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_emptybench
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
     ...    msg=Failed building frontend wrapper (empty bench dir parity) (rc=${build_front.rc})\nSTDOUT:\n${build_front.stdout}\nSTDERR:\n${build_front.stderr}
-    ${empty}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_empty_bench_dir
+    ${empty}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_empty_bench_dir
     Run Keyword And Ignore Error    Remove Directory    ${empty}    recursive=True
     Create Directory    ${empty}
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang    bench    ${empty}
@@ -3890,11 +3891,11 @@ MLang Frontend Empty Bench Dir Fails
 
 MLang Frontend Bench Dir Requires Bench Prefix
     [Documentation]    Verify bench directory mode only considers `bench_*.mla` files (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_prefix
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_prefix
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_prefix_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_prefix_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${nonbench}=    Catenate    SEPARATOR=\n
@@ -3909,13 +3910,13 @@ MLang Frontend Bench Dir Requires Bench Prefix
 
 MLang Frontend Bench Directory Skips Synthetic Test Root Files
     [Documentation]    Verify bench directory mode ignores __mlang_test_root.mla while still running valid bench_ suites (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_skiproot
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_skiproot
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_skiproot_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_skiproot_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_skiproot_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_skiproot_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_skiproot_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_skiproot_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bad_root}=    Catenate    SEPARATOR=\n
@@ -3945,12 +3946,12 @@ MLang Frontend Bench Directory Skips Synthetic Test Root Files
 
 MLang Frontend Test Uses Last Positional Path
     [Documentation]    Verify frontend test-mode positional parsing matches C++ main semantics (last positional wins).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_lastpos
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_lastpos
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_lastpos_suite
-    ${empty_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_lastpos_empty
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_lastpos_suite
+    ${empty_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_lastpos_empty
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Run Keyword And Ignore Error    Remove Directory    ${empty_dir}    recursive=True
     Create Directory    ${suite_dir}
@@ -3969,12 +3970,12 @@ MLang Frontend Test Uses Last Positional Path
 
 MLang Frontend RunTests Uses Last Positional Path
     [Documentation]    Verify frontend run-tests positional parsing matches C++ semantics (last positional wins).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_lastpos
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_lastpos
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_lastpos_suite
-    ${empty_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_lastpos_empty
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_lastpos_suite
+    ${empty_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_lastpos_empty
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Run Keyword And Ignore Error    Remove Directory    ${empty_dir}    recursive=True
     Create Directory    ${suite_dir}
@@ -3993,12 +3994,12 @@ MLang Frontend RunTests Uses Last Positional Path
 
 MLang Frontend DirectTests Uses Last Positional Path
     [Documentation]    Verify direct --tests positional parsing matches C++ semantics (last positional wins).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_directtests_lastpos
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_directtests_lastpos
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_lastpos_suite
-    ${empty_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_directtests_lastpos_empty
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_lastpos_suite
+    ${empty_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_directtests_lastpos_empty
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Run Keyword And Ignore Error    Remove Directory    ${empty_dir}    recursive=True
     Create Directory    ${suite_dir}
@@ -4017,11 +4018,11 @@ MLang Frontend DirectTests Uses Last Positional Path
 
 MLang Frontend Skips Synthetic Test Root Files
     [Documentation]    Verify frontend test directory mode ignores __mlang_test_root*.mla files during suite discovery.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_skiproot
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_skiproot
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_skip_root_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_skip_root_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bad_root}=    Catenate    SEPARATOR=\n
@@ -4043,11 +4044,11 @@ MLang Frontend Skips Synthetic Test Root Files
 
 MLang Frontend Keeps Modonly Root Candidate
     [Documentation]    Verify frontend parity with C++: only __mlang_test_root.mla is skipped, modonly variant remains candidate.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_modonly
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_modonly
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_modonly_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_modonly_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${modonly_bad}=    Catenate    SEPARATOR=\n
@@ -4062,11 +4063,11 @@ MLang Frontend Keeps Modonly Root Candidate
 
 MLang Frontend Normalizes Multi-Suite Failure Exit Code
     [Documentation]    Verify frontend test-directory mode returns rc=1 when multiple suites fail (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_failnorm
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_failnorm
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_fail_norm_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_fail_norm_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bad1}=    Catenate    SEPARATOR=\n
@@ -4089,7 +4090,7 @@ MLang Frontend Normalizes Multi-Suite Failure Exit Code
 
 MLang Frontend Bench Flag Parsing Works
     [Documentation]    Verify frontend bench mode parses option values without treating them as input path.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_parse
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_parse
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4103,7 +4104,7 @@ MLang Frontend Bench Flag Parsing Works
 
 MLang Frontend Bench Flag Validation
     [Documentation]    Verify frontend bench mode reports invalid numeric values for bench flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_validate
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_validate
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4115,7 +4116,7 @@ MLang Frontend Bench Flag Validation
 
 MLang Frontend Bench Inline Flags Are Rejected
     [Documentation]    Verify C++ parity: --bench-iters=N and --bench-warmup=N are unknown options.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_inline
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_inline
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4130,11 +4131,11 @@ MLang Frontend Bench Inline Flags Are Rejected
 
 MLang Frontend Bench SingleFile Rejects Bare Wl Flag
     [Documentation]    Verify C++ parity: bare -Wl, is rejected in single-file bench mode as unknown.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_wl_bare
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_wl_bare
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_wl_bare.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_wl_bare.mla
     Create File    ${src}    fn main() -> i32 { return 0; }
     ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
     ...    bench    ${src}    -Wl,
@@ -4144,14 +4145,14 @@ MLang Frontend Bench SingleFile Rejects Bare Wl Flag
 
 MLang Frontend Bench SingleFile Forwards Wl Flags
     [Documentation]    Verify C++ parity: single-file bench mode forwards valid -Wl,<args> linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_wl
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_wl
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_wl.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_wl.mla
     Create File    ${src}    fn main() -> i32 { return 0; }
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_wl_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_wl_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_wl_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_wl_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -4168,14 +4169,14 @@ MLang Frontend Bench SingleFile Forwards Wl Flags
 
 MLang Frontend Bench SingleFile Forwards Compact Linker Flags
     [Documentation]    Verify C++ parity: single-file bench mode forwards compact -L<dir> and -l<name> flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_compact_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_compact_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_compact_link.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_compact_link.mla
     Create File    ${src}    fn main() -> i32 { return 0; }
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_compact_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_compact_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_compact_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -4193,14 +4194,14 @@ MLang Frontend Bench SingleFile Forwards Compact Linker Flags
 
 MLang Frontend Bench SingleFile Forwards Split Linker Flags
     [Documentation]    Verify C++ parity: single-file bench mode forwards split -L <dir> and -l <name> flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_split_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_split_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_split_link.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_split_link.mla
     Create File    ${src}    fn main() -> i32 { return 0; }
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_split_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_split_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_split_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -4218,14 +4219,14 @@ MLang Frontend Bench SingleFile Forwards Split Linker Flags
 
 MLang Frontend Bench SingleFile Forwards OutputFlag
     [Documentation]    Verify C++ parity: single-file bench mode forwards `-o <file>`.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_output.mla
     Create File    ${src}    fn main() -> i32 { return 0; }
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_output_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_output_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_output_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_output_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -4242,7 +4243,7 @@ MLang Frontend Bench SingleFile Forwards OutputFlag
 
 MLang Frontend Bench Warmup Validation
     [Documentation]    Verify frontend rejects non-numeric warmup values before backend compile.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_validate
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_warmup_validate
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4254,7 +4255,7 @@ MLang Frontend Bench Warmup Validation
 
 MLang Frontend Bench Numeric Range Validation
     [Documentation]    Verify frontend rejects out-of-range bench numeric values (std::stoi parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_range_validate
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_range_validate
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4275,13 +4276,13 @@ MLang Frontend Bench Numeric Range Validation
 
 MLang Frontend Bench Numeric I32 Boundary Behavior
     [Documentation]    Verify i32 boundary values are accepted and clamped/forwarded with C++-parity semantics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_i32_bounds
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_i32_bounds
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_i32_bounds.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_i32_bounds_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_i32_bounds_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_i32_bounds.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_i32_bounds_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_i32_bounds_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4313,7 +4314,7 @@ MLang Frontend Bench Numeric I32 Boundary Behavior
 
 MLang Frontend Bench Accepts Signed Numeric Warmup
     [Documentation]    Verify frontend accepts signed numeric warmup values (backend clamps like C++).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warmup_signed
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_warmup_signed
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4324,7 +4325,7 @@ MLang Frontend Bench Accepts Signed Numeric Warmup
 
 MLang Frontend Bench Accepts Zero Iterations Value
     [Documentation]    Verify frontend accepts numeric zero for --bench-iters (backend applies C++ clamp).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_iters_zero
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_iters_zero
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -4335,14 +4336,14 @@ MLang Frontend Bench Accepts Zero Iterations Value
 
 MLang Frontend Bench Uses Last Positional Path
     [Documentation]    Verify C++ parity: in bench mode, the last non-flag positional argument wins as input path.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_last_pos
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_last_pos
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${first}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_last_first.mla
-    ${second}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_last_second.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_last_pos_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_last_pos_backend.log
+    ${first}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_last_first.mla
+    ${second}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_last_second.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_last_pos_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_last_pos_backend.log
     Create File    ${first}    fn main() -> i32 { return 0; }
     Create File    ${second}    fn main() -> i32 { return 0; }
     ${script}=    Catenate    SEPARATOR=\n
@@ -4362,13 +4363,13 @@ MLang Frontend Bench Uses Last Positional Path
 
 MLang Frontend Bench Directory Forwards Default Iteration Flags
     [Documentation]    Verify frontend bench directory mode forwards C++ default --bench-iters/--bench-warmup when not provided.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_defaults
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_defaults
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_defaults_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_defaults_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4393,13 +4394,13 @@ MLang Frontend Bench Directory Forwards Default Iteration Flags
 
 MLang Frontend Bench SingleFile Does Not Inject Default Iteration Flags
     [Documentation]    Verify single-file bench mode does not inject default --bench-iters/--bench-warmup (backend handles defaults).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_defaults
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_defaults
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_defaults.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_defaults_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_defaults_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_defaults.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_defaults_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_defaults_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4421,13 +4422,13 @@ MLang Frontend Bench SingleFile Does Not Inject Default Iteration Flags
 
 MLang Frontend Bench SingleFile Clamps Iteration Values
     [Documentation]    Verify bench single-file mode clamps --bench-iters to >=1 and --bench-warmup to >=0 before forwarding.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_clamp_single
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_clamp_single
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_clamp_single.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_clamp_single_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_clamp_single_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_clamp_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_clamp_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_clamp_single_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4450,13 +4451,13 @@ MLang Frontend Bench SingleFile Clamps Iteration Values
 
 MLang Frontend Bench Directory Uses Last Iteration Flags
     [Documentation]    Verify bench directory mode forwards only one effective bench-iters/warmup pair and last value wins.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_lastflags
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_lastflags
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_lastflags_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_lastflags_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_lastflags_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_lastflags_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_lastflags_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_lastflags_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4483,13 +4484,13 @@ MLang Frontend Bench Directory Uses Last Iteration Flags
 
 MLang Frontend Bench Directory Canonicalizes Numeric Flags
     [Documentation]    Verify bench directory mode forwards canonical numeric forms (e.g. +0007 -> 7).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_canon
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_canon
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_canon_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_canon_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_canon_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_canon_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_canon_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_canon_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4516,13 +4517,13 @@ MLang Frontend Bench Directory Canonicalizes Numeric Flags
 
 MLang Frontend Bench Directory Clamps Iteration Values
     [Documentation]    Verify bench directory mode clamps --bench-iters to >=1 and --bench-warmup to >=0 before forwarding.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_clamp
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_clamp
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_clamp_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_clamp_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_clamp_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_clamp_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_clamp_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_clamp_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4547,13 +4548,13 @@ MLang Frontend Bench Directory Clamps Iteration Values
 
 MLang Frontend Bench Ignores NoRun Flag
     [Documentation]    Verify frontend bench mode ignores --no-run (C++ parity) and does not forward it.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_norun
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_norun
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_norun_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_norun_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4576,13 +4577,13 @@ MLang Frontend Bench Ignores NoRun Flag
 
 MLang Frontend Bench SingleFile Forwards NoRun Flag
     [Documentation]    Verify bench single-file mode forwards --no-run (directory mode still ignores it).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_norun_single
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_norun_single
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_norun_single.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_single_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_single_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_norun_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_single_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4603,13 +4604,13 @@ MLang Frontend Bench SingleFile Forwards NoRun Flag
 
 MLang Frontend Bench SingleFile NoRunWithTests StillForwards
     [Documentation]    Verify bench single-file keeps --no-run effective even when --tests also appears.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_norun_tests_single
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_norun_tests_single
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_norun_tests_single.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_tests_single_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_tests_single_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_norun_tests_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_tests_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_tests_single_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4631,13 +4632,13 @@ MLang Frontend Bench SingleFile NoRunWithTests StillForwards
 
 MLang Frontend Bench SingleFile TestsThenNoRun StillForwards
     [Documentation]    Verify bench single-file keeps --no-run effective when flags are ordered as --tests then --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_tests_norun_single
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_tests_norun_single
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_tests_norun_single.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_tests_norun_single_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_tests_norun_single_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_tests_norun_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_tests_norun_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_tests_norun_single_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4659,13 +4660,13 @@ MLang Frontend Bench SingleFile TestsThenNoRun StillForwards
 
 MLang Frontend Bench SingleFile Forwards NoTests
     [Documentation]    Verify bench single-file mode forwards --no-tests (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_single_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_single_notests
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_single_notests.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_single_notests_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_single_notests.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_single_notests_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4687,13 +4688,13 @@ MLang Frontend Bench SingleFile Forwards NoTests
 
 MLang Frontend Bench Directory NoRunWithTests StillIgnored
     [Documentation]    Verify bench directory mode still ignores --no-run even when --tests also appears.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_norun_tests_dir
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_norun_tests_dir
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_norun_tests_dir_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_tests_dir_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_norun_tests_dir_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_norun_tests_dir_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_tests_dir_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_norun_tests_dir_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4717,13 +4718,13 @@ MLang Frontend Bench Directory NoRunWithTests StillIgnored
 
 MLang Frontend Bench Directory TestsThenNoRun StillIgnored
     [Documentation]    Verify bench directory mode still ignores --no-run when flags are ordered as --tests then --no-run.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_tests_norun_dir
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_tests_norun_dir
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_tests_norun_dir_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_tests_norun_dir_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_tests_norun_dir_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_tests_norun_dir_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_tests_norun_dir_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_tests_norun_dir_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4747,13 +4748,13 @@ MLang Frontend Bench Directory TestsThenNoRun StillIgnored
 
 MLang Frontend Bench Directory Ignores NoTests
     [Documentation]    Verify bench directory mode ignores --no-tests and does not forward it per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_dir_notests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_dir_notests
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_dir_notests_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_notests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_notests_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_dir_notests_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_notests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_notests_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4777,13 +4778,13 @@ MLang Frontend Bench Directory Ignores NoTests
 
 MLang Frontend Bench Directory Forwards Split LinkerFlags
     [Documentation]    Verify bench directory mode forwards split -L/-l flags per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_dir_split_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_dir_split_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_dir_split_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_split_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_split_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_dir_split_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_split_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4809,13 +4810,13 @@ MLang Frontend Bench Directory Forwards Split LinkerFlags
 
 MLang Frontend Bench Directory Uses Sorted Suite Order
     [Documentation]    Verify `bench <dir>` executes suites in deterministic sorted filename order (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_dir_sorted_order
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_dir_sorted_order
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_dir_sorted_order_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_sorted_order_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_sorted_order_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_dir_sorted_order_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_sorted_order_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_sorted_order_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4839,13 +4840,13 @@ MLang Frontend Bench Directory Uses Sorted Suite Order
 
 MLang Frontend Bench Directory Forwards Compact LinkerFlags
     [Documentation]    Verify bench directory mode forwards compact -L/-l and -Wl flags per-suite (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_dir_compact_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_dir_compact_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_dir_compact_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_compact_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_compact_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_dir_compact_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_compact_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4872,13 +4873,13 @@ MLang Frontend Bench Directory Forwards Compact LinkerFlags
 
 MLang Frontend Bench Directory Ignores OutputFlag
     [Documentation]    Verify bench directory mode ignores `-o <file>` (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_dir_ignore_o
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_dir_ignore_o
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_dir_ignore_o_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_ignore_o_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_dir_ignore_o_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_dir_ignore_o_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_ignore_o_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_dir_ignore_o_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4894,7 +4895,7 @@ MLang Frontend Bench Directory Ignores OutputFlag
     ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${chmod.rc}    0
     ${run}=    Run Process    ${frontend}    --backend    ${fake_backend}
-    ...    bench    ${suite_dir}    -o    ${OUTPUT DIR}/ignored_bench_dir_bin
+    ...    bench    ${suite_dir}    -o    ${ARTIFACT DIR}/ignored_bench_dir_bin
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${run.rc}    0
     ${log_text}=    Get File    ${fake_log}
@@ -4904,13 +4905,13 @@ MLang Frontend Bench Directory Ignores OutputFlag
 
 MLang Frontend Bench Ignores Colon Warning Flags
     [Documentation]    Verify bench mode does not forward -Wno-colon-if/-Wno-colon-while to backend suite invocations.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_nowarn
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_nowarn
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_bench_nowarn_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_nowarn_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_nowarn_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_bench_nowarn_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_nowarn_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_nowarn_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4935,13 +4936,13 @@ MLang Frontend Bench Ignores Colon Warning Flags
 
 MLang Frontend Bench SingleFile Forwards Colon Warning Flags
     [Documentation]    Verify bench single-file mode preserves -Wno-colon-if/-Wno-colon-while for backend compile.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_warn_single
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_warn_single
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${bench_file}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_warn_single.mla
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_warn_single_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_bench_warn_single_backend.log
+    ${bench_file}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_warn_single.mla
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_warn_single_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_bench_warn_single_backend.log
     ${bench_code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -4964,13 +4965,13 @@ MLang Frontend Bench SingleFile Forwards Colon Warning Flags
 
 MLang Frontend Directory Mode Ignores Output Flag
     [Documentation]    Verify directory suite mode does not forward -o to per-suite backend invocations (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_igno
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_igno
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_ignore_o_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_ignore_o_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_ignore_o_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_ignore_o_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_ignore_o_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_ignore_o_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -4993,13 +4994,13 @@ MLang Frontend Directory Mode Ignores Output Flag
 
 MLang Frontend Directory Mode Forwards Compact Linker Flags
     [Documentation]    Verify directory suite mode forwards compact -L<dir> and -l<name> linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_compact_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_compact_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_compact_link_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compact_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_compact_link_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_compact_link_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_compact_link_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -5024,13 +5025,13 @@ MLang Frontend Directory Mode Forwards Compact Linker Flags
 
 MLang Frontend Directory Mode Forwards Wl Flags
     [Documentation]    Verify directory suite mode forwards -Wl,<args> linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_wl
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_wl
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_wl_suite
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_wl_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_dir_wl_backend.log
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_wl_suite
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_wl_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_dir_wl_backend.log
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${test_code}=    Catenate    SEPARATOR=\n
@@ -5055,11 +5056,11 @@ MLang Frontend Directory Mode Forwards Wl Flags
 
 MLang Frontend Directory Mode Rejects Bare Wl Flag
     [Documentation]    Verify C++ parity: bare -Wl, (without payload) is an unknown option.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_wl_bare
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_wl_bare
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_wl_bare_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_wl_bare_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${test_code}=    Catenate    SEPARATOR=\n
@@ -5076,11 +5077,11 @@ MLang Frontend Directory Mode Rejects Bare Wl Flag
 
 MLang Frontend SingleFile Rejects Bare Wl Flag
     [Documentation]    Verify C++ parity: bare -Wl, is rejected in single-file test mode as unknown.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_wl_bare
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_wl_bare
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_wl_bare.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_wl_bare.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn single_wl_bare_test() -> i32 {
@@ -5095,19 +5096,19 @@ MLang Frontend SingleFile Rejects Bare Wl Flag
 
 MLang Frontend SingleFile Forwards Wl Flags
     [Documentation]    Verify C++ parity: single-file test mode forwards valid -Wl,<args> linker flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_wl
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_wl
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_wl.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_wl.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn single_wl_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_wl_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_wl_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_wl_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_wl_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5124,19 +5125,19 @@ MLang Frontend SingleFile Forwards Wl Flags
 
 MLang Frontend SingleFile Forwards Compact Linker Flags
     [Documentation]    Verify C++ parity: single-file test mode forwards compact -L<dir> and -l<name> flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_compact_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_compact_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_compact_link.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_compact_link.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn single_compact_link_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_compact_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_compact_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_compact_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_compact_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5154,19 +5155,19 @@ MLang Frontend SingleFile Forwards Compact Linker Flags
 
 MLang Frontend SingleFile Forwards Split Linker Flags
     [Documentation]    Verify C++ parity: single-file test mode forwards split -L <dir> and -l <name> flags.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_split_link
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_split_link
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_split_link.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_split_link.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn single_split_link_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_split_link_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_split_link_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_split_link_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_split_link_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5184,19 +5185,19 @@ MLang Frontend SingleFile Forwards Split Linker Flags
 
 MLang Frontend SingleFile Forwards OutputFlag
     [Documentation]    Verify C++ parity: single-file test mode forwards `-o <file>`.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_single_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_single_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_single_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_single_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn single_output_test() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_output_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_single_output_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_output_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_single_output_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5213,11 +5214,11 @@ MLang Frontend SingleFile Forwards OutputFlag
 
 MLang Frontend Directory Mode Rejects Unknown Option
     [Documentation]    Verify test/bench directory mode rejects unknown options instead of silently dropping them.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_dir_unknown
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_dir_unknown
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${suite_dir}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_dir_unknown_suite
+    ${suite_dir}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_dir_unknown_suite
     Run Keyword And Ignore Error    Remove Directory    ${suite_dir}    recursive=True
     Create Directory    ${suite_dir}
     ${bench_code}=    Catenate    SEPARATOR=\n
@@ -5233,7 +5234,7 @@ MLang Frontend Directory Mode Rejects Unknown Option
 
 MLang Frontend Bench Missing Value Uses Unknown Option Error
     [Documentation]    Verify missing value for bench options is reported as unknown option (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_missing
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_missing
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -5250,11 +5251,11 @@ MLang Frontend Bench Missing Value Uses Unknown Option Error
 
 MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
     [Documentation]    Verify missing value for -o/-L/-l in test mode reports unknown option and usage (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_missing_link_or_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_missing_link_or_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_missing_link_or_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn missing_link_or_output_value_test() -> i32 {
@@ -5285,11 +5286,11 @@ MLang Frontend Missing LinkOrOutput Value Uses Unknown Option Error
 
 MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown Option Error
     [Documentation]    Verify missing value for -o/-L/-l in run tests mode reports unknown option and usage (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_runtests_missing_link_or_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_runtests_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/frontend_runtests_missing_link_or_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_runtests_missing_link_or_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    \#[test]
     ...    fn runtests_missing_link_or_output_value_test() -> i32 {
@@ -5320,11 +5321,11 @@ MLang Frontend RunTests Missing LinkOrOutput Value Uses Unknown Option Error
 
 MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown Option Error
     [Documentation]    Verify missing value for -o/-L/-l in bench mode reports unknown option and usage (C++ parity).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_bench_missing_link_or_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/bench_missing_link_or_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/bench_missing_link_or_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5354,11 +5355,11 @@ MLang Frontend Bench Missing LinkOrOutput Value Uses Unknown Option Error
 
 MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown Option Error
     [Documentation]    Verify C++ parity: missing value for -o/-L/-l in compile mode reports unknown option and usage.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_missing_link_or_output
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_missing_link_or_output
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_missing_link_or_output.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_missing_link_or_output.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5388,7 +5389,7 @@ MLang Frontend Compile Missing LinkOrOutput Value Uses Unknown Option Error
 
 MLang Frontend Unknown Option Prints Usage
     [Documentation]    Verify unknown test/bench options print usage text in addition to error (C++ parity style).
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_unknown_usage
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_unknown_usage
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
@@ -5401,11 +5402,11 @@ MLang Frontend Unknown Option Prints Usage
 
 MLang Frontend Compile Mode Rejects Bench Flags
     [Documentation]    Verify C++ parity: non-test compile mode rejects bench-only flags as unknown options.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_benchflag_reject
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_benchflag_reject
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_benchflag_reject.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_benchflag_reject.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5420,11 +5421,11 @@ MLang Frontend Compile Mode Rejects Bench Flags
 
 MLang Frontend Compile Mode Rejects Inline Bench Flags
     [Documentation]    Verify C++ parity: non-test compile mode rejects inline bench flag forms.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_inline_benchflag_reject
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_inline_benchflag_reject
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_inline_benchflag_reject.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_inline_benchflag_reject.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5440,11 +5441,11 @@ MLang Frontend Compile Mode Rejects Inline Bench Flags
 
 MLang Frontend Compile Mode Rejects NoRun Flag
     [Documentation]    Verify C++ parity: non-test compile mode rejects --no-run as unknown option.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_norun_reject
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_norun_reject
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_norun_reject.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_norun_reject.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5459,18 +5460,18 @@ MLang Frontend Compile Mode Rejects NoRun Flag
 
 MLang Frontend Compile Mode Allows NoRun After Tests
     [Documentation]    Verify C++ left-to-right parity: `--tests` enables later `--no-run` in compile-mode argument stream.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_allow_norun_after_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_allow_norun_after_tests
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_allow_norun_after_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_allow_norun_after_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_allow_norun_after_tests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_allow_norun_after_tests_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_allow_norun_after_tests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_allow_norun_after_tests_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -5488,11 +5489,11 @@ MLang Frontend Compile Mode Allows NoRun After Tests
 
 MLang Frontend Compile Mode Rejects NoRun Before Tests
     [Documentation]    Verify C++ left-to-right parity: `--no-run` before `--tests` remains unknown in compile mode.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_reject_norun_before_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_reject_norun_before_tests
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_reject_norun_before_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_reject_norun_before_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5507,18 +5508,18 @@ MLang Frontend Compile Mode Rejects NoRun Before Tests
 
 MLang Frontend Compile Mode Allows BenchFlags After Tests
     [Documentation]    Verify C++ left-to-right parity: `--tests` enables later bench flags in compile-mode stream.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_allow_bench_after_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_allow_bench_after_tests
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_allow_bench_after_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_allow_bench_after_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_allow_bench_after_tests_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_allow_bench_after_tests_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_allow_bench_after_tests_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_allow_bench_after_tests_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -5537,11 +5538,11 @@ MLang Frontend Compile Mode Allows BenchFlags After Tests
 
 MLang Frontend Compile Mode Rejects BenchFlags Before Tests
     [Documentation]    Verify C++ left-to-right parity: bench flags before `--tests` are unknown in compile mode.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_reject_bench_before_tests
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_reject_bench_before_tests
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_reject_bench_before_tests.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_reject_bench_before_tests.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5556,18 +5557,18 @@ MLang Frontend Compile Mode Rejects BenchFlags Before Tests
 
 MLang Frontend Compile Mode TestsFlag Invalid BenchValue Fails Early
     [Documentation]    Verify C++ parity: after --tests in compile stream, invalid bench values fail with explicit diagnostics.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_invalid_bench_value
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_tests_invalid_bench_value
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_invalid_bench_value.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_tests_invalid_bench_value.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_invalid_bench_value_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_invalid_bench_value_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_invalid_bench_value_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_invalid_bench_value_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5585,18 +5586,18 @@ MLang Frontend Compile Mode TestsFlag Invalid BenchValue Fails Early
 
 MLang Frontend Compile Mode TestsFlag BenchValue Is Normalized
     [Documentation]    Verify C++ parity: after --tests in compile stream, bench values are clamped/normalized before forwarding.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_bench_normalize
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_tests_bench_normalize
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_bench_normalize.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_tests_bench_normalize.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_normalize_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_normalize_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_bench_normalize_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_bench_normalize_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" > "${fake_log}"
@@ -5614,18 +5615,18 @@ MLang Frontend Compile Mode TestsFlag BenchValue Is Normalized
 
 MLang Frontend Compile Mode TestsFlag Rejects Inline BenchForms
     [Documentation]    Verify C++ parity: after --tests in compile stream, inline bench forms are unknown options.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_inline_bench_reject
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_tests_inline_bench_reject
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_inline_bench_reject.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_tests_inline_bench_reject.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_inline_bench_reject_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_inline_bench_reject_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_inline_bench_reject_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_inline_bench_reject_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5645,18 +5646,18 @@ MLang Frontend Compile Mode TestsFlag Rejects Inline BenchForms
 
 MLang Frontend Compile Mode TestsFlag BenchValue Overflow Fails Early
     [Documentation]    Verify C++ parity: after --tests in compile stream, out-of-range bench values are rejected early.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_bench_overflow
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_tests_bench_overflow
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_bench_overflow.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_tests_bench_overflow.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
     ...    }
     Create File    ${src}    ${code}
-    ${fake_backend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_overflow_backend.sh
-    ${fake_log}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/fake_compile_tests_bench_overflow_backend.log
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_bench_overflow_backend.sh
+    ${fake_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_compile_tests_bench_overflow_backend.log
     ${script}=    Catenate    SEPARATOR=\n
     ...    \#!/bin/sh
     ...    echo "$@" >> "${fake_log}"
@@ -5683,11 +5684,11 @@ MLang Frontend Compile Mode TestsFlag BenchValue Overflow Fails Early
 
 MLang Frontend Compile Mode TestsFlag BenchValue Position Treats VersionHelp As Value
     [Documentation]    Verify C++ parity: after --tests in compile stream, --version/--help in bench value slot are invalid values.
-    ${frontend}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/mlang_frontend_mla_bin_compile_tests_bench_valuepos
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_tests_bench_valuepos
     ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build_front.rc}    0
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/compile_tests_bench_valuepos.mla
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_tests_bench_valuepos.mla
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
     ...        return 0;
@@ -5707,7 +5708,7 @@ MLang Frontend Compile Mode TestsFlag BenchValue Position Treats VersionHelp As 
 Testing Mock Example Runs Correctly
     [Documentation]    Build and run examples/testing_mock_example.mla and verify
     ...                std::testing mock expectations pass.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/testing_mock_example_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/testing_mock_example_bin
     ${build}=    Run Process    ${MLANG}    examples/testing_mock_example.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5720,7 +5721,7 @@ Testing Mock Example Runs Correctly
 Argparser Demo Runs Correctly
     [Documentation]    Build and run examples/argparser_demo.mla with various CLI args;
     ...                verify flags, options, and positionals are parsed correctly.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/argparser_demo_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/argparser_demo_bin
     ${build}=    Run Process    ${MLANG}    examples/argparser_demo.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5755,7 +5756,7 @@ Slice Example Runs Correctly
     [Documentation]    Build and run examples/slice.mla; verify key output lines
     ...                for [T;N] type annotation, [val;N] fill literal, enumerate
     ...                loop forms, iter()/into_iter() adaptors, and len().
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/slice_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/slice_bin
     ${build}=    Run Process    ${MLANG}    examples/slice.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5789,7 +5790,7 @@ Slice Example Runs Correctly
 Lambda Fold Patterns Demo Runs Correctly
     [Documentation]    Build and run examples/lambda_fold_patterns.mla and
     ...                verify typed lambda and fold-expression outputs.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/lambda_fold_patterns_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/lambda_fold_patterns_bin
     ${build}=    Run Process    ${MLANG}    examples/lambda_fold_patterns.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5806,7 +5807,7 @@ Lambda Fold Patterns Demo Runs Correctly
 Lambda Fold Advanced Demo Runs Correctly
     [Documentation]    Build and run examples/lambda_fold_advanced.mla and
     ...                verify nested lambda generation and fold reductions.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/lambda_fold_advanced_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/lambda_fold_advanced_bin
     ${build}=    Run Process    ${MLANG}    examples/lambda_fold_advanced.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5822,8 +5823,8 @@ Lambda Fold Advanced Demo Runs Correctly
 Printf And GetChar Demo
     [Documentation]    Verify std::printf (printf/eprintf/fprintf) compile and
     ...                produce correct output; get_char is verified via compile only.
-    ${src}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/printf_demo.mla
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/printf_demo_bin
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/printf_demo.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/printf_demo_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    mod std::printf;
     ...    mod std::io;
@@ -5854,7 +5855,7 @@ Fs Lines Demo Runs Correctly
     [Documentation]    Build and run examples/std_fs_lines.mla; verify that
     ...                BufReader filters comment lines, counts data rows,
     ...                prints each data line, and finds entries by content.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_fs_lines_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_fs_lines_bin
     ${build}=    Run Process    ${MLANG}    examples/std_fs_lines.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5876,7 +5877,7 @@ Fs Seek Demo Runs Correctly
     [Documentation]    Build and run examples/std_fs_seek.mla; verify
     ...                SeekFrom::start/current/end, File::tell, and
     ...                File::size all produce the expected output.
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_fs_seek_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_fs_seek_bin
     ${build}=    Run Process    ${MLANG}    examples/std_fs_seek.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5896,7 +5897,7 @@ Fs Rw Demo Runs Correctly
     [Documentation]    Build and run examples/std_fs_rw.mla; verify
     ...                File::create, File::append, and File::open_rw
     ...                (in-place field patching with seek+write_bytes).
-    ${bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_fs_rw_bin
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_fs_rw_bin
     ${build}=    Run Process    ${MLANG}    examples/std_fs_rw.mla    -o    ${bin}
     ...    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0
@@ -5916,10 +5917,10 @@ Fs Rw Demo Runs Correctly
 Multithreaded Net Server Client Roundtrip
     [Documentation]    Build and run multithreaded std::net server/client examples
     ...                and verify concurrent echo roundtrips succeed.
-    ${server_bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_server_bin
-    ${client_bin}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_client_bin
-    ${server_out}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_server.out
-    ${server_err}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/std_net_mt_server.err
+    ${server_bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_net_mt_server_bin
+    ${client_bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_net_mt_client_bin
+    ${server_out}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_net_mt_server.out
+    ${server_err}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/std_net_mt_server.err
     ${PORT}=    Set Variable    18788
 
     ${build_server}=    Run Process    ${MLANG}    examples/std_net_mt_server.mla    -o    ${server_bin}
@@ -5962,7 +5963,7 @@ Pkg Fetch Build Parity (CPP vs MLA)
     [Documentation]    Create a local git C dependency and verify both
     ...                package-manager backends (MLANG_PKG_IMPL=cpp|mla)
     ...                pass init/add/fetch/build and produce runnable binaries.
-    ${base}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/pkg_parity
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_parity
     ${dep_repo}=    Catenate    SEPARATOR=    ${base}/depmini
     ${cpp_proj}=    Catenate    SEPARATOR=    ${base}/pkg_cpp_app
     ${mla_proj}=    Catenate    SEPARATOR=    ${base}/pkg_mla_app
@@ -6027,7 +6028,7 @@ Pkg PkgConfig Parity (CPP vs MLA)
     [Documentation]    Verify pkg-config based c-dependencies behave identically
     ...                for both package-manager backends using a local fake
     ...                pkg-config executable.
-    ${base}=    Catenate    SEPARATOR=    ${OUTPUT DIR}/pkg_cfg_parity
+    ${base}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/pkg_cfg_parity
     ${fakebin}=    Catenate    SEPARATOR=    ${base}/fakebin
     ${cpp_proj}=    Catenate    SEPARATOR=    ${base}/pkgcfg_cpp_app
     ${mla_proj}=    Catenate    SEPARATOR=    ${base}/pkgcfg_mla_app
@@ -6085,3 +6086,14 @@ Pkg PkgConfig Parity (CPP vs MLA)
     ${mla_run}=    Run Process    ${mla_proj}/build/pkgcfg_mla_app    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${mla_run.rc}    0
     Should Contain    ${mla_run.stdout}    pkg workflow ok
+
+*** Keywords ***
+Initialize Artifact Dir
+    ${is_default_out}=    Run Keyword And Return Status
+    ...    Should Be Equal    ${OUTPUT DIR}    ${EXECDIR}
+    ${artifact_dir}=    Set Variable If
+    ...    ${is_default_out}
+    ...    ${EXECDIR}/artifacts/robot/generated
+    ...    ${OUTPUT DIR}
+    Create Directory    ${artifact_dir}
+    Set Suite Variable    ${ARTIFACT DIR}    ${artifact_dir}
