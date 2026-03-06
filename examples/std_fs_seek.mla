@@ -20,15 +20,15 @@ fn main() -> i32 {
 
     // write 20 bytes of known content: "0123456789ABCDEFGHIJ"
     let wr: Result<i32, string> = write_all_text(path, "0123456789ABCDEFGHIJ");
-    if wr.is_err(): { println!("error: write failed"); return 1; }
+    if wr.is_err() { println!("error: write failed"); return 1; }
 
     let fr: Result<File, string> = File::open(path);
-    if fr.is_err(): { println!("error: open failed"); return 1; }
+    if fr.is_err() { println!("error: open failed"); return 1; }
     var f: File = fr.unwrap();
 
     // -- size -------------------------------------------------------------
     let sz_r: Result<i64, string> = f.size();
-    if sz_r.is_err(): { f.close(); return 1; }
+    if sz_r.is_err() { f.close(); return 1; }
     println!("size={}", sz_r.unwrap());
 
     var buf: string = String::with_capacity(16);
@@ -36,34 +36,34 @@ fn main() -> i32 {
     // -- SeekFrom::start --------------------------------------------------
     // read 4 bytes from the very beginning
     let sk1: Result<i64, string> = f.seek(SeekFrom::start(0));
-    if sk1.is_err(): { f.close(); return 1; }
+    if sk1.is_err() { f.close(); return 1; }
     let r1: Result<i64, string> = f.read_bytes(buf, 4);
     println!("start(0)+4: {}", buf);       // 0123
 
     // jump to byte 10 and read 4
     let sk2: Result<i64, string> = f.seek(SeekFrom::start(10));
-    if sk2.is_err(): { f.close(); return 1; }
+    if sk2.is_err() { f.close(); return 1; }
     let r2: Result<i64, string> = f.read_bytes(buf, 4);
     println!("start(10)+4: {}", buf);      // ABCD
 
     // -- SeekFrom::end ----------------------------------------------------
     // read the last 4 bytes
     let sk3: Result<i64, string> = f.seek(SeekFrom::end(-4));
-    if sk3.is_err(): { f.close(); return 1; }
+    if sk3.is_err() { f.close(); return 1; }
     let r3: Result<i64, string> = f.read_bytes(buf, 4);
     println!("end(-4)+4: {}", buf);        // GHIJ
 
     // -- tell after reading to EOF ----------------------------------------
     let tell_r: Result<i64, string> = f.tell();
-    if tell_r.is_err(): { f.close(); return 1; }
+    if tell_r.is_err() { f.close(); return 1; }
     println!("tell={}", tell_r.unwrap());  // 20
 
     // -- SeekFrom::current ------------------------------------------------
     // position at byte 4, skip 2 forward, then read 4
     let sk4: Result<i64, string> = f.seek(SeekFrom::start(4));
-    if sk4.is_err(): { f.close(); return 1; }
+    if sk4.is_err() { f.close(); return 1; }
     let sk5: Result<i64, string> = f.seek(SeekFrom::current(2));
-    if sk5.is_err(): { f.close(); return 1; }
+    if sk5.is_err() { f.close(); return 1; }
     let r4: Result<i64, string> = f.read_bytes(buf, 4);
     println!("start(4),skip(2),+4: {}", buf);  // 6789
 

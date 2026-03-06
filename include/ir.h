@@ -66,6 +66,10 @@ public:
     {
         warnPlainColonWhile = enabled;
     }
+    void setWarnResultUnwrap(bool enabled)
+    {
+        warnResultUnwrap = enabled;
+    }
 
 private:
     llvm::LLVMContext& context;
@@ -123,6 +127,7 @@ private:
     bool includeTests = true;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
+    bool warnResultUnwrap = true;
     std::string sourceFileName;
 
     // Visibility tracking for functions

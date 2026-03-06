@@ -15141,7 +15141,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         return it != mangledToGenericName.end() && it->second == "Result";
     };
 
-    if(node->methodName == "unwrap" && isResultType(structTypeName))
+    if(node->methodName == "unwrap" && isResultType(structTypeName) &&
+       warnResultUnwrap)
     {
         reportWarning(node->line, node->col,
                       "Result.unwrap() may panic on Err; consider "

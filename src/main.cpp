@@ -55,6 +55,7 @@ void printUsage(const char* programName)
               << "  --tests       Compile and run #[test] for input path/file\n"
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
               << "  -Wno-colon-while Suppress warning for plain while with ':'\n"
+              << "  -Wno-unwrap Suppress warning for Result.unwrap() usage\n"
               << "  -L <dir>      Add a library search path for linking\n"
               << "  -l <name>     Link with library (e.g. -l m)\n"
               << "  -Wl,<args>    Pass raw linker arguments\n"
@@ -1049,6 +1050,7 @@ int main(int argc, char** argv)
     bool debugMode = false;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
+    bool warnResultUnwrap = true;
     std::vector<std::string> linkArgs;
 
     for(int i = argStart; i < argc; ++i)
@@ -1147,6 +1149,10 @@ int main(int argc, char** argv)
         {
             warnPlainColonWhile = false;
         }
+        else if(arg == "-Wno-unwrap")
+        {
+            warnResultUnwrap = false;
+        }
         else if(arg == "--no-run" && testMode)
         {
             runTests = false;
@@ -1192,6 +1198,19 @@ int main(int argc, char** argv)
         // Tests intentionally use colon-form if/while in many fixtures.
         warnPlainColonIf = false;
         warnPlainColonWhile = false;
+    }
+    if(const char* noColonEnv = std::getenv("MLANG_NO_COLON_WARNINGS"))
+    {
+        if(noColonEnv[0] != '\0' && std::string(noColonEnv) != "0")
+        {
+            warnPlainColonIf = false;
+            warnPlainColonWhile = false;
+        }
+    }
+    if(const char* noUnwrapEnv = std::getenv("MLANG_NO_UNWRAP_WARNINGS"))
+    {
+        if(noUnwrapEnv[0] != '\0' && std::string(noUnwrapEnv) != "0")
+            warnResultUnwrap = false;
     }
 
     if(inputFile.empty())
@@ -1383,6 +1402,7 @@ int main(int argc, char** argv)
         generator.setBenchmarkWarmupIterations(benchWarmup);
         generator.setWarnPlainColonIf(warnPlainColonIf);
         generator.setWarnPlainColonWhile(warnPlainColonWhile);
+        generator.setWarnResultUnwrap(warnResultUnwrap);
         if(!testMode)
             generator.setIncludeTests(includeTests);
 

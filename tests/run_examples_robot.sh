@@ -8,16 +8,25 @@ LOG_LEVEL="${ROBOT_LOG_LEVEL:-info}"
 COLOR_LOGS="${ROBOT_COLOR_LOGS:-auto}"
 ROBOT_JOBS="${ROBOT_JOBS:-}"
 ROBOT_TIME_FORMAT="${ROBOT_TIME_FORMAT:-full}"
+ROBOT_ALLOW_FLAKY_PASS="${ROBOT_ALLOW_FLAKY_PASS:-0}"
+ROBOT_SHOW_RUN="${ROBOT_SHOW_RUN:-0}"
 PROGRESS_LISTENER="$ROOT_DIR/tests/robot_progress_listener.py"
 PABOT_FILTER="$ROOT_DIR/tests/pabot_progress_filter.py"
+PABOT_ROBOT_WRAPPER="$ROOT_DIR/tests/pabot_robot_wrapper.py"
+PARALLEL_RUNNER="$ROOT_DIR/tests/robot_parallel_runner.py"
+
+if [[ "$ROBOT_RESULTS_DIR" != /* ]]; then
+  ROBOT_RESULTS_DIR="$ROOT_DIR/$ROBOT_RESULTS_DIR"
+fi
 
 usage() {
   cat <<'USAGE'
-Usage: run_examples_robot.sh [-j <n>] [--jobs <n>] [--time-format <full|hms|off>] [--log-level <error|info|verbose|debug>] [--color-logs] [--no-color-logs] [--help]
+Usage: run_examples_robot.sh [-j <n>] [--jobs <n>] [--time-format <full|hms|off>] [--show-run] [--log-level <error|info|verbose|debug>] [--color-logs] [--no-color-logs] [--help]
 
 Options:
   -j, --jobs <n>     Number of parallel jobs for robot tests (default: CPU cores)
   --time-format <f>  Timestamp format in progress lines: full, hms, off (default: full)
+  --show-run         Show [RUN ] progress rows (default: hidden)
   --log-level <lvl>  Log verbosity: error, info, verbose, debug (default: info)
   --color-logs       Force colored log output
   --no-color-logs    Disable colored log output
@@ -248,6 +257,10 @@ while [[ $# -gt 0 ]]; do
       ROBOT_TIME_FORMAT="${1#*=}"
       shift
       ;;
+    --show-run)
+      ROBOT_SHOW_RUN=1
+      shift
+      ;;
     --color-logs)
       COLOR_LOGS="always"
       shift
@@ -373,17 +386,26 @@ fi
 log_verbose "ROBOT_CONSOLE_MODE=$CONSOLE_MODE ROBOT_CONSOLE_COLORS=$CONSOLE_COLORS ROBOT_CONSOLE_WIDTH=$CONSOLE_WIDTH"
 
 RUN_CMD=("${ROBOT_CMD[@]}")
+USE_INTERNAL_PARALLEL=0
 if [[ "$ROBOT_JOBS" -gt 1 ]]; then
-  if [[ ${#PABOT_CMD[@]} -eq 0 ]]; then
-    log_error "parallel robot jobs requested (-j $ROBOT_JOBS) but pabot is not available."
-    log_error "falling back to serial robot run (jobs=1)."
-    log_error "install with: python3 -m pip install -r tests/requirements.txt"
-    ROBOT_JOBS=1
+  if [[ -f "$PARALLEL_RUNNER" ]]; then
+    USE_INTERNAL_PARALLEL=1
   else
-    RUN_CMD=("${PABOT_CMD[@]}" --processes "$ROBOT_JOBS" --testlevelsplit)
-    if [[ "$CONSOLE_MODE_EXPLICIT" -eq 0 ]]; then
-      # Keep pabot worker chatter low; listener provides live progress.
-      CONSOLE_MODE="quiet"
+    if [[ ${#PABOT_CMD[@]} -eq 0 ]]; then
+      log_error "parallel robot jobs requested (-j $ROBOT_JOBS) but no parallel runner is available."
+      log_error "falling back to serial robot run (jobs=1)."
+      log_error "install with: python3 -m pip install -r tests/requirements.txt"
+      ROBOT_JOBS=1
+    else
+      if [[ -f "$PABOT_ROBOT_WRAPPER" ]]; then
+        RUN_CMD=("${PABOT_CMD[@]}" --processes "$ROBOT_JOBS" --testlevelsplit --no-pabotlib --command "$PYTHON_BIN" "$PABOT_ROBOT_WRAPPER" --end-command)
+      else
+        RUN_CMD=("${PABOT_CMD[@]}" --processes "$ROBOT_JOBS" --testlevelsplit --no-pabotlib --command "${ROBOT_CMD[@]}" --end-command)
+      fi
+      if [[ "$CONSOLE_MODE_EXPLICIT" -eq 0 ]]; then
+        # Keep pabot worker chatter low; listener provides live progress.
+        CONSOLE_MODE="quiet"
+      fi
     fi
   fi
 fi
@@ -398,34 +420,50 @@ mkdir -p "$ROBOT_RESULTS_DIR"
 start_ts="$(date +%s)"
 set +e
 if [[ "$ROBOT_JOBS" -gt 1 ]]; then
-  total_tests="$(detect_robot_total_tests)"
-  if [[ -f "$PABOT_FILTER" ]]; then
-    (
-      cd "$ROBOT_RESULTS_DIR"
-      ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
-        --console "$CONSOLE_MODE" \
-        --consolecolors "$CONSOLE_COLORS" \
-        --consolewidth "$CONSOLE_WIDTH" \
-        --variable MLANG:"$MLANG_BIN" \
-        --outputdir "$ROBOT_RESULTS_DIR" \
-        "$ROOT_DIR/tests/robot/examples.robot"
-    ) 2>&1 | "$PYTHON_BIN" "$PABOT_FILTER" --total "$total_tests" --color "$COLOR_LOGS" --time-format "$ROBOT_TIME_FORMAT"
-    rc=${PIPESTATUS[0]}
-  else
-    (
-      cd "$ROBOT_RESULTS_DIR"
-      ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
-        --console "$CONSOLE_MODE" \
-        --consolecolors "$CONSOLE_COLORS" \
-        --consolewidth "$CONSOLE_WIDTH" \
-        --variable MLANG:"$MLANG_BIN" \
-        --outputdir "$ROBOT_RESULTS_DIR" \
-        "$ROOT_DIR/tests/robot/examples.robot"
-    )
+  if [[ "$USE_INTERNAL_PARALLEL" -eq 1 ]]; then
+    ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
+    PYTHONUNBUFFERED=1 "$PYTHON_BIN" "$PARALLEL_RUNNER" \
+      --jobs "$ROBOT_JOBS" \
+      --mlang "$MLANG_BIN" \
+      --suite "$ROOT_DIR/tests/robot/examples.robot" \
+      --repo-root "$ROOT_DIR" \
+      --outputdir "$ROBOT_RESULTS_DIR" \
+      --time-format "$ROBOT_TIME_FORMAT" \
+      --color "$COLOR_LOGS" \
+      --python-bin "$PYTHON_BIN" \
+      $([[ "$ROBOT_SHOW_RUN" == "1" ]] && echo "--show-run") \
+      $([[ "$ROBOT_ALLOW_FLAKY_PASS" == "1" ]] && echo "--allow-flaky-pass")
     rc=$?
+  else
+    total_tests="$(detect_robot_total_tests)"
+    if [[ -f "$PABOT_FILTER" ]]; then
+      ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
+      MLANG_PABOT_ARTIFACT_ROOT="$ROBOT_RESULTS_DIR/worker_artifacts" \
+      PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
+        --console "$CONSOLE_MODE" \
+        --consolecolors "$CONSOLE_COLORS" \
+        --consolewidth "$CONSOLE_WIDTH" \
+        --variable MLANG:"$MLANG_BIN" \
+        --outputdir "$ROBOT_RESULTS_DIR" \
+        "$ROOT_DIR/tests/robot/examples.robot" 2>&1 | \
+        "$PYTHON_BIN" "$PABOT_FILTER" --total "$total_tests" --color "$COLOR_LOGS" --time-format "$ROBOT_TIME_FORMAT"
+      rc=${PIPESTATUS[0]}
+    else
+      ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
+      MLANG_PABOT_ARTIFACT_ROOT="$ROBOT_RESULTS_DIR/worker_artifacts" \
+      PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
+        --console "$CONSOLE_MODE" \
+        --consolecolors "$CONSOLE_COLORS" \
+        --consolewidth "$CONSOLE_WIDTH" \
+        --variable MLANG:"$MLANG_BIN" \
+        --outputdir "$ROBOT_RESULTS_DIR" \
+        "$ROOT_DIR/tests/robot/examples.robot"
+      rc=$?
+    fi
   fi
 else
-  ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
+  ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
+  PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
     --console "$CONSOLE_MODE" \
     --consolecolors "$CONSOLE_COLORS" \
     --consolewidth "$CONSOLE_WIDTH" \

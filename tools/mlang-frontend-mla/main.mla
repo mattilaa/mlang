@@ -184,7 +184,7 @@ fn build_shell_command(program: string, args: list<string>) -> string {
 }
 
 fn run_shell_inherit(cmd: string) -> i32 {
-    return run_inherit("/bin/sh", ["-lc", cmd]);
+    return run_inherit("/bin/sh", ["-c", cmd]);
 }
 
 fn split_lines(content: string) -> list<string> {
@@ -400,7 +400,7 @@ fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> 
 
 fn collect_dir_mla_files(path: string) -> list<string> {
     let cmd: string = format!("find {} -maxdepth 1 -type f -name '*.mla' | sort", shell_quote(path));
-    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
+    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-c", cmd]);
     if rr.is_err() {
         return [];
     }
@@ -409,7 +409,7 @@ fn collect_dir_mla_files(path: string) -> list<string> {
 
 fn path_is_directory(path: string) -> i32 {
     let cmd: string = format!("test -d {}", shell_quote(path));
-    let rc: i32 = run_inherit("/bin/sh", ["-lc", cmd]);
+    let rc: i32 = run_inherit("/bin/sh", ["-c", cmd]);
     return rc == 0 ? 1 : 0;
 }
 
@@ -423,7 +423,7 @@ fn file_mtime_ge(lhs: string, rhs: string) -> i32 {
     cmd = concat(cmd, qlhs);
     cmd = concat(cmd, " -ot ");
     cmd = concat(cmd, qrhs);
-    let rc: i32 = run_inherit("/bin/sh", ["-lc", cmd]);
+    let rc: i32 = run_inherit("/bin/sh", ["-c", cmd]);
     return rc == 0 ? 1 : 0;
 }
 
@@ -436,7 +436,7 @@ fn abspath(path: string) -> string {
     }
     if len(trim(dir)) == 0 { dir = "."; }
     let cmd: string = format!("cd {} && pwd", shell_quote(dir));
-    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
+    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-c", cmd]);
     if rr.is_err() {
         return dir;
     }
@@ -551,12 +551,11 @@ fn find_manifest_path(start_dir: string) -> string {
 }
 
 fn getenv_value(name: string) -> string {
-    let cmd: string = format!("printf '%s' \"${}\"", name);
-    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-lc", cmd]);
+    let rr: Result<string, string> = run_capture_stdout("/usr/bin/printenv", [name]);
     if rr.is_err() {
         return String::new();
     }
-    return rr.unwrap();
+    return trim(rr.unwrap());
 }
 
 fn tiny_hash_u31(s: string) -> i64 {
@@ -591,7 +590,8 @@ fn tiny_hash_u31_alt(s: string) -> i64 {
 }
 
 fn pkg_frontend_bin_path(backend: string, src: string) -> string {
-    let seed: string = format!("{}|{}", backend, src);
+    let cache_key: string = getenv_value("MLANG_PKG_CACHE_KEY");
+    let seed: string = format!("{}|{}|{}", backend, src, cache_key);
     let h1: i64 = tiny_hash_u31(seed);
     let h2: i64 = tiny_hash_u31_alt(seed);
     let bl: i64 = len(backend);
@@ -614,7 +614,7 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     let src: string = find_pkg_frontend_source(backend);
     if len(src) == 0 { return -1; }
     let tmp_bin: string = pkg_frontend_bin_path(backend, src);
-    let need_compile: i32 = !(file_exists(tmp_bin) == 1 && file_mtime_ge(tmp_bin, src) == 1);
+    let need_compile: i32 = 1;
     if need_compile == 1 {
         let compile_base: list<string> = [
             src,
@@ -626,11 +626,6 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
         let compile_cmd: string = build_shell_command(backend, compile_args);
         let compile_rc: i32 = run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", compile_cmd));
         if compile_rc != 0 {
-            if file_exists(tmp_bin) == 0 {
-                return -1;
-            }
-        }
-        if file_exists(tmp_bin) == 0 {
             return -1;
         }
     }
@@ -641,6 +636,14 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     }
     let run_cmd: string = build_shell_command(tmp_bin, run_args);
     return run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", run_cmd));
+}
+
+fn backend_can_run_pkg_mla(backend: string) -> i32 {
+    let be_name: string = basename(backend);
+    if contains(be_name, "mlang") == 1 {
+        return 1;
+    }
+    return 0;
 }
 
 fn clone_args(args: list<string>) -> list<string> {
@@ -1032,7 +1035,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         if len(impl_val) == 0 || eq(impl_val, "mla") == 1 {
             prefer_mla = 1;
         }
-        if prefer_mla == 1 && force_cpp == 0 {
+        if prefer_mla == 1 && force_cpp == 0 && backend_can_run_pkg_mla(st.backend) == 1 {
             var pkg_args: list<string> = [];
             let pkg_n: i64 = passthrough.len();
             for pi in 0..pkg_n {
@@ -1074,6 +1077,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         var compile_test_mode: i32 = 0;
         var compile_test_short_circuit: i32 = 0;
         var saw_compile_input: i32 = 0;
+        var saw_compile_help_or_version: i32 = 0;
         var has_no_colon_if: i32 = 0;
         var has_no_colon_while: i32 = 0;
         var ci: i64 = 0;
@@ -1143,6 +1147,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 continue;
             }
             compile_in.push(ca);
+            if eq(ca, "--help") == 1 || eq(ca, "-h") == 1 || eq(ca, "--version") == 1 {
+                saw_compile_help_or_version = 1;
+            }
             if eq(ca, "-Wno-colon-if") == 1 {
                 has_no_colon_if = 1;
             }
@@ -1154,7 +1161,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             }
             ci = ci + 1;
         }
-        if compile_test_mode == 0 && saw_compile_input == 0 {
+        if compile_test_mode == 0 && saw_compile_input == 0 && saw_compile_help_or_version == 0 {
             eprintln!("Error: No input file specified");
             print_usage(program);
             return 1;
