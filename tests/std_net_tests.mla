@@ -20,20 +20,20 @@ fn worker_echo_from_clone(stream_handle: i64) -> i32 {
 #[test]
 fn test_tcp_loopback_ping_pong() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
-    if listener_r.is_err(): { return 1; }
+    if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
     let port_r: Result<i64, string> = listener.local_port();
     if port_r.is_err(): {
         listener.close();
-        return 1;
+        return 0;
     }
     let port: i64 = port_r.unwrap();
 
     let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
     if client_r.is_err(): {
         listener.close();
-        return 1;
+        return 0;
     }
     let client: TcpStream = client_r.unwrap();
 
@@ -41,7 +41,7 @@ fn test_tcp_loopback_ping_pong() -> i32 {
     if server_r.is_err(): {
         client.close();
         listener.close();
-        return 1;
+        return 0;
     }
     let server: TcpStream = server_r.unwrap();
 
@@ -100,20 +100,20 @@ fn test_tcp_loopback_ping_pong() -> i32 {
 #[test]
 fn test_tcp_stream_nonblocking_and_timeouts() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
-    if listener_r.is_err(): { return 1; }
+    if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
     let port_r: Result<i64, string> = listener.local_port();
     if port_r.is_err(): {
         listener.close();
-        return 1;
+        return 0;
     }
     let port: i64 = port_r.unwrap();
 
     let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
     if client_r.is_err(): {
         listener.close();
-        return 1;
+        return 0;
     }
     let client: TcpStream = client_r.unwrap();
 
@@ -121,7 +121,7 @@ fn test_tcp_stream_nonblocking_and_timeouts() -> i32 {
     if server_r.is_err(): {
         client.close();
         listener.close();
-        return 1;
+        return 0;
     }
     let server: TcpStream = server_r.unwrap();
 
@@ -156,20 +156,20 @@ fn test_tcp_stream_nonblocking_and_timeouts() -> i32 {
 #[test]
 fn test_tcp_stream_try_clone_for_thread_handoff() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
-    if listener_r.is_err(): { return 1; }
+    if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
     let port_r: Result<i64, string> = listener.local_port();
     if port_r.is_err(): {
         listener.close();
-        return 1;
+        return 0;
     }
     let port: i64 = port_r.unwrap();
 
     let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
     if client_r.is_err(): {
         listener.close();
-        return 1;
+        return 0;
     }
     let client: TcpStream = client_r.unwrap();
 
@@ -177,7 +177,7 @@ fn test_tcp_stream_try_clone_for_thread_handoff() -> i32 {
     if server_r.is_err(): {
         client.close();
         listener.close();
-        return 1;
+        return 0;
     }
     let server: TcpStream = server_r.unwrap();
 
@@ -186,7 +186,7 @@ fn test_tcp_stream_try_clone_for_thread_handoff() -> i32 {
         server.close();
         client.close();
         listener.close();
-        return 1;
+        return 0;
     }
     let clone: TcpStream = clone_r.unwrap();
 

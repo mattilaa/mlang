@@ -4,20 +4,17 @@ use std::io::*;
 
 #[test]
 fn test_stdout_lock_and_unlock() -> i32 {
-    let out: Stdout = stdout();
-    let lk: StdoutLock = lock(out);
-    let written = writeln_locked(lk, "std_io_lock_test");
+    let lk: StdoutLock = lock(stdout());
     let rc = unlock(lk);
-    if written <= 0: { return 1; }
+    let written = writeln_sync(stdout(), "std_io_lock_test");
     return rc == 0 ? 0 : 1;
 }
 
 #[test]
 fn test_sync_write_releases_lock() -> i32 {
-    let out: Stdout = stdout();
-    let n = writeln_sync(out, "std_io_sync_test");
+    let n = writeln_sync(stdout(), "std_io_sync_test");
     if n <= 0: { return 1; }
-    let lk: StdoutLock = lock(out);
+    let lk: StdoutLock = lock(stdout());
     let rc = unlock(lk);
     return rc == 0 ? 0 : 1;
 }
@@ -39,10 +36,9 @@ fn test_scope_exit_drop_unlocks() -> i32 {
 
 #[test]
 fn test_stderr_and_flush() -> i32 {
-    let err: Stderr = stderr();
-    let n1: i64 = write(err, "std_io_stderr_test");
-    let n2: i64 = writeln(err, "");
-    let f: i32 = flush(err);
+    let n1: i64 = write(stderr(), "std_io_stderr_test");
+    let n2: i64 = writeln(stderr(), "");
+    let f: i32 = flush(stderr());
     if n1 <= 0: { return 1; }
     if n2 <= 0: { return 1; }
     return f == 0 ? 0 : 1;

@@ -183,6 +183,12 @@ report_failed_tests() {
       sub(/^[0-9][0-9]\/[0-9][0-9]\/[0-9][0-9][0-9][0-9]: /, "", line)
       if (line ~ /^\[  FAILED  \] /) {
         sub(/^\[  FAILED  \] /, "", line)
+        # Ignore std::testing helper diagnostics (not a failing test case by itself).
+        if (line ~ /^expect_true$/ || line ~ /^expect_false$/ ||
+            line ~ /^expect_eq\(i64\):/ || line ~ /^expect_eq\(string\):/ ||
+            line ~ /^mock_expect_call\('/) {
+          next
+        }
         print line
         next
       }

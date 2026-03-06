@@ -37,14 +37,12 @@ fn test_create_open_and_lines() -> i32 {
         if count == 0: {
             if eq(line, "alpha") != 1: {
                 free_lines(lines);
-                rf.close();
                 return 1;
             }
         } else: {
             if count == 1: {
                 if eq(line, "beta") != 1: {
                     free_lines(lines);
-                    rf.close();
                     return 1;
                 }
             }
@@ -53,7 +51,6 @@ fn test_create_open_and_lines() -> i32 {
     }
 
     free_lines(lines);
-    rf.close();
     return count == 2 ? 0 : 1;
 }
 

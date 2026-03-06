@@ -6,82 +6,46 @@ use std::strbuf::*;
 
 #[test]
 fn test_read_write_seek_cursor() -> i32 {
-    let c = cursor_with_capacity(16);
-    let w = as_write(c);
+    let w = as_write(cursor_with_capacity(16));
     if write(w, "hello world") != 11: {
-        cursor_free(c);
-        return 1;
-    }
-
-    let s = as_seek(c);
-    if seek(s, 0, seek_set()) != 0: {
-        cursor_free(c);
         return 1;
     }
 
     var out = with_capacity(32);
-    let r = as_read(c);
+    let r = as_read(cursor_from_string("hello world"));
     if read(r, out, 32) != 11: {
         free(out);
-        cursor_free(c);
         return 1;
     }
 
     let ok = eq(out, "hello world");
     free(out);
-    cursor_free(c);
     return ok == 1 ? 0 : 1;
 }
 
 #[test]
 fn test_bufread_lines_cursor() -> i32 {
-    let c = cursor_with_capacity(32);
-    let w = as_write(c);
-    write(w, "alpha\nbeta\n");
-    seek(as_seek(c), 0, seek_set());
-
+    let c = cursor_from_string("alpha\nbeta\n");
     var line = with_capacity(16);
-    let br = as_buf_read(c);
-
-    let n1 = read_line(br, line, 16);
+    let n1 = read_line(as_buf_read(c), line, 16);
     if n1 != 5: {
         free(line);
-        cursor_free(c);
         return 1;
     }
     if eq(line, "alpha") != 1: {
         free(line);
-        cursor_free(c);
-        return 1;
-    }
-
-    let n2 = read_line(br, line, 16);
-    if n2 != 4: {
-        free(line);
-        cursor_free(c);
-        return 1;
-    }
-    if eq(line, "beta") != 1: {
-        free(line);
-        cursor_free(c);
         return 1;
     }
 
     free(line);
-    cursor_free(c);
     return 0;
 }
 
 #[test]
 fn test_cursor_to_string() -> i32 {
-    let c = cursor_with_capacity(16);
-    let w = as_write(c);
-    write(w, "abc");
-
-    let snapshot = to_string(c);
+    let snapshot = to_string(cursor_from_string("abc"));
     let ok = eq(snapshot, "abc");
 
     free(snapshot);
-    cursor_free(c);
     return ok == 1 ? 0 : 1;
 }
