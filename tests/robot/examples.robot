@@ -3808,6 +3808,55 @@ MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
     ${ok}=    Evaluate    bool(${has_unknown} or ${has_compile_error} or ${has_usage})
     Should Be True    ${ok}
 
+MLang Frontend Pkg Mla Mode Reuses Cached Frontend Binary
+    [Documentation]    Regression: verify pkg-mla frontend compilation is cached and not repeated for unchanged source/backend/cache key.
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_pkg_mla_cache_reuse
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${repo_root}=    Catenate    SEPARATOR=    ${CURDIR}/../..
+    ${fake_backend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_mlang_pkg_cache_wrapper.sh
+    ${backend_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_mlang_pkg_cache_wrapper.log
+    ${pkg_run_log}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/fake_mlang_pkg_cache_run.log
+    ${cache_key}=    Evaluate    "pkg_cache_reuse_" + str(__import__('time').time_ns())
+    Run Keyword And Ignore Error    Remove File    ${backend_log}
+    Run Keyword And Ignore Error    Remove File    ${pkg_run_log}
+    ${script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${backend_log}"
+    ...    if [ "$1" = "tools/mlang-pkg-mla/main.mla" ]; then
+    ...      exit 1
+    ...    fi
+    ...    exit 0
+    Create File    ${fake_backend}    ${script}
+    ${chmod}=    Run Process    /bin/sh    -lc    chmod +x "${fake_backend}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod.rc}    0
+    ${bootstrap}=    Run Process    ${frontend}    --backend    ${fake_backend}    pkg    --help
+    ...    env:MLANG_PKG_IMPL=mla    env:MLANG_FRONTEND_IMPL=cpp    env:MLANG_PKG_CACHE_KEY=${cache_key}
+    ...    cwd=${repo_root}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${bootstrap.rc}    0
+    ${bootstrap_log}=    Get File    ${backend_log}
+    ${cached_bin}=    Evaluate    __import__("re").search(r"-o\\s+(\\S+)", """${bootstrap_log}""").group(1)
+    ${cached_script}=    Catenate    SEPARATOR=\n
+    ...    \#!/bin/sh
+    ...    echo "$@" >> "${pkg_run_log}"
+    ...    exit 0
+    Create File    ${cached_bin}    ${cached_script}
+    ${chmod_cached}=    Run Process    /bin/sh    -lc    chmod +x "${cached_bin}"    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${chmod_cached.rc}    0
+    Run Keyword And Ignore Error    Remove File    ${backend_log}
+    ${run1}=    Run Process    ${frontend}    --backend    ${fake_backend}    pkg    --help
+    ...    env:MLANG_PKG_IMPL=mla    env:MLANG_FRONTEND_IMPL=cpp    env:MLANG_PKG_CACHE_KEY=${cache_key}
+    ...    cwd=${repo_root}    stdout=PIPE    stderr=PIPE
+    ${run2}=    Run Process    ${frontend}    --backend    ${fake_backend}    pkg    --help
+    ...    env:MLANG_PKG_IMPL=mla    env:MLANG_FRONTEND_IMPL=cpp    env:MLANG_PKG_CACHE_KEY=${cache_key}
+    ...    cwd=${repo_root}    stdout=PIPE    stderr=PIPE
+    ${backend_exists}=    Run Keyword And Return Status    File Should Exist    ${backend_log}
+    Should Be Equal    ${backend_exists}    ${False}
+    ${backend_text}=    Set Variable    ${EMPTY}
+    ${compile_count}=    Evaluate    """${backend_text}""".count("tools/mlang-pkg-mla/main.mla")
+    Should Be Equal As Integers    ${compile_count}    0
+
 MLang Frontend Empty Test Dir Fails
     [Documentation]    Verify frontend parity with C++ main: `test <empty_dir>` returns nonzero.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_emptydir

@@ -136,6 +136,7 @@ Recent branch-level additions reflected in these docs:
 - GoogleTest-like test expectation helpers (`std::testing`)
 - MLang package-manager frontend updates including optional Ninja build flag
 - CLI parity coverage (`mlang-frontend-mla`) for compile/test arguments, trailing `--tests` handling, and Robot sub-suites (`MLang Frontend Trailing Tests *`, `MLang Frontend CompileOnly TestsFlag *`).
+- pkg frontend caching coverage (`MLang Frontend Pkg Mla Mode Reuses Cached Frontend Binary`) to prevent redundant pkg frontend recompiles when cache keys/source/backend are unchanged.
 
 Related example files:
 - `examples/lambda_fold_demo.mla`

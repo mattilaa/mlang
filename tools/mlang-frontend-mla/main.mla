@@ -614,7 +614,10 @@ fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
     let src: string = find_pkg_frontend_source(backend);
     if len(src) == 0 { return -1; }
     let tmp_bin: string = pkg_frontend_bin_path(backend, src);
-    let need_compile: i32 = 1;
+    var need_compile: i32 = 1;
+    if file_exists(tmp_bin) == 1 && file_mtime_ge(tmp_bin, src) == 1 {
+        need_compile = 0;
+    }
     if need_compile == 1 {
         let compile_base: list<string> = [
             src,

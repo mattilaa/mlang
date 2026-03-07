@@ -11,7 +11,7 @@ Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir 
                         [--install-if-tests-pass]
                         [--merge-to-main] [--bump-minor] [--bump-major]
 
-Builds the mlang compiler and optionally installs it.
+Builds the mlang compiler toolchain and optionally installs it.
 
 Options:
   --install          Install after build (default)
@@ -55,6 +55,7 @@ Notes:
   The install step also installs the stdlib docs (including builtin types)
   to: <prefix>/share/mlang/stdlib
   and stdlib libraries to: <prefix>/lib
+  and tool binaries: mlangd-mla, mlang-format, mlang-frontend-mla, mlang-frontend
   - Install runs by default unless --no-install is set.
   - --tests/--unit-tests/--lsp-tests/--robot-tests/--all-tests imply --install-if-tests-pass.
   - --install-if-tests-pass requires tests to be selected.
@@ -583,6 +584,9 @@ log_info "building tool: mlangd-mla"
 # Build mlang-format (Mlang implementation, port-in-progress).
 log_info "building tool: mlang-format"
 "$build_dir/mlang" "tools/mlang-format-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-format"
+# Build mlang-frontend-mla (feature-rich Mlang CLI frontend).
+log_info "building tool: mlang-frontend-mla"
+"$build_dir/mlang" "tools/mlang-frontend-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-frontend-mla"
 
 if $run_unit_tests; then
   log_info "running unit tests"
@@ -660,22 +664,40 @@ if $install_after_build; then
     cmake --install "$build_dir" --prefix "$prefix"
   fi
 
-  # Install mlangd-mla binary explicitly to the selected bin dir.
+  # Install tool binaries explicitly to the selected bin dir.
+  frontend_launcher_tmp="$(mktemp)"
+  cat > "$frontend_launcher_tmp" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${bin_dir}/mlang-frontend-mla" --backend "${bin_dir}/mlang" "$@"
+EOF
   if $use_sudo; then
     sudo mkdir -p "$bin_dir"
     sudo cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
     sudo chmod +x "$bin_dir/mlangd-mla"
     sudo cp -f "$build_dir/mlang-format" "$bin_dir/mlang-format"
     sudo chmod +x "$bin_dir/mlang-format"
+    sudo cp -f "$build_dir/mlang-frontend-mla" "$bin_dir/mlang-frontend-mla"
+    sudo chmod +x "$bin_dir/mlang-frontend-mla"
+    sudo cp -f "$frontend_launcher_tmp" "$bin_dir/mlang-frontend"
+    sudo chmod +x "$bin_dir/mlang-frontend"
   else
     mkdir -p "$bin_dir"
     cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
     chmod +x "$bin_dir/mlangd-mla"
     cp -f "$build_dir/mlang-format" "$bin_dir/mlang-format"
     chmod +x "$bin_dir/mlang-format"
+    cp -f "$build_dir/mlang-frontend-mla" "$bin_dir/mlang-frontend-mla"
+    chmod +x "$bin_dir/mlang-frontend-mla"
+    cp -f "$frontend_launcher_tmp" "$bin_dir/mlang-frontend"
+    chmod +x "$bin_dir/mlang-frontend"
   fi
+  rm -f "$frontend_launcher_tmp"
   log_info "installed mlangd-mla: $bin_dir/mlangd-mla"
   log_info "installed mlang-format: $bin_dir/mlang-format"
+  log_info "installed mlang-frontend-mla: $bin_dir/mlang-frontend-mla"
+  log_info "installed mlang-frontend: $bin_dir/mlang-frontend"
 
   stdlib_dir="$prefix/share/mlang/stdlib"
   stdlib_lib_dir="$prefix/lib"

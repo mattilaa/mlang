@@ -65,13 +65,14 @@ Build executable:
 /tmp/mlangd-mla --stdio
 ```
 
-## Compiler Frontend (MLang Port Scaffold)
-Incremental frontend port lives at `tools/mlang-frontend-mla/main.mla`.
+## Compiler Frontend (Primary MLang CLI)
+Feature-rich frontend implementation lives at `tools/mlang-frontend-mla/main.mla`.
 Current scope:
 - parses frontend option `--backend`
 - command-dispatch parity for `test`, `run tests`, `bench`, `pkg`
 - directory suite mode for `test`/`bench` (runs suites one-by-one)
 - stdlib link auto-discovery for compile passthrough (`-L... -lmlang_std -lm`)
+- pkg frontend binary caching (skip recompilation when cached tool is up-to-date)
 
 ```sh
 ./build/mlang tools/mlang-frontend-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-frontend-mla
@@ -86,6 +87,14 @@ You can route `mlang` itself through the MLang frontend implementation:
 
 ```sh
 MLANG_FRONTEND_IMPL=mla ./build/mlang examples/main.mla -o /tmp/main_bin
+```
+
+After install (`./scripts/build_install.sh`), prefer:
+
+```sh
+mlang-frontend --help
+mlang-frontend examples/main.mla -o /tmp/main_bin
+mlang-frontend test tests
 ```
 
 `mlang` emits `mlang_commands.json` for editor tooling. You can add module
@@ -138,7 +147,8 @@ The stdlib module search path is controlled by `MLANG_STDLIB_PATH` and defaults
 to `~/.local/share/mlang/stdlib` when installed.
 
 ## Build + Install
-Build and install both `mlang` and `mlangd`:
+Build and install compiler + tools (`mlang`, `mlangd`, `mlangd-mla`,
+`mlang-format`, `mlang-frontend-mla`, `mlang-frontend`):
 
 ```sh
 ./scripts/build_install.sh
@@ -165,7 +175,10 @@ The repository ships a Doxygen-based documentation build. Run the helper from th
 doxygen docs/Doxyfile
 ```
 
-The generated site mirrors the Markdown sources under `docs/` (stdlib APIs, language syntax, Rust-like attributes) and the `stdlib/std/` modules themselves, so you can include the latest stdlib/`use type` descriptions, `std::regex` helpers, `std::term` + `std::esc` details, unordered/quickmap coverage, and testing/bench API tables. Open `docs/out/index.html` in a browser after running the command.
+The generated site mirrors the Markdown sources under `docs/`, stdlib sources
+(`stdlib/std/`, `stdlib/src/`), and MLang tool sources
+(`tools/mlang-frontend-mla/main.mla`, `tools/mlang-pkg-mla/main.mla`). Open
+`docs/out/index.html` in a browser after running the command.
 
 ## AddressSanitizer Verification
 After a clean workspace, run the helper script that configures an AddressSanitizer build, compiles the stdlib, and exercises `mlang` on a representative input so you can confirm the compiler no longer crashes under ASan:
