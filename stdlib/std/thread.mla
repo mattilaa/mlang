@@ -21,6 +21,14 @@
 mod std::thread::detail;
 use std::thread::detail::*;
 
+/// @brief Spawn a thread from a closure/function pointer.
+///
+/// Preferred entrypoint for user code so IDE/LSP "go to definition" resolves
+/// to documented stdlib source.
+///
+/// Note: this is a compiler intrinsic declaration (not a C FFI binding).
+extern pub fn spawn(fn_ptr: ptr<void>) -> Handle<Thread>;
+
 /// @brief Join a spawned thread handle.
 /// Returns thread exit status.
 pub fn join(handle: Handle<Thread>) -> int {
