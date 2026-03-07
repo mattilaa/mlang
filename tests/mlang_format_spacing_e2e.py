@@ -27,6 +27,7 @@ def main() -> int:
             "        result = result * i;\n"
             "        result*=2;\n"
             "        result * = 3;\n"
+            "        result+=-3;\n"
             "    }\n"
             "    return result;\n"
             "}\n"
@@ -59,6 +60,9 @@ def main() -> int:
         )
         assert "        result *= 3;\n" in out, (
             "expected spaced compound assignment to normalize to '*='"
+        )
+        assert "        result += -3;\n" in out, (
+            "expected unary minus after compound assignment to remain compact"
         )
         assert "    if result < 10: {\n" in out, (
             "expected default relational operator spacing normalization"

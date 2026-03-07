@@ -2343,6 +2343,25 @@ static int append_text_dyn(char** io_out, size_t* io_cap, size_t* io_w,
     return 0;
 }
 
+static int is_unary_plus_minus_context(const char* out, size_t w)
+{
+    if(!out || w == 0u)
+        return 1;
+    size_t j = w;
+    while(j > 0u && is_space_char(out[j - 1u]))
+        --j;
+    if(j == 0u)
+        return 1;
+    const char p = out[j - 1u];
+    if(p == '(' || p == '[' || p == '{' || p == ',' || p == ':' || p == '=' ||
+       p == '+' || p == '-' || p == '*' || p == '/' || p == '%' || p == '!' ||
+       p == '<' || p == '>' || p == '&' || p == '|' || p == '^' || p == '?')
+    {
+        return 1;
+    }
+    return 0;
+}
+
 static char* apply_spacing_rules(const char* text, int space_after_comma,
                                  int space_after_colon,
                                  int space_around_operators,
@@ -2640,6 +2659,9 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
         if(op_len > 0)
         {
             int space_for_this_operator = space_around_operators;
+            const int unary_plus_minus =
+                (op_len == 1 && (c == '+' || c == '-') &&
+                 is_unary_plus_minus_context(out, w));
             if(c == '<' || c == '>')
                 space_for_this_operator = space_around_relational_operators;
             const int keep_compact = (op_len >= 2 && c == '.') ? 1 : 0;
@@ -2662,7 +2684,8 @@ static char* apply_spacing_rules(const char* text, int space_after_comma,
             while(is_space_char(text[i + 1u]))
                 ++i;
 
-            if(!keep_compact && space_for_this_operator == 1)
+            if(!keep_compact && space_for_this_operator == 1 &&
+               unary_plus_minus == 0)
             {
                 char nx = text[i + 1u];
                 if(nx != '\0' && nx != '\n' && nx != ')' && nx != ']' &&
