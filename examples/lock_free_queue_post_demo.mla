@@ -1,0 +1,98 @@
+mod std::sync;
+mod std::thread;
+mod std::time;
+
+use std::sync::LockFreeQueue;
+use std::thread::join;
+use std::time::sleep_ms;
+
+extern pub fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_last_error() -> string;
+
+struct Event {
+    var id: i32;
+    var kind: string;
+    var value: i32;
+};
+
+fn encode_event(e: Event) -> string {
+    return format!("Event{{id:{}, kind:\"{}\", value:{}}}", e.id, e.kind, e.value);
+}
+
+fn consumer_thread(queue_handle: i64) -> i32 {
+    var buf = String::with_capacity(256);
+    for _i in 0..2000000 {
+        let n: i64 = __mlang_std_sync_lfqueue_try_recv(queue_handle, buf, 256);
+        if n < -2 {
+            eprintln!("[consumer] error: {}", __mlang_std_sync_last_error());
+            String::free(buf);
+            return 1;
+        }
+        if n > 0 {
+            println!("[consumer] received {}", buf);
+            continue;
+        }
+        if n == 0 {
+            println!("[consumer] queue closed+drained");
+            String::free(buf);
+            return 0;
+        }
+        sleep_ms(1);
+    }
+    eprintln!("[consumer] timeout waiting for queue close");
+    String::free(buf);
+    return 1;
+}
+
+fn post_event(q: LockFreeQueue, ev: Event) -> i32 {
+    let payload: string = encode_event(ev);
+    for _i in 0..2000000 {
+        let sr: Result<i32, string> = q.try_send(payload);
+        if sr.is_err(): {
+            eprintln!("[producer] send error: {}", sr.unwrap_err());
+            return 1;
+        }
+        let rc: i32 = sr.unwrap();
+        if rc == 0 {
+            println!("[producer] posted {}", payload);
+            return 0;
+        }
+        sleep_ms(1);
+    }
+    eprintln!("[producer] queue stayed full too long");
+    return 1;
+}
+
+fn main() -> i32 {
+    let qr: Result<LockFreeQueue, string> = LockFreeQueue::new(4);
+    if qr.is_err(): {
+        eprintln!("queue new failed: {}", qr.unwrap_err());
+        return 1;
+    }
+    let q: LockFreeQueue = qr.unwrap();
+
+    let h: Handle<Thread> = thread::spawn(consumer_thread, q.handle);
+
+    let events: list<Event> = [
+        Event { id: 1, kind: "price-update", value: 42 },
+        Event { id: 2, kind: "price-update", value: 45 },
+        Event { id: 3, kind: "risk-alert", value: 7 },
+        Event { id: 4, kind: "order-fill", value: 3 },
+        Event { id: 5, kind: "heartbeat", value: 1 },
+        Event { id: 6, kind: "order-fill", value: 9 }
+    ];
+
+    for ev in events {
+        if post_event(q, ev) != 0 {
+            q.close();
+            join(h);
+            q.free();
+            return 1;
+        }
+    }
+
+    q.close();
+    join(h);
+    q.free();
+    return 0;
+}

@@ -5,6 +5,7 @@
 /// - Mutex
 /// - Condvar
 /// - Channel (string message queue)
+/// - LockFreeQueue (string SPSC lock-free queue)
 
 extern pub fn __mlang_std_sync_last_error() -> string;
 extern pub fn __mlang_std_sync_mutex_new() -> i64;
@@ -23,6 +24,11 @@ extern pub fn __mlang_std_sync_channel_recv(channel_handle: i64, buf: string, ca
 extern pub fn __mlang_std_sync_channel_try_recv(channel_handle: i64, buf: string, capacity: i64) -> i64;
 extern pub fn __mlang_std_sync_channel_close(channel_handle: i64) -> int;
 extern pub fn __mlang_std_sync_channel_free(channel_handle: i64) -> int;
+extern pub fn __mlang_std_sync_lfqueue_new(capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: string) -> int;
+extern pub fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: string, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> int;
+extern pub fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> int;
 
 /// @brief Mutex handle.
 pub struct Mutex {
@@ -36,6 +42,11 @@ pub struct Condvar {
 
 /// @brief String channel handle.
 pub struct Channel {
+    var handle: i64;
+};
+
+/// @brief Lock-free string queue handle (single-producer/single-consumer).
+pub struct LockFreeQueue {
     var handle: i64;
 };
 
@@ -149,6 +160,12 @@ impl Channel {
         return Ok<i32, string>(0);
     }
 
+    /// @brief Post message to another thread.
+    /// Alias for `send`.
+    pub fn post(self: Channel, s: string) -> Result<i32, string> {
+        return self.send(s);
+    }
+
     /// @brief Receive message into `buf`.
     /// Returns bytes copied. `0` means channel is closed and drained.
     pub fn recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string> {
@@ -180,5 +197,46 @@ impl Channel {
     /// @brief Free channel handle.
     pub fn free(self: Channel) -> i32 {
         return __mlang_std_sync_channel_free(self.handle);
+    }
+}
+
+impl LockFreeQueue {
+    /// @brief Create lock-free SPSC queue (`capacity<=0` => default).
+    pub fn new(capacity: i64) -> Result<LockFreeQueue, string> {
+        let h: i64 = __mlang_std_sync_lfqueue_new(capacity);
+        if h == 0: {
+            return Err<LockFreeQueue, string>(last_error());
+        }
+        return Ok<LockFreeQueue, string>(LockFreeQueue { handle: h });
+    }
+
+    /// @brief Non-blocking post to queue.
+    /// Returns `0` on success, `1` when full.
+    pub fn try_send(self: LockFreeQueue, s: string) -> Result<i32, string> {
+        let rc: i32 = __mlang_std_sync_lfqueue_send(self.handle, s);
+        if rc == 0 || rc == 1: {
+            return Ok<i32, string>(rc);
+        }
+        return Err<i32, string>(last_error());
+    }
+
+    /// @brief Non-blocking receive into `buf`.
+    /// Returns bytes copied (>0), `0` when closed+drained, `-2` when empty.
+    pub fn try_recv(self: LockFreeQueue, buf: string, capacity: i64) -> Result<i64, string> {
+        let n: i64 = __mlang_std_sync_lfqueue_try_recv(self.handle, buf, capacity);
+        if n >= 0 || n == -2: {
+            return Ok<i64, string>(n);
+        }
+        return Err<i64, string>(last_error());
+    }
+
+    /// @brief Close queue to new sends.
+    pub fn close(self: LockFreeQueue) -> i32 {
+        return __mlang_std_sync_lfqueue_close(self.handle);
+    }
+
+    /// @brief Free queue handle.
+    pub fn free(self: LockFreeQueue) -> i32 {
+        return __mlang_std_sync_lfqueue_free(self.handle);
     }
 }

@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -28,6 +29,15 @@ typedef struct
     size_t tail;
     char** items;
 } mlang_sync_channel_t;
+
+typedef struct
+{
+    _Atomic size_t head;
+    _Atomic size_t tail;
+    _Atomic int closed;
+    size_t cap;
+    char** items;
+} mlang_sync_lfqueue_t;
 
 static __thread char g_last_error[512];
 
@@ -476,5 +486,138 @@ int __mlang_std_sync_channel_free(int64_t channel_handle)
     (void)pthread_mutex_destroy(&ch->mu);
     free(ch->items);
     free(ch);
+    return 0;
+}
+
+int64_t __mlang_std_sync_lfqueue_new(int64_t capacity)
+{
+    size_t cap = capacity > 0 ? (size_t)capacity : 256u;
+    mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)malloc(sizeof(mlang_sync_lfqueue_t));
+    if(!q)
+    {
+        set_error("std::sync lfqueue_new: out of memory");
+        return 0;
+    }
+    memset(q, 0, sizeof(*q));
+
+    q->items = (char**)calloc(cap, sizeof(char*));
+    if(!q->items)
+    {
+        free(q);
+        set_error("std::sync lfqueue_new: out of memory");
+        return 0;
+    }
+    q->cap = cap;
+    atomic_store_explicit(&q->head, 0u, memory_order_relaxed);
+    atomic_store_explicit(&q->tail, 0u, memory_order_relaxed);
+    atomic_store_explicit(&q->closed, 0, memory_order_relaxed);
+    clear_error();
+    return (int64_t)(intptr_t)q;
+}
+
+int __mlang_std_sync_lfqueue_send(int64_t queue_handle, const char* s)
+{
+    mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)(intptr_t)queue_handle;
+    if(!q || !s)
+    {
+        set_error("std::sync lfqueue_send: invalid handle or message");
+        return -1;
+    }
+    if(atomic_load_explicit(&q->closed, memory_order_acquire) != 0)
+    {
+        set_error("std::sync lfqueue_send: queue closed");
+        return -1;
+    }
+
+    size_t tail = atomic_load_explicit(&q->tail, memory_order_relaxed);
+    size_t head = atomic_load_explicit(&q->head, memory_order_acquire);
+    if((tail - head) >= q->cap)
+    {
+        clear_error();
+        return 1; // full
+    }
+
+    char* msg = mlang_strdup(s);
+    if(!msg)
+    {
+        set_error("std::sync lfqueue_send: out of memory");
+        return -1;
+    }
+
+    q->items[tail % q->cap] = msg;
+    atomic_store_explicit(&q->tail, tail + 1u, memory_order_release);
+    clear_error();
+    return 0;
+}
+
+int64_t __mlang_std_sync_lfqueue_try_recv(int64_t queue_handle, char* buf, int64_t capacity)
+{
+    mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)(intptr_t)queue_handle;
+    if(!q)
+    {
+        set_error("std::sync lfqueue_try_recv: invalid handle");
+        return -1;
+    }
+    if(!buf || capacity <= 1)
+    {
+        set_error("std::sync lfqueue_try_recv: invalid buffer");
+        return -1;
+    }
+
+    size_t head = atomic_load_explicit(&q->head, memory_order_relaxed);
+    size_t tail = atomic_load_explicit(&q->tail, memory_order_acquire);
+    if(head == tail)
+    {
+        buf[0] = '\0';
+        if(atomic_load_explicit(&q->closed, memory_order_acquire) != 0)
+        {
+            clear_error();
+            return 0;
+        }
+        clear_error();
+        return -2; // empty
+    }
+
+    size_t idx = head % q->cap;
+    char* msg = q->items[idx];
+    q->items[idx] = NULL;
+    atomic_store_explicit(&q->head, head + 1u, memory_order_release);
+
+    int64_t src_len = msg ? (int64_t)strlen(msg) : 0;
+    int64_t n = src_len < (capacity - 1) ? src_len : (capacity - 1);
+    if(n > 0 && msg)
+        (void)memcpy(buf, msg, (size_t)n);
+    buf[n] = '\0';
+    free(msg);
+    clear_error();
+    return n;
+}
+
+int __mlang_std_sync_lfqueue_close(int64_t queue_handle)
+{
+    mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)(intptr_t)queue_handle;
+    if(!q)
+        return 0;
+    atomic_store_explicit(&q->closed, 1, memory_order_release);
+    clear_error();
+    return 0;
+}
+
+int __mlang_std_sync_lfqueue_free(int64_t queue_handle)
+{
+    mlang_sync_lfqueue_t* q = (mlang_sync_lfqueue_t*)(intptr_t)queue_handle;
+    if(!q)
+        return 0;
+    atomic_store_explicit(&q->closed, 1, memory_order_release);
+    if(q->items)
+    {
+        for(size_t i = 0; i < q->cap; ++i)
+        {
+            free(q->items[i]);
+            q->items[i] = NULL;
+        }
+        free(q->items);
+    }
+    free(q);
     return 0;
 }

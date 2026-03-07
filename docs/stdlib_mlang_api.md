@@ -539,6 +539,7 @@ Module file: `stdlib/std/sync.mla`
 - `Mutex`
 - `Condvar`
 - `Channel`
+- `LockFreeQueue` (SPSC string queue)
 
 ### Mutex
 - `Mutex::new() -> Result<Mutex, string>`
@@ -557,10 +558,20 @@ Module file: `stdlib/std/sync.mla`
 ### Channel (string)
 - `Channel::new(capacity: i64) -> Result<Channel, string>`
 - `Channel::send(self: Channel, s: string) -> Result<i32, string>`
+- `Channel::post(self: Channel, s: string) -> Result<i32, string>` (alias of `send`)
 - `Channel::recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
 - `Channel::try_recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
 - `Channel::close(self: Channel) -> i32`
 - `Channel::free(self: Channel) -> i32`
+
+### LockFreeQueue (string, single-producer/single-consumer)
+- `LockFreeQueue::new(capacity: i64) -> Result<LockFreeQueue, string>`
+- `LockFreeQueue::try_send(self: LockFreeQueue, s: string) -> Result<i32, string>`
+  - returns `0` on success, `1` when full
+- `LockFreeQueue::try_recv(self: LockFreeQueue, buf: string, capacity: i64) -> Result<i64, string>`
+  - returns bytes copied (>0), `-2` when empty, `0` when closed and drained
+- `LockFreeQueue::close(self: LockFreeQueue) -> i32`
+- `LockFreeQueue::free(self: LockFreeQueue) -> i32`
 
 ## std::term
 

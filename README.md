@@ -351,6 +351,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/scope_exit_drop_demo.mla`
 - Trait-like IO (`Read`/`Write`/`Seek`/`BufRead`) using in-memory cursor:
   `examples/std_io_traits_demo.mla`
+- Lock-free queue cross-thread posting demo (SPSC message stream):
+  `examples/lock_free_queue_post_demo.mla`
 - Filesystem read-lines flow (`File::open`, `BufReader::new`, `lines`):
   `examples/std_fs_demo.mla`
 - TCP loopback client/server over libc sockets:

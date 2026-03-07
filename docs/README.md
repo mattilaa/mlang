@@ -62,7 +62,8 @@ For timing helpers, see:
 
 For synchronization primitives, see:
 - `stdlib/std/sync.mla`
-  (`Mutex`, `Condvar`, `Channel` with send/recv/try_recv/close).
+  (`Mutex`, `Condvar`, `Channel` with send/post/recv/try_recv/close,
+   plus lock-free SPSC `LockFreeQueue` with try_send/try_recv).
 
 For filesystem helpers, see:
 - `stdlib/std/fs.mla`
