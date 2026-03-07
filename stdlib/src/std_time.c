@@ -1,13 +1,33 @@
 #include <errno.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 #include <time.h>
+
+extern int __mlang_std_sync_lfqueue_send(int64_t queue_handle, const char* s);
 
 typedef struct
 {
     int64_t deadline_ns;
 } mlang_time_timer_t;
+
+typedef struct
+{
+    int64_t interval_ns;
+    int64_t next_deadline_ns;
+} mlang_interval_timer_t;
+
+typedef struct
+{
+    int64_t queue_handle;
+    int64_t interval_ns;
+    char* event_name;
+    pthread_t thread;
+    atomic_int running;
+    atomic_int started;
+} mlang_async_ticker_t;
 
 static int64_t now_ns_internal(void)
 {
@@ -110,6 +130,158 @@ int __mlang_std_time_timer_free(int64_t handle)
     mlang_time_timer_t* t = (mlang_time_timer_t*)(intptr_t)handle;
     if(!t)
         return 0;
+    free(t);
+    return 0;
+}
+
+int64_t __mlang_std_timer_interval_new(int64_t interval_ms)
+{
+    if(interval_ms <= 0)
+        interval_ms = 1;
+
+    mlang_interval_timer_t* t = (mlang_interval_timer_t*)malloc(sizeof(mlang_interval_timer_t));
+    if(!t)
+        return 0;
+
+    t->interval_ns = interval_ms * 1000000LL;
+    t->next_deadline_ns = now_ns_internal() + t->interval_ns;
+    return (int64_t)(intptr_t)t;
+}
+
+int __mlang_std_timer_interval_reset(int64_t handle)
+{
+    mlang_interval_timer_t* t = (mlang_interval_timer_t*)(intptr_t)handle;
+    if(!t)
+        return -1;
+    t->next_deadline_ns = now_ns_internal() + t->interval_ns;
+    return 0;
+}
+
+int64_t __mlang_std_timer_interval_remaining_ms(int64_t handle)
+{
+    mlang_interval_timer_t* t = (mlang_interval_timer_t*)(intptr_t)handle;
+    if(!t)
+        return -1;
+    int64_t now = now_ns_internal();
+    if(now >= t->next_deadline_ns)
+        return 0;
+    int64_t rem_ns = t->next_deadline_ns - now;
+    return (rem_ns + 999999LL) / 1000000LL;
+}
+
+int __mlang_std_timer_interval_wait_next(int64_t handle)
+{
+    mlang_interval_timer_t* t = (mlang_interval_timer_t*)(intptr_t)handle;
+    if(!t)
+        return -1;
+
+    int64_t now = now_ns_internal();
+    if(now < t->next_deadline_ns)
+    {
+        sleep_ns_internal(t->next_deadline_ns - now);
+        now = now_ns_internal();
+    }
+
+    while(now >= t->next_deadline_ns)
+        t->next_deadline_ns += t->interval_ns;
+    return 0;
+}
+
+int __mlang_std_timer_interval_poll(int64_t handle)
+{
+    mlang_interval_timer_t* t = (mlang_interval_timer_t*)(intptr_t)handle;
+    if(!t)
+        return -1;
+
+    int64_t now = now_ns_internal();
+    if(now < t->next_deadline_ns)
+        return 0;
+
+    while(now >= t->next_deadline_ns)
+        t->next_deadline_ns += t->interval_ns;
+    return 1;
+}
+
+int __mlang_std_timer_interval_free(int64_t handle)
+{
+    mlang_interval_timer_t* t = (mlang_interval_timer_t*)(intptr_t)handle;
+    if(!t)
+        return 0;
+    free(t);
+    return 0;
+}
+
+static void* ticker_thread_main(void* arg)
+{
+    mlang_async_ticker_t* t = (mlang_async_ticker_t*)arg;
+    if(!t)
+        return NULL;
+
+    while(atomic_load(&t->running))
+    {
+        sleep_ns_internal(t->interval_ns);
+        if(!atomic_load(&t->running))
+            break;
+        (void)__mlang_std_sync_lfqueue_send(t->queue_handle, t->event_name ? t->event_name : "tick");
+    }
+    return NULL;
+}
+
+int64_t __mlang_std_timer_async_ticker_new(int64_t queue_handle, int64_t interval_ms, const char* event_name)
+{
+    if(queue_handle == 0)
+        return 0;
+    if(interval_ms <= 0)
+        interval_ms = 1;
+
+    mlang_async_ticker_t* t = (mlang_async_ticker_t*)calloc(1, sizeof(mlang_async_ticker_t));
+    if(!t)
+        return 0;
+
+    t->queue_handle = queue_handle;
+    t->interval_ns = interval_ms * 1000000LL;
+    t->event_name = strdup((event_name && event_name[0]) ? event_name : "tick");
+    if(!t->event_name)
+    {
+        free(t);
+        return 0;
+    }
+    atomic_store(&t->running, 1);
+    atomic_store(&t->started, 0);
+
+    if(pthread_create(&t->thread, NULL, ticker_thread_main, t) != 0)
+    {
+        free(t->event_name);
+        free(t);
+        return 0;
+    }
+    atomic_store(&t->started, 1);
+    return (int64_t)(intptr_t)t;
+}
+
+int __mlang_std_timer_async_ticker_stop(int64_t handle)
+{
+    mlang_async_ticker_t* t = (mlang_async_ticker_t*)(intptr_t)handle;
+    if(!t)
+        return 0;
+
+    atomic_store(&t->running, 0);
+    if(atomic_load(&t->started))
+    {
+        (void)pthread_join(t->thread, NULL);
+        atomic_store(&t->started, 0);
+    }
+    return 0;
+}
+
+int __mlang_std_timer_async_ticker_free(int64_t handle)
+{
+    mlang_async_ticker_t* t = (mlang_async_ticker_t*)(intptr_t)handle;
+    if(!t)
+        return 0;
+
+    (void)__mlang_std_timer_async_ticker_stop(handle);
+    free(t->event_name);
     free(t);
     return 0;
 }

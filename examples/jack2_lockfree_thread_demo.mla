@@ -1,0 +1,80 @@
+mod std::sync;
+mod std::time;
+
+use std::time::sleep_ms;
+
+extern fn __mlang_std_sync_lfqueue_new(capacity: i64) -> i64;
+extern fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: string) -> i32;
+extern fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> i32;
+extern fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> i32;
+extern fn __mlang_std_sync_last_error() -> string;
+extern fn jack2_bridge_start(queue_handle: i64, client_name: string) -> i32;
+extern fn jack2_bridge_stop() -> i32;
+
+fn post_cmd(queue_handle: i64, cmd: string) -> i32 {
+    for _i in 0..2000000 {
+        let rc: i32 = __mlang_std_sync_lfqueue_send(queue_handle, cmd);
+        if rc < 0 {
+            eprintln!("queue send error: {}", __mlang_std_sync_last_error());
+            return 1;
+        }
+        if rc == 0 {
+            println!("[main] posted: {}", cmd);
+            return 0;
+        }
+        // queue full -> backoff and retry
+        sleep_ms(1);
+    }
+    eprintln!("queue stayed full too long");
+    return 1;
+}
+
+fn main() -> i32 {
+    let queue_handle: i64 = __mlang_std_sync_lfqueue_new(256);
+    if queue_handle == 0 {
+        eprintln!("LockFreeQueue::new failed: {}", __mlang_std_sync_last_error());
+        return 1;
+    }
+
+    let rc_start: i32 = jack2_bridge_start(queue_handle, "mlang_jack2_queue_demo");
+    if rc_start != 0 {
+        eprintln!("jack2_bridge_start failed: rc={}", rc_start);
+        __mlang_std_sync_lfqueue_free(queue_handle);
+        return 1;
+    }
+
+    // Set output gain and then post multiple "play <freq_hz> <duration_ms>" messages.
+    if post_cmd(queue_handle, "gain 0.20") != 0 {
+        jack2_bridge_stop();
+        __mlang_std_sync_lfqueue_free(queue_handle);
+        return 1;
+    }
+
+    let notes: list<string> = [
+        "play 440 220",
+        "play 554.37 220",
+        "play 659.25 220",
+        "play 880 220",
+        "play 659.25 220",
+        "play 554.37 220",
+        "play 440 220"
+    ];
+
+    for n in notes {
+        if post_cmd(queue_handle, n) != 0 {
+            jack2_bridge_stop();
+            __mlang_std_sync_lfqueue_free(queue_handle);
+            return 1;
+        }
+        sleep_ms(260);
+    }
+
+    // Demonstrate stopping from main thread via message.
+    let _ = post_cmd(queue_handle, "stop");
+    sleep_ms(100);
+
+    __mlang_std_sync_lfqueue_close(queue_handle);
+    let _ = jack2_bridge_stop();
+    __mlang_std_sync_lfqueue_free(queue_handle);
+    return 0;
+}

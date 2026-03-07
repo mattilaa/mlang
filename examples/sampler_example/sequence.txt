@@ -1,0 +1,8 @@
+BD = bassdrum, SD = Snare drum, CH = Closedhihat, CL = Clap
+
+BPM: 130
+steps: 4
+BD: xxx    x       x
+SD:     x       x
+CH: xxxxx  xxxxxxxxx
+CL:     x       x

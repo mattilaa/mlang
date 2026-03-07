@@ -1,0 +1,81 @@
+/// \file timer.mla
+/// \brief Event-loop friendly interval timers for MLang (std::timer).
+///
+/// Designed for async loops where you want periodic wake-ups without
+/// calling `sleep_ms` directly in user code.
+
+extern pub fn __mlang_std_timer_interval_new(interval_ms: i64) -> i64;
+extern pub fn __mlang_std_timer_interval_reset(handle: i64) -> int;
+extern pub fn __mlang_std_timer_interval_remaining_ms(handle: i64) -> i64;
+extern pub fn __mlang_std_timer_interval_wait_next(handle: i64) -> int;
+extern pub fn __mlang_std_timer_interval_poll(handle: i64) -> int;
+extern pub fn __mlang_std_timer_interval_free(handle: i64) -> int;
+extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: string) -> i64;
+extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> int;
+extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> int;
+
+pub struct IntervalTimer {
+    var handle: i64;
+};
+
+pub struct AsyncTicker {
+    var handle: i64;
+};
+
+impl IntervalTimer {
+    /// @brief Create periodic timer that ticks every `interval_ms`.
+    pub fn every_ms(interval_ms: i64) -> Result<IntervalTimer, string> {
+        let h: i64 = __mlang_std_timer_interval_new(interval_ms);
+        if h == 0 {
+            return Err<IntervalTimer, string>("std::timer::IntervalTimer::every_ms failed");
+        }
+        return Ok<IntervalTimer, string>(IntervalTimer { handle: h });
+    }
+
+    /// @brief Reset next tick deadline to now + interval.
+    pub fn reset(self: IntervalTimer) -> i32 {
+        return __mlang_std_timer_interval_reset(self.handle);
+    }
+
+    /// @brief Milliseconds until next tick (0 when due).
+    pub fn remaining_ms(self: IntervalTimer) -> i64 {
+        return __mlang_std_timer_interval_remaining_ms(self.handle);
+    }
+
+    /// @brief Block until next timer tick and schedule next period.
+    pub fn wait_next(self: IntervalTimer) -> i32 {
+        return __mlang_std_timer_interval_wait_next(self.handle);
+    }
+
+    /// @brief Non-blocking tick check.
+    /// Returns 1 when a tick fired (and advances schedule), 0 otherwise.
+    pub fn poll(self: IntervalTimer) -> i32 {
+        return __mlang_std_timer_interval_poll(self.handle);
+    }
+
+    /// @brief Free timer handle.
+    pub fn close(self: IntervalTimer) -> i32 {
+        return __mlang_std_timer_interval_free(self.handle);
+    }
+}
+
+impl AsyncTicker {
+    /// @brief Start async ticker thread that posts `event_name` to lock-free queue every `interval_ms`.
+    pub fn start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<AsyncTicker, string> {
+        let h: i64 = __mlang_std_timer_async_ticker_new(queue_handle, interval_ms, event_name);
+        if h == 0 {
+            return Err<AsyncTicker, string>("std::timer::AsyncTicker::start failed");
+        }
+        return Ok<AsyncTicker, string>(AsyncTicker { handle: h });
+    }
+
+    /// @brief Stop ticker thread.
+    pub fn stop(self: AsyncTicker) -> i32 {
+        return __mlang_std_timer_async_ticker_stop(self.handle);
+    }
+
+    /// @brief Stop and free ticker handle.
+    pub fn close(self: AsyncTicker) -> i32 {
+        return __mlang_std_timer_async_ticker_free(self.handle);
+    }
+}

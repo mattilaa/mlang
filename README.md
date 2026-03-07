@@ -353,6 +353,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/std_io_traits_demo.mla`
 - Lock-free queue cross-thread posting demo (SPSC message stream):
   `examples/lock_free_queue_post_demo.mla`
+- JACK2 realtime process-thread demo with main-thread command posting:
+  `examples/jack2_lockfree_thread_demo.mla` (+ bridge `examples/jack2_queue_bridge.c`)
 - Filesystem read-lines flow (`File::open`, `BufReader::new`, `lines`):
   `examples/std_fs_demo.mla`
 - TCP loopback client/server over libc sockets:
@@ -377,6 +379,76 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/testing_mock_example.mla`
 - Sundaram sieve with real hash-set membership (`HashSetI64`):
   `examples/sieve_sundaram.mla`
+
+### JACK2 Lock-Free Queue Demo
+This demo runs JACK2 audio processing in JACK's process callback thread while
+the MLang main thread posts play commands through `std::sync::LockFreeQueue`.
+
+Prereqs (macOS/Homebrew):
+
+```sh
+brew install jack pkg-config
+jackd -d coreaudio
+```
+
+Build:
+
+```sh
+cc -O2 -I./include $(pkg-config --cflags jack) -c examples/jack2_queue_bridge.c -o /tmp/jack2_queue_bridge.o
+ar rcs /tmp/libjack2_mlang_bridge.a /tmp/jack2_queue_bridge.o
+./build/mlang examples/jack2_lockfree_thread_demo.mla -L /tmp -ljack2_mlang_bridge $(pkg-config --libs jack) -o /tmp/jack2_lockfree_demo
+```
+
+Run:
+
+```sh
+/tmp/jack2_lockfree_demo
+```
+
+The bridge attempts auto-connect to playback ports at startup. If you still get
+silence, wire ports manually:
+
+```sh
+jack_lsp -c
+jack_connect mlang_jack2_queue_demo:out_l system:playback_1
+jack_connect mlang_jack2_queue_demo:out_r system:playback_2
+```
+
+### JACK2 Drum Machine Sampler Demo
+Loads WAV samples from `examples/sampler_example` via C/JACK backend, while
+the MLang sequencer parses `sequence.txt` and advances on JACK-clocked lock-free `tick` events.
+
+Prereqs (macOS/Homebrew):
+
+```sh
+brew install jack pkg-config
+jackd -d coreaudio
+```
+
+Build:
+
+```sh
+cc -O2 -I./include $(pkg-config --cflags jack) -c examples/sampler_example/jack2_drum_machine_bridge.c -o /tmp/jack2_drum_machine_bridge.o
+ar rcs /tmp/libjack2_drum_machine.a /tmp/jack2_drum_machine_bridge.o
+./build/mlang examples/sampler_example/jack2_drum_machine.mla -L /tmp -ljack2_drum_machine $(pkg-config --libs jack) -o /tmp/jack2_drum_machine_demo
+```
+
+Run:
+
+```sh
+/tmp/jack2_drum_machine_demo
+```
+
+At startup, the sequencer prints controls: `SPACE` toggles start/stop and `q` exits.
+The main loop uses `std::event_loop::EventLoop` (async timer thread) and JACK lock-free tick events.
+
+If auto-connect fails, connect manually:
+
+```sh
+jack_lsp -c
+jack_connect mlang_drum_machine:out_l system:playback_1
+jack_connect mlang_drum_machine:out_r system:playback_2
+```
 
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:

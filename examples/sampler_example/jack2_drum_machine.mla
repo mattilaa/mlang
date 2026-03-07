@@ -1,0 +1,738 @@
+mod std::fs;
+mod std::event_loop;
+mod std::esc;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::vec;
+
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_home;
+use std::esc::cmd_hide;
+use std::esc::cmd_show;
+use std::esc::bold_on;
+use std::esc::cursor;
+use std::esc::reset;
+use std::event_loop::EventLoop;
+use std::fs::BufReader;
+use std::fs::File;
+use std::fs::free_lines;
+use std::io::Stdin;
+use std::io::read_line_nonblocking;
+use std::io::stdin;
+use std::strbuf::concat;
+use std::strbuf::ends_with;
+use std::strbuf::eq;
+use std::strbuf::find;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::starts_with;
+use std::strbuf::sub;
+use std::strbuf::trim;
+use std::strbuf::with_capacity;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::vec::*;
+
+extern fn __mlang_std_sync_lfqueue_new(capacity: i64) -> i64;
+extern fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: string) -> i32;
+extern fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> i32;
+extern fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> i32;
+extern fn __mlang_std_sync_last_error() -> string;
+extern fn atoi(s: string) -> i32;
+extern fn __mlang_std_esc_cursor_code(code: i32) -> string;
+
+extern fn jack2_sampler_start(cmd_queue_handle: i64,
+                              event_queue_handle: i64,
+                              schema_path: string,
+                              sample_dir: string,
+                              client_name: string,
+                              bpm: i32,
+                              steps_per_beat: i32) -> i32;
+extern fn jack2_sampler_stop() -> i32;
+
+fn cursor_force(cmd: i32) -> string {
+    let gated: string = cursor(cmd);
+    if len(gated) > 0 {
+        return gated;
+    }
+    return __mlang_std_esc_cursor_code(cmd);
+}
+
+fn post_cmd(queue_handle: i64, cmd: string) -> i32 {
+    for _i in 0..2000000 {
+        let rc: i32 = __mlang_std_sync_lfqueue_send(queue_handle, cmd);
+        if rc < 0 {
+            eprintln!("queue send error: {}", __mlang_std_sync_last_error());
+            return 1;
+        }
+        if rc == 0 {
+            return 0;
+        }
+    }
+    eprintln!("queue stayed full too long");
+    return 1;
+}
+
+fn parse_lane_value(raw: string) -> string {
+    if len(raw) > 0 {
+        let first: string = sub(raw, 0, 1);
+        if eq(first, " ") == 1 || eq(first, "\t") == 1 {
+            let out: string = sub(raw, 1, len(raw) - 1);
+            free(raw);
+            free(first);
+            return out;
+        }
+        free(first);
+    }
+    return raw;
+}
+
+fn parse_bpm_from(key: string, value: string, default_value: i32) -> i32 {
+    if eq(key, "BPM") == 1 || eq(key, "bpm") == 1 || eq(key, "BMP") == 1 || eq(key, "bmp") == 1 {
+        let t: string = trim(value);
+        let v: i32 = atoi(t);
+        free(t);
+        return v > 0 ? v : default_value;
+    }
+    return default_value;
+}
+
+fn parse_steps_from(key: string, value: string, default_value: i32) -> i32 {
+    if eq(key, "steps") == 1 || eq(key, "Steps") == 1 || eq(key, "StepsPerBeat") == 1 ||
+       eq(key, "stepsperbeat") == 1 || eq(key, "SPB") == 1 || eq(key, "spb") == 1 {
+        let t2: string = trim(value);
+        let v2: i32 = atoi(t2);
+        free(t2);
+        return v2 > 0 ? v2 : default_value;
+    }
+
+    return default_value;
+}
+
+fn has_name(names: Vec<string>, needle: string) -> i32 {
+    for n in names {
+        if eq(n, needle) == 1 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+fn find_pattern_index(pattern_names: Vec<string>, pid: string) -> i64 {
+    let n: i64 = pattern_names.len();
+    for i in 0..n {
+        if eq(pattern_names[i], pid) == 1 {
+            return i;
+        }
+    }
+    return -1;
+}
+
+fn set_pattern_steps(pattern_names: Vec<string>, pattern_steps: Vec<i64>, pid: string, steps: i64) -> void {
+    pattern_names.push(pid);
+    pattern_steps.push(steps);
+}
+
+fn get_pattern_steps(pattern_names: Vec<string>, pattern_steps: Vec<i64>, pid: string) -> i64 {
+    var i: i64 = pattern_names.len() - 1;
+    while i >= 0 {
+        if eq(pattern_names[i], pid) == 1 {
+            let s: i64 = pattern_steps[i];
+            if s > 0 {
+                return s;
+            }
+            return 16;
+        }
+        i -= 1;
+    }
+    return 16;
+}
+
+fn strip_brackets(s: string) -> string {
+    let t: string = trim(s);
+    if len(t) >= 2 && starts_with(t, "[") == 1 && ends_with(t, "]") == 1 {
+        let out: string = sub(t, 1, len(t) - 2);
+        free(t);
+        return out;
+    }
+    return t;
+}
+
+fn parse_song_list(value: string) -> Vec<string> {
+    var out: Vec<string> = Vec::new();
+    let inner: string = strip_brackets(value);
+    var rest: string = inner;
+    while len(rest) > 0 {
+        let comma: i64 = find(rest, ",");
+        if comma < 0 {
+            let tok: string = trim(rest);
+            if len(tok) > 0 {
+                out.push(tok);
+            } else {
+                free(tok);
+            }
+            free(rest);
+            break;
+        }
+        let left_raw: string = sub(rest, 0, comma);
+        let tok2: string = trim(left_raw);
+        if len(tok2) > 0 {
+            out.push(tok2);
+        } else {
+            free(tok2);
+        }
+        free(left_raw);
+        let next: string = sub(rest, comma + 1, len(rest) - (comma + 1));
+        free(rest);
+        rest = next;
+    }
+    return out;
+}
+
+fn make_track_key(pattern_id: string, track_name: string) -> string {
+    let p: string = concat(pattern_id, "|");
+    let k: string = concat(p, track_name);
+    free(p);
+    return k;
+}
+
+fn get_track_pattern(pattern_id: string,
+                     track_name: string,
+                     track_keys: Vec<string>,
+                     track_values: Vec<string>) -> string {
+    let key: string = make_track_key(pattern_id, track_name);
+    let n: i64 = track_keys.len();
+    for i in 0..n {
+        if eq(track_keys[i], key) == 1 {
+            free(key);
+            return track_values[i];
+        }
+    }
+    free(key);
+    return "";
+}
+
+fn resolve_pattern_steps(base_steps: i64,
+                         pattern_id: string,
+                         sample_names: Vec<string>,
+                         track_keys: Vec<string>,
+                         track_values: Vec<string>) -> i64 {
+    var steps: i64 = base_steps > 0 ? base_steps : 16;
+    let n: i64 = sample_names.len();
+    for i in 0..n {
+        let lane: string = get_track_pattern(pattern_id, sample_names[i], track_keys, track_values);
+        if len(lane) > steps {
+            steps = len(lane);
+        }
+    }
+    return steps;
+}
+
+fn is_hit(pattern: string, step: i64) -> i32 {
+    if step >= len(pattern) {
+        return 0;
+    }
+    let c: string = sub(pattern, step, 1);
+    var ok: i32 = 0;
+    if eq(c, "x") == 1 || eq(c, "X") == 1 {
+        ok = 1;
+    }
+    free(c);
+    return ok;
+}
+
+fn emit_step(queue_handle: i64,
+             step: i64,
+             pattern_id: string,
+             sample_names: Vec<string>,
+             track_keys: Vec<string>,
+             track_values: Vec<string>) -> i32 {
+    let n_tracks: i64 = sample_names.len();
+    for i in 0..n_tracks {
+        let name: string = sample_names[i];
+        let pattern: string = get_track_pattern(pattern_id, name, track_keys, track_values);
+        if is_hit(pattern, step) == 1 {
+            if post_cmd(queue_handle, name) != 0 {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+fn draw_lane(name: string, pattern: string, step: i64, pattern_steps: i64, running: bool) -> void {
+    print!("[{}] ", name);
+    for i in 0..pattern_steps {
+        if i < len(pattern) {
+            let c: string = sub(pattern, i, 1);
+            if running && i == step {
+                print!("{}{}{}", bold_on(), c, reset());
+            } else {
+                print!("{}", c);
+            }
+            free(c);
+        } else {
+            print!(" ");
+        }
+    }
+    print!("\r\n");
+}
+
+fn draw_ui(bpm: i32,
+           steps_per_beat: i32,
+           pattern_steps: i64,
+           running: bool,
+           step: i64,
+           pattern_id: string,
+           sample_names: Vec<string>,
+           track_keys: Vec<string>,
+           track_values: Vec<string>) -> void {
+    print!("{}{}{}", cursor_force(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    print!("\r[drum] SPACE=start/stop q=quit bpm={} spb={} pattern={} steps={} tracks={}\n",
+           bpm, steps_per_beat, pattern_id, pattern_steps, sample_names.len());
+    if running {
+        print!("\r[state] running\n");
+    } else {
+        print!("\r[state] stopped\n");
+    }
+
+    let n_tracks: i64 = sample_names.len();
+    for i in 0..n_tracks {
+        let nm: string = sample_names[i];
+        let lane: string = get_track_pattern(pattern_id, nm, track_keys, track_values);
+        draw_lane(nm, lane, step, pattern_steps, running);
+    }
+
+    print!("\r     ");
+    for i in 0..pattern_steps {
+        if running && i == step {
+            print!("{}|{}", bold_on(), reset());
+        } else {
+            print!(" ");
+        }
+    }
+    print!("\n");
+}
+
+fn main() -> i32 {
+    let schema_path: string = "examples/sampler_example/drumschema.txt";
+    let sample_dir: string = "examples/sampler_example";
+    let bpm_default: i32 = 130;
+
+    let fr: Result<File, string> = File::open(schema_path);
+    if fr.is_err() {
+        eprintln!("failed to open schema: {}", schema_path);
+        return 1;
+    }
+
+    let reader: BufReader = BufReader::new(fr.unwrap());
+    let lines: list<string> = reader.lines();
+
+    var bpm_cfg: i32 = bpm_default;
+    var steps_per_beat: i32 = 4;
+    var section: i32 = 0; // 1=samples, 2=patterns, 3=sequencer
+    var in_pattern_sequence: i32 = 0;
+    var current_pattern_id: string = "";
+
+    var sample_names: Vec<string> = Vec::new();
+    var pattern_names: Vec<string> = Vec::new();
+    var pattern_steps: Vec<i64> = Vec::new();
+    var track_keys: Vec<string> = Vec::new();
+    var track_values: Vec<string> = Vec::new();
+    var song_order: Vec<string> = Vec::new();
+
+    for line in lines {
+        let tl: string = trim(line);
+        if len(tl) == 0 || starts_with(tl, "#") == 1 {
+            free(tl);
+            continue;
+        }
+
+        if eq(tl, "[samples]") == 1 {
+            section = 1;
+            in_pattern_sequence = 0;
+            free(tl);
+            continue;
+        }
+        if eq(tl, "[patterns]") == 1 {
+            section = 2;
+            in_pattern_sequence = 0;
+            free(tl);
+            continue;
+        }
+        if eq(tl, "[sequencer]") == 1 {
+            section = 3;
+            in_pattern_sequence = 0;
+            free(tl);
+            continue;
+        }
+
+        if section == 2 && starts_with(tl, "[") == 1 && ends_with(tl, "]") == 1 {
+            if eq(tl, "[sequence]") == 1 {
+                in_pattern_sequence = 1;
+                free(tl);
+                continue;
+            }
+            let pid: string = strip_brackets(tl);
+            if eq(pid, "patterns") != 1 {
+                current_pattern_id = pid;
+                pattern_names.push(current_pattern_id);
+                pattern_steps.push(16);
+                in_pattern_sequence = 0;
+            } else {
+                free(pid);
+            }
+            free(tl);
+            continue;
+        }
+
+        let pos: i64 = find(tl, ":");
+        if pos < 0 {
+            free(tl);
+            continue;
+        }
+
+        let key_raw: string = sub(tl, 0, pos);
+        let key: string = trim(key_raw);
+        let val_raw: string = sub(tl, pos + 1, len(tl) - (pos + 1));
+        let val: string = parse_lane_value(val_raw);
+
+        if section == 1 {
+            sample_names.push(key);
+            free(val);
+        } else if section == 2 {
+            let old_bpm: i32 = bpm_cfg;
+            let old_spb: i32 = steps_per_beat;
+            bpm_cfg = parse_bpm_from(key, val, bpm_cfg);
+            steps_per_beat = parse_steps_from(key, val, steps_per_beat);
+
+            if bpm_cfg == old_bpm && steps_per_beat == old_spb {
+                if len(current_pattern_id) > 0 && in_pattern_sequence == 0 && (eq(key, "steps") == 1 || eq(key, "Steps") == 1) {
+                    let tsteps: string = trim(val);
+                    let steps_v: i32 = atoi(tsteps);
+                    free(tsteps);
+                    if steps_v > 0 {
+                        pattern_names.push(current_pattern_id);
+                        pattern_steps.push(steps_v);
+                    }
+                    free(key);
+                    free(val);
+                } else if len(current_pattern_id) > 0 && in_pattern_sequence == 1 {
+                    var known_sample: i32 = 0;
+                    let ns: i64 = sample_names.len();
+                    for si in 0..ns {
+                        if eq(sample_names[si], key) == 1 {
+                            known_sample = 1;
+                            break;
+                        }
+                    }
+                    if known_sample == 1 {
+                        let tk: string = make_track_key(current_pattern_id, key);
+                        track_keys.push(tk);
+                        track_values.push(val);
+                        free(key);
+                    } else {
+                        free(key);
+                        free(val);
+                    }
+                } else {
+                    free(key);
+                    free(val);
+                }
+            } else {
+                free(key);
+                free(val);
+            }
+        } else if section == 3 {
+            let old_bpm2: i32 = bpm_cfg;
+            let old_spb2: i32 = steps_per_beat;
+            bpm_cfg = parse_bpm_from(key, val, bpm_cfg);
+            steps_per_beat = parse_steps_from(key, val, steps_per_beat);
+
+            if bpm_cfg == old_bpm2 && steps_per_beat == old_spb2 {
+                if eq(key, "song") == 1 || eq(key, "Song") == 1 {
+                    song_order = parse_song_list(val);
+                }
+            }
+            free(key);
+            free(val);
+        } else {
+            free(key);
+            free(val);
+        }
+
+        free(key_raw);
+        free(tl);
+    }
+
+    free_lines(lines);
+
+    if pattern_steps.len() == 0 {
+        eprintln!("no patterns found in {}", schema_path);
+        return 1;
+    }
+
+    if song_order.len() == 0 {
+        let np: i64 = pattern_names.len();
+        for i in 0..np {
+            song_order.push(pattern_names[i]);
+        }
+    }
+
+    var song_index: i64 = 0;
+    var current_song_pattern: string = song_order[0];
+    var current_base_steps: i64 = 16;
+    var i_ps0: i64 = pattern_names.len() - 1;
+    while i_ps0 >= 0 {
+        if eq(pattern_names[i_ps0], current_song_pattern) == 1 {
+            let ps0: i64 = pattern_steps[i_ps0];
+            if ps0 > 0 {
+                current_base_steps = ps0;
+            }
+            break;
+        }
+        i_ps0 -= 1;
+    }
+    var current_pattern_steps: i64 = current_base_steps;
+    let nsm0: i64 = sample_names.len();
+    for ti0 in 0..nsm0 {
+        let nm0: string = sample_names[ti0];
+        let lk0: string = make_track_key(current_song_pattern, nm0);
+        let nk0: i64 = track_keys.len();
+        for kj0 in 0..nk0 {
+            if eq(track_keys[kj0], lk0) == 1 {
+                let lane0: string = track_values[kj0];
+                if len(lane0) > current_pattern_steps {
+                    current_pattern_steps = len(lane0);
+                }
+            }
+        }
+        free(lk0);
+    }
+
+    let cmd_queue: i64 = __mlang_std_sync_lfqueue_new(1024);
+    let event_queue: i64 = __mlang_std_sync_lfqueue_new(4096);
+    if cmd_queue == 0 || event_queue == 0 {
+        eprintln!("LockFreeQueue::new failed: {}", __mlang_std_sync_last_error());
+        if cmd_queue != 0 { __mlang_std_sync_lfqueue_free(cmd_queue); }
+        if event_queue != 0 { __mlang_std_sync_lfqueue_free(event_queue); }
+        return 1;
+    }
+
+    let rc_start: i32 = jack2_sampler_start(cmd_queue,
+                                            event_queue,
+                                            schema_path,
+                                            sample_dir,
+                                            "mlang_drum_machine",
+                                            bpm_cfg,
+                                            steps_per_beat);
+    if rc_start != 0 {
+        eprintln!("jack2_sampler_start failed: rc={}", rc_start);
+        __mlang_std_sync_lfqueue_free(cmd_queue);
+        __mlang_std_sync_lfqueue_free(event_queue);
+        return 1;
+    }
+
+    let input: Stdin = stdin();
+    var raw_enabled: i32 = 0;
+    if stdin_is_tty() == 1 {
+        if stdin_enable_raw() == 0 {
+            raw_enabled = 1;
+        }
+    }
+
+    let event_loop_r: Result<EventLoop, string> = EventLoop::start(event_queue, 2, "poll");
+    if event_loop_r.is_err() {
+        eprintln!("[drum] failed to create std::event_loop");
+        if raw_enabled == 1 {
+            let _ = stdin_restore();
+        }
+        __mlang_std_sync_lfqueue_close(cmd_queue);
+        __mlang_std_sync_lfqueue_close(event_queue);
+        let _ = jack2_sampler_stop();
+        __mlang_std_sync_lfqueue_free(cmd_queue);
+        __mlang_std_sync_lfqueue_free(event_queue);
+        return 1;
+    }
+    let event_loop: EventLoop = event_loop_r.unwrap();
+
+    var running: bool = false;
+    var quit: bool = false;
+    var failed: i32 = 0;
+    var step: i64 = 0;
+    var ui_dirty: i32 = 1;
+    let ev_buf: string = with_capacity(64);
+
+    while quit == false {
+        for _i in 0..256 {
+            let n_ev: i64 = __mlang_std_sync_lfqueue_try_recv(event_queue, ev_buf, 64);
+            if n_ev <= 0 {
+                break;
+            }
+
+            if eq(ev_buf, "poll") == 1 {
+                let keys: string = with_capacity(64);
+                let n_keys: i64 = read_line_nonblocking(input, keys, 64);
+                if n_keys > 0 {
+                    for i in 0..n_keys {
+                        let k: string = sub(keys, i, 1);
+                        if eq(k, "q") == 1 || eq(k, "Q") == 1 {
+                            quit = true;
+                            free(k);
+                            break;
+                        }
+                        if eq(k, " ") == 1 {
+                            running = !running;
+                            ui_dirty = 1;
+                        }
+                        free(k);
+                    }
+                } else if n_keys < 0 {
+                    quit = true;
+                }
+                free(keys);
+                if quit {
+                    break;
+                }
+            }
+
+            if running && eq(ev_buf, "tick") == 1 {
+                let nsm: i64 = sample_names.len();
+                for ti in 0..nsm {
+                    let nm: string = sample_names[ti];
+                    let lk: string = make_track_key(current_song_pattern, nm);
+                    var lane: string = "";
+                    let nk: i64 = track_keys.len();
+                    for kj in 0..nk {
+                        if eq(track_keys[kj], lk) == 1 {
+                            lane = track_values[kj];
+                            break;
+                        }
+                    }
+                    free(lk);
+                    if is_hit(lane, step) == 1 {
+                        if post_cmd(cmd_queue, nm) != 0 {
+                            failed = 1;
+                            break;
+                        }
+                    }
+                }
+                if failed != 0 {
+                    break;
+                }
+                step = step + 1;
+                if step >= current_pattern_steps {
+                    step = 0;
+                    song_index = (song_index + 1) % song_order.len();
+                    current_song_pattern = song_order[song_index];
+                    current_base_steps = 16;
+                    var i_ps: i64 = pattern_names.len() - 1;
+                    while i_ps >= 0 {
+                        if eq(pattern_names[i_ps], current_song_pattern) == 1 {
+                            let psi: i64 = pattern_steps[i_ps];
+                            if psi > 0 {
+                                current_base_steps = psi;
+                            }
+                            break;
+                        }
+                        i_ps -= 1;
+                    }
+                    current_pattern_steps = current_base_steps;
+                    let nsm2: i64 = sample_names.len();
+                    for ti2 in 0..nsm2 {
+                        let nm2: string = sample_names[ti2];
+                        let lk2: string = make_track_key(current_song_pattern, nm2);
+                        let nk2: i64 = track_keys.len();
+                        for kj2 in 0..nk2 {
+                            if eq(track_keys[kj2], lk2) == 1 {
+                                let lane2: string = track_values[kj2];
+                                if len(lane2) > current_pattern_steps {
+                                    current_pattern_steps = len(lane2);
+                                }
+                            }
+                        }
+                        free(lk2);
+                    }
+                }
+                ui_dirty = 1;
+            }
+        }
+
+        if failed != 0 {
+            break;
+        }
+
+        if ui_dirty == 1 {
+            print!("{}{}{}", cursor_force(cmd_hide()), cursor_force(cmd_home()), cursor_force(cmd_clear_screen()));
+            var draw_step: i64 = step;
+            if running && current_pattern_steps > 0 {
+                if draw_step == 0 {
+                    draw_step = current_pattern_steps - 1;
+                } else {
+                    draw_step -= 1;
+                }
+            }
+            print!("[drum] SPACE=start/stop q=quit bpm={} spb={} steps={} tracks={}\r\n",
+                   bpm_cfg, steps_per_beat, current_pattern_steps, sample_names.len());
+            print!("[pattern] {}\r\n", current_song_pattern);
+            var lane_prefix_width: i64 = 5; // default aligns to "[BD] "
+            if sample_names.len() > 0 {
+                lane_prefix_width = len(sample_names[0]) + 3; // "[" + name + "] "
+            }
+            for _p in 0..lane_prefix_width {
+                print!(" ");
+            }
+            for i in 0..current_pattern_steps {
+                if running && i == draw_step {
+                    print!("{}|{}", bold_on(), reset());
+                } else {
+                    print!(" ");
+                }
+            }
+            print!("\r\n");
+            if running {
+                print!("[state] running\r\n");
+            } else {
+                print!("[state] stopped\r\n");
+            }
+
+            let n_tracks: i64 = sample_names.len();
+            for ti3 in 0..n_tracks {
+                let nm3: string = sample_names[ti3];
+                let lk3: string = make_track_key(current_song_pattern, nm3);
+                var lane3: string = "";
+                let nk3: i64 = track_keys.len();
+                for kj3 in 0..nk3 {
+                    if eq(track_keys[kj3], lk3) == 1 {
+                        lane3 = track_values[kj3];
+                        break;
+                    }
+                }
+                free(lk3);
+                draw_lane(nm3, lane3, draw_step, current_pattern_steps, running);
+            }
+            ui_dirty = 0;
+        }
+    }
+
+    if raw_enabled == 1 {
+        let _ = stdin_restore();
+    }
+    print!("{}", cursor_force(cmd_show()));
+
+    let _ = event_loop.close();
+    __mlang_std_sync_lfqueue_close(cmd_queue);
+    __mlang_std_sync_lfqueue_close(event_queue);
+    let _ = jack2_sampler_stop();
+    __mlang_std_sync_lfqueue_free(cmd_queue);
+    __mlang_std_sync_lfqueue_free(event_queue);
+    free(ev_buf);
+
+    if failed != 0 {
+        return 1;
+    }
+    return 0;
+}

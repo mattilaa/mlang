@@ -1,0 +1,48 @@
+[samples]
+BD: bassdrum.WAV
+SD: snare.WAV
+CH: closedhihat.WAV
+CL: clap.WAV
+CY: cymbal.WAV
+
+[patterns]
+    [pattern1]
+    name: 01
+    steps: 4
+        [sequence]
+            BD: xxx    x       x
+            SD:     x       x
+            CH: xxxxx  xxxxxxxxx
+            CL:     x       x
+            CY: x
+    [pattern2]
+    name: 02
+    steps: 4
+        [sequence]
+            BD:  xx   xx       x
+            SD:    x        x
+            CH: xxxxx  xxxxxxxxx
+            CL:     x       x
+            CY:
+    [pattern3]
+    name: 03
+    steps: 4
+        [sequence]
+            BD:  xx   xx       x
+            SD: xx  x   x x  x
+            CH: xxxxx  xxxxxxxxx
+            CL:     x       x
+            CY:
+    [pattern4]
+    name: 04
+    steps: 4
+        [sequence]
+            BD:  xx   xx       x
+            SD: xx  x   x x  x
+            CH: xxxxx  xxxxxxxxx
+            CL:     x       x
+            CY:  x
+
+[sequencer]
+BPM: 130
+song: [pattern1, pattern2, pattern3, pattern4, pattern2]
