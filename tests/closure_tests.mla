@@ -198,7 +198,7 @@ fn test_closure_body_compound_assign() -> i32 {
 // Spawn a no-op closure and join -- just verifies no crash / correct handle.
 #[test]
 fn test_thread_spawn_closure_basic() -> i32 {
-    let h: Handle<Thread> = Thread::spawn(|| {
+    let h: Handle<Thread> = thread_spawn(|| {
         var x: int = 1;
         x += 1;
     });
@@ -209,7 +209,7 @@ fn test_thread_spawn_closure_basic() -> i32 {
 // Spawn a closure containing a for loop.
 #[test]
 fn test_thread_spawn_closure_loop() -> i32 {
-    let h: Handle<Thread> = Thread::spawn(|| {
+    let h: Handle<Thread> = thread_spawn(|| {
         var s: int = 0;
         for i in 0..4 {
             s += 1;

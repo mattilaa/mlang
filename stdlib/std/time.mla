@@ -37,7 +37,7 @@ impl Timer {
     /// @brief Create timer that elapses after `timeout_ms`.
     pub fn after(timeout_ms: i64) -> Result<Timer, string> {
         let h: i64 = __mlang_std_time_timer_new(timeout_ms);
-        if h == 0: {
+        if h == 0 {
             return Err<Timer, string>("std::time Timer::after failed");
         }
         return Ok<Timer, string>(Timer { handle: h });

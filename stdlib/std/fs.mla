@@ -211,7 +211,7 @@ impl File {
     /// @return `Ok(File)` on success, `Err(string)` on failure.
     pub fn open(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_read(path);
-        if h == 0: {
+        if h == 0 {
             return Err<File, string>("std::fs::File::open failed");
         }
         return Ok<File, string>(File { handle: h });
@@ -235,7 +235,7 @@ impl File {
     /// @return `Ok(File)` on success, `Err(string)` on failure.
     pub fn create(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_write(path);
-        if h == 0: {
+        if h == 0 {
             return Err<File, string>("std::fs::File::create failed");
         }
         return Ok<File, string>(File { handle: h });
@@ -260,7 +260,7 @@ impl File {
     /// @return `Ok(File)` on success, `Err(string)` on failure.
     pub fn append(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_append(path);
-        if h == 0: {
+        if h == 0 {
             return Err<File, string>("std::fs::File::append failed");
         }
         return Ok<File, string>(File { handle: h });
@@ -287,7 +287,7 @@ impl File {
     /// @return `Ok(File)` on success, `Err(string)` on failure.
     pub fn open_rw(path: string) -> Result<File, string> {
         let h = __mlang_std_fs_open_read_write(path);
-        if h == 0: {
+        if h == 0 {
             return Err<File, string>("std::fs::File::open_rw failed");
         }
         return Ok<File, string>(File { handle: h });
@@ -305,7 +305,7 @@ impl File {
     ///
     /// @return `0` on success, non-zero on flush/close error.
     pub fn close(self: File) -> i32 {
-        if self.handle == 0: {
+        if self.handle == 0 {
             return 0;
         }
         return __mlang_std_fs_close(self.handle);
@@ -324,7 +324,7 @@ impl File {
     /// @return `Ok(i64)` — bytes written; `Err(string)` on I/O error.
     pub fn write(self: File, s: string) -> Result<i64, string> {
         let n = __mlang_std_fs_write(self.handle, s);
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>("std::fs::File::write failed");
         }
         return Ok<i64, string>(n);
@@ -344,11 +344,11 @@ impl File {
     /// @return `Ok(i64)` — total bytes written including newline; `Err(string)` on error.
     pub fn write_line(self: File, s: string) -> Result<i64, string> {
         let n1: Result<i64, string> = self.write(s);
-        if n1.is_err(): {
+        if n1.is_err() {
             return Err<i64, string>("std::fs::File::write_line failed");
         }
         let n2: Result<i64, string> = self.write("\n");
-        if n2.is_err(): {
+        if n2.is_err() {
             return Err<i64, string>("std::fs::File::write_line failed");
         }
         return Ok<i64, string>(n1.unwrap() + n2.unwrap());
@@ -377,7 +377,7 @@ impl File {
     /// @return `Ok(i64)` — new byte offset from file start; `Err(string)` on failure.
     pub fn seek(self: File, sf: SeekFrom) -> Result<i64, string> {
         let pos: i64 = __mlang_std_fs_seek(self.handle, sf.offset, sf.whence);
-        if pos < 0: {
+        if pos < 0 {
             return Err<i64, string>("std::fs::File::seek failed");
         }
         return Ok<i64, string>(pos);
@@ -396,7 +396,7 @@ impl File {
     /// @return `Ok(i64)` — current position in bytes; `Err(string)` on failure.
     pub fn tell(self: File) -> Result<i64, string> {
         let pos: i64 = __mlang_std_fs_tell(self.handle);
-        if pos < 0: {
+        if pos < 0 {
             return Err<i64, string>("std::fs::File::tell failed");
         }
         return Ok<i64, string>(pos);
@@ -415,7 +415,7 @@ impl File {
     /// @return `Ok(i64)` — file size in bytes; `Err(string)` on failure.
     pub fn size(self: File) -> Result<i64, string> {
         let sz: i64 = __mlang_std_fs_file_size(self.handle);
-        if sz < 0: {
+        if sz < 0 {
             return Err<i64, string>("std::fs::File::size failed");
         }
         return Ok<i64, string>(sz);
@@ -447,7 +447,7 @@ impl File {
     /// @return `Ok(i64)` — bytes actually read (0 at EOF); `Err(string)` on I/O error.
     pub fn read_bytes(self: File, buf: string, n: i64) -> Result<i64, string> {
         let got: i64 = __mlang_std_fs_read_bytes(self.handle, buf, n);
-        if got < 0: {
+        if got < 0 {
             return Err<i64, string>("std::fs::File::read_bytes failed");
         }
         return Ok<i64, string>(got);
@@ -476,7 +476,7 @@ impl File {
     /// @return `Ok(i64)` — bytes written; `Err(string)` on I/O error.
     pub fn write_bytes(self: File, buf: string, n: i64) -> Result<i64, string> {
         let w: i64 = __mlang_std_fs_write_bytes(self.handle, buf, n);
-        if w < 0: {
+        if w < 0 {
             return Err<i64, string>("std::fs::File::write_bytes failed");
         }
         return Ok<i64, string>(w);
@@ -534,7 +534,7 @@ impl BufReader {
     /// @return `Ok(i64)` — bytes read without newline; `Err(string)` at EOF or on error.
     pub fn read_line(self: BufReader, buf: string) -> Result<i64, string> {
         let n = __mlang_std_fs_read_line(self.file.handle, buf, self.line_capacity);
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>("std::fs::BufReader::read_line failed");
         }
         return Ok<i64, string>(n);
@@ -638,8 +638,8 @@ pub fn cwd() -> string {
 ///         cannot be opened or read.
 pub fn read_all_text(path: string) -> Result<string, string> {
     let text: string = __mlang_std_fs_read_all_text(path);
-    if __mlang_std_strbuf_len(text) == 0: {
-        if file_exists(path) == 0: {
+    if __mlang_std_strbuf_len(text) == 0 {
+        if file_exists(path) == 0 {
             return Err<string, string>("std::fs::read_all_text failed");
         }
     }
@@ -660,7 +660,7 @@ pub fn read_all_text(path: string) -> Result<string, string> {
 /// @return `Ok(0)` on success; `Err(string)` on failure.
 pub fn write_all_text(path: string, text: string) -> Result<i32, string> {
     let rc: i32 = __mlang_std_fs_write_all_text(path, text);
-    if rc != 0: {
+    if rc != 0 {
         return Err<i32, string>("std::fs::write_all_text failed");
     }
     return Ok<i32, string>(0);

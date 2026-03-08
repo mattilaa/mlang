@@ -27,7 +27,7 @@ impl Regex {
     /// Compile a pattern using POSIX ERE syntax.
     pub fn compile(pattern: string) -> Result<Regex, string> {
         let h: i64 = __mlang_std_regex_compile(pattern);
-        if h == 0: {
+        if h == 0 {
             return Err<Regex, string>(last_error());
         }
         return Ok<Regex, string>(Regex { handle: h });

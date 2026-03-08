@@ -59,7 +59,7 @@ impl Mutex {
     /// @brief Create a new mutex.
     pub fn new() -> Result<Mutex, string> {
         let h: i64 = __mlang_std_sync_mutex_new();
-        if h == 0: {
+        if h == 0 {
             return Err<Mutex, string>(last_error());
         }
         return Ok<Mutex, string>(Mutex { handle: h });
@@ -68,7 +68,7 @@ impl Mutex {
     /// @brief Lock mutex.
     pub fn lock(self: Mutex) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_mutex_lock(self.handle);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -77,7 +77,7 @@ impl Mutex {
     /// @brief Unlock mutex.
     pub fn unlock(self: Mutex) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_mutex_unlock(self.handle);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -93,7 +93,7 @@ impl Condvar {
     /// @brief Create a new condition variable.
     pub fn new() -> Result<Condvar, string> {
         let h: i64 = __mlang_std_sync_condvar_new();
-        if h == 0: {
+        if h == 0 {
             return Err<Condvar, string>(last_error());
         }
         return Ok<Condvar, string>(Condvar { handle: h });
@@ -102,7 +102,7 @@ impl Condvar {
     /// @brief Wait for notification. Caller must hold `mutex`.
     pub fn wait(self: Condvar, mutex: Mutex) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_condvar_wait(self.handle, mutex.handle);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -111,7 +111,7 @@ impl Condvar {
     /// @brief Wait with timeout (ms). Returns 0 when notified, 1 when timed out.
     pub fn wait_timeout_ms(self: Condvar, mutex: Mutex, timeout_ms: i64) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_condvar_wait_timeout_ms(self.handle, mutex.handle, timeout_ms);
-        if rc < 0: {
+        if rc < 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(rc);
@@ -120,7 +120,7 @@ impl Condvar {
     /// @brief Wake one waiting thread.
     pub fn notify_one(self: Condvar) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_condvar_notify_one(self.handle);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -129,7 +129,7 @@ impl Condvar {
     /// @brief Wake all waiting threads.
     pub fn notify_all(self: Condvar) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_condvar_notify_all(self.handle);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -145,7 +145,7 @@ impl Channel {
     /// @brief Create string channel with bounded capacity (`<=0` => default).
     pub fn new(capacity: i64) -> Result<Channel, string> {
         let h: i64 = __mlang_std_sync_channel_new(capacity);
-        if h == 0: {
+        if h == 0 {
             return Err<Channel, string>(last_error());
         }
         return Ok<Channel, string>(Channel { handle: h });
@@ -154,7 +154,7 @@ impl Channel {
     /// @brief Send message to channel (blocks when full).
     pub fn send(self: Channel, s: string) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_channel_send(self.handle, s);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -170,7 +170,7 @@ impl Channel {
     /// Returns bytes copied. `0` means channel is closed and drained.
     pub fn recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_sync_channel_recv(self.handle, buf, capacity);
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);
@@ -180,10 +180,10 @@ impl Channel {
     /// Returns bytes copied (>0), `0` when closed+drained, `-2` when empty.
     pub fn try_recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_sync_channel_try_recv(self.handle, buf, capacity);
-        if n < -1: {
+        if n < -1 {
             return Ok<i64, string>(n);
         }
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);
@@ -204,7 +204,7 @@ impl LockFreeQueue {
     /// @brief Create lock-free SPSC queue (`capacity<=0` => default).
     pub fn new(capacity: i64) -> Result<LockFreeQueue, string> {
         let h: i64 = __mlang_std_sync_lfqueue_new(capacity);
-        if h == 0: {
+        if h == 0 {
             return Err<LockFreeQueue, string>(last_error());
         }
         return Ok<LockFreeQueue, string>(LockFreeQueue { handle: h });
@@ -214,7 +214,7 @@ impl LockFreeQueue {
     /// Returns `0` on success, `1` when full.
     pub fn try_send(self: LockFreeQueue, s: string) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_lfqueue_send(self.handle, s);
-        if rc == 0 || rc == 1: {
+        if rc == 0 || rc == 1 {
             return Ok<i32, string>(rc);
         }
         return Err<i32, string>(last_error());
@@ -224,7 +224,7 @@ impl LockFreeQueue {
     /// Returns bytes copied (>0), `0` when closed+drained, `-2` when empty.
     pub fn try_recv(self: LockFreeQueue, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_sync_lfqueue_try_recv(self.handle, buf, capacity);
-        if n >= 0 || n == -2: {
+        if n >= 0 || n == -2 {
             return Ok<i64, string>(n);
         }
         return Err<i64, string>(last_error());

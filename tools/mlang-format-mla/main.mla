@@ -66,114 +66,114 @@ fn fail(message: string) -> i32 {
 }
 
 fn parse_indent_width(line: string, fallback: i64) -> i64 {
-    if starts_with(line, "IndentWidth:") == 0: {
+    if starts_with(line, "IndentWidth:") == 0 {
         return fallback;
     }
-    if contains(line, ": 16") == 1: { return 16; }
-    if contains(line, ":16") == 1: { return 16; }
-    if contains(line, ": 12") == 1: { return 12; }
-    if contains(line, ":12") == 1: { return 12; }
-    if contains(line, ": 10") == 1: { return 10; }
-    if contains(line, ":10") == 1: { return 10; }
-    if contains(line, ": 8") == 1: { return 8; }
-    if contains(line, ":8") == 1: { return 8; }
-    if contains(line, ": 6") == 1: { return 6; }
-    if contains(line, ":6") == 1: { return 6; }
-    if contains(line, ": 4") == 1: { return 4; }
-    if contains(line, ":4") == 1: { return 4; }
-    if contains(line, ": 2") == 1: { return 2; }
-    if contains(line, ":2") == 1: { return 2; }
+    if contains(line, ": 16") == 1 { return 16; }
+    if contains(line, ":16") == 1 { return 16; }
+    if contains(line, ": 12") == 1 { return 12; }
+    if contains(line, ":12") == 1 { return 12; }
+    if contains(line, ": 10") == 1 { return 10; }
+    if contains(line, ":10") == 1 { return 10; }
+    if contains(line, ": 8") == 1 { return 8; }
+    if contains(line, ":8") == 1 { return 8; }
+    if contains(line, ": 6") == 1 { return 6; }
+    if contains(line, ":6") == 1 { return 6; }
+    if contains(line, ": 4") == 1 { return 4; }
+    if contains(line, ":4") == 1 { return 4; }
+    if contains(line, ": 2") == 1 { return 2; }
+    if contains(line, ":2") == 1 { return 2; }
     return fallback;
 }
 
 fn parse_ensure_trailing_newline(line: string, fallback: bool) -> bool {
-    if starts_with(line, "EnsureTrailingNewline:") == 0: {
+    if starts_with(line, "EnsureTrailingNewline:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: {
+    if contains(line, "true") == 1 {
         return true;
     }
-    if contains(line, "True") == 1: {
+    if contains(line, "True") == 1 {
         return true;
     }
-    if contains(line, "false") == 1: {
+    if contains(line, "false") == 1 {
         return false;
     }
-    if contains(line, "False") == 1: {
+    if contains(line, "False") == 1 {
         return false;
     }
     return fallback;
 }
 
 fn parse_space_after_comma(line: string, fallback: bool) -> bool {
-    if starts_with(line, "SpaceAfterComma:") == 0: {
+    if starts_with(line, "SpaceAfterComma:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: { return true; }
-    if contains(line, "True") == 1: { return true; }
-    if contains(line, "false") == 1: { return false; }
-    if contains(line, "False") == 1: { return false; }
+    if contains(line, "true") == 1 { return true; }
+    if contains(line, "True") == 1 { return true; }
+    if contains(line, "false") == 1 { return false; }
+    if contains(line, "False") == 1 { return false; }
     return fallback;
 }
 
 fn parse_space_after_colon(line: string, fallback: bool) -> bool {
-    if starts_with(line, "SpaceAfterColon:") == 0: {
+    if starts_with(line, "SpaceAfterColon:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: { return true; }
-    if contains(line, "True") == 1: { return true; }
-    if contains(line, "false") == 1: { return false; }
-    if contains(line, "False") == 1: { return false; }
+    if contains(line, "true") == 1 { return true; }
+    if contains(line, "True") == 1 { return true; }
+    if contains(line, "false") == 1 { return false; }
+    if contains(line, "False") == 1 { return false; }
     return fallback;
 }
 
 fn parse_space_around_operators(line: string, fallback: bool) -> bool {
-    if starts_with(line, "SpaceAroundOperators:") == 0: {
+    if starts_with(line, "SpaceAroundOperators:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: { return true; }
-    if contains(line, "True") == 1: { return true; }
-    if contains(line, "false") == 1: { return false; }
-    if contains(line, "False") == 1: { return false; }
+    if contains(line, "true") == 1 { return true; }
+    if contains(line, "True") == 1 { return true; }
+    if contains(line, "false") == 1 { return false; }
+    if contains(line, "False") == 1 { return false; }
     return fallback;
 }
 
 fn parse_space_around_relational_operators(line: string, fallback: bool) -> bool {
-    if starts_with(line, "SpaceAroundRelationalOperators:") == 0: {
+    if starts_with(line, "SpaceAroundRelationalOperators:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: { return true; }
-    if contains(line, "True") == 1: { return true; }
-    if contains(line, "false") == 1: { return false; }
-    if contains(line, "False") == 1: { return false; }
+    if contains(line, "true") == 1 { return true; }
+    if contains(line, "True") == 1 { return true; }
+    if contains(line, "false") == 1 { return false; }
+    if contains(line, "False") == 1 { return false; }
     return fallback;
 }
 
 fn parse_space_inside_braces_single_line(line: string, fallback: bool) -> bool {
-    if starts_with(line, "SpaceInsideBracesSingleLine:") == 0: {
+    if starts_with(line, "SpaceInsideBracesSingleLine:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: { return true; }
-    if contains(line, "True") == 1: { return true; }
-    if contains(line, "false") == 1: { return false; }
-    if contains(line, "False") == 1: { return false; }
+    if contains(line, "true") == 1 { return true; }
+    if contains(line, "True") == 1 { return true; }
+    if contains(line, "false") == 1 { return false; }
+    if contains(line, "False") == 1 { return false; }
     return fallback;
 }
 
 fn parse_compact_fat_arrow(line: string, fallback: bool) -> bool {
-    if starts_with(line, "CompactFatArrow:") == 0: {
+    if starts_with(line, "CompactFatArrow:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1: { return true; }
-    if contains(line, "True") == 1: { return true; }
-    if contains(line, "false") == 1: { return false; }
-    if contains(line, "False") == 1: { return false; }
+    if contains(line, "true") == 1 { return true; }
+    if contains(line, "True") == 1 { return true; }
+    if contains(line, "false") == 1 { return false; }
+    if contains(line, "False") == 1 { return false; }
     return fallback;
 }
 
 fn read_config(path: string) -> FormatConfig {
     let open_r: Result<File, string> = File::open(path);
-    if open_r.is_err(): {
+    if open_r.is_err() {
         return default_config();
     }
     let file: File = open_r.unwrap();
@@ -183,13 +183,13 @@ fn read_config(path: string) -> FormatConfig {
     var cfg: FormatConfig = default_config();
     for raw in lines {
         let line: string = trim(raw);
-        if len(line) == 0: {
+        if len(line) == 0 {
             continue;
         }
-        if starts_with(line, "#") == 1: {
+        if starts_with(line, "#") == 1 {
             continue;
         }
-        if starts_with(line, "//") == 1: {
+        if starts_with(line, "//") == 1 {
             continue;
         }
         cfg.indent_width = parse_indent_width(line, cfg.indent_width);
@@ -220,10 +220,10 @@ fn read_config(path: string) -> FormatConfig {
 }
 
 fn normalize_start_dir(start_path: string) -> string {
-    if len(start_path) == 0: {
+    if len(start_path) == 0 {
         return cwd();
     }
-    if ends_with(start_path, ".mla") == 1: {
+    if ends_with(start_path, ".mla") == 1 {
         return parent_dir(start_path);
     }
     return start_path;
@@ -235,16 +235,16 @@ fn find_config(start_path: string, root_path: string) -> string {
 
     for _i in 0..128 {
         let candidate: string = concat(current, "/.mlang-format");
-        if file_exists(candidate) == 1: {
+        if file_exists(candidate) == 1 {
             return candidate;
         }
-        if root_enabled: {
-            if eq(current, root_path) == 1: {
+        if root_enabled {
+            if eq(current, root_path) == 1 {
                 return "";
             }
         }
         let parent: string = parent_dir(current);
-        if eq(parent, current) == 1: {
+        if eq(parent, current) == 1 {
             return "";
         }
         current = parent;
@@ -253,7 +253,7 @@ fn find_config(start_path: string, root_path: string) -> string {
 }
 
 fn bool_to_int(v: bool) -> int {
-    if v: {
+    if v {
         return 1;
     }
     return 0;
@@ -271,8 +271,8 @@ fn apply_config_format(text: string, cfg: FormatConfig) -> string {
         bool_to_int(cfg.compact_fat_arrow),
         bool_to_int(cfg.space_around_relational_operators)
     );
-    if cfg.ensure_trailing_newline: {
-        if ends_with(formatted, "\n") == 0: {
+    if cfg.ensure_trailing_newline {
+        if ends_with(formatted, "\n") == 0 {
             formatted = concat(formatted, "\n");
         }
         return formatted;
@@ -286,7 +286,7 @@ fn read_stdin_all() -> string {
     var out: string = String::new();
     for _i in 0..2147483647 {
         let n: i64 = read_line(input, buf, 8192);
-        if n < 0: {
+        if n < 0 {
             break;
         }
         let t1: string = concat(out, buf);
@@ -314,143 +314,143 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var expect_fallback_style: bool = false;
 
     for arg in args {
-        if seen_prog == false: {
+        if seen_prog == false {
             seen_prog = true;
             continue;
         }
 
-        if expect_root: {
+        if expect_root {
             root_path = format!("{}", arg);
             expect_root = false;
             continue;
         }
-        if expect_assume: {
+        if expect_assume {
             assume_filename = format!("{}", arg);
             expect_assume = false;
             continue;
         }
-        if expect_style: {
+        if expect_style {
             style = format!("{}", arg);
             expect_style = false;
             continue;
         }
-        if expect_fallback_style: {
+        if expect_fallback_style {
             expect_fallback_style = false;
             continue;
         }
 
-        if strcmp(arg, "-h") == 0: {
+        if strcmp(arg, "-h") == 0 {
             usage();
             return 0;
         }
-        if strcmp(arg, "--help") == 0: {
+        if strcmp(arg, "--help") == 0 {
             usage();
             return 0;
         }
-        if strcmp(arg, "--version") == 0: {
+        if strcmp(arg, "--version") == 0 {
             println!("mlang-format {}", version());
             return 0;
         }
-        if strcmp(arg, "-v") == 0: {
+        if strcmp(arg, "-v") == 0 {
             println!("mlang-format {}", version());
             return 0;
         }
-        if strcmp(arg, "-i") == 0: {
+        if strcmp(arg, "-i") == 0 {
             in_place = true;
             continue;
         }
-        if strcmp(arg, "--in-place") == 0: {
+        if strcmp(arg, "--in-place") == 0 {
             in_place = true;
             continue;
         }
-        if strcmp(arg, "--root") == 0: {
+        if strcmp(arg, "--root") == 0 {
             expect_root = true;
             continue;
         }
-        if strcmp(arg, "--assume-filename") == 0: {
+        if strcmp(arg, "--assume-filename") == 0 {
             expect_assume = true;
             continue;
         }
-        if strcmp(arg, "--style") == 0: {
+        if strcmp(arg, "--style") == 0 {
             expect_style = true;
             continue;
         }
-        if strcmp(arg, "--fallback-style") == 0: {
+        if strcmp(arg, "--fallback-style") == 0 {
             expect_fallback_style = true;
             continue;
         }
 
         let arg_s: string = format!("{}", arg);
-        if starts_with(arg_s, "--assume-filename=") == 1: {
+        if starts_with(arg_s, "--assume-filename=") == 1 {
             let off: i64 = len("--assume-filename=");
             assume_filename = sub(arg_s, off, len(arg_s) - off);
             continue;
         }
-        if starts_with(arg_s, "--style=") == 1: {
+        if starts_with(arg_s, "--style=") == 1 {
             let off: i64 = len("--style=");
             style = sub(arg_s, off, len(arg_s) - off);
             continue;
         }
-        if starts_with(arg_s, "--root=") == 1: {
+        if starts_with(arg_s, "--root=") == 1 {
             let off: i64 = len("--root=");
             root_path = sub(arg_s, off, len(arg_s) - off);
             continue;
         }
 
-        if starts_with(arg_s, "-") == 1: {
+        if starts_with(arg_s, "-") == 1 {
             return fail(format!("mlang-format: unknown option '{}'", arg_s));
         }
-        if len(target_path) > 0: {
+        if len(target_path) > 0 {
             return fail("mlang-format: multiple paths are not supported yet");
         }
         target_path = arg_s;
     }
 
-    if expect_root: {
+    if expect_root {
         return fail("mlang-format: missing value after option");
     }
-    if expect_assume: {
+    if expect_assume {
         return fail("mlang-format: missing value after option");
     }
-    if expect_style: {
+    if expect_style {
         return fail("mlang-format: missing value after option");
     }
-    if expect_fallback_style: {
+    if expect_fallback_style {
         return fail("mlang-format: missing value after option");
     }
-    if eq(style, "file") == 0: {
+    if eq(style, "file") == 0 {
         return fail("mlang-format: only '--style file' is currently supported");
     }
-    if in_place: {
-        if len(target_path) == 0: {
+    if in_place {
+        if len(target_path) == 0 {
             return fail("mlang-format: -i/--in-place requires a file path");
         }
     }
 
     var config_anchor: string = cwd();
-    if len(target_path) > 0: {
+    if len(target_path) > 0 {
         config_anchor = target_path;
     }
-    if len(assume_filename) > 0: {
+    if len(assume_filename) > 0 {
         config_anchor = assume_filename;
     }
 
     let config_path: string = find_config(config_anchor, root_path);
     var cfg: FormatConfig = default_config();
-    if len(config_path) > 0: {
+    if len(config_path) > 0 {
         cfg = read_config(config_path);
     }
 
-    if len(target_path) > 0: {
+    if len(target_path) > 0 {
         let read_r: Result<string, string> = read_all_text(target_path);
-        if read_r.is_err(): {
+        if read_r.is_err() {
             return fail(format!("mlang-format: failed to read '{}'", target_path));
         }
         let text: string = read_r.unwrap();
         let formatted: string = apply_config_format(text, cfg);
-        if in_place: {
+        if in_place {
             let wr: Result<i32, string> = write_all_text(target_path, formatted);
-            if wr.is_err(): {
+            if wr.is_err() {
                 return fail(format!("mlang-format: failed to write '{}'", target_path));
             }
             return 0;

@@ -118,13 +118,13 @@ impl StdioTransport {
     /// Returns frame payload bytes copied to `buf`.
     pub fn read_frame(self: StdioTransport, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_jsonrpc_stdio_read_frame(buf, capacity);
-        if n == -2: {
+        if n == -2 {
             return Err<i64, string>("std::jsonrpc read_frame timeout");
         }
-        if n == -3: {
+        if n == -3 {
             return Err<i64, string>("std::jsonrpc read_frame payload too large for buffer");
         }
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);
@@ -134,13 +134,13 @@ impl StdioTransport {
     /// `timeout_ms` >= 0, returns timeout error if no data arrives in time.
     pub fn read_frame_timeout(self: StdioTransport, buf: string, capacity: i64, timeout_ms: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_jsonrpc_stdio_read_frame_timeout(buf, capacity, timeout_ms);
-        if n == -2: {
+        if n == -2 {
             return Err<i64, string>("std::jsonrpc read_frame timeout");
         }
-        if n == -3: {
+        if n == -3 {
             return Err<i64, string>("std::jsonrpc read_frame payload too large for buffer");
         }
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);
@@ -149,7 +149,7 @@ impl StdioTransport {
     /// @brief Write one JSON payload as a framed `Content-Length` message.
     pub fn write_frame(self: StdioTransport, payload: string) -> Result<i32, string> {
         let rc: i32 = __mlang_std_jsonrpc_stdio_write_frame(payload);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -160,11 +160,11 @@ impl Runtime {
     /// @brief Build runtime queues with bounded channel capacity.
     pub fn new(queue_capacity: i64) -> Result<Runtime, string> {
         let in_h: i64 = __mlang_std_sync_channel_new(queue_capacity);
-        if in_h == 0: {
+        if in_h == 0 {
             return Err<Runtime, string>(__mlang_std_sync_last_error());
         }
         let out_h: i64 = __mlang_std_sync_channel_new(queue_capacity);
-        if out_h == 0: {
+        if out_h == 0 {
             __mlang_std_sync_channel_free(in_h);
             return Err<Runtime, string>(__mlang_std_sync_last_error());
         }
@@ -177,7 +177,7 @@ impl Runtime {
     /// @brief Push parsed inbound request/notification payload.
     pub fn push_inbound(self: Runtime, payload: string) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_channel_send(self.inbound_handle, payload);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(__mlang_std_sync_last_error());
         }
         return Ok<i32, string>(0);
@@ -187,10 +187,10 @@ impl Runtime {
     /// Returns copied bytes (>0), `-2` empty, `0` closed+drained.
     pub fn try_pop_inbound(self: Runtime, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_sync_channel_try_recv(self.inbound_handle, buf, capacity);
-        if n < -1: {
+        if n < -1 {
             return Ok<i64, string>(n);
         }
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(__mlang_std_sync_last_error());
         }
         return Ok<i64, string>(n);
@@ -199,7 +199,7 @@ impl Runtime {
     /// @brief Queue outbound payload.
     pub fn push_outbound(self: Runtime, payload: string) -> Result<i32, string> {
         let rc: i32 = __mlang_std_sync_channel_send(self.outbound_handle, payload);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(__mlang_std_sync_last_error());
         }
         return Ok<i32, string>(0);
@@ -209,10 +209,10 @@ impl Runtime {
     /// Returns copied bytes (>0), `-2` empty, `0` closed+drained.
     pub fn try_pop_outbound(self: Runtime, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_sync_channel_try_recv(self.outbound_handle, buf, capacity);
-        if n < -1: {
+        if n < -1 {
             return Ok<i64, string>(n);
         }
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(__mlang_std_sync_last_error());
         }
         return Ok<i64, string>(n);
@@ -235,7 +235,7 @@ pub fn build_frame(payload: string) -> string {
 /// @brief Parse one raw frame string into `out` payload buffer.
 pub fn parse_frame(frame: string, out: string, capacity: i64) -> Result<i64, string> {
     let n: i64 = __mlang_std_jsonrpc_parse_frame(frame, out, capacity);
-    if n < 0: {
+    if n < 0 {
         return Err<i64, string>(last_error());
     }
     return Ok<i64, string>(n);
@@ -244,7 +244,7 @@ pub fn parse_frame(frame: string, out: string, capacity: i64) -> Result<i64, str
 /// @brief Mark request id as cancelled.
 pub fn cancel_mark(request_id: i64) -> Result<i32, string> {
     let rc: i32 = __mlang_std_jsonrpc_cancel_mark(request_id);
-    if rc != 0: {
+    if rc != 0 {
         return Err<i32, string>(last_error());
     }
     return Ok<i32, string>(0);
@@ -549,14 +549,14 @@ pub fn uri_store_get(handle: i64, index: i64) -> string {
 /// - `0` when payload is not a cancel notification
 pub fn register_cancel_from_payload(payload: string) -> Result<i32, string> {
     let request_id: i64 = __mlang_std_jsonrpc_extract_cancel_id(payload);
-    if request_id == -1: {
+    if request_id == -1 {
         return Ok<i32, string>(0);
     }
-    if request_id == -2: {
+    if request_id == -2 {
         return Err<i32, string>("std::jsonrpc cancel payload missing/invalid params.id");
     }
     let mark_r: Result<i32, string> = cancel_mark(request_id);
-    if mark_r.is_err(): {
+    if mark_r.is_err() {
         return Err<i32, string>(mark_r.unwrap_err());
     }
     return Ok<i32, string>(1);
@@ -568,21 +568,21 @@ pub fn register_cancel_from_payload(payload: string) -> Result<i32, string> {
 /// - `0` when queue was empty
 pub fn flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: string, capacity: i64) -> Result<i32, string> {
     let recv_r: Result<i64, string> = rt.try_pop_outbound(scratch, capacity);
-    if recv_r.is_err(): {
+    if recv_r.is_err() {
         return Err<i32, string>(recv_r.unwrap_err());
     }
     let n: i64 = match recv_r {
         Ok(v) => v,
         Err(_e) => -1
     };
-    if n == -2: {
+    if n == -2 {
         return Ok<i32, string>(0);
     }
-    if n <= 0: {
+    if n <= 0 {
         return Ok<i32, string>(0);
     }
     let wr: Result<i32, string> = transport.write_frame(scratch);
-    if wr.is_err(): {
+    if wr.is_err() {
         return Err<i32, string>(wr.unwrap_err());
     }
     return Ok<i32, string>(1);
@@ -599,21 +599,21 @@ fn __jsonrpc_reader_thread(inbound_handle: i64, done_handle: i64, frame_capacity
 
     for _i in 0..2147483647 {
         let rr: Result<i64, string> = transport.read_frame(frame, frame_capacity);
-        if rr.is_err(): {
+        if rr.is_err() {
             break;
         }
         let cr: Result<i32, string> = register_cancel_from_payload(frame);
-        if cr.is_ok(): {
+        if cr.is_ok() {
             let c: i32 = match cr {
                 Ok(v) => v,
                 Err(_e) => 0
             };
-            if c == 1: {
+            if c == 1 {
                 continue;
             }
         }
         let rc: i32 = __mlang_std_sync_channel_send(inbound_handle, frame);
-        if rc != 0: {
+        if rc != 0 {
             break;
         }
     }
@@ -630,25 +630,25 @@ fn __jsonrpc_worker_thread(inbound_handle: i64, done_handle: i64, request_capaci
 
     for _i in 0..2147483647 {
         let n: i64 = __mlang_std_sync_channel_recv(inbound_handle, request_buf, request_capacity);
-        if n <= 0: {
+        if n <= 0 {
             break;
         }
 
         let request_id: i64 = __mlang_std_jsonrpc_extract_request_id(request_buf);
-        if request_id >= 0: {
-            if cancel_take(request_id) == 1: {
+        if request_id >= 0 {
+            if cancel_take(request_id) == 1 {
                 continue;
             }
         }
 
         let response_payload: string = __mlang_std_jsonrpc_runtime_dispatch(request_buf);
-        if __mlang_std_strbuf_len(response_payload) <= 0: {
+        if __mlang_std_strbuf_len(response_payload) <= 0 {
             String::free(response_payload);
             continue;
         }
 
-        if request_id >= 0: {
-            if cancel_take(request_id) == 1: {
+        if request_id >= 0 {
+            if cancel_take(request_id) == 1 {
                 String::free(response_payload);
                 continue;
             }
@@ -656,7 +656,7 @@ fn __jsonrpc_worker_thread(inbound_handle: i64, done_handle: i64, request_capaci
 
         let wr: Result<i32, string> = transport.write_frame(response_payload);
         String::free(response_payload);
-        if wr.is_err(): {
+        if wr.is_err() {
             break;
         }
     }
@@ -667,7 +667,7 @@ fn __jsonrpc_worker_thread(inbound_handle: i64, done_handle: i64, request_capaci
 }
 
 fn __jsonrpc_spawn_workers(remaining: i32, inbound_handle: i64, done_handle: i64, request_capacity: i64, response_capacity: i64) -> i32 {
-    if remaining <= 0: {
+    if remaining <= 0 {
         return 0;
     }
     thread_spawn(__jsonrpc_worker_thread, inbound_handle, done_handle, request_capacity, response_capacity);
@@ -687,20 +687,20 @@ fn __jsonrpc_spawn_workers(remaining: i32, inbound_handle: i64, done_handle: i64
 /// in libmlang_std (returns no response). Servers should override it.
 pub fn run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, string> {
     var workers: i32 = worker_count;
-    if workers <= 0: {
+    if workers <= 0 {
         workers = 1;
     }
     var req_cap: i64 = frame_capacity;
-    if req_cap < 1024: {
+    if req_cap < 1024 {
         req_cap = 1024;
     }
     var resp_cap: i64 = response_capacity;
-    if resp_cap < 1024: {
+    if resp_cap < 1024 {
         resp_cap = 1024;
     }
 
     let rt_r: Result<Runtime, string> = Runtime::new(256);
-    if rt_r.is_err(): {
+    if rt_r.is_err() {
         return Err<i32, string>(rt_r.unwrap_err());
     }
     let rt: Runtime = match rt_r {
@@ -709,7 +709,7 @@ pub fn run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity:
     };
 
     let done_handle: i64 = __mlang_std_sync_channel_new(workers + 1);
-    if done_handle == 0: {
+    if done_handle == 0 {
         rt.close();
         return Err<i32, string>(__mlang_std_sync_last_error());
     }

@@ -147,7 +147,7 @@ impl ArgParser {
         let rh: i64 = __mlang_std_argparser_parse_begin(self.handle);
         var i: i32 = 0;
         for arg in args {
-            if i > 0: {
+            if i > 0 {
                 let s: string = format!("{}", arg);
                 __mlang_std_argparser_parse_add(rh, s);
             }

@@ -57,107 +57,107 @@ pub fn dir_right() -> CursorDirection { return 2; }
 pub fn dir_left() -> CursorDirection { return 3; }
 
 fn fg_code(c: Color) -> i32 {
-    if c == color_black(): { return 30; }
-    if c == color_red(): { return 31; }
-    if c == color_green(): { return 32; }
-    if c == color_yellow(): { return 33; }
-    if c == color_blue(): { return 34; }
-    if c == color_magenta(): { return 35; }
-    if c == color_cyan(): { return 36; }
-    if c == color_white(): { return 37; }
-    if c == color_bright_black(): { return 90; }
-    if c == color_bright_red(): { return 91; }
-    if c == color_bright_green(): { return 92; }
-    if c == color_bright_yellow(): { return 93; }
-    if c == color_bright_blue(): { return 94; }
-    if c == color_bright_magenta(): { return 95; }
-    if c == color_bright_cyan(): { return 96; }
-    if c == color_bright_white(): { return 97; }
+    if c == color_black() { return 30; }
+    if c == color_red() { return 31; }
+    if c == color_green() { return 32; }
+    if c == color_yellow() { return 33; }
+    if c == color_blue() { return 34; }
+    if c == color_magenta() { return 35; }
+    if c == color_cyan() { return 36; }
+    if c == color_white() { return 37; }
+    if c == color_bright_black() { return 90; }
+    if c == color_bright_red() { return 91; }
+    if c == color_bright_green() { return 92; }
+    if c == color_bright_yellow() { return 93; }
+    if c == color_bright_blue() { return 94; }
+    if c == color_bright_magenta() { return 95; }
+    if c == color_bright_cyan() { return 96; }
+    if c == color_bright_white() { return 97; }
     return 39;
 }
 
 fn bg_code(c: Color) -> i32 {
-    if c == color_black(): { return 40; }
-    if c == color_red(): { return 41; }
-    if c == color_green(): { return 42; }
-    if c == color_yellow(): { return 43; }
-    if c == color_blue(): { return 44; }
-    if c == color_magenta(): { return 45; }
-    if c == color_cyan(): { return 46; }
-    if c == color_white(): { return 47; }
-    if c == color_bright_black(): { return 100; }
-    if c == color_bright_red(): { return 101; }
-    if c == color_bright_green(): { return 102; }
-    if c == color_bright_yellow(): { return 103; }
-    if c == color_bright_blue(): { return 104; }
-    if c == color_bright_magenta(): { return 105; }
-    if c == color_bright_cyan(): { return 106; }
-    if c == color_bright_white(): { return 107; }
+    if c == color_black() { return 40; }
+    if c == color_red() { return 41; }
+    if c == color_green() { return 42; }
+    if c == color_yellow() { return 43; }
+    if c == color_blue() { return 44; }
+    if c == color_magenta() { return 45; }
+    if c == color_cyan() { return 46; }
+    if c == color_white() { return 47; }
+    if c == color_bright_black() { return 100; }
+    if c == color_bright_red() { return 101; }
+    if c == color_bright_green() { return 102; }
+    if c == color_bright_yellow() { return 103; }
+    if c == color_bright_blue() { return 104; }
+    if c == color_bright_magenta() { return 105; }
+    if c == color_bright_cyan() { return 106; }
+    if c == color_bright_white() { return 107; }
     return 49;
 }
 
 /// @brief Reset all SGR styles/colors.
 pub fn reset() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_reset();
 }
 
 /// @brief Set foreground color.
 pub fn fg(color: Color) -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(fg_code(color));
 }
 
 /// @brief Set background color.
 pub fn bg(color: Color) -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(bg_code(color));
 }
 
 /// @brief Enable bold text.
 pub fn bold_on() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(1);
 }
 
 /// @brief Disable bold/dim text.
 pub fn bold_off() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(22);
 }
 
 /// @brief Enable underline.
 pub fn underline_on() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(4);
 }
 
 /// @brief Disable underline.
 pub fn underline_off() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(24);
 }
 
 /// @brief Enable inverse video.
 pub fn inverse_on() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(7);
 }
 
 /// @brief Disable inverse video.
 pub fn inverse_off() -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(27);
 }
 
 /// @brief Return a cursor control escape sequence.
 pub fn cursor(cmd: CursorCommand) -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_code(cmd);
 }
 
 /// @brief Move cursor by `amount` in given direction.
 pub fn cursor_move(dir: CursorDirection, amount: i32) -> string {
-    if ansi_enabled() == 0: { return ""; }
+    if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_move(dir, amount);
 }

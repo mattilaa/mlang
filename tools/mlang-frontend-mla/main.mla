@@ -536,7 +536,7 @@ fn find_manifest_path(start_dir: string) -> string {
     if len(cur) == 0 {
         cur = ".";
     }
-    while len(cur) > 0: {
+    while len(cur) > 0 {
         let candidate: string = join_path(cur, "mlang.toml");
         if file_exists(candidate) == 1 {
             return candidate;
@@ -709,7 +709,7 @@ fn normalize_signed_decimal(s: string) -> string {
         sign = first;
         start = 1;
     }
-    while start < n: {
+    while start < n {
         if eq(sub(s, start, 1), "0") == 1 {
             start = start + 1;
             continue;
@@ -887,7 +887,7 @@ fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<stri
     var have_bench_warmup: i32 = 0;
     let n: i64 = args.len();
     var i: i64 = 0;
-    while i < n: {
+    while i < n {
         let a: string = args[i];
         if eq(a, "-L") == 1 || eq(a, "-l") == 1 || eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
             if i + 1 < n {
@@ -960,13 +960,13 @@ fn parse_options(argv: list<string>) -> FrontendState {
     let n: i64 = argv.len();
     var i: i64 = 1;
     var passthrough_started: i32 = 0;
-    while i < n: {
+    while i < n {
         let arg: string = argv[i];
         if passthrough_started == 1 {
             out.passthrough.push(arg);
             i = i + 1;
             continue;
-        }
+	        }
         if (eq(arg, "--backend") == 1) {
             if i + 1 >= n {
                 out.parse_error = "missing value after --backend";
@@ -1084,7 +1084,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         var has_no_colon_if: i32 = 0;
         var has_no_colon_while: i32 = 0;
         var ci: i64 = 0;
-        while ci < compile_n: {
+        while ci < compile_n {
             let ca: string = passthrough[ci];
             if eq(ca, "--tests") == 1 {
                 compile_test_mode = 1;
@@ -1191,7 +1191,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var bench_warmup_seen: i32 = 0;
     let n: i64 = passthrough.len();
     var i: i64 = idx;
-    while i < n: {
+	    while i < n {
         let a: string = passthrough[i];
         if eq(a, "--version") == 1 {
             return run_inherit(st.backend, ["--version"]);

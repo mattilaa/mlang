@@ -123,7 +123,7 @@ pub fn cursor_free(c: Cursor) -> void {
 pub fn read_line_owned(input: Stdin, capacity: i64) -> string {
     let buf = String::with_capacity(capacity);
     let n = read_line(input, buf, capacity);
-    if n < 0: {
+    if n < 0 {
         String::free(buf);
         return String::new();
     }
@@ -238,7 +238,7 @@ pub fn writeln_sync(out: Stdout, s: string) -> i64 {
 /// @brief Trait-like read.
 /// Stdin backend currently reads one logical line.
 pub fn read(reader: Read, buf: string, capacity: i64) -> i64 {
-    if reader.kind == 1: {
+    if reader.kind == 1 {
         return __mlang_std_io_stdin_read_line(buf, capacity);
     }
     return __mlang_std_io_cursor_read(reader.cursor.handle, buf, capacity);
@@ -246,10 +246,10 @@ pub fn read(reader: Read, buf: string, capacity: i64) -> i64 {
 
 /// @brief Trait-like write.
 pub fn write(writer: Write, s: string) -> i64 {
-    if writer.kind == 1: {
+    if writer.kind == 1 {
         return __mlang_std_io_stdout_write(s);
     }
-    if writer.kind == 2: {
+    if writer.kind == 2 {
         return __mlang_std_io_stderr_write(s);
     }
     return __mlang_std_io_cursor_write(writer.cursor.handle, s);
@@ -257,7 +257,7 @@ pub fn write(writer: Write, s: string) -> i64 {
 
 /// @brief Trait-like buffered read line.
 pub fn read_line(reader: BufRead, buf: string, capacity: i64) -> i64 {
-    if reader.kind == 1: {
+    if reader.kind == 1 {
         return __mlang_std_io_stdin_read_line(buf, capacity);
     }
     return __mlang_std_io_cursor_read_line(reader.cursor.handle, buf, capacity);

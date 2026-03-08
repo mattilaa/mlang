@@ -55,7 +55,7 @@ pub fn last_error() -> string {
 /// @brief Spawn a child process with stdin/stdout/stderr pipes enabled.
 pub fn spawn(program: string, args: list<string>) -> Result<Child, string> {
     let h: i64 = __mlang_std_process_spawn(program, args, 1, 1, 1);
-    if h == 0: {
+    if h == 0 {
         return Err<Child, string>(last_error());
     }
     return Ok<Child, string>(Child { handle: h });
@@ -64,7 +64,7 @@ pub fn spawn(program: string, args: list<string>) -> Result<Child, string> {
 /// @brief Spawn a child process inheriting parent stdio.
 pub fn spawn_inherit(program: string, args: list<string>) -> Result<Child, string> {
     let h: i64 = __mlang_std_process_spawn(program, args, 0, 0, 0);
-    if h == 0: {
+    if h == 0 {
         return Err<Child, string>(last_error());
     }
     return Ok<Child, string>(Child { handle: h });
@@ -74,7 +74,7 @@ impl Child {
     /// @brief Take writable child stdin pipe.
     pub fn stdin(self: Child) -> Result<ChildStdin, string> {
         let h: i64 = __mlang_std_process_take_stdin(self.handle);
-        if h == 0: {
+        if h == 0 {
             return Err<ChildStdin, string>(last_error());
         }
         return Ok<ChildStdin, string>(ChildStdin { handle: h });
@@ -83,7 +83,7 @@ impl Child {
     /// @brief Take readable child stdout pipe.
     pub fn stdout(self: Child) -> Result<ChildStdout, string> {
         let h: i64 = __mlang_std_process_take_stdout(self.handle);
-        if h == 0: {
+        if h == 0 {
             return Err<ChildStdout, string>(last_error());
         }
         return Ok<ChildStdout, string>(ChildStdout { handle: h });
@@ -92,7 +92,7 @@ impl Child {
     /// @brief Take readable child stderr pipe.
     pub fn stderr(self: Child) -> Result<ChildStderr, string> {
         let h: i64 = __mlang_std_process_take_stderr(self.handle);
-        if h == 0: {
+        if h == 0 {
             return Err<ChildStderr, string>(last_error());
         }
         return Ok<ChildStderr, string>(ChildStderr { handle: h });
@@ -101,7 +101,7 @@ impl Child {
     /// @brief Wait for child completion and return exit status.
     pub fn wait(self: Child) -> Result<ExitStatus, string> {
         let raw: i32 = __mlang_std_process_wait_raw(self.handle);
-        if raw < 0: {
+        if raw < 0 {
             return Err<ExitStatus, string>(last_error());
         }
         return Ok<ExitStatus, string>(ExitStatus { raw: raw });
@@ -110,7 +110,7 @@ impl Child {
     /// @brief Send signal `sig` to child process.
     pub fn kill(self: Child, sig: i32) -> Result<i32, string> {
         let rc: i32 = __mlang_std_process_kill(self.handle, sig);
-        if rc != 0: {
+        if rc != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -145,7 +145,7 @@ impl ExitStatus {
 
     /// @brief Return 1 on successful exit code 0.
     pub fn success(self: ExitStatus) -> int {
-        if self.exited() != 1: {
+        if self.exited() != 1 {
             return 0;
         }
         return self.code() == 0 ? 1 : 0;
@@ -156,7 +156,7 @@ impl ChildStdin {
     /// @brief Write bytes to child stdin pipe.
     pub fn write(self: ChildStdin, s: string) -> Result<i64, string> {
         let n: i64 = __mlang_std_process_pipe_write(self.handle, s);
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);
@@ -172,7 +172,7 @@ impl ChildStdout {
     /// @brief Read up to `capacity-1` bytes into `buf` (NUL-terminated).
     pub fn read(self: ChildStdout, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_process_pipe_read(self.handle, buf, capacity);
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);
@@ -188,7 +188,7 @@ impl ChildStderr {
     /// @brief Read up to `capacity-1` bytes into `buf` (NUL-terminated).
     pub fn read(self: ChildStderr, buf: string, capacity: i64) -> Result<i64, string> {
         let n: i64 = __mlang_std_process_pipe_read(self.handle, buf, capacity);
-        if n < 0: {
+        if n < 0 {
             return Err<i64, string>(last_error());
         }
         return Ok<i64, string>(n);

@@ -127,7 +127,7 @@ pub fn last_error() -> string {
 /// @brief Create a new compiler session.
 pub fn session_create() -> Result<Session, string> {
     let h: i64 = __mlang_std_compiler_session_create();
-    if h == 0: {
+    if h == 0 {
         return Err<Session, string>(last_error());
     }
     return Ok<Session, string>(Session { handle: h });
@@ -137,7 +137,7 @@ impl Session {
     /// @brief Destroy compiler session and release associated document state.
     pub fn destroy(self: Session) -> Result<i32, string> {
         let st: i32 = __mlang_std_compiler_session_destroy(self.handle);
-        if st != 0: {
+        if st != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -146,7 +146,7 @@ impl Session {
     /// @brief Open or replace a document in this session.
     pub fn open_document(self: Session, uri: string, language_id: string, text: string, version: i32) -> Result<i32, string> {
         let st: i32 = __mlang_std_compiler_document_open(self.handle, uri, language_id, text, version);
-        if st != 0: {
+        if st != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -155,7 +155,7 @@ impl Session {
     /// @brief Replace full text for an already-open document, enforcing monotonic version.
     pub fn change_document(self: Session, uri: string, text: string, version: i32) -> Result<i32, string> {
         let st: i32 = __mlang_std_compiler_document_change(self.handle, uri, text, version);
-        if st != 0: {
+        if st != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -164,7 +164,7 @@ impl Session {
     /// @brief Close and forget a document in this session.
     pub fn close_document(self: Session, uri: string) -> Result<i32, string> {
         let st: i32 = __mlang_std_compiler_document_close(self.handle, uri);
-        if st != 0: {
+        if st != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -173,7 +173,7 @@ impl Session {
     /// @brief Return number of syntax diagnostics for a document.
     pub fn syntax_diagnostic_count(self: Session, uri: string) -> Result<i32, string> {
         let count: i32 = __mlang_std_compiler_document_syntax_diagnostic_count(self.handle, uri);
-        if count < 0: {
+        if count < 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(count);
@@ -182,15 +182,15 @@ impl Session {
     /// @brief Fetch one syntax diagnostic by index.
     pub fn syntax_diagnostic_get(self: Session, uri: string, index: i32) -> Result<SyntaxDiagnostic, string> {
         let line: i32 = __mlang_std_compiler_document_syntax_diagnostic_line(self.handle, uri, index);
-        if line < 0: {
+        if line < 0 {
             return Err<SyntaxDiagnostic, string>(last_error());
         }
         let column: i32 = __mlang_std_compiler_document_syntax_diagnostic_column(self.handle, uri, index);
-        if column < 0: {
+        if column < 0 {
             return Err<SyntaxDiagnostic, string>(last_error());
         }
         let msg: string = __mlang_std_compiler_document_syntax_diagnostic_message(self.handle, uri, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<SyntaxDiagnostic, string>(last_error());
         }
         return Ok<SyntaxDiagnostic, string>(SyntaxDiagnostic {
@@ -203,7 +203,7 @@ impl Session {
     /// @brief Return hover text at 1-based line/column.
     pub fn hover(self: Session, uri: string, line: i32, column: i32) -> Result<string, string> {
         let msg: string = __mlang_std_compiler_document_hover(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<string, string>(last_error());
         }
         return Ok<string, string>(msg);
@@ -212,7 +212,7 @@ impl Session {
     /// @brief Return completion item count at 1-based line/column.
     pub fn completion_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string> {
         let count: i32 = __mlang_std_compiler_document_completion_count(self.handle, uri, line, column);
-        if count < 0: {
+        if count < 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(count);
@@ -221,7 +221,7 @@ impl Session {
     /// @brief Fetch completion item by index for 1-based line/column.
     pub fn completion_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<string, string> {
         let item: string = __mlang_std_compiler_document_completion_get(self.handle, uri, line, column, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<string, string>(last_error());
         }
         return Ok<string, string>(item);
@@ -230,7 +230,7 @@ impl Session {
     /// @brief Return declared symbol count for a document.
     pub fn document_symbol_count(self: Session, uri: string) -> Result<i32, string> {
         let count: i32 = __mlang_std_compiler_document_symbol_count(self.handle, uri);
-        if count < 0: {
+        if count < 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(count);
@@ -239,31 +239,31 @@ impl Session {
     /// @brief Fetch one declared symbol by index.
     pub fn document_symbol_get(self: Session, uri: string, index: i32) -> Result<DocumentSymbol, string> {
         let line: i32 = __mlang_std_compiler_document_symbol_line(self.handle, uri, index);
-        if line < 0: {
+        if line < 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         let column: i32 = __mlang_std_compiler_document_symbol_column(self.handle, uri, index);
-        if column < 0: {
+        if column < 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         let kind: i32 = __mlang_std_compiler_document_symbol_kind(self.handle, uri, index);
-        if kind < 0: {
+        if kind < 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         let id: string = __mlang_std_compiler_document_symbol_id(self.handle, uri, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         let name: string = __mlang_std_compiler_document_symbol_name(self.handle, uri, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         let type_info: string = __mlang_std_compiler_document_symbol_type(self.handle, uri, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         let signature: string = __mlang_std_compiler_document_symbol_signature(self.handle, uri, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DocumentSymbol, string>(last_error());
         }
         return Ok<DocumentSymbol, string>(DocumentSymbol {
@@ -280,23 +280,23 @@ impl Session {
     /// @brief Resolve definition for symbol under cursor (same document scope).
     pub fn definition(self: Session, uri: string, line: i32, column: i32) -> Result<DefinitionLocation, string> {
         let def_line: i32 = __mlang_std_compiler_document_definition_line(self.handle, uri, line, column);
-        if def_line < 0: {
+        if def_line < 0 {
             return Err<DefinitionLocation, string>(last_error());
         }
         let def_column: i32 = __mlang_std_compiler_document_definition_column(self.handle, uri, line, column);
-        if def_column < 0: {
+        if def_column < 0 {
             return Err<DefinitionLocation, string>(last_error());
         }
         let def_name: string = __mlang_std_compiler_document_definition_name(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DefinitionLocation, string>(last_error());
         }
         let def_uri: string = __mlang_std_compiler_document_definition_uri(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DefinitionLocation, string>(last_error());
         }
         let def_id: string = __mlang_std_compiler_document_definition_id(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<DefinitionLocation, string>(last_error());
         }
         return Ok<DefinitionLocation, string>(DefinitionLocation {
@@ -311,7 +311,7 @@ impl Session {
     /// @brief Count references to symbol under cursor across loaded/workspace-resolved documents.
     pub fn references_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string> {
         let count: i32 = __mlang_std_compiler_document_reference_count(self.handle, uri, line, column);
-        if count < 0: {
+        if count < 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(count);
@@ -320,15 +320,15 @@ impl Session {
     /// @brief Fetch one reference location by index.
     pub fn reference_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, string> {
         let ref_line: i32 = __mlang_std_compiler_document_reference_line(self.handle, uri, line, column, index);
-        if ref_line < 0: {
+        if ref_line < 0 {
             return Err<ReferenceLocation, string>(last_error());
         }
         let ref_col: i32 = __mlang_std_compiler_document_reference_column(self.handle, uri, line, column, index);
-        if ref_col < 0: {
+        if ref_col < 0 {
             return Err<ReferenceLocation, string>(last_error());
         }
         let ref_uri: string = __mlang_std_compiler_document_reference_uri(self.handle, uri, line, column, index);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<ReferenceLocation, string>(last_error());
         }
         return Ok<ReferenceLocation, string>(ReferenceLocation {
@@ -341,43 +341,43 @@ impl Session {
     /// @brief Resolve symbol under cursor with typed metadata and overload count.
     pub fn resolve_symbol(self: Session, uri: string, line: i32, column: i32) -> Result<ResolvedSymbol, string> {
         let sym_line: i32 = __mlang_std_compiler_resolve_symbol_line(self.handle, uri, line, column);
-        if sym_line < 0: {
+        if sym_line < 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let sym_col: i32 = __mlang_std_compiler_resolve_symbol_column(self.handle, uri, line, column);
-        if sym_col < 0: {
+        if sym_col < 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let kind: i32 = __mlang_std_compiler_resolve_symbol_kind(self.handle, uri, line, column);
-        if kind < 0: {
+        if kind < 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let overload_count: i32 = __mlang_std_compiler_resolve_symbol_overload_count(self.handle, uri, line, column);
-        if overload_count < 0: {
+        if overload_count < 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let from_current_document: i32 = __mlang_std_compiler_resolve_symbol_from_current_document(self.handle, uri, line, column);
-        if from_current_document < 0: {
+        if from_current_document < 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let id: string = __mlang_std_compiler_resolve_symbol_id(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let name: string = __mlang_std_compiler_resolve_symbol_name(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let sym_uri: string = __mlang_std_compiler_resolve_symbol_uri(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let type_info: string = __mlang_std_compiler_resolve_symbol_type(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         let signature: string = __mlang_std_compiler_resolve_symbol_signature(self.handle, uri, line, column);
-        if last_status() != 0: {
+        if last_status() != 0 {
             return Err<ResolvedSymbol, string>(last_error());
         }
         return Ok<ResolvedSymbol, string>(ResolvedSymbol {
@@ -397,7 +397,7 @@ impl Session {
     /// @brief Conservative rename safety check (1 safe, 0 unsafe).
     pub fn rename_is_safe(self: Session, uri: string, line: i32, column: i32, new_name: string) -> Result<i32, string> {
         let safe: i32 = __mlang_std_compiler_document_rename_is_safe(self.handle, uri, line, column, new_name);
-        if safe < 0: {
+        if safe < 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(safe);
@@ -406,7 +406,7 @@ impl Session {
     /// @brief Warm semantic cache for a document + workspace graph rooted from it.
     pub fn semantic_cache_warm(self: Session, uri: string) -> Result<i32, string> {
         let st: i32 = __mlang_std_compiler_semantic_cache_warm(self.handle, uri);
-        if st != 0: {
+        if st != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
@@ -415,7 +415,7 @@ impl Session {
     /// @brief Clear cached semantic snapshots for this session.
     pub fn semantic_cache_clear(self: Session) -> Result<i32, string> {
         let st: i32 = __mlang_std_compiler_semantic_cache_clear(self.handle);
-        if st != 0: {
+        if st != 0 {
             return Err<i32, string>(last_error());
         }
         return Ok<i32, string>(0);
