@@ -1,0 +1,94 @@
+mod std::net;
+mod std::protocol;
+mod std::strbuf;
+
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::protocol::ProtocolFrame;
+use std::protocol::close;
+use std::protocol::connect;
+use std::protocol::default_max_payload_bytes;
+use std::protocol::from_stream;
+use std::protocol::recv;
+use std::protocol::send;
+use std::strbuf::eq;
+
+fn main() -> i32 {
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    if listener_r.is_err() {
+        println!("bind failed: {}", listener_r.unwrap_err());
+        return 1;
+    }
+    let listener: TcpListener = listener_r.unwrap();
+
+    let port_r: Result<i64, string> = listener.local_port();
+    if port_r.is_err() {
+        println!("local_port failed: {}", port_r.unwrap_err());
+        listener.close();
+        return 1;
+    }
+    let port: i64 = port_r.unwrap();
+
+    let client_r: Result<i64, string> = connect("127.0.0.1", port);
+    if client_r.is_err() {
+        println!("connect failed: {}", client_r.unwrap_err());
+        listener.close();
+        return 1;
+    }
+    let client: i64 = client_r.unwrap();
+
+    let server_stream_r: Result<TcpStream, string> = listener.accept();
+    if server_stream_r.is_err() {
+        println!("accept failed: {}", server_stream_r.unwrap_err());
+        close(client);
+        listener.close();
+        return 1;
+    }
+    let server: i64 = from_stream(server_stream_r.unwrap());
+
+    // Derived protocol example:
+    // opcode=1 -> ping request, opcode=2 -> pong response
+    let sr: Result<i64, string> = send(client, 1, "hello-protocol");
+    if sr.is_err() {
+        println!("client send failed");
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+
+    let rf: Result<ProtocolFrame, string> = recv(server, 256, default_max_payload_bytes());
+    if rf.is_err() {
+        println!("server recv failed: {}", rf.unwrap_err());
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+    let f: ProtocolFrame = rf.unwrap();
+
+    if f.opcode == 1 && eq(f.payload, "hello-protocol") == 1 {
+        send(server, 2, "pong");
+    } else {
+        send(server, 99, "bad-request");
+    }
+    String::free(f.payload);
+
+    let cf: Result<ProtocolFrame, string> = recv(client, 256, default_max_payload_bytes());
+    if cf.is_err() {
+        println!("client recv failed: {}", cf.unwrap_err());
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+    let out: ProtocolFrame = cf.unwrap();
+
+    println!("client got opcode={} payload={} ", out.opcode, out.payload);
+    String::free(out.payload);
+
+    close(server);
+    close(client);
+    listener.close();
+    return 0;
+}

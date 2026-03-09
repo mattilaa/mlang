@@ -1,0 +1,151 @@
+mod std::net;
+mod std::protocol;
+mod std::strbuf;
+
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::protocol::ProtocolFrame;
+use std::protocol::close;
+use std::protocol::connect;
+use std::protocol::default_max_payload_bytes;
+use std::protocol::from_stream;
+use std::protocol::recv;
+use std::protocol::send;
+use std::strbuf::eq;
+
+#[test]
+fn test_protocol_ping_pong_roundtrip() -> i32 {
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    if listener_r.is_err() { return 0; }
+    let listener: TcpListener = listener_r.unwrap();
+
+    let port_r: Result<i64, string> = listener.local_port();
+    if port_r.is_err() {
+        listener.close();
+        return 0;
+    }
+    let port: i64 = port_r.unwrap();
+
+    let client_r: Result<i64, string> = connect("127.0.0.1", port);
+    if client_r.is_err() {
+        listener.close();
+        return 0;
+    }
+    let client: i64 = client_r.unwrap();
+
+    let server_stream_r: Result<TcpStream, string> = listener.accept();
+    if server_stream_r.is_err() {
+        close(client);
+        listener.close();
+        return 0;
+    }
+    let server: i64 = from_stream(server_stream_r.unwrap());
+
+    let sw: Result<i64, string> = send(client, 1, "ping");
+    if sw.is_err() {
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+
+    let recv1: Result<ProtocolFrame, string> = recv(server, 128, default_max_payload_bytes());
+    if recv1.is_err() {
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+    let f1: ProtocolFrame = recv1.unwrap();
+    if f1.opcode != 1 {
+        String::free(f1.payload);
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+    if eq(f1.payload, "ping") != 1 {
+        String::free(f1.payload);
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+    String::free(f1.payload);
+
+    let rw: Result<i64, string> = send(server, 2, "pong");
+    if rw.is_err() {
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+
+    let recv2: Result<ProtocolFrame, string> = recv(client, 128, default_max_payload_bytes());
+    if recv2.is_err() {
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+    let f2: ProtocolFrame = recv2.unwrap();
+    let ok_opcode: i32 = f2.opcode == 2 ? 1 : 0;
+    let ok_payload: i32 = eq(f2.payload, "pong");
+    String::free(f2.payload);
+
+    close(server);
+    close(client);
+    listener.close();
+    if ok_opcode == 1 && ok_payload == 1 {
+        return 0;
+    }
+    return 1;
+}
+
+#[test]
+fn test_protocol_max_payload_limit() -> i32 {
+    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    if listener_r.is_err() { return 0; }
+    let listener: TcpListener = listener_r.unwrap();
+
+    let port_r: Result<i64, string> = listener.local_port();
+    if port_r.is_err() {
+        listener.close();
+        return 0;
+    }
+    let port: i64 = port_r.unwrap();
+
+    let client_r: Result<i64, string> = connect("127.0.0.1", port);
+    if client_r.is_err() {
+        listener.close();
+        return 0;
+    }
+    let client: i64 = client_r.unwrap();
+
+    let server_stream_r: Result<TcpStream, string> = listener.accept();
+    if server_stream_r.is_err() {
+        close(client);
+        listener.close();
+        return 0;
+    }
+    let server: i64 = from_stream(server_stream_r.unwrap());
+
+    let sw: Result<i64, string> = send(client, 9, "toolong");
+    if sw.is_err() {
+        close(server);
+        close(client);
+        listener.close();
+        return 1;
+    }
+
+    let rr: Result<ProtocolFrame, string> = recv(server, 128, 4);
+
+    close(server);
+    close(client);
+    listener.close();
+
+    if rr.is_err() {
+        return 0;
+    }
+    return 1;
+}

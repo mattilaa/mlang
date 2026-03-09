@@ -29,6 +29,8 @@ Currently provided:
    UTF-8<->UTF-16 converters and helpers).
 - `std/bytes.mla`: dynamic raw byte buffer helpers for protocol/binary payloads
   (reserve/append/index/set, binary-safe `to_hex`, text-oriented `to_string`).
+- `std/protocol.mla`: base framed TCP protocol transport helpers intended for
+  project-level derived protocol stacks (`opcode + payload` framing).
 - `std/json.mla`: JSON parse/stringify + object/array navigation and iterators
   (`JsonDoc::parse/from_file`, `JsonDoc::stringify`,
    `JsonValue::get/index/as_*`, `iter_array`, `iter_object`),

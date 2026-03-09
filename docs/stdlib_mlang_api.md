@@ -25,6 +25,7 @@ mod std::timer;
 mod std::fs;
 mod std::strbuf;
 mod std::bytes;
+mod std::protocol;
 mod std::testing;
 mod std::thread;
 mod std::unordered;
@@ -53,6 +54,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/timer.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/bytes.mla`
+- `stdlib/std/protocol.mla`
 - `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
 - `stdlib/std/unordered.mla`
@@ -847,6 +849,29 @@ Module file: `stdlib/std/bytes.mla`
 ### Conversions
 - `Bytes::to_string(self: Bytes) -> string` (text-oriented C/UTF-8 string copy)
 - `Bytes::to_hex(self: Bytes) -> string` (binary-safe lowercase hex)
+
+## std::protocol
+
+Module file: `stdlib/std/protocol.mla`
+
+### Types
+- `ProtocolFrame`
+
+### API
+- `default_max_payload_bytes() -> i64`
+- `last_error() -> string`
+- `connect(addr: string, port: i64) -> Result<i64, string>` (protocol stream handle)
+- `from_stream(stream: TcpStream) -> i64` (protocol stream handle)
+- `send(stream_handle: i64, opcode: i32, payload: string) -> Result<i64, string>`
+- `recv(stream_handle: i64, payload_capacity: i64, max_payload_bytes: i64) -> Result<ProtocolFrame, string>`
+- `close(stream_handle: i64) -> i32`
+- `raw_handle(stream_handle: i64) -> i64`
+
+### Wire format
+- magic: `MLP1` (4 bytes)
+- opcode: big-endian `u32`
+- payload length: big-endian `u32`
+- payload bytes
 
 ## std::thread
 

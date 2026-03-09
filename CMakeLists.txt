@@ -220,6 +220,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_bytes.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_protocol.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_vec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_error.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_compiler_api.cpp
