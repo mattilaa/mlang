@@ -11,13 +11,17 @@
 ///   seed_auto();
 ///   let x: i64 = range_i64(1, 6);  // dice roll in [1, 6]
 
+/// \cond INTERNAL_IMPORTS
+mod std::time;
+use std::time::now_ns;
+/// \endcond
+
 extern pub fn __mlang_std_rand_seed_i64(seed: i64) -> void;
 extern pub fn __mlang_std_rand_next_u64() -> u64;
 extern pub fn __mlang_std_rand_next_i64() -> i64;
 extern pub fn __mlang_std_rand_range_i64(min_value: i64, max_value: i64) -> i64;
 extern pub fn __mlang_std_rand_next_f64() -> f64;
 extern pub fn __mlang_std_rand_range_f64(min_value: f64, max_value: f64) -> f64;
-extern fn __mlang_std_time_now_ns() -> i64;
 
 /// @brief Set RNG seed explicitly.
 pub fn seed(value: i64) -> void {
@@ -27,7 +31,7 @@ pub fn seed(value: i64) -> void {
 /// @brief Seed RNG with monotonic clock nanoseconds.
 /// @return Seed value that was applied.
 pub fn seed_auto() -> i64 {
-    let s: i64 = __mlang_std_time_now_ns();
+    let s: i64 = now_ns();
     __mlang_std_rand_seed_i64(s);
     return s;
 }
