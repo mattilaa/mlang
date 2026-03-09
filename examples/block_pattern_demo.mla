@@ -1,9 +1,8 @@
-/// Block pattern demo (equivalent to the C++ iostream example).
-///
-/// Prints 8 rows, each with 29 repeated 3-glyph blocks.
-/// The block pattern rotates every row.
 fn main() -> i32 {
-    let blocks: [string; 4] = ["▀▄─", "▄▀─", "▀─▄", "▄─▀"];
+    let A: string = "▀";
+    let B: string = "▄";
+    let C: string = "─";
+    let blocks: [string; 4] = [A + B + C, B + A + C, A + C + B, B + C + A];
 
     var p: i64 = 0;
     for _y in 0..8 {
