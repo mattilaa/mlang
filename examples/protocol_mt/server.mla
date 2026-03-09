@@ -1,0 +1,167 @@
+/// Advanced protocol stack server demo (multithreaded, one worker per client).
+///
+/// Uses std::protocol framed messages over TCP.
+///
+/// Build:
+///   ./build/mlang examples/protocol_mt/server.mla -o /tmp/protocol_mt_server
+///
+/// Run:
+///   /tmp/protocol_mt_server --port 9095 --clients 4 --rounds 3
+
+mod std::argparser;
+mod std::net;
+mod std::protocol;
+mod std::thread;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::protocol::ProtocolFrame;
+use std::protocol::close;
+use std::protocol::default_max_payload_bytes;
+use std::protocol::recv;
+use std::protocol::send;
+use std::thread::join;
+
+fn op_ping() -> i32 { return 1; }
+fn op_pong() -> i32 { return 2; }
+fn op_echo() -> i32 { return 10; }
+fn op_echo_reply() -> i32 { return 11; }
+fn op_shutdown() -> i32 { return 99; }
+fn op_shutdown_ack() -> i32 { return 100; }
+fn op_error() -> i32 { return 255; }
+
+fn handle_client(client_id: i64, stream_handle: i64, rounds: i64) -> i32 {
+    for i in 0..rounds {
+        let rf: Result<ProtocolFrame, string> = recv(stream_handle, 2048, default_max_payload_bytes());
+        if rf.is_err() {
+            println!("SERVER_CLIENT_ERROR id={} phase=recv err={}", client_id, rf.unwrap_err());
+            close(stream_handle);
+            return 1;
+        }
+
+        let req: ProtocolFrame = rf.unwrap();
+        let reply_opcode: i32 = match req.opcode {
+            1 => op_pong(),
+            10 => op_echo_reply(),
+            99 => op_shutdown_ack(),
+            _ => op_error()
+        };
+        let reply_payload: string = match req.opcode {
+            1 => format!("pong client={} round={} payload={}", client_id, i, req.payload),
+            10 => format!("echo client={} round={} payload={}", client_id, i, req.payload),
+            99 => format!("bye client={}", client_id),
+            _ => format!("unsupported opcode={} payload={}", req.opcode, req.payload)
+        };
+
+        String::free(req.payload);
+
+        let sr: Result<i64, string> = send(stream_handle, reply_opcode, reply_payload);
+        String::free(reply_payload);
+        if sr.is_err() {
+            println!("SERVER_CLIENT_ERROR id={} phase=send err={}", client_id, sr.unwrap_err());
+            close(stream_handle);
+            return 1;
+        }
+
+        if reply_opcode == op_shutdown_ack() {
+            break;
+        }
+    }
+
+    close(stream_handle);
+    println!("SERVER_CLIENT_DONE id={}", client_id);
+    return 0;
+}
+
+fn accept_spawn_join(listener: TcpListener, next_id: i64, remaining: i64, rounds: i64) -> i32 {
+    if remaining <= 0 {
+        return 0;
+    }
+
+    let ar: Result<TcpStream, string> = listener.accept();
+    if ar.is_err() {
+        println!("SERVER_ACCEPT_ERROR id={} err={}", next_id, ar.unwrap_err());
+        return 1;
+    }
+
+    let stream: TcpStream = ar.unwrap();
+    let worker_stream_r: Result<TcpStream, string> = stream.try_clone();
+    if worker_stream_r.is_err() {
+        println!("SERVER_CLONE_ERROR id={} err={}", next_id, worker_stream_r.unwrap_err());
+        stream.close();
+        return 1;
+    }
+
+    let worker_stream: TcpStream = worker_stream_r.unwrap();
+    let h: Handle<Thread> = thread_spawn(handle_client, next_id, worker_stream.raw_handle(), rounds);
+    stream.close();
+
+    let rest_rc: i32 = accept_spawn_join(listener, next_id + 1, remaining - 1, rounds);
+    let self_rc: int = join(h);
+
+    if rest_rc != 0 {
+        return 1;
+    }
+    if self_rc != 0 {
+        return 1;
+    }
+    return 0;
+}
+
+fn run_server(port: i64, clients: i64, rounds: i64) -> i32 {
+    let lr: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", port);
+    if lr.is_err() {
+        println!("SERVER_BIND_ERROR err={}", lr.unwrap_err());
+        return 1;
+    }
+
+    let listener: TcpListener = lr.unwrap();
+    let br: Result<i32, string> = listener.set_backlog(128);
+    if br.is_err() {
+        println!("SERVER_BACKLOG_ERROR err={}", br.unwrap_err());
+        listener.close();
+        return 1;
+    }
+
+    println!("SERVER_READY port={} clients={} rounds={}", port, clients, rounds);
+    let rc: i32 = accept_spawn_join(listener, 1, clients, rounds);
+
+    if rc != 0 {
+        println!("SERVER_DONE status=error");
+        return 1;
+    }
+    println!("SERVER_DONE status=ok handled={}", clients);
+    return 0;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("protocol_mt_server", "Multithreaded protocol stack server demo");
+    ap.option("port", "p", "TCP port", "9095");
+    ap.option("clients", "c", "Number of clients to accept", "4");
+    ap.option("rounds", "r", "Messages per client before shutdown", "3");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("parse error: {}", parsed.error());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let port: i64 = parsed.get_i64("port");
+    let clients: i64 = parsed.get_i64("clients");
+    let rounds: i64 = parsed.get_i64("rounds");
+
+    parsed.free();
+    ap.free();
+
+    return run_server(port, clients, rounds);
+}

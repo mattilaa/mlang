@@ -1,0 +1,196 @@
+/// Advanced protocol stack client-load demo.
+///
+/// Spawns multiple client threads that talk to the multithreaded server.
+///
+/// Build:
+///   ./build/mlang examples/protocol_mt/client.mla -o /tmp/protocol_mt_client
+///
+/// Run:
+///   /tmp/protocol_mt_client --port 9095 --clients 4 --rounds 3
+
+mod std::argparser;
+mod std::protocol;
+mod std::strbuf;
+mod std::time;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+use std::protocol::ProtocolFrame;
+use std::protocol::close;
+use std::protocol::connect;
+use std::protocol::default_max_payload_bytes;
+use std::protocol::recv;
+use std::protocol::send;
+use std::strbuf::eq;
+use std::time::sleep_ms;
+
+fn op_ping() -> i32 { return 1; }
+fn op_pong() -> i32 { return 2; }
+fn op_echo() -> i32 { return 10; }
+fn op_echo_reply() -> i32 { return 11; }
+fn op_shutdown() -> i32 { return 99; }
+fn op_shutdown_ack() -> i32 { return 100; }
+fn op_error() -> i32 { return 255; }
+
+fn message_delay_ms(client_id: i64, round: i64, min_ms: i64, max_ms: i64) -> i64 {
+    var lo: i64 = min_ms;
+    var hi: i64 = max_ms;
+    if lo > hi {
+        let t: i64 = lo;
+        lo = hi;
+        hi = t;
+    }
+    let span: i64 = (hi - lo) + 1;
+    if span <= 1 {
+        return lo;
+    }
+    let seed: i64 = client_id * 197 + round * 389 + 17;
+    let off: i64 = seed % span;
+    return lo + off;
+}
+
+fn connect_with_retry(port: i64, retries: i64) -> Result<i64, string> {
+    for _i in 0..retries {
+        let cr: Result<i64, string> = connect("127.0.0.1", port);
+        if cr.is_ok() {
+            return cr;
+        }
+    }
+    return Err<i64, string>(format!("connect failed after {} retries", retries));
+}
+
+fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max_delay_ms: i64) -> i32 {
+    let cr: Result<i64, string> = connect_with_retry(port, 8000);
+    if cr.is_err() {
+        println!("CLIENT_CONNECT_ERROR id={} err={}", client_id, cr.unwrap_err());
+        return 1;
+    }
+
+    let s: i64 = cr.unwrap();
+    for i in 0..rounds {
+        let delay_ms: i64 = message_delay_ms(client_id, i, min_delay_ms, max_delay_ms);
+        sleep_ms(delay_ms);
+
+        let opcode: i32 = match i {
+            0 => op_ping(),
+            _ => op_echo()
+        };
+
+        let payload: string = format!("hello-from-client-{}-round-{}", client_id, i);
+        let sr: Result<i64, string> = send(s, opcode, payload);
+        if sr.is_err() {
+            println!("CLIENT_SEND_ERROR id={} round={} err={}", client_id, i, sr.unwrap_err());
+            close(s);
+            return 1;
+        }
+
+        let rr: Result<ProtocolFrame, string> = recv(s, 2048, default_max_payload_bytes());
+        if rr.is_err() {
+            println!("CLIENT_RECV_ERROR id={} round={} err={}", client_id, i, rr.unwrap_err());
+            close(s);
+            return 1;
+        }
+
+        let frame: ProtocolFrame = rr.unwrap();
+        let expected_opcode: i32 = match opcode {
+            1 => op_pong(),
+            10 => op_echo_reply(),
+            _ => op_error()
+        };
+
+        if frame.opcode != expected_opcode {
+            println!("CLIENT_BAD_OPCODE id={} round={} got={} expected={}", client_id, i, frame.opcode, expected_opcode);
+            String::free(frame.payload);
+            close(s);
+            return 1;
+        }
+
+        println!("CLIENT_RX id={} round={} delay_ms={} opcode={} payload={}", client_id, i, delay_ms, frame.opcode, frame.payload);
+        String::free(frame.payload);
+    }
+
+    let shutdown_payload: string = format!("shutdown-client-{}", client_id);
+    let sdr: Result<i64, string> = send(s, op_shutdown(), shutdown_payload);
+    if sdr.is_err() {
+        println!("CLIENT_SHUTDOWN_SEND_ERROR id={} err={}", client_id, sdr.unwrap_err());
+        close(s);
+        return 1;
+    }
+
+    let ackr: Result<ProtocolFrame, string> = recv(s, 1024, default_max_payload_bytes());
+    if ackr.is_err() {
+        println!("CLIENT_SHUTDOWN_ACK_ERROR id={} err={}", client_id, ackr.unwrap_err());
+        close(s);
+        return 1;
+    }
+
+    let ack: ProtocolFrame = ackr.unwrap();
+    if ack.opcode != op_shutdown_ack() {
+        println!("CLIENT_SHUTDOWN_BAD_OPCODE id={} got={} expected={}", client_id, ack.opcode, op_shutdown_ack());
+        String::free(ack.payload);
+        close(s);
+        return 1;
+    }
+
+    if eq(ack.payload, format!("bye client={}", client_id)) != 1 {
+        println!("CLIENT_SHUTDOWN_BAD_PAYLOAD id={} payload={}", client_id, ack.payload);
+        String::free(ack.payload);
+        close(s);
+        return 1;
+    }
+
+    String::free(ack.payload);
+    close(s);
+    println!("CLIENT_DONE id={}", client_id);
+    return 0;
+}
+
+fn run_client_load(port: i64, clients: i64, rounds: i64, min_delay_ms: i64, max_delay_ms: i64) -> i32 {
+    println!(
+        "CLIENT_START port={} clients={} rounds={} delay_ms=[{},{}]",
+        port, clients, rounds, min_delay_ms, max_delay_ms
+    );
+    for i in 0..clients {
+        let rc: i32 = run_one_client(i + 1, port, rounds, min_delay_ms, max_delay_ms);
+        if rc != 0 {
+            println!("CLIENT_LOAD_DONE status=error");
+            return 1;
+        }
+    }
+    println!("CLIENT_LOAD_DONE status=ok clients={}", clients);
+    return 0;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("protocol_mt_client", "Multiclient protocol stack load demo");
+    ap.option("port", "p", "TCP port", "9095");
+    ap.option("clients", "c", "Number of clients", "1");
+    ap.option("rounds", "r", "Messages per client before shutdown", "7");
+    ap.option("delay-min-ms", "", "Minimum per-message delay in ms", "500");
+    ap.option("delay-max-ms", "", "Maximum per-message delay in ms", "1000");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        println!("parse error: {}", parsed.error());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let port: i64 = parsed.get_i64("port");
+    let clients: i64 = parsed.get_i64("clients");
+    let rounds: i64 = parsed.get_i64("rounds");
+    let min_delay_ms: i64 = parsed.get_i64("delay-min-ms");
+    let max_delay_ms: i64 = parsed.get_i64("delay-max-ms");
+
+    parsed.free();
+    ap.free();
+
+    return run_client_load(port, clients, rounds, min_delay_ms, max_delay_ms);
+}

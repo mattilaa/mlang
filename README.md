@@ -301,6 +301,9 @@ Regex API (`std::regex::Regex`, compile/match/find/captures) example:
 `examples/std_regex_demo.mla`.
 Multithreaded TCP server/client examples:
 `examples/std_net_mt_server.mla` and `examples/std_net_mt_client.mla`.
+Advanced framed protocol stack examples (isolated in subdirectory):
+`examples/protocol_mt/server.mla` and `examples/protocol_mt/client.mla`
+with runner script `examples/protocol_mt/run_demo.sh`.
 JSON API (`std::json::JsonDoc` parse/stringify/object-array navigation, iterators, and `from_file`) example:
 `examples/std_json_demo.mla`.
 JSON-RPC/LSP transport runtime (`std::jsonrpc` Content-Length framing, timeout reads, cancellation registry, queue runtime) example:
@@ -325,6 +328,36 @@ cmake --build build -j
 # Terminal 2: run client
 ./build/mlang examples/std_net_mt_client.mla -o /tmp/std_net_mt_client_bin
 /tmp/std_net_mt_client_bin --port 18788
+```
+
+## Advanced Protocol Stack Demo (Local)
+Build and run the isolated multithreaded protocol stack demo under
+`examples/protocol_mt/`:
+
+```sh
+cmake -S . -B build
+cmake --build build -j
+
+# Build + run server/client together (script)
+./examples/protocol_mt/run_demo.sh
+
+# Optional tuning through env vars:
+# PORT=19111 CLIENTS=2 ROUNDS=5 DELAY_MIN_MS=500 DELAY_MAX_MS=1000 ./examples/protocol_mt/run_demo.sh
+```
+
+Default script settings target a demo runtime around ~5 seconds
+(`CLIENTS=1`, `ROUNDS=7`, `DELAY_MIN_MS=500`, `DELAY_MAX_MS=1000`).
+
+Manual run (separate terminals):
+
+```sh
+# Terminal 1
+./build/mlang examples/protocol_mt/server.mla -o /tmp/protocol_mt_server
+/tmp/protocol_mt_server --port 19095 --clients 4 --rounds 3
+
+# Terminal 2
+./build/mlang examples/protocol_mt/client.mla -o /tmp/protocol_mt_client
+/tmp/protocol_mt_client --port 19095 --clients 1 --rounds 7 --delay-min-ms 500 --delay-max-ms 1000
 ```
 
 Run the Robot Framework example suite (includes the multithreaded net case):
@@ -359,6 +392,9 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
   `examples/std_fs_demo.mla`
 - TCP loopback client/server over libc sockets:
   `examples/std_net_demo.mla`
+- Advanced framed protocol demo (multithreaded server, per-client workers, multi-client load):
+  `examples/protocol_mt/server.mla`, `examples/protocol_mt/client.mla`
+  (runner: `examples/protocol_mt/run_demo.sh`)
 - Regex compile + match + group extraction:
   `examples/std_regex_demo.mla`
 - JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):

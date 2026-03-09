@@ -149,6 +149,10 @@ Related example files:
 For the multithreaded TCP server/client examples and local Robot run commands,
 see the root project `README.md` section:
 - `Multithreaded TCP Demo (Local)`
+- `Advanced Protocol Stack Demo (Local)` for isolated subdirectory examples:
+  - `examples/protocol_mt/server.mla`
+  - `examples/protocol_mt/client.mla`
+  - `examples/protocol_mt/run_demo.sh`
 
 See also:
 - `docs/ownership_model.h` for the phase-1 ownership model (`Copy` vs
