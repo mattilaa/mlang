@@ -757,9 +757,9 @@ Module file: `stdlib/std/time.mla`
 - `now_ns() -> i64`
 - `sleep_ms(ms: i64) -> void`
 - `format_local(pattern: str8) -> string`
-- `local_datetime() -> string` (`MM/DD/YYYY:HH/MM/SS`)
-- `local_datetime_ms() -> string` (`MM/DD/YYYY:HH/MM/SS.MS`)
-- `local_datetime_ns() -> string` (`MM/DD/YYYY:HH/MM/SS.NS`)
+- `local_datetime() -> string` (`MM/DD/YYYY:HH:MM:SS`)
+- `local_datetime_ms() -> string` (`MM/DD/YYYY:HH:MM:SS.MS`)
+- `local_datetime_ns() -> string` (`MM/DD/YYYY:HH:MM:SS.NS`)
 
 `format_local` token support:
 - `YYYY` year
