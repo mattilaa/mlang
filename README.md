@@ -290,6 +290,9 @@ The example uses `var user_input` directly (no `&mut` required) and trims with
 `trim(user_input)`.
 `std::io` now also supports stderr writes, stream buffering configuration
 (`set_*_buffering`), and non-blocking stdin polling (`read_line_nonblocking`).
+`std::time` now also provides local wall-clock formatting helpers:
+`local_datetime()` (`MM/DD/YYYY:HH:MM:SS`), `local_datetime_ms()` (`...SS.MS`),
+and `local_datetime_ns()` (`...SS.NS`).
 Trait-like `std::io` handles (`Read`, `Write`, `Seek`, `BufRead`) example:
 `examples/std_io_traits_demo.mla`.
 Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:

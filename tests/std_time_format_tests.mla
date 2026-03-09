@@ -2,7 +2,10 @@ mod std::strbuf;
 mod std::time;
 
 use std::strbuf::contains;
+use std::strbuf::eq;
 use std::strbuf::len;
+use std::strbuf::sub;
+use std::time::format_local;
 use std::time::local_datetime;
 use std::time::local_datetime_ms;
 use std::time::local_datetime_ns;
@@ -29,5 +32,19 @@ fn test_local_datetime_ns_shape() -> i32 {
     let s: string = local_datetime_ns();
     if len(s) != 29 { return 1; }
     if contains(s, ".") != 1 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_format_local_custom_pattern_shape() -> i32 {
+    let fmt: str8 = "DD/MM/YYYY:HH:MM:SS.MS";
+    let s: string = format_local(fmt);
+    if len(s) != 23 { return 1; }
+    if eq(sub(s, 2, 1), "/") != 1 { return 1; }
+    if eq(sub(s, 5, 1), "/") != 1 { return 1; }
+    if eq(sub(s, 10, 1), ":") != 1 { return 1; }
+    if eq(sub(s, 13, 1), ":") != 1 { return 1; }
+    if eq(sub(s, 16, 1), ":") != 1 { return 1; }
+    if eq(sub(s, 19, 1), ".") != 1 { return 1; }
     return 0;
 }

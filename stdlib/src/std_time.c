@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -371,6 +372,132 @@ const char* __mlang_std_time_local_datetime(void)
     if(strftime(buf, sizeof(buf), "%m/%d/%Y %H:%M:%S", &tmv) == 0)
         strcpy(buf, "01/01/1970 00:00:00");
     return buf;
+}
+
+static void append_text(char* out, size_t cap, size_t* len, const char* s)
+{
+    if(!out || !len || !s || cap == 0)
+        return;
+    while(*s && *len + 1 < cap)
+    {
+        out[*len] = *s;
+        ++(*len);
+        ++s;
+    }
+    out[*len] = '\0';
+}
+
+static void append_char(char* out, size_t cap, size_t* len, char c)
+{
+    if(!out || !len || cap == 0)
+        return;
+    if(*len + 1 >= cap)
+        return;
+    out[*len] = c;
+    ++(*len);
+    out[*len] = '\0';
+}
+
+static void append_i32_pad(char* out, size_t cap, size_t* len, int value, int width)
+{
+    char tmp[32];
+    if(width <= 0)
+        (void)snprintf(tmp, sizeof(tmp), "%d", value);
+    else
+        (void)snprintf(tmp, sizeof(tmp), "%0*d", width, value);
+    append_text(out, cap, len, tmp);
+}
+
+static void append_i64_pad(char* out, size_t cap, size_t* len, int64_t value, int width)
+{
+    char tmp[48];
+    if(width <= 0)
+        (void)snprintf(tmp, sizeof(tmp), "%lld", (long long)value);
+    else
+        (void)snprintf(tmp, sizeof(tmp), "%0*lld", width, (long long)value);
+    append_text(out, cap, len, tmp);
+}
+
+const char* __mlang_std_time_format_local(const char* pattern)
+{
+    static char out[128];
+    out[0] = '\0';
+    size_t len = 0;
+
+    struct timespec ts;
+    (void)clock_gettime(CLOCK_REALTIME, &ts);
+    time_t t = ts.tv_sec;
+
+    struct tm tmv;
+#if defined(_WIN32)
+    if(localtime_s(&tmv, &t) != 0)
+#else
+    if(localtime_r(&t, &tmv) == NULL)
+#endif
+    {
+        append_text(out, sizeof(out), &len, "01/01/1970:00:00:00.000");
+        return out;
+    }
+
+    int mm_seen = 0;
+    const char* p = pattern;
+    if(!p || !*p)
+        p = "MM/DD/YYYY:HH:MM:SS";
+
+    while(*p)
+    {
+        if(strncmp(p, "YYYY", 4) == 0)
+        {
+            append_i32_pad(out, sizeof(out), &len, tmv.tm_year + 1900, 4);
+            p += 4;
+            continue;
+        }
+        if(strncmp(p, "DD", 2) == 0)
+        {
+            append_i32_pad(out, sizeof(out), &len, tmv.tm_mday, 2);
+            p += 2;
+            continue;
+        }
+        if(strncmp(p, "HH", 2) == 0)
+        {
+            append_i32_pad(out, sizeof(out), &len, tmv.tm_hour, 2);
+            p += 2;
+            continue;
+        }
+        if(strncmp(p, "SS", 2) == 0)
+        {
+            append_i32_pad(out, sizeof(out), &len, tmv.tm_sec, 2);
+            p += 2;
+            continue;
+        }
+        if(strncmp(p, "MS", 2) == 0)
+        {
+            append_i64_pad(out, sizeof(out), &len, ts.tv_nsec / 1000000LL, 3);
+            p += 2;
+            continue;
+        }
+        if(strncmp(p, "NS", 2) == 0)
+        {
+            append_i64_pad(out, sizeof(out), &len, ts.tv_nsec, 9);
+            p += 2;
+            continue;
+        }
+        if(strncmp(p, "MM", 2) == 0)
+        {
+            if(mm_seen == 0)
+                append_i32_pad(out, sizeof(out), &len, tmv.tm_mon + 1, 2);
+            else
+                append_i32_pad(out, sizeof(out), &len, tmv.tm_min, 2);
+            ++mm_seen;
+            p += 2;
+            continue;
+        }
+
+        append_char(out, sizeof(out), &len, *p);
+        ++p;
+    }
+
+    return out;
 }
 
 const char* __mlang_std_time_log_level_tag(int level, int color)

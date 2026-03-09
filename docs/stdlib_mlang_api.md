@@ -756,9 +756,19 @@ Module file: `stdlib/std/time.mla`
 - `now_ms() -> i64`
 - `now_ns() -> i64`
 - `sleep_ms(ms: i64) -> void`
+- `format_local(pattern: str8) -> string`
 - `local_datetime() -> string` (`MM/DD/YYYY:HH/MM/SS`)
 - `local_datetime_ms() -> string` (`MM/DD/YYYY:HH/MM/SS.MS`)
 - `local_datetime_ns() -> string` (`MM/DD/YYYY:HH/MM/SS.NS`)
+
+`format_local` token support:
+- `YYYY` year
+- `DD` day-of-month
+- `HH` 24h hour
+- `MM` first occurrence = month, following occurrences = minute
+- `SS` seconds
+- `MS` milliseconds
+- `NS` nanoseconds
 
 ### Timer
 - `Timer::after(timeout_ms: i64) -> Result<Timer, string>`

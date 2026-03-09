@@ -4,19 +4,14 @@
 /// Provides monotonic clocks, sleeping, and one-shot timers.
 ///
 /// Local timestamp format helpers:
-/// - `local_datetime()`     -> `MM/DD/YYYY:HH/MM/SS`
-/// - `local_datetime_ms()`  -> `MM/DD/YYYY:HH/MM/SS.MS`
-/// - `local_datetime_ns()`  -> `MM/DD/YYYY:HH/MM/SS.NS`
-
-/// \cond INTERNAL_IMPORTS
-mod std::date;
-use std::date::DateTime;
-use std::date::now;
-/// \endcond
+/// - `local_datetime()`     -> `MM/DD/YYYY:HH:MM:SS`
+/// - `local_datetime_ms()`  -> `MM/DD/YYYY:HH:MM:SS.MS`
+/// - `local_datetime_ns()`  -> `MM/DD/YYYY:HH:MM:SS.NS`
 
 extern pub fn __mlang_std_time_now_ms() -> i64;
 extern pub fn __mlang_std_time_now_ns() -> i64;
 extern pub fn __mlang_std_time_sleep_ms(ms: i64) -> void;
+extern pub fn __mlang_std_time_format_local(pattern: str8) -> string;
 extern pub fn __mlang_std_time_timer_new(timeout_ms: i64) -> i64;
 extern pub fn __mlang_std_time_timer_reset(handle: i64, timeout_ms: i64) -> int;
 extern pub fn __mlang_std_time_timer_elapsed(handle: i64) -> int;
@@ -29,60 +24,6 @@ pub struct Timer {
     var handle: i64;
 };
 
-fn __pad2(v: i32) -> string {
-    if v < 10 {
-        return format!("0{}", v);
-    }
-    return format!("{}", v);
-}
-
-fn __pad3(v: i64) -> string {
-    if v < 10 {
-        return format!("00{}", v);
-    }
-    if v < 100 {
-        return format!("0{}", v);
-    }
-    return format!("{}", v);
-}
-
-fn __pad9(v: i64) -> string {
-    if v < 10 {
-        return format!("00000000{}", v);
-    }
-    if v < 100 {
-        return format!("0000000{}", v);
-    }
-    if v < 1000 {
-        return format!("000000{}", v);
-    }
-    if v < 10000 {
-        return format!("00000{}", v);
-    }
-    if v < 100000 {
-        return format!("0000{}", v);
-    }
-    if v < 1000000 {
-        return format!("000{}", v);
-    }
-    if v < 10000000 {
-        return format!("00{}", v);
-    }
-    if v < 100000000 {
-        return format!("0{}", v);
-    }
-    return format!("{}", v);
-}
-
-fn __dt_prefix(dt: DateTime) -> string {
-    let mm: string = __pad2(dt.month);
-    let dd: string = __pad2(dt.day);
-    let hh: string = __pad2(dt.hour);
-    let mi: string = __pad2(dt.minute);
-    let ss: string = __pad2(dt.second);
-    return format!("{}/{}/{}:{}/{}/{}", mm, dd, dt.year, hh, mi, ss);
-}
-
 /// @brief Monotonic milliseconds since unspecified epoch.
 pub fn now_ms() -> i64 {
     return __mlang_std_time_now_ms();
@@ -93,24 +34,37 @@ pub fn now_ns() -> i64 {
     return __mlang_std_time_now_ns();
 }
 
-/// @brief Local wall-clock timestamp `MM/DD/YYYY:HH/MM/SS`.
+/// @brief Format local wall-clock time using a token pattern.
+///
+/// Supported tokens:
+/// - `YYYY` year
+/// - `DD` day-of-month
+/// - `HH` hour (24h)
+/// - `MM` month for first occurrence; minute for following occurrences
+/// - `SS` seconds
+/// - `MS` milliseconds
+/// - `NS` nanoseconds
+///
+/// Example:
+///   let fmt: str8 = "DD/MM/YYYY:HH:MM:SS.MS";
+///   let ts: string = format_local(fmt);
+pub fn format_local(pattern: str8) -> string {
+    return __mlang_std_time_format_local(pattern);
+}
+
+/// @brief Local wall-clock timestamp `MM/DD/YYYY:HH:MM:SS`.
 pub fn local_datetime() -> string {
-    let dt: DateTime = now();
-    return __dt_prefix(dt);
+    return __mlang_std_time_format_local("MM/DD/YYYY:HH:MM:SS");
 }
 
-/// @brief Local wall-clock timestamp `MM/DD/YYYY:HH/MM/SS.MS`.
+/// @brief Local wall-clock timestamp `MM/DD/YYYY:HH:MM:SS.MS`.
 pub fn local_datetime_ms() -> string {
-    let dt: DateTime = now();
-    let ms: i64 = now_ms() % 1000;
-    return format!("{}.{}", __dt_prefix(dt), __pad3(ms));
+    return __mlang_std_time_format_local("MM/DD/YYYY:HH:MM:SS.MS");
 }
 
-/// @brief Local wall-clock timestamp `MM/DD/YYYY:HH/MM/SS.NS`.
+/// @brief Local wall-clock timestamp `MM/DD/YYYY:HH:MM:SS.NS`.
 pub fn local_datetime_ns() -> string {
-    let dt: DateTime = now();
-    let ns: i64 = now_ns() % 1000000000;
-    return format!("{}.{}", __dt_prefix(dt), __pad9(ns));
+    return __mlang_std_time_format_local("MM/DD/YYYY:HH:MM:SS.NS");
 }
 
 /// @brief Sleep current thread for at least `ms` milliseconds.
