@@ -27,6 +27,8 @@ Currently provided:
 - `std/strbuf.mla`: string allocation + utility helpers
   (`String::new/with_capacity/free`, len/compare/find/rfind/repeat,
    UTF-8<->UTF-16 converters and helpers).
+- `std/bytes.mla`: dynamic raw byte buffer helpers for protocol/binary payloads
+  (reserve/append/index/set, binary-safe `to_hex`, text-oriented `to_string`).
 - `std/json.mla`: JSON parse/stringify + object/array navigation and iterators
   (`JsonDoc::parse/from_file`, `JsonDoc::stringify`,
    `JsonValue::get/index/as_*`, `iter_array`, `iter_object`),

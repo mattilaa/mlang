@@ -1,0 +1,71 @@
+mod std::bytes;
+mod std::strbuf;
+
+use std::bytes::*;
+use std::strbuf::eq;
+
+#[test]
+fn test_bytes_append_get_set_and_string() -> i32 {
+    let br: Result<Bytes, string> = Bytes::new(2);
+    if br.is_err() { return 1; }
+    let b: Bytes = br.unwrap();
+
+    if b.append_byte(65) != 0 { b.close(); return 1; }
+    if b.append_string("BC") != 2 { b.close(); return 1; }
+    if b.len() != 3 { b.close(); return 1; }
+    if b.get(0) != 65 { b.close(); return 1; }
+    if b.get(2) != 67 { b.close(); return 1; }
+    if b.set(1, 120) != 0 { b.close(); return 1; }
+
+    let s: string = b.to_string();
+    if eq(s, "AxC") != 1 { String::free(s); b.close(); return 1; }
+    String::free(s);
+
+    b.close();
+    return 0;
+}
+
+#[test]
+fn test_bytes_hex_and_append_bytes() -> i32 {
+    let r1: Result<Bytes, string> = Bytes::new(0);
+    if r1.is_err() { return 1; }
+    let a: Bytes = r1.unwrap();
+
+    if a.append_byte(0) != 0 { a.close(); return 1; }
+    if a.append_byte(255) != 0 { a.close(); return 1; }
+
+    let r2: Result<Bytes, string> = Bytes::from_string("ok");
+    if r2.is_err() { a.close(); return 1; }
+    let b: Bytes = r2.unwrap();
+
+    if a.append_bytes(b) != 2 { b.close(); a.close(); return 1; }
+    if a.len() != 4 { b.close(); a.close(); return 1; }
+
+    let hex: string = a.to_hex();
+    if eq(hex, "00ff6f6b") != 1 { String::free(hex); b.close(); a.close(); return 1; }
+    String::free(hex);
+
+    b.close();
+    a.close();
+    return 0;
+}
+
+#[test]
+fn test_bytes_reserve_clear_and_bounds() -> i32 {
+    let r: Result<Bytes, string> = Bytes::new(1);
+    if r.is_err() { return 1; }
+    let b: Bytes = r.unwrap();
+
+    if b.reserve(128) != 0 { b.close(); return 1; }
+    if b.capacity() < 128 { b.close(); return 1; }
+
+    if b.append_string("hello") != 5 { b.close(); return 1; }
+    if b.clear() != 0 { b.close(); return 1; }
+    if b.len() != 0 { b.close(); return 1; }
+
+    if b.get(0) != -1 { b.close(); return 1; }
+    if b.append_byte(300) != -1 { b.close(); return 1; }
+
+    b.close();
+    return 0;
+}

@@ -24,6 +24,7 @@ mod std::time;
 mod std::timer;
 mod std::fs;
 mod std::strbuf;
+mod std::bytes;
 mod std::testing;
 mod std::thread;
 mod std::unordered;
@@ -51,6 +52,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/time.mla`
 - `stdlib/std/timer.mla`
 - `stdlib/std/strbuf.mla`
+- `stdlib/std/bytes.mla`
 - `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
 - `stdlib/std/unordered.mla`
@@ -817,6 +819,34 @@ Module file: `stdlib/std/strbuf.mla`
 - `from_utf16(s: str16) -> string`
 - `to_utf8(s: str16) -> string`
 - `free_utf16(s: str16) -> void`
+
+## std::bytes
+
+Module file: `stdlib/std/bytes.mla`
+
+### Types
+- `Bytes`
+
+### Lifecycle
+- `Bytes::new(initial_capacity: i64) -> Result<Bytes, string>`
+- `Bytes::from_string(s: string) -> Result<Bytes, string>`
+- `Bytes::close(self: Bytes) -> i32`
+- `last_error() -> string`
+
+### Buffer operations
+- `Bytes::len(self: Bytes) -> i64`
+- `Bytes::capacity(self: Bytes) -> i64`
+- `Bytes::clear(self: Bytes) -> i32`
+- `Bytes::reserve(self: Bytes, min_capacity: i64) -> i32`
+- `Bytes::append_byte(self: Bytes, value: i32) -> i32`
+- `Bytes::append_string(self: Bytes, s: string) -> i64`
+- `Bytes::append_bytes(self: Bytes, other: Bytes) -> i64`
+- `Bytes::get(self: Bytes, index: i64) -> i32`
+- `Bytes::set(self: Bytes, index: i64, value: i32) -> i32`
+
+### Conversions
+- `Bytes::to_string(self: Bytes) -> string` (text-oriented C/UTF-8 string copy)
+- `Bytes::to_hex(self: Bytes) -> string` (binary-safe lowercase hex)
 
 ## std::thread
 

@@ -1,0 +1,119 @@
+/// \file bytes.mla
+/// \brief Dynamic raw byte buffer for protocol and binary payload handling (std::bytes).
+///
+/// `Bytes` is an owned growable container over raw bytes (`0..255`) with
+/// reserve/append/index operations.
+///
+/// Notes:
+/// - `to_hex()` is binary-safe and always preserves full payload.
+/// - `to_string()` returns a UTF-8/C-string view and is best for text payloads.
+
+extern pub fn __mlang_std_bytes_last_error() -> string;
+extern pub fn __mlang_std_bytes_new(initial_capacity: i64) -> i64;
+extern pub fn __mlang_std_bytes_from_string(s: string) -> i64;
+extern pub fn __mlang_std_bytes_free(handle: i64) -> i32;
+extern pub fn __mlang_std_bytes_len(handle: i64) -> i64;
+extern pub fn __mlang_std_bytes_capacity(handle: i64) -> i64;
+extern pub fn __mlang_std_bytes_clear(handle: i64) -> i32;
+extern pub fn __mlang_std_bytes_reserve(handle: i64, min_capacity: i64) -> i32;
+extern pub fn __mlang_std_bytes_append_byte(handle: i64, value: i32) -> i32;
+extern pub fn __mlang_std_bytes_append_string(handle: i64, s: string) -> i64;
+extern pub fn __mlang_std_bytes_append_bytes(handle: i64, other_handle: i64) -> i64;
+extern pub fn __mlang_std_bytes_get(handle: i64, index: i64) -> i32;
+extern pub fn __mlang_std_bytes_set(handle: i64, index: i64, value: i32) -> i32;
+extern pub fn __mlang_std_bytes_to_string(handle: i64) -> string;
+extern pub fn __mlang_std_bytes_to_hex(handle: i64) -> string;
+
+/// @brief Owned dynamic byte container handle.
+pub struct Bytes {
+    var handle: i64;
+};
+
+/// @brief Return last backend error.
+pub fn last_error() -> string {
+    return __mlang_std_bytes_last_error();
+}
+
+impl Bytes {
+    /// @brief Create an empty byte buffer with initial capacity.
+    pub fn new(initial_capacity: i64) -> Result<Bytes, string> {
+        let h: i64 = __mlang_std_bytes_new(initial_capacity);
+        if h == 0 {
+            return Err<Bytes, string>(last_error());
+        }
+        return Ok<Bytes, string>(Bytes { handle: h });
+    }
+
+    /// @brief Build a byte buffer from UTF-8 string bytes.
+    pub fn from_string(s: string) -> Result<Bytes, string> {
+        let h: i64 = __mlang_std_bytes_from_string(s);
+        if h == 0 {
+            return Err<Bytes, string>(last_error());
+        }
+        return Ok<Bytes, string>(Bytes { handle: h });
+    }
+
+    /// @brief Number of stored bytes.
+    pub fn len(self: Bytes) -> i64 {
+        return __mlang_std_bytes_len(self.handle);
+    }
+
+    /// @brief Allocated byte capacity.
+    pub fn capacity(self: Bytes) -> i64 {
+        return __mlang_std_bytes_capacity(self.handle);
+    }
+
+    /// @brief Reset length to 0 while keeping allocated capacity.
+    pub fn clear(self: Bytes) -> i32 {
+        return __mlang_std_bytes_clear(self.handle);
+    }
+
+    /// @brief Ensure capacity is at least `min_capacity` bytes.
+    pub fn reserve(self: Bytes, min_capacity: i64) -> i32 {
+        return __mlang_std_bytes_reserve(self.handle, min_capacity);
+    }
+
+    /// @brief Append one byte value (0..255).
+    pub fn append_byte(self: Bytes, value: i32) -> i32 {
+        return __mlang_std_bytes_append_byte(self.handle, value);
+    }
+
+    /// @brief Append bytes from UTF-8 string.
+    /// @return Number of appended bytes, -1 on error.
+    pub fn append_string(self: Bytes, s: string) -> i64 {
+        return __mlang_std_bytes_append_string(self.handle, s);
+    }
+
+    /// @brief Append content of another byte buffer.
+    /// @return Number of appended bytes, -1 on error.
+    pub fn append_bytes(self: Bytes, other: Bytes) -> i64 {
+        return __mlang_std_bytes_append_bytes(self.handle, other.handle);
+    }
+
+    /// @brief Read byte at index.
+    /// @return 0..255 on success, -1 on out-of-range/error.
+    pub fn get(self: Bytes, index: i64) -> i32 {
+        return __mlang_std_bytes_get(self.handle, index);
+    }
+
+    /// @brief Write byte at index.
+    /// @return 0 on success, -1 on out-of-range/error.
+    pub fn set(self: Bytes, index: i64, value: i32) -> i32 {
+        return __mlang_std_bytes_set(self.handle, index, value);
+    }
+
+    /// @brief Convert to C/UTF-8 string copy (text-oriented).
+    pub fn to_string(self: Bytes) -> string {
+        return __mlang_std_bytes_to_string(self.handle);
+    }
+
+    /// @brief Convert full byte payload to lowercase hex string.
+    pub fn to_hex(self: Bytes) -> string {
+        return __mlang_std_bytes_to_hex(self.handle);
+    }
+
+    /// @brief Free buffer resources.
+    pub fn close(self: Bytes) -> i32 {
+        return __mlang_std_bytes_free(self.handle);
+    }
+}
