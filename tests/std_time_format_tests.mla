@@ -1,0 +1,33 @@
+mod std::strbuf;
+mod std::time;
+
+use std::strbuf::contains;
+use std::strbuf::len;
+use std::time::local_datetime;
+use std::time::local_datetime_ms;
+use std::time::local_datetime_ns;
+
+#[test]
+fn test_local_datetime_shape() -> i32 {
+    let s: string = local_datetime();
+    if len(s) != 19 { return 1; }
+    if contains(s, ":") != 1 { return 1; }
+    if contains(s, "/") != 1 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_local_datetime_ms_shape() -> i32 {
+    let s: string = local_datetime_ms();
+    if len(s) != 23 { return 1; }
+    if contains(s, ".") != 1 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_local_datetime_ns_shape() -> i32 {
+    let s: string = local_datetime_ns();
+    if len(s) != 29 { return 1; }
+    if contains(s, ".") != 1 { return 1; }
+    return 0;
+}

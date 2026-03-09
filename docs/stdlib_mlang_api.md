@@ -756,6 +756,9 @@ Module file: `stdlib/std/time.mla`
 - `now_ms() -> i64`
 - `now_ns() -> i64`
 - `sleep_ms(ms: i64) -> void`
+- `local_datetime() -> string` (`MM/DD/YYYY:HH/MM/SS`)
+- `local_datetime_ms() -> string` (`MM/DD/YYYY:HH/MM/SS.MS`)
+- `local_datetime_ns() -> string` (`MM/DD/YYYY:HH/MM/SS.NS`)
 
 ### Timer
 - `Timer::after(timeout_ms: i64) -> Result<Timer, string>`
