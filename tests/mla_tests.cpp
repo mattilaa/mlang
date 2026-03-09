@@ -418,6 +418,58 @@ TEST_F(MLATest, StringEscapeTab)
     EXPECT_EQ(compileAndRun(code), "Col1\tCol2\n");
 }
 
+TEST_F(MLATest, StringConcatenationPlus)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let a: string = "Hello, ";
+            let b: string = "MLA!";
+            let c = a + b;
+            println!("{}", c);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code), "Hello, MLA!\n");
+}
+
+TEST_F(MLATest, StringConcatenationRejectsMixedNumeric)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let a: string = "x=";
+            let b: i32 = 42;
+            let c = a + b;
+            println!("{}", c);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("string concatenation requires both operands to be string types"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, StringConcatenationRejectsMismatchedStringKinds)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let a: string = "left";
+            let b: str8 = "right";
+            let c = a + b;
+            println!("{}", c);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int exitCode = 0;
+    std::string out = compileCapture(exitCode);
+    EXPECT_NE(exitCode, 0);
+    EXPECT_NE(out.find("string concatenation requires matching operand types"),
+              std::string::npos);
+}
+
 // ============================================================================
 // Print Macro Tests
 // ============================================================================

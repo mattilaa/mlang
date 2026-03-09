@@ -1902,6 +1902,18 @@ TypeNode::TypeKind getExpressionTypeKind(
     ExpressionNode* expr,
     const std::map<std::string, TypeNode::TypeKind>& variableTypes)
 {
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+        return TypeNode::TYPE_BOOL;
+    if(dynamic_cast<IntLiteralNode*>(expr))
+        return TypeNode::TYPE_INT;
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+        return TypeNode::TYPE_FLOAT;
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+        return TypeNode::TYPE_DOUBLE;
+    if(dynamic_cast<StringLiteralNode*>(expr) || dynamic_cast<FormatNode*>(expr))
+        return TypeNode::TYPE_STRING;
+    if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+        return castExpr->targetType;
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
         auto it = variableTypes.find(id->name);
@@ -1909,6 +1921,53 @@ TypeNode::TypeKind getExpressionTypeKind(
         {
             return it->second;
         }
+    }
+    if(auto* fn = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        if(fn->name == "String::new" || fn->name == "String::with_capacity" ||
+           fn->name == "String::from" || fn->name == "String::to_utf8")
+            return TypeNode::TYPE_STRING;
+    }
+    if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(mc->methodName == "clone")
+        {
+            TypeNode::TypeKind recvKind =
+                getExpressionTypeKind(mc->object, variableTypes);
+            if(recvKind == TypeNode::TYPE_STRING ||
+               recvKind == TypeNode::TYPE_STR8 ||
+               recvKind == TypeNode::TYPE_STR16)
+                return recvKind;
+        }
+    }
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(bin->op == BinaryOpNode::OP_LT || bin->op == BinaryOpNode::OP_GT ||
+           bin->op == BinaryOpNode::OP_LE || bin->op == BinaryOpNode::OP_GE ||
+           bin->op == BinaryOpNode::OP_EQ || bin->op == BinaryOpNode::OP_NE ||
+           bin->op == BinaryOpNode::OP_AND || bin->op == BinaryOpNode::OP_OR)
+            return TypeNode::TYPE_BOOL;
+        if(bin->op == BinaryOpNode::OP_SPACESHIP)
+            return TypeNode::TYPE_INT;
+
+        TypeNode::TypeKind lhsKind =
+            getExpressionTypeKind(bin->left, variableTypes);
+        TypeNode::TypeKind rhsKind =
+            getExpressionTypeKind(bin->right, variableTypes);
+        bool lhsIsString = lhsKind == TypeNode::TYPE_STRING ||
+                           lhsKind == TypeNode::TYPE_STR8 ||
+                           lhsKind == TypeNode::TYPE_STR16;
+        bool rhsIsString = rhsKind == TypeNode::TYPE_STRING ||
+                           rhsKind == TypeNode::TYPE_STR8 ||
+                           rhsKind == TypeNode::TYPE_STR16;
+        if(bin->op == BinaryOpNode::OP_PLUS && lhsIsString && rhsIsString &&
+           lhsKind == rhsKind)
+            return lhsKind;
+        if(lhsKind == TypeNode::TYPE_DOUBLE || rhsKind == TypeNode::TYPE_DOUBLE)
+            return TypeNode::TYPE_DOUBLE;
+        if(lhsKind == TypeNode::TYPE_FLOAT || rhsKind == TypeNode::TYPE_FLOAT)
+            return TypeNode::TYPE_FLOAT;
+        return TypeNode::TYPE_INT;
     }
     // Default to signed int for literals and unknown expressions
     return TypeNode::TYPE_INT;
@@ -5198,6 +5257,112 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         return (node->op == BinaryOpNode::OP_AND)
                    ? builder.CreateAnd(Lb, Rb, "andtmp")
                    : builder.CreateOr(Lb, Rb, "ortmp");
+    }
+
+    auto typeKindName = [](TypeNode::TypeKind kind) -> std::string {
+        switch(kind)
+        {
+        case TypeNode::TYPE_STRING:
+            return "string";
+        case TypeNode::TYPE_STR8:
+            return "str8";
+        case TypeNode::TYPE_STR16:
+            return "str16";
+        case TypeNode::TYPE_BOOL:
+            return "bool";
+        case TypeNode::TYPE_INT:
+            return "int";
+        case TypeNode::TYPE_FLOAT:
+            return "float";
+        case TypeNode::TYPE_DOUBLE:
+            return "double";
+        case TypeNode::TYPE_I8:
+            return "i8";
+        case TypeNode::TYPE_I16:
+            return "i16";
+        case TypeNode::TYPE_I32:
+            return "i32";
+        case TypeNode::TYPE_I64:
+            return "i64";
+        case TypeNode::TYPE_U8:
+            return "u8";
+        case TypeNode::TYPE_U16:
+            return "u16";
+        case TypeNode::TYPE_U32:
+            return "u32";
+        case TypeNode::TYPE_U64:
+            return "u64";
+        default:
+            return "unknown";
+        }
+    };
+
+    TypeNode::TypeKind lhsKind = getExpressionTypeKind(node->left, variableTypes);
+    TypeNode::TypeKind rhsKind =
+        getExpressionTypeKind(node->right, variableTypes);
+    bool lhsIsString = lhsKind == TypeNode::TYPE_STRING ||
+                       lhsKind == TypeNode::TYPE_STR8 ||
+                       lhsKind == TypeNode::TYPE_STR16;
+    bool rhsIsString = rhsKind == TypeNode::TYPE_STRING ||
+                       rhsKind == TypeNode::TYPE_STR8 ||
+                       rhsKind == TypeNode::TYPE_STR16;
+
+    if(node->op == BinaryOpNode::OP_PLUS && (lhsIsString || rhsIsString))
+    {
+        if(!lhsIsString || !rhsIsString)
+        {
+            reportError(node->line,
+                        "string concatenation requires both operands to be "
+                        "string types");
+            return nullptr;
+        }
+        if(lhsKind != rhsKind)
+        {
+            reportError(node->line,
+                        "string concatenation requires matching operand types "
+                        "(got '" +
+                            typeKindName(lhsKind) + "' and '" +
+                            typeKindName(rhsKind) + "')");
+            return nullptr;
+        }
+        if(lhsKind == TypeNode::TYPE_STR16)
+        {
+            reportError(node->line,
+                        "string concatenation for 'str16' is not supported yet");
+            return nullptr;
+        }
+
+        initializeStdlibFunctions();
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* lhsPtr = L;
+        llvm::Value* rhsPtr = R;
+        if(lhsPtr->getType() != ptrType && lhsPtr->getType()->isPointerTy())
+            lhsPtr = builder.CreateBitCast(lhsPtr, ptrType, "strcat.lhs.cast");
+        if(rhsPtr->getType() != ptrType && rhsPtr->getType()->isPointerTy())
+            rhsPtr = builder.CreateBitCast(rhsPtr, ptrType, "strcat.rhs.cast");
+        if(!lhsPtr->getType()->isPointerTy() || !rhsPtr->getType()->isPointerTy())
+        {
+            reportError(node->line,
+                        "invalid string operands for concatenation");
+            return nullptr;
+        }
+
+        llvm::FunctionType* concatFnType =
+            llvm::FunctionType::get(ptrType, {ptrType, ptrType}, false);
+        llvm::FunctionCallee concatFn = module->getOrInsertFunction(
+            "__mlang_std_strbuf_concat", concatFnType);
+        return builder.CreateCall(concatFn, {lhsPtr, rhsPtr}, "strcat");
+    }
+    if((lhsIsString || rhsIsString) && node->op != BinaryOpNode::OP_PLUS)
+    {
+        reportError(node->line,
+                    "only '+' is supported for string operands");
+        return nullptr;
     }
 
     // Check if we're dealing with floating point or integer types
@@ -9327,6 +9492,24 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 if(call->name == "Vec::new")
                     return TypeNode::TYPE_LIST;
             }
+            if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+            {
+                if(bin->op == BinaryOpNode::OP_PLUS)
+                {
+                    TypeNode::TypeKind lhsKind =
+                        getExpressionTypeKind(bin->left, variableTypes);
+                    TypeNode::TypeKind rhsKind =
+                        getExpressionTypeKind(bin->right, variableTypes);
+                    bool lhsIsString = lhsKind == TypeNode::TYPE_STRING ||
+                                       lhsKind == TypeNode::TYPE_STR8 ||
+                                       lhsKind == TypeNode::TYPE_STR16;
+                    bool rhsIsString = rhsKind == TypeNode::TYPE_STRING ||
+                                       rhsKind == TypeNode::TYPE_STR8 ||
+                                       rhsKind == TypeNode::TYPE_STR16;
+                    if(lhsIsString && rhsIsString && lhsKind == rhsKind)
+                        return lhsKind;
+                }
+            }
             if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
             {
                 if(mc->methodName == "clone")
@@ -10094,6 +10277,24 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     return TypeNode::TYPE_STRING;
                 if(call->name == "Vec::new")
                     return TypeNode::TYPE_LIST;
+            }
+            if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+            {
+                if(bin->op == BinaryOpNode::OP_PLUS)
+                {
+                    TypeNode::TypeKind lhsKind =
+                        getExpressionTypeKind(bin->left, variableTypes);
+                    TypeNode::TypeKind rhsKind =
+                        getExpressionTypeKind(bin->right, variableTypes);
+                    bool lhsIsString = lhsKind == TypeNode::TYPE_STRING ||
+                                       lhsKind == TypeNode::TYPE_STR8 ||
+                                       lhsKind == TypeNode::TYPE_STR16;
+                    bool rhsIsString = rhsKind == TypeNode::TYPE_STRING ||
+                                       rhsKind == TypeNode::TYPE_STR8 ||
+                                       rhsKind == TypeNode::TYPE_STR16;
+                    if(lhsIsString && rhsIsString && lhsKind == rhsKind)
+                        return lhsKind;
+                }
             }
             if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
             {
