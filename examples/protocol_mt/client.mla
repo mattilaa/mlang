@@ -10,6 +10,7 @@
 
 mod std::argparser;
 mod std::protocol;
+mod std::rand;
 mod std::strbuf;
 mod std::time;
 
@@ -21,7 +22,10 @@ use std::protocol::connect;
 use std::protocol::default_max_payload_bytes;
 use std::protocol::recv;
 use std::protocol::send;
+use std::rand::range_i64;
+use std::rand::seed_auto;
 use std::strbuf::eq;
+use std::time::format_local;
 use std::time::sleep_ms;
 
 fn op_ping() -> i32 { return 1; }
@@ -32,7 +36,7 @@ fn op_shutdown() -> i32 { return 99; }
 fn op_shutdown_ack() -> i32 { return 100; }
 fn op_error() -> i32 { return 255; }
 
-fn message_delay_ms(client_id: i64, round: i64, min_ms: i64, max_ms: i64) -> i64 {
+fn message_delay_ms(min_ms: i64, max_ms: i64) -> i64 {
     var lo: i64 = min_ms;
     var hi: i64 = max_ms;
     if lo > hi {
@@ -44,9 +48,7 @@ fn message_delay_ms(client_id: i64, round: i64, min_ms: i64, max_ms: i64) -> i64
     if span <= 1 {
         return lo;
     }
-    let seed: i64 = client_id * 197 + round * 389 + 17;
-    let off: i64 = seed % span;
-    return lo + off;
+    return range_i64(lo, hi);
 }
 
 fn connect_with_retry(port: i64, retries: i64) -> Result<i64, string> {
@@ -60,6 +62,7 @@ fn connect_with_retry(port: i64, retries: i64) -> Result<i64, string> {
 }
 
 fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max_delay_ms: i64) -> i32 {
+    let fmt: str8 = "MM/DD/YYYY:HH:MM:SS.MS";
     let cr: Result<i64, string> = connect_with_retry(port, 8000);
     if cr.is_err() {
         println!("CLIENT_CONNECT_ERROR id={} err={}", client_id, cr.unwrap_err());
@@ -68,7 +71,12 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
 
     let s: i64 = cr.unwrap();
     for i in 0..rounds {
-        let delay_ms: i64 = message_delay_ms(client_id, i, min_delay_ms, max_delay_ms);
+        let delay_ms: i64 = message_delay_ms(min_delay_ms, max_delay_ms);
+        let pre_sleep_ts: string = format_local(fmt);
+        println!(
+            "{} CLIENT_WAIT: id={} round={} delay_ms={}",
+            pre_sleep_ts, client_id, i, delay_ms
+        );
         sleep_ms(delay_ms);
 
         let opcode: i32 = match i {
@@ -78,6 +86,11 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
 
         let payload: string = format!("hello-from-client-{}-round-{}", client_id, i);
         let sr: Result<i64, string> = send(s, opcode, payload);
+        let tx_ts: string = format_local(fmt);
+        println!(
+            "{} CLIENT_TX: id={} round={} delay_ms={} opcode={} payload={}",
+            tx_ts, client_id, i, delay_ms, opcode, payload
+        );
         if sr.is_err() {
             println!("CLIENT_SEND_ERROR id={} round={} err={}", client_id, i, sr.unwrap_err());
             close(s);
@@ -92,6 +105,7 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
         }
 
         let frame: ProtocolFrame = rr.unwrap();
+        let rx_ts: string = format_local(fmt);
         let expected_opcode: i32 = match opcode {
             1 => op_pong(),
             10 => op_echo_reply(),
@@ -105,7 +119,10 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
             return 1;
         }
 
-        println!("CLIENT_RX id={} round={} delay_ms={} opcode={} payload={}", client_id, i, delay_ms, frame.opcode, frame.payload);
+        println!(
+            "{} CLIENT_RX: id={} round={} delay_ms={} opcode={} payload={}",
+            rx_ts, client_id, i, delay_ms, frame.opcode, frame.payload
+        );
         String::free(frame.payload);
     }
 
@@ -192,5 +209,6 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     parsed.free();
     ap.free();
 
+    let _seed: i64 = seed_auto();
     return run_client_load(port, clients, rounds, min_delay_ms, max_delay_ms);
 }

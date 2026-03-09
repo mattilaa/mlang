@@ -12,6 +12,7 @@ mod std::argparser;
 mod std::net;
 mod std::protocol;
 mod std::thread;
+mod std::time;
 
 use std::argparser::ArgParser;
 use std::argparser::ParseResult;
@@ -23,6 +24,8 @@ use std::protocol::default_max_payload_bytes;
 use std::protocol::recv;
 use std::protocol::send;
 use std::thread::join;
+use std::time::format_local;
+use std::time::now_ms;
 
 fn op_ping() -> i32 { return 1; }
 fn op_pong() -> i32 { return 2; }
@@ -33,6 +36,8 @@ fn op_shutdown_ack() -> i32 { return 100; }
 fn op_error() -> i32 { return 255; }
 
 fn handle_client(client_id: i64, stream_handle: i64, rounds: i64) -> i32 {
+    let fmt: str8 = "MM/DD/YYYY:HH:MM:SS.MS";
+    var last_rx_ms: i64 = -1;
     for i in 0..rounds {
         let rf: Result<ProtocolFrame, string> = recv(stream_handle, 2048, default_max_payload_bytes());
         if rf.is_err() {
@@ -42,6 +47,14 @@ fn handle_client(client_id: i64, stream_handle: i64, rounds: i64) -> i32 {
         }
 
         let req: ProtocolFrame = rf.unwrap();
+        let rx_ms: i64 = now_ms();
+        let gap_ms: i64 = last_rx_ms < 0 ? -1 : (rx_ms - last_rx_ms);
+        last_rx_ms = rx_ms;
+        let ts: string = format_local(fmt);
+        println!(
+            "{} SERVER_RX: id={} round={} opcode={} gap_ms={} payload={}",
+            ts, client_id, i, req.opcode, gap_ms, req.payload
+        );
         let reply_opcode: i32 = match req.opcode {
             1 => op_pong(),
             10 => op_echo_reply(),
@@ -58,6 +71,11 @@ fn handle_client(client_id: i64, stream_handle: i64, rounds: i64) -> i32 {
         String::free(req.payload);
 
         let sr: Result<i64, string> = send(stream_handle, reply_opcode, reply_payload);
+        let tx_ts: string = format_local(fmt);
+        println!(
+            "{} SERVER_TX: id={} round={} opcode={}",
+            tx_ts, client_id, i, reply_opcode
+        );
         String::free(reply_payload);
         if sr.is_err() {
             println!("SERVER_CLIENT_ERROR id={} phase=send err={}", client_id, sr.unwrap_err());
