@@ -17,6 +17,7 @@ mod std::math;
 mod std::net;
 mod std::printf;
 mod std::process;
+mod std::rand;
 mod std::regex;
 mod std::sync;
 mod std::term;
@@ -47,6 +48,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
 - `stdlib/std/process.mla`
+- `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
@@ -633,6 +635,19 @@ Module file: `stdlib/std/process.mla`
 - `ExitStatus::code(self: ExitStatus) -> i32`
 - `ExitStatus::signaled(self: ExitStatus) -> int`
 - `ExitStatus::signal(self: ExitStatus) -> i32`
+
+## std::rand
+
+Module file: `stdlib/std/rand.mla`
+
+Pseudo-random helpers (process-global PRNG state):
+- `seed(value: i64) -> void`
+- `seed_auto() -> i64`
+- `next_u64() -> u64`
+- `next_i64() -> i64`
+- `range_i64(min_value: i64, max_value: i64) -> i64`
+- `next_f64() -> f64`
+- `range_f64(min_value: f64, max_value: f64) -> f64`
 
 ## std::regex
 

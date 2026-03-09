@@ -46,6 +46,10 @@ For TCP networking, see:
   (`TcpListener::bind/accept/local_port`, `TcpStream::connect/read/write`,
   `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`).
 
+For pseudo-random values, see:
+- `stdlib/std/rand.mla`
+  (`seed`, `seed_auto`, `next_u64`, `next_i64`, `range_i64`, `next_f64`, `range_f64`).
+
 For POSIX regular expressions, see:
 - `stdlib/std/regex.mla`
   (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`,
@@ -159,7 +163,7 @@ See also:
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::bench`, `std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
-  `std::process`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
+  `std::process`, `std::rand`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
   `std::testing`,
   `std::thread`, `std::time`, `std::unordered`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.

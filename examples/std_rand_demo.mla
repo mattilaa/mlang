@@ -1,0 +1,27 @@
+mod std::rand;
+
+use std::rand::next_f64;
+use std::rand::next_i64;
+use std::rand::range_f64;
+use std::rand::range_i64;
+use std::rand::seed;
+use std::rand::seed_auto;
+
+fn main() -> i32 {
+    let auto_seed: i64 = seed_auto();
+    println!("std::rand demo: auto_seed={}", auto_seed);
+
+    println!("next_i64: {}", next_i64());
+    println!("next_i64: {}", next_i64());
+    println!("range_i64(1, 6): {}", range_i64(1, 6));
+    println!("range_i64(10, 20): {}", range_i64(10, 20));
+    println!("next_f64: {}", next_f64());
+    println!("range_f64(2.5, 3.5): {}", range_f64(2.5, 3.5));
+
+    seed(12345);
+    let d1: i64 = range_i64(1, 1000);
+    seed(12345);
+    let d2: i64 = range_i64(1, 1000);
+    println!("deterministic with same seed? {} ({} vs {})", d1 == d2 ? "yes" : "no", d1, d2);
+    return 0;
+}

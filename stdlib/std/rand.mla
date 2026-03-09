@@ -1,0 +1,60 @@
+/// \file rand.mla
+/// \brief Pseudo-random number helpers for MLang (std::rand).
+///
+/// Backed by a fast native PRNG with process-global state.
+///
+/// Typical usage:
+///   mod std::rand;
+///   use std::rand::seed_auto;
+///   use std::rand::range_i64;
+///
+///   seed_auto();
+///   let x: i64 = range_i64(1, 6);  // dice roll in [1, 6]
+
+extern pub fn __mlang_std_rand_seed_i64(seed: i64) -> void;
+extern pub fn __mlang_std_rand_next_u64() -> u64;
+extern pub fn __mlang_std_rand_next_i64() -> i64;
+extern pub fn __mlang_std_rand_range_i64(min_value: i64, max_value: i64) -> i64;
+extern pub fn __mlang_std_rand_next_f64() -> f64;
+extern pub fn __mlang_std_rand_range_f64(min_value: f64, max_value: f64) -> f64;
+extern fn __mlang_std_time_now_ns() -> i64;
+
+/// @brief Set RNG seed explicitly.
+pub fn seed(value: i64) -> void {
+    __mlang_std_rand_seed_i64(value);
+}
+
+/// @brief Seed RNG with monotonic clock nanoseconds.
+/// @return Seed value that was applied.
+pub fn seed_auto() -> i64 {
+    let s: i64 = __mlang_std_time_now_ns();
+    __mlang_std_rand_seed_i64(s);
+    return s;
+}
+
+/// @brief Return next random unsigned 64-bit value.
+pub fn next_u64() -> u64 {
+    return __mlang_std_rand_next_u64();
+}
+
+/// @brief Return next random signed 64-bit value.
+pub fn next_i64() -> i64 {
+    return __mlang_std_rand_next_i64();
+}
+
+/// @brief Return random i64 in inclusive range [min_value, max_value].
+/// If bounds are reversed, they are swapped internally.
+pub fn range_i64(min_value: i64, max_value: i64) -> i64 {
+    return __mlang_std_rand_range_i64(min_value, max_value);
+}
+
+/// @brief Return random f64 in half-open range [0.0, 1.0).
+pub fn next_f64() -> f64 {
+    return __mlang_std_rand_next_f64();
+}
+
+/// @brief Return random f64 in range [min_value, max_value].
+/// If bounds are reversed, they are swapped internally.
+pub fn range_f64(min_value: f64, max_value: f64) -> f64 {
+    return __mlang_std_rand_range_f64(min_value, max_value);
+}

@@ -297,6 +297,8 @@ Filesystem API (`std::fs::File`, `std::fs::BufReader`) example:
 TCP networking API (`std::net::TcpListener`, `std::net::TcpStream`,
 non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
+Random API (`std::rand` seed/range helpers) example:
+`examples/std_rand_demo.mla`.
 Regex API (`std::regex::Regex`, compile/match/find/captures) example:
 `examples/std_regex_demo.mla`.
 Multithreaded TCP server/client examples:
@@ -395,6 +397,8 @@ robot --test "MLang Frontend CompileOnly TestsFlag *" tests/robot/examples.robot
 - Advanced framed protocol demo (multithreaded server, per-client workers, multi-client load):
   `examples/protocol_mt/server.mla`, `examples/protocol_mt/client.mla`
   (runner: `examples/protocol_mt/run_demo.sh`)
+- Random number generation (`std::rand`) with deterministic seeding + ranges:
+  `examples/std_rand_demo.mla`
 - Regex compile + match + group extraction:
   `examples/std_regex_demo.mla`
 - JSON parse/stringify, navigation, iterators, and `from_file` (`JsonDoc`, `JsonValue`):
