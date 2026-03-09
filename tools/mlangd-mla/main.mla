@@ -448,6 +448,14 @@ fn path_to_file_uri(path: string) -> string {
     return concat("file://", path);
 }
 
+fn file_uri_to_path(uri: string) -> string {
+    if len(uri) == 0 { return String::new(); }
+    if starts_with(uri, "file://") == 1 {
+        return sub(uri, 7, len(uri) - 7);
+    }
+    return uri;
+}
+
 fn first_match_location(path: string, text: string, pattern: string) -> string {
     let off: i64 = find(text, pattern);
     if off < 0 { return String::new(); }
@@ -570,6 +578,51 @@ fn builtin_type_location(word: string) -> string {
     return first_match_location(path, text, marker);
 }
 
+fn builtin_result_method_location(member: string) -> string {
+    if eq(member, "is_ok") != 1 {
+        if eq(member, "is_err") != 1 {
+            if eq(member, "unwrap") != 1 {
+                if eq(member, "unwrap_err") != 1 {
+                    return String::new();
+                }
+            }
+        }
+    }
+
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var p1: string = String::new();
+    var p2: string = String::new();
+    var p3: string = concat(here, "/stdlib/types.mla");
+    var p4: string = concat(here, "/types.mla");
+    if len(root) > 0 {
+        p1 = concat(root, "/stdlib/types.mla");
+        p2 = concat(root, "/types.mla");
+    }
+
+    var path: string = String::new();
+    if len(path) == 0 {
+        if len(p1) > 0 {
+            if file_exists(p1) == 1 { path = p1; }
+        }
+    }
+    if len(path) == 0 {
+        if len(p2) > 0 {
+            if file_exists(p2) == 1 { path = p2; }
+        }
+    }
+    if len(path) == 0 {
+        if file_exists(p3) == 1 { path = p3; }
+    }
+    if len(path) == 0 {
+        if file_exists(p4) == 1 { path = p4; }
+    }
+    if len(path) == 0 { return String::new(); }
+
+    // Builtin Result docs live in stdlib/types.mla around line 90.
+    return location_json(path_to_file_uri(path), 90, 1);
+}
+
 fn string_intrinsic_location(member: string) -> string {
     var target: string = String::new();
     if eq(member, "new") == 1 { target = "new"; }
@@ -680,37 +733,42 @@ fn associated_type_method_location(query_text: string, type_name: string, method
     if len(type_name) == 0 { return String::new(); }
     if len(method) == 0 { return String::new(); }
 
-    let type_mod: string = find_module_for_qualifier(query_text, type_name);
-    if len(type_mod) == 0 { return String::new(); }
-
-    let rel_path: string = colon_to_slash(type_mod);
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var path: string = String::new();
-    if len(root) > 0 {
-        let p1: string = format!("{}/stdlib/{}.mla", root, rel_path);
-        if file_exists(p1) == 1 { path = p1; }
-    }
-    if len(path) == 0 {
-        if len(root) > 0 {
-            let p2: string = format!("{}/{}.mla", root, rel_path);
-            if file_exists(p2) == 1 { path = p2; }
+    let type_base: string = base_type_name(type_name);
+    if eq(type_base, "TcpListener") == 1 || eq(type_base, "TcpStream") == 1 {
+        let net_path: string = module_file_path("std::net");
+        if len(net_path) > 0 {
+            let net_text_r: Result<string, string> = read_all_text(net_path);
+            if net_text_r.is_ok() {
+                let net_text: string = net_text_r.unwrap();
+                let net_loc: string = first_match_location(net_path, net_text, format!("fn {}(", method));
+                if len(net_loc) > 0 { return net_loc; }
+            }
         }
     }
-    if len(path) == 0 {
-        let p3: string = format!("{}/stdlib/{}.mla", here, rel_path);
-        if file_exists(p3) == 1 { path = p3; }
+
+    var type_mod: string = find_module_for_qualifier(query_text, type_base);
+    if len(type_mod) == 0 {
+        type_mod = module_for_type_in_scope(query_text, type_base);
     }
-    if len(path) == 0 {
-        let p4: string = format!("{}/{}.mla", here, rel_path);
-        if file_exists(p4) == 1 { path = p4; }
-    }
+    if len(type_mod) == 0 { return String::new(); }
+
+    let path: string = module_file_path(type_mod);
     if len(path) == 0 { return String::new(); }
 
     let text_r: Result<string, string> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
     let text: string = text_r.unwrap();
     return first_match_location(path, text, format!("fn {}(", method));
+}
+
+fn std_net_method_location(method: string) -> string {
+    if len(method) == 0 { return String::new(); }
+    let p: string = module_file_path("std::net");
+    if len(p) == 0 { return String::new(); }
+    let tr: Result<string, string> = read_all_text(p);
+    if tr.is_err() { return String::new(); }
+    let t: string = tr.unwrap();
+    return first_match_location(p, t, format!("fn {}(", method));
 }
 
 fn thread_intrinsic_location(name: string) -> string {
@@ -820,6 +878,34 @@ fn module_file_location(module_name: string) -> string {
     return location_json(path_to_file_uri(path), 1, 1);
 }
 
+fn module_file_path(module_name: string) -> string {
+    let modn: string = trim_ascii_ws(module_name);
+    if len(modn) == 0 { return String::new(); }
+    let rel_path: string = colon_to_slash(modn);
+    let root: string = root_path_from_store();
+    let here: string = cwd();
+    var path: string = String::new();
+    if len(root) > 0 {
+        let p1: string = format!("{}/stdlib/{}.mla", root, rel_path);
+        if file_exists(p1) == 1 { path = p1; }
+    }
+    if len(path) == 0 {
+        if len(root) > 0 {
+            let p2: string = format!("{}/{}.mla", root, rel_path);
+            if file_exists(p2) == 1 { path = p2; }
+        }
+    }
+    if len(path) == 0 {
+        let p3: string = format!("{}/stdlib/{}.mla", here, rel_path);
+        if file_exists(p3) == 1 { path = p3; }
+    }
+    if len(path) == 0 {
+        let p4: string = format!("{}/{}.mla", here, rel_path);
+        if file_exists(p4) == 1 { path = p4; }
+    }
+    return path;
+}
+
 /// @brief Extract module name from a "use mod::path::*;" or "use mod::path::Item;" line.
 fn use_line_module_name(line_text: string) -> string {
     let line: string = trim_ascii_ws(line_text);
@@ -870,6 +956,22 @@ fn find_module_for_qualifier(text: string, word: string) -> string {
         var mod_name: string = String::new();
         let line_t: string = trim_ascii_ws(line);
         if starts_with(line_t, "use ") == 1 {
+            // Resolve imported symbols, e.g.:
+            //   use std::net::TcpListener;  => TcpListener -> std::net
+            // Wildcard imports are intentionally not used for qualifier mapping
+            // because they do not declare a concrete qualifier symbol.
+            let rest0: string = sub(line_t, 4, len(line_t) - 4);
+            var end: i64 = len(rest0);
+            let semi: i64 = find(rest0, ";");
+            if semi >= 0 { end = semi; }
+            let rest: string = trim_ascii_ws(sub(rest0, 0, end));
+            let use_sep: i64 = rfind(rest, "::");
+            if use_sep >= 0 {
+                let imported_name: string = sub(rest, use_sep + 2, len(rest) - use_sep - 2);
+                if eq(imported_name, word) == 1 {
+                    return sub(rest, 0, use_sep);
+                }
+            }
             mod_name = use_line_module_name(line_t);
         }
         if starts_with(line_t, "mod ") == 1 {
@@ -885,6 +987,215 @@ fn find_module_for_qualifier(text: string, word: string) -> string {
         }
     }
     return String::new();
+}
+
+fn module_for_type_in_scope(text: string, type_name: string) -> string {
+    if len(text) == 0 { return String::new(); }
+    if len(type_name) == 0 { return String::new(); }
+    let n: i64 = line_count(text);
+    for i in 0..n {
+        let raw: string = line_text_at(text, i);
+        let line_t: string = trim_ascii_ws(raw);
+        var modn: string = String::new();
+        if starts_with(line_t, "use ") == 1 {
+            modn = use_line_module_name(line_t);
+        }
+        if starts_with(line_t, "mod ") == 1 {
+            modn = mod_line_module_name(line_t);
+        }
+        if len(modn) == 0 { continue; }
+        let p: string = module_file_path(modn);
+        if len(p) == 0 { continue; }
+        let tr: Result<string, string> = read_all_text(p);
+        if tr.is_err() { continue; }
+        let t: string = tr.unwrap();
+        if contains(t, format!("impl {}", type_name)) == 1 { return modn; }
+        if contains(t, format!("struct {}", type_name)) == 1 { return modn; }
+        if contains(t, format!("enum {}", type_name)) == 1 { return modn; }
+    }
+    return String::new();
+}
+
+fn dot_call_receiver_name(line_text: string, member: string) -> string {
+    if len(line_text) == 0 { return String::new(); }
+    if len(member) == 0 { return String::new(); }
+    let pat: string = format!(".{}(", member);
+    let dot_at: i64 = find(line_text, pat);
+    if dot_at <= 0 { return String::new(); }
+
+    let left_end: i64 = dot_at;
+    var start: i64 = left_end;
+    for i in 0..left_end {
+        let pos: i64 = left_end - i - 1;
+        let ch: string = sub(line_text, pos, 1);
+        if is_ident_char(ch) == 1 {
+            start = pos;
+            continue;
+        }
+        break;
+    }
+    if start >= left_end { return String::new(); }
+    return sub(line_text, start, left_end - start);
+}
+
+fn static_call_receiver_name(line_text: string, member: string) -> string {
+    if len(line_text) == 0 { return String::new(); }
+    if len(member) == 0 { return String::new(); }
+    let pat: string = format!("::{}(", member);
+    let pos: i64 = find(line_text, pat);
+    if pos <= 0 { return String::new(); }
+    let left_end: i64 = pos;
+    var start: i64 = left_end;
+    for i in 0..left_end {
+        let p: i64 = left_end - i - 1;
+        let ch: string = sub(line_text, p, 1);
+        if is_ident_char(ch) == 1 {
+            start = p;
+            continue;
+        }
+        break;
+    }
+    if start >= left_end { return String::new(); }
+    return sub(line_text, start, left_end - start);
+}
+
+fn first_static_call_pair(line_text: string) -> string {
+    let lp: i64 = find(line_text, "(");
+    if lp < 0 { return "::"; }
+    let left: string = sub(line_text, 0, lp);
+    let sep: i64 = rfind(left, "::");
+    if sep <= 0 { return "::"; }
+    let method: string = trim_ascii_ws(sub(left, sep + 2, len(left) - sep - 2));
+    if len(method) == 0 { return "::"; }
+    var qend: i64 = sep;
+    for i in 0..sep {
+        let p: i64 = sep - i - 1;
+        let ch: string = sub(left, p, 1);
+        if eq(ch, " ") == 1 || eq(ch, "\t") == 1 {
+            qend = p;
+            continue;
+        }
+        break;
+    }
+    var qstart: i64 = qend;
+    let qend0: i64 = qend;
+    for i in 0..qend0 {
+        let p: i64 = qend0 - i - 1;
+        let ch: string = sub(left, p, 1);
+        if is_ident_char(ch) == 1 {
+            qstart = p;
+            continue;
+        }
+        break;
+    }
+    if qend <= qstart { return "::"; }
+    let recv: string = sub(left, qstart, qend - qstart);
+    if len(recv) == 0 { return "::"; }
+    return format!("{}::{}", recv, method);
+}
+
+fn first_dot_call_pair(line_text: string) -> string {
+    let lp: i64 = find(line_text, "(");
+    if lp < 0 { return "::"; }
+    let left: string = sub(line_text, 0, lp);
+    let dot: i64 = rfind(left, ".");
+    if dot <= 0 { return "::"; }
+    let method: string = trim_ascii_ws(sub(left, dot + 1, len(left) - dot - 1));
+    if len(method) == 0 { return "::"; }
+    var qend: i64 = dot;
+    for i in 0..dot {
+        let p: i64 = dot - i - 1;
+        let ch: string = sub(left, p, 1);
+        if eq(ch, " ") == 1 || eq(ch, "\t") == 1 {
+            qend = p;
+            continue;
+        }
+        break;
+    }
+    var qstart: i64 = qend;
+    let qend0: i64 = qend;
+    for i in 0..qend0 {
+        let p: i64 = qend0 - i - 1;
+        let ch: string = sub(left, p, 1);
+        if is_ident_char(ch) == 1 {
+            qstart = p;
+            continue;
+        }
+        break;
+    }
+    if qend <= qstart { return "::"; }
+    let recv: string = sub(left, qstart, qend - qstart);
+    if len(recv) == 0 { return "::"; }
+    return format!("{}::{}", recv, method);
+}
+
+fn local_binding_type(text: string, name: string) -> string {
+    if len(text) == 0 { return String::new(); }
+    if len(name) == 0 { return String::new(); }
+
+    let n: i64 = line_count(text);
+    for i in 0..n {
+        let raw: string = line_text_at(text, i);
+        let line: string = trim_ascii_ws(raw);
+        if starts_with(line, "let ") == 0 {
+            if starts_with(line, "var ") == 0 {
+                continue;
+            }
+        }
+        let rest: string = sub(line, 4, len(line) - 4);
+        let c: i64 = find(rest, ":");
+        if c < 0 { continue; }
+
+        let lhs: string = trim_ascii_ws(sub(rest, 0, c));
+        if eq(lhs, name) != 1 { continue; }
+
+        var ty: string = trim_ascii_ws(sub(rest, c + 1, len(rest) - c - 1));
+        let eqi: i64 = find(ty, "=");
+        if eqi >= 0 {
+            ty = trim_ascii_ws(sub(ty, 0, eqi));
+        }
+        return ty;
+    }
+    // Infer `let x = y.unwrap();` from `y: Result<T, E>`.
+    for i in 0..n {
+        let raw: string = line_text_at(text, i);
+        let line: string = trim_ascii_ws(raw);
+        if starts_with(line, "let ") == 0 {
+            if starts_with(line, "var ") == 0 {
+                continue;
+            }
+        }
+        let rest: string = sub(line, 4, len(line) - 4);
+        let eqi: i64 = find(rest, "=");
+        if eqi < 0 { continue; }
+        let lhs: string = trim_ascii_ws(sub(rest, 0, eqi));
+        if eq(lhs, name) != 1 { continue; }
+        let rhs: string = trim_ascii_ws(sub(rest, eqi + 1, len(rest) - eqi - 1));
+        let uat: i64 = find(rhs, ".unwrap()");
+        if uat <= 0 { continue; }
+        let src: string = trim_ascii_ws(sub(rhs, 0, uat));
+        if len(src) == 0 { continue; }
+        if eq(src, name) == 1 { continue; }
+        let src_ty: string = local_binding_type(text, src);
+        if starts_with(src_ty, "Result<") == 1 {
+            let inner: string = sub(src_ty, 7, len(src_ty) - 7);
+            let comma: i64 = find(inner, ",");
+            if comma > 0 {
+                return trim_ascii_ws(sub(inner, 0, comma));
+            }
+        }
+    }
+    return String::new();
+}
+
+fn base_type_name(type_text: string) -> string {
+    let t: string = trim_ascii_ws(type_text);
+    if len(t) == 0 { return String::new(); }
+    let lt: i64 = find(t, "<");
+    if lt > 0 {
+        return trim_ascii_ws(sub(t, 0, lt));
+    }
+    return t;
 }
 
 /// @brief Resolve module import definition from a single source line.
@@ -1257,6 +1568,46 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
     }
 
     return format!("{}::{}", prefix, word);
+}
+
+fn word_at_col(line_text: string, col0: i64) -> string {
+    let n: i64 = len(line_text);
+    if n <= 0 { return String::new(); }
+    var idx: i64 = col0;
+    if idx < 0 { idx = 0; }
+    if idx > n { idx = n; }
+    if idx > 0 {
+        let chp: string = sub(line_text, idx - 1, 1);
+        if is_ident_char(chp) == 1 {
+            idx = idx - 1;
+        }
+    }
+    if idx >= n { idx = n - 1; }
+    if idx < 0 { return String::new(); }
+    let ch: string = sub(line_text, idx, 1);
+    if is_ident_char(ch) == 0 { return String::new(); }
+    var s: i64 = idx;
+    let idx0: i64 = idx;
+    for i in 0..idx0 {
+        let p: i64 = idx0 - i - 1;
+        let c: string = sub(line_text, p, 1);
+        if is_ident_char(c) == 1 {
+            s = p;
+            continue;
+        }
+        break;
+    }
+    var e: i64 = idx + 1;
+    for i in (idx0 + 1)..n {
+        let c: string = sub(line_text, i, 1);
+        if is_ident_char(c) == 1 {
+            e = i + 1;
+            continue;
+        }
+        break;
+    }
+    if e <= s { return String::new(); }
+    return sub(line_text, s, e - s);
 }
 
 fn symbol_kind_lsp(sig: string) -> i32 {
@@ -1775,9 +2126,23 @@ fn handle_definition(payload: string) -> string {
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
+    var query_text: string = String::new();
     if ensure_text_store() == 0 {
-        let query_text: string = text_store_get(g_text_store_handle, uri);
-        if len(query_text) > 0 {
+        query_text = text_store_get(g_text_store_handle, uri);
+    }
+    if len(query_text) == 0 {
+        let p: string = file_uri_to_path(uri);
+        if len(p) > 0 {
+            if file_exists(p) == 1 {
+                let tr: Result<string, string> = read_all_text(p);
+                if tr.is_ok() {
+                    query_text = tr.unwrap();
+                }
+            }
+        }
+    }
+
+    if len(query_text) > 0 {
             let line_text: string = line_text_at(query_text, line);
             let import_loc0: string = module_import_location_from_line(line_text);
             if len(import_loc0) > 0 { return format!("[{}]", import_loc0); }
@@ -1806,11 +2171,47 @@ fn handle_definition(payload: string) -> string {
                 }
                 return "[]";
             }
+            if contains(line_text, "TcpListener::bind(") == 1 {
+                let nloc0: string = std_net_method_location("bind");
+                if len(nloc0) > 0 { return format!("[{}]", nloc0); }
+            }
+            if contains(line_text, ".local_port(") == 1 {
+                let nloc1: string = std_net_method_location("local_port");
+                if len(nloc1) > 0 { return format!("[{}]", nloc1); }
+            }
+            let sc_pair: string = first_static_call_pair(line_text);
+            let sc_sep: i64 = find(sc_pair, "::");
+            if sc_sep > 0 {
+                let sc_recv: string = sub(sc_pair, 0, sc_sep);
+                let sc_method: string = sub(sc_pair, sc_sep + 2, len(sc_pair) - sc_sep - 2);
+                if len(sc_recv) > 0 && len(sc_method) > 0 {
+                    let sc_loc: string = associated_type_method_location(query_text, sc_recv, sc_method);
+                    if len(sc_loc) > 0 { return format!("[{}]", sc_loc); }
+                }
+            }
+            let dc_pair: string = first_dot_call_pair(line_text);
+            let dc_sep: i64 = find(dc_pair, "::");
+            if dc_sep > 0 {
+                let dc_recv: string = sub(dc_pair, 0, dc_sep);
+                let dc_method: string = sub(dc_pair, dc_sep + 2, len(dc_pair) - dc_sep - 2);
+                let dc_ty: string = local_binding_type(query_text, dc_recv);
+                if len(dc_ty) > 0 && len(dc_method) > 0 {
+                    let dc_loc: string = associated_type_method_location(query_text, base_type_name(dc_ty), dc_method);
+                    if len(dc_loc) > 0 { return format!("[{}]", dc_loc); }
+                    if eq(base_type_name(dc_ty), "Result") == 1 {
+                        let rloc0: string = builtin_result_method_location(dc_method);
+                        if len(rloc0) > 0 { return format!("[{}]", rloc0); }
+                    }
+                }
+            }
             let packed: string = extract_word_and_prefix(line_text, col);
             let sep: i64 = find(packed, "::");
             if sep >= 0 {
                 let prefix: string = sub(packed, 0, sep);
-                let word: string = sub(packed, sep + 2, len(packed) - sep - 2);
+                var word: string = sub(packed, sep + 2, len(packed) - sep - 2);
+                if len(word) == 0 {
+                    word = word_at_col(line_text, col);
+                }
                 if len(prefix) > 0 {
                     if eq(prefix, "String") == 1 {
                         let loc: string = string_intrinsic_location(word);
@@ -1818,9 +2219,41 @@ fn handle_definition(payload: string) -> string {
                     }
                     let assoc_loc: string = associated_type_method_location(query_text, prefix, word);
                     if len(assoc_loc) > 0 { return format!("[{}]", assoc_loc); }
+                    let static_recv: string = static_call_receiver_name(line_text, word);
+                    if len(static_recv) > 0 {
+                        let static_assoc: string = associated_type_method_location(query_text, static_recv, word);
+                        if len(static_assoc) > 0 { return format!("[{}]", static_assoc); }
+                    }
+                    let result_mloc: string = builtin_result_method_location(word);
+                    if len(result_mloc) > 0 { return format!("[{}]", result_mloc); }
                 }
                 if len(prefix) == 0 {
+                    let result_mloc2: string = builtin_result_method_location(word);
+                    if len(result_mloc2) > 0 {
+                        if contains(line_text, format!(".{}(", word)) == 1 {
+                            return format!("[{}]", result_mloc2);
+                        }
+                    }
                     if len(word) > 0 {
+                        let recv_static: string = static_call_receiver_name(line_text, word);
+                        if len(recv_static) > 0 {
+                            let recv_static_assoc: string = associated_type_method_location(query_text, recv_static, word);
+                            if len(recv_static_assoc) > 0 { return format!("[{}]", recv_static_assoc); }
+                        }
+                        let recv: string = dot_call_receiver_name(line_text, word);
+                        if len(recv) > 0 {
+                            let recv_ty: string = local_binding_type(query_text, recv);
+                            if len(recv_ty) > 0 {
+                                let recv_assoc: string = associated_type_method_location(query_text, base_type_name(recv_ty), word);
+                                if len(recv_assoc) > 0 { return format!("[{}]", recv_assoc); }
+                                let recv_result_loc: string = builtin_result_method_location(word);
+                                if len(recv_result_loc) > 0 {
+                                    if eq(base_type_name(recv_ty), "Result") == 1 {
+                                        return format!("[{}]", recv_result_loc);
+                                    }
+                                }
+                            }
+                        }
                         let qual_mod: string = find_module_for_qualifier(query_text, word);
                         if len(qual_mod) > 0 {
                             let qual_loc: string = module_file_location(qual_mod);
@@ -1855,19 +2288,21 @@ fn handle_definition(payload: string) -> string {
                     }
                 }
             }
-        }
     }
 
     let s: Session = current_session();
     let dr: Result<DefinitionLocation, string> =
         s.definition(uri, line + 1, col + 1);
     if dr.is_err() {
-        if ensure_text_store() == 0 {
-            let line_text2: string = line_text_at(text_store_get(g_text_store_handle, uri), line);
+        if len(query_text) > 0 {
+            let line_text2: string = line_text_at(query_text, line);
             let packed2: string = extract_word_and_prefix(line_text2, col);
             let sep2: i64 = find(packed2, "::");
             if sep2 >= 0 {
-                let word2: string = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
+                var word2: string = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
+                if len(word2) == 0 {
+                    word2 = word_at_col(line_text2, col);
+                }
                 if len(word2) > 0 {
                     let root_uri2: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
                     if len(root_uri2) > 0 {
@@ -1884,6 +2319,66 @@ fn handle_definition(payload: string) -> string {
         Ok(v) => v,
         Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
     };
+    if len(query_text) > 0 {
+            let line_text2: string = line_text_at(query_text, line);
+            let sc_pair2: string = first_static_call_pair(line_text2);
+            let sc_sep2: i64 = find(sc_pair2, "::");
+            if sc_sep2 > 0 {
+                let sc_recv2: string = sub(sc_pair2, 0, sc_sep2);
+                let sc_method2: string = sub(sc_pair2, sc_sep2 + 2, len(sc_pair2) - sc_sep2 - 2);
+                if len(sc_recv2) > 0 && len(sc_method2) > 0 {
+                    let sc_loc2: string = associated_type_method_location(query_text, sc_recv2, sc_method2);
+                    if len(sc_loc2) > 0 { return format!("[{}]", sc_loc2); }
+                }
+            }
+            let dc_pair2: string = first_dot_call_pair(line_text2);
+            let dc_sep2: i64 = find(dc_pair2, "::");
+            if dc_sep2 > 0 {
+                let dc_recv2: string = sub(dc_pair2, 0, dc_sep2);
+                let dc_method2: string = sub(dc_pair2, dc_sep2 + 2, len(dc_pair2) - dc_sep2 - 2);
+                let dc_ty2: string = local_binding_type(query_text, dc_recv2);
+                if len(dc_ty2) > 0 && len(dc_method2) > 0 {
+                    let dc_loc2: string = associated_type_method_location(query_text, base_type_name(dc_ty2), dc_method2);
+                    if len(dc_loc2) > 0 { return format!("[{}]", dc_loc2); }
+                    if eq(base_type_name(dc_ty2), "Result") == 1 {
+                        let rloc3: string = builtin_result_method_location(dc_method2);
+                        if len(rloc3) > 0 { return format!("[{}]", rloc3); }
+                    }
+                }
+            }
+            let packed2: string = extract_word_and_prefix(line_text2, col);
+            let sep2: i64 = find(packed2, "::");
+            if sep2 >= 0 {
+                let prefix2: string = sub(packed2, 0, sep2);
+                var word2: string = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
+                if len(word2) == 0 {
+                    word2 = word_at_col(line_text2, col);
+                }
+                if len(word2) > 0 {
+                    let static_recv2: string = static_call_receiver_name(line_text2, word2);
+                    if len(static_recv2) > 0 {
+                        let static_assoc2: string = associated_type_method_location(query_text, static_recv2, word2);
+                        if len(static_assoc2) > 0 { return format!("[{}]", static_assoc2); }
+                    }
+                    if len(prefix2) > 0 {
+                        let assoc2: string = associated_type_method_location(query_text, prefix2, word2);
+                        if len(assoc2) > 0 { return format!("[{}]", assoc2); }
+                    }
+                    let dot_recv2: string = dot_call_receiver_name(line_text2, word2);
+                    if len(dot_recv2) > 0 {
+                        let dot_ty2: string = local_binding_type(query_text, dot_recv2);
+                        if len(dot_ty2) > 0 {
+                            let dot_assoc2: string = associated_type_method_location(query_text, base_type_name(dot_ty2), word2);
+                            if len(dot_assoc2) > 0 { return format!("[{}]", dot_assoc2); }
+                            if eq(base_type_name(dot_ty2), "Result") == 1 {
+                                let rloc2: string = builtin_result_method_location(word2);
+                                if len(rloc2) > 0 { return format!("[{}]", rloc2); }
+                            }
+                        }
+                    }
+                }
+            }
+    }
     let loc: string = location_json(d.uri, d.line, d.column);
     let out: string = format!("[{}]", loc);
     return out;

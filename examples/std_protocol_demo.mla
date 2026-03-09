@@ -16,41 +16,73 @@ use std::strbuf::eq;
 fn main() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err() {
-        println!("bind failed: {}", listener_r.unwrap_err());
+        let e: string = match listener_r {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("bind failed: {}", e);
         return 1;
     }
-    let listener: TcpListener = listener_r.unwrap();
+    let listener: TcpListener = match listener_r {
+        Ok(v) => v,
+        Err(_e) => TcpListener { handle: 0 }
+    };
 
     let port_r: Result<i64, string> = listener.local_port();
     if port_r.is_err() {
-        println!("local_port failed: {}", port_r.unwrap_err());
+        let e: string = match port_r {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("local_port failed: {}", e);
         listener.close();
         return 1;
     }
-    let port: i64 = port_r.unwrap();
+    let port: i64 = match port_r {
+        Ok(v) => v,
+        Err(_e) => -1
+    };
 
     let client_r: Result<i64, string> = connect("127.0.0.1", port);
     if client_r.is_err() {
-        println!("connect failed: {}", client_r.unwrap_err());
+        let e: string = match client_r {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("connect failed: {}", e);
         listener.close();
         return 1;
     }
-    let client: i64 = client_r.unwrap();
+    let client: i64 = match client_r {
+        Ok(v) => v,
+        Err(_e) => -1
+    };
 
     let server_stream_r: Result<TcpStream, string> = listener.accept();
     if server_stream_r.is_err() {
-        println!("accept failed: {}", server_stream_r.unwrap_err());
+        let e: string = match server_stream_r {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("accept failed: {}", e);
         close(client);
         listener.close();
         return 1;
     }
-    let server: i64 = from_stream(server_stream_r.unwrap());
+    let server: i64 = match server_stream_r {
+        Ok(v) => from_stream(v),
+        Err(_e) => -1
+    };
 
     // Derived protocol example:
     // opcode=1 -> ping request, opcode=2 -> pong response
     let sr: Result<i64, string> = send(client, 1, "hello-protocol");
     if sr.is_err() {
-        println!("client send failed");
+        let e: string = match sr {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("client send failed: {}", e);
         close(server);
         close(client);
         listener.close();
@@ -59,7 +91,11 @@ fn main() -> i32 {
 
     let rf: Result<ProtocolFrame, string> = recv(server, 256, default_max_payload_bytes());
     if rf.is_err() {
-        println!("server recv failed: {}", rf.unwrap_err());
+        let e: string = match rf {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("server recv failed: {}", e);
         close(server);
         close(client);
         listener.close();
@@ -76,7 +112,11 @@ fn main() -> i32 {
 
     let cf: Result<ProtocolFrame, string> = recv(client, 256, default_max_payload_bytes());
     if cf.is_err() {
-        println!("client recv failed: {}", cf.unwrap_err());
+        let e: string = match cf {
+            Ok(_v) => String::new(),
+            Err(err) => err
+        };
+        println!("client recv failed: {}", e);
         close(server);
         close(client);
         listener.close();
