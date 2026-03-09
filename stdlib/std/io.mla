@@ -11,8 +11,10 @@
 ///   when a matching drop overload exists. `StdoutLock` uses this to unlock
 ///   automatically.
 
+/// \cond INTERNAL_IMPORTS
 mod std::io::detail;
 use std::io::detail::*;
+/// \endcond
 
 pub struct Stdin {
     var _tag: i32;

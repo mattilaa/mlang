@@ -5,6 +5,7 @@ extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms:
 extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> int;
 extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> int;
 
+/// @brief Handle for periodic event posting to a lock-free queue.
 pub struct EventLoop {
     var ticker_handle: i64;
 };

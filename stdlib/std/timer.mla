@@ -14,10 +14,12 @@ extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms:
 extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> int;
 extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> int;
 
+/// @brief Owned handle for periodic interval ticks.
 pub struct IntervalTimer {
     var handle: i64;
 };
 
+/// @brief Owned handle for background ticker thread posting queue events.
 pub struct AsyncTicker {
     var handle: i64;
 };

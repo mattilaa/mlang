@@ -8,8 +8,10 @@
 ///
 /// Additional utility helpers are backed by libmlang_std.
 
+/// \cond INTERNAL_IMPORTS
 mod std::strbuf::detail;
 use std::strbuf::detail::*;
+/// \endcond
 
 /// @brief Allocate an empty string buffer (NUL-terminated).
 pub fn new() -> string {

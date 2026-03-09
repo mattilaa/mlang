@@ -7,6 +7,7 @@
 /// Usage:
 ///   mlang-frontend-mla [--backend <mlang_bin>] [compiler args...]
 
+/// \cond INTERNAL_IMPORTS
 mod std::compiler;
 mod std::fs;
 mod std::process;
@@ -30,6 +31,7 @@ use std::strbuf::rfind;
 use std::strbuf::starts_with;
 use std::strbuf::sub;
 use std::strbuf::trim;
+/// \endcond
 
 struct FrontendState {
     var backend: string;

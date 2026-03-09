@@ -6,16 +6,22 @@ These are the APIs you import in Mlang source via:
 ```mla
 mod std::io;
 mod std::esc;
+mod std::argparser;
+mod std::compiler;
+mod std::date;
+mod std::event_loop;
 mod std::json;
 mod std::jsonrpc;
 mod std::bench;
 mod std::math;
 mod std::net;
+mod std::printf;
 mod std::process;
 mod std::regex;
 mod std::sync;
 mod std::term;
 mod std::time;
+mod std::timer;
 mod std::fs;
 mod std::strbuf;
 mod std::testing;
@@ -27,17 +33,23 @@ mod std::vec;
 The source-of-truth implementation files are:
 - `stdlib/std/fs.mla`
 - `stdlib/std/esc.mla`
+- `stdlib/std/argparser.mla`
+- `stdlib/std/compiler.mla`
+- `stdlib/std/date.mla`
+- `stdlib/std/event_loop.mla`
 - `stdlib/std/io.mla`
 - `stdlib/std/json.mla`
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/net.mla`
+- `stdlib/std/printf.mla`
 - `stdlib/std/process.mla`
 - `stdlib/std/regex.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
+- `stdlib/std/timer.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
@@ -104,6 +116,103 @@ let scores: SomeMap = {"Alice": 95, "Bob": 87};
 ```
 
 If an alias name is duplicated in the same scope, the compiler reports an error referencing the original definition (`file.mla:row:column: alias 'Distance' already defined`), so you can reliably locate the conflict.
+
+## std::argparser
+
+Module file: `stdlib/std/argparser.mla`
+
+### Types
+- `ArgParser`
+- `ParseResult`
+
+### Parser setup
+- `ArgParser::new(prog: string, desc: string) -> ArgParser`
+- `ArgParser::flag(self: ArgParser, long_name: string, short_name: string, help: string) -> void`
+- `ArgParser::option(self: ArgParser, long_name: string, short_name: string, help: string, default_val: string) -> void`
+- `ArgParser::positional(self: ArgParser, name: string, help: string) -> void`
+- `ArgParser::parse(self: ArgParser, argc: i32, args: list<str8>) -> ParseResult`
+- `ArgParser::print_help(self: ArgParser) -> void`
+- `ArgParser::free(self: ArgParser) -> void`
+
+### Parse results
+- `ParseResult::ok(self: ParseResult) -> bool`
+- `ParseResult::has_error(self: ParseResult) -> bool`
+- `ParseResult::error(self: ParseResult) -> string`
+- `ParseResult::help_requested(self: ParseResult) -> bool`
+- `ParseResult::flag(self: ParseResult, name: string) -> bool`
+- `ParseResult::get(self: ParseResult, name: string) -> string`
+- `ParseResult::get_i64(self: ParseResult, name: string) -> i64`
+- `ParseResult::positional(self: ParseResult, idx: i64) -> string`
+- `ParseResult::positional_count(self: ParseResult) -> i64`
+- `ParseResult::free(self: ParseResult) -> void`
+
+## std::compiler
+
+Module file: `stdlib/std/compiler.mla`
+
+### Types
+- `Session`
+- `SyntaxDiagnostic`
+- `DocumentSymbol`
+- `DefinitionLocation`
+- `ReferenceLocation`
+- `ResolvedSymbol`
+
+### Global helpers
+- `session_create() -> Result<Session, string>`
+- `last_status() -> i32`
+- `status_name(status: i32) -> string`
+- `version() -> string`
+- `last_error() -> string`
+
+### Session lifecycle and document state
+- `Session::destroy(self: Session) -> Result<i32, string>`
+- `Session::open_document(self: Session, uri: string, language_id: string, text: string, version: i32) -> Result<i32, string>`
+- `Session::change_document(self: Session, uri: string, text: string, version: i32) -> Result<i32, string>`
+- `Session::close_document(self: Session, uri: string) -> Result<i32, string>`
+
+### Diagnostics and editor queries
+- `Session::syntax_diagnostic_count(self: Session, uri: string) -> Result<i32, string>`
+- `Session::syntax_diagnostic_get(self: Session, uri: string, index: i32) -> Result<SyntaxDiagnostic, string>`
+- `Session::hover(self: Session, uri: string, line: i32, column: i32) -> Result<string, string>`
+- `Session::completion_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string>`
+- `Session::completion_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<string, string>`
+
+### Symbols, definitions, references, rename
+- `Session::document_symbol_count(self: Session, uri: string) -> Result<i32, string>`
+- `Session::document_symbol_get(self: Session, uri: string, index: i32) -> Result<DocumentSymbol, string>`
+- `Session::definition(self: Session, uri: string, line: i32, column: i32) -> Result<DefinitionLocation, string>`
+- `Session::references_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string>`
+- `Session::reference_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, string>`
+- `Session::resolve_symbol(self: Session, uri: string, line: i32, column: i32) -> Result<ResolvedSymbol, string>`
+- `Session::rename_is_safe(self: Session, uri: string, line: i32, column: i32, new_name: string) -> Result<i32, string>`
+- `Session::semantic_cache_warm(self: Session, uri: string) -> Result<i32, string>`
+- `Session::semantic_cache_clear(self: Session) -> Result<i32, string>`
+
+## std::date
+
+Module file: `stdlib/std/date.mla`
+
+### Types
+- `DateTime`
+
+### API
+- `now() -> DateTime`
+- `format_iso8601(dt: DateTime) -> string`
+- `format_date(dt: DateTime) -> string`
+- `format_time(dt: DateTime) -> string`
+
+## std::event_loop
+
+Module file: `stdlib/std/event_loop.mla`
+
+### Types
+- `EventLoop`
+
+### API
+- `EventLoop::start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<EventLoop, string>`
+- `EventLoop::stop(self: EventLoop) -> i32`
+- `EventLoop::close(self: EventLoop) -> i32`
 
 ## std::unordered
 
@@ -444,6 +553,17 @@ Module file: `stdlib/std/net.mla`
 ### Errors
 - `last_error() -> string`
 
+## std::printf
+
+Module file: `stdlib/std/printf.mla`
+
+MLang-facing wrappers over C-style output that accept preformatted strings.
+
+### API
+- `printf(s: string) -> void`
+- `eprintf(s: string) -> void`
+- `fprintf(fd: i32, s: string) -> void`
+
 ## std::math
 
 Module file: `stdlib/std/math.mla`
@@ -625,6 +745,27 @@ Module file: `stdlib/std/time.mla`
 - `Timer::remaining_ms(self: Timer) -> i64`
 - `Timer::wait(self: Timer) -> i32`
 - `Timer::close(self: Timer) -> i32`
+
+## std::timer
+
+Module file: `stdlib/std/timer.mla`
+
+### Types
+- `IntervalTimer`
+- `AsyncTicker`
+
+### Interval timer API
+- `IntervalTimer::every_ms(interval_ms: i64) -> Result<IntervalTimer, string>`
+- `IntervalTimer::reset(self: IntervalTimer) -> i32`
+- `IntervalTimer::remaining_ms(self: IntervalTimer) -> i64`
+- `IntervalTimer::wait_next(self: IntervalTimer) -> i32`
+- `IntervalTimer::poll(self: IntervalTimer) -> i32`
+- `IntervalTimer::close(self: IntervalTimer) -> i32`
+
+### Async ticker API
+- `AsyncTicker::start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<AsyncTicker, string>`
+- `AsyncTicker::stop(self: AsyncTicker) -> i32`
+- `AsyncTicker::close(self: AsyncTicker) -> i32`
 
 ## std::strbuf
 

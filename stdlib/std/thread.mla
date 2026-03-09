@@ -18,8 +18,10 @@
 /// Note: `thread_spawn(...)` is a compiler intrinsic also reachable via the
 /// `thread::spawn` qualified name when given a closure or function identifier.
 
+/// \cond INTERNAL_IMPORTS
 mod std::thread::detail;
 use std::thread::detail::*;
+/// \endcond
 
 /// @brief Spawn a thread from a closure/function pointer.
 ///

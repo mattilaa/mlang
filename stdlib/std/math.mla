@@ -5,8 +5,10 @@
 
 // std::math - generic math helpers
 
+/// \cond INTERNAL_IMPORTS
 mod std::math::detail;
 use std::math::detail::*;
+/// \endcond
 
 /// @brief Add two values.
 /// @param a a value.

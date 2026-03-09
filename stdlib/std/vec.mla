@@ -39,8 +39,10 @@
 /// The `extern fn` declarations below are for documentation only —
 /// they are wired directly in the code generator.
 
+/// \cond INTERNAL_IMPORTS
 mod std::vec::detail;
 use std::vec::detail::*;
+/// \endcond
 
 // ------------------------------------------------------------------ //
 // Method stubs — compiler intrinsics, documented for gd/hover.       //
