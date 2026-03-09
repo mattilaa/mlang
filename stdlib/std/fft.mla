@@ -8,6 +8,10 @@
 extern fn __mlang_std_fft_is_power_of_two(n: i64) -> i32;
 extern fn __mlang_std_fft_forward_i64(data: list<i64>) -> list<i64>;
 extern fn __mlang_std_fft_inverse_i64(data: list<i64>) -> list<i64>;
+extern fn __mlang_std_fft_forward_f32(data: list<f32>) -> list<f32>;
+extern fn __mlang_std_fft_inverse_f32(data: list<f32>) -> list<f32>;
+extern fn __mlang_std_fft_forward_f64(data: list<f64>) -> list<f64>;
+extern fn __mlang_std_fft_inverse_f64(data: list<f64>) -> list<f64>;
 
 /// @brief Check whether n is a power-of-two (> 0).
 pub fn is_power_of_two(n: i64) -> bool {
@@ -26,4 +30,32 @@ pub fn forward(data: list<i64>) -> list<i64> {
 /// @return Inverse-transformed data, or empty list on invalid input.
 pub fn inverse(data: list<i64>) -> list<i64> {
     return __mlang_std_fft_inverse_i64(data);
+}
+
+/// @brief Forward FFT over interleaved complex samples (f32).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Transformed data, or empty list on invalid input.
+pub fn forward_f32(data: list<f32>) -> list<f32> {
+    return __mlang_std_fft_forward_f32(data);
+}
+
+/// @brief Inverse FFT over interleaved complex samples (f32).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Inverse-transformed data, or empty list on invalid input.
+pub fn inverse_f32(data: list<f32>) -> list<f32> {
+    return __mlang_std_fft_inverse_f32(data);
+}
+
+/// @brief Forward FFT over interleaved complex samples (f64).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Transformed data, or empty list on invalid input.
+pub fn forward_f64(data: list<f64>) -> list<f64> {
+    return __mlang_std_fft_forward_f64(data);
+}
+
+/// @brief Inverse FFT over interleaved complex samples (f64).
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Inverse-transformed data, or empty list on invalid input.
+pub fn inverse_f64(data: list<f64>) -> list<f64> {
+    return __mlang_std_fft_inverse_f64(data);
 }

@@ -96,6 +96,116 @@ static int fft_inplace(double* re, double* im, int64_t n, int inverse)
     return 1;
 }
 
+static mlang_list_t fft_run_f64(mlang_list_t data, int inverse)
+{
+    if(data.size <= 0 || (data.size % 2) != 0 || !data.data)
+        return empty_list();
+
+    int64_t n = data.size / 2;
+    if(__mlang_std_fft_is_power_of_two(n) == 0)
+        return empty_list();
+
+    double* src = (double*)data.data;
+    double* re = (double*)malloc(sizeof(double) * (size_t)n);
+    double* im = (double*)malloc(sizeof(double) * (size_t)n);
+    if(!re || !im)
+    {
+        free(re);
+        free(im);
+        return empty_list();
+    }
+
+    for(int64_t i = 0; i < n; ++i)
+    {
+        re[i] = src[2 * i];
+        im[i] = src[2 * i + 1];
+    }
+
+    if(!fft_inplace(re, im, n, inverse))
+    {
+        free(re);
+        free(im);
+        return empty_list();
+    }
+
+    double* out_data = (double*)malloc(sizeof(double) * (size_t)data.size);
+    if(!out_data)
+    {
+        free(re);
+        free(im);
+        return empty_list();
+    }
+
+    for(int64_t i = 0; i < n; ++i)
+    {
+        out_data[2 * i] = re[i];
+        out_data[2 * i + 1] = im[i];
+    }
+
+    free(re);
+    free(im);
+
+    mlang_list_t out;
+    out.size = data.size;
+    out.data = out_data;
+    return out;
+}
+
+static mlang_list_t fft_run_f32(mlang_list_t data, int inverse)
+{
+    if(data.size <= 0 || (data.size % 2) != 0 || !data.data)
+        return empty_list();
+
+    int64_t n = data.size / 2;
+    if(__mlang_std_fft_is_power_of_two(n) == 0)
+        return empty_list();
+
+    float* src = (float*)data.data;
+    double* re = (double*)malloc(sizeof(double) * (size_t)n);
+    double* im = (double*)malloc(sizeof(double) * (size_t)n);
+    if(!re || !im)
+    {
+        free(re);
+        free(im);
+        return empty_list();
+    }
+
+    for(int64_t i = 0; i < n; ++i)
+    {
+        re[i] = (double)src[2 * i];
+        im[i] = (double)src[2 * i + 1];
+    }
+
+    if(!fft_inplace(re, im, n, inverse))
+    {
+        free(re);
+        free(im);
+        return empty_list();
+    }
+
+    float* out_data = (float*)malloc(sizeof(float) * (size_t)data.size);
+    if(!out_data)
+    {
+        free(re);
+        free(im);
+        return empty_list();
+    }
+
+    for(int64_t i = 0; i < n; ++i)
+    {
+        out_data[2 * i] = (float)re[i];
+        out_data[2 * i + 1] = (float)im[i];
+    }
+
+    free(re);
+    free(im);
+
+    mlang_list_t out;
+    out.size = data.size;
+    out.data = out_data;
+    return out;
+}
+
 static mlang_list_t fft_run_i64(mlang_list_t data, int inverse)
 {
     if(data.size <= 0 || (data.size % 2) != 0 || !data.data)
@@ -159,4 +269,24 @@ mlang_list_t __mlang_std_fft_forward_i64(mlang_list_t data)
 mlang_list_t __mlang_std_fft_inverse_i64(mlang_list_t data)
 {
     return fft_run_i64(data, 1);
+}
+
+mlang_list_t __mlang_std_fft_forward_f32(mlang_list_t data)
+{
+    return fft_run_f32(data, 0);
+}
+
+mlang_list_t __mlang_std_fft_inverse_f32(mlang_list_t data)
+{
+    return fft_run_f32(data, 1);
+}
+
+mlang_list_t __mlang_std_fft_forward_f64(mlang_list_t data)
+{
+    return fft_run_f64(data, 0);
+}
+
+mlang_list_t __mlang_std_fft_inverse_f64(mlang_list_t data)
+{
+    return fft_run_f64(data, 1);
 }
