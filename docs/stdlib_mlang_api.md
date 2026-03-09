@@ -779,6 +779,22 @@ Module file: `stdlib/std/strbuf.mla`
 - `with_capacity(capacity: i64) -> string`
 - `free(buf: string) -> void`
 
+### Dynamic builder
+- `StringBuilder`
+- `builder_new(initial_capacity: i64) -> StringBuilder` (default page: 256 bytes)
+- `builder_with_page(initial_capacity: i64, page_size: i64) -> StringBuilder`
+- `builder_is_valid(builder: StringBuilder) -> i32`
+- `builder_len(builder: StringBuilder) -> i64`
+- `builder_capacity(builder: StringBuilder) -> i64`
+- `builder_set_page_size(builder: StringBuilder, page_size: i64) -> i32`
+- `builder_clear(builder: StringBuilder) -> i32`
+- `builder_reserve(builder: StringBuilder, min_capacity: i64) -> i32`
+- `builder_append(builder: StringBuilder, s: string) -> i64` (bytes appended, `-1` on failure)
+- `builder_append_char(builder: StringBuilder, ch: i32) -> i64` (`1` on success, `-1` on failure)
+- `builder_to_string(builder: StringBuilder) -> string` (clone)
+- `builder_take_string(builder: StringBuilder) -> string` (moves out current buffer and resets builder)
+- `builder_free(builder: StringBuilder) -> void`
+
 ### String helpers
 - `len(s: string) -> i64`
 - `is_empty(s: string) -> int`

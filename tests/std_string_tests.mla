@@ -75,3 +75,40 @@ fn test_string_sub_bounds() -> i32 {
     free(s);
     return 0;
 }
+
+#[test]
+fn test_string_builder_dynamic_growth_and_take() -> i32 {
+    var b: StringBuilder = builder_with_page(2, 4);
+    if builder_is_valid(b) != 1 { return 1; }
+    if builder_append(b, "ab") != 2 { builder_free(b); return 1; }
+    if builder_append_char(b, 99) != 1 { builder_free(b); return 1; } // 'c'
+    if builder_append(b, "defghijklmnop") != 13 { builder_free(b); return 1; }
+    if builder_len(b) != 16 { builder_free(b); return 1; }
+    if builder_capacity(b) < 16 { builder_free(b); return 1; }
+
+    let s: string = builder_take_string(b);
+    if eq(s, "abcdefghijklmnop") != 1 { free(s); builder_free(b); return 1; }
+    if builder_len(b) != 0 { free(s); builder_free(b); return 1; }
+    free(s);
+    builder_free(b);
+    return 0;
+}
+
+#[test]
+fn test_string_builder_reserve_clear_and_clone() -> i32 {
+    var b: StringBuilder = builder_new(0);
+    if builder_is_valid(b) != 1 { return 1; }
+    if builder_reserve(b, 64) != 0 { builder_free(b); return 1; }
+    if builder_capacity(b) < 64 { builder_free(b); return 1; }
+    if builder_append(b, "hello") != 5 { builder_free(b); return 1; }
+
+    let c: string = builder_to_string(b);
+    if eq(c, "hello") != 1 { free(c); builder_free(b); return 1; }
+    free(c);
+
+    if builder_clear(b) != 0 { builder_free(b); return 1; }
+    if builder_len(b) != 0 { builder_free(b); return 1; }
+    if builder_append_char(b, 300) != -1 { builder_free(b); return 1; }
+    builder_free(b);
+    return 0;
+}

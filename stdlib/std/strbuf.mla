@@ -28,6 +28,86 @@ pub fn free(buf: string) -> void {
     String::free(buf);
 }
 
+/// @brief Growable UTF-8 byte string builder handle.
+use type StringBuilder = i64;
+
+/// @brief Create a StringBuilder with auto-growth and default page size.
+///
+/// Default page size is 256 bytes.
+pub fn builder_new(initial_capacity: i64) -> StringBuilder {
+    return __mlang_std_strbuf_builder_rt_new(initial_capacity, 256);
+}
+
+/// @brief Create a StringBuilder with explicit growth page size.
+///
+/// `page_size` controls allocation granularity; smaller values reduce
+/// over-allocation, larger values reduce realloc frequency.
+pub fn builder_with_page(initial_capacity: i64, page_size: i64) -> StringBuilder {
+    return __mlang_std_strbuf_builder_rt_new(initial_capacity, page_size);
+}
+
+/// @brief Return `1` when builder allocation succeeded.
+pub fn builder_is_valid(builder: StringBuilder) -> i32 {
+    return builder != 0 ? 1 : 0;
+}
+
+/// @brief Current content length in bytes.
+pub fn builder_len(builder: StringBuilder) -> i64 {
+    return __mlang_std_strbuf_builder_rt_len(builder);
+}
+
+/// @brief Current writable byte capacity (excluding trailing NUL).
+pub fn builder_capacity(builder: StringBuilder) -> i64 {
+    return __mlang_std_strbuf_builder_rt_capacity(builder);
+}
+
+/// @brief Change growth page size for future expansions.
+/// @return 0 on success, -1 on invalid page size or builder.
+pub fn builder_set_page_size(builder: StringBuilder, page_size: i64) -> i32 {
+    return __mlang_std_strbuf_builder_rt_set_page_size(builder, page_size);
+}
+
+/// @brief Reset builder to empty content while keeping allocated storage.
+/// @return 0 on success, -1 on invalid builder.
+pub fn builder_clear(builder: StringBuilder) -> i32 {
+    return __mlang_std_strbuf_builder_rt_clear(builder);
+}
+
+/// @brief Ensure minimum writable capacity in bytes.
+/// @return 0 on success, -1 on invalid builder/allocation failure.
+pub fn builder_reserve(builder: StringBuilder, min_capacity: i64) -> i32 {
+    return __mlang_std_strbuf_builder_rt_reserve(builder, min_capacity);
+}
+
+/// @brief Append UTF-8 text; grows automatically.
+/// @return Number of appended bytes, or -1 on failure.
+pub fn builder_append(builder: StringBuilder, s: string) -> i64 {
+    return __mlang_std_strbuf_builder_rt_append(builder, s);
+}
+
+/// @brief Append one byte value (0..255) as a character.
+/// @return 1 on success, -1 on invalid byte/builder/failure.
+pub fn builder_append_char(builder: StringBuilder, ch: i32) -> i64 {
+    return __mlang_std_strbuf_builder_rt_append_char(builder, ch);
+}
+
+/// @brief Clone current contents into a new string.
+/// Caller owns and frees returned string via `strbuf::free`.
+pub fn builder_to_string(builder: StringBuilder) -> string {
+    return __mlang_std_strbuf_builder_rt_to_string(builder);
+}
+
+/// @brief Move current contents out as an owned string and reset builder.
+/// Caller owns and frees returned string via `strbuf::free`.
+pub fn builder_take_string(builder: StringBuilder) -> string {
+    return __mlang_std_strbuf_builder_rt_take_string(builder);
+}
+
+/// @brief Release builder and any owned internal buffer.
+pub fn builder_free(builder: StringBuilder) -> void {
+    __mlang_std_strbuf_builder_rt_free(builder);
+}
+
 /// @brief Return UTF-8 string length in bytes.
 pub fn len(s: string) -> i64 {
     return __mlang_std_strbuf_len(s);

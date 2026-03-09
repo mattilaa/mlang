@@ -534,3 +534,226 @@ char* __mlang_std_strbuf_json_escape(const char* s)
     out[w] = '\0';
     return out;
 }
+
+typedef struct mlang_strbuilder_t
+{
+    char* buf;
+    size_t len;
+    size_t cap;
+    size_t page_size;
+} mlang_strbuilder_t;
+
+static size_t sb_default_page_size(void)
+{
+    return 256u;
+}
+
+static int sb_round_up_to_page(size_t need, size_t page, size_t* out)
+{
+    if(!out || page == 0u)
+        return 0;
+    size_t rem = need % page;
+    if(rem == 0u)
+    {
+        *out = need;
+        return 1;
+    }
+    size_t add = page - rem;
+    if(need > SIZE_MAX - add)
+        return 0;
+    *out = need + add;
+    return 1;
+}
+
+static int sb_ensure_capacity(mlang_strbuilder_t* sb, size_t additional)
+{
+    if(!sb || !sb->buf || sb->cap == 0u)
+        return 0;
+
+    if(additional > SIZE_MAX - sb->len - 1u)
+        return 0;
+    size_t need = sb->len + additional + 1u;
+    if(need <= sb->cap)
+        return 1;
+
+    size_t doubled = sb->cap;
+    if(doubled <= SIZE_MAX / 2u)
+        doubled = doubled * 2u;
+    else
+        doubled = SIZE_MAX;
+
+    size_t rounded_need = 0u;
+    if(!sb_round_up_to_page(need, sb->page_size, &rounded_need))
+        return 0;
+
+    size_t next_cap = doubled > rounded_need ? doubled : rounded_need;
+    if(next_cap < need)
+        return 0;
+
+    char* grown = (char*)realloc(sb->buf, next_cap);
+    if(!grown)
+        return 0;
+    sb->buf = grown;
+    sb->cap = next_cap;
+    return 1;
+}
+
+int64_t __mlang_std_strbuf_builder_rt_new(int64_t initial_capacity, int64_t page_size)
+{
+    size_t page = sb_default_page_size();
+    if(page_size > 0)
+        page = (size_t)page_size;
+    if(page == 0u)
+        page = 1u;
+
+    size_t requested = 1u;
+    if(initial_capacity > 0)
+    {
+        size_t init = (size_t)initial_capacity;
+        if(init > SIZE_MAX - 1u)
+            return 0;
+        requested = init + 1u;
+    }
+
+    size_t cap = 0u;
+    if(!sb_round_up_to_page(requested, page, &cap))
+        return 0;
+    if(cap == 0u)
+        cap = 1u;
+
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)malloc(sizeof(*sb));
+    if(!sb)
+        return 0;
+    sb->buf = (char*)malloc(cap);
+    if(!sb->buf)
+    {
+        free(sb);
+        return 0;
+    }
+    sb->buf[0] = '\0';
+    sb->len = 0u;
+    sb->cap = cap;
+    sb->page_size = page;
+    return (int64_t)(intptr_t)sb;
+}
+
+int32_t __mlang_std_strbuf_builder_rt_free(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb)
+        return -1;
+    free(sb->buf);
+    sb->buf = NULL;
+    free(sb);
+    return 0;
+}
+
+int64_t __mlang_std_strbuf_builder_rt_len(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb)
+        return -1;
+    return (int64_t)sb->len;
+}
+
+int64_t __mlang_std_strbuf_builder_rt_capacity(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || sb->cap == 0u)
+        return -1;
+    return (int64_t)(sb->cap - 1u);
+}
+
+int32_t __mlang_std_strbuf_builder_rt_set_page_size(int64_t handle, int64_t page_size)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || page_size <= 0)
+        return -1;
+    sb->page_size = (size_t)page_size;
+    if(sb->page_size == 0u)
+        sb->page_size = 1u;
+    return 0;
+}
+
+int32_t __mlang_std_strbuf_builder_rt_clear(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf)
+        return -1;
+    sb->len = 0u;
+    sb->buf[0] = '\0';
+    return 0;
+}
+
+int32_t __mlang_std_strbuf_builder_rt_reserve(int64_t handle, int64_t min_capacity)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || min_capacity < 0)
+        return -1;
+
+    size_t target = (size_t)min_capacity;
+    if(target <= sb->len)
+        return 0;
+    size_t additional = target - sb->len;
+    return sb_ensure_capacity(sb, additional) ? 0 : -1;
+}
+
+int64_t __mlang_std_strbuf_builder_rt_append(int64_t handle, const char* s)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf || !s)
+        return -1;
+
+    size_t n = strlen(s);
+    if(!sb_ensure_capacity(sb, n))
+        return -1;
+    if(n > 0u)
+        memcpy(sb->buf + sb->len, s, n);
+    sb->len += n;
+    sb->buf[sb->len] = '\0';
+    return (int64_t)n;
+}
+
+int64_t __mlang_std_strbuf_builder_rt_append_char(int64_t handle, int32_t ch)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf || ch < 0 || ch > 255)
+        return -1;
+
+    if(!sb_ensure_capacity(sb, 1u))
+        return -1;
+    sb->buf[sb->len] = (char)(unsigned char)ch;
+    sb->len += 1u;
+    sb->buf[sb->len] = '\0';
+    return 1;
+}
+
+char* __mlang_std_strbuf_builder_rt_to_string(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf)
+        return NULL;
+    return __mlang_std_strbuf_clone(sb->buf);
+}
+
+char* __mlang_std_strbuf_builder_rt_take_string(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf)
+        return NULL;
+
+    char* out = sb->buf;
+
+    size_t cap = sb->page_size;
+    if(cap == 0u)
+        cap = 1u;
+    char* fresh = (char*)malloc(cap);
+    if(!fresh)
+        return NULL;
+    fresh[0] = '\0';
+
+    sb->buf = fresh;
+    sb->len = 0u;
+    sb->cap = cap;
+    return out;
+}
