@@ -14,6 +14,7 @@ mod std::json;
 mod std::jsonrpc;
 mod std::bench;
 mod std::math;
+mod std::fft;
 mod std::net;
 mod std::printf;
 mod std::process;
@@ -45,6 +46,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
+- `stdlib/std/fft.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
 - `stdlib/std/process.mla`
@@ -598,6 +600,18 @@ Module file: `stdlib/std/math.mla`
 ### Integer-specific
 - `sum_range(start: int, end: int) -> int`
 - `factorial(n: int) -> int`
+
+## std::fft
+
+Module file: `stdlib/std/fft.mla`
+
+Radix-2 FFT over interleaved complex arrays (`list<i64>`):
+`[re0, im0, re1, im1, ...]`.
+
+### API
+- `is_power_of_two(n: i64) -> bool`
+- `forward(data: list<i64>) -> list<i64>` (empty list on invalid input)
+- `inverse(data: list<i64>) -> list<i64>` (empty list on invalid input)
 
 ## std::process
 

@@ -1,0 +1,44 @@
+/// Simple std::fft usage demo.
+mod std::fft;
+
+use std::fft::forward;
+use std::fft::inverse;
+
+fn main() -> i32 {
+    // 8 complex samples in interleaved form: [re0, im0, re1, im1, ...].
+    let data: list<i64> = [
+        1, 0,
+        2, 0,
+        0, 0,
+        -2, 0,
+        0, 0,
+        2, 0,
+        0, 0,
+        -2, 0
+    ];
+
+    let freq: list<i64> = forward(data);
+    if freq.len() == 0 {
+        eprintln!("FFT forward failed (input must be non-empty, even-length, and power-of-two complex count)");
+        return 1;
+    }
+
+    println!("Frequency bins (re, im):");
+    for i in 0..(freq.len() / 2) {
+        let base: i64 = i * 2;
+        println!("bin {} => ({}, {})", i, freq[base], freq[base + 1]);
+    }
+
+    let time: list<i64> = inverse(freq);
+    if time.len() == 0 {
+        eprintln!("FFT inverse failed");
+        return 1;
+    }
+
+    println!("Roundtrip back to time-domain (real part):");
+    for i in 0..(time.len() / 2) {
+        println!("x[{}] = {}", i, time[i * 2]);
+    }
+
+    return 0;
+}

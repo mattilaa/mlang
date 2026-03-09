@@ -1,0 +1,29 @@
+/// \file fft.mla
+/// \brief Fast Fourier Transform helpers (std::fft).
+///
+/// Integer FFT over interleaved complex arrays:
+/// `[re0, im0, re1, im1, ...]` using `list<i64>`.
+/// Returns empty list on invalid input.
+
+extern fn __mlang_std_fft_is_power_of_two(n: i64) -> i32;
+extern fn __mlang_std_fft_forward_i64(data: list<i64>) -> list<i64>;
+extern fn __mlang_std_fft_inverse_i64(data: list<i64>) -> list<i64>;
+
+/// @brief Check whether n is a power-of-two (> 0).
+pub fn is_power_of_two(n: i64) -> bool {
+    return __mlang_std_fft_is_power_of_two(n) != 0;
+}
+
+/// @brief Forward FFT over interleaved complex samples.
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Transformed data, or empty list on invalid input.
+pub fn forward(data: list<i64>) -> list<i64> {
+    return __mlang_std_fft_forward_i64(data);
+}
+
+/// @brief Inverse FFT over interleaved complex samples.
+/// @param data `[re0, im0, re1, im1, ...]` (moved).
+/// @return Inverse-transformed data, or empty list on invalid input.
+pub fn inverse(data: list<i64>) -> list<i64> {
+    return __mlang_std_fft_inverse_i64(data);
+}

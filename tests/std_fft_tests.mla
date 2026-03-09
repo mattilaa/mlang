@@ -1,0 +1,89 @@
+mod std::fft;
+
+use std::fft::forward;
+use std::fft::inverse;
+use std::fft::is_power_of_two;
+
+#[test]
+fn test_fft_power_of_two_check() -> i32 {
+    if !is_power_of_two(8) {
+        return 1;
+    }
+    if is_power_of_two(0) {
+        return 1;
+    }
+    if is_power_of_two(6) {
+        return 1;
+    }
+    return 0;
+}
+
+#[test]
+fn test_fft_impulse_forward() -> i32 {
+    let data: list<i64> = [1, 0, 0, 0, 0, 0, 0, 0];
+    let out: list<i64> = forward(data);
+    if out.len() == 0 {
+        return 1;
+    }
+
+    for i in 0..4 {
+        let base: i64 = i * 2;
+        let re: i64 = out[base];
+        let im: i64 = out[base + 1];
+        if re != 1 {
+            return 1;
+        }
+        if im != 0 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#[test]
+fn test_fft_inverse_roundtrip() -> i32 {
+    let data: list<i64> = [
+        1, 0,
+        2, 0,
+        3, 0,
+        4, 0,
+        5, 0,
+        6, 0,
+        7, 0,
+        8, 0
+    ];
+    let original_real: list<i64> = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    let freq: list<i64> = forward(data);
+    if freq.len() == 0 {
+        return 1;
+    }
+    let out: list<i64> = inverse(freq);
+    if out.len() == 0 {
+        return 1;
+    }
+
+    for i in 0..8 {
+        let base: i64 = i * 2;
+        let re: i64 = out[base];
+        let im: i64 = out[base + 1];
+        let expected: i64 = original_real[i];
+        if re != expected {
+            return 1;
+        }
+        if im != 0 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#[test]
+fn test_fft_rejects_invalid_length() -> i32 {
+    let invalid: list<i64> = [1, 0, 2];
+    let fr: list<i64> = forward(invalid);
+    if fr.len() == 0 {
+        return 0;
+    }
+    return 1;
+}

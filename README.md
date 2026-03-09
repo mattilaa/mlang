@@ -302,6 +302,8 @@ non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
 Random API (`std::rand` seed/range helpers) example:
 `examples/std_rand_demo.mla`.
+FFT API (`std::fft` forward/inverse on split real/imag arrays) example:
+`examples/std_fft_demo.mla`.
 Regex API (`std::regex::Regex`, compile/match/find/captures) example:
 `examples/std_regex_demo.mla`.
 Multithreaded TCP server/client examples:

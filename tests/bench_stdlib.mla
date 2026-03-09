@@ -1,9 +1,12 @@
 mod std::unordered;
 mod std::bench;
+mod std::fft;
 use std::unordered::QuickMapI64I64;
 use std::unordered::QuickMapVecI64I64;
 use std::bench::clobber_memory;
 use std::bench::do_not_optimize_i64;
+use std::fft::forward;
+use std::fft::inverse;
 
 #[test]
 fn bench_vec_push_pop() -> i32 {
@@ -53,4 +56,33 @@ fn bench_quickmap_vec_set_get() -> i32 {
     q.close();
 
     return acc == 4032 ? 0 : 1;
+}
+
+#[test]
+fn bench_fft_roundtrip_1024() -> i32 {
+    var data: list<i64> = [];
+    for i in 0..1024 {
+        data.push(i % 23);
+        data.push(0);
+    }
+
+    for _it in 0..32 {
+        let fs: list<i64> = forward(data);
+        if fs.len() == 0 {
+            return 1;
+        }
+        let ts: list<i64> = inverse(fs);
+        if ts.len() == 0 {
+            return 1;
+        }
+        data = ts;
+    }
+
+    var checksum: i64 = 0;
+    for i in 0..16 {
+        checksum = checksum + data[i * 2];
+    }
+    do_not_optimize_i64(checksum);
+    clobber_memory();
+    return checksum != 0 ? 0 : 1;
 }
