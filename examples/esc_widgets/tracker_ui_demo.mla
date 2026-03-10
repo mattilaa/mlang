@@ -1,0 +1,123 @@
+mod std::esc;
+mod std::event_loop;
+mod std::io;
+mod std::strbuf;
+mod std::sync;
+mod std::term;
+mod widgets;
+
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_home;
+use std::esc::cmd_hide;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::reset;
+use std::event_loop::EventLoop;
+use std::io::Stdin;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::strbuf::concat;
+use std::strbuf::free;
+use std::term::TermSize;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::sync::__mlang_std_sync_lfqueue_close;
+use std::sync::__mlang_std_sync_lfqueue_free;
+use std::sync::__mlang_std_sync_lfqueue_new;
+use std::sync::__mlang_std_sync_lfqueue_try_recv;
+use widgets::render_tracker_ui;
+
+fn canvas_width(cols: i32) -> i64 {
+    let w: i64 = cols - 4;
+    if w < 40 {
+        return 40;
+    }
+    return w > 150 ? 150 : w;
+}
+
+fn main() -> i32 {
+    let input: Stdin = stdin();
+    let out = stdout();
+    var raw_enabled: i32 = 0;
+    if stdin_is_tty() == 1 {
+        if stdin_enable_raw() == 0 {
+            raw_enabled = 1;
+        }
+    }
+
+    let qh: i64 = __mlang_std_sync_lfqueue_new(128);
+    if qh == 0 {
+        println!("queue init failed");
+        if raw_enabled == 1 { stdin_restore(); }
+        return 1;
+    }
+
+    let loop_r: Result<EventLoop, string> = EventLoop::start(qh, 30, "tick");
+    if loop_r.is_err() {
+        println!("event loop init failed: {}", loop_r.unwrap_err());
+        __mlang_std_sync_lfqueue_free(qh);
+        if raw_enabled == 1 { stdin_restore(); }
+        return 1;
+    }
+    let ticker: EventLoop = loop_r.unwrap();
+
+    let ev_buf: string = String::with_capacity(32);
+    var cursor_row: i64 = 0;
+    var quit: i32 = 0;
+    var running: i32 = 0;
+    var focus_idx: i64 = 0;
+    var edit_mode: i32 = 0;
+
+    print!("{}{}{}", cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    while quit == 0 {
+        let n: i64 = __mlang_std_sync_lfqueue_try_recv(qh, ev_buf, 32);
+        if n == -2 {
+            continue;
+        }
+        if n <= 0 {
+            continue;
+        }
+
+        let keycode: i32 = read_keycode_nonblocking(input);
+        if keycode >= 0 {
+            if keycode == 113 || keycode == 81 {
+                quit = 1;
+            }
+            if keycode == 32 {
+                running = running == 1 ? 0 : 1;
+            }
+            if keycode == 9 {
+                focus_idx = (focus_idx + 1) % 4;
+            }
+            if keycode == 13 || keycode == 10 {
+                edit_mode = edit_mode == 1 ? 0 : 1;
+            }
+        }
+
+        let ts: TermSize = stdout_size();
+        let w: i64 = canvas_width(ts.cols);
+        let h: i64 = ts.rows;
+        let frame: string = render_tracker_ui(w, h, cursor_row, running, focus_idx, edit_mode);
+        let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
+        let payload: string = concat(clear_home, frame);
+        write(out, payload);
+        free(payload);
+        free(clear_home);
+        free(frame);
+        if running == 1 {
+            cursor_row = (cursor_row + 1) % 16;
+        }
+    }
+
+    String::free(ev_buf);
+    ticker.close();
+    __mlang_std_sync_lfqueue_close(qh);
+    __mlang_std_sync_lfqueue_free(qh);
+    if raw_enabled == 1 { stdin_restore(); }
+    print!("{}{}\n", reset(), cursor(cmd_show()));
+    return 0;
+}

@@ -1,0 +1,171 @@
+mod std::esc;
+mod std::strbuf;
+
+use std::esc::bg;
+use std::esc::bold_on;
+use std::esc::color_black;
+use std::esc::color_blue;
+use std::esc::color_bright_black;
+use std::esc::color_bright_cyan;
+use std::esc::color_bright_white;
+use std::esc::color_bright_yellow;
+use std::esc::color_cyan;
+use std::esc::color_green;
+use std::esc::color_white;
+use std::esc::fg;
+use std::esc::reset;
+use std::strbuf::builder_append;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+use std::strbuf::concat;
+use std::strbuf::fit_right;
+use std::strbuf::free;
+use std::strbuf::pad_i64_left;
+use std::strbuf::repeat;
+use std::strbuf::zpad_i64;
+use type StringBuilder = i64;
+
+fn styled_line(width: i64, fg_c: i32, bg_c: i32, bold: i32, text: string) -> string {
+    let row: string = fit_right(text, width, " ");
+    if bold == 1 {
+        let out_b: string = format!("{}{}{}{}{}\r\n", bold_on(), fg(fg_c), bg(bg_c), row, reset());
+        free(row);
+        return out_b;
+    }
+    let out: string = format!("{}{}{}{}\r\n", fg(fg_c), bg(bg_c), row, reset());
+    free(row);
+    return out;
+}
+
+fn append_owned(builder: StringBuilder, s: string) -> void {
+    let _ = builder_append(builder, s);
+    free(s);
+}
+
+fn sep_line(width: i64) -> string {
+    let dash: string = repeat("-", width);
+    let out: string = styled_line(width, color_bright_black(), color_black(), 0, dash);
+    free(dash);
+    return out;
+}
+
+fn render_meter(step_in: i64, total: i64) -> string {
+    if total <= 0 {
+        return "";
+    }
+    var step: i64 = step_in;
+    if step < 0 {
+        step = 0;
+    }
+    if step > total {
+        step = total;
+    }
+    let on: string = repeat("#", step);
+    let off: string = repeat(".", total - step);
+    let out: string = concat(on, off);
+    free(off);
+    free(on);
+    return out;
+}
+
+fn pattern_cell(row: i64, ch: i64) -> string {
+    let pitch: list<string> = ["C-4", "D#4", "F-4", "G-4", "A#4", "C-5", "---"];
+    let idx: i64 = (row + ch * 2) % pitch.len();
+    let note: string = pitch[idx];
+    let vol: i64 = 32 + ((row * 3 + ch * 7) % 32);
+    let vol_s: string = zpad_i64(vol, 2);
+    let fx_s: string = zpad_i64((row + ch * 5) % 16, 2);
+    let out: string = format!("{} {} {}", note, vol_s, fx_s);
+    free(fx_s);
+    free(vol_s);
+    return out;
+}
+
+fn tracker_grid_line(row: i64) -> string {
+    let row_s: string = pad_i64_left(row, 2, " ");
+    var line: string = format!(" {} |", row_s);
+    free(row_s);
+    for ch in 0..4 {
+        let cell: string = pattern_cell(row, ch);
+        let left: string = format!("{} {}", line, cell);
+        let next: string = format!("{} |", left);
+        free(left);
+        free(cell);
+        free(line);
+        line = next;
+    }
+    return line;
+}
+
+pub fn render_tracker_ui(width_in: i64,
+                         rows_in: i64,
+                         cursor_row: i64,
+                         running: i32,
+                         focus_idx: i64,
+                         edit_mode: i32) -> string {
+    let width: i64 = width_in < 40 ? 40 : width_in;
+    let rows: i64 = rows_in < 12 ? 12 : rows_in;
+    // Keep one spare terminal row to avoid bottom-edge newline scroll.
+    let grid_rows: i64 = rows - 12;
+    let builder: StringBuilder = builder_new(width * rows + 512);
+
+    append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
+        " Scream Tracker V2.2   Unregistered Version!   [ESC Widgets Demo]"));
+
+    append_owned(builder, styled_line(width, color_cyan(), color_black(), 1,
+        " Octave: 1    Sample: 01    Volume: 64    Tempo: 6    Pattern: 00"));
+    append_owned(builder, styled_line(width, color_cyan(), color_black(), 0,
+        " Channel: 00 01 02 03   Song: Example song   Pos: 00"));
+
+    append_owned(builder, sep_line(width));
+
+    let focus_label: string = focus_idx == 0 ? "File" :
+                              (focus_idx == 1 ? "Play" :
+                              (focus_idx == 2 ? "Edit" : "Other"));
+    let run_label: string = running == 1 ? "RUN" : "STOP";
+    let edit_label: string = edit_mode == 1 ? "EDIT" : "NAV";
+    let menu_line: string = format!(" File     Play     Edit     Other   [{}:{} {}]                    F1=HELP",
+                                    focus_label, run_label, edit_label);
+    append_owned(builder, styled_line(width, color_bright_white(), color_blue(), 1, menu_line));
+    free(menu_line);
+
+    append_owned(builder, styled_line(width, color_bright_cyan(), color_black(), 0,
+        " Edit order      F1      Edit patterns      F2      Edit samples      F3"));
+
+    append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
+        " Row |   Ch0         |   Ch1         |   Ch2         |   Ch3         |"));
+
+    for i in 0..grid_rows {
+        let r: i64 = i + 10;
+        let line: string = tracker_grid_line(r);
+        if i == cursor_row {
+            append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, line));
+        } else if (r % 4) == 0 {
+            append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, line));
+        } else {
+            append_owned(builder, styled_line(width, color_white(), color_black(), 0, line));
+        }
+        free(line);
+    }
+
+    append_owned(builder, sep_line(width));
+
+    let meter_l: string = render_meter(18, 30);
+    let meter_r: string = render_meter(22, 30);
+    let meter_line: string = format!(" L [{}]   R [{}]   CPU {}%   DSP {}%", meter_l, meter_r, 24, 31);
+    append_owned(builder, styled_line(width, color_green(), color_black(), 0, meter_line));
+    free(meter_line);
+    free(meter_l);
+    free(meter_r);
+
+    append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
+        " SPACE=play/stop   TAB=next widget   ENTER=edit   q=quit"));
+
+    append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0,
+        " Widgets used: title bar, menu bar, status line, table/grid, meter bar."));
+
+    let out: string = builder_take_string(builder);
+    builder_free(builder);
+    return out;
+}
