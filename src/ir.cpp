@@ -7,6 +7,23 @@
 #include <limits>
 #include <unordered_map>
 
+static bool is_same_module_family(const std::string& a, const std::string& b)
+{
+    if(a.empty() || b.empty())
+        return a == b;
+    if(a == b)
+        return true;
+    auto is_nested = [](const std::string& parent, const std::string& child)
+    {
+        if(child.size() <= parent.size())
+            return false;
+        if(child.compare(0, parent.size(), parent) != 0)
+            return false;
+        return child.compare(parent.size(), 2, "::") == 0;
+    };
+    return is_nested(a, b) || is_nested(b, a);
+}
+
 // Recursively collect all IdentifierNode names referenced in an AST subtree.
 // Used for Non-Lexical Lifetime (NLL) borrow expiration.
 static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
@@ -9333,7 +9350,7 @@ bool CodeGenerator::isOverloadVisible(const FunctionOverloadInfo& info) const
 {
     if(info.sourceModule.empty())
         return true;
-    if(info.sourceModule == currentModule)
+    if(is_same_module_family(info.sourceModule, currentModule))
         return true;
     return info.isPublic;
 }

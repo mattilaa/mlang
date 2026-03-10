@@ -3,6 +3,23 @@
 #include <fstream>
 #include <iostream>
 
+static bool is_same_module_family(const std::string& a, const std::string& b)
+{
+    if(a.empty() || b.empty())
+        return a == b;
+    if(a == b)
+        return true;
+    auto is_nested = [](const std::string& parent, const std::string& child)
+    {
+        if(child.size() <= parent.size())
+            return false;
+        if(child.compare(0, parent.size(), parent) != 0)
+            return false;
+        return child.compare(parent.size(), 2, "::") == 0;
+    };
+    return is_nested(a, b) || is_nested(b, a);
+}
+
 static std::string type_mangle(TypeNode* typeNode)
 {
     if(!typeNode)
@@ -256,6 +273,23 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
         return false;
     }
 
+    // Mark symbols declared in this module with their source module name.
+    if(moduleAst->functionList)
+    {
+        for(auto* fn : moduleAst->functionList->functions)
+        {
+            if(fn && fn->sourceModule.empty())
+                fn->sourceModule = moduleName;
+        }
+    }
+    if(moduleAst->structList)
+    {
+        for(auto* st : moduleAst->structList->structs)
+        {
+            if(st && st->sourceModule.empty())
+                st->sourceModule = moduleName;
+        }
+    }
     // Process any mod declarations in this module (recursive loading)
     if(!processModDeclarations(moduleAst, errorMsg))
     {
@@ -266,7 +300,7 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
     // Process use declarations within the module itself so that symbols
     // imported from sub-modules (e.g. `use std::math::detail::*;`) are
     // merged into this module's function list before it is stored.
-    if(!processUseDeclarations(moduleAst, errorMsg))
+    if(!processUseDeclarations(moduleAst, errorMsg, moduleName))
     {
         loadingStack.erase(moduleName);
         return false;
@@ -359,7 +393,8 @@ bool ModuleLoader::processModDeclarations(ProgramNode* program,
 }
 
 bool ModuleLoader::processUseDeclarations(ProgramNode* program,
-                                          std::string& errorMsg)
+                                          std::string& errorMsg,
+                                          const std::string& currentModuleName)
 {
     for(auto* useDecl : program->imports)
     {
@@ -384,16 +419,26 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
             for(auto* func : module->functionList->functions)
             {
-                // Set source module for all functions
-                func->sourceModule = useDecl->moduleName;
+                // Preserve already-tagged origin module (e.g. std::x::detail)
+                // and only set when not yet known.
+                if(func->sourceModule.empty())
+                    func->sourceModule = useDecl->moduleName;
 
                 // Check if function already added (avoid duplicates)
                 std::string sigKey = function_signature_key(func);
                 bool alreadyAdded = false;
-                for(auto* existing : program->functionList->functions)
+                for(size_t i = 0; i < program->functionList->functions.size(); ++i)
                 {
+                    auto* existing = program->functionList->functions[i];
                     if(function_signature_key(existing) == sigKey)
                     {
+                        // Prefer the more visible symbol when signatures collide
+                        // across modules (e.g. private detail binding vs public
+                        // facade declaration).
+                        if(!existing->isPublic && func->isPublic)
+                        {
+                            program->functionList->functions[i] = func;
+                        }
                         alreadyAdded = true;
                         break;
                     }
@@ -517,10 +562,14 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             {
                 if(!hasPublicFunction)
                 {
-                    errorMsg = "function '" + useDecl->itemName +
-                               "' is private in module '" +
-                               useDecl->moduleName + "'";
-                    return false;
+                    if(!is_same_module_family(currentModuleName,
+                                              useDecl->moduleName))
+                    {
+                        errorMsg = "function '" + useDecl->itemName +
+                                   "' is private in module '" +
+                                   useDecl->moduleName + "'";
+                        return false;
+                    }
                 }
                 found = true;
             }
@@ -535,10 +584,14 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         // Check if the struct is public
                         if(!structDef->isPublic)
                         {
-                            errorMsg = "struct '" + useDecl->itemName +
-                                       "' is private in module '" +
-                                       useDecl->moduleName + "'";
-                            return false;
+                            if(!is_same_module_family(currentModuleName,
+                                                      useDecl->moduleName))
+                            {
+                                errorMsg = "struct '" + useDecl->itemName +
+                                           "' is private in module '" +
+                                           useDecl->moduleName + "'";
+                                return false;
+                            }
                         }
                         found = true;
                         break;

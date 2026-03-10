@@ -57,7 +57,8 @@ public:
     bool processModDeclarations(ProgramNode* program, std::string& errorMsg);
 
     // Merge imported symbols into the main program
-    bool processUseDeclarations(ProgramNode* program, std::string& errorMsg);
+    bool processUseDeclarations(ProgramNode* program, std::string& errorMsg,
+                                const std::string& currentModuleName = "");
 
     // Set the base path for module resolution
     void setBasePath(const std::string& path)
