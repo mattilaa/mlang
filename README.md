@@ -495,6 +495,34 @@ jack_connect mlang_drum_machine:out_l system:playback_1
 jack_connect mlang_drum_machine:out_r system:playback_2
 ```
 
+### JACK2 Stereo FFT Analyzer Demo
+Plays a stereo WAV via JACK2 and renders a real-time 100x25 ASCII spectrum
+analyzer with colorized stereo differences (left/right/overlap) using `std::fft`.
+
+Demo directory:
+- `examples/fft_example/main.mla`
+- `examples/fft_example/fftviz_bridge.c`
+- `examples/fft_example/illusion.wav`
+- `examples/fft_example/run_demo.sh`
+
+Build + run:
+
+```sh
+./examples/fft_example/run_demo.sh
+```
+
+If JACK playback ports differ on your system, use explicit output ports:
+
+```sh
+FFTVIZ_OUT_L="system:playback_3" FFTVIZ_OUT_R="system:playback_4" ./examples/fft_example/run_demo.sh --flat
+```
+
+Custom WAV:
+
+```sh
+./examples/fft_example/run_demo.sh /path/to/stereo.wav
+```
+
 ## Rust-like Attributes
 Mlang currently supports these Rust-like attributes:
 

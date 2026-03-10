@@ -1,0 +1,627 @@
+mod std::esc;
+mod std::fft;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use std::esc::bold_on;
+use std::esc::bg;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_clear_line;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::color_black;
+use std::esc::color_bright_cyan;
+use std::esc::color_bright_magenta;
+use std::esc::color_bright_white;
+use std::esc::color_bright_yellow;
+use std::esc::color_white;
+use std::esc::cursor;
+use std::esc::fg;
+use std::esc::reset;
+use std::fft::forward;
+use std::io::Stdin;
+use std::io::Stdout;
+use std::io::flush;
+use std::io::read_line_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::strbuf::find;
+use std::strbuf::free;
+use std::strbuf::eq;
+use std::strbuf::len;
+use std::strbuf::with_capacity;
+use std::term::TermSize;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::sleep_ms;
+
+extern fn jack2_fftviz_start(wav_path: string, client_name: string) -> i32;
+extern fn jack2_fftviz_stop() -> i32;
+extern fn jack2_fftviz_running() -> i32;
+extern fn jack2_fftviz_sample_rate() -> i64;
+extern fn jack2_fftviz_total_frames() -> i64;
+extern fn jack2_fftviz_current_frame() -> i64;
+extern fn jack2_fftviz_snapshot_i64(channel: i32, window: i32) -> list<i64>;
+extern fn jack2_fftviz_block_ansi_i64(color_idx: i64) -> string;
+extern fn jack2_fftviz_bg_ansi_i64(bg_idx: i64) -> string;
+extern fn __mlang_std_esc_cursor_code(code: i32) -> string;
+
+fn abs_i64(x: i64) -> i64 {
+    return x < 0 ? 0 - x : x;
+}
+
+fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 {
+    if x < lo {
+        return lo;
+    }
+    if x > hi {
+        return hi;
+    }
+    return x;
+}
+
+fn viewport_width(cols: i32) -> i64 {
+    // Keep two spare columns to avoid terminal right-edge autowrap jitter.
+    let w: i64 = cols - 2;
+    if w < 1 {
+        return 1;
+    }
+    return w > 200 ? 200 : w;
+}
+
+fn viewport_height(rows: i32) -> i64 {
+    // Use live terminal rows directly; graph_h reserves header rows.
+    if rows < 4 {
+        return 4;
+    }
+    return rows > 80 ? 80 : rows;
+}
+
+fn choose_fft_window(width: i64) -> i32 {
+    // Positive-frequency bins are window/2; keep enough bins but prioritize UI FPS.
+    var want: i64 = width * 8;
+    if want < 1024 {
+        want = 1024;
+    }
+    if want > 8192 {
+        want = 8192;
+    }
+    var w: i64 = 1;
+    while w < want {
+        w = w * 2;
+    }
+    if w > 8192 {
+        w = 8192;
+    }
+    return w;
+}
+
+fn scale_height(mag: i64, max_mag: i64, graph_h: i64) -> i64 {
+    if mag <= 0 || max_mag <= 0 {
+        return 0;
+    }
+    let h: i64 = (mag * graph_h + max_mag - 1) / max_mag;
+    return clamp_i64(h, 0, graph_h);
+}
+
+fn log2_i64(v: i64) -> i64 {
+    var x: i64 = v;
+    var p: i64 = 0;
+    while x > 1 {
+        x = x / 2;
+        p = p + 1;
+    }
+    return p;
+}
+
+fn scale_height_log(mag: i64, floor_mag: i64, max_mag: i64, graph_h: i64) -> i64 {
+    if mag <= floor_mag || max_mag <= floor_mag {
+        return 0;
+    }
+    let a: i64 = log2_i64(mag + 1);
+    let f: i64 = log2_i64(floor_mag + 1);
+    let m: i64 = log2_i64(max_mag + 1);
+    if m <= f {
+        return 0;
+    }
+    let num: i64 = a > f ? (a - f) : 0;
+    let den: i64 = m - f;
+    let h: i64 = (num * graph_h + den - 1) / den;
+    return clamp_i64(h, 0, graph_h);
+}
+
+fn overlap_color(ml: i64, mr: i64, max_mag: i64, depth: i64) -> i32 {
+    let diff: i64 = abs_i64(ml - mr);
+    if diff * 6 <= max_mag {
+        return color_bright_yellow();
+    }
+    if ml > mr {
+        return color_bright_cyan();
+    }
+    return color_bright_magenta();
+}
+
+fn channel_color(depth: i64, c: i32) -> i32 {
+    return c;
+}
+
+fn vol_level(ml: i64, mr: i64, max_vis: i64) -> i64 {
+    let peak: i64 = ml > mr ? ml : mr;
+    if max_vis <= 0 || peak <= 0 {
+        return 0;
+    }
+    return clamp_i64((peak * 23) / max_vis, 0, 23);
+}
+
+fn cell_color_idx(on_l: i32, on_r: i32, ml: i64, mr: i64, max_vis: i64) -> i64 {
+    let lvl: i64 = vol_level(ml, mr, max_vis);
+    if on_l == 1 && on_r == 1 {
+        return 184 + lvl;
+    }
+    if on_l == 1 {
+        return 27 + lvl;
+    }
+    return 163 + lvl;
+}
+
+fn cursor_force(cmd: i32) -> string {
+    let gated: string = cursor(cmd);
+    if len(gated) > 0 {
+        return gated;
+    }
+    return __mlang_std_esc_cursor_code(cmd);
+}
+
+fn max_hz_for_axis(sr: i64) -> i64 {
+    var out: i64 = sr / 2;
+    if out > 20000 {
+        out = 20000;
+    }
+    if out < 1000 {
+        out = 1000;
+    }
+    return out;
+}
+
+fn x_for_hz_calibrated(hz_in: i64, width: i64, sr: i64) -> i64 {
+    if width <= 1 {
+        return 0;
+    }
+    let max_hz: i64 = max_hz_for_axis(sr);
+    // Frequency anchors and display-position anchors (permille of width).
+    // This keeps 20-100 close while preserving readable mid/high distribution.
+    let hz_anchors: list<i64> = [20, 100, 500, 1000, 4000, 8000, 16000, 20000];
+    let x_anchors: list<i64> = [0, 40, 200, 360, 620, 780, 910, 980];
+    let nseg: i64 = hz_anchors.len() - 1;
+    let hz: i64 = clamp_i64(hz_in, 20, max_hz);
+    var seg: i64 = 0;
+    var scan: i64 = 0;
+    while scan < (nseg - 1) {
+        let nxt: i64 = scan + 1;
+        let a_next: i64 = hz_anchors[nxt];
+        if a_next < hz {
+            seg = nxt;
+        }
+        scan = nxt;
+    }
+    var h0: i64 = hz_anchors[seg];
+    var h1: i64 = hz_anchors[seg + 1];
+    if h0 > max_hz {
+        h0 = max_hz;
+    }
+    if h1 > max_hz {
+        h1 = max_hz;
+    }
+    let x0p: i64 = x_anchors[seg];
+    let x1p: i64 = x_anchors[seg + 1];
+    if h1 <= h0 {
+        return clamp_i64((x0p * (width - 1)) / 1000, 0, width - 1);
+    }
+    let xp: i64 = x0p + (((hz - h0) * (x1p - x0p)) / (h1 - h0));
+    return clamp_i64((xp * (width - 1)) / 1000, 0, width - 1);
+}
+
+fn hz_for_x_calibrated(x: i64, width: i64, sr: i64) -> i64 {
+    if width <= 1 {
+        return 20;
+    }
+    let max_hz: i64 = max_hz_for_axis(sr);
+    let hz_anchors: list<i64> = [20, 100, 500, 1000, 4000, 8000, 16000, 20000];
+    let x_anchors: list<i64> = [0, 40, 200, 360, 620, 780, 910, 980];
+    let nseg: i64 = hz_anchors.len() - 1;
+    let xp: i64 = (x * 1000) / (width - 1);
+
+    var seg: i64 = 0;
+    var scan: i64 = 0;
+    while scan < (nseg - 1) {
+        let nxt: i64 = scan + 1;
+        let x_next: i64 = x_anchors[nxt];
+        if x_next < xp {
+            seg = nxt;
+        }
+        scan = nxt;
+    }
+
+    let x0p: i64 = x_anchors[seg];
+    let x1p: i64 = x_anchors[seg + 1];
+    let h0: i64 = hz_anchors[seg];
+    var h1: i64 = hz_anchors[seg + 1];
+    if h1 > max_hz {
+        h1 = max_hz;
+    }
+    if x1p <= x0p {
+        return clamp_i64(h0, 20, max_hz);
+    }
+    let hz: i64 = h0 + (((xp - x0p) * (h1 - h0)) / (x1p - x0p));
+    return clamp_i64(hz, 20, max_hz);
+}
+
+fn bin_for_x_calibrated(x: i64, width: i64, fft_window: i32, sr: i64, bins: i64) -> i64 {
+    if fft_window <= 0 || sr <= 0 || bins <= 3 {
+        return 2;
+    }
+    let hz: i64 = hz_for_x_calibrated(x, width, sr);
+    let b: i64 = (hz * fft_window) / sr;
+    return clamp_i64(b, 2, bins - 2);
+}
+
+fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
+    print!("{}", cursor_force(cmd_clear_line()));
+    print!("{}{}", fg(color_black()), bg(color_white()));
+
+    let x20: i64 = x_for_hz_calibrated(20, width, sr);
+    let x100: i64 = x_for_hz_calibrated(100, width, sr);
+    let x500: i64 = x_for_hz_calibrated(500, width, sr);
+    let x1k: i64 = x_for_hz_calibrated(1000, width, sr);
+    let x4k: i64 = x_for_hz_calibrated(4000, width, sr);
+    let x8k: i64 = x_for_hz_calibrated(8000, width, sr);
+    let x16k: i64 = x_for_hz_calibrated(16000, width, sr);
+
+    var cur: i64 = 0;
+
+    var p: i64 = x20;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "20Hz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    p = x100;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "100Hz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    p = x500;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "500Hz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    p = x1k;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "1KHz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    p = x4k;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "4KHz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    p = x8k;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "8KHz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    p = x16k;
+    if p > cur {
+        for _i in cur..p { print!(" "); }
+        cur = p;
+    }
+    if p < width {
+        let t: string = "16KHz";
+        let tl: i64 = len(t);
+        if p + tl <= width {
+            print!("{}", t);
+            cur = cur + tl;
+        }
+    }
+
+    if cur < width {
+        for _i in cur..width {
+            print!(" ");
+        }
+    }
+    // No trailing newline here; prevents terminal scroll/jitter per frame.
+    print!("{}", reset());
+}
+
+fn begin_white_bar_line(width: i64) -> void {
+    print!("{}", cursor_force(cmd_clear_line()));
+    print!("{}{}", fg(color_black()), bg(color_white()));
+    for _i in 0..width {
+        print!(" ");
+    }
+    print!("\r");
+    print!("{}{}", fg(color_black()), bg(color_white()));
+}
+
+fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
+                cur_frame: i64, total_frames: i64, sr: i64, mode: i32, fft_window: i32) -> void {
+    // 1 header row + 1 bottom frequency row.
+    let graph_h: i64 = height - 2;
+    let bins_full: i64 = (freq_l.len() / 2);
+    // FFT on real-valued audio is mirrored; render only positive frequencies.
+    let bins: i64 = bins_full / 2;
+    if bins <= 4 {
+        return;
+    }
+
+    print!("{}{}", cursor_force(cmd_home()), reset());
+    begin_white_bar_line(width);
+    print!(
+        "FFT {}x{} sr={} L=cyan R=magenta B=yellow/white mode={} [f/m/q] win={} frame={}/{}\r\n",
+        width, height, sr,
+        mode == 1 ? "music" : "flat",
+        fft_window, cur_frame, total_frames
+    );
+    print!("{}", reset());
+
+    var col_hl: Vec<i64> = Vec::new();
+    var col_hr: Vec<i64> = Vec::new();
+
+    var max_l: i64 = 0;
+    var max_r: i64 = 0;
+    for b in 2..(bins - 1) {
+        let base: i64 = b * 2;
+        let raw_l: i64 = abs_i64(freq_l[base]) + abs_i64(freq_l[base + 1]);
+        let raw_r: i64 = abs_i64(freq_r[base]) + abs_i64(freq_r[base + 1]);
+        let weight: i64 = mode == 1 ? (b + 1) : 1;
+        let ml: i64 = raw_l * weight;
+        let mr: i64 = raw_r * weight;
+        if ml > max_l {
+            max_l = ml;
+        }
+        if mr > max_r {
+            max_r = mr;
+        }
+    }
+
+    var max_ref: i64 = max_l > max_r ? max_l : max_r;
+    if max_ref < 1 {
+        max_ref = 1;
+    }
+    let noise_floor: i64 = mode == 1 ? (max_ref / 8) : (max_ref / 1200);
+    let max_vis: i64 = max_ref;
+
+    var col_ml: Vec<i64> = Vec::new();
+    var col_mr: Vec<i64> = Vec::new();
+    for x in 0..width {
+        // True logarithmic horizontal frequency mapping.
+        let b: i64 = bin_for_x_calibrated(x, width, fft_window, sr, bins);
+        let b0: i64 = b > 2 ? (b - 1) : 2;
+        let b1: i64 = b;
+        let b2: i64 = b < (bins - 2) ? (b + 1) : (bins - 2);
+        let base0: i64 = b0 * 2;
+        let base1: i64 = b1 * 2;
+        let base2: i64 = b2 * 2;
+        let l0: i64 = abs_i64(freq_l[base0]) + abs_i64(freq_l[base0 + 1]);
+        let l1: i64 = abs_i64(freq_l[base1]) + abs_i64(freq_l[base1 + 1]);
+        let l2: i64 = abs_i64(freq_l[base2]) + abs_i64(freq_l[base2 + 1]);
+        let r0: i64 = abs_i64(freq_r[base0]) + abs_i64(freq_r[base0 + 1]);
+        let r1: i64 = abs_i64(freq_r[base1]) + abs_i64(freq_r[base1 + 1]);
+        let r2: i64 = abs_i64(freq_r[base2]) + abs_i64(freq_r[base2 + 1]);
+        let m_l0: i64 = l0 > l1 ? (l0 > l2 ? l0 : l2) : (l1 > l2 ? l1 : l2);
+        let m_r0: i64 = r0 > r1 ? (r0 > r2 ? r0 : r2) : (r1 > r2 ? r1 : r2);
+        let weight: i64 = mode == 1 ? (b + 1) : 1;
+        let raw_l: i64 = m_l0 * weight;
+        let raw_r: i64 = m_r0 * weight;
+        var ml: i64 = raw_l > noise_floor ? (raw_l - noise_floor) : 0;
+        var mr: i64 = raw_r > noise_floor ? (raw_r - noise_floor) : 0;
+        if mode == 1 {
+            // Mild display EQ for music mode.
+            let eq_num: i64 = x + (width / 6) + 1;
+            let eq_den: i64 = width + 1;
+            ml = (ml * eq_num) / eq_den;
+            mr = (mr * eq_num) / eq_den;
+        }
+        let floor_mag: i64 = mode == 1 ? noise_floor : (noise_floor / 8);
+        let hl: i64 = scale_height_log(ml, floor_mag, max_vis, graph_h);
+        let hr: i64 = scale_height_log(mr, floor_mag, max_vis, graph_h);
+        let hl_shrunk: i64 = (hl * 3) / 4;
+        let hr_shrunk: i64 = (hr * 3) / 4;
+        let hlf: i64 = hl_shrunk < 2 ? 0 : hl_shrunk;
+        let hrf: i64 = hr_shrunk < 2 ? 0 : hr_shrunk;
+
+        col_hl.push(hlf);
+        col_hr.push(hrf);
+        col_ml.push(ml);
+        col_mr.push(mr);
+    }
+
+    // Fill isolated horizontal holes so columns look continuous across x.
+    var fix_l: Vec<i64> = Vec::new();
+    var fix_r: Vec<i64> = Vec::new();
+    for x in 0..width {
+        var hl: i64 = col_hl[x];
+        var hr: i64 = col_hr[x];
+        if x > 0 && x < (width - 1) {
+            let ll: i64 = col_hl[x - 1];
+            let rl: i64 = col_hl[x + 1];
+            let lr: i64 = col_hr[x - 1];
+            let rr: i64 = col_hr[x + 1];
+            if hl == 0 && ll > 0 && rl > 0 {
+                hl = (ll + rl) / 2;
+            }
+            if hr == 0 && lr > 0 && rr > 0 {
+                hr = (lr + rr) / 2;
+            }
+        }
+        fix_l.push(hl);
+        fix_r.push(hr);
+    }
+    col_hl = fix_l;
+    col_hr = fix_r;
+
+    var row: i64 = graph_h;
+    while row > 0 {
+        row = row - 1;
+        // Pre-fill row with very dark blue background, then overlay FFT cells.
+        print!("{}", jack2_fftviz_bg_ansi_i64(17));
+        for _i in 0..width {
+            print!(" ");
+        }
+        print!("\r");
+        print!("{}", jack2_fftviz_bg_ansi_i64(17));
+        for x in 0..width {
+            let ml: i64 = col_ml[x];
+            let mr: i64 = col_mr[x];
+            let hl: i64 = col_hl[x];
+            let hr: i64 = col_hr[x];
+            let on_l: i32 = hl > row ? 1 : 0;
+            let on_r: i32 = hr > row ? 1 : 0;
+            if on_l == 1 || on_r == 1 {
+                let idx: i64 = cell_color_idx(on_l, on_r, ml, mr, max_vis);
+                print!("{}{}", jack2_fftviz_block_ansi_i64(idx), jack2_fftviz_bg_ansi_i64(17));
+            } else {
+                print!(" ");
+            }
+        }
+        print!("{}\r\n", reset());
+    }
+    draw_freq_axis(width, bins, fft_window, sr);
+    let out: Stdout = stdout();
+    let _ = flush(out);
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var wav_path: string = "examples/fft_example/illusion.wav";
+    var mode: i32 = 0; // 1=music, 0=flat
+    var i: i32 = 1;
+    while i < argc {
+        let a: string = args[i];
+        if eq(a, "--flat") == 1 {
+            mode = 0;
+        } else if eq(a, "--music") == 1 {
+            mode = 1;
+        } else {
+            wav_path = a;
+        }
+        i = i + 1;
+    }
+
+    let rc: i32 = jack2_fftviz_start(wav_path, "mlang_fft_analyzer");
+    if rc != 0 {
+        eprintln!("jack2_fftviz_start failed: rc={}", rc);
+        return 1;
+    }
+
+    print!("{}{}{}", cursor_force(cmd_clear_screen()), cursor_force(cmd_home()), cursor_force(cmd_hide()));
+    let input: Stdin = stdin();
+    var key_buf = with_capacity(32);
+    var raw_on: i32 = 0;
+    if stdin_is_tty() == 1 {
+        if stdin_enable_raw() == 0 {
+            raw_on = 1;
+        }
+    }
+
+    let sr: i64 = jack2_fftviz_sample_rate();
+    let total_frames: i64 = jack2_fftviz_total_frames();
+
+    // Keep rendering shortly after playback ends so final frame is visible.
+    var tail_ticks: i64 = 10;
+    while jack2_fftviz_running() == 1 || tail_ticks > 0 {
+        let n_key: i64 = read_line_nonblocking(input, key_buf, 32);
+        if n_key > 0 {
+            if find(key_buf, "q") >= 0 || find(key_buf, "Q") >= 0 {
+                break;
+            }
+            if find(key_buf, "f") >= 0 || find(key_buf, "F") >= 0 {
+                mode = 0;
+            }
+            if find(key_buf, "m") >= 0 || find(key_buf, "M") >= 0 {
+                mode = 1;
+            }
+        }
+
+        let term_sz: TermSize = stdout_size();
+        let width: i64 = viewport_width(term_sz.cols);
+        let height: i64 = viewport_height(term_sz.rows);
+        let fft_window: i32 = choose_fft_window(width);
+
+        let snap_l: list<i64> = jack2_fftviz_snapshot_i64(0, fft_window);
+        let snap_r: list<i64> = jack2_fftviz_snapshot_i64(1, fft_window);
+        let freq_l: list<i64> = forward(snap_l);
+        let freq_r: list<i64> = forward(snap_r);
+        let cur_frame: i64 = jack2_fftviz_current_frame();
+        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, sr, mode, fft_window);
+        sleep_ms(16);
+        if jack2_fftviz_running() == 0 {
+            tail_ticks = tail_ticks - 1;
+        }
+    }
+
+    print!("{}{}\n", reset(), cursor_force(cmd_show()));
+    if raw_on == 1 {
+        let _ = stdin_restore();
+    }
+    free(key_buf);
+    jack2_fftviz_stop();
+    return 0;
+}
