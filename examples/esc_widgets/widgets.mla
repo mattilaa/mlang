@@ -1,8 +1,15 @@
 mod std::esc;
 mod std::strbuf;
 
+use std::esc::acs_hline;
+use std::esc::acs_llcorner;
+use std::esc::acs_lrcorner;
+use std::esc::acs_ulcorner;
+use std::esc::acs_urcorner;
+use std::esc::acs_vline;
 use std::esc::bg;
 use std::esc::bold_on;
+use std::esc::cmd_home;
 use std::esc::color_black;
 use std::esc::color_blue;
 use std::esc::color_bright_black;
@@ -12,6 +19,10 @@ use std::esc::color_bright_yellow;
 use std::esc::color_cyan;
 use std::esc::color_green;
 use std::esc::color_white;
+use std::esc::cursor;
+use std::esc::cursor_move;
+use std::esc::dir_down;
+use std::esc::dir_right;
 use std::esc::fg;
 use std::esc::reset;
 use std::strbuf::builder_append;
@@ -98,16 +109,177 @@ fn tracker_grid_line(row: i64) -> string {
     return line;
 }
 
+fn menu_tabs_line(focus_idx: i64, running: i32, edit_mode: i32) -> string {
+    let file_tab: string = focus_idx == 0 ? "[File]" : " File ";
+    let view_tab: string = focus_idx == 1 ? "[View]" : " View ";
+    let edit_tab: string = focus_idx == 2 ? "[Edit]" : " Edit ";
+    let help_tab: string = focus_idx == 3 ? "[Help]" : " Help ";
+    let run_label: string = running == 1 ? "RUN" : "STOP";
+    let edit_label: string = edit_mode == 1 ? "EDIT" : "NAV";
+    let line: string = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
+                               file_tab, view_tab, edit_tab, help_tab, run_label, edit_label);
+    return line;
+}
+
+fn menu_anchor_x(focus_idx: i64) -> i64 {
+    if focus_idx == 0 {
+        return 1;
+    }
+    if focus_idx == 1 {
+        return 12;
+    }
+    if focus_idx == 2 {
+        return 23;
+    }
+    return 34;
+}
+
+fn menu_item_text(focus_idx: i64, item_idx: i64) -> string {
+    if focus_idx == 0 {
+        if item_idx == 0 { return format!("{}", "New"); }
+        if item_idx == 1 { return format!("{}", "Open"); }
+        if item_idx == 2 { return format!("{}", "Save"); }
+        if item_idx == 3 { return format!("{}", "Export"); }
+        if item_idx == 4 { return format!("{}", "Close"); }
+        return format!("{}", "Quit");
+    }
+    if focus_idx == 1 {
+        if item_idx == 0 { return format!("{}", "Pattern"); }
+        if item_idx == 1 { return format!("{}", "Mixer"); }
+        if item_idx == 2 { return format!("{}", "Instruments"); }
+        if item_idx == 3 { return format!("{}", "Scope"); }
+        if item_idx == 4 { return format!("{}", "FFT"); }
+        return format!("{}", "Fullscreen");
+    }
+    if focus_idx == 2 {
+        if item_idx == 0 { return format!("{}", "Cut"); }
+        if item_idx == 1 { return format!("{}", "Copy"); }
+        if item_idx == 2 { return format!("{}", "Paste"); }
+        if item_idx == 3 { return format!("{}", "Transpose"); }
+        if item_idx == 4 { return format!("{}", "Quantize"); }
+        return format!("{}", "Clear");
+    }
+    if item_idx == 0 { return format!("{}", "Keys"); }
+    if item_idx == 1 { return format!("{}", "About"); }
+    if item_idx == 2 { return format!("{}", "License"); }
+    if item_idx == 3 { return format!("{}", "Docs"); }
+    if item_idx == 4 { return format!("{}", "Version"); }
+    return format!("{}", "System");
+}
+
+fn menu_item_shortcut(focus_idx: i64, item_idx: i64) -> string {
+    if focus_idx == 0 {
+        if item_idx == 0 { return format!("{}", "ALT-N"); }
+        if item_idx == 1 { return format!("{}", "ALT-O"); }
+        if item_idx == 2 { return format!("{}", "ALT-S"); }
+        if item_idx == 3 { return format!("{}", "ALT-E"); }
+        if item_idx == 4 { return format!("{}", "ALT-W"); }
+        return format!("{}", "ALT-Q");
+    }
+    if focus_idx == 1 {
+        if item_idx == 0 { return format!("{}", "F5"); }
+        if item_idx == 1 { return format!("{}", "F6"); }
+        if item_idx == 2 { return format!("{}", "F7"); }
+        if item_idx == 3 { return format!("{}", "F8"); }
+        if item_idx == 4 { return format!("{}", "F9"); }
+        return format!("{}", "F11");
+    }
+    if focus_idx == 2 {
+        if item_idx == 0 { return format!("{}", "ALT-X"); }
+        if item_idx == 1 { return format!("{}", "ALT-C"); }
+        if item_idx == 2 { return format!("{}", "ALT-V"); }
+        if item_idx == 3 { return format!("{}", "ALT-T"); }
+        if item_idx == 4 { return format!("{}", "ALT-Z"); }
+        return format!("{}", "DEL");
+    }
+    if item_idx == 0 { return format!("{}", "F1"); }
+    if item_idx == 1 { return format!("{}", "ALT-A"); }
+    if item_idx == 2 { return format!("{}", "ALT-L"); }
+    if item_idx == 3 { return format!("{}", "ALT-D"); }
+    if item_idx == 4 { return format!("{}", "ALT-V"); }
+    return format!("{}", "ALT-S");
+}
+
+fn menu_item_count(focus_idx: i64) -> i64 {
+    let _ = focus_idx;
+    return 6;
+}
+
+fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_menu: i32) -> string {
+    if open_menu == 0 {
+        return format!("{}", "");
+    }
+    let menu_w: i64 = 36;
+    let x: i64 = menu_anchor_x(focus_idx);
+    if x + menu_w + 1 >= width {
+        return format!("{}", "");
+    }
+    let left_pad: string = repeat(" ", x);
+    let total_items: i64 = menu_item_count(focus_idx);
+    if row_idx == 0 || row_idx == (total_items + 1) {
+        let h: string = acs_hline();
+        let top: string = repeat(h, menu_w);
+        let l: string = row_idx == 0 ? acs_ulcorner() : acs_llcorner();
+        let r: string = row_idx == 0 ? acs_urcorner() : acs_lrcorner();
+        let line: string = format!("{}{}{}{}", left_pad, l, top, r);
+        free(r);
+        free(l);
+        free(top);
+        free(h);
+        free(left_pad);
+        return line;
+    }
+    let item_idx: i64 = row_idx - 1;
+    let item: string = menu_item_text(focus_idx, item_idx);
+    let short: string = menu_item_shortcut(focus_idx, item_idx);
+    let item_l: string = fit_right(item, 22, " ");
+    let short_l: string = fit_right(short, 11, " ");
+    let merged: string = format!("{} {}", item_l, short_l);
+    let fit_item: string = fit_right(merged, menu_w, " ");
+    let v: string = acs_vline();
+    var item_out: string = format!("{}", "");
+    if item_idx == menu_sel {
+        free(item_out);
+        item_out = format!("{}{}{}{}{}", fg(color_black()), bg(color_bright_cyan()), bold_on(), fit_item, reset());
+    } else {
+        free(item_out);
+        item_out = format!("{}", fit_item);
+    }
+    let line: string = format!("{}{}{}{}", left_pad, v, item_out, v);
+    free(v);
+    free(item_out);
+    free(item);
+    free(short);
+    free(item_l);
+    free(short_l);
+    free(merged);
+    free(left_pad);
+    free(fit_item);
+    return line;
+}
+
+fn ansi_cursor_pos(row1: i64, col1: i64) -> string {
+    let home: string = cursor(cmd_home());
+    let down: string = cursor_move(dir_down(), row1 - 1);
+    let right: string = cursor_move(dir_right(), col1 - 1);
+    return format!("{}{}{}", home, down, right);
+}
+
 pub fn render_tracker_ui(width_in: i64,
                          rows_in: i64,
                          cursor_row: i64,
                          running: i32,
                          focus_idx: i64,
-                         edit_mode: i32) -> string {
+                         edit_mode: i32,
+                         open_menu: i32,
+                         menu_sel: i64,
+                         last_action: string) -> string {
     let width: i64 = width_in < 40 ? 40 : width_in;
     let rows: i64 = rows_in < 12 ? 12 : rows_in;
     // Keep one spare terminal row to avoid bottom-edge newline scroll.
-    let grid_rows: i64 = rows - 12;
+    let drop_rows: i64 = open_menu == 1 ? (menu_item_count(focus_idx) + 2) : 0;
+    let grid_rows_raw: i64 = rows - 11;
+    let grid_rows: i64 = grid_rows_raw < 4 ? 4 : grid_rows_raw;
     let builder: StringBuilder = builder_new(width * rows + 512);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
@@ -120,18 +292,9 @@ pub fn render_tracker_ui(width_in: i64,
 
     append_owned(builder, sep_line(width));
 
-    let focus_label: string = focus_idx == 0 ? "File" :
-                              (focus_idx == 1 ? "Play" :
-                              (focus_idx == 2 ? "Edit" : "Other"));
-    let run_label: string = running == 1 ? "RUN" : "STOP";
-    let edit_label: string = edit_mode == 1 ? "EDIT" : "NAV";
-    let menu_line: string = format!(" File     Play     Edit     Other   [{}:{} {}]                    F1=HELP",
-                                    focus_label, run_label, edit_label);
-    append_owned(builder, styled_line(width, color_bright_white(), color_blue(), 1, menu_line));
-    free(menu_line);
-
-    append_owned(builder, styled_line(width, color_bright_cyan(), color_black(), 0,
-        " Edit order      F1      Edit patterns      F2      Edit samples      F3"));
+    let menu_tabs: string = menu_tabs_line(focus_idx, running, edit_mode);
+    append_owned(builder, styled_line(width, color_bright_white(), color_blue(), 1, menu_tabs));
+    free(menu_tabs);
 
     append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
         " Row |   Ch0         |   Ch1         |   Ch2         |   Ch3         |"));
@@ -160,12 +323,46 @@ pub fn render_tracker_ui(width_in: i64,
     free(meter_r);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-        " SPACE=play/stop   TAB=next widget   ENTER=edit   q=quit"));
+        " SPACE=play/stop   TAB=next menu   F1..F4=open   j/k=move   ENTER=select   q=quit"));
 
-    append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0,
-        " Widgets used: title bar, menu bar, status line, table/grid, meter bar."));
+    let status: string = format!(" Last action: {}   [menu open={} focus={} sel={}]", last_action, open_menu, focus_idx, menu_sel);
+    append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0, status));
+    free(status);
 
-    let out: string = builder_take_string(builder);
+    let base: string = builder_take_string(builder);
     builder_free(builder);
+
+    if open_menu == 0 {
+        return base;
+    }
+
+    // Overlay dropdown over already-rendered content.
+    let overlay_builder: StringBuilder = builder_new(512);
+    let x: i64 = menu_anchor_x(focus_idx) + 1;
+    for m in 0..drop_rows {
+        let y: i64 = 6 + m;
+        let move: string = ansi_cursor_pos(y, x);
+        let line: string = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
+        var painted: string = format!("{}", "");
+        if m > 0 && m < (menu_item_count(focus_idx) + 1) && (m - 1) == menu_sel {
+            free(painted);
+            painted = format!("{}{}{}{}{}", move, fg(color_black()), bg(color_bright_cyan()), line, reset());
+        } else {
+            free(painted);
+            painted = format!("{}{}{}{}{}", move, fg(color_bright_white()), bg(color_blue()), line, reset());
+        }
+        let _ = builder_append(overlay_builder, painted);
+        free(painted);
+        free(line);
+        free(move);
+    }
+    let _ = builder_append(overlay_builder, reset());
+    let _ = builder_append(overlay_builder, cursor(cmd_home()));
+    let overlay: string = builder_take_string(overlay_builder);
+    builder_free(overlay_builder);
+
+    let out: string = concat(base, overlay);
+    free(overlay);
+    free(base);
     return out;
 }

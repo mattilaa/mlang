@@ -11,6 +11,8 @@ use std::esc::cmd_home;
 use std::esc::cmd_hide;
 use std::esc::cmd_show;
 use std::esc::cursor;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
 use std::esc::reset;
 use std::event_loop::EventLoop;
 use std::io::Stdin;
@@ -37,6 +39,51 @@ fn canvas_width(cols: i32) -> i64 {
         return 40;
     }
     return w > 150 ? 150 : w;
+}
+
+fn menu_item_count(focus_idx: i64) -> i64 {
+    let _ = focus_idx;
+    return 6;
+}
+
+fn menu_name(focus_idx: i64) -> string {
+    if focus_idx == 0 { return format!("{}", "File"); }
+    if focus_idx == 1 { return format!("{}", "View"); }
+    if focus_idx == 2 { return format!("{}", "Edit"); }
+    return format!("{}", "Help");
+}
+
+fn menu_item_name(focus_idx: i64, item_idx: i64) -> string {
+    if focus_idx == 0 {
+        if item_idx == 0 { return format!("{}", "New"); }
+        if item_idx == 1 { return format!("{}", "Open"); }
+        if item_idx == 2 { return format!("{}", "Save"); }
+        if item_idx == 3 { return format!("{}", "Export"); }
+        if item_idx == 4 { return format!("{}", "Close"); }
+        return format!("{}", "Quit");
+    }
+    if focus_idx == 1 {
+        if item_idx == 0 { return format!("{}", "Pattern"); }
+        if item_idx == 1 { return format!("{}", "Mixer"); }
+        if item_idx == 2 { return format!("{}", "Instruments"); }
+        if item_idx == 3 { return format!("{}", "Scope"); }
+        if item_idx == 4 { return format!("{}", "FFT"); }
+        return format!("{}", "Fullscreen");
+    }
+    if focus_idx == 2 {
+        if item_idx == 0 { return format!("{}", "Cut"); }
+        if item_idx == 1 { return format!("{}", "Copy"); }
+        if item_idx == 2 { return format!("{}", "Paste"); }
+        if item_idx == 3 { return format!("{}", "Transpose"); }
+        if item_idx == 4 { return format!("{}", "Quantize"); }
+        return format!("{}", "Clear");
+    }
+    if item_idx == 0 { return format!("{}", "Keys"); }
+    if item_idx == 1 { return format!("{}", "About"); }
+    if item_idx == 2 { return format!("{}", "License"); }
+    if item_idx == 3 { return format!("{}", "Docs"); }
+    if item_idx == 4 { return format!("{}", "Version"); }
+    return format!("{}", "System");
 }
 
 fn main() -> i32 {
@@ -71,8 +118,13 @@ fn main() -> i32 {
     var running: i32 = 0;
     var focus_idx: i64 = 0;
     var edit_mode: i32 = 0;
+    var open_menu: i32 = 0;
+    var menu_sel: i64 = 0;
+    var esc_mode: i32 = 0;
+    var csi_num: i64 = 0;
+    var last_action: string = format!("{}", "(none)");
 
-    print!("{}{}{}", cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
     while quit == 0 {
         let n: i64 = __mlang_std_sync_lfqueue_try_recv(qh, ev_buf, 32);
         if n == -2 {
@@ -82,26 +134,149 @@ fn main() -> i32 {
             continue;
         }
 
-        let keycode: i32 = read_keycode_nonblocking(input);
-        if keycode >= 0 {
-            if keycode == 113 || keycode == 81 {
-                quit = 1;
+        while 1 {
+            let keycode: i32 = read_keycode_nonblocking(input);
+            if keycode == -2 {
+                break;
             }
-            if keycode == 32 {
-                running = running == 1 ? 0 : 1;
+            if keycode < 0 {
+                break;
             }
-            if keycode == 9 {
-                focus_idx = (focus_idx + 1) % 4;
-            }
-            if keycode == 13 || keycode == 10 {
-                edit_mode = edit_mode == 1 ? 0 : 1;
+
+            if esc_mode == 0 {
+                if keycode == 27 {
+                    esc_mode = 1;
+                    csi_num = 0;
+                } else {
+                    if keycode == 113 || keycode == 81 {
+                        quit = 1;
+                    }
+                    if keycode == 32 {
+                        running = running == 1 ? 0 : 1;
+                    }
+                    if keycode == 9 {
+                        focus_idx = (focus_idx + 1) % 4;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 49 {
+                        focus_idx = 0;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 50 {
+                        focus_idx = 1;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 51 {
+                        focus_idx = 2;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 52 {
+                        focus_idx = 3;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 102 || keycode == 70 {
+                        focus_idx = 0;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 118 || keycode == 86 {
+                        focus_idx = 1;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 101 || keycode == 69 {
+                        focus_idx = 2;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 104 || keycode == 72 {
+                        focus_idx = 3;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    if keycode == 13 || keycode == 10 {
+                        if open_menu == 1 {
+                            let mname: string = menu_name(focus_idx);
+                            let iname: string = menu_item_name(focus_idx, menu_sel);
+                            let action: string = format!("{} -> {}", mname, iname);
+                            free(mname);
+                            free(iname);
+                            free(last_action);
+                            last_action = action;
+                            open_menu = 0;
+                        } else {
+                            edit_mode = edit_mode == 1 ? 0 : 1;
+                        }
+                    }
+                    if keycode == 106 || keycode == 74 {
+                        if open_menu == 1 {
+                            let count: i64 = menu_item_count(focus_idx);
+                            menu_sel = (menu_sel + 1) % count;
+                        }
+                    }
+                    if keycode == 107 || keycode == 75 {
+                        if open_menu == 1 {
+                            let count: i64 = menu_item_count(focus_idx);
+                            menu_sel = menu_sel == 0 ? (count - 1) : (menu_sel - 1);
+                        }
+                    }
+                }
+            } else if esc_mode == 1 {
+                if keycode == 91 {
+                    esc_mode = 2;
+                    csi_num = 0;
+                } else if keycode == 79 {
+                    esc_mode = 3;
+                } else {
+                    // Plain ESC closes the dropdown if open.
+                    open_menu = 0;
+                    menu_sel = 0;
+                    esc_mode = 0;
+                }
+            } else if esc_mode == 2 {
+                if keycode >= 48 && keycode <= 57 {
+                    csi_num = csi_num * 10 + (keycode - 48);
+                } else if keycode == 126 {
+                    if csi_num >= 11 && csi_num <= 14 {
+                        focus_idx = csi_num - 11;
+                        open_menu = 1;
+                        menu_sel = 0;
+                    }
+                    esc_mode = 0;
+                } else {
+                    esc_mode = 0;
+                }
+            } else {
+                if keycode == 80 {
+                    focus_idx = 0;
+                    open_menu = 1;
+                    menu_sel = 0;
+                } else if keycode == 81 {
+                    focus_idx = 1;
+                    open_menu = 1;
+                    menu_sel = 0;
+                } else if keycode == 82 {
+                    focus_idx = 2;
+                    open_menu = 1;
+                    menu_sel = 0;
+                } else if keycode == 83 {
+                    focus_idx = 3;
+                    open_menu = 1;
+                    menu_sel = 0;
+                }
+                esc_mode = 0;
             }
         }
 
         let ts: TermSize = stdout_size();
         let w: i64 = canvas_width(ts.cols);
         let h: i64 = ts.rows;
-        let frame: string = render_tracker_ui(w, h, cursor_row, running, focus_idx, edit_mode);
+        let frame: string = render_tracker_ui(w, h, cursor_row, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -114,10 +289,11 @@ fn main() -> i32 {
     }
 
     String::free(ev_buf);
+    String::free(last_action);
     ticker.close();
     __mlang_std_sync_lfqueue_close(qh);
     __mlang_std_sync_lfqueue_free(qh);
     if raw_enabled == 1 { stdin_restore(); }
-    print!("{}{}\n", reset(), cursor(cmd_show()));
+    print!("{}{}{}{}\n", reset(), cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
     return 0;
 }

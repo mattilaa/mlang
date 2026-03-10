@@ -7,6 +7,12 @@ Files:
 - `tracker_ui_demo.mla`: ticker-driven event loop + keypress polling (`q` to quit)
 - `run_demo.sh`: build + run helper
 
+Menu widget:
+- Top menu tabs: `File`, `View`, `Edit`, `Help`
+- Tracker-style blue dropdown panel opens under the active tab with highlighted selection row
+- Function keys activate/open menus: `F1=File`, `F2=View`, `F3=Edit`, `F4=Help`
+- Keys: `j`/`k` move selection, `ENTER` selects, `TAB` cycles focus, `ESC` closes open dropdown, `q` quits
+
 Run:
 
 ```sh
