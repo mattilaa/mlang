@@ -77,6 +77,45 @@ fn test_string_sub_bounds() -> i32 {
 }
 
 #[test]
+fn test_string_pad_helpers() -> i32 {
+    let base = clone("abc");
+    let l = pad_left(base, 6, "0");
+    let r = pad_right(base, 6, ".");
+    let same_l = pad_left(base, 3, " ");
+    let same_r = pad_right(base, 2, " ");
+    let num_l = pad_i64_left(18, 4, " ");
+    let num_r = pad_i64_right(18, 4, ".");
+    let num_z = zpad_i64(7, 3);
+    let fit_same = fit_right("abc", 3, " ");
+    let fit_pad = fit_right("abc", 5, ".");
+    let fit_cut = fit_right("abcdef", 4, " ");
+
+    if eq(l, "000abc") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(r, "abc...") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(same_l, "abc") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(same_r, "abc") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(num_l, "  18") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(num_r, "18..") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(num_z, "007") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(fit_same, "abc") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(fit_pad, "abc..") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+    if eq(fit_cut, "abcd") != 1 { free(fit_cut); free(fit_pad); free(fit_same); free(num_z); free(num_r); free(num_l); free(same_r); free(same_l); free(r); free(l); free(base); return 1; }
+
+    free(fit_cut);
+    free(fit_pad);
+    free(fit_same);
+    free(num_z);
+    free(num_r);
+    free(num_l);
+    free(same_r);
+    free(same_l);
+    free(r);
+    free(l);
+    free(base);
+    return 0;
+}
+
+#[test]
 fn test_string_builder_dynamic_growth_and_take() -> i32 {
     var b: StringBuilder = builder_with_page(2, 4);
     if builder_is_valid(b) != 1 { return 1; }

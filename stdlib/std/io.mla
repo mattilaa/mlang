@@ -14,6 +14,10 @@
 /// \cond INTERNAL_IMPORTS
 mod std::io::detail;
 use std::io::detail::*;
+mod std::strbuf;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::sub;
 /// \endcond
 
 pub struct Stdin {
@@ -99,6 +103,38 @@ pub fn read_line(input: Stdin, buf: string, capacity: i64) -> i64 {
 /// @return >0 bytes read, 0 if no data available yet, -1 on EOF/error.
 pub fn read_line_nonblocking(input: Stdin, buf: string, capacity: i64) -> i64 {
     return __mlang_std_io_stdin_read_line_nonblocking(buf, capacity);
+}
+
+/// @brief Non-blocking read of one raw byte from stdin.
+/// @return 0..255 byte value, -2 when no byte available, -1 on EOF/error.
+pub fn read_keycode_nonblocking(input: Stdin) -> i32 {
+    return __mlang_std_io_stdin_read_byte_nonblocking();
+}
+
+/// @brief Non-blocking read into a newly allocated string.
+/// @return Newly allocated text when available, otherwise empty string.
+pub fn read_keys_nonblocking(input: Stdin, capacity: i64) -> string {
+    let cap: i64 = capacity <= 1 ? 32 : capacity;
+    let buf: string = String::with_capacity(cap);
+    let n: i64 = read_line_nonblocking(input, buf, cap);
+    if n <= 0 {
+        String::free(buf);
+        return String::new();
+    }
+    return buf;
+}
+
+/// @brief Read first pending key as single-byte string (non-blocking).
+/// Intended for stdin raw mode polling loops.
+/// @return Newly allocated one-char string, or empty string when no key.
+pub fn read_key_nonblocking(input: Stdin) -> string {
+    let keys: string = read_keys_nonblocking(input, 32);
+    if len(keys) == 0 {
+        return keys;
+    }
+    let one: string = sub(keys, 0, 1);
+    free(keys);
+    return one;
 }
 
 /// @brief Create in-memory cursor with initial capacity.

@@ -23,10 +23,12 @@ Currently provided:
   and scope-exit destructor for `StdoutLock`.
   Also includes stderr writes/flush, stream buffering controls
   (`set_stdin_buffering`, `set_stdout_buffering`, `set_stderr_buffering`)
-  and non-blocking stdin reads (`read_line_nonblocking`).
+  and non-blocking stdin reads (`read_line_nonblocking`,
+  `read_keys_nonblocking`, `read_key_nonblocking`).
 - `std/strbuf.mla`: string allocation + utility helpers
   (`String::new/with_capacity/free`, len/compare/find/rfind/repeat,
-   UTF-8<->UTF-16 converters and helpers).
+   `pad_left/pad_right`, numeric padding helpers
+   `pad_i64_left/pad_i64_right/zpad_i64`, UTF-8<->UTF-16 converters and helpers).
 - `std/bytes.mla`: dynamic raw byte buffer helpers for protocol/binary payloads
   (reserve/append/index/set, binary-safe `to_hex`, text-oriented `to_string`).
 - `std/protocol.mla`: base framed TCP protocol transport helpers intended for

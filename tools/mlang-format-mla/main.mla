@@ -21,9 +21,9 @@ use std::io::writeln;
 use std::io::Stdin;
 use std::jsonrpc::format_text_with_style_options;
 use std::strbuf::concat;
-use std::strbuf::contains;
 use std::strbuf::ends_with;
 use std::strbuf::eq;
+use std::strbuf::find;
 use std::strbuf::len;
 use std::strbuf::rtrim;
 use std::strbuf::starts_with;
@@ -69,20 +69,20 @@ fn parse_indent_width(line: string, fallback: i64) -> i64 {
     if starts_with(line, "IndentWidth:") == 0 {
         return fallback;
     }
-    if contains(line, ": 16") == 1 { return 16; }
-    if contains(line, ":16") == 1 { return 16; }
-    if contains(line, ": 12") == 1 { return 12; }
-    if contains(line, ":12") == 1 { return 12; }
-    if contains(line, ": 10") == 1 { return 10; }
-    if contains(line, ":10") == 1 { return 10; }
-    if contains(line, ": 8") == 1 { return 8; }
-    if contains(line, ":8") == 1 { return 8; }
-    if contains(line, ": 6") == 1 { return 6; }
-    if contains(line, ":6") == 1 { return 6; }
-    if contains(line, ": 4") == 1 { return 4; }
-    if contains(line, ":4") == 1 { return 4; }
-    if contains(line, ": 2") == 1 { return 2; }
-    if contains(line, ":2") == 1 { return 2; }
+    if find(line, ": 16") >= 0 { return 16; }
+    if find(line, ":16") >= 0 { return 16; }
+    if find(line, ": 12") >= 0 { return 12; }
+    if find(line, ":12") >= 0 { return 12; }
+    if find(line, ": 10") >= 0 { return 10; }
+    if find(line, ":10") >= 0 { return 10; }
+    if find(line, ": 8") >= 0 { return 8; }
+    if find(line, ":8") >= 0 { return 8; }
+    if find(line, ": 6") >= 0 { return 6; }
+    if find(line, ":6") >= 0 { return 6; }
+    if find(line, ": 4") >= 0 { return 4; }
+    if find(line, ":4") >= 0 { return 4; }
+    if find(line, ": 2") >= 0 { return 2; }
+    if find(line, ":2") >= 0 { return 2; }
     return fallback;
 }
 
@@ -90,16 +90,16 @@ fn parse_ensure_trailing_newline(line: string, fallback: bool) -> bool {
     if starts_with(line, "EnsureTrailingNewline:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 {
+    if find(line, "true") >= 0 {
         return true;
     }
-    if contains(line, "True") == 1 {
+    if find(line, "True") >= 0 {
         return true;
     }
-    if contains(line, "false") == 1 {
+    if find(line, "false") >= 0 {
         return false;
     }
-    if contains(line, "False") == 1 {
+    if find(line, "False") >= 0 {
         return false;
     }
     return fallback;
@@ -109,10 +109,10 @@ fn parse_space_after_comma(line: string, fallback: bool) -> bool {
     if starts_with(line, "SpaceAfterComma:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 { return true; }
-    if contains(line, "True") == 1 { return true; }
-    if contains(line, "false") == 1 { return false; }
-    if contains(line, "False") == 1 { return false; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
     return fallback;
 }
 
@@ -120,10 +120,10 @@ fn parse_space_after_colon(line: string, fallback: bool) -> bool {
     if starts_with(line, "SpaceAfterColon:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 { return true; }
-    if contains(line, "True") == 1 { return true; }
-    if contains(line, "false") == 1 { return false; }
-    if contains(line, "False") == 1 { return false; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
     return fallback;
 }
 
@@ -131,10 +131,10 @@ fn parse_space_around_operators(line: string, fallback: bool) -> bool {
     if starts_with(line, "SpaceAroundOperators:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 { return true; }
-    if contains(line, "True") == 1 { return true; }
-    if contains(line, "false") == 1 { return false; }
-    if contains(line, "False") == 1 { return false; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
     return fallback;
 }
 
@@ -142,10 +142,10 @@ fn parse_space_around_relational_operators(line: string, fallback: bool) -> bool
     if starts_with(line, "SpaceAroundRelationalOperators:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 { return true; }
-    if contains(line, "True") == 1 { return true; }
-    if contains(line, "false") == 1 { return false; }
-    if contains(line, "False") == 1 { return false; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
     return fallback;
 }
 
@@ -153,10 +153,10 @@ fn parse_space_inside_braces_single_line(line: string, fallback: bool) -> bool {
     if starts_with(line, "SpaceInsideBracesSingleLine:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 { return true; }
-    if contains(line, "True") == 1 { return true; }
-    if contains(line, "false") == 1 { return false; }
-    if contains(line, "False") == 1 { return false; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
     return fallback;
 }
 
@@ -164,10 +164,10 @@ fn parse_compact_fat_arrow(line: string, fallback: bool) -> bool {
     if starts_with(line, "CompactFatArrow:") == 0 {
         return fallback;
     }
-    if contains(line, "true") == 1 { return true; }
-    if contains(line, "True") == 1 { return true; }
-    if contains(line, "false") == 1 { return false; }
-    if contains(line, "False") == 1 { return false; }
+    if find(line, "true") >= 0 { return true; }
+    if find(line, "True") >= 0 { return true; }
+    if find(line, "false") >= 0 { return false; }
+    if find(line, "False") >= 0 { return false; }
     return fallback;
 }
 

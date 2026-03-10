@@ -15,6 +15,7 @@ extern fn __mlang_std_io_stdout_flush() -> int;
 extern fn __mlang_std_io_stderr_flush() -> int;
 extern fn __mlang_std_io_stdin_read_line(buf: string, capacity: i64) -> i64;
 extern fn __mlang_std_io_stdin_read_line_nonblocking(buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_io_stdin_read_byte_nonblocking() -> i32;
 extern fn __mlang_std_io_set_stdin_buffering(mode: int, size: i64) -> int;
 extern fn __mlang_std_io_set_stdout_buffering(mode: int, size: i64) -> int;
 extern fn __mlang_std_io_set_stderr_buffering(mode: int, size: i64) -> int;

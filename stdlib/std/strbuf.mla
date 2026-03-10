@@ -187,6 +187,72 @@ pub fn repeat(s: string, count: i64) -> string {
     return __mlang_std_strbuf_repeat(s, count);
 }
 
+/// @brief Left-pad `s` to at least `width` bytes using repeated `pad`.
+/// Returns a newly allocated string; caller frees with `free`.
+pub fn pad_left(s: string, width: i64, pad: string) -> string {
+    let n: i64 = len(s);
+    if n >= width {
+        return clone(s);
+    }
+    let fill: string = repeat(pad, width - n);
+    let out: string = concat(fill, s);
+    free(fill);
+    return out;
+}
+
+/// @brief Right-pad `s` to at least `width` bytes using repeated `pad`.
+/// Returns a newly allocated string; caller frees with `free`.
+pub fn pad_right(s: string, width: i64, pad: string) -> string {
+    let n: i64 = len(s);
+    if n >= width {
+        return clone(s);
+    }
+    let fill: string = repeat(pad, width - n);
+    let out: string = concat(s, fill);
+    free(fill);
+    return out;
+}
+
+/// @brief Fit `s` to exactly `width` bytes by right-padding or truncating.
+/// Returns a newly allocated string; caller frees with `free`.
+pub fn fit_right(s: string, width: i64, pad: string) -> string {
+    if width <= 0 {
+        return String::new();
+    }
+    let n: i64 = len(s);
+    if n == width {
+        return clone(s);
+    }
+    if n > width {
+        return sub(s, 0, width);
+    }
+    return pad_right(s, width, pad);
+}
+
+/// @brief Convert `value` to string and left-pad to `width`.
+/// Returns a newly allocated string; caller frees with `free`.
+pub fn pad_i64_left(value: i64, width: i64, pad: string) -> string {
+    let s: string = format!("{}", value);
+    let out: string = pad_left(s, width, pad);
+    free(s);
+    return out;
+}
+
+/// @brief Convert `value` to string and right-pad to `width`.
+/// Returns a newly allocated string; caller frees with `free`.
+pub fn pad_i64_right(value: i64, width: i64, pad: string) -> string {
+    let s: string = format!("{}", value);
+    let out: string = pad_right(s, width, pad);
+    free(s);
+    return out;
+}
+
+/// @brief Zero-pad integer to at least `width` characters.
+/// Returns a newly allocated string; caller frees with `free`.
+pub fn zpad_i64(value: i64, width: i64) -> string {
+    return pad_i64_left(value, width, "0");
+}
+
 /// @brief Return a newly allocated trimmed string (both ends).
 pub fn trim(s: string) -> string {
     return __mlang_std_strbuf_trim(s);

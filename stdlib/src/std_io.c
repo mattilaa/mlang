@@ -199,6 +199,34 @@ int64_t __mlang_std_io_stdin_read_line_nonblocking(char* buf, int64_t capacity)
     return out_n;
 }
 
+// Returns:
+//  0..255 byte value
+//  -2 no data currently available (would block)
+//  -1 EOF/error
+int32_t __mlang_std_io_stdin_read_byte_nonblocking(void)
+{
+    int fd = fileno(stdin);
+    if(fd < 0)
+        return -1;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if(flags < 0)
+        return -1;
+    if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0)
+        return -1;
+
+    unsigned char ch = 0;
+    ssize_t n = read(fd, &ch, 1);
+    (void)fcntl(fd, F_SETFL, flags);
+    if(n == 1)
+        return (int32_t)ch;
+    if(n == 0)
+        return -1;
+    if(errno == EAGAIN || errno == EWOULDBLOCK)
+        return -2;
+    return -1;
+}
+
 typedef int64_t (*mlang_fn0_i64_t)(void);
 
 int64_t __mlang_std_io_with_stdout_lock_call0(int64_t func)
