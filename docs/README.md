@@ -82,12 +82,17 @@ For thread and atomic helpers, see:
 For terminal ANSI escape helpers, see:
 - `stdlib/std/esc.mla`
   (named-value `fg/bg/reset`, style toggles, and cursor control helpers;
-   auto-disabled when ANSI is unsupported).
+   auto-disabled when ANSI is unsupported, plus ACS box-drawing and
+   alternate-screen helpers for TUI apps).
 
 For terminal capabilities/termios helpers, see:
 - `stdlib/std/term.mla`
   (`isatty` checks, terminal size, color level/truecolor detection,
    `supports_ansi()` convenience check, and stdin raw mode helpers).
+
+For reusable TUI safety/cleanup patterns (raw mode + alt screen + terminal
+restore guard), see:
+- `docs/stdlib_mlang_api.md` section `std::esc` -> `TUI Safety Helper`.
 
 The runtime builtins are implemented by the compiler backend and map to
 platform facilities (pthreads and libc). These symbols are available without

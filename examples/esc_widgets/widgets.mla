@@ -126,12 +126,12 @@ fn menu_anchor_x(focus_idx: i64) -> i64 {
         return 1;
     }
     if focus_idx == 1 {
-        return 12;
+        return 10;
     }
     if focus_idx == 2 {
-        return 23;
+        return 19;
     }
-    return 34;
+    return 28;
 }
 
 fn menu_item_text(focus_idx: i64, item_idx: i64) -> string {
@@ -214,19 +214,17 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     if x + menu_w + 1 >= width {
         return format!("{}", "");
     }
-    let left_pad: string = repeat(" ", x);
     let total_items: i64 = menu_item_count(focus_idx);
     if row_idx == 0 || row_idx == (total_items + 1) {
         let h: string = acs_hline();
         let top: string = repeat(h, menu_w);
         let l: string = row_idx == 0 ? acs_ulcorner() : acs_llcorner();
         let r: string = row_idx == 0 ? acs_urcorner() : acs_lrcorner();
-        let line: string = format!("{}{}{}{}", left_pad, l, top, r);
+        let line: string = format!("{}{}{}", l, top, r);
         free(r);
         free(l);
         free(top);
         free(h);
-        free(left_pad);
         return line;
     }
     let item_idx: i64 = row_idx - 1;
@@ -240,12 +238,12 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     var item_out: string = format!("{}", "");
     if item_idx == menu_sel {
         free(item_out);
-        item_out = format!("{}{}{}{}{}", fg(color_black()), bg(color_bright_cyan()), bold_on(), fit_item, reset());
+        item_out = format!("{}{}{}{}{}{}{}", fg(color_black()), bg(color_bright_cyan()), bold_on(), fit_item, reset(), fg(color_bright_white()), bg(color_blue()));
     } else {
         free(item_out);
         item_out = format!("{}", fit_item);
     }
-    let line: string = format!("{}{}{}{}", left_pad, v, item_out, v);
+    let line: string = format!("{}{}{}", v, item_out, v);
     free(v);
     free(item_out);
     free(item);
@@ -253,7 +251,6 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     free(item_l);
     free(short_l);
     free(merged);
-    free(left_pad);
     free(fit_item);
     return line;
 }
@@ -343,14 +340,7 @@ pub fn render_tracker_ui(width_in: i64,
         let y: i64 = 6 + m;
         let move: string = ansi_cursor_pos(y, x);
         let line: string = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
-        var painted: string = format!("{}", "");
-        if m > 0 && m < (menu_item_count(focus_idx) + 1) && (m - 1) == menu_sel {
-            free(painted);
-            painted = format!("{}{}{}{}{}", move, fg(color_black()), bg(color_bright_cyan()), line, reset());
-        } else {
-            free(painted);
-            painted = format!("{}{}{}{}{}", move, fg(color_bright_white()), bg(color_blue()), line, reset());
-        }
+        let painted: string = format!("{}{}{}{}{}", move, fg(color_bright_white()), bg(color_blue()), line, reset());
         let _ = builder_append(overlay_builder, painted);
         free(painted);
         free(line);

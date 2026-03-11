@@ -335,10 +335,79 @@ Sequences auto-disable to `""` when `std::term::supports_ansi()` is false.
 - `underline_off() -> string`
 - `inverse_on() -> string`
 - `inverse_off() -> string`
+- `standout_on() -> string`
+- `standout_off() -> string`
+- `clear_eol() -> string`
+- `alt_screen_on() -> string`
+- `alt_screen_off() -> string`
 
 ### Cursor API
 - `cursor(cmd: CursorCommand) -> string`
 - `cursor_move(dir: CursorDirection, amount: i32) -> string`
+
+### ACS (ncurses-style line drawing)
+- `acs_hline() -> string`
+- `acs_vline() -> string`
+- `acs_ulcorner() -> string`
+- `acs_urcorner() -> string`
+- `acs_llcorner() -> string`
+- `acs_lrcorner() -> string`
+- `acs_ltee() -> string`
+- `acs_rtee() -> string`
+- `acs_ttee() -> string`
+- `acs_btee() -> string`
+- `acs_plus() -> string`
+
+### TUI Safety Helper (recommended for all terminal UIs)
+Use this pattern in every TUI example to avoid broken scrolling/cursor state:
+
+```mla
+mod std::esc;
+mod std::term;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::reset;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+
+pub struct TuiGuard {
+    var raw_enabled: i32;
+};
+
+pub fn tui_enter() -> TuiGuard {
+    var raw: i32 = 0;
+    if stdin_is_tty() == 1 {
+        if stdin_enable_raw() == 0 {
+            raw = 1;
+        }
+    }
+    print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
+    return TuiGuard { raw_enabled: raw };
+}
+
+pub fn tui_leave(g: TuiGuard) -> void {
+    if g.raw_enabled == 1 {
+        let _ = stdin_restore();
+    }
+    print!("{}{}{}{}\n", reset(), cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
+}
+```
+
+Shell runner safety (recommended):
+
+```sh
+cleanup_terminal() {
+  stty sane 2>/dev/null || true
+  printf '\033[0m\033[?25h\033[?1049l' || true
+}
+trap cleanup_terminal EXIT INT TERM
+```
 
 ### Enum value helpers
 - Color helpers: `color_default`, `color_black`, `color_red`, `color_green`,

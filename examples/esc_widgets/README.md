@@ -18,3 +18,10 @@ Run:
 ```sh
 ./examples/esc_widgets/run_demo.sh
 ```
+
+Reusable terminal safety:
+- This demo runner applies a shared TUI-safe cleanup trap (`stty sane`, reset,
+  show cursor, leave alt screen) on `EXIT/INT/TERM`.
+- Reuse the same pattern in all TUI example scripts.
+- Reference helper docs: `docs/stdlib_mlang_api.md` -> `std::esc` ->
+  `TUI Safety Helper`.
