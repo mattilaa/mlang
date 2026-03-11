@@ -237,6 +237,7 @@ fn main() -> i32 {
                         if open_menu == 1 {
                             open_menu = 0;
                             menu_sel = 0;
+                            focus_idx = 0;
                         } else {
                             esc_mode = 1;
                             csi_num = 0;
@@ -245,6 +246,7 @@ fn main() -> i32 {
                         if open_menu == 1 {
                             open_menu = 0;
                             menu_sel = 0;
+                            focus_idx = 0;
                         }
                         esc_mode = 0;
                     }
@@ -257,9 +259,14 @@ fn main() -> i32 {
                         row_phase = 0;
                     }
                     if keycode == 9 {
-                        focus_idx = (focus_idx + 1) % 4;
-                        open_menu = 1;
-                        menu_sel = 0;
+                        if open_menu == 0 {
+                            focus_idx = 0;
+                            open_menu = 1;
+                            menu_sel = 0;
+                        } else {
+                            focus_idx = (focus_idx + 1) % 4;
+                            menu_sel = 0;
+                        }
                     }
                     if keycode == 49 {
                         focus_idx = 0;
@@ -363,6 +370,7 @@ fn main() -> i32 {
                     // Plain ESC closes the dropdown if open.
                     open_menu = 0;
                     menu_sel = 0;
+                    focus_idx = 0;
                     esc_mode = 0;
                 }
             } else if esc_mode == 2 {

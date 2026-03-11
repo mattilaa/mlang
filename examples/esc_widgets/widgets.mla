@@ -8,6 +8,7 @@ use std::esc::acs_ulcorner;
 use std::esc::acs_urcorner;
 use std::esc::acs_vline;
 use std::esc::bg;
+use std::esc::bg_rgb;
 use std::esc::bold_on;
 use std::esc::cmd_home;
 use std::esc::color_black;
@@ -24,6 +25,7 @@ use std::esc::cursor_move;
 use std::esc::dir_down;
 use std::esc::dir_right;
 use std::esc::fg;
+use std::esc::fg_rgb;
 use std::esc::reset;
 use std::strbuf::builder_append;
 use std::strbuf::builder_free;
@@ -45,6 +47,42 @@ fn styled_line(width: i64, fg_c: i32, bg_c: i32, bold: i32, text: string) -> str
         return out_b;
     }
     let out: string = format!("{}{}{}{}\r\n", fg(fg_c), bg(bg_c), row, reset());
+    free(row);
+    return out;
+}
+
+fn styled_line_compact(fg_c: i32, bg_c: i32, bold: i32, text: string) -> string {
+    if bold == 1 {
+        return format!("{}{}{}{}{}\r\n", bold_on(), fg(fg_c), bg(bg_c), text, reset());
+    }
+    return format!("{}{}{}{}\r\n", fg(fg_c), bg(bg_c), text, reset());
+}
+
+fn styled_line_compact_rgb(fg_r: i32, fg_g: i32, fg_b: i32,
+                           bg_r: i32, bg_g: i32, bg_b: i32,
+                           bold: i32, text: string) -> string {
+    let fg_s: string = fg_rgb(fg_r, fg_g, fg_b);
+    let bg_s: string = bg_rgb(bg_r, bg_g, bg_b);
+    if bold == 1 {
+        return format!("{}{}{}{}{}\r\n", bold_on(), fg_s, bg_s, text, reset());
+    }
+    return format!("{}{}{}{}\r\n", fg_s, bg_s, text, reset());
+}
+
+fn styled_line_rgb(width: i64,
+                   fg_r: i32, fg_g: i32, fg_b: i32,
+                   bg_r: i32, bg_g: i32, bg_b: i32,
+                   bold: i32,
+                   text: string) -> string {
+    let row: string = fit_right(text, width, " ");
+    let fg_s: string = fg_rgb(fg_r, fg_g, fg_b);
+    let bg_s: string = bg_rgb(bg_r, bg_g, bg_b);
+    if bold == 1 {
+        let out_b: string = format!("{}{}{}{}{}\r\n", bold_on(), fg_s, bg_s, row, reset());
+        free(row);
+        return out_b;
+    }
+    let out: string = format!("{}{}{}{}\r\n", fg_s, bg_s, row, reset());
     free(row);
     return out;
 }
@@ -194,11 +232,11 @@ fn song_grid_line(order_row: i64) -> string {
     return line;
 }
 
-fn menu_tabs_line(focus_idx: i64, running: i32, edit_mode: i32) -> string {
-    let file_tab: string = focus_idx == 0 ? "[File]": " File ";
-    let view_tab: string = focus_idx == 1 ? "[View]": " View ";
-    let edit_tab: string = focus_idx == 2 ? "[Edit]": " Edit ";
-    let help_tab: string = focus_idx == 3 ? "[Help]": " Help ";
+fn menu_tabs_line(focus_idx: i64, open_menu: i32, running: i32, edit_mode: i32) -> string {
+    let file_tab: string = (open_menu == 1 ? (focus_idx == 0 ? "[File]" : " File ") : " File ");
+    let view_tab: string = (open_menu == 1 ? (focus_idx == 1 ? "[View]" : " View ") : " View ");
+    let edit_tab: string = (open_menu == 1 ? (focus_idx == 2 ? "[Edit]" : " Edit ") : " Edit ");
+    let help_tab: string = (open_menu == 1 ? (focus_idx == 3 ? "[Help]" : " Help ") : " Help ");
     let run_label: string = running == 1 ? "RUN": "STOP";
     let edit_label: string = edit_mode == 1 ? "EDIT": "NAV";
     let line: string = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
@@ -323,7 +361,7 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     var item_out: string = format!("{}", "");
     if item_idx == menu_sel {
         free(item_out);
-        item_out = format!("{}{}{}{}{}{}{}", fg(color_black()), bg(color_bright_cyan()), bold_on(), fit_item, reset(), fg(color_bright_white()), bg(color_blue()));
+        item_out = format!("{}{}{}{}{}{}{}", fg_rgb(22, 28, 22), bg_rgb(80, 122, 76), bold_on(), fit_item, reset(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
     } else {
         free(item_out);
         item_out = format!("{}", fit_item);
@@ -380,8 +418,9 @@ last_action: string) -> string {
 
     append_owned(builder, sep_line(width));
 
-    let menu_tabs: string = menu_tabs_line(focus_idx, running, edit_mode);
-    append_owned(builder, styled_line(width, color_bright_white(), color_blue(), 1, menu_tabs));
+    let menu_tabs: string = menu_tabs_line(focus_idx, open_menu, running, edit_mode);
+    // Menu bar: darker than previous cyan-ish blue, but lighter than channel header.
+    append_owned(builder, styled_line_rgb(width, 235, 228, 198, 26, 58, 92, 1, menu_tabs));
     free(menu_tabs);
 
     if current_view == 1 {
@@ -392,7 +431,7 @@ last_action: string) -> string {
         " Row | Pat | Stp | BPM | Start |"));
     } else {
         let head: string = tracker_header_line();
-        append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, head));
+        append_owned(builder, styled_line_rgb(width, 235, 228, 198, 14, 30, 66, 0, head));
         free(head);
     }
 
@@ -416,13 +455,14 @@ last_action: string) -> string {
         let event_primary: i64 = current_view == 1 ?((cursor_row / 2) * 2): -1;
         let event_secondary: i64 = current_view == 1 ?(event_primary + 1): -1;
         if r == cursor_row || (current_view == 1 && r == event_primary) {
-            append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, line));
+            append_owned(builder, styled_line_compact(color_bright_yellow(), color_blue(), 1, line));
         } else if current_view == 1 && r == event_secondary {
-            append_owned(builder, styled_line(width, color_bright_white(), color_cyan(), 0, line));
+            append_owned(builder, styled_line_compact(color_bright_white(), color_cyan(), 0, line));
         } else if(stripe_key % 4) == 0 {
-            append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, line));
+            // Beat stripe rows: darkened background.
+            append_owned(builder, styled_line_compact_rgb(220, 214, 190, 36, 42, 52, 0, line));
         } else {
-            append_owned(builder, styled_line(width, color_white(), color_black(), 0, line));
+            append_owned(builder, styled_line_compact(color_white(), color_black(), 0, line));
         }
         free(line);
     }
@@ -458,7 +498,7 @@ last_action: string) -> string {
         let y: i64 = 6 + m;
         let move: string = ansi_cursor_pos(y, x);
         let line: string = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
-        let painted: string = format!("{}{}{}{}{}", move, fg(color_bright_white()), bg(color_blue()), line, reset());
+        let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
         let _ = builder_append(overlay_builder, painted);
         free(painted);
         free(line);
