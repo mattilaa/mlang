@@ -1,0 +1,35 @@
+/// \file music.mla
+/// \brief Musical note helpers for tracker/sequencer style UIs (std::music).
+///
+/// The std note domain is enum-like and wraps over `0..127`:
+/// - `0` => `C-0`
+/// - `1` => `C#0`
+/// - ...
+/// - `127` => `G-10`
+///
+/// Typical usage:
+///   mod std::music;
+///   use std::music::note_wrap_u8;
+///   use std::music::note_name_u8;
+///
+///   let n: i64 = note_wrap_u8(130);   // 2
+///   let s: string = note_name_u8(n);  // "D-0"
+
+/// @brief Wrap arbitrary integer to note-u8 domain `0..127`.
+pub fn note_wrap_u8(v: i64) -> i64 {
+    var out: i64 = v % 128;
+    if out < 0 {
+        out = out + 128;
+    }
+    return out;
+}
+
+/// @brief Convert wrapped note-u8 (`0..127`) to tracker note text (`C-0..G-10`).
+pub fn note_name_u8(v: i64) -> string {
+    let n: i64 = note_wrap_u8(v);
+    let semitone: i64 = n % 12;
+    let octave: i64 = n / 12;
+    let names: list<string> = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+    return format!("{}{}", names[semitone], octave);
+}
+
