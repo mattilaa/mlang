@@ -32,10 +32,13 @@ use std::strbuf::builder_free;
 use std::strbuf::builder_new;
 use std::strbuf::builder_take_string;
 use std::strbuf::concat;
+use std::strbuf::eq;
 use std::strbuf::fit_right;
 use std::strbuf::free;
+use std::strbuf::len;
 use std::strbuf::pad_i64_left;
 use std::strbuf::repeat;
+use std::strbuf::sub;
 use std::strbuf::zpad_i64;
 use type StringBuilder = i64;
 
@@ -118,26 +121,38 @@ fn render_meter(step_in: i64, total: i64) -> string {
     return out;
 }
 
-fn pattern_cell(row: i64, ch: i64) -> string {
+fn wrap_mod(v: i64, m: i64) -> i64 {
+    var out: i64 = v % m;
+    if out < 0 { out = out + m; }
+    return out;
+}
+
+fn pattern_cell(row: i64, ch: i64, off_note: i64, off_v1: i64, off_v2: i64) -> string {
     let pitch: list<string> = ["C-4", "D#4", "F-4", "G-4", "A#4", "C-5", "---"];
-    let idx: i64 = (row + ch * 2) % pitch.len();
+    let idx: i64 = wrap_mod((row + ch * 2) + off_note, pitch.len());
     let note: string = pitch[idx];
-    let v1: i64 = (row * 3 + ch * 7) % 128;
-    let v2: i64 = (row * 5 + ch * 11) % 256;
+    let v1: i64 = wrap_mod((row * 3 + ch * 7) + off_v1, 128);
+    let v2: i64 = wrap_mod((row * 5 + ch * 11) + off_v2, 256);
     let v1_s: string = pad_i64_left(v1, 3, " ");
     let v2_s: string = pad_i64_left(v2, 3, " ");
-    let out: string = format!("{} {} {}", note, v1_s, v2_s);
+    let out: string = format!("{}|{}|{}", note, v1_s, v2_s);
     free(v2_s);
     free(v1_s);
     return out;
 }
 
-fn tracker_grid_line(row: i64) -> string {
+fn tracker_grid_line(row: i64,
+                     off_note0: i64, off_note1: i64, off_note2: i64, off_note3: i64,
+                     off_v10: i64, off_v11: i64, off_v12: i64, off_v13: i64,
+                     off_v20: i64, off_v21: i64, off_v22: i64, off_v23: i64) -> string {
     let row_s: string = pad_i64_left(row, 3, " ");
     var line: string = format!("{} |", row_s);
     free(row_s);
     for ch in 0..4 {
-        let cell: string = pattern_cell(row, ch);
+        let off_note: i64 = ch == 0 ? off_note0 : (ch == 1 ? off_note1 : (ch == 2 ? off_note2 : off_note3));
+        let off_v1: i64 = ch == 0 ? off_v10 : (ch == 1 ? off_v11 : (ch == 2 ? off_v12 : off_v13));
+        let off_v2: i64 = ch == 0 ? off_v20 : (ch == 1 ? off_v21 : (ch == 2 ? off_v22 : off_v23));
+        let cell: string = pattern_cell(row, ch, off_note, off_v1, off_v2);
         let cell_fit: string = fit_right(cell, 12, " ");
         let next: string = format!("{} {} |", line, cell_fit);
         free(cell_fit);
@@ -188,7 +203,9 @@ fn event_row_to_step(pattern_id: i64, steps_per_pattern: i64, event_row: i64) ->
     return steps_per_pattern - 1;
 }
 
-fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64) -> string {
+fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
+                   off_event: i64, off_val1: i64, off_val2: i64,
+                   off_mod: i64, off_m1: i64, off_m2: i64) -> string {
     let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row);
     let base_row: i64 = step_to_event_row(pattern_id, step);
     let e_row: i64 = (event_row - base_row) + 1;
@@ -199,13 +216,16 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64) -> s
     let val1s: list<string> = ["A4", "C-5", "32", "16", "L32", "V48", "On", "Maj"];
     let val2s: list<string> = ["32", "64", "08", "00", "96", "12", "01", "07"];
     let mod_names: list<string> = ["Exp", "LFO", "Gate", "Env", "Rnd", "None", "Slew", "Echo"];
-    let idx: i64 = (step + e_row + pattern_id) % ev_names.len();
+    let idx: i64 = wrap_mod((step + e_row + pattern_id) + off_event, ev_names.len());
     let ev_s: string = ev_names[idx];
-    let v1_s: string = val1s[idx];
-    let v2_s: string = val2s[idx];
-    let m_s: string = mod_names[idx];
-    let m1_s: string = zpad_i64((step * 2 + e_row) % 10, 1);
-    let m2_s: string = zpad_i64((step * 3 + e_row * 2) % 10, 1);
+    let v1_idx: i64 = wrap_mod(idx + off_val1, val1s.len());
+    let v2_idx: i64 = wrap_mod(idx + off_val2, val2s.len());
+    let m_idx: i64 = wrap_mod(idx + off_mod, mod_names.len());
+    let v1_s: string = val1s[v1_idx];
+    let v2_s: string = val2s[v2_idx];
+    let m_s: string = mod_names[m_idx];
+    let m1_s: string = zpad_i64(wrap_mod((step * 2 + e_row) + off_m1, 10), 1);
+    let m2_s: string = zpad_i64(wrap_mod((step * 3 + e_row * 2) + off_m2, 10), 1);
 
     let row_col: string = fit_right(row_label, 3, " ");
     let erow_col: string = fit_right(erow_s, 4, " ");
@@ -230,6 +250,113 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64) -> s
     free(erow_s);
     free(row_label);
     return line;
+}
+
+fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> string {
+    if current_view == 0 && col_sel >= 1 && col_sel <= 4 {
+        let n: i64 = len(seg);
+        let b: StringBuilder = builder_new(n + 192);
+        let mode0_base: string = format!("{}{}{}",
+        fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on());
+        let mode0_sep: string = format!("{}{}",
+        fg_rgb(40, 64, 92), bg_rgb(206, 220, 232));
+        let row_base: string = format!("{}{}{}",
+        fg_rgb(24, 24, 24), bg_rgb(106, 150, 176), bold_on());
+        let dark_sub: string = format!("{}{}",
+        fg_rgb(182, 178, 162), bg_rgb(52, 80, 112));
+        let edit_sub: string = format!("{}{}{}",
+        fg_rgb(8, 8, 8), bg_rgb(228, 236, 220), bold_on());
+        let edit_sep: string = format!("{}{}",
+        fg_rgb(166, 176, 188), bg_rgb(72, 104, 136));
+        let _ = builder_append(b, edit_mode == 0 ? mode0_base : row_base);
+        var part_idx: i64 = 0;
+        for i in 0..n {
+            let ch: string = sub(seg, i, 1);
+            if eq(ch, "|") == 1 {
+                let _ = builder_append(b, edit_mode == 0 ? mode0_sep : edit_sep);
+                let _ = builder_append(b, ch);
+                let _ = builder_append(b, edit_mode == 0 ? mode0_base : row_base);
+                part_idx = part_idx + 1;
+            } else {
+                if edit_mode >= 1 && part_idx != sub_sel_pattern {
+                    let _ = builder_append(b, dark_sub);
+                    let _ = builder_append(b, ch);
+                    let _ = builder_append(b, row_base);
+                } else if edit_mode >= 2 && part_idx == sub_sel_pattern {
+                    let _ = builder_append(b, edit_sub);
+                    let _ = builder_append(b, ch);
+                    let _ = builder_append(b, row_base);
+                } else {
+                    let _ = builder_append(b, ch);
+                }
+            }
+            free(ch);
+        }
+        let suffix: string = format!("{}{}{}{}",
+        reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
+        let _ = builder_append(b, suffix);
+        let out: string = builder_take_string(b);
+        builder_free(b);
+        free(suffix);
+        free(edit_sep);
+        free(edit_sub);
+        free(dark_sub);
+        free(row_base);
+        free(mode0_sep);
+        free(mode0_base);
+        return out;
+    }
+    return format!("{}{}{}{}{}{}{}{}",
+        fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on(), seg,
+        reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
+}
+
+fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> string {
+    if col_sel < 0 {
+        return format!("{}", line);
+    }
+    let n: i64 = len(line);
+    let b: StringBuilder = builder_new(n + 128);
+    var start: i64 = 0;
+    var col: i64 = 0;
+    for i in 0..n {
+        let ch: string = sub(line, i, 1);
+        var prev_ok: i32 = 0;
+        var next_ok: i32 = 1;
+        if i > 0 {
+            let prev_ch: string = sub(line, i - 1, 1);
+            prev_ok = eq(prev_ch, " ");
+            free(prev_ch);
+        }
+        if (i + 1) < n {
+            let next_ch: string = sub(line, i + 1, 1);
+            next_ok = eq(next_ch, " ");
+            free(next_ch);
+        }
+        if eq(ch, "|") == 1 && prev_ok == 1 && next_ok == 1 {
+            let seg: string = sub(line, start, i - start);
+            if col == col_sel {
+                let hl: string = highlighted_segment(seg, current_view, col_sel, sub_sel_pattern, edit_mode);
+                let _ = builder_append(b, hl);
+                free(hl);
+            } else {
+                let _ = builder_append(b, seg);
+            }
+            let _ = builder_append(b, ch);
+            free(seg);
+            start = i + 1;
+            col = col + 1;
+        }
+        free(ch);
+    }
+    if start < n {
+        let tail: string = sub(line, start, n - start);
+        let _ = builder_append(b, tail);
+        free(tail);
+    }
+    let out: string = builder_take_string(b);
+    builder_free(b);
+    return out;
 }
 
 fn song_pattern_at(order_row: i64) -> i64 {
@@ -265,7 +392,7 @@ fn menu_tabs_line(focus_idx: i64, open_menu: i32, running: i32, edit_mode: i32) 
     let edit_tab: string = (open_menu == 1 ? (focus_idx == 2 ? "[Edit]" : " Edit ") : " Edit ");
     let help_tab: string = (open_menu == 1 ? (focus_idx == 3 ? "[Help]" : " Help ") : " Help ");
     let run_label: string = running == 1 ? "RUN": "STOP";
-    let edit_label: string = edit_mode == 1 ? "EDIT": "NAV";
+    let edit_label: string = edit_mode != 0 ? "EDIT": "NAV";
     let line: string = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
     file_tab, view_tab, edit_tab, help_tab, run_label, edit_label);
     return line;
@@ -421,6 +548,27 @@ current_view: i64,
 bpm: i64,
 steps_per_pattern: i64,
 active_pattern: i64,
+edit_col_pattern: i64,
+edit_sub_pattern: i64,
+edit_col_event: i64,
+pat_note_off0: i64,
+pat_note_off1: i64,
+pat_note_off2: i64,
+pat_note_off3: i64,
+pat_v1_off0: i64,
+pat_v1_off1: i64,
+pat_v1_off2: i64,
+pat_v1_off3: i64,
+pat_v2_off0: i64,
+pat_v2_off1: i64,
+pat_v2_off2: i64,
+pat_v2_off3: i64,
+ev_off_event: i64,
+ev_off_val1: i64,
+ev_off_val2: i64,
+ev_off_mod: i64,
+ev_off_m1: i64,
+ev_off_m2: i64,
 running: i32,
 focus_idx: i64,
 edit_mode: i32,
@@ -469,11 +617,15 @@ last_action: string) -> string {
         if r < seq_len {
             free(line);
             if current_view == 1 {
-                line = event_grid_line(r, active_pattern, steps_per_pattern);
+                line = event_grid_line(r, active_pattern, steps_per_pattern, ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2);
             } else if current_view == 2 {
                 line = song_grid_line(r);
             } else {
-                line = tracker_grid_line(r);
+                line = tracker_grid_line(
+                    r,
+                    pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
+                    pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
+                    pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3);
             }
         } else {
             free(line);
@@ -484,7 +636,14 @@ last_action: string) -> string {
         let row_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): -1;
         if r == cursor_row {
             // Selected row: brighter background -> black text for contrast.
-            append_owned(builder, styled_line_compact_rgb(24, 24, 24, 106, 150, 176, 1, line));
+            let focused: string = highlight_column_in_line(
+                line,
+                current_view,
+                current_view == 1 ? edit_col_event : (current_view == 0 ? edit_col_pattern : -1),
+                current_view == 0 ? edit_sub_pattern : -1,
+                edit_mode);
+            append_owned(builder, styled_line_compact_rgb(24, 24, 24, 106, 150, 176, 1, focused));
+            free(focused);
         } else if current_view == 1 && row_step == active_step {
             // Same-step companion event rows: subtle blue highlight (not cyan/green).
             append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line));
@@ -508,7 +667,7 @@ last_action: string) -> string {
     free(meter_r);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-    " SPACE=play/stop   TAB=next menu   F1..F4=open   j/k=menu or row(stop)   ENTER=select   q=quit"));
+    " SPACE=play/stop   TAB=next menu   F1..F4=open   ENTER=mode/select   h/l=move   j/k=edit   q=quit"));
 
     let status: string = format!(" Last action: {}", last_action);
     append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0, status));
