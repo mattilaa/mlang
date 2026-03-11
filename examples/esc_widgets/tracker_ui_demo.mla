@@ -60,10 +60,6 @@ fn view_pattern() -> i64 { return 0; }
 fn view_event() -> i64 { return 1; }
 fn view_song() -> i64 { return 2; }
 
-fn song_order_len() -> i64 {
-    return 64;
-}
-
 fn event_count_for_step(pattern_id: i64, step: i64) -> i64 {
     // Deterministic test data: 1..3 events per pattern step.
     return 1 + ((step + pattern_id) % 3);
@@ -115,20 +111,78 @@ fn map_row_between_views(row: i64, from_view: i64, to_view: i64, active_pattern:
     return 0;
 }
 
-fn view_len(view: i64, active_pattern: i64) -> i64 {
+fn view_len(view: i64, active_pattern: i64, song_order: &list<i64>) -> i64 {
     if view == view_event() { return event_total_rows(active_pattern); }
-    if view == view_song() { return song_order_len(); }
+    if view == view_song() { return song_order.len(); }
     return pattern_steps(active_pattern);
 }
 
 fn pattern_steps(pattern_id: i64) -> i64 {
-    let steps: list<i64> = [64, 48, 96, 32];
+    let steps: list<i64> = [64, 64, 32, 48, 64, 32, 96, 64];
     return steps[pattern_id % steps.len()];
 }
 
-fn song_pattern_at(order_row: i64) -> i64 {
-    let order: list<i64> = [0, 1, 2, 1, 3, 2, 0, 3, 1, 2, 0, 1, 3, 0, 2, 3];
-    return order[order_row % order.len()];
+fn song_pattern_at(song_order: &list<i64>, order_row: i64) -> i64 {
+    if song_order.len() == 0 {
+        return 0;
+    }
+    return song_order[order_row % song_order.len()];
+}
+
+fn find_song_row_for_pattern(song_order: &list<i64>, pattern_id: i64) -> i64 {
+    let total: i64 = song_order.len();
+    for i in 0..total {
+        if song_pattern_at(song_order, i) == pattern_id {
+            return i;
+        }
+    }
+    return 0;
+}
+
+fn song_insert_at(src: &list<i64>, idx_in: i64, pat: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = src.len();
+    var idx: i64 = idx_in;
+    if idx < 0 { idx = 0; }
+    if idx > n { idx = n; }
+    for i in 0..idx {
+        out.push(src[i]);
+    }
+    out.push(pat);
+    for i in idx..n {
+        out.push(src[i]);
+    }
+    return out;
+}
+
+fn song_set_at(src: &list<i64>, idx: i64, pat: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = src.len();
+    for i in 0..n {
+        if i == idx {
+            out.push(pat);
+        } else {
+            out.push(src[i]);
+        }
+    }
+    return out;
+}
+
+fn song_bpm_at(song_bpm: &list<i64>, row: i64) -> i64 {
+    if song_bpm.len() == 0 {
+        return 120;
+    }
+    return song_bpm[row % song_bpm.len()];
+}
+
+fn song_bpm_wrap(v: i64) -> i64 {
+    if v < 40 {
+        return 220;
+    }
+    if v > 220 {
+        return 40;
+    }
+    return v;
 }
 
 fn clamp_view_offset(seq_offset_in: i64, cursor_row: i64, visible: i64, seq_len: i64) -> i64 {
@@ -225,10 +279,23 @@ fn main() -> i32 {
     var seq_offset: i64 = 0;
     var current_view: i64 = view_pattern();
     var active_pattern: i64 = 0;
+    var song_order: list<i64> = [
+        0, 1, 2, 3, 4, 5, 6, 7,
+        1, 0, 3, 2, 5, 4, 7, 6,
+        0, 2, 4, 6, 1, 3, 5, 7
+    ];
+    var song_bpm: list<i64> = [
+        120, 120, 120, 120, 120, 120, 120, 120,
+        120, 120, 120, 120, 120, 120, 120, 120,
+        120, 120, 120, 120, 120, 120, 120, 120
+    ];
     let bpm: i64 = 120;
     let steps_per_beat: i64 = 4;
     let tick_hz: i64 = 30;
     var row_phase: i64 = 0;
+    var play_song_row: i64 = 0;
+    var play_step: i64 = 0;
+    var loop_song_row: i64 = -1;
     var quit: i32 = 0;
     var running: i32 = 0;
     var focus_idx: i64 = 0;
@@ -236,6 +303,7 @@ fn main() -> i32 {
     var edit_col_pattern: i64 = 1;
     var edit_sub_pattern: i64 = 0;
     var edit_col_event: i64 = 2;
+    var edit_col_song: i64 = 1;
     var pat_edit_row: i64 = -1;
     var pat_edit_col: i64 = 1;
     var pat_note_off0: i64 = 0;
@@ -318,6 +386,19 @@ fn main() -> i32 {
                     if keycode == 32 {
                         running = running == 1 ? 0 : 1;
                         row_phase = 0;
+                        if running == 1 {
+                            if current_view == view_song() {
+                                play_song_row = cursor_row;
+                                play_step = 0;
+                            } else if current_view == view_pattern() {
+                                play_song_row = find_song_row_for_pattern(song_order, active_pattern);
+                                let max_steps: i64 = pattern_steps(active_pattern);
+                                play_step = cursor_row % max_steps;
+                            } else if current_view == view_event() {
+                                play_song_row = find_song_row_for_pattern(song_order, active_pattern);
+                                play_step = event_row_to_step(active_pattern, cursor_row);
+                            }
+                        }
                     }
                     if keycode == 9 {
                         if open_menu == 0 {
@@ -374,12 +455,12 @@ fn main() -> i32 {
                             if focus_idx == 1 {
                                 if menu_sel == 0 {
                                     if old_view == view_song() {
-                                        active_pattern = song_pattern_at(cursor_row);
+                                        active_pattern = song_pattern_at(song_order, cursor_row);
                                     }
                                     next_view = view_pattern();
                                 } else if menu_sel == 1 {
                                     if old_view == view_song() {
-                                        active_pattern = song_pattern_at(cursor_row);
+                                        active_pattern = song_pattern_at(song_order, cursor_row);
                                     }
                                     next_view = view_event();
                                 } else if menu_sel == 2 {
@@ -444,9 +525,20 @@ fn main() -> i32 {
                                 if edit_col_event == 5 { ev_off_mod = ev_off_mod + 1; }
                                 if edit_col_event == 6 { ev_off_m1 = ev_off_m1 + 1; }
                                 if edit_col_event == 7 { ev_off_m2 = ev_off_m2 + 1; }
+                            } else if current_view == view_song() {
+                                if edit_col_song == 1 {
+                                    let p0: i64 = song_pattern_at(song_order, cursor_row);
+                                    let p1: i64 = (p0 + 1) % 8;
+                                    song_order = song_set_at(song_order, cursor_row, p1);
+                                    active_pattern = p1;
+                                } else if edit_col_song == 3 {
+                                    let b0: i64 = song_bpm_at(song_bpm, cursor_row);
+                                    let b1: i64 = song_bpm_wrap(b0 + 1);
+                                    song_bpm = song_set_at(song_bpm, cursor_row, b1);
+                                }
                             }
                         } else if running == 0 {
-                            let nrows: i64 = view_len(current_view, active_pattern);
+                            let nrows: i64 = view_len(current_view, active_pattern, song_order);
                             cursor_row = min_i64(nrows - 1, cursor_row + 1);
                         }
                     }
@@ -485,9 +577,39 @@ fn main() -> i32 {
                                 if edit_col_event == 5 { ev_off_mod = ev_off_mod - 1; }
                                 if edit_col_event == 6 { ev_off_m1 = ev_off_m1 - 1; }
                                 if edit_col_event == 7 { ev_off_m2 = ev_off_m2 - 1; }
+                            } else if current_view == view_song() {
+                                if edit_col_song == 1 {
+                                    let p0: i64 = song_pattern_at(song_order, cursor_row);
+                                    let p1: i64 = (p0 + 7) % 8;
+                                    song_order = song_set_at(song_order, cursor_row, p1);
+                                    active_pattern = p1;
+                                } else if edit_col_song == 3 {
+                                    let b0: i64 = song_bpm_at(song_bpm, cursor_row);
+                                    let b1: i64 = song_bpm_wrap(b0 - 1);
+                                    song_bpm = song_set_at(song_bpm, cursor_row, b1);
+                                }
                             }
                         } else if running == 0 {
                             cursor_row = max_i64(0, cursor_row - 1);
+                        }
+                    }
+                    if keycode == 79 {
+                        if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
+                            let first_pat: i64 = song_order.len() > 0 ? song_order[0] : 0;
+                            let first_bpm: i64 = song_bpm.len() > 0 ? song_bpm[0] : 120;
+                            song_order = song_insert_at(song_order, cursor_row, first_pat);
+                            song_bpm = song_insert_at(song_bpm, cursor_row, first_bpm);
+                            active_pattern = song_pattern_at(song_order, cursor_row);
+                        }
+                    }
+                    if keycode == 111 {
+                        if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
+                            let first_pat: i64 = song_order.len() > 0 ? song_order[0] : 0;
+                            let first_bpm: i64 = song_bpm.len() > 0 ? song_bpm[0] : 120;
+                            song_order = song_insert_at(song_order, cursor_row + 1, first_pat);
+                            song_bpm = song_insert_at(song_bpm, cursor_row + 1, first_bpm);
+                            cursor_row = cursor_row + 1;
+                            active_pattern = song_pattern_at(song_order, cursor_row);
                         }
                     }
                     if keycode == 108 || keycode == 76 {
@@ -510,6 +632,16 @@ fn main() -> i32 {
                                 }
                             } else if current_view == view_event() {
                                 edit_col_event = edit_col_event == 7 ? 2 : (edit_col_event + 1);
+                            } else if current_view == view_song() {
+                                if running == 1 && edit_mode == 0 && keycode == 108 {
+                                    if loop_song_row < 0 {
+                                        loop_song_row = play_song_row;
+                                    } else {
+                                        loop_song_row = -1;
+                                    }
+                                } else {
+                                    edit_col_song = edit_col_song == 1 ? 3 : 1;
+                                }
                             }
                         }
                     }
@@ -533,6 +665,8 @@ fn main() -> i32 {
                                 }
                             } else if current_view == view_event() {
                                 edit_col_event = edit_col_event == 2 ? 7 : (edit_col_event - 1);
+                            } else if current_view == view_song() {
+                                edit_col_song = edit_col_song == 1 ? 3 : 1;
                             }
                         }
                     }
@@ -612,18 +746,25 @@ fn main() -> i32 {
         let w: i64 = canvas_width(ts.cols);
         let h: i64 = ts.rows;
         let visible: i64 = visible_grid_rows(ts.rows, current_view);
-        let pat_id: i64 = current_view == view_song() ? song_pattern_at(cursor_row) : active_pattern;
+        let pat_id: i64 = current_view == view_song() ? song_pattern_at(song_order, cursor_row) : active_pattern;
         let steps_pp: i64 = pattern_steps(pat_id);
-        let nrows: i64 = view_len(current_view, active_pattern);
+        let nrows: i64 = view_len(current_view, active_pattern, song_order);
         if cursor_row >= nrows {
             cursor_row = nrows - 1;
         }
+        if nrows <= 0 {
+            cursor_row = 0;
+        }
+        let header_pattern: i64 = running == 1 ? active_pattern : pat_id;
+        let song_pos: i64 = running == 1 ? play_song_row : (current_view == view_song() ? cursor_row : find_song_row_for_pattern(song_order, pat_id));
+        let header_bpm: i64 = running == 1 ? song_bpm_at(song_bpm, play_song_row) : song_bpm_at(song_bpm, song_pos);
         seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, nrows);
         let frame: string = render_tracker_ui(
             w, h,
             cursor_row, seq_offset, nrows,
-            current_view, bpm, steps_pp, active_pattern,
-            edit_col_pattern, edit_sub_pattern, edit_col_event,
+            current_view, header_bpm, steps_pp, active_pattern,
+            song_order, song_bpm, song_pos, header_pattern, loop_song_row,
+            edit_col_pattern, edit_sub_pattern, edit_col_event, edit_col_song,
             pat_edit_row, pat_edit_col,
             pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
             pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
@@ -637,15 +778,35 @@ fn main() -> i32 {
         free(clear_home);
         free(frame);
         if running == 1 {
-            row_phase = row_phase + (bpm * steps_per_beat);
+            let bpm_run: i64 = song_bpm_at(song_bpm, play_song_row);
+            row_phase = row_phase + (bpm_run * steps_per_beat);
             while row_phase >= (60 * tick_hz) {
-                let nrows_run: i64 = view_len(current_view, active_pattern);
-                if current_view == view_event() {
-                    let cur_step: i64 = event_row_to_step(active_pattern, cursor_row);
-                    let next_step: i64 = (cur_step + 1) % pattern_steps(active_pattern);
-                    cursor_row = step_to_event_row(active_pattern, next_step);
+                let song_len: i64 = song_order.len();
+                let song_pat: i64 = song_pattern_at(song_order, play_song_row);
+                let song_steps: i64 = pattern_steps(song_pat);
+                play_step = play_step + 1;
+                if play_step >= song_steps {
+                    play_step = 0;
+                    if loop_song_row >= 0 {
+                        play_song_row = loop_song_row % song_len;
+                    } else {
+                        play_song_row = (play_song_row + 1) % song_len;
+                    }
                 } else {
-                    cursor_row = (cursor_row + 1) % nrows_run;
+                    if loop_song_row >= 0 {
+                        play_song_row = loop_song_row % song_len;
+                    } else {
+                        play_song_row = play_song_row % song_len;
+                    }
+                }
+
+                active_pattern = song_pattern_at(song_order, play_song_row);
+                if current_view == view_song() {
+                    cursor_row = play_song_row;
+                } else if current_view == view_pattern() {
+                    cursor_row = play_step % pattern_steps(active_pattern);
+                } else if current_view == view_event() {
+                    cursor_row = step_to_event_row(active_pattern, play_step);
                 }
                 row_phase = row_phase - (60 * tick_hz);
             }

@@ -29,6 +29,10 @@ use std::esc::fg;
 use std::esc::fg_rgb;
 use std::esc::reset;
 use std::music::note_name_u8;
+use std::music::tracker_event_mod_names;
+use std::music::tracker_event_names;
+use std::music::tracker_event_val1_names;
+use std::music::tracker_event_val2_names;
 use std::strbuf::builder_append;
 use std::strbuf::builder_free;
 use std::strbuf::builder_new;
@@ -267,7 +271,17 @@ fn event_row_to_step(pattern_id: i64, steps_per_pattern: i64, event_row: i64) ->
     return steps_per_pattern - 1;
 }
 
+fn event_focus_seg(seg: string, col_idx: i64, focus_col: i64, is_focus_row: i32) -> string {
+    if is_focus_row == 1 && col_idx == focus_col {
+        return format!("{}{}{}{}{}{}{}{}",
+            fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
+            reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
+    }
+    return format!("{}", seg);
+}
+
 fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
+                   focus_row: i64, focus_col: i64,
                    off_event: i64, off_val1: i64, off_val2: i64,
                    off_mod: i64, off_m1: i64, off_m2: i64) -> string {
     let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row);
@@ -276,10 +290,10 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     let row_label: string = e_row == 1 ? zpad_i64(step + 1, 2): format!("{}", "..");
     let erow_s: string = zpad_i64(e_row, 2);
 
-    let ev_names: list<string> = ["PitchB", "NoteOn", "Delay", "Cut", "Pan", "Vol", "Gate", "Arp"];
-    let val1s: list<string> = ["A4", "C-5", "32", "16", "L32", "V48", "On", "Maj"];
-    let val2s: list<string> = ["32", "64", "08", "00", "96", "12", "01", "07"];
-    let mod_names: list<string> = ["Exp", "LFO", "Gate", "Env", "Rnd", "None", "Slew", "Echo"];
+    let ev_names: list<string> = tracker_event_names();
+    let val1s: list<string> = tracker_event_val1_names();
+    let val2s: list<string> = tracker_event_val2_names();
+    let mod_names: list<string> = tracker_event_mod_names();
     let idx: i64 = wrap_mod((step + e_row + pattern_id) + off_event, ev_names.len());
     let ev_s: string = ev_names[idx];
     let v1_idx: i64 = wrap_mod(idx + off_val1, val1s.len());
@@ -299,8 +313,25 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     let mod_col: string = fit_right(m_s, 4, " ");
     let m1_col: string = fit_right(m1_s, 7, " ");
     let m2_col: string = fit_right(m2_s, 7, " ");
+    let is_focus_row: i32 = event_row == focus_row ? 1 : 0;
+    let row_p: string = event_focus_seg(row_col, 0, focus_col, is_focus_row);
+    let erow_p: string = event_focus_seg(erow_col, 1, focus_col, is_focus_row);
+    let ev_p: string = event_focus_seg(ev_col, 2, focus_col, is_focus_row);
+    let v1_p: string = event_focus_seg(v1_col, 3, focus_col, is_focus_row);
+    let v2_p: string = event_focus_seg(v2_col, 4, focus_col, is_focus_row);
+    let mod_p: string = event_focus_seg(mod_col, 5, focus_col, is_focus_row);
+    let m1_p: string = event_focus_seg(m1_col, 6, focus_col, is_focus_row);
+    let m2_p: string = event_focus_seg(m2_col, 7, focus_col, is_focus_row);
     let line: string = format!(" {} | {} | {} | {} | {} | {} | {} | {} |",
-    row_col, erow_col, ev_col, v1_col, v2_col, mod_col, m1_col, m2_col);
+    row_p, erow_p, ev_p, v1_p, v2_p, mod_p, m1_p, m2_p);
+    free(m2_p);
+    free(m1_p);
+    free(mod_p);
+    free(v2_p);
+    free(v1_p);
+    free(ev_p);
+    free(erow_p);
+    free(row_p);
     free(row_col);
     free(erow_col);
     free(m2_col);
@@ -357,6 +388,11 @@ fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pat
         free(edit_sub);
         free(row_base);
         return out;
+    }
+    if current_view == 1 {
+        return format!("{}{}{}{}{}{}{}{}",
+            fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
+            reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
     }
     return format!("{}{}{}{}{}{}{}{}",
         fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on(), seg,
@@ -424,24 +460,29 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
     return out;
 }
 
-fn song_pattern_at(order_row: i64) -> i64 {
-    let order: list<i64> = [0, 1, 2, 1, 3, 2, 0, 3, 1, 2, 0, 1, 3, 0, 2, 3];
-    return order[order_row % order.len()];
-}
-
 fn pattern_steps(pattern_id: i64) -> i64 {
-    let steps: list<i64> = [64, 48, 96, 32];
+    let steps: list<i64> = [64, 64, 32, 48, 64, 32, 96, 64];
     return steps[pattern_id % steps.len()];
 }
 
-fn song_grid_line(order_row: i64) -> string {
+fn song_start_step(song_order: &list<i64>, order_row: i64) -> i64 {
+    var start: i64 = 0;
+    for i in 0..order_row {
+        let p: i64 = song_order[i % song_order.len()];
+        start = start + pattern_steps(p);
+    }
+    return start;
+}
+
+fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>) -> string {
     let row_s: string = pad_i64_left(order_row, 3, " ");
-    let pat_id: i64 = song_pattern_at(order_row);
+    let pat_id: i64 = song_order[order_row % song_order.len()];
     let pat_s: string = zpad_i64(pat_id, 2);
     let steps: i64 = pattern_steps(pat_id);
     let steps_s: string = pad_i64_left(steps, 3, " ");
-    let bpm_s: string = pad_i64_left(120, 3, " ");
-    let start_s: string = pad_i64_left(order_row * 64, 5, " ");
+    let bpm_v: i64 = song_bpm.len() == 0 ? 120 : song_bpm[order_row % song_bpm.len()];
+    let bpm_s: string = pad_i64_left(bpm_v, 3, " ");
+    let start_s: string = pad_i64_left(song_start_step(song_order, order_row), 5, " ");
     let line: string = format!(" {} | {} | {} | {} | {} |", row_s, pat_s, steps_s, bpm_s, start_s);
     free(start_s);
     free(bpm_s);
@@ -613,9 +654,15 @@ current_view: i64,
 bpm: i64,
 steps_per_pattern: i64,
 active_pattern: i64,
+song_order: &list<i64>,
+song_bpm: &list<i64>,
+song_pos: i64,
+header_pattern: i64,
+loop_song_row: i64,
 edit_col_pattern: i64,
 edit_sub_pattern: i64,
 edit_col_event: i64,
+edit_col_song: i64,
 pat_edit_row: i64,
 pat_edit_col: i64,
 pat_note_off0: i64,
@@ -651,14 +698,24 @@ last_action: string) -> string {
     let grid_rows: i64 = grid_rows_raw < 4 ? 4: grid_rows_raw;
     let builder: StringBuilder = builder_new(width * rows + 512);
 
-    append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-    " iMlau Tracker V0.1"));
+    let loop_pos_s: string = loop_song_row >= 0 ? zpad_i64(loop_song_row, 2) : format!("{}", "--");
+    let loop_tag: string = loop_song_row >= 0 ? format!("LOOP:ON@{}", loop_pos_s) : format!("{}", "LOOP:OFF");
+    let title_line: string = format!(" iMlau Tracker V0.1   {}", loop_tag);
+    append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, title_line));
+    free(title_line);
+    free(loop_tag);
+    free(loop_pos_s);
 
-    let info_line: string = format!(" Octave: 1    Sample: 01    Volume: 64    BPM: {}    Steps/Pattern: {}", bpm, steps_per_pattern);
+    let pat_s: string = zpad_i64(header_pattern, 2);
+    let pos_s: string = zpad_i64(song_pos, 2);
+    let info_line: string = format!(" Octave: 1    Sample: 01    Volume: 64    BPM: {}    Steps/Pattern: {}    Pattern: {}", bpm, steps_per_pattern, pat_s);
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 1, info_line));
     free(info_line);
-    append_owned(builder, styled_line(width, color_cyan(), color_black(), 0,
-    " Channel: 00 01 02 03   Song: Example song   Pos: 00"));
+    free(pat_s);
+    let ch_line: string = format!(" Channel: 00 01 02 03   Song: Example song   Pos: {}", pos_s);
+    append_owned(builder, styled_line(width, color_cyan(), color_black(), 0, ch_line));
+    free(ch_line);
+    free(pos_s);
 
     append_owned(builder, sep_line(width));
 
@@ -688,9 +745,13 @@ last_action: string) -> string {
         if r < seq_len {
             free(line);
             if current_view == 1 {
-                line = event_grid_line(r, active_pattern, steps_per_pattern, ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2);
+                let evt_col_sel_line: i64 = edit_col_event < 2 ? 2 : (edit_col_event > 7 ? 7 : edit_col_event);
+                line = event_grid_line(
+                    r, active_pattern, steps_per_pattern,
+                    cursor_row, evt_col_sel_line,
+                    ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2);
             } else if current_view == 2 {
-                line = song_grid_line(r);
+                line = song_grid_line(r, song_order, song_bpm);
             } else {
                 let pat_col_sel_line: i64 = edit_col_pattern < 1 ? 1 : (edit_col_pattern > 4 ? 4 : edit_col_pattern);
                 let pat_sub_sel_line: i64 = edit_sub_pattern < 0 ? 0 : (edit_sub_pattern > 2 ? 2 : edit_sub_pattern);
@@ -716,11 +777,13 @@ last_action: string) -> string {
             let evt_col_sel: i64 = edit_col_event < 2 ? 2 : (edit_col_event > 7 ? 7 : edit_col_event);
             if current_view == 0 {
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line));
+            } else if current_view == 1 {
+                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line));
             } else {
                 let focused: string = highlight_column_in_line(
                     line,
                     current_view,
-                    current_view == 1 ? evt_col_sel : (current_view == 0 ? pat_col_sel : -1),
+                    current_view == 1 ? evt_col_sel : (current_view == 0 ? pat_col_sel : edit_col_song),
                     current_view == 0 ? pat_sub_sel : -1,
                     edit_mode);
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, focused));
@@ -749,13 +812,15 @@ last_action: string) -> string {
     free(meter_r);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-    " SPACE=play/stop   TAB=next menu   F1..F4=open   ENTER=mode/select   h/l=move   j/k=edit   q=quit"));
+    " SPACE=play/stop   TAB=next menu   F1..F4=open   ENTER=mode/select   h/l=move   j/k=edit   l=song loop   O/o=song insert   q=quit"));
 
     let sel_tag: string = current_view == 0
         ? format!("   SEL=Ch{}.{}", edit_col_pattern - 1, pattern_sub_name(edit_sub_pattern))
         : (current_view == 1
             ? format!("   SEL=EventCol{}", edit_col_event)
-            : format!("{}", ""));
+            : (current_view == 2
+                ? format!("   SEL=Song.{}", edit_col_song == 1 ? "Pat" : "BPM")
+                : format!("{}", "")));
     let status: string = format!(" Last action: {}{}", last_action, sel_tag);
     free(sel_tag);
     append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0, status));
