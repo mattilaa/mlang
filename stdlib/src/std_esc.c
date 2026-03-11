@@ -27,6 +27,34 @@ const char* __mlang_std_esc_sgr_code(int code)
     return buf;
 }
 
+const char* __mlang_std_esc_sgr_palette(int is_bg, int idx)
+{
+    if(idx < 0)
+    {
+        idx = 0;
+    }
+    if(idx > 255)
+    {
+        idx = 255;
+    }
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b[%d;5;%dm", is_bg ? 48 : 38, idx);
+    return buf;
+}
+
+const char* __mlang_std_esc_sgr_rgb(int is_bg, int r, int g, int b)
+{
+    if(r < 0) r = 0;
+    if(g < 0) g = 0;
+    if(b < 0) b = 0;
+    if(r > 255) r = 255;
+    if(g > 255) g = 255;
+    if(b > 255) b = 255;
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b[%d;2;%d;%d;%dm", is_bg ? 48 : 38, r, g, b);
+    return buf;
+}
+
 const char* __mlang_std_esc_cursor_code(int code)
 {
     switch(code)

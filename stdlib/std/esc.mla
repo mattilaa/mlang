@@ -10,6 +10,8 @@
 
 extern pub fn __mlang_std_esc_reset() -> string;
 extern pub fn __mlang_std_esc_sgr_code(code: i32) -> string;
+extern pub fn __mlang_std_esc_sgr_palette(is_bg: i32, idx: i32) -> string;
+extern pub fn __mlang_std_esc_sgr_rgb(is_bg: i32, r: i32, g: i32, b: i32) -> string;
 extern pub fn __mlang_std_esc_cursor_code(code: i32) -> string;
 extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> string;
 extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
@@ -112,6 +114,30 @@ pub fn fg(color: Color) -> string {
 pub fn bg(color: Color) -> string {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(bg_code(color));
+}
+
+/// @brief Set 256-color foreground (0..255).
+pub fn fg_256(index: i32) -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_sgr_palette(0, index);
+}
+
+/// @brief Set 256-color background (0..255).
+pub fn bg_256(index: i32) -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_sgr_palette(1, index);
+}
+
+/// @brief Set truecolor foreground using RGB channels (0..255 each).
+pub fn fg_rgb(r: i32, g: i32, b: i32) -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_sgr_rgb(0, r, g, b);
+}
+
+/// @brief Set truecolor background using RGB channels (0..255 each).
+pub fn bg_rgb(r: i32, g: i32, b: i32) -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_sgr_rgb(1, r, g, b);
 }
 
 /// @brief Enable bold text.
