@@ -483,12 +483,14 @@ last_action: string) -> string {
         let active_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, cursor_row): -1;
         let row_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): -1;
         if r == cursor_row {
-            append_owned(builder, styled_line_compact(color_bright_yellow(), color_blue(), 1, line));
+            // Selected row: brighter background -> black text for contrast.
+            append_owned(builder, styled_line_compact_rgb(24, 24, 24, 106, 150, 176, 1, line));
         } else if current_view == 1 && row_step == active_step {
-            append_owned(builder, styled_line_compact(color_bright_white(), color_cyan(), 0, line));
+            // Same-step companion event rows: subtle blue highlight (not cyan/green).
+            append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line));
         } else if(stripe_key % 4) == 0 {
-            // Beat stripe rows: darkened background.
-            append_owned(builder, styled_line_compact_rgb(220, 214, 190, 36, 42, 52, 0, line));
+            // Beat stripe rows: slightly brighter for clearer rhythm grouping.
+            append_owned(builder, styled_line_compact_rgb(224, 218, 194, 44, 50, 62, 0, line));
         } else {
             append_owned(builder, styled_line_compact(color_white(), color_black(), 0, line));
         }
