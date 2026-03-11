@@ -55,6 +55,13 @@ fn min_i64(a: i64, b: i64) -> i64 {
     return a < b ? a : b;
 }
 
+fn view_pattern() -> i64 { return 0; }
+fn view_event() -> i64 { return 1; }
+
+fn view_len(view: i64) -> i64 {
+    return view == view_event() ? 512 : 256;
+}
+
 fn clamp_view_offset(seq_offset_in: i64, cursor_row: i64, visible: i64, seq_len: i64) -> i64 {
     var seq_offset: i64 = seq_offset_in;
     if cursor_row < seq_offset {
@@ -96,11 +103,11 @@ fn menu_item_name(focus_idx: i64, item_idx: i64) -> string {
     }
     if focus_idx == 1 {
         if item_idx == 0 { return format!("{}", "Pattern"); }
-        if item_idx == 1 { return format!("{}", "Mixer"); }
-        if item_idx == 2 { return format!("{}", "Instruments"); }
-        if item_idx == 3 { return format!("{}", "Scope"); }
-        if item_idx == 4 { return format!("{}", "FFT"); }
-        return format!("{}", "Fullscreen");
+        if item_idx == 1 { return format!("{}", "Event view"); }
+        if item_idx == 2 { return format!("{}", "Mixer"); }
+        if item_idx == 3 { return format!("{}", "Instruments"); }
+        if item_idx == 4 { return format!("{}", "Scope"); }
+        return format!("{}", "FFT");
     }
     if focus_idx == 2 {
         if item_idx == 0 { return format!("{}", "Cut"); }
@@ -147,7 +154,7 @@ fn main() -> i32 {
     let ev_buf: string = String::with_capacity(32);
     var cursor_row: i64 = 0;
     var seq_offset: i64 = 0;
-    let seq_len: i64 = 256;
+    var current_view: i64 = view_pattern();
     var quit: i32 = 0;
     var running: i32 = 0;
     var focus_idx: i64 = 0;
@@ -238,6 +245,17 @@ fn main() -> i32 {
                             let mname: string = menu_name(focus_idx);
                             let iname: string = menu_item_name(focus_idx, menu_sel);
                             let action: string = format!("{} -> {}", mname, iname);
+                            if focus_idx == 1 {
+                                if menu_sel == 0 {
+                                    current_view = view_pattern();
+                                    cursor_row = 0;
+                                    seq_offset = 0;
+                                } else if menu_sel == 1 {
+                                    current_view = view_event();
+                                    cursor_row = 0;
+                                    seq_offset = 0;
+                                }
+                            }
                             free(mname);
                             free(iname);
                             free(last_action);
@@ -252,7 +270,8 @@ fn main() -> i32 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = (menu_sel + 1) % count;
                         } else if running == 0 {
-                            cursor_row = min_i64(seq_len - 1, cursor_row + 1);
+                            let nrows: i64 = view_len(current_view);
+                            cursor_row = min_i64(nrows - 1, cursor_row + 1);
                         }
                     }
                     if keycode == 107 || keycode == 75 {
@@ -315,8 +334,12 @@ fn main() -> i32 {
         let w: i64 = canvas_width(ts.cols);
         let h: i64 = ts.rows;
         let visible: i64 = visible_grid_rows(ts.rows);
-        seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, seq_len);
-        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, seq_len, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
+        let nrows: i64 = view_len(current_view);
+        if cursor_row >= nrows {
+            cursor_row = nrows - 1;
+        }
+        seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, nrows);
+        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, nrows, current_view, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -324,7 +347,8 @@ fn main() -> i32 {
         free(clear_home);
         free(frame);
         if running == 1 {
-            cursor_row = (cursor_row + 1) % seq_len;
+            let nrows_run: i64 = view_len(current_view);
+            cursor_row = (cursor_row + 1) % nrows_run;
         }
     }
 

@@ -94,7 +94,7 @@ fn pattern_cell(row: i64, ch: i64) -> string {
 }
 
 fn tracker_grid_line(row: i64) -> string {
-    let row_s: string = pad_i64_left(row, 2, " ");
+    let row_s: string = pad_i64_left(row, 3, " ");
     var line: string = format!(" {} |", row_s);
     free(row_s);
     for ch in 0..4 {
@@ -106,6 +106,49 @@ fn tracker_grid_line(row: i64) -> string {
         free(line);
         line = next;
     }
+    return line;
+}
+
+fn event_grid_line(event_row: i64) -> string {
+    let row_num: i64 = (event_row / 2) + 1;
+    let e_row: i64 = (event_row % 2) + 1;
+    let row_label: string = e_row == 1 ? zpad_i64(row_num, 2) : format!("{}", "..");
+    let erow_s: string = zpad_i64(e_row, 2);
+
+    let ev_names: list<string> = ["PitchB", "NoteOn", "Delay", "Cut", "Pan", "Vol"];
+    let val1s: list<string> = ["A4", "C-5", "32", "16", "L32", "V48"];
+    let val2s: list<string> = ["32", "64", "08", "00", "96", "12"];
+    let mod_names: list<string> = ["Exp", "LFO", "Gate", "Env", "Rnd", "None"];
+    let idx: i64 = event_row % ev_names.len();
+    let ev_s: string = ev_names[idx];
+    let v1_s: string = val1s[idx];
+    let v2_s: string = val2s[idx];
+    let m_s: string = mod_names[idx];
+    let m1_s: string = zpad_i64((event_row * 2) % 10, 1);
+    let m2_s: string = zpad_i64((event_row * 3 + 1) % 10, 1);
+
+    let row_col: string = fit_right(row_label, 3, " ");
+    let erow_col: string = fit_right(erow_s, 4, " ");
+    let ev_col: string = fit_right(ev_s, 10, " ");
+    let v1_col: string = fit_right(v1_s, 4, " ");
+    let v2_col: string = fit_right(v2_s, 4, " ");
+    let mod_col: string = fit_right(m_s, 4, " ");
+    let m1_col: string = fit_right(m1_s, 7, " ");
+    let m2_col: string = fit_right(m2_s, 7, " ");
+    let line: string = format!(" {} | {} | {} | {} | {} | {} | {} | {} |",
+                               row_col, erow_col, ev_col, v1_col, v2_col, mod_col, m1_col, m2_col);
+    free(row_col);
+    free(erow_col);
+    free(m2_col);
+    free(m1_col);
+    free(mod_col);
+    free(v2_col);
+    free(v1_col);
+    free(ev_col);
+    free(m2_s);
+    free(m1_s);
+    free(erow_s);
+    free(row_label);
     return line;
 }
 
@@ -145,11 +188,11 @@ fn menu_item_text(focus_idx: i64, item_idx: i64) -> string {
     }
     if focus_idx == 1 {
         if item_idx == 0 { return format!("{}", "Pattern"); }
-        if item_idx == 1 { return format!("{}", "Mixer"); }
-        if item_idx == 2 { return format!("{}", "Instruments"); }
-        if item_idx == 3 { return format!("{}", "Scope"); }
-        if item_idx == 4 { return format!("{}", "FFT"); }
-        return format!("{}", "Fullscreen");
+        if item_idx == 1 { return format!("{}", "Event view"); }
+        if item_idx == 2 { return format!("{}", "Mixer"); }
+        if item_idx == 3 { return format!("{}", "Instruments"); }
+        if item_idx == 4 { return format!("{}", "Scope"); }
+        return format!("{}", "FFT");
     }
     if focus_idx == 2 {
         if item_idx == 0 { return format!("{}", "Cut"); }
@@ -182,7 +225,7 @@ fn menu_item_shortcut(focus_idx: i64, item_idx: i64) -> string {
         if item_idx == 2 { return format!("{}", "F7"); }
         if item_idx == 3 { return format!("{}", "F8"); }
         if item_idx == 4 { return format!("{}", "F9"); }
-        return format!("{}", "F11");
+        return format!("{}", "F10");
     }
     if focus_idx == 2 {
         if item_idx == 0 { return format!("{}", "ALT-X"); }
@@ -267,6 +310,7 @@ pub fn render_tracker_ui(width_in: i64,
                          cursor_row: i64,
                          seq_offset: i64,
                          seq_len: i64,
+                         current_view: i64,
                          running: i32,
                          focus_idx: i64,
                          edit_mode: i32,
@@ -285,7 +329,7 @@ pub fn render_tracker_ui(width_in: i64,
         " Scream Tracker V2.2   Unregistered Version!   [ESC Widgets Demo]"));
 
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 1,
-        " Octave: 1    Sample: 01    Volume: 64    Tempo: 6    Pattern: 00"));
+        " Octave: 1    Sample: 01    Volume: 64    Tempo: 4    Pattern: 00"));
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 0,
         " Channel: 00 01 02 03   Song: Example song   Pos: 00"));
 
@@ -295,15 +339,28 @@ pub fn render_tracker_ui(width_in: i64,
     append_owned(builder, styled_line(width, color_bright_white(), color_blue(), 1, menu_tabs));
     free(menu_tabs);
 
-    append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
-        " Row |   Ch0         |   Ch1         |   Ch2         |   Ch3         |"));
+    if current_view == 1 {
+        append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
+            " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |"));
+    } else {
+        append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
+            " Row |   Ch0         |   Ch1         |   Ch2         |   Ch3         |"));
+    }
 
     for i in 0..grid_rows {
         let r: i64 = seq_offset + i;
-        let line: string = r < seq_len ? tracker_grid_line(r) : format!("{}", "");
+        var line: string = format!("{}", "");
+        if r < seq_len {
+            free(line);
+            line = current_view == 1 ? event_grid_line(r) : tracker_grid_line(r);
+        } else {
+            free(line);
+            line = format!("{}", "");
+        }
+        let stripe_key: i64 = current_view == 1 ? (r / 2) : r;
         if r == cursor_row {
             append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, line));
-        } else if (r % 4) == 0 {
+        } else if (stripe_key % 4) == 0 {
             append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, line));
         } else {
             append_owned(builder, styled_line(width, color_white(), color_black(), 0, line));
