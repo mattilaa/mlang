@@ -194,11 +194,15 @@ int __mlang_std_term_stderr_truecolor(void)
 int __mlang_std_term_stdout_supports_ansi(void)
 {
 #if defined(_WIN32)
+    if(env_flag_enabled("MLANG_FORCE_ANSI") || env_flag_enabled("FORCE_COLOR"))
+        return 1;
     return __mlang_std_term_stdout_is_tty() ? 1 : 0;
 #else
-    if(__mlang_std_term_stdout_is_tty() == 0)
-        return 0;
+    if(env_flag_enabled("MLANG_FORCE_ANSI") || env_flag_enabled("FORCE_COLOR"))
+        return 1;
     if(env_flag_enabled("NO_COLOR"))
+        return 0;
+    if(__mlang_std_term_stdout_is_tty() == 0)
         return 0;
     return 1;
 #endif

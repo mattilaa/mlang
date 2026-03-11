@@ -161,3 +161,38 @@ pub fn cursor_move(dir: CursorDirection, amount: i32) -> string {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_move(dir, amount);
 }
+
+/// @brief Enter alternate screen buffer (ncurses-like full-screen mode).
+pub fn alt_screen_on() -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return "\x1b[?1049h";
+}
+
+/// @brief Leave alternate screen buffer.
+pub fn alt_screen_off() -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return "\x1b[?1049l";
+}
+
+/// @brief Clear from cursor to end-of-line.
+pub fn clear_eol() -> string {
+    if ansi_enabled() == 0 { return ""; }
+    return "\x1b[K";
+}
+
+/// @brief ncurses-style standout aliases.
+pub fn standout_on() -> string { return inverse_on(); }
+pub fn standout_off() -> string { return inverse_off(); }
+
+/// @brief ncurses-style ACS line-drawing (ASCII-safe).
+pub fn acs_hline() -> string { return format!("{}", "─"); }
+pub fn acs_vline() -> string { return format!("{}", "│"); }
+pub fn acs_ulcorner() -> string { return format!("{}", "┌"); }
+pub fn acs_urcorner() -> string { return format!("{}", "┐"); }
+pub fn acs_llcorner() -> string { return format!("{}", "└"); }
+pub fn acs_lrcorner() -> string { return format!("{}", "┘"); }
+pub fn acs_ltee() -> string { return format!("{}", "├"); }
+pub fn acs_rtee() -> string { return format!("{}", "┤"); }
+pub fn acs_ttee() -> string { return format!("{}", "┬"); }
+pub fn acs_btee() -> string { return format!("{}", "┴"); }
+pub fn acs_plus() -> string { return format!("{}", "┼"); }

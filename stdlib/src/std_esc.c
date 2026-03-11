@@ -6,7 +6,14 @@
 #define MLANG_ESC_TLS
 #endif
 
-static MLANG_ESC_TLS char g_mlang_esc_buf[32];
+static MLANG_ESC_TLS char g_mlang_esc_bufs[8][32];
+static MLANG_ESC_TLS int g_mlang_esc_buf_idx = 0;
+
+static char* next_esc_buf(void)
+{
+    g_mlang_esc_buf_idx = (g_mlang_esc_buf_idx + 1) & 7;
+    return g_mlang_esc_bufs[g_mlang_esc_buf_idx];
+}
 
 const char* __mlang_std_esc_reset(void)
 {
@@ -15,8 +22,9 @@ const char* __mlang_std_esc_reset(void)
 
 const char* __mlang_std_esc_sgr_code(int code)
 {
-    snprintf(g_mlang_esc_buf, sizeof(g_mlang_esc_buf), "\x1b[%dm", code);
-    return g_mlang_esc_buf;
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b[%dm", code);
+    return buf;
 }
 
 const char* __mlang_std_esc_cursor_code(int code)
@@ -69,7 +77,7 @@ const char* __mlang_std_esc_cursor_move(int dir, int amount)
             break;
     }
 
-    snprintf(g_mlang_esc_buf, sizeof(g_mlang_esc_buf), "\x1b[%d%c", amount,
-             cmd);
-    return g_mlang_esc_buf;
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b[%d%c", amount, cmd);
+    return buf;
 }
