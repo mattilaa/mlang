@@ -348,7 +348,6 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
 }
 
 fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> string {
-    let _ = edit_mode;
     if current_view == 0 && col_sel >= 1 && col_sel <= 4 {
         let n: i64 = len(seg);
         let b: StringBuilder = builder_new(n + 192);
@@ -393,6 +392,16 @@ fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pat
         return format!("{}{}{}{}{}{}{}{}",
             fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
             reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
+    }
+    if current_view == 2 {
+        if edit_mode != 0 {
+            return format!("{}{}{}{}{}{}{}{}",
+                fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), seg,
+                reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
+        }
+        return format!("{}{}{}{}{}{}{}{}",
+            fg_rgb(12, 12, 12), bg_rgb(228, 236, 246), bold_on(), seg,
+            reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
     }
     return format!("{}{}{}{}{}{}{}{}",
         fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on(), seg,
@@ -482,9 +491,12 @@ fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>) 
     let steps_s: string = pad_i64_left(steps, 3, " ");
     let bpm_v: i64 = song_bpm.len() == 0 ? 120 : song_bpm[order_row % song_bpm.len()];
     let bpm_s: string = pad_i64_left(bpm_v, 3, " ");
-    let start_s: string = pad_i64_left(song_start_step(song_order, order_row), 5, " ");
-    let line: string = format!(" {} | {} | {} | {} | {} |", row_s, pat_s, steps_s, bpm_s, start_s);
+    let start_v: i64 = song_start_step(song_order, order_row);
+    let beat_s: string = pad_i64_left(start_v / 4, 5, " ");
+    let start_s: string = pad_i64_left(start_v, 5, " ");
+    let line: string = format!(" {} | {} | {} | {} | {} | {} |", row_s, pat_s, steps_s, bpm_s, beat_s, start_s);
     free(start_s);
+    free(beat_s);
     free(bpm_s);
     free(steps_s);
     free(pat_s);
@@ -658,6 +670,7 @@ song_order: &list<i64>,
 song_bpm: &list<i64>,
 song_pos: i64,
 header_pattern: i64,
+transport_step: i64,
 loop_song_row: i64,
 edit_col_pattern: i64,
 edit_sub_pattern: i64,
@@ -694,7 +707,7 @@ last_action: string) -> string {
     // Keep one spare terminal row to avoid bottom-edge newline scroll.
     let drop_rows: i64 = open_menu == 1 ?(menu_item_count(focus_idx) + 2): 0;
     let pattern_header_extra: i64 = current_view == 0 ? 1 : 0;
-    let grid_rows_raw: i64 = rows - 11 - pattern_header_extra;
+    let grid_rows_raw: i64 = rows - 9 - pattern_header_extra;
     let grid_rows: i64 = grid_rows_raw < 4 ? 4: grid_rows_raw;
     let builder: StringBuilder = builder_new(width * rows + 512);
 
@@ -729,7 +742,7 @@ last_action: string) -> string {
         " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |"));
     } else if current_view == 2 {
         append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
-        " Row | Pat | Stp | BPM | Start |"));
+        " Row | Pat | Stp | BPM | Beat | Start |"));
     } else {
         let head: string = tracker_header_line();
         append_owned(builder, styled_line_rgb(width, 235, 228, 198, 14, 30, 66, 0, head));
@@ -792,6 +805,16 @@ last_action: string) -> string {
         } else if current_view == 1 && row_step == active_step {
             // Same-step companion event rows: subtle blue highlight (not cyan/green).
             append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line));
+        } else if current_view == 2 {
+            let focused_song: string = highlight_column_in_line(line, current_view, edit_col_song, -1, edit_mode);
+            if (r % 4) == 0 {
+                append_owned(builder, styled_line_compact_rgb(224, 218, 194, 42, 50, 66, 0, focused_song));
+            } else if (r % 2) == 0 {
+                append_owned(builder, styled_line_compact_rgb(224, 218, 194, 36, 42, 56, 0, focused_song));
+            } else {
+                append_owned(builder, styled_line_compact(color_white(), color_black(), 0, focused_song));
+            }
+            free(focused_song);
         } else if(stripe_key % 4) == 0 {
             // Beat stripe rows: slightly brighter for clearer rhythm grouping.
             append_owned(builder, styled_line_compact_rgb(224, 218, 194, 44, 50, 62, 0, line));
@@ -803,28 +826,18 @@ last_action: string) -> string {
 
     append_owned(builder, sep_line(width));
 
-    let meter_l: string = render_meter(18, 30);
-    let meter_r: string = render_meter(22, 30);
-    let meter_line: string = format!(" L [{}]   R [{}]   CPU {}%   DSP {}%", meter_l, meter_r, 24, 31);
-    append_owned(builder, styled_line(width, color_green(), color_black(), 0, meter_line));
-    free(meter_line);
-    free(meter_l);
-    free(meter_r);
-
-    append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-    " SPACE=play/stop   TAB=next menu   F1..F4=open   ENTER=mode/select   h/l=move   j/k=edit   l=song loop   O/o=song insert   q=quit"));
-
-    let sel_tag: string = current_view == 0
-        ? format!("   SEL=Ch{}.{}", edit_col_pattern - 1, pattern_sub_name(edit_sub_pattern))
-        : (current_view == 1
-            ? format!("   SEL=EventCol{}", edit_col_event)
-            : (current_view == 2
-                ? format!("   SEL=Song.{}", edit_col_song == 1 ? "Pat" : "BPM")
-                : format!("{}", "")));
-    let status: string = format!(" Last action: {}{}", last_action, sel_tag);
-    free(sel_tag);
-    append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0, status));
-    free(status);
+    let pos_s2: string = zpad_i64(song_pos, 2);
+    let pat_s2: string = zpad_i64(header_pattern, 2);
+    let step_s: string = zpad_i64(transport_step + 1, 3);
+    let total_s: string = zpad_i64(steps_per_pattern, 3);
+    let loop_s: string = loop_song_row >= 0 ? "ON" : "OFF";
+    let transport: string = format!(" Pos:{}   Pattern:{}   Step:{}/{}   Loop:{}", pos_s2, pat_s2, step_s, total_s, loop_s);
+    append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, transport));
+    free(transport);
+    free(total_s);
+    free(step_s);
+    free(pat_s2);
+    free(pos_s2);
 
     let base: string = builder_take_string(builder);
     builder_free(builder);

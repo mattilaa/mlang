@@ -758,12 +758,19 @@ fn main() -> i32 {
         let header_pattern: i64 = running == 1 ? active_pattern : pat_id;
         let song_pos: i64 = running == 1 ? play_song_row : (current_view == view_song() ? cursor_row : find_song_row_for_pattern(song_order, pat_id));
         let header_bpm: i64 = running == 1 ? song_bpm_at(song_bpm, play_song_row) : song_bpm_at(song_bpm, song_pos);
+        let transport_step: i64 = running == 1
+            ? play_step
+            : (current_view == view_pattern()
+                ? (cursor_row % steps_pp)
+                : (current_view == view_event()
+                    ? event_row_to_step(pat_id, cursor_row)
+                    : 0));
         seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, nrows);
         let frame: string = render_tracker_ui(
             w, h,
             cursor_row, seq_offset, nrows,
             current_view, header_bpm, steps_pp, active_pattern,
-            song_order, song_bpm, song_pos, header_pattern, loop_song_row,
+            song_order, song_bpm, song_pos, header_pattern, transport_step, loop_song_row,
             edit_col_pattern, edit_sub_pattern, edit_col_event, edit_col_song,
             pat_edit_row, pat_edit_col,
             pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
