@@ -186,8 +186,28 @@ fn main() -> i32 {
 
             if esc_mode == 0 {
                 if keycode == 27 {
-                    esc_mode = 1;
-                    csi_num = 0;
+                    // Peek one byte so Shift+Tab/F-keys are not mistaken for plain ESC.
+                    let keycode2: i32 = read_keycode_nonblocking(stdin());
+                    if keycode2 == 91 {
+                        esc_mode = 2;
+                        csi_num = 0;
+                    } else if keycode2 == 79 {
+                        esc_mode = 3;
+                    } else if keycode2 == -2 {
+                        if open_menu == 1 {
+                            open_menu = 0;
+                            menu_sel = 0;
+                        } else {
+                            esc_mode = 1;
+                            csi_num = 0;
+                        }
+                    } else {
+                        if open_menu == 1 {
+                            open_menu = 0;
+                            menu_sel = 0;
+                        }
+                        esc_mode = 0;
+                    }
                 } else {
                     if keycode == 113 || keycode == 81 {
                         quit = 1;
@@ -298,6 +318,12 @@ fn main() -> i32 {
             } else if esc_mode == 2 {
                 if keycode >= 48 && keycode <= 57 {
                     csi_num = csi_num * 10 + (keycode - 48);
+                } else if keycode == 90 {
+                    // CSI Z = Shift+Tab
+                    focus_idx = focus_idx == 0 ? 3 : (focus_idx - 1);
+                    open_menu = 1;
+                    menu_sel = 0;
+                    esc_mode = 0;
                 } else if keycode == 126 {
                     if csi_num >= 11 && csi_num <= 14 {
                         focus_idx = csi_num - 11;
