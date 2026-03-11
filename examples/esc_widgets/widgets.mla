@@ -162,23 +162,50 @@ fn tracker_header_line() -> string {
     return line;
 }
 
-fn event_grid_line(event_row: i64) -> string {
-    let row_num: i64 = (event_row / 2) + 1;
-    let e_row: i64 = (event_row % 2) + 1;
-    let row_label: string = e_row == 1 ? zpad_i64(row_num, 2): format!("{}", "..");
+fn event_count_for_step(pattern_id: i64, step: i64) -> i64 {
+    return 1 + ((step + pattern_id) % 3);
+}
+
+fn step_to_event_row(pattern_id: i64, step: i64) -> i64 {
+    var row: i64 = 0;
+    for s in 0..step {
+        row = row + event_count_for_step(pattern_id, s);
+    }
+    return row;
+}
+
+fn event_row_to_step(pattern_id: i64, steps_per_pattern: i64, event_row: i64) -> i64 {
+    var row: i64 = event_row;
+    var s: i64 = 0;
+    while s < steps_per_pattern {
+        let c: i64 = event_count_for_step(pattern_id, s);
+        if row < c {
+            return s;
+        }
+        row = row - c;
+        s = s + 1;
+    }
+    return steps_per_pattern - 1;
+}
+
+fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64) -> string {
+    let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row);
+    let base_row: i64 = step_to_event_row(pattern_id, step);
+    let e_row: i64 = (event_row - base_row) + 1;
+    let row_label: string = e_row == 1 ? zpad_i64(step + 1, 2): format!("{}", "..");
     let erow_s: string = zpad_i64(e_row, 2);
 
-    let ev_names: list<string> = ["PitchB", "NoteOn", "Delay", "Cut", "Pan", "Vol"];
-    let val1s: list<string> = ["A4", "C-5", "32", "16", "L32", "V48"];
-    let val2s: list<string> = ["32", "64", "08", "00", "96", "12"];
-    let mod_names: list<string> = ["Exp", "LFO", "Gate", "Env", "Rnd", "None"];
-    let idx: i64 = event_row % ev_names.len();
+    let ev_names: list<string> = ["PitchB", "NoteOn", "Delay", "Cut", "Pan", "Vol", "Gate", "Arp"];
+    let val1s: list<string> = ["A4", "C-5", "32", "16", "L32", "V48", "On", "Maj"];
+    let val2s: list<string> = ["32", "64", "08", "00", "96", "12", "01", "07"];
+    let mod_names: list<string> = ["Exp", "LFO", "Gate", "Env", "Rnd", "None", "Slew", "Echo"];
+    let idx: i64 = (step + e_row + pattern_id) % ev_names.len();
     let ev_s: string = ev_names[idx];
     let v1_s: string = val1s[idx];
     let v2_s: string = val2s[idx];
     let m_s: string = mod_names[idx];
-    let m1_s: string = zpad_i64((event_row * 2) % 10, 1);
-    let m2_s: string = zpad_i64((event_row * 3 + 1) % 10, 1);
+    let m1_s: string = zpad_i64((step * 2 + e_row) % 10, 1);
+    let m2_s: string = zpad_i64((step * 3 + e_row * 2) % 10, 1);
 
     let row_col: string = fit_right(row_label, 3, " ");
     let erow_col: string = fit_right(erow_s, 4, " ");
@@ -393,6 +420,7 @@ seq_len: i64,
 current_view: i64,
 bpm: i64,
 steps_per_pattern: i64,
+active_pattern: i64,
 running: i32,
 focus_idx: i64,
 edit_mode: i32,
@@ -441,7 +469,7 @@ last_action: string) -> string {
         if r < seq_len {
             free(line);
             if current_view == 1 {
-                line = event_grid_line(r);
+                line = event_grid_line(r, active_pattern, steps_per_pattern);
             } else if current_view == 2 {
                 line = song_grid_line(r);
             } else {
@@ -451,12 +479,12 @@ last_action: string) -> string {
             free(line);
             line = format!("{}", "");
         }
-        let stripe_key: i64 = current_view == 1 ?(r / 2): r;
-        let event_primary: i64 = current_view == 1 ?((cursor_row / 2) * 2): -1;
-        let event_secondary: i64 = current_view == 1 ?(event_primary + 1): -1;
-        if r == cursor_row || (current_view == 1 && r == event_primary) {
+        let stripe_key: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): r;
+        let active_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, cursor_row): -1;
+        let row_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): -1;
+        if r == cursor_row {
             append_owned(builder, styled_line_compact(color_bright_yellow(), color_blue(), 1, line));
-        } else if current_view == 1 && r == event_secondary {
+        } else if current_view == 1 && row_step == active_step {
             append_owned(builder, styled_line_compact(color_bright_white(), color_cyan(), 0, line));
         } else if(stripe_key % 4) == 0 {
             // Beat stripe rows: darkened background.

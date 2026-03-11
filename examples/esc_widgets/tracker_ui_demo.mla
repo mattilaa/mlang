@@ -63,28 +63,61 @@ fn song_order_len() -> i64 {
     return 64;
 }
 
-fn map_row_between_views(row: i64, from_view: i64, to_view: i64) -> i64 {
+fn event_count_for_step(pattern_id: i64, step: i64) -> i64 {
+    // Deterministic test data: 1..3 events per pattern step.
+    return 1 + ((step + pattern_id) % 3);
+}
+
+fn event_total_rows(pattern_id: i64) -> i64 {
+    let steps: i64 = pattern_steps(pattern_id);
+    var total: i64 = 0;
+    for s in 0..steps {
+        total = total + event_count_for_step(pattern_id, s);
+    }
+    return total;
+}
+
+fn step_to_event_row(pattern_id: i64, step: i64) -> i64 {
+    var row: i64 = 0;
+    for s in 0..step {
+        row = row + event_count_for_step(pattern_id, s);
+    }
+    return row;
+}
+
+fn event_row_to_step(pattern_id: i64, event_row: i64) -> i64 {
+    let steps: i64 = pattern_steps(pattern_id);
+    var row: i64 = event_row;
+    var s: i64 = 0;
+    while s < steps {
+        let c: i64 = event_count_for_step(pattern_id, s);
+        if row < c {
+            return s;
+        }
+        row = row - c;
+        s = s + 1;
+    }
+    return steps - 1;
+}
+
+fn map_row_between_views(row: i64, from_view: i64, to_view: i64, active_pattern: i64) -> i64 {
     if from_view == to_view {
         return row;
     }
     if from_view == view_pattern() && to_view == view_event() {
-        return row * 2;
+        return step_to_event_row(active_pattern, row);
     }
     if from_view == view_event() && to_view == view_pattern() {
-        return row / 2;
+        return event_row_to_step(active_pattern, row);
     }
     // Song view uses order rows, so switching to/from it starts at row 0.
     return 0;
 }
 
 fn view_len(view: i64, active_pattern: i64) -> i64 {
-    if view == view_event() { return pattern_steps(active_pattern) * 2; }
+    if view == view_event() { return event_total_rows(active_pattern); }
     if view == view_song() { return song_order_len(); }
     return pattern_steps(active_pattern);
-}
-
-fn run_step_rows(view: i64) -> i64 {
-    return view == view_event() ? 2 : 1;
 }
 
 fn pattern_steps(pattern_id: i64) -> i64 {
@@ -331,7 +364,7 @@ fn main() -> i32 {
                                 }
                             }
                             current_view = next_view;
-                            cursor_row = map_row_between_views(cursor_row, old_view, current_view);
+                            cursor_row = map_row_between_views(cursor_row, old_view, current_view, active_pattern);
                             seq_offset = 0;
                             free(mname);
                             free(iname);
@@ -425,7 +458,7 @@ fn main() -> i32 {
             cursor_row = nrows - 1;
         }
         seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, nrows);
-        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, nrows, current_view, bpm, steps_pp, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
+        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, nrows, current_view, bpm, steps_pp, active_pattern, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -436,8 +469,13 @@ fn main() -> i32 {
             row_phase = row_phase + (bpm * steps_per_beat);
             while row_phase >= (60 * tick_hz) {
                 let nrows_run: i64 = view_len(current_view, active_pattern);
-                let step_rows: i64 = run_step_rows(current_view);
-                cursor_row = (cursor_row + step_rows) % nrows_run;
+                if current_view == view_event() {
+                    let cur_step: i64 = event_row_to_step(active_pattern, cursor_row);
+                    let next_step: i64 = (cur_step + 1) % pattern_steps(active_pattern);
+                    cursor_row = step_to_event_row(active_pattern, next_step);
+                } else {
+                    cursor_row = (cursor_row + 1) % nrows_run;
+                }
                 row_phase = row_phase - (60 * tick_hz);
             }
         }
