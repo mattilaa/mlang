@@ -265,6 +265,8 @@ fn ansi_cursor_pos(row1: i64, col1: i64) -> string {
 pub fn render_tracker_ui(width_in: i64,
                          rows_in: i64,
                          cursor_row: i64,
+                         seq_offset: i64,
+                         seq_len: i64,
                          running: i32,
                          focus_idx: i64,
                          edit_mode: i32,
@@ -297,9 +299,9 @@ pub fn render_tracker_ui(width_in: i64,
         " Row |   Ch0         |   Ch1         |   Ch2         |   Ch3         |"));
 
     for i in 0..grid_rows {
-        let r: i64 = i + 10;
-        let line: string = tracker_grid_line(r);
-        if i == cursor_row {
+        let r: i64 = seq_offset + i;
+        let line: string = r < seq_len ? tracker_grid_line(r) : format!("{}", "");
+        if r == cursor_row {
             append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, line));
         } else if (r % 4) == 0 {
             append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, line));
@@ -320,9 +322,9 @@ pub fn render_tracker_ui(width_in: i64,
     free(meter_r);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-        " SPACE=play/stop   TAB=next menu   F1..F4=open   j/k=move   ENTER=select   q=quit"));
+        " SPACE=play/stop   TAB=next menu   F1..F4=open   j/k=menu or row(stop)   ENTER=select   q=quit"));
 
-    let status: string = format!(" Last action: {}   [menu open={} focus={} sel={}]", last_action, open_menu, focus_idx, menu_sel);
+    let status: string = format!(" Last action: {}", last_action);
     append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0, status));
     free(status);
 

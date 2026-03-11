@@ -41,6 +41,38 @@ fn canvas_width(cols: i32) -> i64 {
     return w > 150 ? 150 : w;
 }
 
+fn visible_grid_rows(term_rows: i32) -> i64 {
+    let rows: i64 = term_rows < 12 ? 12 : term_rows;
+    let raw: i64 = rows - 11;
+    return raw < 4 ? 4 : raw;
+}
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a : b;
+}
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a : b;
+}
+
+fn clamp_view_offset(seq_offset_in: i64, cursor_row: i64, visible: i64, seq_len: i64) -> i64 {
+    var seq_offset: i64 = seq_offset_in;
+    if cursor_row < seq_offset {
+        seq_offset = cursor_row;
+    }
+    if cursor_row >= seq_offset + visible {
+        seq_offset = cursor_row - visible + 1;
+    }
+    let max_off: i64 = max_i64(0, seq_len - visible);
+    if seq_offset < 0 {
+        seq_offset = 0;
+    }
+    if seq_offset > max_off {
+        seq_offset = max_off;
+    }
+    return seq_offset;
+}
+
 fn menu_item_count(focus_idx: i64) -> i64 {
     let _ = focus_idx;
     return 6;
@@ -114,6 +146,8 @@ fn main() -> i32 {
 
     let ev_buf: string = String::with_capacity(32);
     var cursor_row: i64 = 0;
+    var seq_offset: i64 = 0;
+    let seq_len: i64 = 256;
     var quit: i32 = 0;
     var running: i32 = 0;
     var focus_idx: i64 = 0;
@@ -217,12 +251,16 @@ fn main() -> i32 {
                         if open_menu == 1 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = (menu_sel + 1) % count;
+                        } else if running == 0 {
+                            cursor_row = min_i64(seq_len - 1, cursor_row + 1);
                         }
                     }
                     if keycode == 107 || keycode == 75 {
                         if open_menu == 1 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = menu_sel == 0 ? (count - 1) : (menu_sel - 1);
+                        } else if running == 0 {
+                            cursor_row = max_i64(0, cursor_row - 1);
                         }
                     }
                 }
@@ -276,7 +314,9 @@ fn main() -> i32 {
         let ts: TermSize = stdout_size();
         let w: i64 = canvas_width(ts.cols);
         let h: i64 = ts.rows;
-        let frame: string = render_tracker_ui(w, h, cursor_row, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
+        let visible: i64 = visible_grid_rows(ts.rows);
+        seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, seq_len);
+        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, seq_len, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -284,7 +324,7 @@ fn main() -> i32 {
         free(clear_home);
         free(frame);
         if running == 1 {
-            cursor_row = (cursor_row + 1) % 16;
+            cursor_row = (cursor_row + 1) % seq_len;
         }
     }
 
