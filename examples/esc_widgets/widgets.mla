@@ -84,25 +84,40 @@ fn pattern_cell(row: i64, ch: i64) -> string {
     let pitch: list<string> = ["C-4", "D#4", "F-4", "G-4", "A#4", "C-5", "---"];
     let idx: i64 = (row + ch * 2) % pitch.len();
     let note: string = pitch[idx];
-    let vol: i64 = 32 + ((row * 3 + ch * 7) % 32);
-    let vol_s: string = zpad_i64(vol, 2);
-    let fx_s: string = zpad_i64((row + ch * 5) % 16, 2);
-    let out: string = format!("{} {} {}", note, vol_s, fx_s);
-    free(fx_s);
-    free(vol_s);
+    let v1: i64 = (row * 3 + ch * 7) % 128;
+    let v2: i64 = (row * 5 + ch * 11) % 256;
+    let v1_s: string = pad_i64_left(v1, 3, " ");
+    let v2_s: string = pad_i64_left(v2, 3, " ");
+    let out: string = format!("{} {} {}", note, v1_s, v2_s);
+    free(v2_s);
+    free(v1_s);
     return out;
 }
 
 fn tracker_grid_line(row: i64) -> string {
     let row_s: string = pad_i64_left(row, 3, " ");
-    var line: string = format!(" {} |", row_s);
+    var line: string = format!("{} |", row_s);
     free(row_s);
     for ch in 0..4 {
         let cell: string = pattern_cell(row, ch);
-        let left: string = format!("{} {}", line, cell);
-        let next: string = format!("{} |", left);
-        free(left);
+        let cell_fit: string = fit_right(cell, 12, " ");
+        let next: string = format!("{} {} |", line, cell_fit);
+        free(cell_fit);
         free(cell);
+        free(line);
+        line = next;
+    }
+    return line;
+}
+
+fn tracker_header_line() -> string {
+    var line: string = format!("Row |");
+    for ch in 0..4 {
+        let name: string = format!("Ch{}", ch);
+        let name_fit: string = fit_right(name, 12, " ");
+        let next: string = format!("{} {} |", line, name_fit);
+        free(name_fit);
+        free(name);
         free(line);
         line = next;
     }
@@ -112,7 +127,7 @@ fn tracker_grid_line(row: i64) -> string {
 fn event_grid_line(event_row: i64) -> string {
     let row_num: i64 = (event_row / 2) + 1;
     let e_row: i64 = (event_row % 2) + 1;
-    let row_label: string = e_row == 1 ? zpad_i64(row_num, 2) : format!("{}", "..");
+    let row_label: string = e_row == 1 ? zpad_i64(row_num, 2): format!("{}", "..");
     let erow_s: string = zpad_i64(e_row, 2);
 
     let ev_names: list<string> = ["PitchB", "NoteOn", "Delay", "Cut", "Pan", "Vol"];
@@ -136,7 +151,7 @@ fn event_grid_line(event_row: i64) -> string {
     let m1_col: string = fit_right(m1_s, 7, " ");
     let m2_col: string = fit_right(m2_s, 7, " ");
     let line: string = format!(" {} | {} | {} | {} | {} | {} | {} | {} |",
-                               row_col, erow_col, ev_col, v1_col, v2_col, mod_col, m1_col, m2_col);
+    row_col, erow_col, ev_col, v1_col, v2_col, mod_col, m1_col, m2_col);
     free(row_col);
     free(erow_col);
     free(m2_col);
@@ -152,15 +167,42 @@ fn event_grid_line(event_row: i64) -> string {
     return line;
 }
 
+fn song_pattern_at(order_row: i64) -> i64 {
+    let order: list<i64> = [0, 1, 2, 1, 3, 2, 0, 3, 1, 2, 0, 1, 3, 0, 2, 3];
+    return order[order_row % order.len()];
+}
+
+fn pattern_steps(pattern_id: i64) -> i64 {
+    let steps: list<i64> = [64, 48, 96, 32];
+    return steps[pattern_id % steps.len()];
+}
+
+fn song_grid_line(order_row: i64) -> string {
+    let row_s: string = pad_i64_left(order_row, 3, " ");
+    let pat_id: i64 = song_pattern_at(order_row);
+    let pat_s: string = zpad_i64(pat_id, 2);
+    let steps: i64 = pattern_steps(pat_id);
+    let steps_s: string = pad_i64_left(steps, 3, " ");
+    let bpm_s: string = pad_i64_left(120, 3, " ");
+    let start_s: string = pad_i64_left(order_row * 64, 5, " ");
+    let line: string = format!(" {} | {} | {} | {} | {} |", row_s, pat_s, steps_s, bpm_s, start_s);
+    free(start_s);
+    free(bpm_s);
+    free(steps_s);
+    free(pat_s);
+    free(row_s);
+    return line;
+}
+
 fn menu_tabs_line(focus_idx: i64, running: i32, edit_mode: i32) -> string {
-    let file_tab: string = focus_idx == 0 ? "[File]" : " File ";
-    let view_tab: string = focus_idx == 1 ? "[View]" : " View ";
-    let edit_tab: string = focus_idx == 2 ? "[Edit]" : " Edit ";
-    let help_tab: string = focus_idx == 3 ? "[Help]" : " Help ";
-    let run_label: string = running == 1 ? "RUN" : "STOP";
-    let edit_label: string = edit_mode == 1 ? "EDIT" : "NAV";
+    let file_tab: string = focus_idx == 0 ? "[File]": " File ";
+    let view_tab: string = focus_idx == 1 ? "[View]": " View ";
+    let edit_tab: string = focus_idx == 2 ? "[Edit]": " Edit ";
+    let help_tab: string = focus_idx == 3 ? "[Help]": " Help ";
+    let run_label: string = running == 1 ? "RUN": "STOP";
+    let edit_label: string = edit_mode == 1 ? "EDIT": "NAV";
     let line: string = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
-                               file_tab, view_tab, edit_tab, help_tab, run_label, edit_label);
+    file_tab, view_tab, edit_tab, help_tab, run_label, edit_label);
     return line;
 }
 
@@ -189,8 +231,8 @@ fn menu_item_text(focus_idx: i64, item_idx: i64) -> string {
     if focus_idx == 1 {
         if item_idx == 0 { return format!("{}", "Pattern"); }
         if item_idx == 1 { return format!("{}", "Event view"); }
-        if item_idx == 2 { return format!("{}", "Mixer"); }
-        if item_idx == 3 { return format!("{}", "Instruments"); }
+        if item_idx == 2 { return format!("{}", "Song view"); }
+        if item_idx == 3 { return format!("{}", "Mixer"); }
         if item_idx == 4 { return format!("{}", "Scope"); }
         return format!("{}", "FFT");
     }
@@ -261,8 +303,8 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     if row_idx == 0 || row_idx == (total_items + 1) {
         let h: string = acs_hline();
         let top: string = repeat(h, menu_w);
-        let l: string = row_idx == 0 ? acs_ulcorner() : acs_llcorner();
-        let r: string = row_idx == 0 ? acs_urcorner() : acs_lrcorner();
+        let l: string = row_idx == 0 ? acs_ulcorner(): acs_llcorner();
+        let r: string = row_idx == 0 ? acs_urcorner(): acs_lrcorner();
         let line: string = format!("{}{}{}", l, top, r);
         free(r);
         free(l);
@@ -306,32 +348,35 @@ fn ansi_cursor_pos(row1: i64, col1: i64) -> string {
 }
 
 pub fn render_tracker_ui(width_in: i64,
-                         rows_in: i64,
-                         cursor_row: i64,
-                         seq_offset: i64,
-                         seq_len: i64,
-                         current_view: i64,
-                         running: i32,
-                         focus_idx: i64,
-                         edit_mode: i32,
-                         open_menu: i32,
-                         menu_sel: i64,
-                         last_action: string) -> string {
-    let width: i64 = width_in < 40 ? 40 : width_in;
-    let rows: i64 = rows_in < 12 ? 12 : rows_in;
+rows_in: i64,
+cursor_row: i64,
+seq_offset: i64,
+seq_len: i64,
+current_view: i64,
+bpm: i64,
+steps_per_pattern: i64,
+running: i32,
+focus_idx: i64,
+edit_mode: i32,
+open_menu: i32,
+menu_sel: i64,
+last_action: string) -> string {
+    let width: i64 = width_in < 40 ? 40: width_in;
+    let rows: i64 = rows_in < 12 ? 12: rows_in;
     // Keep one spare terminal row to avoid bottom-edge newline scroll.
-    let drop_rows: i64 = open_menu == 1 ? (menu_item_count(focus_idx) + 2) : 0;
+    let drop_rows: i64 = open_menu == 1 ?(menu_item_count(focus_idx) + 2): 0;
     let grid_rows_raw: i64 = rows - 11;
-    let grid_rows: i64 = grid_rows_raw < 4 ? 4 : grid_rows_raw;
+    let grid_rows: i64 = grid_rows_raw < 4 ? 4: grid_rows_raw;
     let builder: StringBuilder = builder_new(width * rows + 512);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-        " Scream Tracker V2.2   Unregistered Version!   [ESC Widgets Demo]"));
+    " iMlau Tracker V0.1"));
 
-    append_owned(builder, styled_line(width, color_cyan(), color_black(), 1,
-        " Octave: 1    Sample: 01    Volume: 64    Tempo: 4    Pattern: 00"));
+    let info_line: string = format!(" Octave: 1    Sample: 01    Volume: 64    BPM: {}    Steps/Pattern: {}", bpm, steps_per_pattern);
+    append_owned(builder, styled_line(width, color_cyan(), color_black(), 1, info_line));
+    free(info_line);
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 0,
-        " Channel: 00 01 02 03   Song: Example song   Pos: 00"));
+    " Channel: 00 01 02 03   Song: Example song   Pos: 00"));
 
     append_owned(builder, sep_line(width));
 
@@ -341,10 +386,14 @@ pub fn render_tracker_ui(width_in: i64,
 
     if current_view == 1 {
         append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
-            " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |"));
-    } else {
+        " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |"));
+    } else if current_view == 2 {
         append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
-            " Row |   Ch0         |   Ch1         |   Ch2         |   Ch3         |"));
+        " Row | Pat | Stp | BPM | Start |"));
+    } else {
+        let head: string = tracker_header_line();
+        append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, head));
+        free(head);
     }
 
     for i in 0..grid_rows {
@@ -352,15 +401,25 @@ pub fn render_tracker_ui(width_in: i64,
         var line: string = format!("{}", "");
         if r < seq_len {
             free(line);
-            line = current_view == 1 ? event_grid_line(r) : tracker_grid_line(r);
+            if current_view == 1 {
+                line = event_grid_line(r);
+            } else if current_view == 2 {
+                line = song_grid_line(r);
+            } else {
+                line = tracker_grid_line(r);
+            }
         } else {
             free(line);
             line = format!("{}", "");
         }
-        let stripe_key: i64 = current_view == 1 ? (r / 2) : r;
-        if r == cursor_row {
+        let stripe_key: i64 = current_view == 1 ?(r / 2): r;
+        let event_primary: i64 = current_view == 1 ?((cursor_row / 2) * 2): -1;
+        let event_secondary: i64 = current_view == 1 ?(event_primary + 1): -1;
+        if r == cursor_row || (current_view == 1 && r == event_primary) {
             append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, line));
-        } else if (stripe_key % 4) == 0 {
+        } else if current_view == 1 && r == event_secondary {
+            append_owned(builder, styled_line(width, color_bright_white(), color_cyan(), 0, line));
+        } else if(stripe_key % 4) == 0 {
             append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0, line));
         } else {
             append_owned(builder, styled_line(width, color_white(), color_black(), 0, line));
@@ -379,7 +438,7 @@ pub fn render_tracker_ui(width_in: i64,
     free(meter_r);
 
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1,
-        " SPACE=play/stop   TAB=next menu   F1..F4=open   j/k=menu or row(stop)   ENTER=select   q=quit"));
+    " SPACE=play/stop   TAB=next menu   F1..F4=open   j/k=menu or row(stop)   ENTER=select   q=quit"));
 
     let status: string = format!(" Last action: {}", last_action);
     append_owned(builder, styled_line(width, color_bright_black(), color_black(), 0, status));

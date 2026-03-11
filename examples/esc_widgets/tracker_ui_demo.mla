@@ -57,9 +57,44 @@ fn min_i64(a: i64, b: i64) -> i64 {
 
 fn view_pattern() -> i64 { return 0; }
 fn view_event() -> i64 { return 1; }
+fn view_song() -> i64 { return 2; }
 
-fn view_len(view: i64) -> i64 {
-    return view == view_event() ? 512 : 256;
+fn song_order_len() -> i64 {
+    return 64;
+}
+
+fn map_row_between_views(row: i64, from_view: i64, to_view: i64) -> i64 {
+    if from_view == to_view {
+        return row;
+    }
+    if from_view == view_pattern() && to_view == view_event() {
+        return row * 2;
+    }
+    if from_view == view_event() && to_view == view_pattern() {
+        return row / 2;
+    }
+    // Song view uses order rows, so switching to/from it starts at row 0.
+    return 0;
+}
+
+fn view_len(view: i64, active_pattern: i64) -> i64 {
+    if view == view_event() { return pattern_steps(active_pattern) * 2; }
+    if view == view_song() { return song_order_len(); }
+    return pattern_steps(active_pattern);
+}
+
+fn run_step_rows(view: i64) -> i64 {
+    return view == view_event() ? 2 : 1;
+}
+
+fn pattern_steps(pattern_id: i64) -> i64 {
+    let steps: list<i64> = [64, 48, 96, 32];
+    return steps[pattern_id % steps.len()];
+}
+
+fn song_pattern_at(order_row: i64) -> i64 {
+    let order: list<i64> = [0, 1, 2, 1, 3, 2, 0, 3, 1, 2, 0, 1, 3, 0, 2, 3];
+    return order[order_row % order.len()];
 }
 
 fn clamp_view_offset(seq_offset_in: i64, cursor_row: i64, visible: i64, seq_len: i64) -> i64 {
@@ -104,8 +139,8 @@ fn menu_item_name(focus_idx: i64, item_idx: i64) -> string {
     if focus_idx == 1 {
         if item_idx == 0 { return format!("{}", "Pattern"); }
         if item_idx == 1 { return format!("{}", "Event view"); }
-        if item_idx == 2 { return format!("{}", "Mixer"); }
-        if item_idx == 3 { return format!("{}", "Instruments"); }
+        if item_idx == 2 { return format!("{}", "Song view"); }
+        if item_idx == 3 { return format!("{}", "Mixer"); }
         if item_idx == 4 { return format!("{}", "Scope"); }
         return format!("{}", "FFT");
     }
@@ -155,6 +190,11 @@ fn main() -> i32 {
     var cursor_row: i64 = 0;
     var seq_offset: i64 = 0;
     var current_view: i64 = view_pattern();
+    var active_pattern: i64 = 0;
+    let bpm: i64 = 120;
+    let steps_per_beat: i64 = 4;
+    let tick_hz: i64 = 30;
+    var row_phase: i64 = 0;
     var quit: i32 = 0;
     var running: i32 = 0;
     var focus_idx: i64 = 0;
@@ -214,6 +254,7 @@ fn main() -> i32 {
                     }
                     if keycode == 32 {
                         running = running == 1 ? 0 : 1;
+                        row_phase = 0;
                     }
                     if keycode == 9 {
                         focus_idx = (focus_idx + 1) % 4;
@@ -262,20 +303,29 @@ fn main() -> i32 {
                     }
                     if keycode == 13 || keycode == 10 {
                         if open_menu == 1 {
+                            let old_view: i64 = current_view;
+                            var next_view: i64 = current_view;
                             let mname: string = menu_name(focus_idx);
                             let iname: string = menu_item_name(focus_idx, menu_sel);
                             let action: string = format!("{} -> {}", mname, iname);
                             if focus_idx == 1 {
                                 if menu_sel == 0 {
-                                    current_view = view_pattern();
-                                    cursor_row = 0;
-                                    seq_offset = 0;
+                                    if old_view == view_song() {
+                                        active_pattern = song_pattern_at(cursor_row);
+                                    }
+                                    next_view = view_pattern();
                                 } else if menu_sel == 1 {
-                                    current_view = view_event();
-                                    cursor_row = 0;
-                                    seq_offset = 0;
+                                    if old_view == view_song() {
+                                        active_pattern = song_pattern_at(cursor_row);
+                                    }
+                                    next_view = view_event();
+                                } else if menu_sel == 2 {
+                                    next_view = view_song();
                                 }
                             }
+                            current_view = next_view;
+                            cursor_row = map_row_between_views(cursor_row, old_view, current_view);
+                            seq_offset = 0;
                             free(mname);
                             free(iname);
                             free(last_action);
@@ -290,7 +340,7 @@ fn main() -> i32 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = (menu_sel + 1) % count;
                         } else if running == 0 {
-                            let nrows: i64 = view_len(current_view);
+                            let nrows: i64 = view_len(current_view, active_pattern);
                             cursor_row = min_i64(nrows - 1, cursor_row + 1);
                         }
                     }
@@ -360,12 +410,14 @@ fn main() -> i32 {
         let w: i64 = canvas_width(ts.cols);
         let h: i64 = ts.rows;
         let visible: i64 = visible_grid_rows(ts.rows);
-        let nrows: i64 = view_len(current_view);
+        let pat_id: i64 = current_view == view_song() ? song_pattern_at(cursor_row) : active_pattern;
+        let steps_pp: i64 = pattern_steps(pat_id);
+        let nrows: i64 = view_len(current_view, active_pattern);
         if cursor_row >= nrows {
             cursor_row = nrows - 1;
         }
         seq_offset = clamp_view_offset(seq_offset, cursor_row, visible, nrows);
-        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, nrows, current_view, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
+        let frame: string = render_tracker_ui(w, h, cursor_row, seq_offset, nrows, current_view, bpm, steps_pp, running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -373,8 +425,13 @@ fn main() -> i32 {
         free(clear_home);
         free(frame);
         if running == 1 {
-            let nrows_run: i64 = view_len(current_view);
-            cursor_row = (cursor_row + 1) % nrows_run;
+            row_phase = row_phase + (bpm * steps_per_beat);
+            while row_phase >= (60 * tick_hz) {
+                let nrows_run: i64 = view_len(current_view, active_pattern);
+                let step_rows: i64 = run_step_rows(current_view);
+                cursor_row = (cursor_row + step_rows) % nrows_run;
+                row_phase = row_phase - (60 * tick_hz);
+            }
         }
     }
 
