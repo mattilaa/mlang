@@ -4650,6 +4650,20 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 // param as the inner type (e.g. &string -> TYPE_STRING).
                 variableTypes[std::string(arg.getName())] =
                     refType->elementType->kind;
+                // Preserve container element typing for borrowed params so
+                // indexing and methods work on &list<T> / &map<K,V>.
+                if(auto* genListInner =
+                       dynamic_cast<GenericListTypeNode*>(refType->elementType))
+                {
+                    listElementTypes[std::string(arg.getName())] =
+                        genListInner->elementType;
+                }
+                if(auto* mapInner =
+                       dynamic_cast<MapTypeNode*>(refType->elementType))
+                {
+                    mapKeyValueTypes[std::string(arg.getName())] =
+                        std::make_pair(mapInner->keyType, mapInner->valueType);
+                }
                 // Immutable reference: param may not be mutated inside body.
                 if(!refType->isMutable)
                     constantVariables.insert(std::string(arg.getName()));
@@ -12696,9 +12710,6 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
             }
         }
-        consumeMoveFromExpression(arg, node->line,
-                                  "passing argument to function '" +
-                                      node->name + "'");
         argVals.push_back(argVal);
     }
 
@@ -12905,6 +12916,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     }
                 }
             }
+        }
+
+        // Consume move-only values only for non-reference parameters.
+        // Reference parameters (&T / &mut T) borrow and must not move.
+        bool shouldConsume = true;
+        if(best->node &&
+           paramIdx < (size_t)best->node->parameters->parameters.size() &&
+           paramIdx < node->arguments.size())
+        {
+            auto* declParam = best->node->parameters->parameters[paramIdx];
+            if(dynamic_cast<ReferenceTypeNode*>(declParam->type))
+                shouldConsume = false;
+        }
+        if(shouldConsume && paramIdx < node->arguments.size())
+        {
+            consumeMoveFromExpression(node->arguments[paramIdx], node->line,
+                                      "passing argument to function '" +
+                                          node->name + "'");
         }
 
         args.push_back(argVal);
@@ -14094,8 +14123,30 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
             {
                 auto* paramNode =
                     method->parameters->parameters[methodParamIdx];
-                variableTypes[std::string(arg.getName())] =
-                    paramNode->type->kind;
+                if(auto* refType =
+                       dynamic_cast<ReferenceTypeNode*>(paramNode->type))
+                {
+                    variableTypes[std::string(arg.getName())] =
+                        refType->elementType->kind;
+                    if(auto* genListInner = dynamic_cast<GenericListTypeNode*>(
+                           refType->elementType))
+                    {
+                        listElementTypes[std::string(arg.getName())] =
+                            genListInner->elementType;
+                    }
+                    if(auto* mapInner =
+                           dynamic_cast<MapTypeNode*>(refType->elementType))
+                    {
+                        mapKeyValueTypes[std::string(arg.getName())] =
+                            std::make_pair(mapInner->keyType,
+                                           mapInner->valueType);
+                    }
+                }
+                else
+                {
+                    variableTypes[std::string(arg.getName())] =
+                        paramNode->type->kind;
+                }
                 if(auto* structType =
                        dynamic_cast<StructTypeRefNode*>(paramNode->type))
                 {
