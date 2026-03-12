@@ -67,8 +67,8 @@ fn styled_line_compact(fg_c: i32, bg_c: i32, bold: i32, text: string) -> string 
 }
 
 fn styled_line_compact_rgb(fg_r: i32, fg_g: i32, fg_b: i32,
-                           bg_r: i32, bg_g: i32, bg_b: i32,
-                           bold: i32, text: string) -> string {
+bg_r: i32, bg_g: i32, bg_b: i32,
+bold: i32, text: string) -> string {
     let fg_s: string = fg_rgb(fg_r, fg_g, fg_b);
     let bg_s: string = bg_rgb(bg_r, bg_g, bg_b);
     if bold == 1 {
@@ -78,10 +78,10 @@ fn styled_line_compact_rgb(fg_r: i32, fg_g: i32, fg_b: i32,
 }
 
 fn styled_line_rgb(width: i64,
-                   fg_r: i32, fg_g: i32, fg_b: i32,
-                   bg_r: i32, bg_g: i32, bg_b: i32,
-                   bold: i32,
-                   text: string) -> string {
+fg_r: i32, fg_g: i32, fg_b: i32,
+bg_r: i32, bg_g: i32, bg_b: i32,
+bold: i32,
+text: string) -> string {
     let row: string = fit_right(text, width, " ");
     let fg_s: string = fg_rgb(fg_r, fg_g, fg_b);
     let bg_s: string = bg_rgb(bg_r, bg_g, bg_b);
@@ -167,27 +167,54 @@ fn is_digit_ch(ch: string) -> i32 {
     return 0;
 }
 
-fn pattern_cell_key(row: i64, ch: i64) -> i64 {
-    return row * 16 + ch;
+fn pattern_row_key(pattern_id: i64, row: i64) -> i64 {
+    return pattern_id * 4096 + row;
 }
 
-fn pattern_cell(row: i64, ch: i64, note_map_h: i64, v1_map_h: i64, v2_map_h: i64, sel_sub: i64) -> string {
-    let key: i64 = pattern_cell_key(row, ch);
-    let off_note: i64 = __mlang_std_unordered_map_i64_i64_get_or(note_map_h, key, 0);
-    let off_v1: i64 = __mlang_std_unordered_map_i64_i64_get_or(v1_map_h, key, 0);
-    let off_v2: i64 = __mlang_std_unordered_map_i64_i64_get_or(v2_map_h, key, 0);
-    let note_u8: i64 = wrap_mod((row + ch * 2) + off_note, 128);
-    let note: string = note_name_u8(note_u8);
-    let note_s: string = fit_right(note, 5, " ");
-    let v1: i64 = wrap_mod((row * 3 + ch * 7) + off_v1, 128);
-    let v2: i64 = wrap_mod((row * 5 + ch * 11) + off_v2, 256);
+fn pattern_cell_key(pattern_id: i64, row: i64, ch: i64) -> i64 {
+    return pattern_id * 65536 + row * 16 + ch;
+}
+
+fn pattern_cell(pattern_id: i64, row: i64, ch: i64,
+                note_map_h: i64, v1_map_h: i64, v2_map_h: i64,
+                pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                sel_sub: i64) -> string {
+    let key: i64 = pattern_cell_key(pattern_id, row, ch);
+    let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, pattern_id, 0);
+    let row_k: i64 = pattern_row_key(pattern_id, row);
+    let active_default: i64 = is_custom == 1 ? 0 : 1;
+    let row_active: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_row_active_map_h, row_k, active_default);
+    var note_u8: i64 = 0;
+    var v1: i64 = 0;
+    var v2: i64 = 0;
+    var note_s: string = format!("{}", "---");
+    if row_active == 1 {
+        if is_custom == 1 {
+            note_u8 = __mlang_std_unordered_map_i64_i64_get_or(note_map_h, key, 0);
+            v1 = __mlang_std_unordered_map_i64_i64_get_or(v1_map_h, key, 127);
+            v2 = __mlang_std_unordered_map_i64_i64_get_or(v2_map_h, key, 0);
+        } else {
+            let off_note: i64 = __mlang_std_unordered_map_i64_i64_get_or(note_map_h, key, 0);
+            let off_v1: i64 = __mlang_std_unordered_map_i64_i64_get_or(v1_map_h, key, 0);
+            let off_v2: i64 = __mlang_std_unordered_map_i64_i64_get_or(v2_map_h, key, 0);
+            note_u8 = wrap_mod((row + ch * 2) + off_note, 128);
+            v1 = wrap_mod((row * 3 + ch * 7) + off_v1, 128);
+            v2 = wrap_mod((row * 5 + ch * 11) + off_v2, 256);
+        }
+        free(note_s);
+        note_s = note_name_u8(note_u8);
+    } else {
+        v1 = 0;
+        v2 = 0;
+    }
+    let note_fit: string = fit_right(note_s, 5, " ");
     let v1_s: string = zpad_i64(v1, 3);
     let v2_s: string = zpad_i64(v2, 3);
     let row_base: string = format!("{}{}{}",
     fg_rgb(232, 224, 201), bg_rgb(106, 150, 176), bold_on());
     let sel_on: string = format!("{}{}{}",
     fg_rgb(10, 10, 10), bg_rgb(255, 241, 153), bold_on());
-    let note_p: string = sel_sub == 0 ? format!("{}{}{}", sel_on, note_s, row_base): format!("{}", note_s);
+    let note_p: string = sel_sub == 0 ? format!("{}{}{}", sel_on, note_fit, row_base): format!("{}", note_fit);
     let v1_p: string = sel_sub == 1 ? format!("{}{}{}", sel_on, v1_s, row_base): format!("{}", v1_s);
     let v2_p: string = sel_sub == 2 ? format!("{}{}{}", sel_on, v2_s, row_base): format!("{}", v2_s);
     let out: string = format!("{} | {} | {}", note_p, v1_p, v2_p);
@@ -196,6 +223,7 @@ fn pattern_cell(row: i64, ch: i64, note_map_h: i64, v1_map_h: i64, v2_map_h: i64
     free(note_p);
     free(sel_on);
     free(row_base);
+    free(note_fit);
     free(note_s);
     free(v2_s);
     free(v1_s);
@@ -203,9 +231,11 @@ fn pattern_cell(row: i64, ch: i64, note_map_h: i64, v1_map_h: i64, v2_map_h: i64
 }
 
 fn tracker_grid_line(row: i64,
+                     pattern_id: i64,
                      edit_row: i64, edit_col: i64,
                      focus_row: i64, focus_col: i64, focus_sub: i64,
                      note_map_h: i64, v1_map_h: i64, v2_map_h: i64,
+                     pat_custom_map_h: i64, pat_row_active_map_h: i64,
                      off_note0: i64, off_note1: i64, off_note2: i64, off_note3: i64,
                      off_v10: i64, off_v11: i64, off_v12: i64, off_v13: i64,
                      off_v20: i64, off_v21: i64, off_v22: i64, off_v23: i64) -> string {
@@ -231,7 +261,7 @@ fn tracker_grid_line(row: i64,
         if row == focus_row && ch == (focus_col - 1) {
             sel_sub = focus_sub;
         }
-        let cell: string = pattern_cell(row, ch, note_map_h, v1_map_h, v2_map_h, sel_sub);
+        let cell: string = pattern_cell(pattern_id, row, ch, note_map_h, v1_map_h, v2_map_h, pat_custom_map_h, pat_row_active_map_h, sel_sub);
         let next: string = format!("{} {} |", line, cell);
         free(cell);
         free(line);
@@ -280,23 +310,40 @@ fn pattern_sub_name(sub_idx: i64) -> string {
     return "V2";
 }
 
-fn event_count_for_step(pattern_id: i64, step: i64) -> i64 {
+fn event_count_key(pattern_id: i64, step: i64) -> i64 {
+    return pattern_id * 4096 + step;
+}
+
+fn event_count_for_step(pattern_id: i64, step: i64,
+                        ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
+    let ov: i64 = __mlang_std_unordered_map_i64_i64_get_or(
+        ev_count_map_h, event_count_key(pattern_id, step), -1);
+    if ov >= 1 {
+        return ov;
+    }
+    let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(
+        pat_custom_map_h, pattern_id, 0);
+    if is_custom == 1 {
+        return 1;
+    }
     return 1 + ((step + pattern_id) % 3);
 }
 
-fn step_to_event_row(pattern_id: i64, step: i64) -> i64 {
+fn step_to_event_row(pattern_id: i64, step: i64,
+                     ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
     var row: i64 = 0;
     for s in 0..step {
-        row = row + event_count_for_step(pattern_id, s);
+        row = row + event_count_for_step(pattern_id, s, ev_count_map_h, pat_custom_map_h);
     }
     return row;
 }
 
-fn event_row_to_step(pattern_id: i64, steps_per_pattern: i64, event_row: i64) -> i64 {
+fn event_row_to_step(pattern_id: i64, steps_per_pattern: i64, event_row: i64,
+                     ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
     var row: i64 = event_row;
     var s: i64 = 0;
     while s < steps_per_pattern {
-        let c: i64 = event_count_for_step(pattern_id, s);
+        let c: i64 = event_count_for_step(pattern_id, s, ev_count_map_h, pat_custom_map_h);
         if row < c {
             return s;
         }
@@ -313,14 +360,15 @@ fn event_cell_key(pattern_id: i64, event_row: i64) -> i64 {
 fn event_focus_seg(seg: string, col_idx: i64, focus_col: i64, is_focus_row: i32) -> string {
     if is_focus_row == 1 && col_idx == focus_col {
         return format!("{}{}{}{}{}{}{}{}",
-            fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
-            reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
+        fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
+        reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
     }
     return format!("{}", seg);
 }
 
 fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
                    focus_row: i64, focus_col: i64,
+                   ev_count_map_h: i64, pat_custom_map_h: i64,
                    event_map_h: i64, val1_map_h: i64, val2_map_h: i64,
                    mod_map_h: i64, m1_map_h: i64, m2_map_h: i64,
                    off_event: i64, off_val1: i64, off_val2: i64,
@@ -338,8 +386,8 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     let _ = off_mod;
     let _ = off_m1;
     let _ = off_m2;
-    let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row);
-    let base_row: i64 = step_to_event_row(pattern_id, step);
+    let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row, ev_count_map_h, pat_custom_map_h);
+    let base_row: i64 = step_to_event_row(pattern_id, step, ev_count_map_h, pat_custom_map_h);
     let e_row: i64 = (event_row - base_row) + 1;
     let row_label: string = e_row == 1 ? zpad_i64(step + 1, 2): format!("{}", "..");
     let erow_s: string = zpad_i64(e_row, 2);
@@ -366,7 +414,7 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     let mod_col: string = fit_right(m_s, 4, " ");
     let m1_col: string = fit_right(m1_s, 7, " ");
     let m2_col: string = fit_right(m2_s, 7, " ");
-    let is_focus_row: i32 = event_row == focus_row ? 1 : 0;
+    let is_focus_row: i32 = event_row == focus_row ? 1: 0;
     let row_p: string = event_focus_seg(row_col, 0, focus_col, is_focus_row);
     let erow_p: string = event_focus_seg(erow_col, 1, focus_col, is_focus_row);
     let ev_p: string = event_focus_seg(ev_col, 2, focus_col, is_focus_row);
@@ -443,30 +491,30 @@ fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pat
     }
     if current_view == 1 {
         return format!("{}{}{}{}{}{}{}{}",
-            fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
-            reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
+        fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
+        reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
     }
     if current_view == 2 {
         let _ = edit_mode;
         return format!("{}{}{}{}{}{}{}{}",
-            fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), seg,
-            reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
+        fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), seg,
+        reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
     }
     return format!("{}{}{}{}{}{}{}{}",
-        fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on(), seg,
-        reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
+    fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on(), seg,
+    reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
 }
 
 fn highlight_song_column_in_line(line: string, col_sel: i64,
-                                 base_fg_r: i64, base_fg_g: i64, base_fg_b: i64,
-                                 base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> string {
+base_fg_r: i64, base_fg_g: i64, base_fg_b: i64,
+base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> string {
     if col_sel < 0 {
         return format!("{}", line);
     }
     let base_style: string = format!("{}{}{}",
-                                     bold_on(),
-                                     fg_rgb(base_fg_r, base_fg_g, base_fg_b),
-                                     bg_rgb(base_bg_r, base_bg_g, base_bg_b));
+    bold_on(),
+    fg_rgb(base_fg_r, base_fg_g, base_fg_b),
+    bg_rgb(base_bg_r, base_bg_g, base_bg_b));
     let n: i64 = len(line);
     let b: StringBuilder = builder_new(n + 192);
     var start: i64 = 0;
@@ -474,7 +522,7 @@ fn highlight_song_column_in_line(line: string, col_sel: i64,
     for i in 0..n {
         let ch: string = sub(line, i, 1);
         var next_ok: i32 = 1;
-        if (i + 1) < n {
+        if(i + 1) < n {
             let next_ch: string = sub(line, i + 1, 1);
             next_ok = eq(next_ch, " ");
             free(next_ch);
@@ -483,9 +531,9 @@ fn highlight_song_column_in_line(line: string, col_sel: i64,
             let seg: string = sub(line, start, i - start);
             if col == col_sel {
                 let hl: string = format!("{}{}{}{}{}{}",
-                                         fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(),
-                                         seg,
-                                         reset(), base_style);
+                fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(),
+                seg,
+                reset(), base_style);
                 let _ = builder_append(b, hl);
                 free(hl);
             } else {
@@ -520,14 +568,14 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
     for i in 0..n {
         let ch: string = sub(line, i, 1);
         var next_ok: i32 = 1;
-        if (i + 1) < n {
+        if(i + 1) < n {
             let next_ch: string = sub(line, i + 1, 1);
             next_ok = eq(next_ch, " ");
             free(next_ch);
         }
         // Pattern rows also contain internal " | " subfield separators.
         // For pattern view, ignore separators whose next non-space char is a digit.
-        var table_delim: i32 = eq(ch, "|") == 1 && next_ok == 1 ? 1 : 0;
+        var table_delim: i32 = eq(ch, "|") == 1 && next_ok == 1 ? 1: 0;
         if table_delim == 1 && current_view == 0 {
             var j: i64 = i + 1;
             while j < n {
@@ -570,33 +618,37 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
     return out;
 }
 
-fn pattern_steps(pattern_id: i64) -> i64 {
-    let steps: list<i64> = [64, 64, 32, 48, 64, 32, 96, 64];
-    return steps[pattern_id % steps.len()];
+fn pattern_steps(pattern_id: i64, pattern_steps_list: &list<i64>) -> i64 {
+    if pattern_steps_list.len() == 0 {
+        return 1;
+    }
+    let idx: i64 = pattern_id % pattern_steps_list.len();
+    let s: i64 = pattern_steps_list[idx];
+    return s < 1 ? 1 : s;
 }
 
-fn song_start_step(song_order: &list<i64>, order_row: i64) -> i64 {
+fn song_start_step(song_order: &list<i64>, pattern_steps_list: &list<i64>, order_row: i64) -> i64 {
     var start: i64 = 0;
     for i in 0..order_row {
         let p: i64 = song_order[i % song_order.len()];
-        start = start + pattern_steps(p);
+        start = start + pattern_steps(p, pattern_steps_list);
     }
     return start;
 }
 
-fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>) -> string {
+fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>, pattern_steps_list: &list<i64>) -> string {
     let row_s: string = fit_right(pad_i64_left(order_row, 3, " "), 3, " ");
     let pat_id: i64 = song_order[order_row % song_order.len()];
     let pat_s: string = fit_right(zpad_i64(pat_id, 2), 3, " ");
-    let steps: i64 = pattern_steps(pat_id);
+    let steps: i64 = pattern_steps(pat_id, pattern_steps_list);
     let steps_s: string = fit_right(pad_i64_left(steps, 3, " "), 3, " ");
-    let bpm_v: i64 = song_bpm.len() == 0 ? 120 : song_bpm[order_row % song_bpm.len()];
+    let bpm_v: i64 = song_bpm.len() == 0 ? 120: song_bpm[order_row % song_bpm.len()];
     let bpm_s: string = fit_right(pad_i64_left(bpm_v, 3, " "), 3, " ");
-    let start_v: i64 = song_start_step(song_order, order_row);
+    let start_v: i64 = song_start_step(song_order, pattern_steps_list, order_row);
     let beat_s: string = fit_right(pad_i64_left(start_v / 4, 5, " "), 5, " ");
     let start_s: string = fit_right(pad_i64_left(start_v, 5, " "), 5, " ");
     let line: string = format!(" {} | {} | {} | {} | {} | {} |",
-                               row_s, pat_s, steps_s, bpm_s, beat_s, start_s);
+    row_s, pat_s, steps_s, bpm_s, beat_s, start_s);
     free(start_s);
     free(beat_s);
     free(bpm_s);
@@ -614,7 +666,7 @@ fn song_header_line() -> string {
     let beat_h: string = fit_right("Beat", 5, " ");
     let start_h: string = fit_right("Start", 5, " ");
     let line: string = format!(" {} | {} | {} | {} | {} | {} |",
-                               row_h, pat_h, stp_h, bpm_h, beat_h, start_h);
+    row_h, pat_h, stp_h, bpm_h, beat_h, start_h);
     free(start_h);
     free(beat_h);
     free(bpm_h);
@@ -625,10 +677,10 @@ fn song_header_line() -> string {
 }
 
 fn menu_tabs_line(focus_idx: i64, open_menu: i32, running: i32, edit_mode: i32) -> string {
-    let file_tab: string = (open_menu == 1 ? (focus_idx == 0 ? "[File]" : " File ") : " File ");
-    let view_tab: string = (open_menu == 1 ? (focus_idx == 1 ? "[View]" : " View ") : " View ");
-    let edit_tab: string = (open_menu == 1 ? (focus_idx == 2 ? "[Edit]" : " Edit ") : " Edit ");
-    let help_tab: string = (open_menu == 1 ? (focus_idx == 3 ? "[Help]" : " Help ") : " Help ");
+    let file_tab: string = (open_menu == 1 ?(focus_idx == 0 ? "[File]": " File "): " File ");
+    let view_tab: string = (open_menu == 1 ?(focus_idx == 1 ? "[View]": " View "): " View ");
+    let edit_tab: string = (open_menu == 1 ?(focus_idx == 2 ? "[Edit]": " Edit "): " Edit ");
+    let help_tab: string = (open_menu == 1 ?(focus_idx == 3 ? "[Help]": " Help "): " Help ");
     let run_label: string = running == 1 ? "RUN": "STOP";
     let edit_label: string = edit_mode != 0 ? "EDIT": "NAV";
     let line: string = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
@@ -799,12 +851,16 @@ edit_col_song: i64,
 pat_note_map_h: i64,
 pat_v1_map_h: i64,
 pat_v2_map_h: i64,
+pat_custom_map_h: i64,
+pat_row_active_map_h: i64,
 ev_event_map_h: i64,
 ev_val1_map_h: i64,
 ev_val2_map_h: i64,
 ev_mod_map_h: i64,
 ev_m1_map_h: i64,
 ev_m2_map_h: i64,
+ev_count_map_h: i64,
+pattern_steps_list: &list<i64>,
 pat_edit_row: i64,
 pat_edit_col: i64,
 pat_note_off0: i64,
@@ -835,14 +891,14 @@ last_action: string) -> string {
     let rows: i64 = rows_in < 12 ? 12: rows_in;
     // Keep one spare terminal row to avoid bottom-edge newline scroll.
     let drop_rows: i64 = open_menu == 1 ?(menu_item_count(focus_idx) + 2): 0;
-    let pattern_header_extra: i64 = current_view == 0 ? 1 : 0;
+    let pattern_header_extra: i64 = current_view == 0 ? 1: 0;
     let grid_rows_raw: i64 = rows - 9 - pattern_header_extra;
     let grid_rows: i64 = grid_rows_raw < 4 ? 4: grid_rows_raw;
     let builder: StringBuilder = builder_new(width * rows + 512);
 
-    let loop_pos_s: string = loop_song_row >= 0 ? zpad_i64(loop_song_row, 2) : format!("{}", "--");
-    let loop_tag: string = loop_song_row >= 0 ? format!("LOOP:ON@{}", loop_pos_s) : format!("{}", "LOOP:OFF");
-    let title_line: string = format!(" iMlau Tracker V0.1   {}", loop_tag);
+    let loop_pos_s: string = loop_song_row >= 0 ? zpad_i64(loop_song_row, 2): format!("{}", "--");
+    let loop_tag: string = loop_song_row >= 0 ? format!("LOOP:ON@{}", loop_pos_s): format!("{}", "LOOP:OFF");
+    let title_line: string = format!(" Mlau Tracker V0.1   {}", loop_tag);
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, title_line));
     free(title_line);
     free(loop_tag);
@@ -850,7 +906,7 @@ last_action: string) -> string {
 
     let pat_s: string = zpad_i64(header_pattern, 2);
     let pos_s: string = zpad_i64(song_pos, 2);
-    let info_line: string = format!(" Octave: 1    Sample: 01    Volume: 64    BPM: {}    Steps/Pattern: {}    Pattern: {}", bpm, steps_per_pattern, pat_s);
+    let info_line: string = format!(" Octave: 1    Volume: 64    BPM: {}    Steps/Pattern: {}    Pattern: {}", bpm, steps_per_pattern, pat_s);
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 1, info_line));
     free(info_line);
     free(pat_s);
@@ -900,7 +956,7 @@ last_action: string) -> string {
     }
     var event_focus_row: i64 = cursor_row;
     if current_view == 1 && running == 1 {
-        event_focus_row = step_to_event_row(active_pattern, transport_step);
+        event_focus_row = step_to_event_row(active_pattern, transport_step, ev_count_map_h, pat_custom_map_h);
     }
 
     for i in 0..grid_rows {
@@ -909,40 +965,41 @@ last_action: string) -> string {
         if r < seq_len {
             free(line);
             if current_view == 1 {
-                let evt_col_sel_line: i64 = edit_col_event < 2 ? 2 : (edit_col_event > 7 ? 7 : edit_col_event);
+                let evt_col_sel_line: i64 = edit_col_event < 2 ? 2: (edit_col_event > 7 ? 7: edit_col_event);
                 line = event_grid_line(
-                    r, active_pattern, steps_per_pattern,
-                    event_focus_row, evt_col_sel_line,
-                    ev_event_map_h, ev_val1_map_h, ev_val2_map_h,
-                    ev_mod_map_h, ev_m1_map_h, ev_m2_map_h,
-                    ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2);
+                r, active_pattern, steps_per_pattern,
+                event_focus_row, evt_col_sel_line,
+                ev_count_map_h, pat_custom_map_h,
+                ev_event_map_h, ev_val1_map_h, ev_val2_map_h,
+                ev_mod_map_h, ev_m1_map_h, ev_m2_map_h,
+                ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2);
             } else if current_view == 2 {
-                line = song_grid_line(r, song_order, song_bpm);
+                line = song_grid_line(r, song_order, song_bpm, pattern_steps_list);
             } else {
-                let pat_col_sel_line: i64 = edit_col_pattern < 1 ? 1 : (edit_col_pattern > 4 ? 4 : edit_col_pattern);
-                let pat_sub_sel_line: i64 = edit_sub_pattern < 0 ? 0 : (edit_sub_pattern > 2 ? 2 : edit_sub_pattern);
+                let pat_col_sel_line: i64 = edit_col_pattern < 1 ? 1: (edit_col_pattern > 4 ? 4: edit_col_pattern);
+                let pat_sub_sel_line: i64 = edit_sub_pattern < 0 ? 0: (edit_sub_pattern > 2 ? 2: edit_sub_pattern);
                 line = tracker_grid_line(
-                    r,
-                    pat_edit_row, pat_edit_col,
-                    cursor_row, pat_col_sel_line, pat_sub_sel_line,
-                    pat_note_map_h, pat_v1_map_h, pat_v2_map_h,
-                    pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
-                    pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
-                    pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3);
+                r, active_pattern,
+                pat_edit_row, pat_edit_col,
+                cursor_row, pat_col_sel_line, pat_sub_sel_line,
+                pat_note_map_h, pat_v1_map_h, pat_v2_map_h, pat_custom_map_h, pat_row_active_map_h,
+                pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
+                pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
+                pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3);
             }
         } else {
             free(line);
             line = format!("{}", "");
         }
-        let stripe_key: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): r;
+        let stripe_key: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r, ev_count_map_h, pat_custom_map_h): r;
         // In event view, selected row and playhead can differ while running.
-        let active_step: i64 = current_view == 1 ? transport_step : -1;
-        let row_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): -1;
+        let active_step: i64 = current_view == 1 ? transport_step:-1;
+        let row_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r, ev_count_map_h, pat_custom_map_h):-1;
         if r == cursor_row {
             // Selected row: brighter background -> black text for contrast.
-            let pat_col_sel: i64 = edit_col_pattern < 1 ? 1 : (edit_col_pattern > 4 ? 4 : edit_col_pattern);
-            let pat_sub_sel: i64 = edit_sub_pattern < 0 ? 0 : (edit_sub_pattern > 2 ? 2 : edit_sub_pattern);
-            let evt_col_sel: i64 = edit_col_event < 2 ? 2 : (edit_col_event > 7 ? 7 : edit_col_event);
+            let pat_col_sel: i64 = edit_col_pattern < 1 ? 1: (edit_col_pattern > 4 ? 4: edit_col_pattern);
+            let pat_sub_sel: i64 = edit_sub_pattern < 0 ? 0: (edit_sub_pattern > 2 ? 2: edit_sub_pattern);
+            let evt_col_sel: i64 = edit_col_event < 2 ? 2: (edit_col_event > 7 ? 7: edit_col_event);
             if current_view == 0 {
                 let line_g: string = borderify_ascii(line);
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line_g));
@@ -953,15 +1010,15 @@ last_action: string) -> string {
                 free(line_g);
             } else if current_view == 2 {
                 let focused_song_sel: string = highlight_song_column_in_line(
-                    line, edit_col_song,
-                    232, 224, 201,
-                    (r % 4) == 0 ? 52 : ((r % 2) == 0 ? 44 : 36),
-                    (r % 4) == 0 ? 62 : ((r % 2) == 0 ? 54 : 46),
-                    (r % 4) == 0 ? 82 : ((r % 2) == 0 ? 72 : 64));
+                line, edit_col_song,
+                232, 224, 201,
+                (r % 4) == 0 ? 52: ((r % 2) == 0 ? 44: 36),
+                (r % 4) == 0 ? 62: ((r % 2) == 0 ? 54: 46),
+                (r % 4) == 0 ? 82: ((r % 2) == 0 ? 72: 64));
                 let focused_song_sel_g: string = borderify_ascii(focused_song_sel);
-                if (r % 4) == 0 {
+                if(r % 4) == 0 {
                     append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 62, 82, 1, focused_song_sel_g));
-                } else if (r % 2) == 0 {
+                } else if(r % 2) == 0 {
                     append_owned(builder, styled_line_compact_rgb(232, 224, 201, 44, 54, 72, 1, focused_song_sel_g));
                 } else {
                     append_owned(builder, styled_line_compact_rgb(232, 224, 201, 36, 46, 64, 1, focused_song_sel_g));
@@ -970,11 +1027,11 @@ last_action: string) -> string {
                 free(focused_song_sel);
             } else {
                 let focused: string = highlight_column_in_line(
-                    line,
-                    current_view,
-                    current_view == 1 ? evt_col_sel : (current_view == 0 ? pat_col_sel : edit_col_song),
-                    current_view == 0 ? pat_sub_sel : -1,
-                    edit_mode);
+                line,
+                current_view,
+                current_view == 1 ? evt_col_sel: (current_view == 0 ? pat_col_sel: edit_col_song),
+                current_view == 0 ? pat_sub_sel:-1,
+                edit_mode);
                 let focused_g: string = borderify_ascii(focused);
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, focused_g));
                 free(focused_g);
@@ -986,11 +1043,11 @@ last_action: string) -> string {
             append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line_g));
             free(line_g);
         } else if current_view == 2 {
-            let focused_song: string = highlight_column_in_line(line, current_view, edit_col_song, -1, edit_mode);
+            let focused_song: string = highlight_column_in_line(line, current_view, edit_col_song,-1, edit_mode);
             let focused_song_g: string = borderify_ascii(focused_song);
-            if (r % 4) == 0 {
+            if(r % 4) == 0 {
                 append_owned(builder, styled_line_compact_rgb(224, 218, 194, 42, 50, 66, 0, focused_song_g));
-            } else if (r % 2) == 0 {
+            } else if(r % 2) == 0 {
                 append_owned(builder, styled_line_compact_rgb(224, 218, 194, 36, 42, 56, 0, focused_song_g));
             } else {
                 append_owned(builder, styled_line_compact(color_white(), color_black(), 0, focused_song_g));
@@ -1016,7 +1073,7 @@ last_action: string) -> string {
     let pat_s2: string = zpad_i64(header_pattern, 2);
     let step_s: string = zpad_i64(transport_step + 1, 3);
     let total_s: string = zpad_i64(steps_per_pattern, 3);
-    let loop_s: string = loop_song_row >= 0 ? "ON" : "OFF";
+    let loop_s: string = loop_song_row >= 0 ? "ON": "OFF";
     let transport: string = format!(" Pos:{}   Pattern:{}   Step:{}/{}   Loop:{}", pos_s2, pat_s2, step_s, total_s, loop_s);
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, transport));
     free(transport);

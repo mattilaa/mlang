@@ -67,34 +67,67 @@ fn view_pattern() -> i64 { return 0; }
 fn view_event() -> i64 { return 1; }
 fn view_song() -> i64 { return 2; }
 
-fn event_count_for_step(pattern_id: i64, step: i64) -> i64 {
-    // Deterministic test data: 1..3 events per pattern step.
+fn pattern_steps(pattern_id: i64, pattern_steps_list: &list<i64>) -> i64 {
+    if pattern_steps_list.len() == 0 {
+        return 1;
+    }
+    let idx: i64 = pattern_id % pattern_steps_list.len();
+    let s: i64 = pattern_steps_list[idx];
+    return s < 1 ? 1 : s;
+}
+
+fn event_count_key(pattern_id: i64, step: i64) -> i64 {
+    return pattern_id * 4096 + step;
+}
+
+fn pattern_row_key(pattern_id: i64, row: i64) -> i64 {
+    return pattern_id * 4096 + row;
+}
+
+fn pattern_cell_key(pattern_id: i64, row: i64, ch_idx: i64) -> i64 {
+    return pattern_id * 65536 + row * 16 + ch_idx;
+}
+
+fn event_count_for_step(pattern_id: i64, step: i64,
+                        ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
+    let k: i64 = event_count_key(pattern_id, step);
+    let ov: i64 = __mlang_std_unordered_map_i64_i64_get_or(ev_count_map_h, k, -1);
+    if ov >= 1 {
+        return ov;
+    }
+    let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, pattern_id, 0);
+    if is_custom == 1 {
+        return 1;
+    }
     return 1 + ((step + pattern_id) % 3);
 }
 
-fn event_total_rows(pattern_id: i64) -> i64 {
-    let steps: i64 = pattern_steps(pattern_id);
+fn event_total_rows(pattern_id: i64, pattern_steps_list: &list<i64>,
+                    ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
+    let steps: i64 = pattern_steps(pattern_id, pattern_steps_list);
     var total: i64 = 0;
     for s in 0..steps {
-        total = total + event_count_for_step(pattern_id, s);
+        total = total + event_count_for_step(pattern_id, s, ev_count_map_h, pat_custom_map_h);
     }
     return total;
 }
 
-fn step_to_event_row(pattern_id: i64, step: i64) -> i64 {
+fn step_to_event_row(pattern_id: i64, step: i64,
+                     ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
     var row: i64 = 0;
     for s in 0..step {
-        row = row + event_count_for_step(pattern_id, s);
+        row = row + event_count_for_step(pattern_id, s, ev_count_map_h, pat_custom_map_h);
     }
     return row;
 }
 
-fn event_row_to_step(pattern_id: i64, event_row: i64) -> i64 {
-    let steps: i64 = pattern_steps(pattern_id);
+fn event_row_to_step(pattern_id: i64, event_row: i64, pattern_steps_list: &list<i64>,
+                     ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
+    let steps: i64 = pattern_steps(pattern_id, pattern_steps_list);
     var row: i64 = event_row;
     var s: i64 = 0;
     while s < steps {
-        let c: i64 = event_count_for_step(pattern_id, s);
+        let c: i64 = event_count_for_step(pattern_id, s, ev_count_map_h, pat_custom_map_h);
         if row < c {
             return s;
         }
@@ -104,29 +137,28 @@ fn event_row_to_step(pattern_id: i64, event_row: i64) -> i64 {
     return steps - 1;
 }
 
-fn map_row_between_views(row: i64, from_view: i64, to_view: i64, active_pattern: i64) -> i64 {
+fn map_row_between_views(row: i64, from_view: i64, to_view: i64, active_pattern: i64,
+                         pattern_steps_list: &list<i64>,
+                         ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
     if from_view == to_view {
         return row;
     }
     if from_view == view_pattern() && to_view == view_event() {
-        return step_to_event_row(active_pattern, row);
+        return step_to_event_row(active_pattern, row, ev_count_map_h, pat_custom_map_h);
     }
     if from_view == view_event() && to_view == view_pattern() {
-        return event_row_to_step(active_pattern, row);
+        return event_row_to_step(active_pattern, row, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
     }
     // Song view uses order rows, so switching to/from it starts at row 0.
     return 0;
 }
 
-fn view_len(view: i64, active_pattern: i64, song_order: &list<i64>) -> i64 {
-    if view == view_event() { return event_total_rows(active_pattern); }
+fn view_len(view: i64, active_pattern: i64, song_order: &list<i64>,
+            pattern_steps_list: &list<i64>,
+            ev_count_map_h: i64, pat_custom_map_h: i64) -> i64 {
+    if view == view_event() { return event_total_rows(active_pattern, pattern_steps_list, ev_count_map_h, pat_custom_map_h); }
     if view == view_song() { return song_order.len(); }
-    return pattern_steps(active_pattern);
-}
-
-fn pattern_steps(pattern_id: i64) -> i64 {
-    let steps: list<i64> = [64, 64, 32, 48, 64, 32, 96, 64];
-    return steps[pattern_id % steps.len()];
+    return pattern_steps(active_pattern, pattern_steps_list);
 }
 
 fn song_pattern_at(song_order: &list<i64>, order_row: i64) -> i64 {
@@ -192,8 +224,51 @@ fn song_bpm_wrap(v: i64) -> i64 {
     return v;
 }
 
-fn pattern_cell_key(row: i64, ch_idx: i64) -> i64 {
-    return row * 16 + ch_idx;
+fn pattern_insert_row(pattern_id: i64, at_row: i64, current_steps: i64,
+                      pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                      pat_note_map_h: i64, pat_v1_map_h: i64, pat_v2_map_h: i64) -> i64 {
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, pattern_id, 1);
+    if current_steps >= 256 {
+        return current_steps;
+    }
+    var idx: i64 = at_row;
+    if idx < 0 { idx = 0; }
+    if idx > current_steps { idx = current_steps; }
+    var r: i64 = current_steps - 1;
+    while r >= idx {
+        let src_row_k: i64 = pattern_row_key(pattern_id, r);
+        let dst_row_k: i64 = pattern_row_key(pattern_id, r + 1);
+        let active: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_row_active_map_h, src_row_k, 0);
+        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, dst_row_k, active);
+        if active == 1 {
+            for ch in 0..4 {
+                let src_k: i64 = pattern_cell_key(pattern_id, r, ch);
+                let dst_k: i64 = pattern_cell_key(pattern_id, r + 1, ch);
+                let n0: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_note_map_h, src_k, 0);
+                let v10: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v1_map_h, src_k, 127);
+                let v20: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v2_map_h, src_k, 0);
+                let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, dst_k, n0);
+                let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v1_map_h, dst_k, v10);
+                let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v2_map_h, dst_k, v20);
+            }
+        }
+        r = r - 1;
+    }
+    let ins_row_k: i64 = pattern_row_key(pattern_id, idx);
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, ins_row_k, 0);
+    return current_steps + 1;
+}
+
+fn pattern_init_cell(pattern_id: i64, row: i64, ch: i64,
+                     pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                     pat_note_map_h: i64, pat_v1_map_h: i64, pat_v2_map_h: i64) -> void {
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, pattern_id, 1);
+    let row_k: i64 = pattern_row_key(pattern_id, row);
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, row_k, 1);
+    let k: i64 = pattern_cell_key(pattern_id, row, ch);
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, k, 0);
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v1_map_h, k, 127);
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v2_map_h, k, 0);
 }
 
 fn event_cell_key(pattern_id: i64, event_row: i64) -> i64 {
@@ -294,6 +369,7 @@ fn main() -> i32 {
     var seq_offset: i64 = 0;
     var current_view: i64 = view_pattern();
     var active_pattern: i64 = 0;
+    var pattern_steps_list: list<i64> = [64, 64, 32, 48, 64, 32, 96, 64];
     var song_order: list<i64> = [
         0, 1, 2, 3, 4, 5, 6, 7,
         1, 0, 3, 2, 5, 4, 7, 6,
@@ -336,25 +412,33 @@ fn main() -> i32 {
     let pat_note_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let pat_v1_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let pat_v2_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
+    let pat_custom_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
+    let pat_row_active_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_event_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_val1_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_val2_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_mod_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_m1_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_m2_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
+    let ev_count_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     if pat_note_map_h == 0 || pat_v1_map_h == 0 || pat_v2_map_h == 0 ||
+       pat_custom_map_h == 0 || pat_row_active_map_h == 0 ||
        ev_event_map_h == 0 || ev_val1_map_h == 0 || ev_val2_map_h == 0 ||
-       ev_mod_map_h == 0 || ev_m1_map_h == 0 || ev_m2_map_h == 0 {
+       ev_mod_map_h == 0 || ev_m1_map_h == 0 || ev_m2_map_h == 0 ||
+       ev_count_map_h == 0 {
         println!("pattern map init failed");
         if pat_note_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_note_map_h); }
         if pat_v1_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_v1_map_h); }
         if pat_v2_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_v2_map_h); }
+        if pat_custom_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_custom_map_h); }
+        if pat_row_active_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_row_active_map_h); }
         if ev_event_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_event_map_h); }
         if ev_val1_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_val1_map_h); }
         if ev_val2_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_val2_map_h); }
         if ev_mod_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_mod_map_h); }
         if ev_m1_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_m1_map_h); }
         if ev_m2_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_m2_map_h); }
+        if ev_count_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_count_map_h); }
         ticker.close();
         __mlang_std_sync_lfqueue_close(qh);
         __mlang_std_sync_lfqueue_free(qh);
@@ -435,11 +519,11 @@ fn main() -> i32 {
                                 play_step = 0;
                             } else if current_view == view_pattern() {
                                 play_song_row = find_song_row_for_pattern(song_order, active_pattern);
-                                let max_steps: i64 = pattern_steps(active_pattern);
+                                let max_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
                                 play_step = cursor_row % max_steps;
                             } else if current_view == view_event() {
                                 play_song_row = find_song_row_for_pattern(song_order, active_pattern);
-                                play_step = event_row_to_step(active_pattern, cursor_row);
+                                play_step = event_row_to_step(active_pattern, cursor_row, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
                             }
                         }
                     }
@@ -495,6 +579,14 @@ fn main() -> i32 {
                             let mname: string = menu_name(focus_idx);
                             let iname: string = menu_item_name(focus_idx, menu_sel);
                             let action: string = format!("{} -> {}", mname, iname);
+                            if focus_idx == 0 && menu_sel == 0 {
+                                active_pattern = (active_pattern + 1) % pattern_steps_list.len();
+                                pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, 1);
+                                let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, active_pattern, 1);
+                                let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, 0), 0);
+                                next_view = view_pattern();
+                                cursor_row = 0;
+                            }
                             if focus_idx == 1 {
                                 if menu_sel == 0 {
                                     if old_view == view_song() {
@@ -513,20 +605,27 @@ fn main() -> i32 {
                             current_view = next_view;
                             // Prevent cross-view "stuck in edit" behavior.
                             edit_mode = 0;
-                            cursor_row = map_row_between_views(cursor_row, old_view, current_view, active_pattern);
+                            cursor_row = map_row_between_views(cursor_row, old_view, current_view, active_pattern, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
                             seq_offset = 0;
                             free(mname);
                             free(iname);
                             free(last_action);
-                            last_action = action;
+                            if focus_idx == 0 && menu_sel == 0 {
+                                free(action);
+                                last_action = format!("{}", "New -> Pattern");
+                            } else {
+                                last_action = action;
+                            }
                             open_menu = 0;
                         } else {
-                            if edit_mode == 0 {
-                                if current_view == view_pattern() {
-                                    pat_edit_row = cursor_row;
-                                    pat_edit_col = edit_col_pattern;
-                                }
-                                edit_mode = 1;
+                            if current_view == view_pattern() && running == 0 {
+                                pattern_init_cell(active_pattern, cursor_row, edit_col_pattern - 1,
+                                                  pat_custom_map_h, pat_row_active_map_h,
+                                                  pat_note_map_h, pat_v1_map_h, pat_v2_map_h);
+                                pat_edit_row = cursor_row;
+                                pat_edit_col = edit_col_pattern;
+                                free(last_action);
+                                last_action = format!("{}", "Pattern cell initialized");
                             }
                         }
                     }
@@ -535,7 +634,7 @@ fn main() -> i32 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = (menu_sel + 1) % count;
                         } else if running == 0 || current_view == view_event() {
-                            let nrows: i64 = view_len(current_view, active_pattern, song_order);
+                            let nrows: i64 = view_len(current_view, active_pattern, song_order, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
                             cursor_row = min_i64(nrows - 1, cursor_row + 1);
                         }
                     }
@@ -546,12 +645,27 @@ fn main() -> i32 {
                         } else {
                             if current_view == view_pattern() {
                                 let ch_idx: i64 = edit_col_pattern - 1;
-                                let key: i64 = pattern_cell_key(cursor_row, ch_idx);
-                                var map_h: i64 = pat_note_map_h;
-                                if edit_sub_pattern == 1 { map_h = pat_v1_map_h; }
-                                if edit_sub_pattern == 2 { map_h = pat_v2_map_h; }
-                                let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(map_h, key, 0);
-                                let _ = __mlang_std_unordered_map_i64_i64_insert(map_h, key, old_v - 1);
+                                let key: i64 = pattern_cell_key(active_pattern, cursor_row, ch_idx);
+                                let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, active_pattern, 0);
+                                if is_custom == 1 {
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, cursor_row), 1);
+                                    if edit_sub_pattern == 0 {
+                                        let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_note_map_h, key, 0);
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, key, old_v <= 0 ? 127 : (old_v - 1));
+                                    } else if edit_sub_pattern == 1 {
+                                        let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v1_map_h, key, 127);
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v1_map_h, key, old_v <= 0 ? 127 : (old_v - 1));
+                                    } else {
+                                        let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v2_map_h, key, 0);
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v2_map_h, key, old_v <= 0 ? 255 : (old_v - 1));
+                                    }
+                                } else {
+                                    var map_h: i64 = pat_note_map_h;
+                                    if edit_sub_pattern == 1 { map_h = pat_v1_map_h; }
+                                    if edit_sub_pattern == 2 { map_h = pat_v2_map_h; }
+                                    let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(map_h, key, 0);
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(map_h, key, old_v - 1);
+                                }
                                 pat_edit_row = cursor_row;
                                 pat_edit_col = edit_col_pattern;
                             } else if current_view == view_event() {
@@ -609,12 +723,27 @@ fn main() -> i32 {
                         } else {
                             if current_view == view_pattern() {
                                 let ch_idx: i64 = edit_col_pattern - 1;
-                                let key: i64 = pattern_cell_key(cursor_row, ch_idx);
-                                var map_h: i64 = pat_note_map_h;
-                                if edit_sub_pattern == 1 { map_h = pat_v1_map_h; }
-                                if edit_sub_pattern == 2 { map_h = pat_v2_map_h; }
-                                let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(map_h, key, 0);
-                                let _ = __mlang_std_unordered_map_i64_i64_insert(map_h, key, old_v + 1);
+                                let key: i64 = pattern_cell_key(active_pattern, cursor_row, ch_idx);
+                                let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, active_pattern, 0);
+                                if is_custom == 1 {
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, cursor_row), 1);
+                                    if edit_sub_pattern == 0 {
+                                        let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_note_map_h, key, 0);
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, key, old_v >= 127 ? 0 : (old_v + 1));
+                                    } else if edit_sub_pattern == 1 {
+                                        let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v1_map_h, key, 127);
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v1_map_h, key, old_v >= 127 ? 0 : (old_v + 1));
+                                    } else {
+                                        let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v2_map_h, key, 0);
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v2_map_h, key, old_v >= 255 ? 0 : (old_v + 1));
+                                    }
+                                } else {
+                                    var map_h: i64 = pat_note_map_h;
+                                    if edit_sub_pattern == 1 { map_h = pat_v1_map_h; }
+                                    if edit_sub_pattern == 2 { map_h = pat_v2_map_h; }
+                                    let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(map_h, key, 0);
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(map_h, key, old_v + 1);
+                                }
                                 pat_edit_row = cursor_row;
                                 pat_edit_col = edit_col_pattern;
                             } else if current_view == view_event() {
@@ -658,7 +787,16 @@ fn main() -> i32 {
                         }
                     }
                     if keycode == std::ascii::AsciiKey::UpperO {
-                        if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
+                        if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_pattern() {
+                            let cur_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
+                            let next_steps: i64 = pattern_insert_row(
+                                active_pattern, cursor_row, cur_steps,
+                                pat_custom_map_h, pat_row_active_map_h,
+                                pat_note_map_h, pat_v1_map_h, pat_v2_map_h);
+                            pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, next_steps);
+                            free(last_action);
+                            last_action = format!("{}", "Pattern row inserted above");
+                        } else if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
                             let first_pat: i64 = song_order.len() > 0 ? song_order[0] : 0;
                             let first_bpm: i64 = song_bpm.len() > 0 ? song_bpm[0] : 120;
                             song_order = song_insert_at(song_order, cursor_row, first_pat);
@@ -667,7 +805,17 @@ fn main() -> i32 {
                         }
                     }
                     if keycode == std::ascii::AsciiKey::LowerO {
-                        if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
+                        if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_pattern() {
+                            let cur_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
+                            let next_steps: i64 = pattern_insert_row(
+                                active_pattern, cursor_row + 1, cur_steps,
+                                pat_custom_map_h, pat_row_active_map_h,
+                                pat_note_map_h, pat_v1_map_h, pat_v2_map_h);
+                            pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, next_steps);
+                            cursor_row = min_i64(next_steps - 1, cursor_row + 1);
+                            free(last_action);
+                            last_action = format!("{}", "Pattern row inserted below");
+                        } else if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
                             let first_pat: i64 = song_order.len() > 0 ? song_order[0] : 0;
                             let first_bpm: i64 = song_bpm.len() > 0 ? song_bpm[0] : 120;
                             song_order = song_insert_at(song_order, cursor_row + 1, first_pat);
@@ -748,6 +896,48 @@ fn main() -> i32 {
                             active_pattern = (active_pattern + 1) % 8;
                         }
                     }
+                    if keycode == std::ascii::AsciiKey::Plus {
+                        if open_menu == 0 && running == 0 {
+                            if current_view == view_pattern() {
+                                let cur_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
+                                if cur_steps < 256 {
+                                    pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, cur_steps + 1);
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, active_pattern, 1);
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, cur_steps), 0);
+                                    free(last_action);
+                                    last_action = format!("{}", "Pattern length +1");
+                                }
+                            } else if current_view == view_event() {
+                                let step_idx: i64 = event_row_to_step(active_pattern, cursor_row, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
+                                let c0: i64 = event_count_for_step(active_pattern, step_idx, ev_count_map_h, pat_custom_map_h);
+                                let _ = __mlang_std_unordered_map_i64_i64_insert(ev_count_map_h, event_count_key(active_pattern, step_idx), c0 + 1);
+                                free(last_action);
+                                last_action = format!("{}", "Event rows +1 on step");
+                            }
+                        }
+                    }
+                    if keycode == std::ascii::AsciiKey::Minus {
+                        if open_menu == 0 && running == 0 {
+                            if current_view == view_pattern() {
+                                let cur_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
+                                if cur_steps > 1 {
+                                    pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, cur_steps - 1);
+                                    if cursor_row >= (cur_steps - 1) {
+                                        cursor_row = cur_steps - 2;
+                                    }
+                                    free(last_action);
+                                    last_action = format!("{}", "Pattern length -1");
+                                }
+                            } else if current_view == view_event() {
+                                let step_idx: i64 = event_row_to_step(active_pattern, cursor_row, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
+                                let c0: i64 = event_count_for_step(active_pattern, step_idx, ev_count_map_h, pat_custom_map_h);
+                                let c1: i64 = c0 <= 1 ? 1 : (c0 - 1);
+                                let _ = __mlang_std_unordered_map_i64_i64_insert(ev_count_map_h, event_count_key(active_pattern, step_idx), c1);
+                                free(last_action);
+                                last_action = format!("{}", "Event rows -1 on step");
+                            }
+                        }
+                    }
                 }
             } else if esc_mode == 1 {
                 if keycode == std::ascii::AsciiKey::LBracket {
@@ -811,8 +1001,8 @@ fn main() -> i32 {
         let h: i64 = ts.rows;
         let visible: i64 = visible_grid_rows(ts.rows, current_view);
         let pat_id: i64 = current_view == view_song() ? song_pattern_at(song_order, cursor_row) : active_pattern;
-        let steps_pp: i64 = pattern_steps(pat_id);
-        let nrows: i64 = view_len(current_view, active_pattern, song_order);
+        let steps_pp: i64 = pattern_steps(pat_id, pattern_steps_list);
+        let nrows: i64 = view_len(current_view, active_pattern, song_order, pattern_steps_list, ev_count_map_h, pat_custom_map_h);
         if cursor_row >= nrows {
             cursor_row = nrows - 1;
         }
@@ -827,9 +1017,9 @@ fn main() -> i32 {
             : (current_view == view_pattern()
                 ? (cursor_row % steps_pp)
                 : (current_view == view_event()
-                    ? event_row_to_step(pat_id, cursor_row)
+                    ? event_row_to_step(pat_id, cursor_row, pattern_steps_list, ev_count_map_h, pat_custom_map_h)
                     : 0));
-        let play_event_row: i64 = step_to_event_row(active_pattern, transport_step);
+        let play_event_row: i64 = step_to_event_row(active_pattern, transport_step, ev_count_map_h, pat_custom_map_h);
         var view_anchor_row: i64 = cursor_row;
         if current_view == view_event() && running == 1 && edit_mode == 0 {
             view_anchor_row = play_event_row;
@@ -841,8 +1031,9 @@ fn main() -> i32 {
             current_view, header_bpm, steps_pp, active_pattern,
             song_order, song_bpm, song_pos, header_pattern, transport_step, loop_song_row,
             edit_col_pattern, edit_sub_pattern, edit_col_event, edit_col_song,
-            pat_note_map_h, pat_v1_map_h, pat_v2_map_h,
+            pat_note_map_h, pat_v1_map_h, pat_v2_map_h, pat_custom_map_h, pat_row_active_map_h,
             ev_event_map_h, ev_val1_map_h, ev_val2_map_h, ev_mod_map_h, ev_m1_map_h, ev_m2_map_h,
+            ev_count_map_h, pattern_steps_list,
             pat_edit_row, pat_edit_col,
             pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
             pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
@@ -861,7 +1052,7 @@ fn main() -> i32 {
             while row_phase >= (60 * tick_hz) {
                 let song_len: i64 = song_order.len();
                 let song_pat: i64 = song_pattern_at(song_order, play_song_row);
-                let song_steps: i64 = pattern_steps(song_pat);
+                let song_steps: i64 = pattern_steps(song_pat, pattern_steps_list);
                 play_step = play_step + 1;
                 if play_step >= song_steps {
                     play_step = 0;
@@ -882,7 +1073,7 @@ fn main() -> i32 {
                 if current_view == view_song() {
                     cursor_row = play_song_row;
                 } else if current_view == view_pattern() {
-                    cursor_row = play_step % pattern_steps(active_pattern);
+                    cursor_row = play_step % pattern_steps(active_pattern, pattern_steps_list);
                 } else if current_view == view_event() {
                     // Keep event cursor user-controlled while running so
                     // columns/rows remain editable; playhead is rendered from
@@ -899,12 +1090,15 @@ fn main() -> i32 {
     __mlang_std_unordered_map_i64_i64_free(pat_note_map_h);
     __mlang_std_unordered_map_i64_i64_free(pat_v1_map_h);
     __mlang_std_unordered_map_i64_i64_free(pat_v2_map_h);
+    __mlang_std_unordered_map_i64_i64_free(pat_custom_map_h);
+    __mlang_std_unordered_map_i64_i64_free(pat_row_active_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_event_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_val1_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_val2_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_mod_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_m1_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_m2_map_h);
+    __mlang_std_unordered_map_i64_i64_free(ev_count_map_h);
     ticker.close();
     __mlang_std_sync_lfqueue_close(qh);
     __mlang_std_sync_lfqueue_free(qh);
