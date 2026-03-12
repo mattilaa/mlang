@@ -363,6 +363,7 @@ private:
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
+    std::string resolveVisibleEnumName(const std::string& enumName) const;
     bool structHasFieldNamed(const std::string& structTypeName,
                              const std::string& fieldName) const;
     std::string expressionTypeNameForLog(ExpressionNode* expr, int line);

@@ -290,6 +290,14 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
                 st->sourceModule = moduleName;
         }
     }
+    if(moduleAst->enumList)
+    {
+        for(auto* en : moduleAst->enumList->enums)
+        {
+            if(en && en->sourceModule.empty())
+                en->sourceModule = moduleName;
+        }
+    }
     // Process any mod declarations in this module (recursive loading)
     if(!processModDeclarations(moduleAst, errorMsg))
     {
@@ -517,6 +525,34 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
         }
 
+        // Always import ALL enums from the module.
+        if(module->enumList && !module->enumList->enums.empty())
+        {
+            if(!program->enumList)
+                program->enumList = new EnumListNode();
+            for(auto* enumDef : module->enumList->enums)
+            {
+                if(!enumDef)
+                    continue;
+                if(enumDef->sourceModule.empty())
+                    enumDef->sourceModule = useDecl->moduleName;
+
+                bool alreadyAdded = false;
+                for(auto* existing : program->enumList->enums)
+                {
+                    if(existing->name == enumDef->name)
+                    {
+                        alreadyAdded = true;
+                        break;
+                    }
+                }
+                if(!alreadyAdded)
+                {
+                    program->enumList->enums.push_back(enumDef);
+                }
+            }
+        }
+
         // Import type aliases so they can be used in the current module.
         if(!module->typeAliases.empty())
         {
@@ -606,6 +642,30 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 {
                     if(aliasDef->name == useDecl->itemName)
                     {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            // Try to find as enum
+            if(!found && module->enumList && !module->enumList->enums.empty())
+            {
+                for(auto* enumDef : module->enumList->enums)
+                {
+                    if(enumDef->name == useDecl->itemName)
+                    {
+                        if(!enumDef->isPublic)
+                        {
+                            if(!is_same_module_family(currentModuleName,
+                                                      useDecl->moduleName))
+                            {
+                                errorMsg = "enum '" + useDecl->itemName +
+                                           "' is private in module '" +
+                                           useDecl->moduleName + "'";
+                                return false;
+                            }
+                        }
                         found = true;
                         break;
                     }

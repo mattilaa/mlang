@@ -942,8 +942,7 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
         auto classifyStructByName = [&](const std::string& structName)
             -> OwnershipClass
         {
-            auto enumIt = enumValues.find(structName);
-            if(enumIt != enumValues.end())
+            if(!resolveVisibleEnumName(structName).empty())
                 return OwnershipClass::Copy;
 
             auto membersIt = structMembers.find(structName);
@@ -1681,10 +1680,11 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
     // Handle struct type reference
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeNode))
     {
-        auto enumIt = enumValues.find(structRef->structName);
-        if(enumIt != enumValues.end())
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
         {
-            auto bkIt = enumBaseTypes.find(structRef->structName);
+            auto bkIt = enumBaseTypes.find(resolvedEnumName);
             TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
             if(bkIt != enumBaseTypes.end())
                 baseKind = bkIt->second;
@@ -2196,12 +2196,44 @@ std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
     return "unknown";
 }
 
+std::string CodeGenerator::resolveVisibleEnumName(
+    const std::string& enumName) const
+{
+    auto it = enumValues.find(enumName);
+    if(it != enumValues.end())
+        return enumName;
+
+    std::string shortName = enumName;
+    size_t scopePos = enumName.rfind("::");
+    if(scopePos != std::string::npos && (scopePos + 2) < enumName.size())
+    {
+        shortName = enumName.substr(scopePos + 2);
+        auto shortIt = enumValues.find(shortName);
+        if(shortIt != enumValues.end())
+            return shortName;
+    }
+
+    for(const auto& kv : enumValues)
+    {
+        const std::string& candidate = kv.first;
+        if(candidate.size() > shortName.size() &&
+           candidate.compare(candidate.size() - shortName.size(),
+                             shortName.size(), shortName) == 0)
+        {
+            char sep = candidate[candidate.size() - shortName.size() - 1];
+            if(sep == ':' || sep == '.' || sep == '_')
+                return candidate;
+        }
+    }
+    return {};
+}
+
 llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
                                             const std::string& enumName,
                                             int line)
 {
-    auto enumIt = enumValues.find(enumName);
-    if(enumIt == enumValues.end())
+    std::string resolvedEnumName = resolveVisibleEnumName(enumName);
+    if(resolvedEnumName.empty())
     {
         reportError(line, "unknown enum: '" + enumName + "'");
 #if LLVM_VERSION_MAJOR >= 21
@@ -2210,9 +2242,10 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
         return builder.CreateGlobalStringPtr("<enum>");
 #endif
     }
+    auto enumIt = enumValues.find(resolvedEnumName);
 
     TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
-    auto bkIt = enumBaseTypes.find(enumName);
+    auto bkIt = enumBaseTypes.find(resolvedEnumName);
     if(bkIt != enumBaseTypes.end())
         baseKind = bkIt->second;
     llvm::Type* enumTy = getLLVMType(baseKind);
@@ -2225,7 +2258,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
                                             "enum.str.cast");
     }
 
-    std::string unknownText = "<" + enumName + ":unknown>";
+    std::string unknownText = "<" + resolvedEnumName + ":unknown>";
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* out = builder.CreateGlobalString(unknownText);
 #else
@@ -2238,7 +2271,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
             enumTy, kv.second, !enumIsUnsigned(baseKind));
         llvm::Value* isMatch =
             builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
-        std::string text = enumName + "::" + kv.first;
+        std::string text = resolvedEnumName + "::" + kv.first;
 #if LLVM_VERSION_MAJOR >= 21
         llvm::Value* variantStr = builder.CreateGlobalString(text);
 #else
@@ -4676,9 +4709,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(paramNode->type))
             {
-                if(enumValues.find(structType->structName) != enumValues.end())
+                if(!resolveVisibleEnumName(structType->structName).empty())
                     enumVariableTypes[std::string(arg.getName())] =
-                        structType->structName;
+                        resolveVisibleEnumName(structType->structName);
                 else
                     structVariableTypes[std::string(arg.getName())] =
                         structType->structName;
@@ -8022,13 +8055,14 @@ llvm::Value* CodeGenerator::generateStringLiteral(StringLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
 {
-    auto enumIt = enumValues.find(node->enumName);
-    if(enumIt == enumValues.end())
+    std::string resolvedEnumName = resolveVisibleEnumName(node->enumName);
+    if(resolvedEnumName.empty())
     {
         reportError(node->line,
                     "unknown enum: '" + node->enumName + "'");
         return nullptr;
     }
+    auto enumIt = enumValues.find(resolvedEnumName);
     auto variantIt = enumIt->second.find(node->variantName);
     if(variantIt == enumIt->second.end())
     {
@@ -8037,7 +8071,7 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
         return nullptr;
     }
     TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
-    auto bkIt = enumBaseTypes.find(node->enumName);
+    auto bkIt = enumBaseTypes.find(resolvedEnumName);
     if(bkIt != enumBaseTypes.end())
         baseKind = bkIt->second;
     llvm::Type* enumTy = getLLVMType(baseKind);
@@ -9922,11 +9956,12 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     // Handle struct type reference
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(node->type))
     {
-        auto enumIt = enumValues.find(structRef->structName);
-        if(enumIt != enumValues.end())
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
         {
             TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
-            auto baseIt = enumBaseTypes.find(structRef->structName);
+            auto baseIt = enumBaseTypes.find(resolvedEnumName);
             if(baseIt != enumBaseTypes.end())
                 baseKind = baseIt->second;
 
@@ -9964,7 +9999,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             builder.CreateStore(initValue, alloca);
             namedValues[node->name] = alloca;
             variableTypes[node->name] = TypeNode::TYPE_INT;
-            enumVariableTypes[node->name] = structRef->structName;
+            enumVariableTypes[node->name] = resolvedEnumName;
             constantVariables.insert(node->name);
             return;
         }
@@ -10750,11 +10785,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
     // Handle struct type reference
     if(auto* structRef = dynamic_cast<StructTypeRefNode*>(node->type))
     {
-        auto enumIt = enumValues.find(structRef->structName);
-        if(enumIt != enumValues.end())
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
         {
             TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
-            auto baseIt = enumBaseTypes.find(structRef->structName);
+            auto baseIt = enumBaseTypes.find(resolvedEnumName);
             if(baseIt != enumBaseTypes.end())
                 baseKind = baseIt->second;
 
@@ -10790,7 +10826,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
             namedValues[node->name] = alloca;
             variableTypes[node->name] = TypeNode::TYPE_INT;
-            enumVariableTypes[node->name] = structRef->structName;
+            enumVariableTypes[node->name] = resolvedEnumName;
             return;
         }
 
@@ -12474,8 +12510,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
                 if(auto* structType = dynamic_cast<StructTypeRefNode*>(param->type))
                 {
-                    if(enumValues.find(structType->structName) != enumValues.end())
-                        enumVariableTypes[param->name] = structType->structName;
+                    std::string resolvedEnumName =
+                        resolveVisibleEnumName(structType->structName);
+                    if(!resolvedEnumName.empty())
+                        enumVariableTypes[param->name] = resolvedEnumName;
                     else
                         structVariableTypes[param->name] = structType->structName;
                 }
@@ -14150,10 +14188,11 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                 if(auto* structType =
                        dynamic_cast<StructTypeRefNode*>(paramNode->type))
                 {
-                    if(enumValues.find(structType->structName) !=
-                       enumValues.end())
+                    std::string resolvedEnumName =
+                        resolveVisibleEnumName(structType->structName);
+                    if(!resolvedEnumName.empty())
                         enumVariableTypes[std::string(arg.getName())] =
-                            structType->structName;
+                            resolvedEnumName;
                     else
                         structVariableTypes[std::string(arg.getName())] =
                             structType->structName;
@@ -16478,10 +16517,12 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
         {
-            if(enumValues.find(structRef->structName) != enumValues.end())
+            std::string resolvedEnumName =
+                resolveVisibleEnumName(structRef->structName);
+            if(!resolvedEnumName.empty())
             {
                 variableTypes[name] = TypeNode::TYPE_INT;
-                enumVariableTypes[name] = structRef->structName;
+                enumVariableTypes[name] = resolvedEnumName;
             }
             else
             {

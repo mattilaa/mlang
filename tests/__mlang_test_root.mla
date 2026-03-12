@@ -1,5 +1,7 @@
 mod std_compiler_tests;
 use std_compiler_tests::*;
+mod std_ascii_tests;
+use std_ascii_tests::*;
 mod enum_tests;
 use enum_tests::*;
 mod borrow_checker_tests;

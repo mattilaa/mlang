@@ -1,4 +1,5 @@
 mod std_compiler_tests;
+mod std_ascii_tests;
 mod enum_tests;
 mod borrow_checker_tests;
 mod std_json_tests;

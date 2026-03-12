@@ -1,0 +1,22 @@
+mod std::ascii;
+use std::ascii::AsciiKey;
+
+#[test]
+fn test_ascii_key_basic_values() -> i32 {
+    if std::ascii::AsciiKey::Nul != 0: { return 1; }
+    if std::ascii::AsciiKey::Esc != 27: { return 1; }
+    if std::ascii::AsciiKey::Space != 32: { return 1; }
+    if std::ascii::AsciiKey::Digit0 != 48: { return 1; }
+    if std::ascii::AsciiKey::UpperA != 65: { return 1; }
+    if std::ascii::AsciiKey::LowerA != 97: { return 1; }
+    if std::ascii::AsciiKey::Del != 127: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_ascii_key_ranges() -> i32 {
+    if std::ascii::AsciiKey::Digit9 < std::ascii::AsciiKey::Digit0: { return 1; }
+    if std::ascii::AsciiKey::UpperZ < std::ascii::AsciiKey::UpperA: { return 1; }
+    if std::ascii::AsciiKey::LowerZ < std::ascii::AsciiKey::LowerA: { return 1; }
+    return 0;
+}
