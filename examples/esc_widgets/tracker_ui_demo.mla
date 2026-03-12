@@ -690,7 +690,7 @@ fn main() -> i32 {
                             } else if current_view == view_event() {
                                 edit_col_event = edit_col_event == 7 ? 2 : (edit_col_event + 1);
                             } else if current_view == view_song() {
-                                if running == 1 && edit_mode == 0 && keycode == 108 {
+                                if running == 1 && edit_mode == 0 && keycode == 76 {
                                     if loop_song_row < 0 {
                                         loop_song_row = play_song_row;
                                     } else {

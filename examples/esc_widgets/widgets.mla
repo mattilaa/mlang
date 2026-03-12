@@ -426,18 +426,66 @@ fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pat
             reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
     }
     if current_view == 2 {
-        if edit_mode != 0 {
-            return format!("{}{}{}{}{}{}{}{}",
-                fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), seg,
-                reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
-        }
+        let _ = edit_mode;
         return format!("{}{}{}{}{}{}{}{}",
-            fg_rgb(12, 12, 12), bg_rgb(228, 236, 246), bold_on(), seg,
-            reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
+            fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), seg,
+            reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
     }
     return format!("{}{}{}{}{}{}{}{}",
         fg_rgb(16, 16, 16), bg_rgb(236, 236, 224), bold_on(), seg,
         reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
+}
+
+fn highlight_song_column_in_line(line: string, col_sel: i64,
+                                 base_fg_r: i64, base_fg_g: i64, base_fg_b: i64,
+                                 base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> string {
+    if col_sel < 0 {
+        return format!("{}", line);
+    }
+    let base_style: string = format!("{}{}{}",
+                                     bold_on(),
+                                     fg_rgb(base_fg_r, base_fg_g, base_fg_b),
+                                     bg_rgb(base_bg_r, base_bg_g, base_bg_b));
+    let n: i64 = len(line);
+    let b: StringBuilder = builder_new(n + 192);
+    var start: i64 = 0;
+    var col: i64 = 0;
+    for i in 0..n {
+        let ch: string = sub(line, i, 1);
+        var next_ok: i32 = 1;
+        if (i + 1) < n {
+            let next_ch: string = sub(line, i + 1, 1);
+            next_ok = eq(next_ch, " ");
+            free(next_ch);
+        }
+        if eq(ch, "|") == 1 && next_ok == 1 {
+            let seg: string = sub(line, start, i - start);
+            if col == col_sel {
+                let hl: string = format!("{}{}{}{}{}{}",
+                                         fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(),
+                                         seg,
+                                         reset(), base_style);
+                let _ = builder_append(b, hl);
+                free(hl);
+            } else {
+                let _ = builder_append(b, seg);
+            }
+            let _ = builder_append(b, ch);
+            free(seg);
+            start = i + 1;
+            col = col + 1;
+        }
+        free(ch);
+    }
+    if start < n {
+        let tail: string = sub(line, start, n - start);
+        let _ = builder_append(b, tail);
+        free(tail);
+    }
+    let out: string = builder_take_string(b);
+    builder_free(b);
+    free(base_style);
+    return out;
 }
 
 fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> string {
@@ -516,17 +564,18 @@ fn song_start_step(song_order: &list<i64>, order_row: i64) -> i64 {
 }
 
 fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>) -> string {
-    let row_s: string = pad_i64_left(order_row, 3, " ");
+    let row_s: string = fit_right(pad_i64_left(order_row, 3, " "), 3, " ");
     let pat_id: i64 = song_order[order_row % song_order.len()];
-    let pat_s: string = zpad_i64(pat_id, 2);
+    let pat_s: string = fit_right(zpad_i64(pat_id, 2), 3, " ");
     let steps: i64 = pattern_steps(pat_id);
-    let steps_s: string = pad_i64_left(steps, 3, " ");
+    let steps_s: string = fit_right(pad_i64_left(steps, 3, " "), 3, " ");
     let bpm_v: i64 = song_bpm.len() == 0 ? 120 : song_bpm[order_row % song_bpm.len()];
-    let bpm_s: string = pad_i64_left(bpm_v, 3, " ");
+    let bpm_s: string = fit_right(pad_i64_left(bpm_v, 3, " "), 3, " ");
     let start_v: i64 = song_start_step(song_order, order_row);
-    let beat_s: string = pad_i64_left(start_v / 4, 5, " ");
-    let start_s: string = pad_i64_left(start_v, 5, " ");
-    let line: string = format!(" {} | {} | {} | {} | {} | {} |", row_s, pat_s, steps_s, bpm_s, beat_s, start_s);
+    let beat_s: string = fit_right(pad_i64_left(start_v / 4, 5, " "), 5, " ");
+    let start_s: string = fit_right(pad_i64_left(start_v, 5, " "), 5, " ");
+    let line: string = format!(" {} | {} | {} | {} | {} | {} |",
+                               row_s, pat_s, steps_s, bpm_s, beat_s, start_s);
     free(start_s);
     free(beat_s);
     free(bpm_s);
@@ -841,6 +890,21 @@ last_action: string) -> string {
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line));
             } else if current_view == 1 {
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line));
+            } else if current_view == 2 {
+                let focused_song_sel: string = highlight_song_column_in_line(
+                    line, edit_col_song,
+                    232, 224, 201,
+                    (r % 4) == 0 ? 52 : ((r % 2) == 0 ? 44 : 36),
+                    (r % 4) == 0 ? 62 : ((r % 2) == 0 ? 54 : 46),
+                    (r % 4) == 0 ? 82 : ((r % 2) == 0 ? 72 : 64));
+                if (r % 4) == 0 {
+                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 62, 82, 1, focused_song_sel));
+                } else if (r % 2) == 0 {
+                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 44, 54, 72, 1, focused_song_sel));
+                } else {
+                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 36, 46, 64, 1, focused_song_sel));
+                }
+                free(focused_song_sel);
             } else {
                 let focused: string = highlight_column_in_line(
                     line,
