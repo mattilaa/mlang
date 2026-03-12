@@ -101,9 +101,30 @@ fn append_owned(builder: StringBuilder, s: string) -> void {
 }
 
 fn sep_line(width: i64) -> string {
-    let dash: string = repeat("-", width);
+    let h: string = acs_hline();
+    let dash: string = repeat(h, width);
     let out: string = styled_line(width, color_bright_black(), color_black(), 0, dash);
     free(dash);
+    free(h);
+    return out;
+}
+
+fn borderify_ascii(line: string) -> string {
+    let n: i64 = len(line);
+    let out_b: StringBuilder = builder_new(n + 64);
+    let v: string = acs_vline();
+    for i in 0..n {
+        let ch: string = sub(line, i, 1);
+        if eq(ch, "|") == 1 {
+            let _ = builder_append(out_b, v);
+        } else {
+            let _ = builder_append(out_b, ch);
+        }
+        free(ch);
+    }
+    free(v);
+    let out: string = builder_take_string(out_b);
+    builder_free(out_b);
     return out;
 }
 
@@ -585,6 +606,24 @@ fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>) 
     return line;
 }
 
+fn song_header_line() -> string {
+    let row_h: string = fit_right("Row", 3, " ");
+    let pat_h: string = fit_right("Pat", 3, " ");
+    let stp_h: string = fit_right("Stp", 3, " ");
+    let bpm_h: string = fit_right("BPM", 3, " ");
+    let beat_h: string = fit_right("Beat", 5, " ");
+    let start_h: string = fit_right("Start", 5, " ");
+    let line: string = format!(" {} | {} | {} | {} | {} | {} |",
+                               row_h, pat_h, stp_h, bpm_h, beat_h, start_h);
+    free(start_h);
+    free(beat_h);
+    free(bpm_h);
+    free(stp_h);
+    free(pat_h);
+    free(row_h);
+    return line;
+}
+
 fn menu_tabs_line(focus_idx: i64, open_menu: i32, running: i32, edit_mode: i32) -> string {
     let file_tab: string = (open_menu == 1 ? (focus_idx == 0 ? "[File]" : " File ") : " File ");
     let view_tab: string = (open_menu == 1 ? (focus_idx == 1 ? "[View]" : " View ") : " View ");
@@ -828,17 +867,35 @@ last_action: string) -> string {
     free(menu_tabs);
 
     if current_view == 1 {
-        append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
-        " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |"));
+        let ev_head_raw: string = format!("{}", " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |");
+        let ev_head_pad: string = fit_right(ev_head_raw, width, " ");
+        let ev_head: string = borderify_ascii(ev_head_pad);
+        free(ev_head_pad);
+        free(ev_head_raw);
+        append_owned(builder, styled_line_compact(color_bright_white(), color_bright_black(), 0, ev_head));
+        free(ev_head);
     } else if current_view == 2 {
-        append_owned(builder, styled_line(width, color_bright_white(), color_bright_black(), 0,
-        " Row | Pat | Stp | BPM | Beat | Start |"));
+        let song_head_raw: string = song_header_line();
+        let song_head_pad: string = fit_right(song_head_raw, width, " ");
+        let song_head: string = borderify_ascii(song_head_pad);
+        free(song_head_pad);
+        free(song_head_raw);
+        append_owned(builder, styled_line_compact(color_bright_white(), color_bright_black(), 0, song_head));
+        free(song_head);
     } else {
         let head: string = tracker_header_line();
-        append_owned(builder, styled_line_rgb(width, 235, 228, 198, 14, 30, 66, 0, head));
+        let head_pad: string = fit_right(head, width, " ");
+        let head_g: string = borderify_ascii(head_pad);
+        free(head_pad);
+        append_owned(builder, styled_line_compact_rgb(235, 228, 198, 14, 30, 66, 0, head_g));
+        free(head_g);
         free(head);
         let subhead: string = tracker_subheader_line();
-        append_owned(builder, styled_line_rgb(width, 214, 208, 188, 10, 24, 52, 0, subhead));
+        let subhead_pad: string = fit_right(subhead, width, " ");
+        let subhead_g: string = borderify_ascii(subhead_pad);
+        free(subhead_pad);
+        append_owned(builder, styled_line_compact_rgb(214, 208, 188, 10, 24, 52, 0, subhead_g));
+        free(subhead_g);
         free(subhead);
     }
     var event_focus_row: i64 = cursor_row;
@@ -887,9 +944,13 @@ last_action: string) -> string {
             let pat_sub_sel: i64 = edit_sub_pattern < 0 ? 0 : (edit_sub_pattern > 2 ? 2 : edit_sub_pattern);
             let evt_col_sel: i64 = edit_col_event < 2 ? 2 : (edit_col_event > 7 ? 7 : edit_col_event);
             if current_view == 0 {
-                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line));
+                let line_g: string = borderify_ascii(line);
+                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line_g));
+                free(line_g);
             } else if current_view == 1 {
-                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line));
+                let line_g: string = borderify_ascii(line);
+                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line_g));
+                free(line_g);
             } else if current_view == 2 {
                 let focused_song_sel: string = highlight_song_column_in_line(
                     line, edit_col_song,
@@ -897,13 +958,15 @@ last_action: string) -> string {
                     (r % 4) == 0 ? 52 : ((r % 2) == 0 ? 44 : 36),
                     (r % 4) == 0 ? 62 : ((r % 2) == 0 ? 54 : 46),
                     (r % 4) == 0 ? 82 : ((r % 2) == 0 ? 72 : 64));
+                let focused_song_sel_g: string = borderify_ascii(focused_song_sel);
                 if (r % 4) == 0 {
-                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 62, 82, 1, focused_song_sel));
+                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 62, 82, 1, focused_song_sel_g));
                 } else if (r % 2) == 0 {
-                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 44, 54, 72, 1, focused_song_sel));
+                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 44, 54, 72, 1, focused_song_sel_g));
                 } else {
-                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 36, 46, 64, 1, focused_song_sel));
+                    append_owned(builder, styled_line_compact_rgb(232, 224, 201, 36, 46, 64, 1, focused_song_sel_g));
                 }
+                free(focused_song_sel_g);
                 free(focused_song_sel);
             } else {
                 let focused: string = highlight_column_in_line(
@@ -912,27 +975,37 @@ last_action: string) -> string {
                     current_view == 1 ? evt_col_sel : (current_view == 0 ? pat_col_sel : edit_col_song),
                     current_view == 0 ? pat_sub_sel : -1,
                     edit_mode);
-                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, focused));
+                let focused_g: string = borderify_ascii(focused);
+                append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, focused_g));
+                free(focused_g);
                 free(focused);
             }
         } else if current_view == 1 && row_step == active_step {
             // Same-step companion event rows: subtle blue highlight (not cyan/green).
-            append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line));
+            let line_g: string = borderify_ascii(line);
+            append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line_g));
+            free(line_g);
         } else if current_view == 2 {
             let focused_song: string = highlight_column_in_line(line, current_view, edit_col_song, -1, edit_mode);
+            let focused_song_g: string = borderify_ascii(focused_song);
             if (r % 4) == 0 {
-                append_owned(builder, styled_line_compact_rgb(224, 218, 194, 42, 50, 66, 0, focused_song));
+                append_owned(builder, styled_line_compact_rgb(224, 218, 194, 42, 50, 66, 0, focused_song_g));
             } else if (r % 2) == 0 {
-                append_owned(builder, styled_line_compact_rgb(224, 218, 194, 36, 42, 56, 0, focused_song));
+                append_owned(builder, styled_line_compact_rgb(224, 218, 194, 36, 42, 56, 0, focused_song_g));
             } else {
-                append_owned(builder, styled_line_compact(color_white(), color_black(), 0, focused_song));
+                append_owned(builder, styled_line_compact(color_white(), color_black(), 0, focused_song_g));
             }
+            free(focused_song_g);
             free(focused_song);
         } else if(stripe_key % 4) == 0 {
             // Beat stripe rows: slightly brighter for clearer rhythm grouping.
-            append_owned(builder, styled_line_compact_rgb(224, 218, 194, 44, 50, 62, 0, line));
+            let line_g: string = borderify_ascii(line);
+            append_owned(builder, styled_line_compact_rgb(224, 218, 194, 44, 50, 62, 0, line_g));
+            free(line_g);
         } else {
-            append_owned(builder, styled_line_compact(color_white(), color_black(), 0, line));
+            let line_g: string = borderify_ascii(line);
+            append_owned(builder, styled_line_compact(color_white(), color_black(), 0, line_g));
+            free(line_g);
         }
         free(line);
     }
