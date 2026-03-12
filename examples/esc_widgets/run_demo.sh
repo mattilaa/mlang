@@ -11,5 +11,5 @@ cleanup_terminal() {
 
 trap cleanup_terminal EXIT INT TERM
 
-"${ROOT_DIR}/build/mlang" "${ROOT_DIR}/examples/esc_widgets/tracker_ui_demo.mla" -o "${OUT_BIN}"
+"${ROOT_DIR}/build/mlang-frontend-mla" "${ROOT_DIR}/examples/esc_widgets/tracker_ui_demo.mla" -o "${OUT_BIN}"
 env -u NO_COLOR FORCE_COLOR=1 MLANG_FORCE_ANSI=1 "${OUT_BIN}"
