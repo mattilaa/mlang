@@ -153,6 +153,14 @@ fn wrap_mod(v: i64, m: i64) -> i64 {
     return out;
 }
 
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a : b;
+}
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a : b;
+}
+
 fn is_digit_ch(ch: string) -> i32 {
     if eq(ch, "0") == 1 { return 1; }
     if eq(ch, "1") == 1 { return 1; }
@@ -825,6 +833,21 @@ fn ansi_cursor_pos(row1: i64, col1: i64) -> string {
     return format!("{}{}{}", home, down, right);
 }
 
+fn center_text(text: string, width: i64) -> string {
+    let n: i64 = len(text);
+    if n >= width {
+        return sub(text, 0, width);
+    }
+    let left_n: i64 = (width - n) / 2;
+    let right_n: i64 = width - n - left_n;
+    let left: string = repeat(" ", left_n);
+    let right: string = repeat(" ", right_n);
+    let out: string = format!("{}{}{}", left, text, right);
+    free(right);
+    free(left);
+    return out;
+}
+
 pub fn render_tracker_ui(width_in: i64,
 rows_in: i64,
 cursor_row: i64,
@@ -882,6 +905,10 @@ focus_idx: i64,
 edit_mode: i32,
 open_menu: i32,
 menu_sel: i64,
+modal_open: i32,
+modal_title: string,
+modal_body: string,
+modal_ok_selected: i32,
 last_action: string) -> string {
     let width: i64 = width_in < 40 ? 40: width_in;
     let rows: i64 = rows_in < 12 ? 12: rows_in;
@@ -1081,22 +1108,101 @@ last_action: string) -> string {
     let base: string = builder_take_string(builder);
     builder_free(builder);
 
-    if open_menu == 0 {
+    if open_menu == 0 && modal_open == 0 {
         return base;
     }
 
     // Overlay dropdown over already-rendered content.
     let overlay_builder: StringBuilder = builder_new(512);
-    let x: i64 = menu_anchor_x(focus_idx) + 1;
-    for m in 0..drop_rows {
-        let y: i64 = 6 + m;
-        let move: string = ansi_cursor_pos(y, x);
-        let line: string = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
-        let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
-        let _ = builder_append(overlay_builder, painted);
-        free(painted);
-        free(line);
-        free(move);
+    if open_menu == 1 {
+        let x: i64 = menu_anchor_x(focus_idx) + 1;
+        for m in 0..drop_rows {
+            let y: i64 = 6 + m;
+            let move: string = ansi_cursor_pos(y, x);
+            let line: string = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
+            let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+            let _ = builder_append(overlay_builder, painted);
+            free(painted);
+            free(line);
+            free(move);
+        }
+    }
+
+    if modal_open == 1 {
+        let inner_w_raw: i64 = max_i64(len(modal_title), len(modal_body)) + 8;
+        let inner_w: i64 = min_i64(max_i64(26, inner_w_raw), width - 6);
+        let box_h: i64 = 7;
+        let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
+        let y0: i64 = max_i64(3, (rows - box_h) / 2);
+        let h: string = acs_hline();
+        let v: string = acs_vline();
+        let ul: string = acs_ulcorner();
+        let ur: string = acs_urcorner();
+        let ll: string = acs_llcorner();
+        let lr: string = acs_lrcorner();
+        let top_fill: string = repeat(h, inner_w);
+        let top: string = format!("{}{}{}", ul, top_fill, ur);
+        let bot: string = format!("{}{}{}", ll, top_fill, lr);
+        let empty_in: string = repeat(" ", inner_w);
+        let title_in: string = center_text(modal_title, inner_w);
+        let body_in: string = center_text(modal_body, inner_w);
+        let btn_plain: string = "[ OK ]";
+        let btn_w: i64 = len(btn_plain);
+        let btn_left_n: i64 = (inner_w - btn_w) / 2;
+        let btn_right_n: i64 = inner_w - btn_w - btn_left_n;
+        let btn_left: string = repeat(" ", btn_left_n);
+        let btn_right: string = repeat(" ", btn_right_n);
+        let modal_base: string = format!("{}{}{}", bold_on(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
+        for i in 0..box_h {
+            let y: i64 = y0 + i;
+            let move: string = ansi_cursor_pos(y, x0);
+            var line: string = format!("{}", "");
+            if i == 0 {
+                free(line);
+                line = format!("{}", top);
+            } else if i == (box_h - 1) {
+                free(line);
+                line = format!("{}", bot);
+            } else if i == 2 {
+                free(line);
+                line = format!("{}{}{}", v, title_in, v);
+            } else if i == 4 {
+                free(line);
+                line = format!("{}{}{}", v, body_in, v);
+            } else if i == 5 {
+                free(line);
+                if modal_ok_selected == 1 {
+                    line = format!("{}{}{}{}{}{}{}{}{}", v, btn_left,
+                                   fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), btn_plain, modal_base,
+                                   btn_right, v);
+                } else {
+                    line = format!("{}{}{}{}{}", v, btn_left, btn_plain, btn_right, v);
+                }
+            } else {
+                free(line);
+                line = format!("{}{}{}", v, empty_in, v);
+            }
+            let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+            let _ = builder_append(overlay_builder, painted);
+            free(painted);
+            free(line);
+            free(move);
+        }
+        free(modal_base);
+        free(btn_right);
+        free(btn_left);
+        free(body_in);
+        free(title_in);
+        free(empty_in);
+        free(bot);
+        free(top);
+        free(top_fill);
+        free(lr);
+        free(ll);
+        free(ur);
+        free(ul);
+        free(v);
+        free(h);
     }
     let _ = builder_append(overlay_builder, reset());
     let _ = builder_append(overlay_builder, cursor(cmd_home()));

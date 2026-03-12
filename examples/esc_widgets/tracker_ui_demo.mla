@@ -450,6 +450,10 @@ fn main() -> i32 {
     var menu_sel: i64 = 0;
     var esc_mode: i32 = 0;
     var csi_num: i64 = 0;
+    var modal_open: i32 = 0;
+    var modal_ok_selected: i32 = 1;
+    var modal_title: string = format!("{}", "About Mlau Tracker");
+    var modal_body: string = format!("{}", "Modal popup demo [Enter/Esc = OK]");
     var last_action: string = format!("{}", "(none)");
 
     print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
@@ -469,6 +473,18 @@ fn main() -> i32 {
             }
             if keycode < 0 {
                 break;
+            }
+
+            if modal_open == 1 {
+                if keycode == std::ascii::AsciiKey::Esc || keycode == std::ascii::AsciiKey::Cr || keycode == std::ascii::AsciiKey::Lf {
+                    modal_open = 0;
+                    esc_mode = 0;
+                    open_menu = 0;
+                    menu_sel = 0;
+                    free(last_action);
+                    last_action = format!("{}", "About dialog closed");
+                }
+                continue;
             }
 
             if esc_mode == 0 {
@@ -601,6 +617,12 @@ fn main() -> i32 {
                                 } else if menu_sel == 2 {
                                     next_view = view_song();
                                 }
+                            }
+                            if focus_idx == 3 && menu_sel == 1 {
+                                modal_open = 1;
+                                modal_ok_selected = 1;
+                                free(last_action);
+                                last_action = format!("{}", "Help -> About");
                             }
                             current_view = next_view;
                             // Prevent cross-view "stuck in edit" behavior.
@@ -1044,7 +1066,8 @@ fn main() -> i32 {
             pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
             pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3,
             ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2,
-            running, focus_idx, edit_mode, open_menu, menu_sel, last_action);
+            running, focus_idx, edit_mode, open_menu, menu_sel,
+            modal_open, modal_title, modal_body, modal_ok_selected, last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -1091,6 +1114,8 @@ fn main() -> i32 {
     }
 
     String::free(ev_buf);
+    String::free(modal_title);
+    String::free(modal_body);
     String::free(last_action);
     __mlang_std_unordered_map_i64_i64_free(pat_note_map_h);
     __mlang_std_unordered_map_i64_i64_free(pat_v1_map_h);
