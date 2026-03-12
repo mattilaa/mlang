@@ -30,10 +30,7 @@ use std::esc::fg;
 use std::esc::fg_rgb;
 use std::esc::reset;
 use std::music::note_name_u8;
-use std::music::tracker_event_mod_names;
 use std::music::tracker_event_names;
-use std::music::tracker_event_val1_names;
-use std::music::tracker_event_val2_names;
 use std::strbuf::builder_append;
 use std::strbuf::builder_free;
 use std::strbuf::builder_new;
@@ -288,6 +285,10 @@ fn event_row_to_step(pattern_id: i64, steps_per_pattern: i64, event_row: i64) ->
     return steps_per_pattern - 1;
 }
 
+fn event_cell_key(pattern_id: i64, event_row: i64) -> i64 {
+    return pattern_id * 4096 + event_row;
+}
+
 fn event_focus_seg(seg: string, col_idx: i64, focus_col: i64, is_focus_row: i32) -> string {
     if is_focus_row == 1 && col_idx == focus_col {
         return format!("{}{}{}{}{}{}{}{}",
@@ -299,8 +300,23 @@ fn event_focus_seg(seg: string, col_idx: i64, focus_col: i64, is_focus_row: i32)
 
 fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
                    focus_row: i64, focus_col: i64,
+                   event_map_h: i64, val1_map_h: i64, val2_map_h: i64,
+                   mod_map_h: i64, m1_map_h: i64, m2_map_h: i64,
                    off_event: i64, off_val1: i64, off_val2: i64,
                    off_mod: i64, off_m1: i64, off_m2: i64) -> string {
+    let key: i64 = event_cell_key(pattern_id, event_row);
+    let off_event_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(event_map_h, key, 0);
+    let off_val1_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(val1_map_h, key, 0);
+    let off_val2_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(val2_map_h, key, 0);
+    let off_mod_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(mod_map_h, key, 0);
+    let off_m1_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(m1_map_h, key, 0);
+    let off_m2_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(m2_map_h, key, 0);
+    let _ = off_event;
+    let _ = off_val1;
+    let _ = off_val2;
+    let _ = off_mod;
+    let _ = off_m1;
+    let _ = off_m2;
     let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row);
     let base_row: i64 = step_to_event_row(pattern_id, step);
     let e_row: i64 = (event_row - base_row) + 1;
@@ -308,19 +324,18 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     let erow_s: string = zpad_i64(e_row, 2);
 
     let ev_names: list<string> = tracker_event_names();
-    let val1s: list<string> = tracker_event_val1_names();
-    let val2s: list<string> = tracker_event_val2_names();
-    let mod_names: list<string> = tracker_event_mod_names();
-    let idx: i64 = wrap_mod((step + e_row + pattern_id) + off_event, ev_names.len());
+    let idx: i64 = wrap_mod((step + e_row + pattern_id) + off_event_local, ev_names.len());
     let ev_s: string = ev_names[idx];
-    let v1_idx: i64 = wrap_mod(idx + off_val1, val1s.len());
-    let v2_idx: i64 = wrap_mod(idx + off_val2, val2s.len());
-    let m_idx: i64 = wrap_mod(idx + off_mod, mod_names.len());
-    let v1_s: string = val1s[v1_idx];
-    let v2_s: string = val2s[v2_idx];
-    let m_s: string = mod_names[m_idx];
-    let m1_s: string = zpad_i64(wrap_mod((step * 2 + e_row) + off_m1, 10), 1);
-    let m2_s: string = zpad_i64(wrap_mod((step * 3 + e_row * 2) + off_m2, 10), 1);
+    let v1_v: i64 = wrap_mod((step * 5 + e_row * 3 + pattern_id) + off_val1_local, 128);
+    let v2_v: i64 = wrap_mod((step * 7 + e_row * 2 + pattern_id) + off_val2_local, 128);
+    let mod_v: i64 = wrap_mod((step * 11 + e_row + pattern_id) + off_mod_local, 128);
+    let m1_v: i64 = wrap_mod((step * 2 + e_row) + off_m1_local, 128);
+    let m2_v: i64 = wrap_mod((step * 3 + e_row * 2) + off_m2_local, 128);
+    let v1_s: string = zpad_i64(v1_v, 3);
+    let v2_s: string = zpad_i64(v2_v, 3);
+    let m_s: string = zpad_i64(mod_v, 3);
+    let m1_s: string = zpad_i64(m1_v, 3);
+    let m2_s: string = zpad_i64(m2_v, 3);
 
     let row_col: string = fit_right(row_label, 3, " ");
     let erow_col: string = fit_right(erow_s, 4, " ");
@@ -696,6 +711,12 @@ edit_col_song: i64,
 pat_note_map_h: i64,
 pat_v1_map_h: i64,
 pat_v2_map_h: i64,
+ev_event_map_h: i64,
+ev_val1_map_h: i64,
+ev_val2_map_h: i64,
+ev_mod_map_h: i64,
+ev_m1_map_h: i64,
+ev_m2_map_h: i64,
 pat_edit_row: i64,
 pat_edit_col: i64,
 pat_note_off0: i64,
@@ -771,6 +792,10 @@ last_action: string) -> string {
         append_owned(builder, styled_line_rgb(width, 214, 208, 188, 10, 24, 52, 0, subhead));
         free(subhead);
     }
+    var event_focus_row: i64 = cursor_row;
+    if current_view == 1 && running == 1 {
+        event_focus_row = step_to_event_row(active_pattern, transport_step);
+    }
 
     for i in 0..grid_rows {
         let r: i64 = seq_offset + i;
@@ -781,7 +806,9 @@ last_action: string) -> string {
                 let evt_col_sel_line: i64 = edit_col_event < 2 ? 2 : (edit_col_event > 7 ? 7 : edit_col_event);
                 line = event_grid_line(
                     r, active_pattern, steps_per_pattern,
-                    cursor_row, evt_col_sel_line,
+                    event_focus_row, evt_col_sel_line,
+                    ev_event_map_h, ev_val1_map_h, ev_val2_map_h,
+                    ev_mod_map_h, ev_m1_map_h, ev_m2_map_h,
                     ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2);
             } else if current_view == 2 {
                 line = song_grid_line(r, song_order, song_bpm);
