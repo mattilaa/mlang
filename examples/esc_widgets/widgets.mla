@@ -103,7 +103,7 @@ fn append_owned(builder: StringBuilder, s: string) -> void {
 fn sep_line(width: i64) -> string {
     let h: string = acs_hline();
     let dash: string = repeat(h, width);
-    let out: string = styled_line(width, color_bright_black(), color_black(), 0, dash);
+    let out: string = styled_line_compact(color_bright_black(), color_black(), 0, dash);
     free(dash);
     free(h);
     return out;
