@@ -1,6 +1,7 @@
 mod std::esc;
 mod std::music;
 mod std::strbuf;
+mod std::unordered;
 
 use std::esc::acs_hline;
 use std::esc::acs_llcorner;
@@ -46,6 +47,7 @@ use std::strbuf::pad_i64_left;
 use std::strbuf::repeat;
 use std::strbuf::sub;
 use std::strbuf::zpad_i64;
+use std::unordered::__mlang_std_unordered_map_i64_i64_get_or;
 use type StringBuilder = i64;
 
 fn styled_line(width: i64, fg_c: i32, bg_c: i32, bold: i32, text: string) -> string {
@@ -147,7 +149,15 @@ fn is_digit_ch(ch: string) -> i32 {
     return 0;
 }
 
-fn pattern_cell(row: i64, ch: i64, off_note: i64, off_v1: i64, off_v2: i64, sel_sub: i64) -> string {
+fn pattern_cell_key(row: i64, ch: i64) -> i64 {
+    return row * 16 + ch;
+}
+
+fn pattern_cell(row: i64, ch: i64, note_map_h: i64, v1_map_h: i64, v2_map_h: i64, sel_sub: i64) -> string {
+    let key: i64 = pattern_cell_key(row, ch);
+    let off_note: i64 = __mlang_std_unordered_map_i64_i64_get_or(note_map_h, key, 0);
+    let off_v1: i64 = __mlang_std_unordered_map_i64_i64_get_or(v1_map_h, key, 0);
+    let off_v2: i64 = __mlang_std_unordered_map_i64_i64_get_or(v2_map_h, key, 0);
     let note_u8: i64 = wrap_mod((row + ch * 2) + off_note, 128);
     let note: string = note_name_u8(note_u8);
     let note_s: string = fit_right(note, 5, " ");
@@ -177,6 +187,7 @@ fn pattern_cell(row: i64, ch: i64, off_note: i64, off_v1: i64, off_v2: i64, sel_
 fn tracker_grid_line(row: i64,
                      edit_row: i64, edit_col: i64,
                      focus_row: i64, focus_col: i64, focus_sub: i64,
+                     note_map_h: i64, v1_map_h: i64, v2_map_h: i64,
                      off_note0: i64, off_note1: i64, off_note2: i64, off_note3: i64,
                      off_v10: i64, off_v11: i64, off_v12: i64, off_v13: i64,
                      off_v20: i64, off_v21: i64, off_v22: i64, off_v23: i64) -> string {
@@ -184,19 +195,25 @@ fn tracker_grid_line(row: i64,
     var line: string = format!("{} |", row_s);
     free(row_s);
     for ch in 0..4 {
-        var off_note: i64 = 0;
-        var off_v1: i64 = 0;
-        var off_v2: i64 = 0;
+        let _ = edit_row;
+        let _ = edit_col;
+        let _ = off_note0;
+        let _ = off_note1;
+        let _ = off_note2;
+        let _ = off_note3;
+        let _ = off_v10;
+        let _ = off_v11;
+        let _ = off_v12;
+        let _ = off_v13;
+        let _ = off_v20;
+        let _ = off_v21;
+        let _ = off_v22;
+        let _ = off_v23;
         var sel_sub: i64 = -1;
-        if row == edit_row && ch == (edit_col - 1) {
-            off_note = ch == 0 ? off_note0 : (ch == 1 ? off_note1 : (ch == 2 ? off_note2 : off_note3));
-            off_v1 = ch == 0 ? off_v10 : (ch == 1 ? off_v11 : (ch == 2 ? off_v12 : off_v13));
-            off_v2 = ch == 0 ? off_v20 : (ch == 1 ? off_v21 : (ch == 2 ? off_v22 : off_v23));
-        }
         if row == focus_row && ch == (focus_col - 1) {
             sel_sub = focus_sub;
         }
-        let cell: string = pattern_cell(row, ch, off_note, off_v1, off_v2, sel_sub);
+        let cell: string = pattern_cell(row, ch, note_map_h, v1_map_h, v2_map_h, sel_sub);
         let next: string = format!("{} {} |", line, cell);
         free(cell);
         free(line);
@@ -676,6 +693,9 @@ edit_col_pattern: i64,
 edit_sub_pattern: i64,
 edit_col_event: i64,
 edit_col_song: i64,
+pat_note_map_h: i64,
+pat_v1_map_h: i64,
+pat_v2_map_h: i64,
 pat_edit_row: i64,
 pat_edit_col: i64,
 pat_note_off0: i64,
@@ -772,6 +792,7 @@ last_action: string) -> string {
                     r,
                     pat_edit_row, pat_edit_col,
                     cursor_row, pat_col_sel_line, pat_sub_sel_line,
+                    pat_note_map_h, pat_v1_map_h, pat_v2_map_h,
                     pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
                     pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
                     pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3);
@@ -781,7 +802,8 @@ last_action: string) -> string {
             line = format!("{}", "");
         }
         let stripe_key: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): r;
-        let active_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, cursor_row): -1;
+        // In event view, selected row and playhead can differ while running.
+        let active_step: i64 = current_view == 1 ? transport_step : -1;
         let row_step: i64 = current_view == 1 ? event_row_to_step(active_pattern, steps_per_pattern, r): -1;
         if r == cursor_row {
             // Selected row: brighter background -> black text for contrast.
