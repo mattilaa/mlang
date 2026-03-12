@@ -80,10 +80,6 @@ fn event_count_key(pattern_id: i64, step: i64) -> i64 {
     return pattern_id * 4096 + step;
 }
 
-fn pattern_row_key(pattern_id: i64, row: i64) -> i64 {
-    return pattern_id * 4096 + row;
-}
-
 fn pattern_cell_key(pattern_id: i64, row: i64, ch_idx: i64) -> i64 {
     return pattern_id * 65536 + row * 16 + ch_idx;
 }
@@ -225,7 +221,7 @@ fn song_bpm_wrap(v: i64) -> i64 {
 }
 
 fn pattern_insert_row(pattern_id: i64, at_row: i64, current_steps: i64,
-                      pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                      pat_custom_map_h: i64, pat_cell_active_map_h: i64,
                       pat_note_map_h: i64, pat_v1_map_h: i64, pat_v2_map_h: i64) -> i64 {
     let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, pattern_id, 1);
     if current_steps >= 256 {
@@ -236,14 +232,12 @@ fn pattern_insert_row(pattern_id: i64, at_row: i64, current_steps: i64,
     if idx > current_steps { idx = current_steps; }
     var r: i64 = current_steps - 1;
     while r >= idx {
-        let src_row_k: i64 = pattern_row_key(pattern_id, r);
-        let dst_row_k: i64 = pattern_row_key(pattern_id, r + 1);
-        let active: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_row_active_map_h, src_row_k, 0);
-        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, dst_row_k, active);
-        if active == 1 {
-            for ch in 0..4 {
-                let src_k: i64 = pattern_cell_key(pattern_id, r, ch);
-                let dst_k: i64 = pattern_cell_key(pattern_id, r + 1, ch);
+        for ch in 0..4 {
+            let src_k: i64 = pattern_cell_key(pattern_id, r, ch);
+            let dst_k: i64 = pattern_cell_key(pattern_id, r + 1, ch);
+            let active: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_cell_active_map_h, src_k, 0);
+            let _ = __mlang_std_unordered_map_i64_i64_insert(pat_cell_active_map_h, dst_k, active);
+            if active == 1 {
                 let n0: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_note_map_h, src_k, 0);
                 let v10: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v1_map_h, src_k, 127);
                 let v20: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_v2_map_h, src_k, 0);
@@ -254,18 +248,19 @@ fn pattern_insert_row(pattern_id: i64, at_row: i64, current_steps: i64,
         }
         r = r - 1;
     }
-    let ins_row_k: i64 = pattern_row_key(pattern_id, idx);
-    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, ins_row_k, 0);
+    for ch in 0..4 {
+        let ins_k: i64 = pattern_cell_key(pattern_id, idx, ch);
+        let _ = __mlang_std_unordered_map_i64_i64_insert(pat_cell_active_map_h, ins_k, 0);
+    }
     return current_steps + 1;
 }
 
 fn pattern_init_cell(pattern_id: i64, row: i64, ch: i64,
-                     pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                     pat_custom_map_h: i64, pat_cell_active_map_h: i64,
                      pat_note_map_h: i64, pat_v1_map_h: i64, pat_v2_map_h: i64) -> void {
     let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, pattern_id, 1);
-    let row_k: i64 = pattern_row_key(pattern_id, row);
-    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, row_k, 1);
     let k: i64 = pattern_cell_key(pattern_id, row, ch);
+    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_cell_active_map_h, k, 1);
     let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, k, 0);
     let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v1_map_h, k, 127);
     let _ = __mlang_std_unordered_map_i64_i64_insert(pat_v2_map_h, k, 0);
@@ -413,7 +408,7 @@ fn main() -> i32 {
     let pat_v1_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let pat_v2_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let pat_custom_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
-    let pat_row_active_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
+    let pat_cell_active_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_event_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_val1_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_val2_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
@@ -422,7 +417,7 @@ fn main() -> i32 {
     let ev_m2_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     let ev_count_map_h: i64 = __mlang_std_unordered_map_i64_i64_new();
     if pat_note_map_h == 0 || pat_v1_map_h == 0 || pat_v2_map_h == 0 ||
-       pat_custom_map_h == 0 || pat_row_active_map_h == 0 ||
+       pat_custom_map_h == 0 || pat_cell_active_map_h == 0 ||
        ev_event_map_h == 0 || ev_val1_map_h == 0 || ev_val2_map_h == 0 ||
        ev_mod_map_h == 0 || ev_m1_map_h == 0 || ev_m2_map_h == 0 ||
        ev_count_map_h == 0 {
@@ -431,7 +426,7 @@ fn main() -> i32 {
         if pat_v1_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_v1_map_h); }
         if pat_v2_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_v2_map_h); }
         if pat_custom_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_custom_map_h); }
-        if pat_row_active_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_row_active_map_h); }
+        if pat_cell_active_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(pat_cell_active_map_h); }
         if ev_event_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_event_map_h); }
         if ev_val1_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_val1_map_h); }
         if ev_val2_map_h != 0 { __mlang_std_unordered_map_i64_i64_free(ev_val2_map_h); }
@@ -583,7 +578,12 @@ fn main() -> i32 {
                                 active_pattern = (active_pattern + 1) % pattern_steps_list.len();
                                 pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, 1);
                                 let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, active_pattern, 1);
-                                let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, 0), 0);
+                                for ch in 0..4 {
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(
+                                        pat_cell_active_map_h,
+                                        pattern_cell_key(active_pattern, 0, ch),
+                                        0);
+                                }
                                 next_view = view_pattern();
                                 cursor_row = 0;
                             }
@@ -620,7 +620,7 @@ fn main() -> i32 {
                         } else {
                             if current_view == view_pattern() && running == 0 {
                                 pattern_init_cell(active_pattern, cursor_row, edit_col_pattern - 1,
-                                                  pat_custom_map_h, pat_row_active_map_h,
+                                                  pat_custom_map_h, pat_cell_active_map_h,
                                                   pat_note_map_h, pat_v1_map_h, pat_v2_map_h);
                                 pat_edit_row = cursor_row;
                                 pat_edit_col = edit_col_pattern;
@@ -648,7 +648,7 @@ fn main() -> i32 {
                                 let key: i64 = pattern_cell_key(active_pattern, cursor_row, ch_idx);
                                 let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, active_pattern, 0);
                                 if is_custom == 1 {
-                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, cursor_row), 1);
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_cell_active_map_h, key, 1);
                                     if edit_sub_pattern == 0 {
                                         let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_note_map_h, key, 0);
                                         let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, key, old_v <= 0 ? 127 : (old_v - 1));
@@ -726,7 +726,7 @@ fn main() -> i32 {
                                 let key: i64 = pattern_cell_key(active_pattern, cursor_row, ch_idx);
                                 let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, active_pattern, 0);
                                 if is_custom == 1 {
-                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, cursor_row), 1);
+                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_cell_active_map_h, key, 1);
                                     if edit_sub_pattern == 0 {
                                         let old_v: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_note_map_h, key, 0);
                                         let _ = __mlang_std_unordered_map_i64_i64_insert(pat_note_map_h, key, old_v >= 127 ? 0 : (old_v + 1));
@@ -791,7 +791,7 @@ fn main() -> i32 {
                             let cur_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
                             let next_steps: i64 = pattern_insert_row(
                                 active_pattern, cursor_row, cur_steps,
-                                pat_custom_map_h, pat_row_active_map_h,
+                                pat_custom_map_h, pat_cell_active_map_h,
                                 pat_note_map_h, pat_v1_map_h, pat_v2_map_h);
                             pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, next_steps);
                             free(last_action);
@@ -809,7 +809,7 @@ fn main() -> i32 {
                             let cur_steps: i64 = pattern_steps(active_pattern, pattern_steps_list);
                             let next_steps: i64 = pattern_insert_row(
                                 active_pattern, cursor_row + 1, cur_steps,
-                                pat_custom_map_h, pat_row_active_map_h,
+                                pat_custom_map_h, pat_cell_active_map_h,
                                 pat_note_map_h, pat_v1_map_h, pat_v2_map_h);
                             pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, next_steps);
                             cursor_row = min_i64(next_steps - 1, cursor_row + 1);
@@ -903,7 +903,12 @@ fn main() -> i32 {
                                 if cur_steps < 256 {
                                     pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, cur_steps + 1);
                                     let _ = __mlang_std_unordered_map_i64_i64_insert(pat_custom_map_h, active_pattern, 1);
-                                    let _ = __mlang_std_unordered_map_i64_i64_insert(pat_row_active_map_h, pattern_row_key(active_pattern, cur_steps), 0);
+                                    for ch in 0..4 {
+                                        let _ = __mlang_std_unordered_map_i64_i64_insert(
+                                            pat_cell_active_map_h,
+                                            pattern_cell_key(active_pattern, cur_steps, ch),
+                                            0);
+                                    }
                                     free(last_action);
                                     last_action = format!("{}", "Pattern length +1");
                                 }
@@ -1031,7 +1036,7 @@ fn main() -> i32 {
             current_view, header_bpm, steps_pp, active_pattern,
             song_order, song_bpm, song_pos, header_pattern, transport_step, loop_song_row,
             edit_col_pattern, edit_sub_pattern, edit_col_event, edit_col_song,
-            pat_note_map_h, pat_v1_map_h, pat_v2_map_h, pat_custom_map_h, pat_row_active_map_h,
+            pat_note_map_h, pat_v1_map_h, pat_v2_map_h, pat_custom_map_h, pat_cell_active_map_h,
             ev_event_map_h, ev_val1_map_h, ev_val2_map_h, ev_mod_map_h, ev_m1_map_h, ev_m2_map_h,
             ev_count_map_h, pattern_steps_list,
             pat_edit_row, pat_edit_col,
@@ -1091,7 +1096,7 @@ fn main() -> i32 {
     __mlang_std_unordered_map_i64_i64_free(pat_v1_map_h);
     __mlang_std_unordered_map_i64_i64_free(pat_v2_map_h);
     __mlang_std_unordered_map_i64_i64_free(pat_custom_map_h);
-    __mlang_std_unordered_map_i64_i64_free(pat_row_active_map_h);
+    __mlang_std_unordered_map_i64_i64_free(pat_cell_active_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_event_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_val1_map_h);
     __mlang_std_unordered_map_i64_i64_free(ev_val2_map_h);

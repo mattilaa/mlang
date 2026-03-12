@@ -167,28 +167,24 @@ fn is_digit_ch(ch: string) -> i32 {
     return 0;
 }
 
-fn pattern_row_key(pattern_id: i64, row: i64) -> i64 {
-    return pattern_id * 4096 + row;
-}
-
 fn pattern_cell_key(pattern_id: i64, row: i64, ch: i64) -> i64 {
     return pattern_id * 65536 + row * 16 + ch;
 }
 
 fn pattern_cell(pattern_id: i64, row: i64, ch: i64,
                 note_map_h: i64, v1_map_h: i64, v2_map_h: i64,
-                pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                pat_custom_map_h: i64, pat_cell_active_map_h: i64,
                 sel_sub: i64) -> string {
     let key: i64 = pattern_cell_key(pattern_id, row, ch);
     let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, pattern_id, 0);
-    let row_k: i64 = pattern_row_key(pattern_id, row);
-    let active_default: i64 = is_custom == 1 ? 0 : 1;
-    let row_active: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_row_active_map_h, row_k, active_default);
+    let cell_active: i64 = is_custom == 1
+        ? __mlang_std_unordered_map_i64_i64_get_or(pat_cell_active_map_h, key, 0)
+        : 1;
     var note_u8: i64 = 0;
     var v1: i64 = 0;
     var v2: i64 = 0;
     var note_s: string = format!("{}", "---");
-    if row_active == 1 {
+    if cell_active == 1 {
         if is_custom == 1 {
             note_u8 = __mlang_std_unordered_map_i64_i64_get_or(note_map_h, key, 0);
             v1 = __mlang_std_unordered_map_i64_i64_get_or(v1_map_h, key, 127);
@@ -235,7 +231,7 @@ fn tracker_grid_line(row: i64,
                      edit_row: i64, edit_col: i64,
                      focus_row: i64, focus_col: i64, focus_sub: i64,
                      note_map_h: i64, v1_map_h: i64, v2_map_h: i64,
-                     pat_custom_map_h: i64, pat_row_active_map_h: i64,
+                     pat_custom_map_h: i64, pat_cell_active_map_h: i64,
                      off_note0: i64, off_note1: i64, off_note2: i64, off_note3: i64,
                      off_v10: i64, off_v11: i64, off_v12: i64, off_v13: i64,
                      off_v20: i64, off_v21: i64, off_v22: i64, off_v23: i64) -> string {
@@ -261,7 +257,7 @@ fn tracker_grid_line(row: i64,
         if row == focus_row && ch == (focus_col - 1) {
             sel_sub = focus_sub;
         }
-        let cell: string = pattern_cell(pattern_id, row, ch, note_map_h, v1_map_h, v2_map_h, pat_custom_map_h, pat_row_active_map_h, sel_sub);
+        let cell: string = pattern_cell(pattern_id, row, ch, note_map_h, v1_map_h, v2_map_h, pat_custom_map_h, pat_cell_active_map_h, sel_sub);
         let next: string = format!("{} {} |", line, cell);
         free(cell);
         free(line);
@@ -852,7 +848,7 @@ pat_note_map_h: i64,
 pat_v1_map_h: i64,
 pat_v2_map_h: i64,
 pat_custom_map_h: i64,
-pat_row_active_map_h: i64,
+pat_cell_active_map_h: i64,
 ev_event_map_h: i64,
 ev_val1_map_h: i64,
 ev_val2_map_h: i64,
@@ -982,7 +978,7 @@ last_action: string) -> string {
                 r, active_pattern,
                 pat_edit_row, pat_edit_col,
                 cursor_row, pat_col_sel_line, pat_sub_sel_line,
-                pat_note_map_h, pat_v1_map_h, pat_v2_map_h, pat_custom_map_h, pat_row_active_map_h,
+                pat_note_map_h, pat_v1_map_h, pat_v2_map_h, pat_custom_map_h, pat_cell_active_map_h,
                 pat_note_off0, pat_note_off1, pat_note_off2, pat_note_off3,
                 pat_v1_off0, pat_v1_off1, pat_v1_off2, pat_v1_off3,
                 pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3);
