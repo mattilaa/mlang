@@ -76,7 +76,7 @@ static int is_try_question_context()
     while((c = yyinput()) != 0)
     {
         buf.push_back((char)c);
-        if(c == ' ' || c == '\t')
+        if(c == ' ' || c == '\t' || c == '\n' || c == '\r')
             continue;
         break;
     }
@@ -85,7 +85,7 @@ static int is_try_question_context()
         yyunput(buf[(size_t)i], yytext);
 
     if(c == 0 || c == ';' || c == ')' || c == ']' || c == '}' || c == ',' ||
-       c == '\n' || c == ':')
+       c == ':')
     {
         return 1;
     }

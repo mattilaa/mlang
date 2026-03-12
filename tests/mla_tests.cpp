@@ -1306,6 +1306,20 @@ TEST_F(MLATest, TernaryWithFunctionCallCondition)
     EXPECT_EQ(compileAndRunExitCode(code), 0);
 }
 
+TEST_F(MLATest, TernaryMultiline)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 5;
+            let y: i32 = x > 3 ?
+                7 :
+                9;
+            return y;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 TEST_F(MLATest, ResultIsOkAndUnwrap)
 {
     std::string code = R"(

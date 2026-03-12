@@ -13,3 +13,12 @@ fn test_ternary_false_branch() -> i32 {
     let s: string = "bad";
     return eq(s, "ok") == 1 ? 1 : 0;
 }
+
+#[test]
+fn test_ternary_multiline() -> i32 {
+    let x: i32 = 5;
+    let y: i32 = x > 3 ?
+        7 :
+        9;
+    return y == 7 ? 0 : 1;
+}
