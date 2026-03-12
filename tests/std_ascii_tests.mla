@@ -1,5 +1,10 @@
 mod std::ascii;
+mod std::strbuf;
 use std::ascii::AsciiKey;
+use std::ascii::UnicodeBoxGlyph;
+use std::ascii::ascii_box_fallback;
+use std::ascii::unicode_box_glyph;
+use std::strbuf::eq;
 
 #[test]
 fn test_ascii_key_basic_values() -> i32 {
@@ -18,5 +23,38 @@ fn test_ascii_key_ranges() -> i32 {
     if std::ascii::AsciiKey::Digit9 < std::ascii::AsciiKey::Digit0: { return 1; }
     if std::ascii::AsciiKey::UpperZ < std::ascii::AsciiKey::UpperA: { return 1; }
     if std::ascii::AsciiKey::LowerZ < std::ascii::AsciiKey::LowerA: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_unicode_box_codepoints() -> i32 {
+    if UnicodeBoxGlyph::LightHorizontal != 9472: { return 1; }
+    if UnicodeBoxGlyph::LightVertical != 9474: { return 1; }
+    if UnicodeBoxGlyph::LightDownRight != 9484: { return 1; }
+    if UnicodeBoxGlyph::DoubleVerticalHorizontal != 9580: { return 1; }
+    if UnicodeBoxGlyph::FullBlock != 9608: { return 1; }
+    if UnicodeBoxGlyph::CheckMark != 10003: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_unicode_box_glyph_mapping() -> i32 {
+    if eq(unicode_box_glyph(UnicodeBoxGlyph::LightHorizontal), "─") != 1: { return 1; }
+    if eq(unicode_box_glyph(UnicodeBoxGlyph::LightVertical), "│") != 1: { return 1; }
+    if eq(unicode_box_glyph(UnicodeBoxGlyph::LightDownRight), "┌") != 1: { return 1; }
+    if eq(unicode_box_glyph(UnicodeBoxGlyph::FullBlock), "█") != 1: { return 1; }
+    if eq(unicode_box_glyph(UnicodeBoxGlyph::RightArrow), "→") != 1: { return 1; }
+    if eq(unicode_box_glyph(UnicodeBoxGlyph::CheckMark), "✓") != 1: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_ascii_fallback_mapping() -> i32 {
+    if eq(ascii_box_fallback(UnicodeBoxGlyph::LightHorizontal), "-") != 1: { return 1; }
+    if eq(ascii_box_fallback(UnicodeBoxGlyph::LightVertical), "|") != 1: { return 1; }
+    if eq(ascii_box_fallback(UnicodeBoxGlyph::LightDownRight), "+") != 1: { return 1; }
+    if eq(ascii_box_fallback(UnicodeBoxGlyph::FullBlock), "#") != 1: { return 1; }
+    if eq(ascii_box_fallback(UnicodeBoxGlyph::LeftArrow), "<") != 1: { return 1; }
+    if eq(ascii_box_fallback(UnicodeBoxGlyph::CheckMark), "v") != 1: { return 1; }
     return 0;
 }

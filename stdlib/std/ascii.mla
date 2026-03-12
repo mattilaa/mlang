@@ -137,3 +137,117 @@ pub enum AsciiKey : i32 {
     Tilde = 126,
     Del = 127
 };
+
+/// \brief Unicode box/graph glyph codepoints for TUI rendering (ncurses-like).
+///
+/// These are Unicode codepoints (U+2500 block plus common symbols), not ASCII
+/// keycodes. Use `unicode_box_glyph()` to get the UTF-8 string for drawing.
+pub enum UnicodeBoxGlyph : i32 {
+    LightHorizontal = 9472,      // U+2500
+    HeavyHorizontal = 9473,      // U+2501
+    LightVertical = 9474,        // U+2502
+    HeavyVertical = 9475,        // U+2503
+    LightDownRight = 9484,       // U+250C
+    LightDownLeft = 9488,        // U+2510
+    LightUpRight = 9492,         // U+2514
+    LightUpLeft = 9496,          // U+2518
+    LightVerticalRight = 9500,   // U+251C
+    LightVerticalLeft = 9508,    // U+2524
+    LightDownHorizontal = 9516,  // U+252C
+    LightUpHorizontal = 9524,    // U+2534
+    LightVerticalHorizontal = 9532, // U+253C
+    DoubleHorizontal = 9552,     // U+2550
+    DoubleVertical = 9553,       // U+2551
+    DoubleDownRight = 9556,      // U+2554
+    DoubleDownLeft = 9559,       // U+2557
+    DoubleUpRight = 9562,        // U+255A
+    DoubleUpLeft = 9565,         // U+255D
+    DoubleVerticalRight = 9568,  // U+2560
+    DoubleVerticalLeft = 9571,   // U+2563
+    DoubleDownHorizontal = 9574, // U+2566
+    DoubleUpHorizontal = 9577,   // U+2569
+    DoubleVerticalHorizontal = 9580, // U+256C
+    UpperHalfBlock = 9600,       // U+2580
+    LowerHalfBlock = 9604,       // U+2584
+    FullBlock = 9608,            // U+2588
+    LeftHalfBlock = 9612,        // U+258C
+    RightHalfBlock = 9616,       // U+2590
+    LightShade = 9617,           // U+2591
+    MediumShade = 9618,          // U+2592
+    DarkShade = 9619,            // U+2593
+    Bullet = 8226,               // U+2022
+    Dot = 183,                   // U+00B7
+    LeftArrow = 8592,            // U+2190
+    UpArrow = 8593,              // U+2191
+    RightArrow = 8594,           // U+2192
+    DownArrow = 8595,            // U+2193
+    CheckMark = 10003,           // U+2713
+    CrossMark = 10007            // U+2717
+};
+
+/// \brief Returns UTF-8 text for a box-drawing glyph enum value.
+pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> string {
+    if g == UnicodeBoxGlyph::LightHorizontal: { return "─"; }
+    if g == UnicodeBoxGlyph::HeavyHorizontal: { return "━"; }
+    if g == UnicodeBoxGlyph::LightVertical: { return "│"; }
+    if g == UnicodeBoxGlyph::HeavyVertical: { return "┃"; }
+    if g == UnicodeBoxGlyph::LightDownRight: { return "┌"; }
+    if g == UnicodeBoxGlyph::LightDownLeft: { return "┐"; }
+    if g == UnicodeBoxGlyph::LightUpRight: { return "└"; }
+    if g == UnicodeBoxGlyph::LightUpLeft: { return "┘"; }
+    if g == UnicodeBoxGlyph::LightVerticalRight: { return "├"; }
+    if g == UnicodeBoxGlyph::LightVerticalLeft: { return "┤"; }
+    if g == UnicodeBoxGlyph::LightDownHorizontal: { return "┬"; }
+    if g == UnicodeBoxGlyph::LightUpHorizontal: { return "┴"; }
+    if g == UnicodeBoxGlyph::LightVerticalHorizontal: { return "┼"; }
+    if g == UnicodeBoxGlyph::DoubleHorizontal: { return "═"; }
+    if g == UnicodeBoxGlyph::DoubleVertical: { return "║"; }
+    if g == UnicodeBoxGlyph::DoubleDownRight: { return "╔"; }
+    if g == UnicodeBoxGlyph::DoubleDownLeft: { return "╗"; }
+    if g == UnicodeBoxGlyph::DoubleUpRight: { return "╚"; }
+    if g == UnicodeBoxGlyph::DoubleUpLeft: { return "╝"; }
+    if g == UnicodeBoxGlyph::DoubleVerticalRight: { return "╠"; }
+    if g == UnicodeBoxGlyph::DoubleVerticalLeft: { return "╣"; }
+    if g == UnicodeBoxGlyph::DoubleDownHorizontal: { return "╦"; }
+    if g == UnicodeBoxGlyph::DoubleUpHorizontal: { return "╩"; }
+    if g == UnicodeBoxGlyph::DoubleVerticalHorizontal: { return "╬"; }
+    if g == UnicodeBoxGlyph::UpperHalfBlock: { return "▀"; }
+    if g == UnicodeBoxGlyph::LowerHalfBlock: { return "▄"; }
+    if g == UnicodeBoxGlyph::FullBlock: { return "█"; }
+    if g == UnicodeBoxGlyph::LeftHalfBlock: { return "▌"; }
+    if g == UnicodeBoxGlyph::RightHalfBlock: { return "▐"; }
+    if g == UnicodeBoxGlyph::LightShade: { return "░"; }
+    if g == UnicodeBoxGlyph::MediumShade: { return "▒"; }
+    if g == UnicodeBoxGlyph::DarkShade: { return "▓"; }
+    if g == UnicodeBoxGlyph::Bullet: { return "•"; }
+    if g == UnicodeBoxGlyph::Dot: { return "·"; }
+    if g == UnicodeBoxGlyph::LeftArrow: { return "←"; }
+    if g == UnicodeBoxGlyph::UpArrow: { return "↑"; }
+    if g == UnicodeBoxGlyph::RightArrow: { return "→"; }
+    if g == UnicodeBoxGlyph::DownArrow: { return "↓"; }
+    if g == UnicodeBoxGlyph::CheckMark: { return "✓"; }
+    if g == UnicodeBoxGlyph::CrossMark: { return "✗"; }
+    return "?";
+}
+
+/// \brief ASCII-safe fallback glyph map (single-byte) for terminals without Unicode.
+pub fn ascii_box_fallback(g: UnicodeBoxGlyph) -> string {
+    if g == UnicodeBoxGlyph::LightHorizontal || g == UnicodeBoxGlyph::HeavyHorizontal || g == UnicodeBoxGlyph::DoubleHorizontal: { return "-"; }
+    if g == UnicodeBoxGlyph::LightVertical || g == UnicodeBoxGlyph::HeavyVertical || g == UnicodeBoxGlyph::DoubleVertical: { return "|"; }
+    if g == UnicodeBoxGlyph::LightDownRight || g == UnicodeBoxGlyph::LightDownLeft || g == UnicodeBoxGlyph::LightUpRight || g == UnicodeBoxGlyph::LightUpLeft: { return "+"; }
+    if g == UnicodeBoxGlyph::LightVerticalRight || g == UnicodeBoxGlyph::LightVerticalLeft || g == UnicodeBoxGlyph::LightDownHorizontal || g == UnicodeBoxGlyph::LightUpHorizontal || g == UnicodeBoxGlyph::LightVerticalHorizontal: { return "+"; }
+    if g == UnicodeBoxGlyph::DoubleDownRight || g == UnicodeBoxGlyph::DoubleDownLeft || g == UnicodeBoxGlyph::DoubleUpRight || g == UnicodeBoxGlyph::DoubleUpLeft: { return "+"; }
+    if g == UnicodeBoxGlyph::DoubleVerticalRight || g == UnicodeBoxGlyph::DoubleVerticalLeft || g == UnicodeBoxGlyph::DoubleDownHorizontal || g == UnicodeBoxGlyph::DoubleUpHorizontal || g == UnicodeBoxGlyph::DoubleVerticalHorizontal: { return "+"; }
+    if g == UnicodeBoxGlyph::UpperHalfBlock || g == UnicodeBoxGlyph::LowerHalfBlock || g == UnicodeBoxGlyph::FullBlock || g == UnicodeBoxGlyph::LeftHalfBlock || g == UnicodeBoxGlyph::RightHalfBlock: { return "#"; }
+    if g == UnicodeBoxGlyph::LightShade: { return "."; }
+    if g == UnicodeBoxGlyph::MediumShade: { return ":"; }
+    if g == UnicodeBoxGlyph::DarkShade: { return "#"; }
+    if g == UnicodeBoxGlyph::Bullet || g == UnicodeBoxGlyph::Dot: { return "."; }
+    if g == UnicodeBoxGlyph::LeftArrow: { return "<"; }
+    if g == UnicodeBoxGlyph::RightArrow: { return ">"; }
+    if g == UnicodeBoxGlyph::UpArrow: { return "^"; }
+    if g == UnicodeBoxGlyph::DownArrow: { return "v"; }
+    if g == UnicodeBoxGlyph::CheckMark: { return "v"; }
+    if g == UnicodeBoxGlyph::CrossMark: { return "x"; }
+    return "?";
+}
