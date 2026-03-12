@@ -54,6 +54,7 @@ extern pub fn __mlang_std_fs_read_line(handle: i64, buf: string, capacity: i64) 
 extern pub fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
 extern pub fn __mlang_std_fs_read_all_lines(handle: i64) -> list<string>;
 extern pub fn __mlang_std_fs_free_lines(lines: list<string>) -> void;
+extern pub fn __mlang_std_fs_list_dir(path: string) -> list<string>;
 extern pub fn __mlang_std_fs_file_exists(path: string) -> i32;
 extern pub fn __mlang_std_fs_parent_dir(path: string) -> string;
 extern pub fn __mlang_std_fs_cwd() -> string;
@@ -578,6 +579,28 @@ impl BufReader {
 /// @param lines  The list returned by `BufReader::lines`.
 pub fn free_lines(lines: list<string>) -> void {
     __mlang_std_fs_free_lines(lines);
+}
+
+/// @brief List entries in a directory (non-recursive).
+///
+/// Returns file and subdirectory names in lexical order. `"."` and `".."`
+/// are excluded. The returned list and strings are heap-allocated; call
+/// `free_lines` when done.
+///
+/// ```mlang
+/// let entries: list<string> = list_dir(".");
+/// for e in entries {
+///     println!("{}", e);
+/// }
+/// free_lines(entries);
+/// ```
+///
+/// @param path Directory path. Empty string means current directory.
+/// @return Directory entries. Returns empty list on open failure or empty directory.
+pub fn list_dir(path: string) -> list<string> {
+    let p: string = len(path) == 0 ? ".": path;
+    let items: list<string> = __mlang_std_fs_list_dir(p);
+    return items;
 }
 
 /// @brief Return `1` if `path` exists and is accessible, `0` otherwise.

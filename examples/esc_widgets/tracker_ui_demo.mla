@@ -1,6 +1,7 @@
 mod std::esc;
 mod std::ascii;
 mod std::event_loop;
+mod std::fs;
 mod std::io;
 mod std::strbuf;
 mod std::sync;
@@ -22,7 +23,19 @@ use std::io::read_keycode_nonblocking;
 use std::io::stdin;
 use std::io::stdout;
 use std::io::write;
+use std::fs::cwd;
+use std::fs::free_lines;
+use std::fs::list_dir;
+use std::strbuf::contains;
 use std::strbuf::concat;
+use std::strbuf::builder_append;
+use std::strbuf::builder_append_char;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+use std::strbuf::eq;
+use std::strbuf::len;
+use std::strbuf::sub;
 use std::strbuf::free;
 use std::term::TermSize;
 use std::term::stdin_enable_raw;
@@ -333,6 +346,60 @@ fn menu_item_name(focus_idx: i64, item_idx: i64) -> string {
     return format!("{}", "System");
 }
 
+fn ascii_is_printable(k: i32) -> i32 {
+    return k >= 32 && k <= 126 ? 1 : 0;
+}
+
+fn append_char_to_owned(src: string, k: i32) -> string {
+    let b: i64 = builder_new(len(src) + 8);
+    let _ = builder_append(b, src);
+    let _ = builder_append_char(b, k);
+    let out: string = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn remove_last_char_owned(src: string) -> string {
+    let n: i64 = len(src);
+    if n <= 0 {
+        return format!("{}", "");
+    }
+    return sub(src, 0, n - 1);
+}
+
+fn fuzzy_match_subseq(text: string, query: string) -> i32 {
+    let qn: i64 = len(query);
+    if qn == 0 {
+        return 1;
+    }
+    let tn: i64 = len(text);
+    var qi: i64 = 0;
+    for ti in 0..tn {
+        if qi >= qn {
+            break;
+        }
+        let tc: string = sub(text, ti, 1);
+        let qc: string = sub(query, qi, 1);
+        if eq(tc, qc) == 1 {
+            qi = qi + 1;
+        }
+        free(qc);
+        free(tc);
+    }
+    return qi >= qn ? 1 : 0;
+}
+
+fn build_file_match_index(entries: &list<string>, filter_q: string) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = entries.len();
+    for i in 0..n {
+        if len(filter_q) == 0 || contains(entries[i], filter_q) == 1 || fuzzy_match_subseq(entries[i], filter_q) == 1 {
+            out.push(i);
+        }
+    }
+    return out;
+}
+
 fn main() -> i32 {
     let input: Stdin = stdin();
     let out = stdout();
@@ -451,9 +518,17 @@ fn main() -> i32 {
     var esc_mode: i32 = 0;
     var csi_num: i64 = 0;
     var modal_open: i32 = 0;
+    var modal_kind: i64 = 0; // 0=about, 1=file dialog
     var modal_ok_selected: i32 = 1;
     var modal_title: string = format!("{}", "About Mlau Tracker");
     var modal_body: string = format!("{}", "Modal popup demo [Enter/Esc = OK]");
+    var file_dialog_input: string = format!("{}", "");
+    var file_dialog_filter: string = format!("{}", "");
+    var file_dialog_filter_mode: i32 = 0;
+    var file_dialog_entries: list<string> = [];
+    var file_dialog_match_idx: list<i64> = [];
+    var file_dialog_sel: i64 = 0;
+    var file_dialog_scroll: i64 = 0;
     var last_action: string = format!("{}", "(none)");
 
     print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
@@ -476,13 +551,124 @@ fn main() -> i32 {
             }
 
             if modal_open == 1 {
-                if keycode == std::ascii::AsciiKey::Esc || keycode == std::ascii::AsciiKey::Cr || keycode == std::ascii::AsciiKey::Lf {
+                if modal_kind == 0 {
+                    if keycode == std::ascii::AsciiKey::Esc || keycode == std::ascii::AsciiKey::Cr || keycode == std::ascii::AsciiKey::Lf {
+                        modal_open = 0;
+                        esc_mode = 0;
+                        open_menu = 0;
+                        menu_sel = 0;
+                        free(last_action);
+                        last_action = format!("{}", "About dialog closed");
+                    }
+                    continue;
+                }
+
+                // File dialog modal.
+                if keycode == std::ascii::AsciiKey::Esc {
                     modal_open = 0;
-                    esc_mode = 0;
+                    modal_kind = 0;
                     open_menu = 0;
                     menu_sel = 0;
+                    file_dialog_filter_mode = 0;
                     free(last_action);
-                    last_action = format!("{}", "About dialog closed");
+                    last_action = format!("{}", "Open dialog canceled");
+                    continue;
+                }
+                if keycode == std::ascii::AsciiKey::Ack {
+                    file_dialog_filter_mode = file_dialog_filter_mode == 1 ? 0 : 1;
+                    free(last_action);
+                    last_action = file_dialog_filter_mode == 1
+                        ? format!("{}", "Filter mode ON (Ctrl-F)")
+                        : format!("{}", "Filter mode OFF (Ctrl-F)");
+                    continue;
+                }
+                if keycode == std::ascii::AsciiKey::Tab || keycode == std::ascii::AsciiKey::LowerL || keycode == std::ascii::AsciiKey::LowerH {
+                    modal_ok_selected = modal_ok_selected == 1 ? 0 : 1;
+                    continue;
+                }
+                if keycode == std::ascii::AsciiKey::LowerJ || keycode == std::ascii::AsciiKey::LowerK {
+                    let mlen: i64 = file_dialog_match_idx.len();
+                    if mlen > 0 {
+                        if keycode == std::ascii::AsciiKey::LowerJ {
+                            file_dialog_sel = file_dialog_sel + 1;
+                            if file_dialog_sel >= mlen {
+                                file_dialog_sel = 0;
+                            }
+                        } else {
+                            file_dialog_sel = file_dialog_sel - 1;
+                            if file_dialog_sel < 0 {
+                                file_dialog_sel = mlen - 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                if keycode == std::ascii::AsciiKey::Backspace || keycode == std::ascii::AsciiKey::Del {
+                    if file_dialog_filter_mode == 1 {
+                        let next_filter: string = remove_last_char_owned(file_dialog_filter);
+                        free(file_dialog_filter);
+                        file_dialog_filter = next_filter;
+                    } else {
+                        let next_input: string = remove_last_char_owned(file_dialog_input);
+                        free(file_dialog_input);
+                        file_dialog_input = next_input;
+                    }
+                    file_dialog_match_idx = build_file_match_index(file_dialog_entries, file_dialog_filter);
+                    if file_dialog_match_idx.len() <= 0 {
+                        file_dialog_sel = 0;
+                    } else if file_dialog_sel >= file_dialog_match_idx.len() {
+                        file_dialog_sel = file_dialog_match_idx.len() - 1;
+                    }
+                    file_dialog_scroll = 0;
+                    continue;
+                }
+                if keycode == std::ascii::AsciiKey::Cr || keycode == std::ascii::AsciiKey::Lf {
+                    if modal_ok_selected == 1 {
+                        if len(file_dialog_input) == 0 && file_dialog_match_idx.len() > 0 {
+                            let pick_idx: i64 = file_dialog_match_idx[file_dialog_sel];
+                            let picked: string = file_dialog_entries[pick_idx];
+                            free(file_dialog_input);
+                            file_dialog_input = format!("{}", picked);
+                        }
+                        modal_open = 0;
+                        modal_kind = 0;
+                        file_dialog_filter_mode = 0;
+                        open_menu = 0;
+                        menu_sel = 0;
+                        free(last_action);
+                        if len(file_dialog_input) > 0 {
+                            last_action = format!("Open -> {}", file_dialog_input);
+                        } else {
+                            last_action = format!("{}", "Open dialog confirmed");
+                        }
+                    } else {
+                        modal_open = 0;
+                        modal_kind = 0;
+                        file_dialog_filter_mode = 0;
+                        open_menu = 0;
+                        menu_sel = 0;
+                        free(last_action);
+                        last_action = format!("{}", "Open dialog canceled");
+                    }
+                    continue;
+                }
+                if ascii_is_printable(keycode) == 1 {
+                    if file_dialog_filter_mode == 1 {
+                        let next_filter: string = append_char_to_owned(file_dialog_filter, keycode);
+                        free(file_dialog_filter);
+                        file_dialog_filter = next_filter;
+                        file_dialog_match_idx = build_file_match_index(file_dialog_entries, file_dialog_filter);
+                        if file_dialog_match_idx.len() <= 0 {
+                            file_dialog_sel = 0;
+                        } else if file_dialog_sel >= file_dialog_match_idx.len() {
+                            file_dialog_sel = file_dialog_match_idx.len() - 1;
+                        }
+                        file_dialog_scroll = 0;
+                    } else {
+                        let next_input: string = append_char_to_owned(file_dialog_input, keycode);
+                        free(file_dialog_input);
+                        file_dialog_input = next_input;
+                    }
                 }
                 continue;
             }
@@ -603,6 +789,25 @@ fn main() -> i32 {
                                 next_view = view_pattern();
                                 cursor_row = 0;
                             }
+                            if focus_idx == 0 && menu_sel == 1 {
+                                if file_dialog_entries.len() > 0 {
+                                    free_lines(file_dialog_entries);
+                                }
+                                let cwd_s: string = cwd();
+                                file_dialog_entries = list_dir(cwd_s);
+                                free(cwd_s);
+                                file_dialog_match_idx = build_file_match_index(file_dialog_entries, file_dialog_filter);
+                                file_dialog_sel = 0;
+                                file_dialog_scroll = 0;
+                                modal_open = 1;
+                                modal_kind = 1;
+                                modal_ok_selected = 1;
+                                file_dialog_filter_mode = 0;
+                                free(modal_title);
+                                modal_title = format!("{}", "Open File");
+                                free(modal_body);
+                                modal_body = format!("{}", "j/k browse  Ctrl-F filter  Enter OK");
+                            }
                             if focus_idx == 1 {
                                 if menu_sel == 0 {
                                     if old_view == view_song() {
@@ -620,6 +825,7 @@ fn main() -> i32 {
                             }
                             if focus_idx == 3 && menu_sel == 1 {
                                 modal_open = 1;
+                                modal_kind = 0;
                                 modal_ok_selected = 1;
                                 free(last_action);
                                 last_action = format!("{}", "Help -> About");
@@ -1067,7 +1273,10 @@ fn main() -> i32 {
             pat_v2_off0, pat_v2_off1, pat_v2_off2, pat_v2_off3,
             ev_off_event, ev_off_val1, ev_off_val2, ev_off_mod, ev_off_m1, ev_off_m2,
             running, focus_idx, edit_mode, open_menu, menu_sel,
-            modal_open, modal_title, modal_body, modal_ok_selected, last_action);
+            modal_open, modal_kind, modal_title, modal_body, modal_ok_selected,
+            file_dialog_input, file_dialog_filter, file_dialog_filter_mode,
+            file_dialog_entries, file_dialog_match_idx, file_dialog_sel, file_dialog_scroll,
+            last_action);
         let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
         let payload: string = concat(clear_home, frame);
         write(out, payload);
@@ -1116,6 +1325,9 @@ fn main() -> i32 {
     String::free(ev_buf);
     String::free(modal_title);
     String::free(modal_body);
+    String::free(file_dialog_input);
+    String::free(file_dialog_filter);
+    if file_dialog_entries.len() > 0 { free_lines(file_dialog_entries); }
     String::free(last_action);
     __mlang_std_unordered_map_i64_i64_free(pat_note_map_h);
     __mlang_std_unordered_map_i64_i64_free(pat_v1_map_h);

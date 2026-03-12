@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
 #include <unistd.h>
 
 typedef struct
@@ -21,6 +22,21 @@ static char* mlang_strdup(const char* s)
     (void)memcpy(out, s, n);
     out[n] = '\0';
     return out;
+}
+
+static int cmp_cstr_ptr(const void* a, const void* b)
+{
+    const char* const* sa = (const char* const*)a;
+    const char* const* sb = (const char* const*)b;
+    if(!sa || !sb)
+        return 0;
+    if(!*sa && !*sb)
+        return 0;
+    if(!*sa)
+        return -1;
+    if(!*sb)
+        return 1;
+    return strcmp(*sa, *sb);
 }
 
 static char* read_line_alloc(FILE* fp)
@@ -195,6 +211,65 @@ int __mlang_std_fs_file_exists(const char* path)
     if(!path)
         return 0;
     return access(path, F_OK) == 0 ? 1 : 0;
+}
+
+mlang_list_t __mlang_std_fs_list_dir(const char* path)
+{
+    mlang_list_t out;
+    out.size = 0;
+    out.data = NULL;
+
+    const char* dir_path = (path && path[0] != '\0') ? path : ".";
+    DIR* dir = opendir(dir_path);
+    if(!dir)
+        return out;
+
+    size_t cap = 32;
+    size_t count = 0;
+    char** items = (char**)malloc(sizeof(char*) * cap);
+    if(!items)
+    {
+        closedir(dir);
+        return out;
+    }
+
+    struct dirent* ent = NULL;
+    while((ent = readdir(dir)) != NULL)
+    {
+        const char* name = ent->d_name;
+        if(!name)
+            continue;
+        if((name[0] == '.' && name[1] == '\0') ||
+           (name[0] == '.' && name[1] == '.' && name[2] == '\0'))
+            continue;
+
+        if(count == cap)
+        {
+            size_t next = cap * 2;
+            char** grown = (char**)realloc(items, sizeof(char*) * next);
+            if(!grown)
+                break;
+            items = grown;
+            cap = next;
+        }
+
+        char* dup = mlang_strdup(name);
+        if(!dup)
+            break;
+        items[count++] = dup;
+    }
+    closedir(dir);
+
+    if(count == 0)
+    {
+        free(items);
+        return out;
+    }
+
+    qsort(items, count, sizeof(char*), cmp_cstr_ptr);
+    out.size = (int64_t)count;
+    out.data = (void*)items;
+    return out;
 }
 
 char* __mlang_std_fs_parent_dir(const char* path)

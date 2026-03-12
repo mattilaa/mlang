@@ -906,9 +906,17 @@ edit_mode: i32,
 open_menu: i32,
 menu_sel: i64,
 modal_open: i32,
+modal_kind: i64,
 modal_title: string,
 modal_body: string,
 modal_ok_selected: i32,
+modal_input: string,
+modal_filter: string,
+modal_filter_mode: i32,
+modal_entries: &list<string>,
+modal_match_idx: &list<i64>,
+modal_sel: i64,
+modal_scroll: i64,
 last_action: string) -> string {
     let width: i64 = width_in < 40 ? 40: width_in;
     let rows: i64 = rows_in < 12 ? 12: rows_in;
@@ -1129,74 +1137,208 @@ last_action: string) -> string {
     }
 
     if modal_open == 1 {
-        let inner_w_raw: i64 = max_i64(len(modal_title), len(modal_body)) + 8;
-        let inner_w: i64 = min_i64(max_i64(26, inner_w_raw), width - 6);
-        let box_h: i64 = 7;
-        let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
-        let y0: i64 = max_i64(3, (rows - box_h) / 2);
         let h: string = acs_hline();
         let v: string = acs_vline();
         let ul: string = acs_ulcorner();
         let ur: string = acs_urcorner();
         let ll: string = acs_llcorner();
         let lr: string = acs_lrcorner();
-        let top_fill: string = repeat(h, inner_w);
-        let top: string = format!("{}{}{}", ul, top_fill, ur);
-        let bot: string = format!("{}{}{}", ll, top_fill, lr);
-        let empty_in: string = repeat(" ", inner_w);
-        let title_in: string = center_text(modal_title, inner_w);
-        let body_in: string = center_text(modal_body, inner_w);
-        let btn_plain: string = "[ OK ]";
-        let btn_w: i64 = len(btn_plain);
-        let btn_left_n: i64 = (inner_w - btn_w) / 2;
-        let btn_right_n: i64 = inner_w - btn_w - btn_left_n;
-        let btn_left: string = repeat(" ", btn_left_n);
-        let btn_right: string = repeat(" ", btn_right_n);
-        let modal_base: string = format!("{}{}{}", bold_on(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
-        for i in 0..box_h {
-            let y: i64 = y0 + i;
-            let move: string = ansi_cursor_pos(y, x0);
-            var line: string = format!("{}", "");
-            if i == 0 {
-                free(line);
-                line = format!("{}", top);
-            } else if i == (box_h - 1) {
-                free(line);
-                line = format!("{}", bot);
-            } else if i == 2 {
-                free(line);
-                line = format!("{}{}{}", v, title_in, v);
-            } else if i == 4 {
-                free(line);
-                line = format!("{}{}{}", v, body_in, v);
-            } else if i == 5 {
-                free(line);
-                if modal_ok_selected == 1 {
-                    line = format!("{}{}{}{}{}{}{}{}{}", v, btn_left,
-                                   fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), btn_plain, modal_base,
-                                   btn_right, v);
-                } else {
-                    line = format!("{}{}{}{}{}", v, btn_left, btn_plain, btn_right, v);
-                }
-            } else {
-                free(line);
-                line = format!("{}{}{}", v, empty_in, v);
+        if modal_kind == 1 {
+            let inner_w: i64 = min_i64(max_i64(52, width - 10), width - 6);
+            let box_h: i64 = min_i64(max_i64(12, rows - 6), 22);
+            let list_rows: i64 = max_i64(3, box_h - 8);
+            let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
+            let y0: i64 = max_i64(2, (rows - box_h) / 2);
+            let top_fill: string = repeat(h, inner_w);
+            let top: string = format!("{}{}{}", ul, top_fill, ur);
+            let bot: string = format!("{}{}{}", ll, top_fill, lr);
+            let empty_in: string = repeat(" ", inner_w);
+            let title_in: string = center_text(modal_title, inner_w);
+            let mode_s: string = modal_filter_mode == 1
+                ? format!("{}", "Ctrl-F FILTER: ON  (type to filter, j/k browse, h/l buttons)")
+                : format!("{}", "Ctrl-F FILTER: OFF (type path input, j/k browse, h/l buttons)");
+            let mode_in_raw: string = fit_right(mode_s, inner_w, " ");
+            let mode_in: string = sub(mode_in_raw, 0, inner_w);
+            let path_raw: string = format!("Path: {}", modal_input);
+            let path_fit0: string = fit_right(path_raw, inner_w, " ");
+            let path_in: string = sub(path_fit0, 0, inner_w);
+            let filter_raw: string = format!("Filter: {}", modal_filter);
+            let filter_fit0: string = fit_right(filter_raw, inner_w, " ");
+            let filter_in: string = sub(filter_fit0, 0, inner_w);
+            let mlen: i64 = modal_match_idx.len();
+            var sel: i64 = modal_sel;
+            if mlen <= 0 {
+                sel = 0;
+            } else if sel >= mlen {
+                sel = mlen - 1;
             }
-            let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
-            let _ = builder_append(overlay_builder, painted);
-            free(painted);
-            free(line);
-            free(move);
+            var scroll: i64 = modal_scroll;
+            if scroll < 0 { scroll = 0; }
+            if sel < scroll {
+                scroll = sel;
+            }
+            if sel >= (scroll + list_rows) {
+                scroll = sel - list_rows + 1;
+            }
+            if scroll < 0 { scroll = 0; }
+            if mlen > list_rows && scroll > (mlen - list_rows) {
+                scroll = mlen - list_rows;
+            }
+            let btn_plain: string = "[ OK ] [ CANCEL ]";
+            let btn_w: i64 = len(btn_plain);
+            let btn_left_n: i64 = (inner_w - btn_w) / 2;
+            let btn_right_n: i64 = inner_w - btn_w - btn_left_n;
+            let btn_left: string = repeat(" ", btn_left_n);
+            let btn_right: string = repeat(" ", btn_right_n);
+            let btn_ok: string = modal_ok_selected == 1
+                ? format!("{}{}{}{}{}", fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), "[ OK ]", reset())
+                : format!("{}", "[ OK ]");
+            let btn_cancel: string = modal_ok_selected == 0
+                ? format!("{}{}{}{}{}", fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), "[ CANCEL ]", reset())
+                : format!("{}", "[ CANCEL ]");
+            let btn_mix: string = format!("{} {}", btn_ok, btn_cancel);
+            let btn_text: string = format!("{}{}{}", btn_left, btn_mix, btn_right);
+            for i in 0..box_h {
+                let y: i64 = y0 + i;
+                let move: string = ansi_cursor_pos(y, x0);
+                var line: string = format!("{}", "");
+                if i == 0 {
+                    free(line);
+                    line = format!("{}", top);
+                } else if i == (box_h - 1) {
+                    free(line);
+                    line = format!("{}", bot);
+                } else if i == 1 {
+                    free(line);
+                    line = format!("{}{}{}", v, title_in, v);
+                } else if i == 2 {
+                    free(line);
+                    line = format!("{}{}{}", v, mode_in, v);
+                } else if i == 3 {
+                    free(line);
+                    line = format!("{}{}{}", v, path_in, v);
+                } else if i == 4 {
+                    free(line);
+                    line = format!("{}{}{}", v, filter_in, v);
+                } else if i >= 5 && i < (5 + list_rows) {
+                    free(line);
+                    let ri: i64 = i - 5;
+                    let mi: i64 = scroll + ri;
+                    if mi < mlen {
+                        let eidx: i64 = modal_match_idx[mi];
+                        let name: string = modal_entries[eidx];
+                        let prefix: string = mi == sel ? "> " : "  ";
+                        let item_raw: string = format!("{}{}", prefix, name);
+                        let item_fit0: string = fit_right(item_raw, inner_w, " ");
+                        let item_fit: string = sub(item_fit0, 0, inner_w);
+                        if mi == sel {
+                            line = format!("{}{}{}{}{}{}{}", v, fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), item_fit, reset(), v);
+                        } else {
+                            line = format!("{}{}{}", v, item_fit, v);
+                        }
+                        free(item_fit);
+                        free(item_fit0);
+                        free(item_raw);
+                    } else {
+                        line = format!("{}{}{}", v, empty_in, v);
+                    }
+                } else if i == (box_h - 2) {
+                    free(line);
+                    line = format!("{}{}{}", v, btn_text, v);
+                } else {
+                    free(line);
+                    line = format!("{}{}{}", v, empty_in, v);
+                }
+                let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+                let _ = builder_append(overlay_builder, painted);
+                free(painted);
+                free(line);
+                free(move);
+            }
+            free(btn_text);
+            free(btn_mix);
+            free(btn_cancel);
+            free(btn_ok);
+            free(btn_right);
+            free(btn_left);
+            free(filter_in);
+            free(filter_fit0);
+            free(filter_raw);
+            free(path_in);
+            free(path_fit0);
+            free(path_raw);
+            free(mode_in);
+            free(mode_in_raw);
+            free(mode_s);
+            free(title_in);
+            free(empty_in);
+            free(bot);
+            free(top);
+            free(top_fill);
+        } else {
+            let inner_w_raw: i64 = max_i64(len(modal_title), len(modal_body)) + 8;
+            let inner_w: i64 = min_i64(max_i64(26, inner_w_raw), width - 6);
+            let box_h: i64 = 7;
+            let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
+            let y0: i64 = max_i64(3, (rows - box_h) / 2);
+            let top_fill: string = repeat(h, inner_w);
+            let top: string = format!("{}{}{}", ul, top_fill, ur);
+            let bot: string = format!("{}{}{}", ll, top_fill, lr);
+            let empty_in: string = repeat(" ", inner_w);
+            let title_in: string = center_text(modal_title, inner_w);
+            let body_in: string = center_text(modal_body, inner_w);
+            let btn_plain: string = "[ OK ]";
+            let btn_w: i64 = len(btn_plain);
+            let btn_left_n: i64 = (inner_w - btn_w) / 2;
+            let btn_right_n: i64 = inner_w - btn_w - btn_left_n;
+            let btn_left: string = repeat(" ", btn_left_n);
+            let btn_right: string = repeat(" ", btn_right_n);
+            let modal_base: string = format!("{}{}{}", bold_on(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
+            for i in 0..box_h {
+                let y: i64 = y0 + i;
+                let move: string = ansi_cursor_pos(y, x0);
+                var line: string = format!("{}", "");
+                if i == 0 {
+                    free(line);
+                    line = format!("{}", top);
+                } else if i == (box_h - 1) {
+                    free(line);
+                    line = format!("{}", bot);
+                } else if i == 2 {
+                    free(line);
+                    line = format!("{}{}{}", v, title_in, v);
+                } else if i == 4 {
+                    free(line);
+                    line = format!("{}{}{}", v, body_in, v);
+                } else if i == 5 {
+                    free(line);
+                    if modal_ok_selected == 1 {
+                        line = format!("{}{}{}{}{}{}{}{}{}", v, btn_left,
+                                       fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(), btn_plain, modal_base,
+                                       btn_right, v);
+                    } else {
+                        line = format!("{}{}{}{}{}", v, btn_left, btn_plain, btn_right, v);
+                    }
+                } else {
+                    free(line);
+                    line = format!("{}{}{}", v, empty_in, v);
+                }
+                let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+                let _ = builder_append(overlay_builder, painted);
+                free(painted);
+                free(line);
+                free(move);
+            }
+            free(modal_base);
+            free(btn_right);
+            free(btn_left);
+            free(body_in);
+            free(title_in);
+            free(empty_in);
+            free(bot);
+            free(top);
+            free(top_fill);
         }
-        free(modal_base);
-        free(btn_right);
-        free(btn_left);
-        free(body_in);
-        free(title_in);
-        free(empty_in);
-        free(bot);
-        free(top);
-        free(top_fill);
         free(lr);
         free(ll);
         free(ur);
