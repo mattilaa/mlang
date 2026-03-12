@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT_BIN="/tmp/mlang_esc_widgets_demo"
+MLANG_FRONTEND="${MLANG_FRONTEND:-${ROOT_DIR}/build/mlang-frontend-mla}"
+MLANG_BACKEND="${MLANG_BACKEND:-${ROOT_DIR}/build/mlang}"
 
 cleanup_terminal() {
   stty sane 2>/dev/null || true
@@ -11,5 +13,5 @@ cleanup_terminal() {
 
 trap cleanup_terminal EXIT INT TERM
 
-"${ROOT_DIR}/build/mlang-frontend-mla" "${ROOT_DIR}/examples/esc_widgets/tracker_ui_demo.mla" -o "${OUT_BIN}"
+"${MLANG_FRONTEND}" --backend "${MLANG_BACKEND}" "${ROOT_DIR}/examples/esc_widgets/tracker_ui_demo.mla" -o "${OUT_BIN}"
 env -u NO_COLOR FORCE_COLOR=1 MLANG_FORCE_ANSI=1 "${OUT_BIN}"

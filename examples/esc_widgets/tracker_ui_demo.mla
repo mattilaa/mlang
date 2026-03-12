@@ -1,4 +1,5 @@
 mod std::esc;
+mod std::ascii;
 mod std::event_loop;
 mod std::io;
 mod std::strbuf;
@@ -37,6 +38,7 @@ use std::unordered::__mlang_std_unordered_map_i64_i64_new;
 use std::unordered::__mlang_std_unordered_map_i64_i64_free;
 use std::unordered::__mlang_std_unordered_map_i64_i64_get_or;
 use std::unordered::__mlang_std_unordered_map_i64_i64_insert;
+use std::ascii::AsciiKey;
 
 fn canvas_width(cols: i32) -> i64 {
     let w: i64 = cols - 4;
@@ -391,13 +393,13 @@ fn main() -> i32 {
             }
 
             if esc_mode == 0 {
-                if keycode == 27 {
+                if keycode == std::ascii::AsciiKey::Esc {
                     // Peek one byte so Shift+Tab/F-keys are not mistaken for plain ESC.
                     let keycode2: i32 = read_keycode_nonblocking(stdin());
-                    if keycode2 == 91 {
+                    if keycode2 == std::ascii::AsciiKey::LBracket {
                         esc_mode = 2;
                         csi_num = 0;
-                    } else if keycode2 == 79 {
+                    } else if keycode2 == std::ascii::AsciiKey::UpperO {
                         esc_mode = 3;
                     } else if keycode2 == -2 {
                         if open_menu == 1 {
@@ -421,10 +423,10 @@ fn main() -> i32 {
                         esc_mode = 0;
                     }
                 } else {
-                    if keycode == 113 || keycode == 81 {
+                    if keycode == std::ascii::AsciiKey::LowerQ || keycode == std::ascii::AsciiKey::UpperQ {
                         quit = 1;
                     }
-                    if keycode == 32 {
+                    if keycode == std::ascii::AsciiKey::Space {
                         running = running == 1 ? 0 : 1;
                         row_phase = 0;
                         if running == 1 {
@@ -441,7 +443,7 @@ fn main() -> i32 {
                             }
                         }
                     }
-                    if keycode == 9 {
+                    if keycode == std::ascii::AsciiKey::Tab {
                         if open_menu == 0 {
                             focus_idx = 0;
                             open_menu = 1;
@@ -451,42 +453,42 @@ fn main() -> i32 {
                             menu_sel = 0;
                         }
                     }
-                    if keycode == 49 {
+                    if keycode == std::ascii::AsciiKey::Digit1 {
                         focus_idx = 0;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 50 {
+                    if keycode == std::ascii::AsciiKey::Digit2 {
                         focus_idx = 1;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 51 {
+                    if keycode == std::ascii::AsciiKey::Digit3 {
                         focus_idx = 2;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 52 {
+                    if keycode == std::ascii::AsciiKey::Digit4 {
                         focus_idx = 3;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 102 || keycode == 70 {
+                    if keycode == std::ascii::AsciiKey::LowerF || keycode == std::ascii::AsciiKey::UpperF {
                         focus_idx = 0;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 118 || keycode == 86 {
+                    if keycode == std::ascii::AsciiKey::LowerV || keycode == std::ascii::AsciiKey::UpperV {
                         focus_idx = 1;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 101 || keycode == 69 {
+                    if keycode == std::ascii::AsciiKey::LowerE || keycode == std::ascii::AsciiKey::UpperE {
                         focus_idx = 2;
                         open_menu = 1;
                         menu_sel = 0;
                     }
-                    if keycode == 13 || keycode == 10 {
+                    if keycode == std::ascii::AsciiKey::Cr || keycode == std::ascii::AsciiKey::Lf {
                         if open_menu == 1 {
                             let old_view: i64 = current_view;
                             var next_view: i64 = current_view;
@@ -528,7 +530,7 @@ fn main() -> i32 {
                             }
                         }
                     }
-                    if keycode == 106 {
+                    if keycode == std::ascii::AsciiKey::LowerJ {
                         if open_menu == 1 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = (menu_sel + 1) % count;
@@ -537,7 +539,7 @@ fn main() -> i32 {
                             cursor_row = min_i64(nrows - 1, cursor_row + 1);
                         }
                     }
-                    if keycode == 74 {
+                    if keycode == std::ascii::AsciiKey::UpperJ {
                         if open_menu == 1 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = (menu_sel + 1) % count;
@@ -592,7 +594,7 @@ fn main() -> i32 {
                             }
                         }
                     }
-                    if keycode == 107 {
+                    if keycode == std::ascii::AsciiKey::LowerK {
                         if open_menu == 1 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = menu_sel == 0 ? (count - 1) : (menu_sel - 1);
@@ -600,7 +602,7 @@ fn main() -> i32 {
                             cursor_row = max_i64(0, cursor_row - 1);
                         }
                     }
-                    if keycode == 75 {
+                    if keycode == std::ascii::AsciiKey::UpperK {
                         if open_menu == 1 {
                             let count: i64 = menu_item_count(focus_idx);
                             menu_sel = menu_sel == 0 ? (count - 1) : (menu_sel - 1);
@@ -655,7 +657,7 @@ fn main() -> i32 {
                             }
                         }
                     }
-                    if keycode == 79 {
+                    if keycode == std::ascii::AsciiKey::UpperO {
                         if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
                             let first_pat: i64 = song_order.len() > 0 ? song_order[0] : 0;
                             let first_bpm: i64 = song_bpm.len() > 0 ? song_bpm[0] : 120;
@@ -664,7 +666,7 @@ fn main() -> i32 {
                             active_pattern = song_pattern_at(song_order, cursor_row);
                         }
                     }
-                    if keycode == 111 {
+                    if keycode == std::ascii::AsciiKey::LowerO {
                         if open_menu == 0 && edit_mode == 0 && running == 0 && current_view == view_song() {
                             let first_pat: i64 = song_order.len() > 0 ? song_order[0] : 0;
                             let first_bpm: i64 = song_bpm.len() > 0 ? song_bpm[0] : 120;
@@ -674,7 +676,7 @@ fn main() -> i32 {
                             active_pattern = song_pattern_at(song_order, cursor_row);
                         }
                     }
-                    if keycode == 108 || keycode == 76 {
+                    if keycode == std::ascii::AsciiKey::LowerL || keycode == std::ascii::AsciiKey::UpperL {
                         if open_menu == 0 {
                             if current_view == view_pattern() {
                                 if edit_sub_pattern < 2 {
@@ -690,7 +692,7 @@ fn main() -> i32 {
                             } else if current_view == view_event() {
                                 edit_col_event = edit_col_event == 7 ? 2 : (edit_col_event + 1);
                             } else if current_view == view_song() {
-                                if running == 1 && edit_mode == 0 && keycode == 76 {
+                                if running == 1 && edit_mode == 0 && keycode == std::ascii::AsciiKey::UpperL {
                                     if loop_song_row < 0 {
                                         loop_song_row = play_song_row;
                                     } else {
@@ -702,7 +704,7 @@ fn main() -> i32 {
                             }
                         }
                     }
-                    if keycode == 104 || keycode == 72 {
+                    if keycode == std::ascii::AsciiKey::LowerH || keycode == std::ascii::AsciiKey::UpperH {
                         if open_menu == 0 {
                             if current_view == view_pattern() {
                                 if edit_sub_pattern > 0 {
@@ -722,26 +724,36 @@ fn main() -> i32 {
                             }
                         }
                     }
-                    if keycode == 119 || keycode == 87 {
+                    if keycode == std::ascii::AsciiKey::LowerW || keycode == std::ascii::AsciiKey::UpperW {
                         if open_menu == 0 {
                             if current_view == view_event() {
                                 edit_col_event = edit_col_event == 7 ? 2 : (edit_col_event + 1);
                             }
                         }
                     }
-                    if keycode == 98 || keycode == 66 {
+                    if keycode == std::ascii::AsciiKey::LowerB || keycode == std::ascii::AsciiKey::UpperB {
                         if open_menu == 0 {
                             if current_view == view_event() {
                                 edit_col_event = edit_col_event == 2 ? 7 : (edit_col_event - 1);
                             }
                         }
                     }
+                    if keycode == std::ascii::AsciiKey::UpperN {
+                        if open_menu == 0 && current_view == view_pattern() && running == 0 {
+                            active_pattern = (active_pattern + 7) % 8;
+                        }
+                    }
+                    if keycode == std::ascii::AsciiKey::UpperM {
+                        if open_menu == 0 && current_view == view_pattern() && running == 0 {
+                            active_pattern = (active_pattern + 1) % 8;
+                        }
+                    }
                 }
             } else if esc_mode == 1 {
-                if keycode == 91 {
+                if keycode == std::ascii::AsciiKey::LBracket {
                     esc_mode = 2;
                     csi_num = 0;
-                } else if keycode == 79 {
+                } else if keycode == std::ascii::AsciiKey::UpperO {
                     esc_mode = 3;
                 } else {
                     // Plain ESC closes the dropdown if open.
@@ -754,15 +766,15 @@ fn main() -> i32 {
                     esc_mode = 0;
                 }
             } else if esc_mode == 2 {
-                if keycode >= 48 && keycode <= 57 {
-                    csi_num = csi_num * 10 + (keycode - 48);
-                } else if keycode == 90 {
+                if keycode >= std::ascii::AsciiKey::Digit0 && keycode <= std::ascii::AsciiKey::Digit9 {
+                    csi_num = csi_num * 10 + (keycode - std::ascii::AsciiKey::Digit0);
+                } else if keycode == std::ascii::AsciiKey::UpperZ {
                     // CSI Z = Shift+Tab
                     focus_idx = focus_idx == 0 ? 3 : (focus_idx - 1);
                     open_menu = 1;
                     menu_sel = 0;
                     esc_mode = 0;
-                } else if keycode == 126 {
+                } else if keycode == std::ascii::AsciiKey::Tilde {
                     if csi_num >= 11 && csi_num <= 14 {
                         focus_idx = csi_num - 11;
                         open_menu = 1;
@@ -773,19 +785,19 @@ fn main() -> i32 {
                     esc_mode = 0;
                 }
             } else {
-                if keycode == 80 {
+                if keycode == std::ascii::AsciiKey::UpperP {
                     focus_idx = 0;
                     open_menu = 1;
                     menu_sel = 0;
-                } else if keycode == 81 {
+                } else if keycode == std::ascii::AsciiKey::UpperQ {
                     focus_idx = 1;
                     open_menu = 1;
                     menu_sel = 0;
-                } else if keycode == 82 {
+                } else if keycode == std::ascii::AsciiKey::UpperR {
                     focus_idx = 2;
                     open_menu = 1;
                     menu_sel = 0;
-                } else if keycode == 83 {
+                } else if keycode == std::ascii::AsciiKey::UpperS {
                     focus_idx = 3;
                     open_menu = 1;
                     menu_sel = 0;
