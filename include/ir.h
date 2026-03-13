@@ -212,6 +212,10 @@ private:
     std::set<std::string> monomorphizedTypes;
     // Map mangled name back to original generic struct name
     std::map<std::string, std::string> mangledToGenericName;
+    // Map mangled name to concrete type arguments used for monomorphization.
+    std::map<std::string, std::vector<TypeNode*>> monomorphizedTypeArgs;
+    // Active generic type bindings while generating a monomorphized method body.
+    std::map<std::string, TypeNode*> activeTypeParamBindings;
 
     // Generics helper methods
     TypeNode* substituteTypeParams(TypeNode* type,

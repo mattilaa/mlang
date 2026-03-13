@@ -1697,6 +1697,15 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
             return it->second;
         }
 
+        // When generating monomorphized generic method bodies, unresolved
+        // identifiers like `T` may appear in type positions inside the body
+        // AST. Resolve them through the active type-param bindings.
+        auto bindIt = activeTypeParamBindings.find(structRef->structName);
+        if(bindIt != activeTypeParamBindings.end() && bindIt->second)
+        {
+            return getLLVMTypeFromNode(bindIt->second);
+        }
+
         // Check if this is a type parameter (like T, U) - should not reach here
         // in properly monomorphized code
         std::cerr << "Unknown struct type: " << structRef->structName
@@ -5039,6 +5048,223 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     if(!L || !R)
         return nullptr;
 
+    auto generateTraitBinaryOp = [&](const std::string& traitName,
+                                     const std::string& methodName,
+                                     const std::string& opText) -> llvm::Value* {
+        auto* lhsStructTy = llvm::dyn_cast<llvm::StructType>(L->getType());
+        auto* rhsStructTy = llvm::dyn_cast<llvm::StructType>(R->getType());
+
+        if(!lhsStructTy && !rhsStructTy)
+            return nullptr;
+
+        if(!lhsStructTy || !rhsStructTy || !lhsStructTy->hasName() ||
+           !rhsStructTy->hasName() ||
+           lhsStructTy->getName() != rhsStructTy->getName())
+        {
+            reportError(node->line,
+                        "operator '" + opText +
+                            "' on structs requires both operands to have the "
+                            "same struct type");
+            return nullptr;
+        }
+
+        const std::string structTypeName = lhsStructTy->getName().str();
+        auto traitIt = structImplementedTraits.find(structTypeName);
+        if(traitIt == structImplementedTraits.end() ||
+           traitIt->second.find(traitName) == traitIt->second.end())
+        {
+            reportError(node->line,
+                        "struct '" + structTypeName +
+                            "' must implement trait '" + traitName +
+                            "' to use operator '" + opText + "'");
+            return nullptr;
+        }
+
+        auto structIt = structMethods.find(structTypeName);
+        if(structIt == structMethods.end())
+        {
+            reportError(node->line,
+                        "struct '" + structTypeName + "' has no methods");
+            return nullptr;
+        }
+        auto methodIt = structIt->second.find(methodName);
+        if(methodIt == structIt->second.end() || !methodIt->second.second)
+        {
+            reportError(node->line,
+                        "trait '" + traitName + "' on struct '" +
+                            structTypeName + "' requires method '" +
+                            methodName + "'");
+            return nullptr;
+        }
+        if(methodIt->second.second->isStatic)
+        {
+            reportError(node->line,
+                        "trait method '" + methodName +
+                            "' must not be static");
+            return nullptr;
+        }
+
+        std::string definingStruct = structTypeName;
+        std::string searchStruct = structTypeName;
+        while(!searchStruct.empty())
+        {
+            std::string candidate = searchStruct + "_" + methodName;
+            if(module->getFunction(candidate))
+            {
+                definingStruct = searchStruct;
+                break;
+            }
+            auto baseIt = structBases.find(searchStruct);
+            if(baseIt != structBases.end())
+                searchStruct = baseIt->second;
+            else
+                break;
+        }
+
+        const std::string mangledName = definingStruct + "_" + methodName;
+        llvm::Function* callee = module->getFunction(mangledName);
+        if(!callee)
+        {
+            reportError(node->line,
+                        "unknown trait method: " + methodName);
+            return nullptr;
+        }
+        if(callee->empty() && monomorphizedTypes.count(definingStruct))
+        {
+            auto defStructIt = structMethods.find(definingStruct);
+            if(defStructIt != structMethods.end())
+            {
+                auto defMethodIt = defStructIt->second.find(methodName);
+                if(defMethodIt != defStructIt->second.end())
+                {
+                    StructMethodNode* methodDef = defMethodIt->second.second;
+                    if(methodDef && methodDef->body)
+                    {
+                        llvm::BasicBlock* savedBlock = builder.GetInsertBlock();
+                        auto savedNamedValues = namedValues;
+                        auto savedConstantVariables = constantVariables;
+                        auto savedVariableTypes = variableTypes;
+                        auto savedStructVariableTypes = structVariableTypes;
+                        auto savedEnumVariableTypes = enumVariableTypes;
+                        auto savedListElementTypes = listElementTypes;
+                        auto savedMapKeyValueTypes = mapKeyValueTypes;
+                        auto savedTupleElementTypes = tupleElementTypes;
+                        auto savedPointerElementTypes = pointerElementTypes;
+                        auto savedMovedVariables = movedVariables;
+                        auto savedPointerBorrowTarget = pointerBorrowTarget;
+                        auto savedActiveBorrowers = activeBorrowers;
+                        auto savedActiveMutBorrower = activeMutBorrower;
+                        auto savedVariableScopeDepth = variableScopeDepth;
+                        auto savedCleanupScopes = cleanupScopes;
+                        auto savedPointerBorrowScopes = pointerBorrowScopes;
+                        auto savedVariableScopeDepthScopes =
+                            variableScopeDepthScopes;
+
+                        generateMethodDefinition(definingStruct, methodDef);
+
+                        namedValues = savedNamedValues;
+                        constantVariables = savedConstantVariables;
+                        variableTypes = savedVariableTypes;
+                        structVariableTypes = savedStructVariableTypes;
+                        enumVariableTypes = savedEnumVariableTypes;
+                        listElementTypes = savedListElementTypes;
+                        mapKeyValueTypes = savedMapKeyValueTypes;
+                        tupleElementTypes = savedTupleElementTypes;
+                        pointerElementTypes = savedPointerElementTypes;
+                        movedVariables = savedMovedVariables;
+                        pointerBorrowTarget = savedPointerBorrowTarget;
+                        activeBorrowers = savedActiveBorrowers;
+                        activeMutBorrower = savedActiveMutBorrower;
+                        variableScopeDepth = savedVariableScopeDepth;
+                        cleanupScopes = savedCleanupScopes;
+                        pointerBorrowScopes = savedPointerBorrowScopes;
+                        variableScopeDepthScopes = savedVariableScopeDepthScopes;
+                        if(savedBlock)
+                            builder.SetInsertPoint(savedBlock);
+                    }
+                }
+            }
+        }
+        if(callee->arg_size() < 2)
+        {
+            reportError(node->line,
+                        "trait method '" + methodName +
+                            "' for operator '" + opText +
+                            "' requires one argument");
+            return nullptr;
+        }
+
+        llvm::Value* lhsPtr = getLValuePointer(node->left, node->line);
+        if(!lhsPtr)
+        {
+            lhsPtr = builder.CreateAlloca(L->getType(), nullptr,
+                                          "traitop.lhs.tmp");
+            builder.CreateStore(L, lhsPtr);
+        }
+
+        llvm::Value* rhsPtr = getLValuePointer(node->right, node->line);
+        if(!rhsPtr)
+        {
+            rhsPtr = builder.CreateAlloca(R->getType(), nullptr,
+                                          "traitop.rhs.tmp");
+            builder.CreateStore(R, rhsPtr);
+        }
+
+        std::vector<llvm::Value*> args;
+        args.push_back(lhsPtr);
+
+        llvm::Value* arg1 = R;
+        llvm::Type* expectedTy = callee->getArg(1)->getType();
+        if(expectedTy->isPointerTy())
+        {
+            arg1 = rhsPtr;
+            if(arg1->getType() != expectedTy && arg1->getType()->isPointerTy())
+                arg1 = builder.CreateBitCast(arg1, expectedTy,
+                                             "traitop.arg.ptrcast");
+        }
+        else if(arg1->getType() != expectedTy)
+        {
+            int convCost = 0;
+            if(!canConvertType(arg1->getType(), expectedTy, convCost))
+            {
+                reportError(node->line,
+                            "argument type mismatch for trait method '" +
+                                methodName + "'");
+                return nullptr;
+            }
+            if(arg1->getType()->isIntegerTy() && expectedTy->isIntegerTy())
+                arg1 = builder.CreateIntCast(arg1, expectedTy, true,
+                                             "traitop.arg.cast");
+            else if(arg1->getType()->isIntegerTy() &&
+                    expectedTy->isFloatingPointTy())
+                arg1 = builder.CreateSIToFP(arg1, expectedTy,
+                                            "traitop.arg.sitofp");
+            else if(arg1->getType()->isFloatingPointTy() &&
+                    expectedTy->isIntegerTy())
+                arg1 = builder.CreateFPToSI(arg1, expectedTy,
+                                            "traitop.arg.fptosi");
+            else if(arg1->getType()->isFloatingPointTy() &&
+                    expectedTy->isFloatingPointTy())
+                arg1 = builder.CreateFPCast(arg1, expectedTy,
+                                            "traitop.arg.fpcast");
+            else if(arg1->getType()->isPointerTy() && expectedTy->isPointerTy())
+                arg1 = builder.CreateBitCast(arg1, expectedTy,
+                                             "traitop.arg.ptrcast");
+        }
+        args.push_back(arg1);
+
+        llvm::Value* res = builder.CreateCall(callee, args, "traitop.call");
+        if(res->getType() != L->getType())
+        {
+            reportError(node->line,
+                        "trait method '" + methodName +
+                            "' used by operator '" + opText +
+                            "' must return the receiver type");
+            return nullptr;
+        }
+        return res;
+    };
+
     if(node->op == BinaryOpNode::OP_SPACESHIP)
     {
         auto buildNumericSpaceship = [&](llvm::Value* lhs,
@@ -5273,6 +5499,55 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             return nullptr;
         }
         return numericCmp;
+    }
+
+    if(node->op == BinaryOpNode::OP_PLUS || node->op == BinaryOpNode::OP_MINUS ||
+       node->op == BinaryOpNode::OP_MULTIPLY ||
+       node->op == BinaryOpNode::OP_DIVIDE ||
+       node->op == BinaryOpNode::OP_MODULO)
+    {
+        const char* opText = nullptr;
+        const char* traitName = nullptr;
+        const char* methodName = nullptr;
+        switch(node->op)
+        {
+        case BinaryOpNode::OP_PLUS:
+            opText = "+";
+            traitName = "Add";
+            methodName = "add";
+            break;
+        case BinaryOpNode::OP_MINUS:
+            opText = "-";
+            traitName = "Sub";
+            methodName = "sub";
+            break;
+        case BinaryOpNode::OP_MULTIPLY:
+            opText = "*";
+            traitName = "Mul";
+            methodName = "mul";
+            break;
+        case BinaryOpNode::OP_DIVIDE:
+            opText = "/";
+            traitName = "Div";
+            methodName = "div";
+            break;
+        case BinaryOpNode::OP_MODULO:
+            opText = "%";
+            traitName = "Rem";
+            methodName = "rem";
+            break;
+        default:
+            break;
+        }
+        if(opText && traitName && methodName)
+        {
+            llvm::Value* traitResult =
+                generateTraitBinaryOp(traitName, methodName, opText);
+            if(traitResult)
+                return traitResult;
+            if(L->getType()->isStructTy() || R->getType()->isStructTy())
+                return nullptr;
+        }
     }
 
     // Check for struct types - cannot perform arithmetic on structs
@@ -5766,6 +6041,160 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
 
         bool isFloat = value->getType()->isFloatingPointTy();
         bool isInt = value->getType()->isIntegerTy();
+        auto* structTy = llvm::dyn_cast<llvm::StructType>(value->getType());
+
+        if(structTy && structTy->hasName())
+        {
+            const std::string structTypeName = structTy->getName().str();
+            const std::string traitName = "Neg";
+            const std::string methodName = "neg";
+
+            auto traitIt = structImplementedTraits.find(structTypeName);
+            if(traitIt == structImplementedTraits.end() ||
+               traitIt->second.find(traitName) == traitIt->second.end())
+            {
+                reportError(node->line,
+                            "struct '" + structTypeName +
+                                "' must implement trait '" + traitName +
+                                "' to use unary '-'");
+                return nullptr;
+            }
+
+            auto structIt = structMethods.find(structTypeName);
+            if(structIt == structMethods.end())
+            {
+                reportError(node->line,
+                            "struct '" + structTypeName + "' has no methods");
+                return nullptr;
+            }
+            auto methodIt = structIt->second.find(methodName);
+            if(methodIt == structIt->second.end() || !methodIt->second.second)
+            {
+                reportError(node->line,
+                            "trait '" + traitName + "' on struct '" +
+                                structTypeName + "' requires method '" +
+                                methodName + "'");
+                return nullptr;
+            }
+            if(methodIt->second.second->isStatic)
+            {
+                reportError(node->line,
+                            "trait method '" + methodName +
+                                "' must not be static");
+                return nullptr;
+            }
+
+            std::string definingStruct = structTypeName;
+            std::string searchStruct = structTypeName;
+            while(!searchStruct.empty())
+            {
+                std::string candidate = searchStruct + "_" + methodName;
+                if(module->getFunction(candidate))
+                {
+                    definingStruct = searchStruct;
+                    break;
+                }
+                auto baseIt = structBases.find(searchStruct);
+                if(baseIt != structBases.end())
+                    searchStruct = baseIt->second;
+                else
+                    break;
+            }
+
+            const std::string mangledName = definingStruct + "_" + methodName;
+            llvm::Function* callee = module->getFunction(mangledName);
+            if(!callee)
+            {
+                reportError(node->line,
+                            "unknown trait method: " + methodName);
+                return nullptr;
+            }
+            if(callee->empty() && monomorphizedTypes.count(definingStruct))
+            {
+                auto defStructIt = structMethods.find(definingStruct);
+                if(defStructIt != structMethods.end())
+                {
+                    auto defMethodIt = defStructIt->second.find(methodName);
+                    if(defMethodIt != defStructIt->second.end())
+                    {
+                        StructMethodNode* methodDef = defMethodIt->second.second;
+                        if(methodDef && methodDef->body)
+                        {
+                            llvm::BasicBlock* savedBlock =
+                                builder.GetInsertBlock();
+                            auto savedNamedValues = namedValues;
+                            auto savedConstantVariables = constantVariables;
+                            auto savedVariableTypes = variableTypes;
+                            auto savedStructVariableTypes = structVariableTypes;
+                            auto savedEnumVariableTypes = enumVariableTypes;
+                            auto savedListElementTypes = listElementTypes;
+                            auto savedMapKeyValueTypes = mapKeyValueTypes;
+                            auto savedTupleElementTypes = tupleElementTypes;
+                            auto savedPointerElementTypes = pointerElementTypes;
+                            auto savedMovedVariables = movedVariables;
+                            auto savedPointerBorrowTarget = pointerBorrowTarget;
+                            auto savedActiveBorrowers = activeBorrowers;
+                            auto savedActiveMutBorrower = activeMutBorrower;
+                            auto savedVariableScopeDepth = variableScopeDepth;
+                            auto savedCleanupScopes = cleanupScopes;
+                            auto savedPointerBorrowScopes = pointerBorrowScopes;
+                            auto savedVariableScopeDepthScopes =
+                                variableScopeDepthScopes;
+
+                            generateMethodDefinition(definingStruct, methodDef);
+
+                            namedValues = savedNamedValues;
+                            constantVariables = savedConstantVariables;
+                            variableTypes = savedVariableTypes;
+                            structVariableTypes = savedStructVariableTypes;
+                            enumVariableTypes = savedEnumVariableTypes;
+                            listElementTypes = savedListElementTypes;
+                            mapKeyValueTypes = savedMapKeyValueTypes;
+                            tupleElementTypes = savedTupleElementTypes;
+                            pointerElementTypes = savedPointerElementTypes;
+                            movedVariables = savedMovedVariables;
+                            pointerBorrowTarget = savedPointerBorrowTarget;
+                            activeBorrowers = savedActiveBorrowers;
+                            activeMutBorrower = savedActiveMutBorrower;
+                            variableScopeDepth = savedVariableScopeDepth;
+                            cleanupScopes = savedCleanupScopes;
+                            pointerBorrowScopes = savedPointerBorrowScopes;
+                            variableScopeDepthScopes =
+                                savedVariableScopeDepthScopes;
+                            if(savedBlock)
+                                builder.SetInsertPoint(savedBlock);
+                        }
+                    }
+                }
+            }
+            if(callee->arg_size() != 1)
+            {
+                reportError(node->line,
+                            "trait method '" + methodName +
+                                "' for unary '-' must take no arguments");
+                return nullptr;
+            }
+
+            llvm::Value* selfPtr = getLValuePointer(node->operand, node->line);
+            if(!selfPtr)
+            {
+                selfPtr = builder.CreateAlloca(value->getType(), nullptr,
+                                               "traitneg.self.tmp");
+                builder.CreateStore(value, selfPtr);
+            }
+
+            llvm::Value* res =
+                builder.CreateCall(callee, {selfPtr}, "traitneg.call");
+            if(res->getType() != value->getType())
+            {
+                reportError(node->line,
+                            "trait method '" + methodName +
+                                "' used by unary '-' must return the receiver "
+                                "type");
+                return nullptr;
+            }
+            return res;
+        }
 
         if(!isFloat && !isInt)
         {
@@ -14128,6 +14557,22 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
+    auto savedTypeParamBindings = activeTypeParamBindings;
+    activeTypeParamBindings.clear();
+    auto genericNameIt = mangledToGenericName.find(structName);
+    if(genericNameIt != mangledToGenericName.end())
+    {
+        auto templIt = genericStructTemplates.find(genericNameIt->second);
+        auto argsIt = monomorphizedTypeArgs.find(structName);
+        if(templIt != genericStructTemplates.end() &&
+           argsIt != monomorphizedTypeArgs.end())
+        {
+            const auto& params = templIt->second->typeParams;
+            const auto& args = argsIt->second;
+            for(size_t i = 0; i < params.size() && i < args.size(); ++i)
+                activeTypeParamBindings[params[i]] = args[i];
+        }
+    }
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
 
@@ -14260,6 +14705,7 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     }
 
     llvm::verifyFunction(*function);
+    activeTypeParamBindings = savedTypeParamBindings;
     return function;
 }
 
@@ -16207,6 +16653,13 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                 // Try to create a TypeNode from the type argument string
                 TypeNode* typeArg = nullptr;
 
+                auto bindIt = activeTypeParamBindings.find(typeArgStr);
+                if(bindIt != activeTypeParamBindings.end() && bindIt->second)
+                {
+                    typeArgNodes.push_back(cloneTypeNode(bindIt->second));
+                    continue;
+                }
+
                 // Check if it's a basic type
                 if(typeArgStr == "i8")
                     typeArg = new TypeNode(TypeNode::TYPE_I8);
@@ -16224,11 +16677,9 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     typeArg = new TypeNode(TypeNode::TYPE_U32);
                 else if(typeArgStr == "u64")
                     typeArg = new TypeNode(TypeNode::TYPE_U64);
-                else if(typeArgStr == "int")
-                    typeArg = new TypeNode(TypeNode::TYPE_INT);
-                else if(typeArgStr == "float")
+                else if(typeArgStr == "f32")
                     typeArg = new TypeNode(TypeNode::TYPE_FLOAT);
-                else if(typeArgStr == "double")
+                else if(typeArgStr == "f64")
                     typeArg = new TypeNode(TypeNode::TYPE_DOUBLE);
                 else if(typeArgStr == "bool")
                     typeArg = new TypeNode(TypeNode::TYPE_BOOL);
@@ -17521,7 +17972,7 @@ static std::string generateMangledName(const std::string& baseName,
                 mangled += "bool";
                 break;
             case TypeNode::TYPE_INT:
-                mangled += "int";
+                mangled += "i32";
                 break;
             case TypeNode::TYPE_I8:
                 mangled += "i8";
@@ -17548,10 +17999,10 @@ static std::string generateMangledName(const std::string& baseName,
                 mangled += "u64";
                 break;
             case TypeNode::TYPE_FLOAT:
-                mangled += "float";
+                mangled += "f32";
                 break;
             case TypeNode::TYPE_DOUBLE:
-                mangled += "double";
+                mangled += "f64";
                 break;
             case TypeNode::TYPE_STRING:
                 mangled += "string";
@@ -17634,6 +18085,11 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     structMembers[mangledName] = members;
     monomorphizedTypes.insert(mangledName);
     mangledToGenericName[mangledName] = genericName;
+    std::vector<TypeNode*> storedTypeArgs;
+    storedTypeArgs.reserve(typeArgs.size());
+    for(auto* arg : typeArgs)
+        storedTypeArgs.push_back(cloneTypeNode(arg));
+    monomorphizedTypeArgs[mangledName] = std::move(storedTypeArgs);
     if(templateStruct->deriveDebug)
         debugStructs.insert(mangledName);
 

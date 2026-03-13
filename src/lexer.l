@@ -153,11 +153,8 @@ static int is_try_question_context()
 "bool"          { return BOOL; }
 "true"          { return TRUE_LIT; }
 "false"         { return FALSE_LIT; }
-"int"           { return INT; }
 "f32"           { return FLOAT; }
 "f64"           { return DOUBLE; }
-"float"         { return FLOAT; }
-"double"        { return DOUBLE; }
 "string"        { return STRING; }
 "str8"          { return STR8; }
 "str16"         { return STR16; }
@@ -187,11 +184,9 @@ static int is_try_question_context()
 "#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }
 "#[inline(never)]"    { return INLINE_NEVER_ATTR; }
 "#[inline]"           { return INLINE_ATTR; }
-"int("          { return CAST_INT; }
+"i32("          { return CAST_INT; }
 "f32("          { return CAST_FLOAT; }
 "f64("          { return CAST_DOUBLE; }
-"float("        { return CAST_FLOAT; }
-"double("       { return CAST_DOUBLE; }
 "->"            { return ARROW; }
 "=>"            { return FAT_ARROW; }
 "..."           { return ELLIPSIS; }

@@ -1034,11 +1034,11 @@ std::string TypeNode::toString() const
     case TYPE_BOOL:
         return "bool";
     case TYPE_INT:
-        return "int";
+        return "i32";
     case TYPE_FLOAT:
-        return "float";
+        return "f32";
     case TYPE_DOUBLE:
-        return "double";
+        return "f64";
     case TYPE_STRING:
         return "string";
     case TYPE_STR8:
@@ -2161,7 +2161,7 @@ std::string GenericStructTypeRefNode::getMangledName() const
                 mangled += "bool";
                 break;
             case TypeNode::TYPE_INT:
-                mangled += "int";
+                mangled += "i32";
                 break;
             case TypeNode::TYPE_I8:
                 mangled += "i8";
@@ -2188,10 +2188,10 @@ std::string GenericStructTypeRefNode::getMangledName() const
                 mangled += "u64";
                 break;
             case TypeNode::TYPE_FLOAT:
-                mangled += "float";
+                mangled += "f32";
                 break;
             case TypeNode::TYPE_DOUBLE:
-                mangled += "double";
+                mangled += "f64";
                 break;
             case TypeNode::TYPE_STRING:
                 mangled += "string";

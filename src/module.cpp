@@ -70,11 +70,11 @@ static std::string type_mangle(TypeNode* typeNode)
     case TypeNode::TYPE_BOOL:
         return "bool";
     case TypeNode::TYPE_INT:
-        return "int";
+        return "i32";
     case TypeNode::TYPE_FLOAT:
-        return "float";
+        return "f32";
     case TypeNode::TYPE_DOUBLE:
-        return "double";
+        return "f64";
     case TypeNode::TYPE_STRING:
         return "string";
     case TypeNode::TYPE_STR8:

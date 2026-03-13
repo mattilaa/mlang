@@ -1364,7 +1364,7 @@ cast_expression
     : CAST_INT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_INT, $2); }
     | CAST_FLOAT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $2); }
     | CAST_DOUBLE expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $2); }
-    | INT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_INT, $3); }
+    | I32 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I32, $3); }
     | FLOAT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $3); }
     | DOUBLE LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $3); }
     ;
@@ -1429,8 +1429,7 @@ static bool is_reserved_type_keyword(const char* s)
     if(!s || !*s)
         return false;
     return strcmp(s, "void") == 0 || strcmp(s, "bool") == 0 ||
-           strcmp(s, "int") == 0 || strcmp(s, "float") == 0 ||
-           strcmp(s, "double") == 0 || strcmp(s, "f32") == 0 ||
+           strcmp(s, "f32") == 0 ||
            strcmp(s, "f64") == 0 || strcmp(s, "string") == 0 ||
            strcmp(s, "str8") == 0 || strcmp(s, "str16") == 0 ||
            strcmp(s, "list") == 0 || strcmp(s, "map") == 0 ||
