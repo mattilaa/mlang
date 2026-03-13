@@ -8,13 +8,15 @@
 /// \cond INTERNAL_IMPORTS
 mod std::math::detail;
 use std::math::detail::*;
+mod std::ops;
+use std::ops::*;
 /// \endcond
 
 /// @brief Add two values.
 /// @param a a value.
 /// @param b b value.
 /// @return Add two values.
-pub fn add(a: int, b: int) -> int {
+pub fn add(a: i32, b: i32) -> i32 {
     return __mlang_std_math_add_i32(a, b);
 }
 
@@ -22,7 +24,7 @@ pub fn add(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Add two values.
-pub fn add(a: float, b: float) -> float {
+pub fn add(a: f32, b: f32) -> f32 {
     return __mlang_std_math_add_f32(a, b);
 }
 
@@ -30,7 +32,7 @@ pub fn add(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Add two values.
-pub fn add(a: double, b: double) -> double {
+pub fn add(a: f64, b: f64) -> f64 {
     return __mlang_std_math_add_f64(a, b);
 }
 
@@ -38,7 +40,7 @@ pub fn add(a: double, b: double) -> double {
 /// @param a a value.
 /// @param b b value.
 /// @return Subtract two values.
-pub fn subtract(a: int, b: int) -> int {
+pub fn subtract(a: i32, b: i32) -> i32 {
     return __mlang_std_math_subtract_i32(a, b);
 }
 
@@ -46,7 +48,7 @@ pub fn subtract(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Subtract two values.
-pub fn subtract(a: float, b: float) -> float {
+pub fn subtract(a: f32, b: f32) -> f32 {
     return __mlang_std_math_subtract_f32(a, b);
 }
 
@@ -54,7 +56,7 @@ pub fn subtract(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Subtract two values.
-pub fn subtract(a: double, b: double) -> double {
+pub fn subtract(a: f64, b: f64) -> f64 {
     return __mlang_std_math_subtract_f64(a, b);
 }
 
@@ -62,7 +64,7 @@ pub fn subtract(a: double, b: double) -> double {
 /// @param a a value.
 /// @param b b value.
 /// @return Multiply two values.
-pub fn multiply(a: int, b: int) -> int {
+pub fn multiply(a: i32, b: i32) -> i32 {
     return __mlang_std_math_multiply_i32(a, b);
 }
 
@@ -70,7 +72,7 @@ pub fn multiply(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Multiply two values.
-pub fn multiply(a: float, b: float) -> float {
+pub fn multiply(a: f32, b: f32) -> f32 {
     return __mlang_std_math_multiply_f32(a, b);
 }
 
@@ -78,28 +80,28 @@ pub fn multiply(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Multiply two values.
-pub fn multiply(a: double, b: double) -> double {
+pub fn multiply(a: f64, b: f64) -> f64 {
     return __mlang_std_math_multiply_f64(a, b);
 }
 
 /// @brief Square a value.
 /// @param x x value.
 /// @return Square a value.
-pub fn square(x: int) -> int {
+pub fn square(x: i32) -> i32 {
     return __mlang_std_math_square_i32(x);
 }
 
 /// @brief Square a value.
 /// @param x x value.
 /// @return Square a value.
-pub fn square(x: float) -> float {
+pub fn square(x: f32) -> f32 {
     return __mlang_std_math_square_f32(x);
 }
 
 /// @brief Square a value.
 /// @param x x value.
 /// @return Square a value.
-pub fn square(x: double) -> double {
+pub fn square(x: f64) -> f64 {
     return __mlang_std_math_square_f64(x);
 }
 
@@ -107,35 +109,35 @@ pub fn square(x: double) -> double {
 /// @param start start value.
 /// @param end end value.
 /// @return Sum integers in [start, end) (end is exclusive).
-pub fn sum_range(start: int, end: int) -> int {
+pub fn sum_range(start: i32, end: i32) -> i32 {
     return __mlang_std_math_sum_range_i32(start, end);
 }
 
 /// @brief Factorial for n >= 0.
 /// @param n n value.
 /// @return Factorial for n >= 0.
-pub fn factorial(n: int) -> int {
+pub fn factorial(n: i32) -> i32 {
     return __mlang_std_math_factorial_i32(n);
 }
 
 /// @brief Absolute value.
 /// @param x x value.
 /// @return Absolute value.
-pub fn abs(x: int) -> int {
+pub fn abs(x: i32) -> i32 {
     return __mlang_std_math_abs_i32(x);
 }
 
 /// @brief Absolute value.
 /// @param x x value.
 /// @return Absolute value.
-pub fn abs(x: float) -> float {
+pub fn abs(x: f32) -> f32 {
     return __mlang_std_math_abs_f32(x);
 }
 
 /// @brief Absolute value.
 /// @param x x value.
 /// @return Absolute value.
-pub fn abs(x: double) -> double {
+pub fn abs(x: f64) -> f64 {
     return __mlang_std_math_abs_f64(x);
 }
 
@@ -143,7 +145,7 @@ pub fn abs(x: double) -> double {
 /// @param a a value.
 /// @param b b value.
 /// @return Minimum of two values.
-pub fn min(a: int, b: int) -> int {
+pub fn min(a: i32, b: i32) -> i32 {
     return __mlang_std_math_min_i32(a, b);
 }
 
@@ -151,7 +153,7 @@ pub fn min(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Minimum of two values.
-pub fn min(a: float, b: float) -> float {
+pub fn min(a: f32, b: f32) -> f32 {
     return __mlang_std_math_min_f32(a, b);
 }
 
@@ -159,7 +161,7 @@ pub fn min(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Minimum of two values.
-pub fn min(a: double, b: double) -> double {
+pub fn min(a: f64, b: f64) -> f64 {
     return __mlang_std_math_min_f64(a, b);
 }
 
@@ -167,7 +169,7 @@ pub fn min(a: double, b: double) -> double {
 /// @param a a value.
 /// @param b b value.
 /// @return Maximum of two values.
-pub fn max(a: int, b: int) -> int {
+pub fn max(a: i32, b: i32) -> i32 {
     return __mlang_std_math_max_i32(a, b);
 }
 
@@ -175,7 +177,7 @@ pub fn max(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Maximum of two values.
-pub fn max(a: float, b: float) -> float {
+pub fn max(a: f32, b: f32) -> f32 {
     return __mlang_std_math_max_f32(a, b);
 }
 
@@ -183,7 +185,7 @@ pub fn max(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Maximum of two values.
-pub fn max(a: double, b: double) -> double {
+pub fn max(a: f64, b: f64) -> f64 {
     return __mlang_std_math_max_f64(a, b);
 }
 
@@ -192,7 +194,7 @@ pub fn max(a: double, b: double) -> double {
 /// @param low low value.
 /// @param high high value.
 /// @return Clamp a value to [low, high].
-pub fn clamp(x: int, low: int, high: int) -> int {
+pub fn clamp(x: i32, low: i32, high: i32) -> i32 {
     return __mlang_std_math_clamp_i32(x, low, high);
 }
 
@@ -201,7 +203,7 @@ pub fn clamp(x: int, low: int, high: int) -> int {
 /// @param low low value.
 /// @param high high value.
 /// @return Clamp a value to [low, high].
-pub fn clamp(x: float, low: float, high: float) -> float {
+pub fn clamp(x: f32, low: f32, high: f32) -> f32 {
     return __mlang_std_math_clamp_f32(x, low, high);
 }
 
@@ -210,7 +212,7 @@ pub fn clamp(x: float, low: float, high: float) -> float {
 /// @param low low value.
 /// @param high high value.
 /// @return Clamp a value to [low, high].
-pub fn clamp(x: double, low: double, high: double) -> double {
+pub fn clamp(x: f64, low: f64, high: f64) -> f64 {
     return __mlang_std_math_clamp_f64(x, low, high);
 }
 
@@ -218,7 +220,7 @@ pub fn clamp(x: double, low: double, high: double) -> double {
 /// @param a a value.
 /// @param b b value.
 /// @return Power function (x^y).
-pub fn pow(a: int, b: int) -> int {
+pub fn pow(a: i32, b: i32) -> i32 {
     return __mlang_std_math_pow_i32(a, b);
 }
 
@@ -226,7 +228,7 @@ pub fn pow(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Power function (x^y).
-pub fn pow(a: float, b: float) -> float {
+pub fn pow(a: f32, b: f32) -> f32 {
     return __mlang_std_math_pow_f32(a, b);
 }
 
@@ -234,196 +236,259 @@ pub fn pow(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Power function (x^y).
-pub fn pow(a: double, b: double) -> double {
+pub fn pow(a: f64, b: f64) -> f64 {
     return __mlang_std_math_pow_f64(a, b);
 }
 
 /// @brief Square root.
 /// @param x x value.
 /// @return Square root.
-pub fn sqrt(x: int) -> int {
+pub fn sqrt(x: i32) -> i32 {
     return __mlang_std_math_sqrt_i32(x);
 }
 
 /// @brief Square root.
 /// @param x x value.
 /// @return Square root.
-pub fn sqrt(x: float) -> float {
+pub fn sqrt(x: f32) -> f32 {
     return __mlang_std_math_sqrt_f32(x);
 }
 
 /// @brief Square root.
 /// @param x x value.
 /// @return Square root.
-pub fn sqrt(x: double) -> double {
+pub fn sqrt(x: f64) -> f64 {
     return __mlang_std_math_sqrt_f64(x);
+}
+
+/// @brief Generic complex number value (Rust-like `Complex<T>` style).
+/// @note Arithmetic methods require `T` to support the used operators.
+pub struct Complex<T> {
+    /// @brief Real part.
+    var re: T;
+    /// @brief Imaginary part.
+    var im: T;
+};
+
+impl<T> Complex {
+    /// @brief Construct a complex number from real and imaginary parts.
+    pub fn new(re: T, im: T) -> Complex<T> {
+        return Complex<T> { re: re, im: im };
+    }
+
+    /// @brief Complex conjugate.
+    pub fn conj(self: Complex<T>) -> Complex<T> {
+        return Complex<T> { re: self.re, im: -self.im };
+    }
+
+    /// @brief Squared magnitude (`re^2 + im^2`).
+    pub fn norm_sqr(self: Complex<T>) -> T {
+        return (self.re * self.re) + (self.im * self.im);
+    }
+    /// @brief Magnitude.
+    pub fn abs(self: Complex<T>) -> T {
+        return sqrt((self.re * self.re) + (self.im * self.im));
+    }
+}
+
+impl<T> Add for Complex {
+    fn add(self: &mut Self, other: Complex<T>) -> Complex<T> {
+        return Complex<T> {
+            re: self.re + other.re,
+            im: self.im + other.im
+        };
+    }
+}
+
+impl<T> Sub for Complex {
+    fn sub(self: &mut Self, other: Complex<T>) -> Complex<T> {
+        return Complex<T> {
+            re: self.re - other.re,
+            im: self.im - other.im
+        };
+    }
+}
+
+impl<T> Mul for Complex {
+    fn mul(self: &mut Self, other: Complex<T>) -> Complex<T> {
+        return Complex<T> {
+            re: (self.re * other.re) - (self.im * other.im),
+            im: (self.re * other.im) + (self.im * other.re)
+        };
+    }
+}
+
+impl<T> Neg for Complex {
+    fn neg(self: &mut Self) -> Complex<T> {
+        return Complex<T> { re: -self.re, im: -self.im };
+    }
 }
 
 /// @brief Sine.
 /// @param x x value.
 /// @return Sine.
-pub fn sin(x: int) -> int {
+pub fn sin(x: i32) -> i32 {
     return __mlang_std_math_sin_i32(x);
 }
 
 /// @brief Sine.
 /// @param x x value.
 /// @return Sine.
-pub fn sin(x: float) -> float {
+pub fn sin(x: f32) -> f32 {
     return __mlang_std_math_sin_f32(x);
 }
 
 /// @brief Sine.
 /// @param x x value.
 /// @return Sine.
-pub fn sin(x: double) -> double {
+pub fn sin(x: f64) -> f64 {
     return __mlang_std_math_sin_f64(x);
 }
 
 /// @brief Cosine.
 /// @param x x value.
 /// @return Cosine.
-pub fn cos(x: int) -> int {
+pub fn cos(x: i32) -> i32 {
     return __mlang_std_math_cos_i32(x);
 }
 
 /// @brief Cosine.
 /// @param x x value.
 /// @return Cosine.
-pub fn cos(x: float) -> float {
+pub fn cos(x: f32) -> f32 {
     return __mlang_std_math_cos_f32(x);
 }
 
 /// @brief Cosine.
 /// @param x x value.
 /// @return Cosine.
-pub fn cos(x: double) -> double {
+pub fn cos(x: f64) -> f64 {
     return __mlang_std_math_cos_f64(x);
 }
 
 /// @brief Tangent.
 /// @param x x value.
 /// @return Tangent.
-pub fn tan(x: int) -> int {
+pub fn tan(x: i32) -> i32 {
     return __mlang_std_math_tan_i32(x);
 }
 
 /// @brief Tangent.
 /// @param x x value.
 /// @return Tangent.
-pub fn tan(x: float) -> float {
+pub fn tan(x: f32) -> f32 {
     return __mlang_std_math_tan_f32(x);
 }
 
 /// @brief Tangent.
 /// @param x x value.
 /// @return Tangent.
-pub fn tan(x: double) -> double {
+pub fn tan(x: f64) -> f64 {
     return __mlang_std_math_tan_f64(x);
 }
 
 /// @brief Floor.
 /// @param x x value.
 /// @return Floor.
-pub fn floor(x: int) -> int {
+pub fn floor(x: i32) -> i32 {
     return __mlang_std_math_floor_i32(x);
 }
 
 /// @brief Floor.
 /// @param x x value.
 /// @return Floor.
-pub fn floor(x: float) -> float {
+pub fn floor(x: f32) -> f32 {
     return __mlang_std_math_floor_f32(x);
 }
 
 /// @brief Floor.
 /// @param x x value.
 /// @return Floor.
-pub fn floor(x: double) -> double {
+pub fn floor(x: f64) -> f64 {
     return __mlang_std_math_floor_f64(x);
 }
 
 /// @brief Ceiling.
 /// @param x x value.
 /// @return Ceiling.
-pub fn ceil(x: int) -> int {
+pub fn ceil(x: i32) -> i32 {
     return __mlang_std_math_ceil_i32(x);
 }
 
 /// @brief Ceiling.
 /// @param x x value.
 /// @return Ceiling.
-pub fn ceil(x: float) -> float {
+pub fn ceil(x: f32) -> f32 {
     return __mlang_std_math_ceil_f32(x);
 }
 
 /// @brief Ceiling.
 /// @param x x value.
 /// @return Ceiling.
-pub fn ceil(x: double) -> double {
+pub fn ceil(x: f64) -> f64 {
     return __mlang_std_math_ceil_f64(x);
 }
 
 /// @brief Round to nearest integer value.
 /// @param x x value.
 /// @return Round to nearest integer value.
-pub fn round(x: int) -> int {
+pub fn round(x: i32) -> i32 {
     return __mlang_std_math_round_i32(x);
 }
 
 /// @brief Round to nearest integer value.
 /// @param x x value.
 /// @return Round to nearest integer value.
-pub fn round(x: float) -> float {
+pub fn round(x: f32) -> f32 {
     return __mlang_std_math_round_f32(x);
 }
 
 /// @brief Round to nearest integer value.
 /// @param x x value.
 /// @return Round to nearest integer value.
-pub fn round(x: double) -> double {
+pub fn round(x: f64) -> f64 {
     return __mlang_std_math_round_f64(x);
 }
 
 /// @brief Natural logarithm.
 /// @param x x value.
 /// @return Natural logarithm.
-pub fn log(x: int) -> int {
+pub fn log(x: i32) -> i32 {
     return __mlang_std_math_log_i32(x);
 }
 
 /// @brief Natural logarithm.
 /// @param x x value.
 /// @return Natural logarithm.
-pub fn log(x: float) -> float {
+pub fn log(x: f32) -> f32 {
     return __mlang_std_math_log_f32(x);
 }
 
 /// @brief Natural logarithm.
 /// @param x x value.
 /// @return Natural logarithm.
-pub fn log(x: double) -> double {
+pub fn log(x: f64) -> f64 {
     return __mlang_std_math_log_f64(x);
 }
 
 /// @brief Natural exponential.
 /// @param x x value.
 /// @return Natural exponential.
-pub fn exp(x: int) -> int {
+pub fn exp(x: i32) -> i32 {
     return __mlang_std_math_exp_i32(x);
 }
 
 /// @brief Natural exponential.
 /// @param x x value.
 /// @return Natural exponential.
-pub fn exp(x: float) -> float {
+pub fn exp(x: f32) -> f32 {
     return __mlang_std_math_exp_f32(x);
 }
 
 /// @brief Natural exponential.
 /// @param x x value.
 /// @return Natural exponential.
-pub fn exp(x: double) -> double {
+pub fn exp(x: f64) -> f64 {
     return __mlang_std_math_exp_f64(x);
 }
 
@@ -431,7 +496,7 @@ pub fn exp(x: double) -> double {
 /// @param a a value.
 /// @param b b value.
 /// @return Modulo (remainder).
-pub fn modulo(a: int, b: int) -> int {
+pub fn modulo(a: i32, b: i32) -> i32 {
     return __mlang_std_math_modulo_i32(a, b);
 }
 
@@ -439,7 +504,7 @@ pub fn modulo(a: int, b: int) -> int {
 /// @param a a value.
 /// @param b b value.
 /// @return Modulo (remainder).
-pub fn modulo(a: float, b: float) -> float {
+pub fn modulo(a: f32, b: f32) -> f32 {
     return __mlang_std_math_modulo_f32(a, b);
 }
 
@@ -447,6 +512,6 @@ pub fn modulo(a: float, b: float) -> float {
 /// @param a a value.
 /// @param b b value.
 /// @return Modulo (remainder).
-pub fn modulo(a: double, b: double) -> double {
+pub fn modulo(a: f64, b: f64) -> f64 {
     return __mlang_std_math_modulo_f64(a, b);
 }

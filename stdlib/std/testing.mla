@@ -47,7 +47,7 @@ extern pub fn __mlang_std_testing_mock_actual_calls(handle: i64,
 extern pub fn __mlang_std_testing_mock_verify(handle: i64) -> i32;
 
 fn bool_to_i32(v: bool) -> i32 {
-    return int(v);
+    return i32(v);
 }
 
 /// Mock handle used by std::testing mock helpers.

@@ -7,20 +7,20 @@
 /// - wait + exit status decoding
 
 extern pub fn __mlang_std_process_last_error() -> string;
-extern pub fn __mlang_std_process_spawn(program: string, args: list<string>, pipe_stdin: int, pipe_stdout: int, pipe_stderr: int) -> i64;
+extern pub fn __mlang_std_process_spawn(program: string, args: list<string>, pipe_stdin: i32, pipe_stdout: i32, pipe_stderr: i32) -> i64;
 extern pub fn __mlang_std_process_take_stdin(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_take_stdout(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_take_stderr(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_pipe_write(pipe_handle: i64, s: string) -> i64;
 extern pub fn __mlang_std_process_pipe_read(pipe_handle: i64, buf: string, capacity: i64) -> i64;
-extern pub fn __mlang_std_process_pipe_close(pipe_handle: i64) -> int;
-extern pub fn __mlang_std_process_wait_raw(child_handle: i64) -> int;
-extern pub fn __mlang_std_process_status_exited(raw_status: int) -> int;
-extern pub fn __mlang_std_process_status_code(raw_status: int) -> int;
-extern pub fn __mlang_std_process_status_signaled(raw_status: int) -> int;
-extern pub fn __mlang_std_process_status_signal(raw_status: int) -> int;
-extern pub fn __mlang_std_process_kill(child_handle: i64, sig: int) -> int;
-extern pub fn __mlang_std_process_child_close(child_handle: i64) -> int;
+extern pub fn __mlang_std_process_pipe_close(pipe_handle: i64) -> i32;
+extern pub fn __mlang_std_process_wait_raw(child_handle: i64) -> i32;
+extern pub fn __mlang_std_process_status_exited(raw_status: i32) -> i32;
+extern pub fn __mlang_std_process_status_code(raw_status: i32) -> i32;
+extern pub fn __mlang_std_process_status_signaled(raw_status: i32) -> i32;
+extern pub fn __mlang_std_process_status_signal(raw_status: i32) -> i32;
+extern pub fn __mlang_std_process_kill(child_handle: i64, sig: i32) -> i32;
+extern pub fn __mlang_std_process_child_close(child_handle: i64) -> i32;
 
 /// @brief Child process handle.
 pub struct Child {
@@ -124,7 +124,7 @@ impl Child {
 
 impl ExitStatus {
     /// @brief Return 1 when process exited normally.
-    pub fn exited(self: ExitStatus) -> int {
+    pub fn exited(self: ExitStatus) -> i32 {
         return __mlang_std_process_status_exited(self.raw);
     }
 
@@ -134,7 +134,7 @@ impl ExitStatus {
     }
 
     /// @brief Return 1 when process terminated by signal.
-    pub fn signaled(self: ExitStatus) -> int {
+    pub fn signaled(self: ExitStatus) -> i32 {
         return __mlang_std_process_status_signaled(self.raw);
     }
 
@@ -144,7 +144,7 @@ impl ExitStatus {
     }
 
     /// @brief Return 1 on successful exit code 0.
-    pub fn success(self: ExitStatus) -> int {
+    pub fn success(self: ExitStatus) -> i32 {
         if self.exited() != 1 {
             return 0;
         }

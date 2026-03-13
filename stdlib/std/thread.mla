@@ -33,7 +33,7 @@ extern pub fn spawn(fn_ptr: ptr<void>) -> Handle<Thread>;
 
 /// @brief Join a spawned thread handle.
 /// Returns thread exit status.
-pub fn join(handle: Handle<Thread>) -> int {
+pub fn join(handle: Handle<Thread>) -> i32 {
     return thread_join(handle);
 }
 
@@ -44,19 +44,19 @@ pub fn mutex_new() -> Handle<Mutex> {
 
 /// @brief Lock a mutex.
 /// Returns `0` on success.
-pub fn mutex_lock_handle(handle: Handle<Mutex>) -> int {
+pub fn mutex_lock_handle(handle: Handle<Mutex>) -> i32 {
     return mutex_lock(handle);
 }
 
 /// @brief Unlock a mutex.
 /// Returns `0` on success.
-pub fn mutex_unlock_handle(handle: Handle<Mutex>) -> int {
+pub fn mutex_unlock_handle(handle: Handle<Mutex>) -> i32 {
     return mutex_unlock(handle);
 }
 
 /// @brief Destroy a mutex.
 /// Returns `0` on success.
-pub fn mutex_free(handle: Handle<Mutex>) -> int {
+pub fn mutex_free(handle: Handle<Mutex>) -> i32 {
     return mutex_destroy(handle);
 }
 

@@ -5,13 +5,13 @@
 /// Do not call them directly -- use the public API in std::strbuf instead.
 
 extern fn __mlang_std_strbuf_len(s: string) -> i64;
-extern fn __mlang_std_strbuf_is_empty(s: string) -> int;
+extern fn __mlang_std_strbuf_is_empty(s: string) -> i32;
 extern fn __mlang_std_strbuf_clone(s: string) -> string;
-extern fn __mlang_std_strbuf_eq(a: string, b: string) -> int;
+extern fn __mlang_std_strbuf_eq(a: string, b: string) -> i32;
 extern fn __mlang_std_strbuf_compare(a: string, b: string) -> i64;
-extern fn __mlang_std_strbuf_starts_with(s: string, prefix: string) -> int;
-extern fn __mlang_std_strbuf_ends_with(s: string, suffix: string) -> int;
-extern fn __mlang_std_strbuf_contains(s: string, needle: string) -> int;
+extern fn __mlang_std_strbuf_starts_with(s: string, prefix: string) -> i32;
+extern fn __mlang_std_strbuf_ends_with(s: string, suffix: string) -> i32;
+extern fn __mlang_std_strbuf_contains(s: string, needle: string) -> i32;
 extern fn __mlang_std_strbuf_find(s: string, needle: string) -> i64;
 extern fn __mlang_std_strbuf_rfind(s: string, needle: string) -> i64;
 extern fn __mlang_std_strbuf_sub(s: string, start: i64, count: i64) -> string;

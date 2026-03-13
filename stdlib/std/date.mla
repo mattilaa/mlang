@@ -1,12 +1,12 @@
 /// \file date.mla
 /// \brief Wall-clock date/time helpers for MLang (std::date).
 
-extern pub fn __mlang_std_date_now_year() -> int;
-extern pub fn __mlang_std_date_now_month() -> int;
-extern pub fn __mlang_std_date_now_day() -> int;
-extern pub fn __mlang_std_date_now_hour() -> int;
-extern pub fn __mlang_std_date_now_minute() -> int;
-extern pub fn __mlang_std_date_now_second() -> int;
+extern pub fn __mlang_std_date_now_year() -> i32;
+extern pub fn __mlang_std_date_now_month() -> i32;
+extern pub fn __mlang_std_date_now_day() -> i32;
+extern pub fn __mlang_std_date_now_hour() -> i32;
+extern pub fn __mlang_std_date_now_minute() -> i32;
+extern pub fn __mlang_std_date_now_second() -> i32;
 
 /// @brief Local date-time components.
 pub struct DateTime {

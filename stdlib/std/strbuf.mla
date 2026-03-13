@@ -114,7 +114,7 @@ pub fn len(s: string) -> i64 {
 }
 
 /// @brief Return `1` when empty, `0` otherwise.
-pub fn is_empty(s: string) -> int {
+pub fn is_empty(s: string) -> i32 {
     return __mlang_std_strbuf_is_empty(s);
 }
 
@@ -130,7 +130,7 @@ pub fn from(s: string) -> string {
 }
 
 /// @brief Compare two strings for equality (`1` true, `0` false).
-pub fn eq(a: string, b: string) -> int {
+pub fn eq(a: string, b: string) -> i32 {
     return __mlang_std_strbuf_eq(a, b);
 }
 
@@ -141,17 +141,17 @@ pub fn compare(a: string, b: string) -> i64 {
 }
 
 /// @brief Return `1` if `s` starts with `prefix`.
-pub fn starts_with(s: string, prefix: string) -> int {
+pub fn starts_with(s: string, prefix: string) -> i32 {
     return __mlang_std_strbuf_starts_with(s, prefix);
 }
 
 /// @brief Return `1` if `s` ends with `suffix`.
-pub fn ends_with(s: string, suffix: string) -> int {
+pub fn ends_with(s: string, suffix: string) -> i32 {
     return __mlang_std_strbuf_ends_with(s, suffix);
 }
 
 /// @brief Return `1` if `s` contains `needle`.
-pub fn contains(s: string, needle: string) -> int {
+pub fn contains(s: string, needle: string) -> i32 {
     return __mlang_std_strbuf_contains(s, needle);
 }
 

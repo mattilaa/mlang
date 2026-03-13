@@ -5,8 +5,8 @@ mod std::sync;
 use std::sync::LockFreeQueue;
 
 extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: string) -> i64;
-extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> int;
-extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> int;
+extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> i32;
+extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> i32;
 
 /// @brief Handle for periodic event posting to a lock-free queue.
 pub struct EventLoop {

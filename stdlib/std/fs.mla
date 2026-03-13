@@ -49,16 +49,16 @@ extern pub fn __mlang_std_fs_open_read(path: string) -> i64;
 extern pub fn __mlang_std_fs_open_write(path: string) -> i64;
 extern pub fn __mlang_std_fs_open_append(path: string) -> i64;
 extern pub fn __mlang_std_fs_open_read_write(path: string) -> i64;
-extern pub fn __mlang_std_fs_close(handle: i64) -> int;
+extern pub fn __mlang_std_fs_close(handle: i64) -> i32;
 extern pub fn __mlang_std_fs_read_line(handle: i64, buf: string, capacity: i64) -> i64;
 extern pub fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
 extern pub fn __mlang_std_fs_read_all_lines(handle: i64) -> list<string>;
 extern pub fn __mlang_std_fs_free_lines(lines: list<string>) -> void;
-extern pub fn __mlang_std_fs_file_exists(path: string) -> int;
+extern pub fn __mlang_std_fs_file_exists(path: string) -> i32;
 extern pub fn __mlang_std_fs_parent_dir(path: string) -> string;
 extern pub fn __mlang_std_fs_cwd() -> string;
 extern pub fn __mlang_std_fs_read_all_text(path: string) -> string;
-extern pub fn __mlang_std_fs_write_all_text(path: string, text: string) -> int;
+extern pub fn __mlang_std_fs_write_all_text(path: string, text: string) -> i32;
 extern pub fn __mlang_std_strbuf_len(s: string) -> i64;
 extern pub fn __mlang_std_fs_seek(handle: i64, offset: i64, whence: i32) -> i64;
 extern pub fn __mlang_std_fs_tell(handle: i64) -> i64;
@@ -588,7 +588,7 @@ pub fn free_lines(lines: list<string>) -> void {
 ///
 /// @param path  File or directory path to check.
 /// @return `1` if the path exists, `0` otherwise.
-pub fn file_exists(path: string) -> int {
+pub fn file_exists(path: string) -> i32 {
     return __mlang_std_fs_file_exists(path);
 }
 

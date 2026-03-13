@@ -13,11 +13,11 @@ extern pub fn __mlang_std_time_now_ns() -> i64;
 extern pub fn __mlang_std_time_sleep_ms(ms: i64) -> void;
 extern pub fn __mlang_std_time_format_local(pattern: str8) -> string;
 extern pub fn __mlang_std_time_timer_new(timeout_ms: i64) -> i64;
-extern pub fn __mlang_std_time_timer_reset(handle: i64, timeout_ms: i64) -> int;
-extern pub fn __mlang_std_time_timer_elapsed(handle: i64) -> int;
+extern pub fn __mlang_std_time_timer_reset(handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_time_timer_elapsed(handle: i64) -> i32;
 extern pub fn __mlang_std_time_timer_remaining_ms(handle: i64) -> i64;
-extern pub fn __mlang_std_time_timer_wait(handle: i64) -> int;
-extern pub fn __mlang_std_time_timer_free(handle: i64) -> int;
+extern pub fn __mlang_std_time_timer_wait(handle: i64) -> i32;
+extern pub fn __mlang_std_time_timer_free(handle: i64) -> i32;
 
 /// @brief One-shot monotonic timer.
 pub struct Timer {
@@ -88,7 +88,7 @@ impl Timer {
     }
 
     /// @brief Return `1` when timer deadline has passed.
-    pub fn elapsed(self: Timer) -> int {
+    pub fn elapsed(self: Timer) -> i32 {
         return __mlang_std_time_timer_elapsed(self.handle);
     }
 

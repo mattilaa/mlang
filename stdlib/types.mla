@@ -8,9 +8,6 @@
 // @builtin bool
 // Boolean value: true or false.
 
-// @builtin int
-// Default integer type (alias of i32).
-
 // @builtin i8
 // Signed 8-bit integer. Range: -128..127.
 
@@ -39,13 +36,7 @@
 // 32-bit floating point (single precision).
 
 // @builtin f64
-// 64-bit floating point (double precision).
-
-// @builtin float
-// Alias of f32.
-
-// @builtin double
-// Alias of f64.
+// 64-bit floating point.
 
 // @builtin string
 // Default string type (alias of str8).

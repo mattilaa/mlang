@@ -5,7 +5,7 @@
 /// It wraps the compiler C ABI with MLang-friendly handles and Result values.
 
 extern pub fn __mlang_std_compiler_last_error() -> string;
-extern pub fn __mlang_std_compiler_last_status() -> int;
+extern pub fn __mlang_std_compiler_last_status() -> i32;
 extern pub fn __mlang_std_compiler_status_name(status: i32) -> string;
 extern pub fn __mlang_std_compiler_version() -> string;
 extern pub fn __mlang_std_compiler_session_create() -> i64;

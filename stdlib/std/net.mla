@@ -8,12 +8,12 @@ extern pub fn __mlang_std_net_tcp_accept(listener: i64) -> i64;
 extern pub fn __mlang_std_net_tcp_connect(addr: string, port: i64) -> i64;
 extern pub fn __mlang_std_net_tcp_read(handle: i64, buf: string, capacity: i64) -> i64;
 extern pub fn __mlang_std_net_tcp_write(handle: i64, s: string) -> i64;
-extern pub fn __mlang_std_net_tcp_close(handle: i64) -> int;
-extern pub fn __mlang_std_net_tcp_set_nonblocking(handle: i64, enabled: int) -> int;
-extern pub fn __mlang_std_net_tcp_set_read_timeout_ms(handle: i64, timeout_ms: i64) -> int;
-extern pub fn __mlang_std_net_tcp_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> int;
+extern pub fn __mlang_std_net_tcp_close(handle: i64) -> i32;
+extern pub fn __mlang_std_net_tcp_set_nonblocking(handle: i64, enabled: i32) -> i32;
+extern pub fn __mlang_std_net_tcp_set_read_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_net_tcp_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
 extern pub fn __mlang_std_net_tcp_try_clone(handle: i64) -> i64;
-extern pub fn __mlang_std_net_tcp_set_listener_backlog(handle: i64, backlog: i64) -> int;
+extern pub fn __mlang_std_net_tcp_set_listener_backlog(handle: i64, backlog: i64) -> i32;
 
 pub struct TcpListener {
     var handle: i64;
@@ -98,7 +98,7 @@ impl TcpStream {
         return __mlang_std_net_tcp_close(self.handle);
     }
 
-    pub fn set_nonblocking(self: TcpStream, enabled: int) -> Result<i32, string> {
+    pub fn set_nonblocking(self: TcpStream, enabled: i32) -> Result<i32, string> {
         let rc: i32 = __mlang_std_net_tcp_set_nonblocking(self.handle, enabled);
         if rc != 0 {
             return Err<i32, string>(last_error());

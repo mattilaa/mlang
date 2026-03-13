@@ -10,8 +10,8 @@
 
 extern pub fn __mlang_std_regex_last_error() -> string;
 extern pub fn __mlang_std_regex_compile(pattern: string) -> i64;
-extern pub fn __mlang_std_regex_free(handle: i64) -> int;
-extern pub fn __mlang_std_regex_is_match(handle: i64, text: string) -> int;
+extern pub fn __mlang_std_regex_free(handle: i64) -> i32;
+extern pub fn __mlang_std_regex_is_match(handle: i64, text: string) -> i32;
 extern pub fn __mlang_std_regex_match_start(handle: i64, text: string, group_index: i64) -> i64;
 extern pub fn __mlang_std_regex_match_end(handle: i64, text: string, group_index: i64) -> i64;
 

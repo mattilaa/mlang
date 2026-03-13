@@ -68,12 +68,12 @@ pub struct BufRead {
 };
 
 /// @brief Seek constants (same semantics as C stdio).
-pub fn seek_set() -> int { return 0; }
-pub fn seek_cur() -> int { return 1; }
-pub fn seek_end() -> int { return 2; }
-pub fn buffering_unbuffered() -> int { return 0; }
-pub fn buffering_line() -> int { return 1; }
-pub fn buffering_full() -> int { return 2; }
+pub fn seek_set() -> i32 { return 0; }
+pub fn seek_cur() -> i32 { return 1; }
+pub fn seek_end() -> i32 { return 2; }
+pub fn buffering_unbuffered() -> i32 { return 0; }
+pub fn buffering_line() -> i32 { return 1; }
+pub fn buffering_full() -> i32 { return 2; }
 
 /// @brief Return stdin handle.
 pub fn stdin() -> Stdin {
@@ -251,13 +251,13 @@ pub fn writeln_locked(lockToken: StdoutLock, s: string) -> i64 {
 }
 
 /// @brief Explicitly release stdout lock.
-pub fn unlock(lockToken: StdoutLock) -> int {
+pub fn unlock(lockToken: StdoutLock) -> i32 {
     return __mlang_std_io_stdout_unlock();
 }
 
 /// @brief Check whether stdout lock is currently acquirable.
 /// Returns 1 when lock is free, 0 when busy.
-pub fn try_lock(out: Stdout) -> int {
+pub fn try_lock(out: Stdout) -> i32 {
     return __mlang_std_io_stdout_try_lock();
 }
 
@@ -302,7 +302,7 @@ pub fn read_line(reader: BufRead, buf: string, capacity: i64) -> i64 {
 }
 
 /// @brief Trait-like seek.
-pub fn seek(seeker: Seek, offset: i64, whence: int) -> i64 {
+pub fn seek(seeker: Seek, offset: i64, whence: i32) -> i64 {
     return __mlang_std_io_cursor_seek(seeker.cursor.handle, offset, whence);
 }
 
@@ -312,27 +312,27 @@ pub fn to_string(c: Cursor) -> string {
 }
 
 /// @brief Flush stdout stream buffers.
-pub fn flush(out: Stdout) -> int {
+pub fn flush(out: Stdout) -> i32 {
     return __mlang_std_io_stdout_flush();
 }
 
 /// @brief Flush stderr stream buffers.
-pub fn flush(err: Stderr) -> int {
+pub fn flush(err: Stderr) -> i32 {
     return __mlang_std_io_stderr_flush();
 }
 
 /// @brief Set stdin buffering mode and size (bytes for full/line modes).
-pub fn set_stdin_buffering(mode: int, size: i64) -> int {
+pub fn set_stdin_buffering(mode: i32, size: i64) -> i32 {
     return __mlang_std_io_set_stdin_buffering(mode, size);
 }
 
 /// @brief Set stdout buffering mode and size.
-pub fn set_stdout_buffering(mode: int, size: i64) -> int {
+pub fn set_stdout_buffering(mode: i32, size: i64) -> i32 {
     return __mlang_std_io_set_stdout_buffering(mode, size);
 }
 
 /// @brief Set stderr buffering mode and size.
-pub fn set_stderr_buffering(mode: int, size: i64) -> int {
+pub fn set_stderr_buffering(mode: i32, size: i64) -> i32 {
     return __mlang_std_io_set_stderr_buffering(mode, size);
 }
 
