@@ -2,13 +2,13 @@
 
 // Define a simple Point struct
 struct Point {
-    var x: int;
-    var y: int;
+    var x: i32;
+    var y: i32;
 };
 
 fn main() -> i32 {
     // Tuple with bool - test direct access in if statement
-    let flags: tuple<bool, bool, int> = (true, false, 42);
+    let flags: tuple<bool, bool, i32> = (true, false, 42);
 
     // Direct tuple access in if condition
     if flags.0: {
@@ -19,7 +19,7 @@ fn main() -> i32 {
     }
 
     // Tuple with mixed types including string
-    let person: tuple<string, int, bool> = ("Alice", 30, true);
+    let person: tuple<string, i32, bool> = ("Alice", 30, true);
     println!("Name: {}", person.0);
     println!("Age: {}", person.1);
     if person.2: {
@@ -50,11 +50,11 @@ fn main() -> i32 {
     let end: Point = line.1;
     println!("Line from ({}, {}) to ({}, {})", start.x, start.y, end.x, end.y);
 
-    // Tuple with Point, bool, and int — fresh instance
+    // Tuple with Point, bool, and i32 — fresh instance
     var pd: Point;
     pd.x = 100;
     pd.y = 200;
-    let markedPoint: tuple<Point, bool, int> = (pd, true, 5);
+    let markedPoint: tuple<Point, bool, i32> = (pd, true, 5);
     if markedPoint.1: {
         let mp: Point = markedPoint.0;
         println!("Marked point at ({}, {}) with priority {}", mp.x, mp.y, markedPoint.2);

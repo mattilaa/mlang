@@ -119,7 +119,7 @@ fn main() -> i32 {
     var found_idx = -1;
     for (i, s) in scores3.iter().enumerate() {
         if s > 90: {
-            if found_idx == -1: { found_idx = int(i); }
+            if found_idx == -1: { found_idx = i32(i); }
         }
     }
     if found_idx >= 0: {
@@ -133,7 +133,7 @@ fn main() -> i32 {
 
     let row: [i32; 10] = [0; 10];
     for (i, _v) in row.iter().enumerate() {
-        println!("  7 * {} = {}", i, 7 * int(i));
+        println!("  7 * {} = {}", i, 7 * i32(i));
     }
 
     return 0;

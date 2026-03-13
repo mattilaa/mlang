@@ -3,33 +3,33 @@ mod std::math;
 use std::math::*;
 
 fn main() -> i32 {
-    // int
-    let ai: int = add(2, 3);
-    let pi: int = pow(2, 4);
-    let si: int = sqrt(81);
-    let mi: int = modulo(17, 5);
-    println!("int: add={} pow={} sqrt={} modulo={}", ai, pi, si, mi);
+    // i32
+    let ai: i32 = add(2, 3);
+    let pi: i32 = pow(2, 4);
+    let si: i32 = sqrt(81);
+    let mi: i32 = modulo(17, 5);
+    println!("i32: add={} pow={} sqrt={} modulo={}", ai, pi, si, mi);
 
-    // float
-    let af: float = add(2.5f, 3.25f);
-    let pf: float = pow(2.0f, 3.0f);
-    let sf: float = sqrt(9.0f);
-    let cf: float = clamp(2.75f, 0.5f, 2.0f);
-    println!("float: add={} pow={} sqrt={} clamp={}", af, pf, sf, cf);
+    // f32
+    let af: f32 = add(2.5f, 3.25f);
+    let pf: f32 = pow(2.0f, 3.0f);
+    let sf: f32 = sqrt(9.0f);
+    let cf: f32 = clamp(2.75f, 0.5f, 2.0f);
+    println!("f32: add={} pow={} sqrt={} clamp={}", af, pf, sf, cf);
 
-    // double
-    let ad: double = add(2.5, 3.25);
-    let pd: double = pow(2.0, 3.0);
-    let sd: double = sqrt(9.0);
-    let md: double = modulo(7.5, 2.0);
-    println!("double: add={} pow={} sqrt={} modulo={}", ad, pd, sd, md);
+    // f64
+    let ad: f64 = add(2.5, 3.25);
+    let pd: f64 = pow(2.0, 3.0);
+    let sd: f64 = sqrt(9.0);
+    let md: f64 = modulo(7.5, 2.0);
+    println!("f64: add={} pow={} sqrt={} modulo={}", ad, pd, sd, md);
 
     // trig/log/exp examples
-    let s0: double = sin(0.0);
-    let c0: double = cos(0.0);
-    let t0: double = tan(0.0);
-    let e1: double = exp(1.0);
-    let l1: double = log(e1);
+    let s0: f64 = sin(0.0);
+    let c0: f64 = cos(0.0);
+    let t0: f64 = tan(0.0);
+    let e1: f64 = exp(1.0);
+    let l1: f64 = log(e1);
     println!("sin(0)={} cos(0)={} tan(0)={} log(exp(1))={}", s0, c0, t0, l1);
 
     return 0;

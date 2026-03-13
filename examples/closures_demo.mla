@@ -28,7 +28,7 @@ use std::thread::*;
 fn demo_counter() -> void {
     println!("-- 1. Simple counter --");
 
-    var count: int = 0;
+    var count: i32 = 0;
 
     var inc = || {
         count += 1;
@@ -50,7 +50,7 @@ fn demo_counter() -> void {
 fn demo_compound_assign() -> void {
     println!("-- 2. Compound assignment --");
 
-    var n: int = 2;
+    var n: i32 = 2;
     n += 3;   println!("  2 + 3  = {}", n);   // 5
     n *= 4;   println!("  5 * 4  = {}", n);   // 20
     n -= 8;   println!("  20 - 8 = {}", n);   // 12
@@ -67,7 +67,7 @@ fn demo_compound_assign() -> void {
 fn demo_accumulator() -> void {
     println!("-- 3. Accumulator --");
 
-    var total: int = 0;
+    var total: i32 = 0;
 
     var add = || {
         total += 10;
@@ -86,8 +86,8 @@ fn demo_accumulator() -> void {
 fn demo_independent_closures() -> void {
     println!("-- 4. Independent closures --");
 
-    var x: int = 0;
-    var y: int = 1;
+    var x: i32 = 0;
+    var y: i32 = 1;
 
     var stepX = || { x += 3; };
     var stepY = || { y *= 2; };
@@ -107,9 +107,9 @@ fn demo_independent_closures() -> void {
 fn demo_logic_in_closure() -> void {
     println!("-- 5. Logic inside closure --");
 
-    var evens: int = 0;
-    var odds:  int = 0;
-    var i: int = 0;
+    var evens: i32 = 0;
+    var odds:  i32 = 0;
+    var i: i32 = 0;
 
     var classify = || {
         if i % 2 == 0: {
@@ -142,7 +142,7 @@ fn demo_spawn_closure() -> void {
     });
 
     let h2: Handle<Thread> = thread::spawn(|| {
-        var n: int = 0;
+        var n: i32 = 0;
         for i in 1..4 {
             n += i;
         }

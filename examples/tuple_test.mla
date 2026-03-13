@@ -1,6 +1,6 @@
 fn main() -> i32 {
     // Create a tuple
-    let coords: tuple<int, int, int> = (10, 20, 30);
+    let coords: tuple<i32, i32, i32> = (10, 20, 30);
 
     // Access elements
     println!("x: {}", coords.0);
@@ -8,10 +8,10 @@ fn main() -> i32 {
     println!("z: {}", coords.2);
 
     // Mixed types
-    let data: tuple<string, int, double> = ("test", 42, 3.14);
+    let data: tuple<string, i32, f64> = ("test", 42, 3.14);
     println!("{} {} {}", data.0, data.1, data.2);
 
-    let data2: tuple<string, int, bool> = ("test", 42, true);
+    let data2: tuple<string, i32, bool> = ("test", 42, true);
     println!("{} {} {}", data.0, data.1, data.2);
 
     return 0;

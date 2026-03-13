@@ -108,8 +108,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let h2: Handle<Thread> = thread_spawn(handle_client, 2, s2c.raw_handle());
     s2.close();
 
-    let rc1: int = join(h1);
-    let rc2: int = join(h2);
+    let rc1: i32 = join(h1);
+    let rc2: i32 = join(h2);
 
     listener.close();
     println!("SERVER_DONE handled=2");

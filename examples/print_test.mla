@@ -18,7 +18,7 @@ fn main() -> i32 {
     println!("{} + {} = {}", a, b, a + b);
 
     // Floating point numbers
-    let pi: double = 3.14159;
+    let pi: f64 = 3.14159;
     println!("Pi is approximately: {}", pi);
 
     // String interpolation

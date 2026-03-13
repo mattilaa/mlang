@@ -1,8 +1,8 @@
 /// Sundaram sieve example in MLang using real hash-set membership.
 ///
 /// C++ sample parity notes:
-/// - `std::unordered_set<int>` -> `HashSetI64` from `std::unordered`.
-/// - `std::vector<int>` -> `list<i32>`.
+/// - `std::unordered_set<i32>` -> `HashSetI64` from `std::unordered`.
+/// - `std::vector<i32>` -> `list<i32>`.
 /// - Range/view pipelines are not first-class yet, so this uses explicit loops.
 
 mod std::unordered;

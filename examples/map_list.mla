@@ -1,6 +1,6 @@
 fn main() -> i32 {
     // Test list
-    let numbers: list<int> = [1, 2, 3, 4, 5];
+    let numbers: list<i32> = [1, 2, 3, 4, 5];
     let names: list<string> = ["Alice", "Bob", "Charlie"];
 
     for x in numbers {

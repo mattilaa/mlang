@@ -69,8 +69,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     let h1: Handle<Thread> = thread_spawn(run_client, 1, port);
     let h2: Handle<Thread> = thread_spawn(run_client, 2, port);
-    let rc1: int = join(h1);
-    let rc2: int = join(h2);
+    let rc1: i32 = join(h1);
+    let rc2: i32 = join(h2);
 
     var ok: i32 = 0;
     if rc1 == 0: {

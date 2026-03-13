@@ -16,7 +16,7 @@ pub struct Point {
 
     // Public method - callable from outside
     pub fn distance(self: Point) -> i32 {
-        return int(double(self.distance_squared()));
+        return i32(f64(self.distance_squared()));
     }
 };
 
@@ -31,30 +31,30 @@ struct Base {
 pub struct Derived : Base {
     var extra: i32;
 
-    pub fn get_total(self: Derived) -> int {
+    pub fn get_total(self: Derived) -> i32 {
         return self.extra + self.value;
     }
 };
 
 struct Inner {
-    var value: int;
-    pub fn get_value(self: Inner) -> int { return self.value; }
+    var value: i32;
+    pub fn get_value(self: Inner) -> i32 { return self.value; }
 };
 
 struct Outer {
     var inner: Inner;
 };
 
-fn main() -> int {
-    let fact5: int = factorial(5);
-    let sum: int = sum_range(1, 5);
-    let sq: int = square(3);
+fn main() -> i32 {
+    let fact5: i32 = factorial(5);
+    let sum: i32 = sum_range(1, 5);
+    let sq: i32 = square(3);
 
-    let maximum: int = max(10, 20);
-    let minimum: int = min(10, 20);
-    let absolute: int = abs(0 - 15);
+    let maximum: i32 = max(10, 20);
+    let minimum: i32 = min(10, 20);
+    let absolute: i32 = abs(0 - 15);
 
-    var result: int = fact5 + sum + sq;
+    var result: i32 = fact5 + sum + sq;
     result = result + maximum + minimum;
     result = result + absolute;
     println!("result: {}", result);
@@ -62,7 +62,7 @@ fn main() -> int {
     var p: Point;
     p.x = 3;
     p.y = 4;
-    let dist: int = p.distance();  // Calls Point_distance with p as self
+    let dist: i32 = p.distance();  // Calls Point_distance with p as self
     println!("distance: {}", dist);
 
     var derived: Derived;
@@ -74,8 +74,8 @@ fn main() -> int {
 
     var outer: Outer;
     outer.inner.value = 42;           // Chained field access
-    let v: int = outer.inner.value;   // Chained field read
-    let x: int = outer.inner.get_value();  // Chained method call
+    let v: i32 = outer.inner.value;   // Chained field read
+    let x: i32 = outer.inner.get_value();  // Chained method call
     println!("outer.inner.value: {} v: {} inner.get_value: {}", outer.inner.value, v, outer.inner.get_value());
 
     return 0;

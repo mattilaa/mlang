@@ -11,7 +11,7 @@ fn main() -> i32 {
 
     // Closure with a loop
     let h2: Handle<Thread> = thread::spawn(|| {
-        var i: int = 0;
+        var i: i32 = 0;
         for i in 0..3 {
             println!("thread loop iteration {}", i);
         }

@@ -117,7 +117,7 @@ fn accept_spawn_join(listener: TcpListener, next_id: i64, remaining: i64, rounds
     stream.close();
 
     let rest_rc: i32 = accept_spawn_join(listener, next_id + 1, remaining - 1, rounds);
-    let self_rc: int = join(h);
+    let self_rc: i32 = join(h);
 
     if rest_rc != 0 {
         return 1;

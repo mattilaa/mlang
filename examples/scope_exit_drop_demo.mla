@@ -2,7 +2,7 @@ mod std::strbuf;
 
 use std::strbuf::*;
 
-extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> int;
+extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> i32;
 
 struct OwnedBuffer {
     var raw: string;

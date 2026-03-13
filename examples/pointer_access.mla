@@ -10,7 +10,7 @@ fn main() -> i32 {
 
     let pi: ptr<i32> = &foo.value;
     *pi = 7;
-    println!("after int ptr: {}", foo.value);
+    println!("after i32 ptr: {}", foo.value);
 
     return 0;
 }
