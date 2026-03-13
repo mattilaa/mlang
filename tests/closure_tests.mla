@@ -10,7 +10,7 @@ use std::thread::*;
 
 #[test]
 fn test_plus_assign() -> i32 {
-    var x: int = 10;
+    var x: i32 = 10;
     x += 5;
     if x != 15: { return 1; }
     x += 0;
@@ -22,7 +22,7 @@ fn test_plus_assign() -> i32 {
 
 #[test]
 fn test_minus_assign() -> i32 {
-    var x: int = 20;
+    var x: i32 = 20;
     x -= 8;
     if x != 12: { return 1; }
     x -= 0;
@@ -34,7 +34,7 @@ fn test_minus_assign() -> i32 {
 
 #[test]
 fn test_multiply_assign() -> i32 {
-    var x: int = 3;
+    var x: i32 = 3;
     x *= 4;
     if x != 12: { return 1; }
     x *= 1;
@@ -46,7 +46,7 @@ fn test_multiply_assign() -> i32 {
 
 #[test]
 fn test_divide_assign() -> i32 {
-    var x: int = 100;
+    var x: i32 = 100;
     x /= 4;
     if x != 25: { return 1; }
     x /= 5;
@@ -58,7 +58,7 @@ fn test_divide_assign() -> i32 {
 
 #[test]
 fn test_modulo_assign() -> i32 {
-    var x: int = 17;
+    var x: i32 = 17;
     x %= 5;
     if x != 2: { return 1; }
     x %= 3;
@@ -70,7 +70,7 @@ fn test_modulo_assign() -> i32 {
 
 #[test]
 fn test_compound_assign_chained() -> i32 {
-    var n: int = 1;
+    var n: i32 = 1;
     n += 4;   // 5
     n *= 3;   // 15
     n -= 5;   // 10
@@ -85,7 +85,7 @@ fn test_compound_assign_chained() -> i32 {
 // Basic counter — the canonical use-case: closure mutates outer var.
 #[test]
 fn test_closure_counter() -> i32 {
-    var count: int = 0;
+    var count: i32 = 0;
     var inc = || {
         count += 1;
     };
@@ -99,7 +99,7 @@ fn test_closure_counter() -> i32 {
 // Closure reads and writes the captured variable correctly each call.
 #[test]
 fn test_closure_value_after_calls() -> i32 {
-    var x: int = 10;
+    var x: i32 = 10;
     var add5 = || {
         x += 5;
     };
@@ -113,8 +113,8 @@ fn test_closure_value_after_calls() -> i32 {
 // Closure captures multiple outer variables.
 #[test]
 fn test_closure_multiple_captures() -> i32 {
-    var a: int = 0;
-    var b: int = 100;
+    var a: i32 = 0;
+    var b: i32 = 100;
     var step = || {
         a += 1;
         b -= 10;
@@ -130,8 +130,8 @@ fn test_closure_multiple_captures() -> i32 {
 // Two independent closures over different variables.
 #[test]
 fn test_two_independent_closures() -> i32 {
-    var x: int = 0;
-    var y: int = 0;
+    var x: i32 = 0;
+    var y: i32 = 0;
     var incX = || { x += 1; };
     var incY = || { y += 2; };
     incX();
@@ -145,7 +145,7 @@ fn test_two_independent_closures() -> i32 {
 // let binding of a closure works the same as var.
 #[test]
 fn test_let_closure() -> i32 {
-    var total: int = 0;
+    var total: i32 = 0;
     let add10 = || {
         total += 10;
     };
@@ -159,7 +159,7 @@ fn test_let_closure() -> i32 {
 #[test]
 fn test_closure_called_in_if() -> i32 {
     var flag: bool = true;
-    var counter: int = 0;
+    var counter: i32 = 0;
     var bump = || { counter += 1; };
     if flag: {
         bump();
@@ -172,7 +172,7 @@ fn test_closure_called_in_if() -> i32 {
 // Closure called from inside a for loop.
 #[test]
 fn test_closure_called_in_loop() -> i32 {
-    var sum: int = 0;
+    var sum: i32 = 0;
     var acc = || { sum += 1; };
     for i in 0..5 {
         acc();
@@ -184,7 +184,7 @@ fn test_closure_called_in_loop() -> i32 {
 // Closure body uses a compound assignment internally.
 #[test]
 fn test_closure_body_compound_assign() -> i32 {
-    var product: int = 1;
+    var product: i32 = 1;
     var dbl = || { product *= 2; };
     dbl();
     dbl();
@@ -199,7 +199,7 @@ fn test_closure_body_compound_assign() -> i32 {
 #[test]
 fn test_thread_spawn_closure_basic() -> i32 {
     let h: Handle<Thread> = thread_spawn(|| {
-        var x: int = 1;
+        var x: i32 = 1;
         x += 1;
     });
     join(h);
@@ -210,7 +210,7 @@ fn test_thread_spawn_closure_basic() -> i32 {
 #[test]
 fn test_thread_spawn_closure_loop() -> i32 {
     let h: Handle<Thread> = thread_spawn(|| {
-        var s: int = 0;
+        var s: i32 = 0;
         for i in 0..4 {
             s += 1;
         }
@@ -223,7 +223,7 @@ fn test_thread_spawn_closure_loop() -> i32 {
 #[test]
 fn test_thread_spawn_intrinsic_closure() -> i32 {
     let h: Handle<Thread> = thread_spawn(|| {
-        var dummy: int = 42;
+        var dummy: i32 = 42;
         dummy *= 2;
     });
     join(h);

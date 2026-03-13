@@ -2,13 +2,13 @@ mod std::strbuf;
 
 use std::strbuf::*;
 
-extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> int;
-extern fn strcmp(a: string, b: string) -> int;
+extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> i32;
+extern fn strcmp(a: string, b: string) -> i32;
 
 #[test]
 fn test_string_new_and_free() -> i32 {
     let s = String::new();
-    let ok: int = strcmp(s, "");
+    let ok: i32 = strcmp(s, "");
     String::free(s);
     return ok == 0 ? 0 : 1;
 }
@@ -17,7 +17,7 @@ fn test_string_new_and_free() -> i32 {
 fn test_string_with_capacity_and_write() -> i32 {
     var s = with_capacity(32);
     snprintf(s, 32, "n=%d", 7);
-    let ok: int = strcmp(s, "n=7");
+    let ok: i32 = strcmp(s, "n=7");
     free(s);
     return ok == 0 ? 0 : 1;
 }

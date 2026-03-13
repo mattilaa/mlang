@@ -358,7 +358,7 @@ TEST_F(MLATest, FloatLiteral)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let x: float = 3.14f;
+            let x: f32 = 3.14f;
             println!("{}", x);
             return 0;
         }
@@ -371,7 +371,7 @@ TEST_F(MLATest, DoubleLiteral)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let x: double = 3.14159;
+            let x: f64 = 3.14159;
             println!("{}", x);
             return 0;
         }
@@ -703,7 +703,7 @@ TEST_F(MLATest, FloatModulo)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let result: float = 5.5f % 2.0f;
+            let result: f32 = 5.5f % 2.0f;
             if result < 1.49f: { return 1; }
             if result > 1.51f: { return 2; }
             return 0;
@@ -716,7 +716,7 @@ TEST_F(MLATest, DoubleModulo)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let result: double = 5.5 % 2.0;
+            let result: f64 = 5.5 % 2.0;
             if result < 1.49: { return 1; }
             if result > 1.51: { return 2; }
             return 0;
@@ -1130,7 +1130,7 @@ TEST_F(MLATest, CastIntToFloat)
     std::string code = R"(
         fn main() -> i32 {
             let x: i32 = 42;
-            let y: double = float(x);
+            let y: f64 = f64(x);
             println!("{}", y);
             return 0;
         }
@@ -1143,8 +1143,8 @@ TEST_F(MLATest, CastFloatToInt)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let x: double = 3.7;
-            let y: i32 = int(x);
+            let x: f64 = 3.7;
+            let y: i32 = i32(x);
             println!("{}", y);
             return 0;
         }
@@ -1174,15 +1174,12 @@ TEST_F(MLATest, F32F64CastAliases)
             let i: i32 = 7;
             let a: f32 = f32(i);
             let b: f64 = f64(i);
-            let c: float = float(i);
-            let d: double = double(i);
-            println!("{} {} {} {}", a, b, c, d);
+            println!("{} {}", a, b);
             return 0;
         }
     )";
     std::string output = compileAndRun(code);
-    EXPECT_TRUE(output.find("7.000000 7.000000 7.000000 7.000000") !=
-                std::string::npos);
+    EXPECT_TRUE(output.find("7.000000 7.000000") != std::string::npos);
 }
 
 // ============================================================================
@@ -1357,7 +1354,7 @@ TEST_F(MLATest, FloatModuloByZeroReportsError)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let x: float = 5.5f % 0.0f;
+            let x: f32 = 5.5f % 0.0f;
             return 0;
         }
     )";
@@ -1430,6 +1427,41 @@ TEST_F(MLATest, UpdateExpressionStructWithoutTraitReportsError)
     std::string out = compileCapture(rc);
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("must implement trait 'Increment'"), std::string::npos);
+}
+
+TEST_F(MLATest, BinaryAddStructWithoutAddTraitReportsError)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        fn main() -> i32 {
+            let a: Counter = Counter { value: 1 };
+            let b: Counter = Counter { value: 2 };
+            let c: Counter = a + b;
+            return c.value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("must implement trait 'Add'"), std::string::npos);
+}
+
+TEST_F(MLATest, UnaryNegStructWithoutNegTraitReportsError)
+{
+    std::string code = R"(
+        struct Counter { var value: i32; };
+        fn main() -> i32 {
+            let a: Counter = Counter { value: 1 };
+            let b: Counter = -a;
+            return b.value;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("must implement trait 'Neg'"), std::string::npos);
 }
 
 TEST_F(MLATest, IndexExpressionWithPostfixUpdateReportsError)

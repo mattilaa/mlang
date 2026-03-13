@@ -32,7 +32,7 @@ fn test_infer_list_map_tuple_struct() -> i32 {
     let typed_map: map<string, i32> = m;
 
     let t = (7, 2.5f, 9);
-    let typed_tuple: tuple<i32, float, i32> = t;
+    let typed_tuple: tuple<i32, f32, i32> = t;
 
     let p = Point { x: 3, y: 4 };
     if p.x != 3: { return 1; }

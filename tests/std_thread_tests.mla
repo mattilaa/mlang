@@ -9,7 +9,7 @@ fn worker(id: i64) -> i32 {
 #[test]
 fn test_thread_join_helper() -> i32 {
     let h: Handle<Thread> = thread_spawn(worker, 7);
-    let status: int = join(h);
+    let status: i32 = join(h);
     return status == 0 ? 0 : 1;
 }
 

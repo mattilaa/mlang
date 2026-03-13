@@ -1,7 +1,7 @@
 mod std::strbuf;
 use std::strbuf::*;
 
-extern fn strcmp(a: string, b: string) -> int;
+extern fn strcmp(a: string, b: string) -> i32;
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 

@@ -2,16 +2,16 @@ mod std::math;
 
 use std::math::*;
 
-fn approx_float(a: float, b: float, eps: float) -> bool {
-    var diff: float = a - b;
+fn approx_float(a: f32, b: f32, eps: f32) -> bool {
+    var diff: f32 = a - b;
     if diff < 0.0f: {
         diff = 0.0f - diff;
     }
     return diff <= eps;
 }
 
-fn approx_double(a: double, b: double, eps: double) -> bool {
-    var diff: double = a - b;
+fn approx_double(a: f64, b: f64, eps: f64) -> bool {
+    var diff: f64 = a - b;
     if diff < 0.0: {
         diff = 0.0 - diff;
     }
@@ -48,8 +48,8 @@ fn test_math_int() -> i32 {
 }
 
 #[test]
-fn test_math_float() -> i32 {
-    let eps: float = 0.0001f;
+fn test_math_f32() -> i32 {
+    let eps: f32 = 0.0001f;
     if !approx_float(add(2.5f, 3.25f), 5.75f, eps): { return 1; }
     if !approx_float(subtract(5.5f, 2.0f), 3.5f, eps): { return 1; }
     if !approx_float(multiply(2.0f, 3.5f), 7.0f, eps): { return 1; }
@@ -76,8 +76,8 @@ fn test_math_float() -> i32 {
 }
 
 #[test]
-fn test_math_double() -> i32 {
-    let eps: double = 0.0000001;
+fn test_math_f64() -> i32 {
+    let eps: f64 = 0.0000001;
     if !approx_double(add(2.5, 3.25), 5.75, eps): { return 1; }
     if !approx_double(subtract(5.5, 2.0), 3.5, eps): { return 1; }
     if !approx_double(multiply(2.0, 3.5), 7.0, eps): { return 1; }
@@ -100,5 +100,98 @@ fn test_math_double() -> i32 {
     if !approx_double(exp(0.0), 1.0, eps): { return 1; }
     if !approx_double(modulo(5.5, 2.0), 1.5, eps): { return 1; }
 
+    return 0;
+}
+
+#[test]
+fn test_complex_i32_ops() -> i32 {
+    let a1: Complex<i32> = Complex<i32> { re: 2, im: 3 };
+    let b1: Complex<i32> = Complex<i32> { re: 4, im: 5 };
+    let s: Complex<i32> = a1 + b1;
+    if s.re != 6: { return 1; }
+    if s.im != 8: { return 1; }
+
+    let b2: Complex<i32> = Complex<i32> { re: 4, im: 5 };
+    let a2: Complex<i32> = Complex<i32> { re: 2, im: 3 };
+    let d: Complex<i32> = b2 - a2;
+    if d.re != 2: { return 1; }
+    if d.im != 2: { return 1; }
+
+    let a3: Complex<i32> = Complex<i32> { re: 2, im: 3 };
+    let b3: Complex<i32> = Complex<i32> { re: 4, im: 5 };
+    let p: Complex<i32> = a3 * b3;
+    if p.re != -7: { return 1; }
+    if p.im != 22: { return 1; }
+
+    let a4: Complex<i32> = Complex<i32> { re: 2, im: 3 };
+    let c: Complex<i32> = a4.conj();
+    if c.re != 2: { return 1; }
+    if c.im != -3: { return 1; }
+
+    let a5: Complex<i32> = Complex<i32> { re: 2, im: 3 };
+    let n: i32 = a5.norm_sqr();
+    if n != 13: { return 1; }
+
+    let a6: Complex<i32> = Complex<i32> { re: 2, im: 3 };
+    let neg: Complex<i32> = -a6;
+    if neg.re != -2: { return 1; }
+    if neg.im != -3: { return 1; }
+
+    return 0;
+}
+
+#[test]
+fn test_complex_f32_abs() -> i32 {
+    let eps: f32 = 0.0001f;
+    let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
+    if !approx_float(z.abs(), 5.0f, eps): { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_complex_u32_add_mul() -> i32 {
+    let a1: Complex<u32> = Complex<u32> { re: 2, im: 3 };
+    let b1: Complex<u32> = Complex<u32> { re: 4, im: 5 };
+    let s: Complex<u32> = a1 + b1;
+    if s.re != 6: { return 1; }
+    if s.im != 8: { return 1; }
+
+    let a2: Complex<u32> = Complex<u32> { re: 2, im: 3 };
+    let b2: Complex<u32> = Complex<u32> { re: 4, im: 5 };
+    let p: Complex<u32> = a2 * b2;
+    if p.re != 4294967289: { return 1; } // wraps on u32 for 8-15
+    if p.im != 22: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_complex_i64_add_mul() -> i32 {
+    let a1: Complex<i64> = Complex<i64> { re: 2, im: 3 };
+    let b1: Complex<i64> = Complex<i64> { re: 4, im: 5 };
+    let s: Complex<i64> = a1 + b1;
+    if s.re != 6: { return 1; }
+    if s.im != 8: { return 1; }
+
+    let a2: Complex<i64> = Complex<i64> { re: 2, im: 3 };
+    let b2: Complex<i64> = Complex<i64> { re: 4, im: 5 };
+    let p: Complex<i64> = a2 * b2;
+    if p.re != -7: { return 1; }
+    if p.im != 22: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_complex_u64_add_mul() -> i32 {
+    let a1: Complex<u64> = Complex<u64> { re: 2, im: 3 };
+    let b1: Complex<u64> = Complex<u64> { re: 4, im: 5 };
+    let s: Complex<u64> = a1 + b1;
+    if s.re != 6: { return 1; }
+    if s.im != 8: { return 1; }
+
+    let a2: Complex<u64> = Complex<u64> { re: 2, im: 3 };
+    let b2: Complex<u64> = Complex<u64> { re: 4, im: 5 };
+    let p: Complex<u64> = a2 * b2;
+    if p.re + 7 != 0: { return 1; } // wraps on u64 for 8-15
+    if p.im != 22: { return 1; }
     return 0;
 }

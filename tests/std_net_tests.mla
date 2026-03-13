@@ -191,7 +191,7 @@ fn test_tcp_stream_try_clone_for_thread_handoff() -> i32 {
     let clone: TcpStream = clone_r.unwrap();
 
     let h: Handle<Thread> = thread_spawn(worker_echo_from_clone, clone.raw_handle());
-    let join_rc: int = join(h);
+    let join_rc: i32 = join(h);
 
     var buf = String::with_capacity(64);
     let r: Result<i64, string> = client.read(buf, 64);
