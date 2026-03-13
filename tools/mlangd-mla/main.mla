@@ -75,7 +75,7 @@ use std::fs::read_all_text;
 extern fn strcmp(a: str8, b: str8) -> i32;
 extern fn __mlang_std_fs_open_write(path: string) -> i64;
 extern fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
-extern fn __mlang_std_fs_close(handle: i64) -> int;
+extern fn __mlang_std_fs_close(handle: i64) -> i32;
 extern fn __mlang_std_time_local_datetime() -> string;
 extern fn __mlang_std_time_log_level_tag(level: i32, color: i32) -> string;
 
@@ -1225,12 +1225,12 @@ fn c_type_target(word: string) -> string {
     if eq(word, "u16") == 1 { return "uint16_t"; }
     if eq(word, "u32") == 1 { return "uint32_t"; }
     if eq(word, "u64") == 1 { return "uint64_t"; }
-    if eq(word, "int") == 1 { return "int32_t"; }
+    if eq(word, "i32") == 1 { return "int32_t"; }
     if eq(word, "bool") == 1 { return "bool"; }
     if eq(word, "f32") == 1 { return "mlang_float"; }
     if eq(word, "f64") == 1 { return "mlang_double"; }
-    if eq(word, "float") == 1 { return "mlang_float"; }
-    if eq(word, "double") == 1 { return "mlang_double"; }
+    if eq(word, "f32") == 1 { return "mlang_float"; }
+    if eq(word, "f64") == 1 { return "mlang_double"; }
     if eq(word, "string") == 1 { return "mlang_string"; }
     if eq(word, "str8") == 1 { return "mlang_str8"; }
     if eq(word, "str16") == 1 { return "mlang_str16"; }
@@ -1643,7 +1643,7 @@ fn completion_kind_lsp(label: string) -> i32 {
     if eq(label, "impl") == 1 { return 14; }
     if eq(label, "extern") == 1 { return 14; }
     if eq(label, "pub") == 1 { return 14; }
-    if eq(label, "int") == 1 { return 22; }
+    if eq(label, "i32") == 1 { return 22; }
     if eq(label, "i32") == 1 { return 22; }
     if eq(label, "i64") == 1 { return 22; }
     if eq(label, "u32") == 1 { return 22; }
@@ -1651,8 +1651,8 @@ fn completion_kind_lsp(label: string) -> i32 {
     if eq(label, "bool") == 1 { return 22; }
     if eq(label, "f32") == 1 { return 22; }
     if eq(label, "f64") == 1 { return 22; }
-    if eq(label, "float") == 1 { return 22; }
-    if eq(label, "double") == 1 { return 22; }
+    if eq(label, "f32") == 1 { return 22; }
+    if eq(label, "f64") == 1 { return 22; }
     if eq(label, "string") == 1 { return 22; }
     return 6;
 }
@@ -1674,7 +1674,7 @@ fn completion_detail(label: string) -> string {
     if eq(label, "impl") == 1 { return "keyword: implementation block"; }
     if eq(label, "extern") == 1 { return "keyword: external symbol declaration"; }
     if eq(label, "pub") == 1 { return "keyword: public visibility"; }
-    if eq(label, "int") == 1 { return "builtin type alias (int32_t)"; }
+    if eq(label, "i32") == 1 { return "builtin type alias (int32_t)"; }
     if eq(label, "i32") == 1 { return "builtin 32-bit signed integer"; }
     if eq(label, "i64") == 1 { return "builtin 64-bit signed integer"; }
     if eq(label, "u32") == 1 { return "builtin 32-bit unsigned integer"; }
@@ -1682,8 +1682,8 @@ fn completion_detail(label: string) -> string {
     if eq(label, "bool") == 1 { return "builtin boolean type"; }
     if eq(label, "f32") == 1 { return "builtin 32-bit floating point"; }
     if eq(label, "f64") == 1 { return "builtin 64-bit floating point"; }
-    if eq(label, "float") == 1 { return "alias of f32"; }
-    if eq(label, "double") == 1 { return "alias of f64"; }
+    if eq(label, "f32") == 1 { return "alias of f32"; }
+    if eq(label, "f64") == 1 { return "alias of f64"; }
     if eq(label, "Handle") == 1 { return "builtin generic runtime handle type"; }
     if eq(label, "Thread") == 1 { return "builtin thread handle payload marker type"; }
     if eq(label, "Mutex") == 1 { return "builtin mutex handle payload marker type"; }
@@ -1693,7 +1693,7 @@ fn completion_detail(label: string) -> string {
 }
 
 fn completion_documentation(label: string) -> string {
-    if eq(label, "int") == 1 {
+    if eq(label, "i32") == 1 {
         return "Alias for a 32-bit signed integer. Maps to C int32_t in the runtime ABI.";
     }
     if eq(label, "i32") == 1 {
@@ -1706,12 +1706,12 @@ fn completion_documentation(label: string) -> string {
         return "32-bit floating point type (single precision).";
     }
     if eq(label, "f64") == 1 {
-        return "64-bit floating point type (double precision).";
+        return "64-bit floating point type (f64 precision).";
     }
-    if eq(label, "float") == 1 {
+    if eq(label, "f32") == 1 {
         return "Alias for f32.";
     }
-    if eq(label, "double") == 1 {
+    if eq(label, "f64") == 1 {
         return "Alias for f64.";
     }
     if eq(label, "bool") == 1 {
@@ -2396,7 +2396,7 @@ fn handle_references(payload: string) -> string {
     let s: Session = current_session();
     let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
-    let include_decl: int = extract_include_declaration(payload);
+    let include_decl: i32 = extract_include_declaration(payload);
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
@@ -3127,7 +3127,7 @@ fn handle_formatting(payload: string) -> string {
     let text: string = text_store_get(g_text_store_handle, uri);
     if len(text) == 0 { return "[]"; }
     let tab_size: i64 = extract_format_tab_size(payload);
-    let insert_spaces: int = extract_format_insert_spaces(payload);
+    let insert_spaces: i32 = extract_format_insert_spaces(payload);
     let formatted: string = format_text_with_options(text, tab_size, insert_spaces);
     if eq(formatted, text) == 1 { return "[]"; }
     let lc: i64 = line_count(text);
@@ -3157,7 +3157,7 @@ fn handle_range_formatting(payload: string) -> string {
     if len(text) == 0 { return "[]"; }
     let raw: string = extract_range_text(text, start_line, start_char, end_line, end_char);
     let tab_size: i64 = extract_format_tab_size(payload);
-    let insert_spaces: int = extract_format_insert_spaces(payload);
+    let insert_spaces: i32 = extract_format_insert_spaces(payload);
     let formatted: string = format_text_with_options(raw, tab_size, insert_spaces);
     if eq(formatted, raw) == 1 { return "[]"; }
     let fmt_e: string = json_escape(formatted);

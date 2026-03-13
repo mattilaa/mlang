@@ -252,7 +252,7 @@ fn find_config(start_path: string, root_path: string) -> string {
     return "";
 }
 
-fn bool_to_int(v: bool) -> int {
+fn bool_to_int(v: bool) -> i32 {
     if v {
         return 1;
     }
