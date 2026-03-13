@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 typedef struct
@@ -211,6 +212,16 @@ int __mlang_std_fs_file_exists(const char* path)
     if(!path)
         return 0;
     return access(path, F_OK) == 0 ? 1 : 0;
+}
+
+int __mlang_std_fs_is_dir(const char* path)
+{
+    if(!path || path[0] == '\0')
+        return 0;
+    struct stat st;
+    if(stat(path, &st) != 0)
+        return 0;
+    return S_ISDIR(st.st_mode) ? 1 : 0;
 }
 
 mlang_list_t __mlang_std_fs_list_dir(const char* path)

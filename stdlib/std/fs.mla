@@ -56,6 +56,7 @@ extern pub fn __mlang_std_fs_read_all_lines(handle: i64) -> list<string>;
 extern pub fn __mlang_std_fs_free_lines(lines: list<string>) -> void;
 extern pub fn __mlang_std_fs_list_dir(path: string) -> list<string>;
 extern pub fn __mlang_std_fs_file_exists(path: string) -> i32;
+extern pub fn __mlang_std_fs_is_dir(path: string) -> i32;
 extern pub fn __mlang_std_fs_parent_dir(path: string) -> string;
 extern pub fn __mlang_std_fs_cwd() -> string;
 extern pub fn __mlang_std_fs_read_all_text(path: string) -> string;
@@ -613,6 +614,11 @@ pub fn list_dir(path: string) -> list<string> {
 /// @return `1` if the path exists, `0` otherwise.
 pub fn file_exists(path: string) -> i32 {
     return __mlang_std_fs_file_exists(path);
+}
+
+/// @brief Return `1` if `path` exists and is a directory, otherwise `0`.
+pub fn is_dir(path: string) -> int {
+    return __mlang_std_fs_is_dir(path);
 }
 
 /// @brief Return the parent directory of `path`.
