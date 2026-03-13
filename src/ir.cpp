@@ -12668,6 +12668,46 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
         return true;
     };
+    auto isFreeLikeFunctionName = [&](const std::string& fnName) -> bool
+    {
+        if(fnName == "String::free" || fnName == "free")
+            return true;
+        return fnName.size() > 5 &&
+               fnName.compare(fnName.size() - 5, 5, "_free") == 0;
+    };
+    auto precheckFreeLikeArgument =
+        [&](ExpressionNode* argExpr, const std::string& fnName) -> bool
+    {
+        if(!argExpr)
+            return true;
+        if((fnName == "String::free" || fnName == "free") &&
+           dynamic_cast<StringLiteralNode*>(argExpr))
+        {
+            reportError(node->line,
+                        "cannot free string literal; free only heap-allocated strings");
+            return false;
+        }
+        if(auto* idArg = dynamic_cast<IdentifierNode*>(argExpr))
+        {
+            if(globalNamedValues.find(idArg->name) == globalNamedValues.end() &&
+               isVariableMoved(idArg->name))
+            {
+                reportError(node->line, idArg->col,
+                            "double free or use-after-free of value: '" +
+                                idArg->name + "'");
+                return false;
+            }
+        }
+        return true;
+    };
+    auto markFreeLikeConsumed = [&](ExpressionNode* argExpr) -> void
+    {
+        if(auto* idArg = dynamic_cast<IdentifierNode*>(argExpr))
+        {
+            if(globalNamedValues.find(idArg->name) == globalNamedValues.end())
+                movedVariables.insert(idArg->name);
+        }
+    };
 
     // Vec::new() — returns an empty list struct {0, null}
     if(node->name == "Vec::new")
@@ -12743,12 +12783,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             reportError(node->line, "String::free expects one argument");
             return nullptr;
         }
+        ExpressionNode* argExpr = node->arguments[0];
+        if(!precheckFreeLikeArgument(argExpr, node->name))
+            return nullptr;
         initializeStdlibFunctions();
-        llvm::Value* ptr = generateExpression(node->arguments[0]);
+        llvm::Value* ptr = generateExpression(argExpr);
         if(!ptr)
             return nullptr;
-        consumeMoveFromExpression(node->arguments[0], node->line,
+        consumeMoveFromExpression(argExpr, node->line,
                                   "passing argument to String::free");
+        markFreeLikeConsumed(argExpr);
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
@@ -13148,6 +13192,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     if(!validateTemporaryBorrowArguments(node->arguments, node->name, ""))
         return nullptr;
 
+    const bool isFreeLikeCall =
+        isFreeLikeFunctionName(node->name) && node->arguments.size() == 1;
+    if(isFreeLikeCall &&
+       !precheckFreeLikeArgument(node->arguments[0], node->name))
+    {
+        return nullptr;
+    }
+
     std::vector<llvm::Value*> argVals;
     argVals.reserve(node->arguments.size());
     for(auto arg : node->arguments)
@@ -13407,9 +13459,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         paramIdx++;
     }
 
+    llvm::Value* callResult = nullptr;
     if(callee->getReturnType()->isVoidTy())
-        return builder.CreateCall(callee, args);
-    return builder.CreateCall(callee, args, "calltmp");
+        callResult = builder.CreateCall(callee, args);
+    else
+        callResult = builder.CreateCall(callee, args, "calltmp");
+
+    if(isFreeLikeCall)
+        markFreeLikeConsumed(node->arguments[0]);
+
+    return callResult;
 }
 
 llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
@@ -14338,6 +14397,16 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
     typeArgs.push_back(new StructTypeRefNode("Atomic64"));
     std::string handleTypeName =
         getOrCreateMonomorphizedStruct("Handle", typeArgs);
+    std::string freeOwner = resolveBorrowOwnerFromLValue(node->arguments[0]);
+    if(!freeOwner.empty() &&
+       globalNamedValues.find(freeOwner) == globalNamedValues.end() &&
+       isVariableMoved(freeOwner))
+    {
+        reportError(node->line,
+                    "double free or use-after-free of value: '" +
+                        freeOwner + "'");
+        return nullptr;
+    }
     llvm::Value* handleVal =
         extractHandleValue(node->arguments[0], handleTypeName, node->line);
     if(!handleVal)
@@ -14345,6 +14414,11 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
 
     llvm::Value* ptr =
         builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+    if(!freeOwner.empty() &&
+       globalNamedValues.find(freeOwner) == globalNamedValues.end())
+    {
+        movedVariables.insert(freeOwner);
+    }
     return builder.CreateCall(freeFunc, {ptr});
 }
 

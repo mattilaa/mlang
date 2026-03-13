@@ -599,7 +599,7 @@ pub fn free_lines(lines: list<string>) -> void {
 /// @param path Directory path. Empty string means current directory.
 /// @return Directory entries. Returns empty list on open failure or empty directory.
 pub fn list_dir(path: string) -> list<string> {
-    let p: string = len(path) == 0 ? ".": path;
+    let p: string = __mlang_std_strbuf_len(path) == 0 ? ".": path;
     let items: list<string> = __mlang_std_fs_list_dir(p);
     return items;
 }

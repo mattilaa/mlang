@@ -5507,6 +5507,51 @@ MLang Frontend Compile Mode Rejects NoRun Flag
     Should Contain    ${run.stderr}    Unknown option: --no-run
     Should Contain    ${run.stdout}    Usage:
 
+MLang Frontend Compile Mode Surfaces DoubleFree Diagnostics
+    [Documentation]    Verify compile-time memory safety diagnostics from backend are surfaced by mlang-frontend-mla.
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_double_free_diag
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_double_free_diag.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn free(s: string) {
+    ...        String::free(s);
+    ...    }
+    ...    fn main() -> i32 {
+    ...        let s: string = String::from("hello");
+    ...        free(s);
+    ...        free(s);
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    double free or use-after-free
+
+MLang Frontend Compile Mode Surfaces HandleFree Diagnostics
+    [Documentation]    Verify compile-time *_free handle diagnostics are surfaced by mlang-frontend-mla.
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_handle_free_diag
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_handle_free_diag.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let a = atomic_i64_new(1);
+    ...        atomic_i64_free(a);
+    ...        atomic_i64_free(a);
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    ${src}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    double free or use-after-free
+
 MLang Frontend Compile Mode Allows NoRun After Tests
     [Documentation]    Verify C++ left-to-right parity: `--tests` enables later `--no-run` in compile-mode argument stream.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_compile_allow_norun_after_tests

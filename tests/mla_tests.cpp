@@ -1683,6 +1683,93 @@ TEST_F(MLATest, OwnershipCannotMoveWhileBorrowedByPointer)
     EXPECT_NE(out.find("while borrowed"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipStringDoubleFreeReportsError)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let s: string = String::from("hello");
+            String::free(s);
+            String::free(s);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("double free or use-after-free"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipStringUseAfterFreeReportsError)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let s: string = String::from("hello");
+            String::free(s);
+            println!("{}", s);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipStringLiteralFreeReportsError)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            String::free("hello");
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot free string literal"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipFreeAliasDoubleFreeReportsError)
+{
+    std::string code = R"(
+        fn free(s: string) {
+            String::free(s);
+        }
+
+        fn main() -> i32 {
+            let s: string = String::from("hello");
+            free(s);
+            free(s);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("double free or use-after-free"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipHandleFreeDoubleFreeReportsError)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let a = atomic_i64_new(1);
+            atomic_i64_free(a);
+            atomic_i64_free(a);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("double free or use-after-free"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipPointerReassignReleasesPreviousBorrow)
 {
     std::string code = R"(
