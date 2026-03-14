@@ -1,0 +1,114 @@
+/// \file order.mla
+/// \brief Ordered-sequence algorithms under std::algorithm.
+///
+/// C++-style helpers for sorted arrays and simple list transforms.
+///
+/// @defgroup algorithm_order std::algorithm::order
+/// @ingroup algorithm
+/// @brief Ordered-sequence algorithms.
+/// @{
+
+/// @brief Return 1 when list is non-decreasing.
+/// @ingroup algorithm_order
+pub fn is_sorted_i64(data: &list<i64>) -> i32 {
+    let n: i64 = data.len();
+    if n <= 1 {
+        return 1;
+    }
+    for i in 1..n {
+        if data[i - 1] > data[i] {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/// @brief Return a reversed copy of data.
+/// @ingroup algorithm_order
+pub fn reverse_i64(data: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(data[i]);
+    }
+    out.reverse();
+    return out;
+}
+
+/// @brief Return a sorted copy (ascending, stable insertion-sort).
+/// @ingroup algorithm_order
+pub fn sort_i64(data: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        out.push(data[i]);
+    }
+    out.sort();
+    return out;
+}
+
+/// @brief Return a deduplicated copy from an already sorted list.
+/// @ingroup algorithm_order
+pub fn unique_sorted_i64(data: &list<i64>) -> list<i64> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<i64> = [];
+    var last: i64 = data[0];
+    out.push(last);
+    for i in 1..n {
+        let v: i64 = data[i];
+        if v != last {
+            out.push(v);
+            last = v;
+        }
+    }
+    return out;
+}
+
+/// @brief First index where value could be inserted (>= value).
+/// Requires non-decreasing sorted input.
+/// @ingroup algorithm_order
+pub fn lower_bound_i64(data: &list<i64>, value: i64) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if data[mid] < value {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+/// @brief First index where value would be inserted after equal range (> value).
+/// Requires non-decreasing sorted input.
+/// @ingroup algorithm_order
+pub fn upper_bound_i64(data: &list<i64>, value: i64) -> i64 {
+    var lo: i64 = 0;
+    var hi: i64 = data.len();
+    while lo < hi {
+        let mid: i64 = lo + (hi - lo) / 2;
+        if data[mid] <= value {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+/// @brief Return 1 when value exists in sorted input; else 0.
+/// @ingroup algorithm_order
+pub fn binary_search_i64(data: &list<i64>, value: i64) -> i32 {
+    let pos: i64 = lower_bound_i64(data, value);
+    if pos >= data.len() {
+        return 0;
+    }
+    return data[pos] == value ? 1 : 0;
+}
+
+/// @}

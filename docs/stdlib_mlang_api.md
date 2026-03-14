@@ -14,6 +14,7 @@ mod std::json;
 mod std::jsonrpc;
 mod std::bench;
 mod std::math;
+mod std::algorithm::order;
 mod std::algorithm::fft;
 mod std::net;
 mod std::printf;
@@ -46,6 +47,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
+- `stdlib/std/algorithm/order.mla`
 - `stdlib/std/algorithm/fft.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
@@ -685,6 +687,21 @@ Radix-2 FFT over interleaved complex arrays:
 - `inverse_f32(data: list<f32>) -> list<f32>` (empty list on invalid input)
 - `forward_f64(data: list<f64>) -> list<f64>` (empty list on invalid input)
 - `inverse_f64(data: list<f64>) -> list<f64>` (empty list on invalid input)
+
+## std::algorithm::order
+
+Module file: `stdlib/std/algorithm/order.mla`
+
+Ordered-sequence helpers for `list<i64>`.
+
+### API
+- `is_sorted_i64(data: &list<i64>) -> i32`
+- `reverse_i64(data: &list<i64>) -> list<i64>`
+- `sort_i64(data: &list<i64>) -> list<i64>`
+- `unique_sorted_i64(data: &list<i64>) -> list<i64>`
+- `lower_bound_i64(data: &list<i64>, value: i64) -> i64`
+- `upper_bound_i64(data: &list<i64>, value: i64) -> i64`
+- `binary_search_i64(data: &list<i64>, value: i64) -> i32`
 
 ## std::process
 

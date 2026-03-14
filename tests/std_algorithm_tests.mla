@@ -1,5 +1,6 @@
 mod std::algorithm::fuzzy;
 mod std::algorithm::fft;
+mod std::algorithm::order;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::strbuf;
@@ -11,6 +12,13 @@ use std::algorithm::fuzzy::score;
 use std::algorithm::fft::forward;
 use std::algorithm::fft::inverse;
 use std::algorithm::fft::is_power_of_two;
+use std::algorithm::order::binary_search_i64;
+use std::algorithm::order::is_sorted_i64;
+use std::algorithm::order::lower_bound_i64;
+use std::algorithm::order::reverse_i64;
+use std::algorithm::order::sort_i64;
+use std::algorithm::order::unique_sorted_i64;
+use std::algorithm::order::upper_bound_i64;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -69,6 +77,49 @@ fn test_algorithm_fft_namespace_roundtrip() -> i32 {
         if re != (i + 1) { return 1; }
         if im != 0 { return 1; }
     }
+    return 0;
+}
+
+#[test]
+fn test_algorithm_order_sort_and_reverse() -> i32 {
+    let data: list<i64> = [5, 1, 3, 3, 2];
+    let sorted: list<i64> = sort_i64(data);
+    if is_sorted_i64(sorted) != 1 { return 1; }
+    if sorted.len() != 5 { return 1; }
+    if sorted[0] != 1 { return 1; }
+    if sorted[1] != 2 { return 1; }
+    if sorted[2] != 3 { return 1; }
+    if sorted[3] != 3 { return 1; }
+    if sorted[4] != 5 { return 1; }
+
+    let rev: list<i64> = reverse_i64(sorted);
+    if rev[0] != 5 { return 1; }
+    if rev[4] != 1 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_algorithm_order_bounds_and_binary_search() -> i32 {
+    let data: list<i64> = [1, 2, 3, 3, 5, 8];
+    if lower_bound_i64(data, 0) != 0 { return 1; }
+    if lower_bound_i64(data, 3) != 2 { return 1; }
+    if lower_bound_i64(data, 4) != 4 { return 1; }
+    if upper_bound_i64(data, 3) != 4 { return 1; }
+    if upper_bound_i64(data, 8) != 6 { return 1; }
+    if binary_search_i64(data, 5) != 1 { return 1; }
+    if binary_search_i64(data, 6) != 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_algorithm_order_unique_sorted() -> i32 {
+    let data: list<i64> = [1, 1, 2, 2, 2, 7, 9, 9];
+    let uniq: list<i64> = unique_sorted_i64(data);
+    if uniq.len() != 4 { return 1; }
+    if uniq[0] != 1 { return 1; }
+    if uniq[1] != 2 { return 1; }
+    if uniq[2] != 7 { return 1; }
+    if uniq[3] != 9 { return 1; }
     return 0;
 }
 

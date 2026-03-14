@@ -3,6 +3,7 @@
 ///
 /// Submodules:
 /// - `std::algorithm::fuzzy`
+/// - `std::algorithm::order`
 /// - `std::algorithm::rand`
 /// - `std::algorithm::regex`
 /// - `std::algorithm::fft`
@@ -14,6 +15,7 @@
 /// @{
 
 mod std::algorithm::fuzzy;
+mod std::algorithm::order;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::algorithm::fft;
