@@ -1,11 +1,12 @@
+mod std::testing;
 mod std::io;
 mod std::strbuf;
 
 use std::io::*;
 use std::strbuf::*;
+use std::testing::verify;
 
-#[test]
-fn test_read_write_seek_cursor() -> i32 {
+fn test_read_write_seek_cursor_impl() -> i32 {
     let w = as_write(cursor_with_capacity(16));
     if write(w, "hello world") != 11: {
         return 1;
@@ -24,7 +25,11 @@ fn test_read_write_seek_cursor() -> i32 {
 }
 
 #[test]
-fn test_bufread_lines_cursor() -> i32 {
+fn test_read_write_seek_cursor() {
+    verify(test_read_write_seek_cursor_impl() == 0);
+}
+
+fn test_bufread_lines_cursor_impl() -> i32 {
     let c = cursor_from_string("alpha\nbeta\n");
     var line = with_capacity(16);
     let n1 = read_line(as_buf_read(c), line, 16);
@@ -42,10 +47,19 @@ fn test_bufread_lines_cursor() -> i32 {
 }
 
 #[test]
-fn test_cursor_to_string() -> i32 {
+fn test_bufread_lines_cursor() {
+    verify(test_bufread_lines_cursor_impl() == 0);
+}
+
+fn test_cursor_to_string_impl() -> i32 {
     let snapshot = to_string(cursor_from_string("abc"));
     let ok = eq(snapshot, "abc");
 
     free(snapshot);
     return ok == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_cursor_to_string() {
+    verify(test_cursor_to_string_impl() == 0);
 }

@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::sync;
 mod std::strbuf;
 
@@ -6,9 +7,9 @@ use std::sync::Channel;
 use std::sync::Condvar;
 use std::sync::LockFreeQueue;
 use std::sync::Mutex;
+use std::testing::verify;
 
-#[test]
-fn test_mutex_lock_unlock() -> i32 {
+fn test_mutex_lock_unlock_impl() -> i32 {
     let mr: Result<Mutex, string> = Mutex::new();
     if mr.is_err(): { return 1; }
     let m: Mutex = mr.unwrap();
@@ -24,7 +25,11 @@ fn test_mutex_lock_unlock() -> i32 {
 }
 
 #[test]
-fn test_condvar_wait_timeout() -> i32 {
+fn test_mutex_lock_unlock() {
+    verify(test_mutex_lock_unlock_impl() == 0);
+}
+
+fn test_condvar_wait_timeout_impl() -> i32 {
     let mr: Result<Mutex, string> = Mutex::new();
     let cr: Result<Condvar, string> = Condvar::new();
     if mr.is_err(): { return 1; }
@@ -48,7 +53,11 @@ fn test_condvar_wait_timeout() -> i32 {
 }
 
 #[test]
-fn test_channel_send_recv_try_recv() -> i32 {
+fn test_condvar_wait_timeout() {
+    verify(test_condvar_wait_timeout_impl() == 0);
+}
+
+fn test_channel_send_recv_try_recv_impl() -> i32 {
     let cr: Result<Channel, string> = Channel::new(2);
     if cr.is_err(): { return 1; }
     let ch: Channel = cr.unwrap();
@@ -79,7 +88,11 @@ fn test_channel_send_recv_try_recv() -> i32 {
 }
 
 #[test]
-fn test_lock_free_queue_basic() -> i32 {
+fn test_channel_send_recv_try_recv() {
+    verify(test_channel_send_recv_try_recv_impl() == 0);
+}
+
+fn test_lock_free_queue_basic_impl() -> i32 {
     let qr: Result<LockFreeQueue, string> = LockFreeQueue::new(2);
     if qr.is_err(): { return 1; }
     let q: LockFreeQueue = qr.unwrap();
@@ -116,4 +129,9 @@ fn test_lock_free_queue_basic() -> i32 {
 
     if ok1 == 0 || ok2 == 0 || ok3 == 0 || ok4 == 0: { return 1; }
     return 0;
+}
+
+#[test]
+fn test_lock_free_queue_basic() {
+    verify(test_lock_free_queue_basic_impl() == 0);
 }

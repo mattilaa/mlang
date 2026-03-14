@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::compiler;
 mod std::strbuf;
 
@@ -9,9 +10,9 @@ use std::compiler::ResolvedSymbol;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
 use std::strbuf::contains;
+use std::testing::verify;
 
-#[test]
-fn test_compiler_open_change_close() -> i32 {
+fn test_compiler_open_change_close_impl() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
@@ -35,7 +36,11 @@ fn test_compiler_open_change_close() -> i32 {
 }
 
 #[test]
-fn test_compiler_main_without_explicit_return_type_defaults_i32() -> i32 {
+fn test_compiler_open_change_close() {
+    verify(test_compiler_open_change_close_impl() == 0);
+}
+
+fn test_compiler_main_without_explicit_return_type_defaults_i32_impl() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
@@ -54,7 +59,11 @@ fn test_compiler_main_without_explicit_return_type_defaults_i32() -> i32 {
 }
 
 #[test]
-fn test_compiler_syntax_diag_get() -> i32 {
+fn test_compiler_main_without_explicit_return_type_defaults_i32() {
+    verify(test_compiler_main_without_explicit_return_type_defaults_i32_impl() == 0);
+}
+
+fn test_compiler_syntax_diag_get_impl() -> i32 {
     let sr: Result<Session, string> = session_create();
     if sr.is_err(): { return 1; }
     let s: Session = sr.unwrap();
@@ -720,4 +729,9 @@ fn test_compiler_definition_prefers_member_object_symbol() -> i32 {
 
     let _ = s.destroy();
     return 0;
+}
+
+#[test]
+fn test_compiler_syntax_diag_get() {
+    verify(test_compiler_syntax_diag_get_impl() == 0);
 }

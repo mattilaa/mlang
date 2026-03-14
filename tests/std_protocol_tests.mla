@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::net;
 mod std::protocol;
 mod std::strbuf;
@@ -12,9 +13,9 @@ use std::protocol::from_stream;
 use std::protocol::recv;
 use std::protocol::send;
 use std::strbuf::eq;
+use std::testing::verify;
 
-#[test]
-fn test_protocol_ping_pong_roundtrip() -> i32 {
+fn test_protocol_ping_pong_roundtrip_impl() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err() { return 0; }
     let listener: TcpListener = listener_r.unwrap();
@@ -103,7 +104,11 @@ fn test_protocol_ping_pong_roundtrip() -> i32 {
 }
 
 #[test]
-fn test_protocol_max_payload_limit() -> i32 {
+fn test_protocol_ping_pong_roundtrip() {
+    verify(test_protocol_ping_pong_roundtrip_impl() == 0);
+}
+
+fn test_protocol_max_payload_limit_impl() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err() { return 0; }
     let listener: TcpListener = listener_r.unwrap();
@@ -148,4 +153,9 @@ fn test_protocol_max_payload_limit() -> i32 {
         return 0;
     }
     return 1;
+}
+
+#[test]
+fn test_protocol_max_payload_limit() {
+    verify(test_protocol_max_payload_limit_impl() == 0);
 }

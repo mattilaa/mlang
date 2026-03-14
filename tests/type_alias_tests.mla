@@ -1,15 +1,16 @@
+mod std::testing;
 use type Distance = f32;
 use type SomeMap = map<K, V>;
 use type VecAlias<T> = list<T>;
 use type Name = string;
 use type NameList = list<Name>;
+use std::testing::verify;
 
 fn midpoint(a: Distance, b: Distance) -> Distance {
     return (a + b) / 2.0f;
 }
 
-#[test]
-fn test_concrete_type_alias() -> i32 {
+fn test_concrete_type_alias_impl() -> i32 {
     let d: Distance = midpoint(10.0f, 14.0f);
     if d > 11.9f: {
         if d < 12.1f: {
@@ -20,25 +21,41 @@ fn test_concrete_type_alias() -> i32 {
 }
 
 #[test]
-fn test_generic_type_alias_map() -> i32 {
+fn test_concrete_type_alias() {
+    verify(test_concrete_type_alias_impl() == 0);
+}
+
+fn test_generic_type_alias_map_impl() -> i32 {
     let scores: SomeMap<string, i32> = {"Alice": 95, "Bob": 87};
     return scores["Alice"] == 95 ? 0 : 1;
 }
 
 #[test]
-fn test_explicit_generic_alias_list() -> i32 {
+fn test_generic_type_alias_map() {
+    verify(test_generic_type_alias_map_impl() == 0);
+}
+
+fn test_explicit_generic_alias_list_impl() -> i32 {
     let nums: VecAlias<i32> = [1, 2, 3];
     return nums.len() == 3 ? 0 : 1;
 }
 
 #[test]
-fn test_alias_of_alias() -> i32 {
+fn test_explicit_generic_alias_list() {
+    verify(test_explicit_generic_alias_list_impl() == 0);
+}
+
+fn test_alias_of_alias_impl() -> i32 {
     let names: NameList = ["alice", "bob"];
     return names.len() == 2 ? 0 : 1;
 }
 
 #[test]
-fn test_scoped_type_alias_shadowing() -> i32 {
+fn test_alias_of_alias() {
+    verify(test_alias_of_alias_impl() == 0);
+}
+
+fn test_scoped_type_alias_shadowing_impl() -> i32 {
     let outside: Distance = 3.5f;
     if outside < 3.4f: { return 1; }
 
@@ -56,4 +73,9 @@ fn test_scoped_type_alias_shadowing() -> i32 {
 
     let final_d: Distance = 4.5f;
     return final_d > 4.4f ? 0 : 1;
+}
+
+#[test]
+fn test_scoped_type_alias_shadowing() {
+    verify(test_scoped_type_alias_shadowing_impl() == 0);
 }

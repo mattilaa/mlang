@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::json;
 mod std::fs;
 mod std::strbuf;
@@ -9,9 +10,9 @@ use std::json::JsonObjectIter;
 use std::json::JsonValue;
 use std::strbuf::contains;
 use std::strbuf::eq;
+use std::testing::verify;
 
-#[test]
-fn test_parse_and_navigate() -> i32 {
+fn test_parse_and_navigate_impl() -> i32 {
     let doc_r: Result<JsonDoc, string> = JsonDoc::parse("{\"a\":1,\"arr\":[10,20],\"s\":\"ok\"}");
     if doc_r.is_err(): { return 1; }
     let doc: JsonDoc = doc_r.unwrap();
@@ -106,7 +107,11 @@ fn test_parse_and_navigate() -> i32 {
 }
 
 #[test]
-fn test_stringify_and_parse_error() -> i32 {
+fn test_parse_and_navigate() {
+    verify(test_parse_and_navigate_impl() == 0);
+}
+
+fn test_stringify_and_parse_error_impl() -> i32 {
     let bad: Result<JsonDoc, string> = JsonDoc::parse("{\"a\":");
     if bad.is_err(): {
         let ok_flag: i32 = 0;
@@ -302,4 +307,9 @@ fn test_iterators_and_from_file() -> i32 {
     root.free();
     doc.free();
     return sum == 30 ? 0 : 1;
+}
+
+#[test]
+fn test_stringify_and_parse_error() {
+    verify(test_stringify_and_parse_error_impl() == 0);
 }

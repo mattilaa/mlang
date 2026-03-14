@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::fs;
 mod std::strbuf;
 
@@ -5,9 +6,9 @@ use std::fs::BufReader;
 use std::fs::File;
 use std::fs::free_lines;
 use std::strbuf::eq;
+use std::testing::verify;
 
-#[test]
-fn test_create_open_and_lines() -> i32 {
+fn test_create_open_and_lines_impl() -> i32 {
     let path = "/tmp/mlang_std_fs_test.txt";
 
     let created: Result<File, string> = File::create(path);
@@ -55,10 +56,19 @@ fn test_create_open_and_lines() -> i32 {
 }
 
 #[test]
-fn test_open_missing_file_is_err() -> i32 {
+fn test_create_open_and_lines() {
+    verify(test_create_open_and_lines_impl() == 0);
+}
+
+fn test_open_missing_file_is_err_impl() -> i32 {
     let missing: Result<File, string> = File::open("/tmp/mlang_std_fs_missing_no_such_file.txt");
     if missing.is_err(): {
         return 0;
     }
     return 1;
+}
+
+#[test]
+fn test_open_missing_file_is_err() {
+    verify(test_open_missing_file_is_err_impl() == 0);
 }

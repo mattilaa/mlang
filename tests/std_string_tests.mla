@@ -1,12 +1,13 @@
+mod std::testing;
 mod std::strbuf;
 
 use std::strbuf::*;
+use std::testing::verify;
 
 extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> i32;
 extern fn strcmp(a: string, b: string) -> i32;
 
-#[test]
-fn test_string_new_and_free() -> i32 {
+fn test_string_new_and_free_impl() -> i32 {
     let s = String::new();
     let ok: i32 = strcmp(s, "");
     String::free(s);
@@ -14,7 +15,11 @@ fn test_string_new_and_free() -> i32 {
 }
 
 #[test]
-fn test_string_with_capacity_and_write() -> i32 {
+fn test_string_new_and_free() {
+    verify(test_string_new_and_free_impl() == 0);
+}
+
+fn test_string_with_capacity_and_write_impl() -> i32 {
     var s = with_capacity(32);
     snprintf(s, 32, "n=%d", 7);
     let ok: i32 = strcmp(s, "n=7");
@@ -23,7 +28,11 @@ fn test_string_with_capacity_and_write() -> i32 {
 }
 
 #[test]
-fn test_string_utils_and_utf() -> i32 {
+fn test_string_with_capacity_and_write() {
+    verify(test_string_with_capacity_and_write_impl() == 0);
+}
+
+fn test_string_utils_and_utf_impl() -> i32 {
     let s = concat("he", "llo");
     if len(s) != 5: { return 1; }
     if is_empty(s) != 0: { return 1; }
@@ -50,7 +59,11 @@ fn test_string_utils_and_utf() -> i32 {
 }
 
 #[test]
-fn test_string_sub_bounds() -> i32 {
+fn test_string_utils_and_utf() {
+    verify(test_string_utils_and_utf_impl() == 0);
+}
+
+fn test_string_sub_bounds_impl() -> i32 {
     let s = clone("abcdef");
     let mid = sub(s, 2, 3);
     if eq(mid, "cde") != 1: { return 1; }
@@ -77,7 +90,11 @@ fn test_string_sub_bounds() -> i32 {
 }
 
 #[test]
-fn test_string_pad_helpers() -> i32 {
+fn test_string_sub_bounds() {
+    verify(test_string_sub_bounds_impl() == 0);
+}
+
+fn test_string_pad_helpers_impl() -> i32 {
     let base = clone("abc");
     let l = pad_left(base, 6, "0");
     let r = pad_right(base, 6, ".");
@@ -116,7 +133,11 @@ fn test_string_pad_helpers() -> i32 {
 }
 
 #[test]
-fn test_string_builder_dynamic_growth_and_take() -> i32 {
+fn test_string_pad_helpers() {
+    verify(test_string_pad_helpers_impl() == 0);
+}
+
+fn test_string_builder_dynamic_growth_and_take_impl() -> i32 {
     var b: StringBuilder = builder_with_page(2, 4);
     if builder_is_valid(b) != 1 { return 1; }
     if builder_append(b, "ab") != 2 { builder_free(b); return 1; }
@@ -134,7 +155,11 @@ fn test_string_builder_dynamic_growth_and_take() -> i32 {
 }
 
 #[test]
-fn test_string_builder_reserve_clear_and_clone() -> i32 {
+fn test_string_builder_dynamic_growth_and_take() {
+    verify(test_string_builder_dynamic_growth_and_take_impl() == 0);
+}
+
+fn test_string_builder_reserve_clear_and_clone_impl() -> i32 {
     var b: StringBuilder = builder_new(0);
     if builder_is_valid(b) != 1 { return 1; }
     if builder_reserve(b, 64) != 0 { builder_free(b); return 1; }
@@ -150,4 +175,9 @@ fn test_string_builder_reserve_clear_and_clone() -> i32 {
     if builder_append_char(b, 300) != -1 { builder_free(b); return 1; }
     builder_free(b);
     return 0;
+}
+
+#[test]
+fn test_string_builder_reserve_clear_and_clone() {
+    verify(test_string_builder_reserve_clear_and_clone_impl() == 0);
 }

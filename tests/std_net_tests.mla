@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::net;
 mod std::strbuf;
 mod std::thread;
@@ -6,6 +7,7 @@ use std::net::TcpListener;
 use std::net::TcpStream;
 use std::strbuf::eq;
 use std::thread::join;
+use std::testing::verify;
 
 fn worker_echo_from_clone(stream_handle: i64) -> i32 {
     let s: TcpStream = TcpStream::from_handle(stream_handle);
@@ -17,8 +19,7 @@ fn worker_echo_from_clone(stream_handle: i64) -> i32 {
     return 0;
 }
 
-#[test]
-fn test_tcp_loopback_ping_pong() -> i32 {
+fn test_tcp_loopback_ping_pong_impl() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
@@ -98,7 +99,11 @@ fn test_tcp_loopback_ping_pong() -> i32 {
 }
 
 #[test]
-fn test_tcp_stream_nonblocking_and_timeouts() -> i32 {
+fn test_tcp_loopback_ping_pong() {
+    verify(test_tcp_loopback_ping_pong_impl() == 0);
+}
+
+fn test_tcp_stream_nonblocking_and_timeouts_impl() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
@@ -154,7 +159,11 @@ fn test_tcp_stream_nonblocking_and_timeouts() -> i32 {
 }
 
 #[test]
-fn test_tcp_stream_try_clone_for_thread_handoff() -> i32 {
+fn test_tcp_stream_nonblocking_and_timeouts() {
+    verify(test_tcp_stream_nonblocking_and_timeouts_impl() == 0);
+}
+
+fn test_tcp_stream_try_clone_for_thread_handoff_impl() -> i32 {
     let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
@@ -205,4 +214,9 @@ fn test_tcp_stream_try_clone_for_thread_handoff() -> i32 {
     if join_rc != 0: { return 1; }
     if r.is_err(): { return 1; }
     return same == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_tcp_stream_try_clone_for_thread_handoff() {
+    verify(test_tcp_stream_try_clone_for_thread_handoff_impl() == 0);
 }
