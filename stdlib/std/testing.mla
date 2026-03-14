@@ -132,6 +132,11 @@ pub fn verify_true(cond: bool) -> void {
     __mlang_std_testing_verify_true(bool_to_i32(cond));
 }
 
+/// Verify condition is true. Fatal on failure (aborts immediately).
+pub fn verify(cond: bool) -> void {
+    verify_true(cond);
+}
+
 /// Verify condition is false. Fatal on failure (aborts immediately).
 pub fn verify_false(cond: bool) -> void {
     __mlang_std_testing_verify_false(bool_to_i32(cond));
