@@ -1,0 +1,58 @@
+/// \file rand.mla
+/// \brief Random helpers under std::algorithm namespace.
+///
+/// Mirrors `std::rand` for namespace consistency.
+///
+/// @defgroup algorithm_rand std::algorithm::rand
+/// @ingroup algorithm
+/// @brief Random number helpers.
+/// @{
+
+mod std::time;
+use std::time::now_ns;
+
+extern pub fn __mlang_std_rand_seed_i64(seed: i64) -> void;
+extern pub fn __mlang_std_rand_next_u64() -> u64;
+extern pub fn __mlang_std_rand_next_i64() -> i64;
+extern pub fn __mlang_std_rand_range_i64(min_value: i64, max_value: i64) -> i64;
+extern pub fn __mlang_std_rand_next_f64() -> f64;
+extern pub fn __mlang_std_rand_range_f64(min_value: f64, max_value: f64) -> f64;
+
+/// @ingroup algorithm_rand
+pub fn seed(value: i64) -> void {
+    __mlang_std_rand_seed_i64(value);
+}
+
+/// @}
+
+/// @ingroup algorithm_rand
+pub fn seed_auto() -> i64 {
+    let s: i64 = now_ns();
+    __mlang_std_rand_seed_i64(s);
+    return s;
+}
+
+/// @ingroup algorithm_rand
+pub fn next_u64() -> u64 {
+    return __mlang_std_rand_next_u64();
+}
+
+/// @ingroup algorithm_rand
+pub fn next_i64() -> i64 {
+    return __mlang_std_rand_next_i64();
+}
+
+/// @ingroup algorithm_rand
+pub fn range_i64(min_value: i64, max_value: i64) -> i64 {
+    return __mlang_std_rand_range_i64(min_value, max_value);
+}
+
+/// @ingroup algorithm_rand
+pub fn next_f64() -> f64 {
+    return __mlang_std_rand_next_f64();
+}
+
+/// @ingroup algorithm_rand
+pub fn range_f64(min_value: f64, max_value: f64) -> f64 {
+    return __mlang_std_rand_range_f64(min_value, max_value);
+}

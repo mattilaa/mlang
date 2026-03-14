@@ -1,0 +1,19 @@
+/// \file algorithm.mla
+/// \brief Algorithm namespace root for stdlib.
+///
+/// Submodules:
+/// - `std::algorithm::fuzzy`
+/// - `std::algorithm::rand`
+/// - `std::algorithm::regex`
+///
+/// @defgroup algorithm std::algorithm
+/// @brief Algorithm namespace and submodules.
+///
+/// Re-exports algorithm-oriented modules under a common namespace.
+/// @{
+
+mod std::algorithm::fuzzy;
+mod std::algorithm::rand;
+mod std::algorithm::regex;
+
+/// @}

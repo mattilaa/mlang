@@ -38,3 +38,4 @@ mod std_printf_tests;
 mod std_testing_tests;
 mod update_expression_tests;
 mod spaceship_operator_tests;
+mod std_algorithm_tests;

@@ -78,3 +78,5 @@ mod update_expression_tests;
 use update_expression_tests::*;
 mod spaceship_operator_tests;
 use spaceship_operator_tests::*;
+mod std_algorithm_tests;
+use std_algorithm_tests::*;

@@ -1,0 +1,62 @@
+/// \file regex.mla
+/// \brief POSIX regex under std::algorithm namespace.
+///
+/// Mirrors `std::regex` API for namespace consistency.
+///
+/// @defgroup algorithm_regex std::algorithm::regex
+/// @ingroup algorithm
+/// @brief Regex matching helpers.
+/// @{
+
+extern pub fn __mlang_std_regex_last_error() -> string;
+extern pub fn __mlang_std_regex_compile(pattern: string) -> i64;
+extern pub fn __mlang_std_regex_free(handle: i64) -> i32;
+extern pub fn __mlang_std_regex_is_match(handle: i64, text: string) -> i32;
+extern pub fn __mlang_std_regex_match_start(handle: i64, text: string, group_index: i64) -> i64;
+extern pub fn __mlang_std_regex_match_end(handle: i64, text: string, group_index: i64) -> i64;
+
+pub struct Regex {
+    var handle: i64;
+};
+
+/// @ingroup algorithm_regex
+pub fn last_error() -> string {
+    return __mlang_std_regex_last_error();
+}
+
+/// @ingroup algorithm_regex
+impl Regex {
+    pub fn compile(pattern: string) -> Result<Regex, string> {
+        let h: i64 = __mlang_std_regex_compile(pattern);
+        if h == 0 {
+            return Err<Regex, string>(last_error());
+        }
+        return Ok<Regex, string>(Regex { handle: h });
+    }
+
+    pub fn is_match(self: Regex, text: string) -> i32 {
+        return __mlang_std_regex_is_match(self.handle, text);
+    }
+
+    pub fn match_start(self: Regex, text: string, group_index: i64) -> i64 {
+        return __mlang_std_regex_match_start(self.handle, text, group_index);
+    }
+
+    pub fn match_end(self: Regex, text: string, group_index: i64) -> i64 {
+        return __mlang_std_regex_match_end(self.handle, text, group_index);
+    }
+
+    pub fn find_start(self: Regex, text: string) -> i64 {
+        return self.match_start(text, 0);
+    }
+
+    pub fn find_end(self: Regex, text: string) -> i64 {
+        return self.match_end(text, 0);
+    }
+
+    pub fn close(self: Regex) -> i32 {
+        return __mlang_std_regex_free(self.handle);
+    }
+}
+
+/// @}

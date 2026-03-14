@@ -45,6 +45,11 @@ Currently provided:
 - `std/regex.mla`: POSIX regular expression helpers
   (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`)
   with error retrieval via `std::regex::last_error()`.
+- `std/algorithm.mla`: algorithm namespace root with submodules:
+  - `std::algorithm::fuzzy`: subsequence fuzzy matching/ranking
+    (`is_match`, `score`, `filter_indices`, `best_index`)
+  - `std::algorithm::rand`: random helpers mirroring `std::rand`
+  - `std::algorithm::regex`: regex helpers mirroring `std::regex`
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`
