@@ -617,7 +617,7 @@ pub fn file_exists(path: string) -> i32 {
 }
 
 /// @brief Return `1` if `path` exists and is a directory, otherwise `0`.
-pub fn is_dir(path: string) -> int {
+pub fn is_dir(path: string) -> i32 {
     return __mlang_std_fs_is_dir(path);
 }
 
