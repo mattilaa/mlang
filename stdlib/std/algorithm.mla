@@ -5,6 +5,7 @@
 /// - `std::algorithm::fuzzy`
 /// - `std::algorithm::rand`
 /// - `std::algorithm::regex`
+/// - `std::algorithm::fft`
 ///
 /// @defgroup algorithm std::algorithm
 /// @brief Algorithm namespace and submodules.
@@ -15,5 +16,6 @@
 mod std::algorithm::fuzzy;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
+mod std::algorithm::fft;
 
 /// @}

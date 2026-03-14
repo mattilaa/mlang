@@ -1,4 +1,5 @@
 mod std::algorithm::fuzzy;
+mod std::algorithm::fft;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::strbuf;
@@ -7,6 +8,9 @@ use std::algorithm::fuzzy::best_index;
 use std::algorithm::fuzzy::filter_indices;
 use std::algorithm::fuzzy::is_match;
 use std::algorithm::fuzzy::score;
+use std::algorithm::fft::forward;
+use std::algorithm::fft::inverse;
+use std::algorithm::fft::is_power_of_two;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -45,6 +49,30 @@ fn test_algorithm_fuzzy_best_index() -> i32 {
 }
 
 #[test]
+fn test_algorithm_fft_namespace_roundtrip() -> i32 {
+    if !is_power_of_two(8) {
+        return 1;
+    }
+    if is_power_of_two(6) {
+        return 1;
+    }
+
+    let data: list<i64> = [1, 0, 2, 0, 3, 0, 4, 0];
+    let freq: list<i64> = forward(data);
+    if freq.len() == 0 { return 1; }
+    let out: list<i64> = inverse(freq);
+    if out.len() == 0 { return 1; }
+    for i in 0..4 {
+        let base: i64 = i * 2;
+        let re: i64 = out[base];
+        let im: i64 = out[base + 1];
+        if re != (i + 1) { return 1; }
+        if im != 0 { return 1; }
+    }
+    return 0;
+}
+
+#[test]
 fn test_algorithm_rand_namespace_reproducible() -> i32 {
     seed(123);
     let a: u64 = next_u64();
@@ -76,4 +104,3 @@ fn test_algorithm_regex_namespace_basic() -> i32 {
     re.close();
     return ok == 1 ? 0 : 1;
 }
-

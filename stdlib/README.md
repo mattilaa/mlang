@@ -50,6 +50,7 @@ Currently provided:
     (`is_match`, `score`, `filter_indices`, `best_index`)
   - `std::algorithm::rand`: random helpers mirroring `std::rand`
   - `std::algorithm::regex`: regex helpers mirroring `std::regex`
+  - `std::algorithm::fft`: FFT helpers mirroring `std::fft`
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`
