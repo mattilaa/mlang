@@ -3204,6 +3204,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
     globalConstantVariables.clear();
     globalVariableTypes.clear();
     globalStructVariableTypes.clear();
+    deferredModuleFunctionDefs.clear();
 
     ensureHandleBuiltin(program);
     ensureThreadBuiltin(program);
@@ -3751,6 +3752,21 @@ void CodeGenerator::generateCode(ProgramNode* program)
             if(funcDef->isTest && !includeTests)
                 continue;
             generateFunctionDefinition(funcDef);
+        }
+    }
+
+    // Emit definitions for module functions that were loaded via `mod` and
+    // referenced through fully-qualified calls (e.g. std::x::foo()) even when
+    // they were not pulled in by `use`.
+    if(!deferredModuleFunctionDefs.empty())
+    {
+        for(auto* fn : deferredModuleFunctionDefs)
+        {
+            if(!fn)
+                continue;
+            if(fn->isTest && !includeTests)
+                continue;
+            generateFunctionDefinition(fn);
         }
     }
 
@@ -13061,6 +13077,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 continue;
             llvm::Function* decl = generateFunctionDeclaration(fn);
             registerFunctionOverload(fn, decl);
+            bool alreadyQueued = false;
+            for(auto* queued : deferredModuleFunctionDefs)
+            {
+                if(queued == fn)
+                {
+                    alreadyQueued = true;
+                    break;
+                }
+            }
+            if(!alreadyQueued)
+                deferredModuleFunctionDefs.push_back(fn);
         }
     };
 

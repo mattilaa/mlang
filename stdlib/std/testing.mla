@@ -96,6 +96,11 @@ pub fn expect_eq(expected: i32, actual: i32) -> void {
     __mlang_std_testing_expect_eq_i32(expected, actual);
 }
 
+/// Explicit i32 expectation helper (avoids overload ambiguity for integer literals).
+pub fn expect_eq_i32(expected: i32, actual: i32) -> void {
+    __mlang_std_testing_expect_eq_i32(expected, actual);
+}
+
 /// Expect equality for i64 values.
 pub fn expect_eq(expected: i64, actual: i64) -> void {
     __mlang_std_testing_expect_eq_i64(expected, actual);
@@ -134,6 +139,11 @@ pub fn verify_false(cond: bool) -> void {
 
 /// Verify equality for i32 values. Fatal on failure.
 pub fn verify_eq(expected: i32, actual: i32) -> void {
+    __mlang_std_testing_verify_eq_i32(expected, actual);
+}
+
+/// Explicit i32 verify helper (avoids overload ambiguity for integer literals).
+pub fn verify_eq_i32(expected: i32, actual: i32) -> void {
     __mlang_std_testing_verify_eq_i32(expected, actual);
 }
 

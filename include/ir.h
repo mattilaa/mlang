@@ -150,6 +150,7 @@ private:
         std::string sourceModule;
     };
     std::map<std::string, std::vector<FunctionOverloadInfo>> functionOverloads;
+    std::vector<FunctionDefNode*> deferredModuleFunctionDefs;
     // Maps struct name -> (isPublic, sourceModule)
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
     // Current module being compiled (empty string for main module)
