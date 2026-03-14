@@ -1,0 +1,66 @@
+/// \file numeric.mla
+/// \brief Numeric algorithms under std::algorithm.
+///
+/// C++-style `<numeric>` inspired helpers for `list<i64>`.
+///
+/// @defgroup algorithm_numeric std::algorithm::numeric
+/// @ingroup algorithm
+/// @brief Numeric sequence algorithms.
+/// @{
+
+/// @brief Sum all elements with an initial value.
+/// @ingroup algorithm_numeric
+pub fn accumulate_i64(data: &list<i64>, init: i64) -> i64 {
+    var acc: i64 = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = acc + data[i];
+    }
+    return acc;
+}
+
+/// @brief Prefix sums with an initial value.
+/// Returns `[init + d0, init + d0 + d1, ...]`.
+/// @ingroup algorithm_numeric
+pub fn partial_sum_i64(data: &list<i64>, init: i64) -> list<i64> {
+    var out: list<i64> = [];
+    var acc: i64 = init;
+    let n: i64 = data.len();
+    for i in 0..n {
+        acc = acc + data[i];
+        out.push(acc);
+    }
+    return out;
+}
+
+/// @brief Adjacent differences.
+/// Returns `[d0 - init, d1 - d0, d2 - d1, ...]`.
+/// @ingroup algorithm_numeric
+pub fn adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<i64> = [];
+    out.push(data[0] - init);
+    for i in 1..n {
+        out.push(data[i] - data[i - 1]);
+    }
+    return out;
+}
+
+/// @brief Inner product with initial value.
+/// For min length of both lists: `init + sum(a[i] * b[i])`.
+/// @ingroup algorithm_numeric
+pub fn inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64 {
+    let na: i64 = a.len();
+    let nb: i64 = b.len();
+    let n: i64 = na < nb ? na : nb;
+    var acc: i64 = init;
+    for i in 0..n {
+        acc = acc + (a[i] * b[i]);
+    }
+    return acc;
+}
+
+/// @}

@@ -51,6 +51,9 @@ Currently provided:
   - `std::algorithm::order`: ordered-sequence helpers for `list<i64>`
     (`sort_i64`, `reverse_i64`, `is_sorted_i64`, `unique_sorted_i64`,
      `lower_bound_i64`, `upper_bound_i64`, `binary_search_i64`)
+  - `std::algorithm::numeric`: numeric helpers for `list<i64>`
+    (`accumulate_i64`, `partial_sum_i64`, `adjacent_difference_i64`,
+     `inner_product_i64`)
   - `std::algorithm::rand`: random helpers mirroring `std::rand`
   - `std::algorithm::regex`: regex helpers mirroring `std::regex`
   - `std::algorithm::fft`: FFT helpers for forward/inverse transforms

@@ -15,6 +15,7 @@ mod std::jsonrpc;
 mod std::bench;
 mod std::math;
 mod std::algorithm::order;
+mod std::algorithm::numeric;
 mod std::algorithm::fft;
 mod std::net;
 mod std::printf;
@@ -48,6 +49,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
 - `stdlib/std/algorithm/order.mla`
+- `stdlib/std/algorithm/numeric.mla`
 - `stdlib/std/algorithm/fft.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
@@ -702,6 +704,18 @@ Ordered-sequence helpers for `list<i64>`.
 - `lower_bound_i64(data: &list<i64>, value: i64) -> i64`
 - `upper_bound_i64(data: &list<i64>, value: i64) -> i64`
 - `binary_search_i64(data: &list<i64>, value: i64) -> i32`
+
+## std::algorithm::numeric
+
+Module file: `stdlib/std/algorithm/numeric.mla`
+
+Numeric sequence helpers for `list<i64>`.
+
+### API
+- `accumulate_i64(data: &list<i64>, init: i64) -> i64`
+- `partial_sum_i64(data: &list<i64>, init: i64) -> list<i64>`
+- `adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64>`
+- `inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64`
 
 ## std::process
 
