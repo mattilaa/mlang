@@ -163,84 +163,100 @@ pub fn verify_eq(expected: f64, actual: f64) -> void {
     __mlang_std_testing_verify_eq_f64(expected, actual);
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_TRUE(cond: bool) -> void {
-    expect_true(cond);
+/// Expect equality for i64 arrays (non-fatal).
+pub fn expect_array_eq(expected: &list<i64>, actual: &list<i64>) -> void {
+    if expected.len() != actual.len() {
+        expect_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        expect_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_FALSE(cond: bool) -> void {
-    expect_false(cond);
+/// Expect equality for i32 arrays (non-fatal).
+pub fn expect_array_eq(expected: &list<i32>, actual: &list<i32>) -> void {
+    if expected.len() != actual.len() {
+        expect_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        expect_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_EQ(expected: i32, actual: i32) -> void {
-    expect_eq(expected, actual);
+/// Expect equality for bool arrays (non-fatal).
+pub fn expect_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
+    if expected.len() != actual.len() {
+        expect_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        expect_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_EQ(expected: i64, actual: i64) -> void {
-    expect_eq(expected, actual);
+/// Expect equality for string arrays (non-fatal).
+pub fn expect_array_eq(expected: &list<string>, actual: &list<string>) -> void {
+    if expected.len() != actual.len() {
+        expect_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        expect_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_EQ(expected: bool, actual: bool) -> void {
-    expect_eq(expected, actual);
+/// Verify equality for i64 arrays (fatal).
+pub fn verify_array_eq(expected: &list<i64>, actual: &list<i64>) -> void {
+    if expected.len() != actual.len() {
+        verify_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        verify_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_EQ(expected: string, actual: string) -> void {
-    expect_eq(expected, actual);
+/// Verify equality for i32 arrays (fatal).
+pub fn verify_array_eq(expected: &list<i32>, actual: &list<i32>) -> void {
+    if expected.len() != actual.len() {
+        verify_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        verify_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_EQ(expected: f32, actual: f32) -> void {
-    expect_eq(expected, actual);
+/// Verify equality for bool arrays (fatal).
+pub fn verify_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
+    if expected.len() != actual.len() {
+        verify_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        verify_eq(expected[i], actual[i]);
+    }
 }
 
-/// GoogleTest-style alias.
-pub fn EXPECT_EQ(expected: f64, actual: f64) -> void {
-    expect_eq(expected, actual);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_TRUE(cond: bool) -> void {
-    verify_true(cond);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_FALSE(cond: bool) -> void {
-    verify_false(cond);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_EQ(expected: i32, actual: i32) -> void {
-    verify_eq(expected, actual);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_EQ(expected: i64, actual: i64) -> void {
-    verify_eq(expected, actual);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_EQ(expected: bool, actual: bool) -> void {
-    verify_eq(expected, actual);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_EQ(expected: string, actual: string) -> void {
-    verify_eq(expected, actual);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_EQ(expected: f32, actual: f32) -> void {
-    verify_eq(expected, actual);
-}
-
-/// GoogleTest-style fatal alias.
-pub fn VERIFY_EQ(expected: f64, actual: f64) -> void {
-    verify_eq(expected, actual);
+/// Verify equality for string arrays (fatal).
+pub fn verify_array_eq(expected: &list<string>, actual: &list<string>) -> void {
+    if expected.len() != actual.len() {
+        verify_true(false);
+        return;
+    }
+    let n: i64 = expected.len();
+    for i in 0..n {
+        verify_eq(expected[i], actual[i]);
+    }
 }
 
 /// Create a new mock state object.

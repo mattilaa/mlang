@@ -10,8 +10,8 @@ fn test_expect_helpers_pass() -> i32 {
     expect_false(3 < 2);
     expect_eq(42, 42);
     expect_eq("mlang", "mlang");
-    EXPECT_TRUE(true);
-    EXPECT_FALSE(false);
+    expect_true(true);
+    expect_false(false);
 
     if failures() != 0 { return 1; }
     if checks() != 6 { return 1; }
@@ -35,6 +35,29 @@ fn test_expect_helpers_record_nonfatal_failures() -> i32 {
 }
 
 #[test]
+fn test_expect_array_helpers() -> i32 {
+    reset();
+    set_quiet(true);
+
+    let a_i32: list<i32> = [1, 2, 3];
+    let b_i32: list<i32> = [1, 2, 3];
+    let c_i32: list<i32> = [1, 2, 4];
+    expect_array_eq(a_i32, b_i32);
+    expect_array_eq(a_i32, b_i32);
+    expect_array_eq(a_i32, c_i32);
+
+    let a_s: list<string> = ["a", "b"];
+    let b_s: list<string> = ["a", "b"];
+    let c_s: list<string> = ["a", "x"];
+    expect_array_eq(a_s, b_s);
+    expect_array_eq(a_s, c_s);
+
+    set_quiet(false);
+    if checks() <= 0 { return 1; }
+    return failures() > 0 ? 0 : 1;
+}
+
+#[test]
 fn test_verify_helpers_pass() -> i32 {
     reset();
 
@@ -42,11 +65,26 @@ fn test_verify_helpers_pass() -> i32 {
     verify_false(2 > 10);
     verify_eq(7, 7);
     verify_eq("ok", "ok");
-    VERIFY_TRUE(true);
-    VERIFY_FALSE(false);
-    VERIFY_EQ(3, 3);
+    verify_true(true);
+    verify_false(false);
+    verify_eq(3, 3);
 
     if failures() != 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_verify_array_helpers_pass() -> i32 {
+    reset();
+    let a_i64: list<i64> = [10, 20, 30];
+    let b_i64: list<i64> = [10, 20, 30];
+    verify_array_eq(a_i64, b_i64);
+    verify_array_eq(a_i64, b_i64);
+
+    let a_b: list<bool> = [true, false, true];
+    let b_b: list<bool> = [true, false, true];
+    verify_array_eq(a_b, b_b);
+    verify_array_eq(a_b, b_b);
     return 0;
 }
 
