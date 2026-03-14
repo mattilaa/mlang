@@ -1,31 +1,31 @@
+mod std::testing;
+
+use std::testing::verify;
 #[test]
-fn if_additive_relational_without_parens() -> i32 {
+fn if_additive_relational_without_parens() {
     let i: i32 = 2;
     let n: i32 = 3;
-    if i + 1 >= n {
-        return 0;
-    }
-    return 1;
+    verify(i + 1 >= n);
 }
 
 #[test]
-fn while_additive_relational_without_parens() -> i32 {
+fn while_additive_relational_without_parens() {
     var i: i32 = 0;
     var loops: i32 = 0;
     while i + 1 < 5 {
         loops = loops + 1;
         i = i + 1;
     }
-    return loops == 4 ? 0 : 1;
+    verify(loops == 4);
 }
 
 #[test]
-fn if_with_complex_nested_guard_expression() -> i32 {
+fn if_with_complex_nested_guard_expression() {
     let i: i32 = 25;
     if i >= 0: (i >= 0 && i < 10) || ((i > 20 && i < 30) || (i > 50 && i < 100)) {
-        return 0;
+    } else {
+        verify(false);
     }
-    return 1;
 }
 
 fn some_val() -> i32 {
@@ -33,10 +33,10 @@ fn some_val() -> i32 {
 }
 
 #[test]
-fn if_let_eq_with_complex_guard_expression() -> i32 {
+fn if_let_eq_with_complex_guard_expression() {
     let j: i32 = 4;
     if let i == some_val(): ((i < 0 && i > -30) || (j > 3 && j < 5)) {
-        return 0;
+    } else {
+        verify(false);
     }
-    return 1;
 }

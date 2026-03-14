@@ -1,29 +1,31 @@
+mod std::testing;
 mod std::strbuf;
 
 use std::strbuf::*;
+use std::testing::verify;
 
 struct Person {
     var name: string;
 };
 
 #[test]
-fn test_type_name_property_primitive() -> i32 {
+fn test_type_name_property_primitive() {
     let i: i32 = 12;
-    return eq(i.name, "i32") == 1 ? 0 : 1;
+    verify(eq(i.name, "i32") == 1);
 }
 
 #[test]
-fn test_type_name_property_collections() -> i32 {
+fn test_type_name_property_collections() {
     let ids: list<i32> = [7, 8, 9];
-    if eq(ids.name, "list<i32>") != 1 { return 1; }
+    if eq(ids.name, "list<i32>") != 1 { verify(false); }
 
     let scores: map<string, i32> = {"Alice": 95, "Bob": 87};
-    return contains(scores.name, "map<string, i32>") == 1 ? 0 : 1;
+    verify(contains(scores.name, "map<string, i32>") == 1);
 }
 
 #[test]
-fn test_type_name_property_does_not_break_real_name_field() -> i32 {
+fn test_type_name_property_does_not_break_real_name_field() {
     let p: Person = Person { name: "Ada" };
-    if eq(p.name, "Ada") != 1 { return 1; }
-    return eq(p.name.name, "string") == 1 ? 0 : 1;
+    if eq(p.name, "Ada") != 1 { verify(false); }
+    verify(eq(p.name.name, "string") == 1);
 }

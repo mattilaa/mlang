@@ -1,16 +1,19 @@
+mod std::testing;
+
+use std::testing::verify;
 #[test]
-fn while_without_colon_runs() -> i32 {
+fn while_without_colon_runs() {
     var i: i32 = 0;
     var sum: i32 = 0;
     while i < 5 {
         sum = sum + i;
         i = i + 1;
     }
-    return sum == 10 ? 0 : 1;
+    verify(sum == 10);
 }
 
 #[test]
-fn while_with_guard_runs() -> i32 {
+fn while_with_guard_runs() {
     var i: i32 = 0;
     var j: i32 = 1;
     var count: i32 = 0;
@@ -19,14 +22,14 @@ fn while_with_guard_runs() -> i32 {
         i = i + 1;
         j = j + 1;
     }
-    return count == 8 ? 0 : 1;
+    verify(count == 8);
 }
 
 #[test]
-fn while_with_redundant_colon_runs() -> i32 {
+fn while_with_redundant_colon_runs() {
     var i: i32 = 0;
     while i < 3: {
         i = i + 1;
     }
-    return i == 3 ? 0 : 1;
+    verify(i == 3);
 }

@@ -1,19 +1,16 @@
+mod std::testing;
+
+use std::testing::verify;
 // Sample tests for `mlang test`
 
 #[test]
-fn test_addition() -> i32 {
+fn test_addition() {
     let x: i32 = 2 + 2;
-    if x == 4: {
-        return 0;
-    }
-    return 1;
+    verify(x == 4);
 }
 
 #[test]
-fn test_result_ok() -> i32 {
+fn test_result_ok() {
     let r: Result<i32, string> = Ok<i32, string>(123);
-    if r.is_ok(): {
-        return 0;
-    }
-    return 1;
+    verify(r.is_ok());
 }

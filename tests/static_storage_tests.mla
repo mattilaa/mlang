@@ -1,3 +1,6 @@
+mod std::testing;
+
+use std::testing::verify;
 var g_counter: i32 = 0;
 
 fn tick() -> i32 {
@@ -8,11 +11,10 @@ fn tick() -> i32 {
 }
 
 #[test]
-fn test_global_and_static_local_persist() -> i32 {
+fn test_global_and_static_local_persist() {
     let a: i32 = tick();
     let b: i32 = tick();
-    if a != 2: { return 1; }
-    if b != 4: { return 1; }
-    if g_counter != 2: { return 1; }
-    return 0;
-}
+    if a != 2: { verify(false); }
+    if b != 4: { verify(false); }
+    if g_counter != 2: { verify(false); }
+    }

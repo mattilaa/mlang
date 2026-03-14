@@ -1,55 +1,54 @@
+mod std::testing;
+
+use std::testing::verify;
 fn source(v: i32) -> i32 { return v; }
 
 #[test]
-fn test_if_let_typed_block_complex_guard() -> i32 {
+fn test_if_let_typed_block_complex_guard() {
     let outer: i32 = 12;
     var seen: i32 = 0;
     if let i: i32 = source(7): (i >= 0 && i < 10) || ((i > 20 && i < 30) || (i > 50 && i < 100)): {
         seen = i;
     }
     else: {
-        return 1;
+        verify(false);
     }
-    if seen != 7: { return 1; }
-    if outer != 12: { return 1; }
-    return 0;
-}
+    if seen != 7: { verify(false); }
+    if outer != 12: { verify(false); }
+    }
 
 #[test]
-fn test_if_let_typed_single_statement() -> i32 {
+fn test_if_let_typed_single_statement() {
     var seen: i32 = 0;
     if let i: i32 = source(3): i == 3: seen = i;
     else: seen = 99;
-    if seen != 3: { return 1; }
-    return 0;
-}
+    if seen != 3: { verify(false); }
+    }
 
 #[test]
-fn test_if_let_untyped_block() -> i32 {
+fn test_if_let_untyped_block() {
     let outer: i32 = 44;
     var seen: i32 = 0;
     if let i = source(6): (i >= 0 && i < 10): {
         seen = i;
     }
     else: {
-        return 1;
+        verify(false);
     }
-    if seen != 6: { return 1; }
-    if outer != 44: { return 1; }
-    return 0;
-}
+    if seen != 6: { verify(false); }
+    if outer != 44: { verify(false); }
+    }
 
 #[test]
-fn test_if_let_untyped_single_statement() -> i32 {
+fn test_if_let_untyped_single_statement() {
     var seen: i32 = 0;
     if let i = source(8): i == 8: seen = i;
     else: seen = 77;
-    if seen != 8: { return 1; }
-    return 0;
-}
+    if seen != 8: { verify(false); }
+    }
 
 #[test]
-fn test_if_var_typed_block_mutable_shadow() -> i32 {
+fn test_if_var_typed_block_mutable_shadow() {
     let outer: i32 = 5;
     var seen: i32 = 0;
     if var i: i32 = source(1): i == 1: {
@@ -57,24 +56,22 @@ fn test_if_var_typed_block_mutable_shadow() -> i32 {
         seen = i;
     }
     else: {
-        return 1;
+        verify(false);
     }
-    if seen != 15: { return 1; }
-    if outer != 5: { return 1; }
-    return 0;
-}
+    if seen != 15: { verify(false); }
+    if outer != 5: { verify(false); }
+    }
 
 #[test]
-fn test_if_var_typed_single_statement() -> i32 {
+fn test_if_var_typed_single_statement() {
     var seen: i32 = 0;
     if var i: i32 = source(2): i == 2: seen = i;
     else: seen = 66;
-    if seen != 2: { return 1; }
-    return 0;
-}
+    if seen != 2: { verify(false); }
+    }
 
 #[test]
-fn test_if_var_untyped_block() -> i32 {
+fn test_if_var_untyped_block() {
     let outer: i32 = 9;
     var seen: i32 = 0;
     if var i = source(4): i == 4: {
@@ -82,24 +79,22 @@ fn test_if_var_untyped_block() -> i32 {
         seen = i;
     }
     else: {
-        return 1;
+        verify(false);
     }
-    if seen != 11: { return 1; }
-    if outer != 9: { return 1; }
-    return 0;
-}
+    if seen != 11: { verify(false); }
+    if outer != 9: { verify(false); }
+    }
 
 #[test]
-fn test_if_var_untyped_single_statement() -> i32 {
+fn test_if_var_untyped_single_statement() {
     var seen: i32 = 0;
     if var i = source(9): i == 9: seen = i;
     else: seen = 55;
-    if seen != 9: { return 1; }
-    return 0;
-}
+    if seen != 9: { verify(false); }
+    }
 
 #[test]
-fn test_else_if_chain_let_and_var_combinations() -> i32 {
+fn test_else_if_chain_let_and_var_combinations() {
     let outer: i32 = 12;
     var branch: i32 = 0;
     if let i: i32 = source(40): (i >= 0 && i < 10): {
@@ -116,15 +111,14 @@ fn test_else_if_chain_let_and_var_combinations() -> i32 {
         branch = 4;
     }
     else: {
-        return 1;
+        verify(false);
     }
-    if branch != 42: { return 1; }
-    if outer != 12: { return 1; }
-    return 0;
-}
+    if branch != 42: { verify(false); }
+    if outer != 12: { verify(false); }
+    }
 
 #[test]
-fn test_if_else_if_else_block_without_colon() -> i32 {
+fn test_if_else_if_else_block_without_colon() {
     let x: i32 = 2;
     var branch: i32 = 0;
     if x == 1 {
@@ -134,12 +128,11 @@ fn test_if_else_if_else_block_without_colon() -> i32 {
     } else {
         branch = 3;
     }
-    if branch != 2: { return 1; }
-    return 0;
-}
+    if branch != 2: { verify(false); }
+    }
 
 #[test]
-fn test_nested_no_colon_if_blocks() -> i32 {
+fn test_nested_no_colon_if_blocks() {
     let x: i32 = 3;
     let y: i32 = 9;
     var seen: i32 = 0;
@@ -152,12 +145,11 @@ fn test_nested_no_colon_if_blocks() -> i32 {
     } else {
         seen = 3;
     }
-    if seen != 1: { return 1; }
-    return 0;
-}
+    if seen != 1: { verify(false); }
+    }
 
 #[test]
-fn test_if_let_eq_initializer_with_complex_guard_block() -> i32 {
+fn test_if_let_eq_initializer_with_complex_guard_block() {
     let outer: i32 = 1;
     let j: i32 = 11;
     var seen: i32 = 0;
@@ -165,16 +157,15 @@ fn test_if_let_eq_initializer_with_complex_guard_block() -> i32 {
     if let i == source(1): ((i < 0 && i > -30) || (j > 3 && j < 15)) {
         seen = i;
     } else {
-        return 1;
+        verify(false);
     }
 
-    if seen != 1: { return 1; }
-    if outer != 1: { return 1; }
-    return 0;
-}
+    if seen != 1: { verify(false); }
+    if outer != 1: { verify(false); }
+    }
 
 #[test]
-fn test_else_if_let_eq_initializer_with_complex_guard_block() -> i32 {
+fn test_else_if_let_eq_initializer_with_complex_guard_block() {
     let j: i32 = 11;
     var seen: i32 = 0;
 
@@ -183,9 +174,8 @@ fn test_else_if_let_eq_initializer_with_complex_guard_block() -> i32 {
     } else if let i == source(5): ((i > 1 && i < 8) || (j > 3 && j < 15)) {
         seen = i;
     } else {
-        return 1;
+        verify(false);
     }
 
-    if seen != 5: { return 1; }
-    return 0;
-}
+    if seen != 5: { verify(false); }
+    }

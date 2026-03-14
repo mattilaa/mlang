@@ -1,86 +1,81 @@
+mod std::testing;
+
+use std::testing::verify;
 // Tests for prefix/postfix ++/-- (UpdateExpression)
 
 #[test]
-fn test_postfix_increment() -> i32 {
+fn test_postfix_increment() {
     var x: i32 = 5;
     let old: i32 = x++;
-    if old != 5: { return 1; }
-    if x != 6: { return 1; }
-    return 0;
-}
+    if old != 5: { verify(false); }
+    if x != 6: { verify(false); }
+    }
 
 #[test]
-fn test_postfix_decrement() -> i32 {
+fn test_postfix_decrement() {
     var x: i32 = 5;
     let old: i32 = x--;
-    if old != 5: { return 1; }
-    if x != 4: { return 1; }
-    return 0;
-}
+    if old != 5: { verify(false); }
+    if x != 4: { verify(false); }
+    }
 
 #[test]
-fn test_prefix_increment() -> i32 {
+fn test_prefix_increment() {
     var x: i32 = 5;
     let new_val: i32 = ++x;
-    if new_val != 6: { return 1; }
-    if x != 6: { return 1; }
-    return 0;
-}
+    if new_val != 6: { verify(false); }
+    if x != 6: { verify(false); }
+    }
 
 #[test]
-fn test_prefix_decrement() -> i32 {
+fn test_prefix_decrement() {
     var x: i32 = 5;
     let new_val: i32 = --x;
-    if new_val != 4: { return 1; }
-    if x != 4: { return 1; }
-    return 0;
-}
+    if new_val != 4: { verify(false); }
+    if x != 4: { verify(false); }
+    }
 
 #[test]
-fn test_increment_in_loop() -> i32 {
+fn test_increment_in_loop() {
     var sum: i32 = 0;
     var i: i32 = 0;
     while i < 5: {
         sum = sum + 1;
         i++;
     }
-    if sum != 5: { return 1; }
-    return 0;
-}
+    if sum != 5: { verify(false); }
+    }
 
 #[test]
-fn test_decrement_in_loop() -> i32 {
+fn test_decrement_in_loop() {
     var count: i32 = 0;
     var i: i32 = 5;
     while i > 0: {
         count = count + 1;
         i--;
     }
-    if count != 5: { return 1; }
-    return 0;
-}
+    if count != 5: { verify(false); }
+    }
 
 #[test]
-fn test_prefix_vs_postfix_distinction() -> i32 {
+fn test_prefix_vs_postfix_distinction() {
     var a: i32 = 10;
     var b: i32 = 10;
     let post: i32 = a++;
     let pre: i32  = ++b;
     // post == 10 (old), a == 11; pre == 11 (new), b == 11
-    if post != 10: { return 1; }
-    if a != 11: { return 1; }
-    if pre != 11: { return 1; }
-    if b != 11: { return 1; }
-    return 0;
-}
+    if post != 10: { verify(false); }
+    if a != 11: { verify(false); }
+    if pre != 11: { verify(false); }
+    if b != 11: { verify(false); }
+    }
 
 #[test]
-fn test_increment_i64() -> i32 {
+fn test_increment_i64() {
     var x: i64 = 100;
     x++;
-    if x != 101: { return 1; }
-    return 0;
-}
+    if x != 101: { verify(false); }
+    }
 
 trait Increment {
     fn increment(self: &mut Self) -> void;
@@ -107,23 +102,22 @@ impl Decrement for Counter {
 }
 
 #[test]
-fn test_trait_increment_decrement_mut_self_void() -> i32 {
+fn test_trait_increment_decrement_mut_self_void() {
     var c: Counter = Counter { value: 1 };
 
     let old: Counter = c++;
-    if old.value != 1: { return 1; }
-    if c.value != 2: { return 1; }
+    if old.value != 1: { verify(false); }
+    if c.value != 2: { verify(false); }
 
     let new_val: Counter = ++c;
-    if new_val.value != 3: { return 1; }
-    if c.value != 3: { return 1; }
+    if new_val.value != 3: { verify(false); }
+    if c.value != 3: { verify(false); }
 
     c--;
-    if c.value != 2: { return 1; }
+    if c.value != 2: { verify(false); }
     --c;
-    if c.value != 1: { return 1; }
-    return 0;
-}
+    if c.value != 1: { verify(false); }
+    }
 
 struct CounterByValue {
     var value: i32;
@@ -142,15 +136,14 @@ impl Decrement for CounterByValue {
 }
 
 #[test]
-fn test_trait_increment_decrement_self_return_self() -> i32 {
+fn test_trait_increment_decrement_self_return_self() {
     var c: CounterByValue = CounterByValue { value: 10 };
 
     let old: CounterByValue = c++;
-    if old.value != 10: { return 1; }
-    if c.value != 11: { return 1; }
+    if old.value != 10: { verify(false); }
+    if c.value != 11: { verify(false); }
 
     let new_val: CounterByValue = --c;
-    if new_val.value != 10: { return 1; }
-    if c.value != 10: { return 1; }
-    return 0;
-}
+    if new_val.value != 10: { verify(false); }
+    if c.value != 10: { verify(false); }
+    }

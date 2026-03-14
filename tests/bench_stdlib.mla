@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::unordered;
 mod std::bench;
 mod std::fft;
@@ -7,9 +8,10 @@ use std::bench::clobber_memory;
 use std::bench::do_not_optimize_i64;
 use std::fft::forward;
 use std::fft::inverse;
+use std::testing::verify;
 
 #[test]
-fn bench_vec_push_pop() -> i32 {
+fn bench_vec_push_pop() {
     var v: list<i32> = [];
     for i in 0..128 {
         v.push(i);
@@ -19,11 +21,11 @@ fn bench_vec_push_pop() -> i32 {
     }
     do_not_optimize_i64(v.len());
     clobber_memory();
-    return v.len() == 0 ? 0 : 1;
+    verify(v.len() == 0);
 }
 
 #[test]
-fn bench_quickmap_hash_set_get() -> i32 {
+fn bench_quickmap_hash_set_get() {
     let q: QuickMapI64I64 = QuickMapI64I64::new();
     for i in 0..64 {
         q.set(i, i * 2);
@@ -37,11 +39,11 @@ fn bench_quickmap_hash_set_get() -> i32 {
     clobber_memory();
     q.close();
 
-    return acc == 4032 ? 0 : 1;
+    verify(acc == 4032);
 }
 
 #[test]
-fn bench_quickmap_vec_set_get() -> i32 {
+fn bench_quickmap_vec_set_get() {
     let q: QuickMapVecI64I64 = QuickMapVecI64I64::new();
     for i in 0..64 {
         q.set(i, i * 2);
@@ -55,11 +57,11 @@ fn bench_quickmap_vec_set_get() -> i32 {
     clobber_memory();
     q.close();
 
-    return acc == 4032 ? 0 : 1;
+    verify(acc == 4032);
 }
 
 #[test]
-fn bench_fft_roundtrip_1024() -> i32 {
+fn bench_fft_roundtrip_1024() {
     var data: list<i64> = [];
     for i in 0..1024 {
         data.push(i % 23);
@@ -69,11 +71,11 @@ fn bench_fft_roundtrip_1024() -> i32 {
     for _it in 0..32 {
         let fs: list<i64> = forward(data);
         if fs.len() == 0 {
-            return 1;
+            verify(false);
         }
         let ts: list<i64> = inverse(fs);
         if ts.len() == 0 {
-            return 1;
+            verify(false);
         }
         data = ts;
     }
@@ -84,5 +86,5 @@ fn bench_fft_roundtrip_1024() -> i32 {
     }
     do_not_optimize_i64(checksum);
     clobber_memory();
-    return checksum != 0 ? 0 : 1;
+    verify(checksum != 0);
 }

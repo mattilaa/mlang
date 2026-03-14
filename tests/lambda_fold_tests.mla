@@ -1,54 +1,57 @@
+mod std::testing;
+
+use std::testing::verify;
 #[test]
-fn test_lambda_with_typed_params() -> i32 {
+fn test_lambda_with_typed_params() {
     var sum: i32 = 0;
     var add = |x: i32, y: i32| {
         sum = x + y;
     };
     add(4, 5);
-    return sum == 9 ? 0 : 1;
+    verify(sum == 9);
 }
 
 #[test]
-fn test_lambda_capture_and_single_arg() -> i32 {
+fn test_lambda_capture_and_single_arg() {
     var base: i64 = 10;
     var bump = |delta: i64| {
         base += delta;
     };
     bump(7);
     bump(3);
-    return base == 20 ? 0 : 1;
+    verify(base == 20);
 }
 
 #[test]
-fn test_fold_sum_and_product() -> i32 {
+fn test_fold_sum_and_product() {
     let xs: list<i32> = [1, 2, 3, 4];
     let sum: i32 = (... + xs);
-    if sum != 10: { return 1; }
+    if sum != 10: { verify(false); }
 
     let ys: list<i32> = [2, 3, 4];
     let prod: i32 = (ys * ...);
-    return prod == 24 ? 0 : 1;
+    verify(prod == 24);
 }
 
 #[test]
-fn test_fold_boolean_ops() -> i32 {
+fn test_fold_boolean_ops() {
     let flags: list<bool> = [true, true, false];
     let all_true: bool = (... && flags);
     let any_true: bool = (... || flags);
-    if all_true != false: { return 1; }
-    return any_true == true ? 0 : 1;
+    if all_true != false: { verify(false); }
+    verify(any_true == true);
 }
 
 #[test]
-fn test_fold_empty_identities() -> i32 {
+fn test_fold_empty_identities() {
     let empty_i32: list<i32> = [];
     let z: i32 = (... + empty_i32);
     let o: i32 = (... * empty_i32);
-    if z != 0 || o != 1: { return 1; }
+    if z != 0 || o != 1: { verify(false); }
 
     let empty_b: list<bool> = [];
     let a: bool = (... && empty_b);
     let n: bool = (... || empty_b);
-    if a != true: { return 1; }
-    return n == false ? 0 : 1;
+    if a != true: { verify(false); }
+    verify(n == false);
 }

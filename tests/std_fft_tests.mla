@@ -1,3 +1,4 @@
+mod std::testing;
 mod std::algorithm::fft;
 
 use std::algorithm::fft::forward;
@@ -7,6 +8,7 @@ use std::algorithm::fft::inverse_f32;
 use std::algorithm::fft::forward_f64;
 use std::algorithm::fft::inverse_f64;
 use std::algorithm::fft::is_power_of_two;
+use std::testing::verify;
 
 fn absf(x: f32) -> f32 {
     return x < 0.0f ? 0.0f - x : x;
@@ -17,25 +19,24 @@ fn absd(x: f64) -> f64 {
 }
 
 #[test]
-fn test_fft_power_of_two_check() -> i32 {
+fn test_fft_power_of_two_check() {
     if !is_power_of_two(8) {
-        return 1;
+        verify(false);
     }
     if is_power_of_two(0) {
-        return 1;
+        verify(false);
     }
     if is_power_of_two(6) {
-        return 1;
+        verify(false);
     }
-    return 0;
-}
+    }
 
 #[test]
-fn test_fft_impulse_forward() -> i32 {
+fn test_fft_impulse_forward() {
     let data: list<i64> = [1, 0, 0, 0, 0, 0, 0, 0];
     let out: list<i64> = forward(data);
     if out.len() == 0 {
-        return 1;
+        verify(false);
     }
 
     for i in 0..4 {
@@ -43,17 +44,16 @@ fn test_fft_impulse_forward() -> i32 {
         let re: i64 = out[base];
         let im: i64 = out[base + 1];
         if re != 1 {
-            return 1;
+            verify(false);
         }
         if im != 0 {
-            return 1;
+            verify(false);
         }
     }
-    return 0;
-}
+    }
 
 #[test]
-fn test_fft_inverse_roundtrip() -> i32 {
+fn test_fft_inverse_roundtrip() {
     let data: list<i64> = [
         1, 0,
         2, 0,
@@ -68,11 +68,11 @@ fn test_fft_inverse_roundtrip() -> i32 {
 
     let freq: list<i64> = forward(data);
     if freq.len() == 0 {
-        return 1;
+        verify(false);
     }
     let out: list<i64> = inverse(freq);
     if out.len() == 0 {
-        return 1;
+        verify(false);
     }
 
     for i in 0..8 {
@@ -81,27 +81,23 @@ fn test_fft_inverse_roundtrip() -> i32 {
         let im: i64 = out[base + 1];
         let expected: i64 = original_real[i];
         if re != expected {
-            return 1;
+            verify(false);
         }
         if im != 0 {
-            return 1;
+            verify(false);
         }
     }
-    return 0;
-}
+    }
 
 #[test]
-fn test_fft_rejects_invalid_length() -> i32 {
+fn test_fft_rejects_invalid_length() {
     let invalid: list<i64> = [1, 0, 2];
     let fr: list<i64> = forward(invalid);
-    if fr.len() == 0 {
-        return 0;
-    }
-    return 1;
+    verify(fr.len() == 0);
 }
 
 #[test]
-fn test_fft_f32_inverse_roundtrip() -> i32 {
+fn test_fft_f32_inverse_roundtrip() {
     let data: list<f32> = [
         1.0f, 0.0f,
         2.0f, 0.0f,
@@ -116,11 +112,11 @@ fn test_fft_f32_inverse_roundtrip() -> i32 {
 
     let freq: list<f32> = forward_f32(data);
     if freq.len() == 0 {
-        return 1;
+        verify(false);
     }
     let out: list<f32> = inverse_f32(freq);
     if out.len() == 0 {
-        return 1;
+        verify(false);
     }
 
     let eps: f32 = 0.0005f;
@@ -130,17 +126,16 @@ fn test_fft_f32_inverse_roundtrip() -> i32 {
         let im: f32 = out[base + 1];
         let expected: f32 = original_real[i];
         if absf(re - expected) > eps {
-            return 1;
+            verify(false);
         }
         if absf(im) > eps {
-            return 1;
+            verify(false);
         }
     }
-    return 0;
-}
+    }
 
 #[test]
-fn test_fft_f64_inverse_roundtrip() -> i32 {
+fn test_fft_f64_inverse_roundtrip() {
     let data: list<f64> = [
         1.0, 0.0,
         2.0, 0.0,
@@ -155,11 +150,11 @@ fn test_fft_f64_inverse_roundtrip() -> i32 {
 
     let freq: list<f64> = forward_f64(data);
     if freq.len() == 0 {
-        return 1;
+        verify(false);
     }
     let out: list<f64> = inverse_f64(freq);
     if out.len() == 0 {
-        return 1;
+        verify(false);
     }
 
     let eps: f64 = 0.0000001;
@@ -169,11 +164,10 @@ fn test_fft_f64_inverse_roundtrip() -> i32 {
         let im: f64 = out[base + 1];
         let expected: f64 = original_real[i];
         if absd(re - expected) > eps {
-            return 1;
+            verify(false);
         }
         if absd(im) > eps {
-            return 1;
+            verify(false);
         }
     }
-    return 0;
-}
+    }

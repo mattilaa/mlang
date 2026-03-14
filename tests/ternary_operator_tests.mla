@@ -1,24 +1,26 @@
+mod std::testing;
 mod std::strbuf;
 
 use std::strbuf::eq;
+use std::testing::verify;
 
 #[test]
-fn test_ternary_with_function_call_condition() -> i32 {
+fn test_ternary_with_function_call_condition() {
     let s: string = "ok";
-    return eq(s, "ok") == 1 ? 0 : 1;
+    verify(eq(s, "ok") == 1);
 }
 
 #[test]
-fn test_ternary_false_branch() -> i32 {
+fn test_ternary_false_branch() {
     let s: string = "bad";
-    return eq(s, "ok") == 1 ? 1 : 0;
+    verify(!(eq(s, "ok") == 1));
 }
 
 #[test]
-fn test_ternary_multiline() -> i32 {
+fn test_ternary_multiline() {
     let x: i32 = 5;
     let y: i32 = x > 3 ?
         7 :
         9;
-    return y == 7 ? 0 : 1;
+    verify(y == 7);
 }

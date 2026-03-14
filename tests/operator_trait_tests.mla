@@ -1,6 +1,8 @@
+mod std::testing;
 mod std::ops;
 
 use std::ops::*;
+use std::testing::verify;
 
 struct Pair {
     var a: i32;
@@ -67,70 +69,67 @@ impl Rem for PairU64 {
 }
 
 #[test]
-fn test_trait_add_sub_mul() -> i32 {
+fn test_trait_add_sub_mul() {
     let x1: Pair = Pair { a: 2, b: 3 };
     let y1: Pair = Pair { a: 4, b: 5 };
     let s: Pair = x1 + y1;
-    if s.a != 6: { return 1; }
-    if s.b != 8: { return 1; }
+    if s.a != 6: { verify(false); }
+    if s.b != 8: { verify(false); }
 
     let y2: Pair = Pair { a: 4, b: 5 };
     let x2: Pair = Pair { a: 2, b: 3 };
     let d: Pair = y2 - x2;
-    if d.a != 2: { return 1; }
-    if d.b != 2: { return 1; }
+    if d.a != 2: { verify(false); }
+    if d.b != 2: { verify(false); }
 
     let x3: Pair = Pair { a: 2, b: 3 };
     let y3: Pair = Pair { a: 4, b: 5 };
     let m: Pair = x3 * y3;
-    if m.a != 8: { return 1; }
-    if m.b != 15: { return 1; }
+    if m.a != 8: { verify(false); }
+    if m.b != 15: { verify(false); }
 
-    return 0;
-}
+    }
 
 #[test]
-fn test_trait_div_rem_neg() -> i32 {
+fn test_trait_div_rem_neg() {
     let x1: Pair = Pair { a: 8, b: 11 };
     let y1: Pair = Pair { a: 2, b: 5 };
     let q: Pair = x1 / y1;
-    if q.a != 4: { return 1; }
-    if q.b != 2: { return 1; }
+    if q.a != 4: { verify(false); }
+    if q.b != 2: { verify(false); }
 
     let x2: Pair = Pair { a: 8, b: 11 };
     let y2: Pair = Pair { a: 2, b: 5 };
     let r: Pair = x2 % y2;
-    if r.a != 0: { return 1; }
-    if r.b != 1: { return 1; }
+    if r.a != 0: { verify(false); }
+    if r.b != 1: { verify(false); }
 
     let x3: Pair = Pair { a: 8, b: 11 };
     let n: Pair = -x3;
-    if n.a != -8: { return 1; }
-    if n.b != -11: { return 1; }
+    if n.a != -8: { verify(false); }
+    if n.b != -11: { verify(false); }
 
-    return 0;
-}
+    }
 
 #[test]
-fn test_trait_u64_add_mul_rem() -> i32 {
+fn test_trait_u64_add_mul_rem() {
     let x: PairU64 = PairU64 { a: 10, b: 21 };
     let y: PairU64 = PairU64 { a: 3, b: 5 };
 
     let s: PairU64 = x + y;
-    if s.a != 13: { return 1; }
-    if s.b != 26: { return 1; }
+    if s.a != 13: { verify(false); }
+    if s.b != 26: { verify(false); }
 
     let x2: PairU64 = PairU64 { a: 10, b: 21 };
     let y2: PairU64 = PairU64 { a: 3, b: 5 };
     let m: PairU64 = x2 * y2;
-    if m.a != 30: { return 1; }
-    if m.b != 105: { return 1; }
+    if m.a != 30: { verify(false); }
+    if m.b != 105: { verify(false); }
 
     let x3: PairU64 = PairU64 { a: 10, b: 21 };
     let y3: PairU64 = PairU64 { a: 3, b: 5 };
     let r: PairU64 = x3 % y3;
-    if r.a != 1: { return 1; }
-    if r.b != 1: { return 1; }
+    if r.a != 1: { verify(false); }
+    if r.b != 1: { verify(false); }
 
-    return 0;
-}
+    }

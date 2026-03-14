@@ -1,5 +1,7 @@
+mod std::testing;
 mod std::strbuf;
 use std::strbuf::contains;
+use std::testing::verify;
 
 fn ok_num() -> Result<i32, string> {
     return Ok<i32, string>(41);
@@ -39,38 +41,34 @@ fn top_fail() -> Result<i32, string> {
 }
 
 #[test]
-fn test_try_ok_path() -> i32 {
+fn test_try_ok_path() {
     let r: Result<i32, string> = chain_ok();
     if r.is_err(): {
-        return 1;
+        verify(false);
     }
-    return r.unwrap() == 42 ? 0 : 1;
+    verify(r.unwrap() == 42);
 }
 
 #[test]
-fn test_try_err_propagation() -> i32 {
+fn test_try_err_propagation() {
     let r: Result<i32, string> = chain_err();
-    if r.is_err(): {
-        return 0;
-    }
-    return 1;
+    verify(r.is_err());
 }
 
 #[test]
-fn test_try_err_context_stack() -> i32 {
+fn test_try_err_context_stack() {
     let r: Result<i32, string> = top_fail();
     if r.is_ok(): {
-        return 1;
+        verify(false);
     }
     let msg: string = r.unwrap_err();
     if contains(msg, "boom") == 0: {
-        return 1;
+        verify(false);
     }
     if contains(msg, "mid_fail") == 0: {
-        return 1;
+        verify(false);
     }
     if contains(msg, "top_fail") == 0: {
-        return 1;
+        verify(false);
     }
-    return 0;
-}
+    }

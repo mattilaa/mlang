@@ -1,46 +1,45 @@
+mod std::testing;
 mod std::time;
 
 use std::time::Timer;
 use std::time::now_ms;
 use std::time::sleep_ms;
+use std::testing::verify;
 
 #[test]
-fn test_now_ms_increases() -> i32 {
+fn test_now_ms_increases() {
     let t1: i64 = now_ms();
     sleep_ms(10);
     let t2: i64 = now_ms();
-    return t2 >= t1 ? 0 : 1;
+    verify(t2 >= t1);
 }
 
 #[test]
-fn test_timer_wait_and_elapsed() -> i32 {
+fn test_timer_wait_and_elapsed() {
     let tr: Result<Timer, string> = Timer::after(20);
-    if tr.is_err(): { return 1; }
+    if tr.is_err(): { verify(false); }
     let t: Timer = tr.unwrap();
     if t.elapsed() == 1: {
-        t.close();
-        return 1;
+        verify(false);
     }
     if t.wait() != 0: {
-        t.close();
-        return 1;
+        verify(false);
     }
     let ok: i32 = t.elapsed() == 1 ? 1 : 0;
     t.close();
-    return ok == 1 ? 0 : 1;
+    verify(ok == 1);
 }
 
 #[test]
-fn test_timer_reset_changes_remaining() -> i32 {
+fn test_timer_reset_changes_remaining() {
     let tr: Result<Timer, string> = Timer::after(100);
-    if tr.is_err(): { return 1; }
+    if tr.is_err(): { verify(false); }
     let t: Timer = tr.unwrap();
     if t.reset(10) != 0: {
-        t.close();
-        return 1;
+        verify(false);
     }
     let rem: i64 = t.remaining_ms();
     t.close();
-    if rem < 0: { return 1; }
-    return rem <= 20 ? 0 : 1;
+    if rem < 0: { verify(false); }
+    verify(rem <= 20);
 }

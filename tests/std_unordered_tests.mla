@@ -1,103 +1,100 @@
+mod std::testing;
 mod std::unordered;
 use std::unordered::HashMapI64I64;
 use std::unordered::HashSetI64;
 use std::unordered::QuickMapI64I64;
 use std::unordered::QuickMapVecI64I64;
+use std::testing::verify;
 
 #[test]
-fn test_hash_map_basic_insert_get_remove() -> i32 {
+fn test_hash_map_basic_insert_get_remove() {
     let m: HashMapI64I64 = HashMapI64I64::new();
 
     m.insert(10, 100);
     m.insert(20, 200);
     m.insert(10, 111);
 
-    if m.len() != 2: { return 1; }
-    if m.contains(10) == 0: { return 1; }
-    if m.get_or(10, -1) != 111: { return 1; }
-    if m.get_or(999, -1) != -1: { return 1; }
+    if m.len() != 2: { verify(false); }
+    if m.contains(10) == 0: { verify(false); }
+    if m.get_or(10, -1) != 111: { verify(false); }
+    if m.get_or(999, -1) != -1: { verify(false); }
 
-    if m.remove(20) == 0: { return 1; }
-    if m.contains(20) != 0: { return 1; }
-    if m.len() != 1: { return 1; }
+    if m.remove(20) == 0: { verify(false); }
+    if m.contains(20) != 0: { verify(false); }
+    if m.len() != 1: { verify(false); }
 
     m.close();
-    return 0;
-}
+    }
 
 #[test]
-fn test_hash_map_rehash_many_values() -> i32 {
+fn test_hash_map_rehash_many_values() {
     let m: HashMapI64I64 = HashMapI64I64::new();
 
     for i in 0..300 {
         m.insert(i, i * 3);
     }
 
-    if m.len() != 300: { return 1; }
+    if m.len() != 300: { verify(false); }
 
     for i in 0..300 {
         if m.get_or(i, -1) != i * 3: {
-            return 1;
+            verify(false);
         }
     }
 
     m.close();
-    return 0;
-}
+    }
 
 #[test]
-fn test_hash_set_basic() -> i32 {
+fn test_hash_set_basic() {
     let s: HashSetI64 = HashSetI64::new();
 
     s.insert(7);
     s.insert(8);
     s.insert(7);
 
-    if s.len() != 2: { return 1; }
-    if s.contains(7) == 0: { return 1; }
-    if s.contains(9) != 0: { return 1; }
+    if s.len() != 2: { verify(false); }
+    if s.contains(7) == 0: { verify(false); }
+    if s.contains(9) != 0: { verify(false); }
 
-    if s.remove(8) == 0: { return 1; }
-    if s.contains(8) != 0: { return 1; }
+    if s.remove(8) == 0: { verify(false); }
+    if s.contains(8) != 0: { verify(false); }
 
     s.close();
-    return 0;
-}
+    }
 
 #[test]
-fn test_quick_map_api() -> i32 {
+fn test_quick_map_api() {
     let q: QuickMapI64I64 = QuickMapI64I64::new();
 
     q.set(1, 10);
     q.set(2, 20);
     q.set(1, 11);
 
-    if q.len() != 2: { return 1; }
-    if q.has(1) == 0: { return 1; }
-    if q.get(1, -1) != 11: { return 1; }
-    if q.get(99, -1) != -1: { return 1; }
-    if q.del(2) == 0: { return 1; }
-    if q.has(2) != 0: { return 1; }
+    if q.len() != 2: { verify(false); }
+    if q.has(1) == 0: { verify(false); }
+    if q.get(1, -1) != 11: { verify(false); }
+    if q.get(99, -1) != -1: { verify(false); }
+    if q.del(2) == 0: { verify(false); }
+    if q.has(2) != 0: { verify(false); }
 
     q.close();
-    return 0;
-}
+    }
 
 #[test]
-fn test_quick_map_vec_api() -> i32 {
+fn test_quick_map_vec_api() {
     let q: QuickMapVecI64I64 = QuickMapVecI64I64::new();
 
     q.set(1, 10);
     q.set(2, 20);
     q.set(1, 11);
 
-    if q.len() != 2: { return 1; }
-    if q.has(1) == 0: { return 1; }
-    if q.get(1, -1) != 11: { return 1; }
-    if q.get(99, -1) != -1: { return 1; }
-    if q.del(2) == 0: { return 1; }
-    if q.has(2) != 0: { return 1; }
+    if q.len() != 2: { verify(false); }
+    if q.has(1) == 0: { verify(false); }
+    if q.get(1, -1) != 11: { verify(false); }
+    if q.get(99, -1) != -1: { verify(false); }
+    if q.del(2) == 0: { verify(false); }
+    if q.has(2) != 0: { verify(false); }
 
     q.close();
-    return 0;
-}
+    }
