@@ -1097,6 +1097,8 @@ condition_postfix
     | condition_postfix DOT IDENTIFIER LPAREN argument_list RPAREN
         { $$ = mla_ast_method_call_expr($1, $3, $5, yylineno); }
     | condition_postfix DOT INT_LITERAL { $$ = mla_ast_tuple_access($1, $3, yylineno); }
+    | condition_postfix LBRACKET expression RBRACKET
+        { $$ = mla_ast_index_expression($1, $3, yylineno); }
     ;
 
 condition_primary
@@ -1328,6 +1330,8 @@ postfix_expression
     | postfix_expression DOT IDENTIFIER LPAREN argument_list RPAREN
         { $$ = mla_ast_method_call_expr($1, $3, $5, yylineno); }
     | postfix_expression DOT INT_LITERAL { $$ = mla_ast_tuple_access($1, $3, yylineno); }
+    | postfix_expression LBRACKET expression RBRACKET
+        { $$ = mla_ast_index_expression($1, $3, yylineno); }
     | postfix_expression PLUS_PLUS { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_POSTFIX, $1, yylineno); }
     | postfix_expression MINUS_MINUS { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_POSTFIX, $1, yylineno); }
     ;

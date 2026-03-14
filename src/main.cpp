@@ -1282,6 +1282,7 @@ int main(int argc, char** argv)
 
     std::vector<std::string> modulePaths;
     std::vector<std::string> moduleSearchPaths;
+    std::unique_ptr<ModuleLoader> moduleLoader;
 
     try
     {
@@ -1351,7 +1352,8 @@ int main(int argc, char** argv)
             append_stdlib_link_args(linkArgs, argv[0]);
 
             // Initialize module loader
-            ModuleLoader moduleLoader(basePath, moduleSearchPaths);
+            moduleLoader =
+                std::make_unique<ModuleLoader>(basePath, moduleSearchPaths);
 
             // Process mod declarations (load modules)
             if(!program->modules.empty())
@@ -1362,7 +1364,7 @@ int main(int argc, char** argv)
                 }
 
                 std::string errorMsg;
-                if(!moduleLoader.processModDeclarations(program, errorMsg))
+                if(!moduleLoader->processModDeclarations(program, errorMsg))
                 {
                     std::cerr << "Error: " << errorMsg << std::endl;
                     fclose(input_file);
@@ -1371,7 +1373,7 @@ int main(int argc, char** argv)
                 }
 
                 // Process use declarations (import symbols)
-                if(!moduleLoader.processUseDeclarations(program, errorMsg))
+                if(!moduleLoader->processUseDeclarations(program, errorMsg))
                 {
                     std::cerr << "Error: " << errorMsg << std::endl;
                     fclose(input_file);
@@ -1382,7 +1384,7 @@ int main(int argc, char** argv)
                 if(verbose)
                 {
                     std::cout << "Modules loaded: ";
-                    for(const auto& mod : moduleLoader.getLoadedModules())
+                    for(const auto& mod : moduleLoader->getLoadedModules())
                     {
                         std::cout << mod << " ";
                     }
@@ -1390,7 +1392,7 @@ int main(int argc, char** argv)
                 }
             }
 
-            modulePaths = moduleLoader.getLoadedModulePaths();
+            modulePaths = moduleLoader->getLoadedModulePaths();
         }
 
         // Initialize code generator
@@ -1403,6 +1405,7 @@ int main(int argc, char** argv)
         generator.setWarnPlainColonIf(warnPlainColonIf);
         generator.setWarnPlainColonWhile(warnPlainColonWhile);
         generator.setWarnResultUnwrap(warnResultUnwrap);
+        generator.setModuleLoader(moduleLoader.get());
         if(!testMode)
             generator.setIncludeTests(includeTests);
 

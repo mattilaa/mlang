@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+class ModuleLoader;
+
 class CodeGenerator
 {
 public:
@@ -69,6 +71,10 @@ public:
     void setWarnResultUnwrap(bool enabled)
     {
         warnResultUnwrap = enabled;
+    }
+    void setModuleLoader(ModuleLoader* loader)
+    {
+        moduleLoader = loader;
     }
 
 private:
@@ -148,6 +154,7 @@ private:
     std::map<std::string, std::pair<bool, std::string>> structVisibility;
     // Current module being compiled (empty string for main module)
     std::string currentModule;
+    ModuleLoader* moduleLoader = nullptr;
     struct TypeAliasInfo
     {
         std::vector<std::string> typeParams;

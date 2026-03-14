@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "module.h"
 #include <cctype>
 #include <cstring>
 #include <filesystem>
@@ -13033,7 +13034,64 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
     }
 
+    auto hasRegisteredOverload = [&](FunctionDefNode* fn) -> bool
+    {
+        if(!fn)
+            return false;
+        auto it = functionOverloads.find(fn->name);
+        if(it == functionOverloads.end())
+            return false;
+        std::string sig = functionSignatureKey(fn);
+        for(const auto& info : it->second)
+        {
+            if(info.signatureKey == sig && info.sourceModule == fn->sourceModule)
+                return true;
+        }
+        return false;
+    };
+
+    auto registerModuleFunctionsOnDemand = [&](const std::string& moduleName)
+    {
+        if(!moduleLoader || moduleName.empty())
+            return;
+        auto moduleFns = moduleLoader->getModuleFunctions(moduleName);
+        for(auto* fn : moduleFns)
+        {
+            if(!fn || fn->name.empty() || hasRegisteredOverload(fn))
+                continue;
+            llvm::Function* decl = generateFunctionDeclaration(fn);
+            registerFunctionOverload(fn, decl);
+        }
+    };
+
     auto overloadIt = functionOverloads.find(node->name);
+    std::string qualifiedModuleFilter;
+    bool usingTailQualifiedLookup = false;
+    size_t qualifiedPos = node->name.rfind("::");
+    if(qualifiedPos != std::string::npos)
+    {
+        qualifiedModuleFilter = node->name.substr(0, qualifiedPos);
+        bool treatAsModulePath = false;
+        if(moduleLoader && !qualifiedModuleFilter.empty())
+        {
+            if(moduleLoader->getModule(qualifiedModuleFilter) != nullptr)
+                treatAsModulePath = true;
+        }
+        if(treatAsModulePath)
+        {
+            registerModuleFunctionsOnDemand(qualifiedModuleFilter);
+            if(overloadIt == functionOverloads.end())
+            {
+                std::string tailName = node->name.substr(qualifiedPos + 2);
+                auto tailIt = functionOverloads.find(tailName);
+                if(tailIt != functionOverloads.end())
+                {
+                    overloadIt = tailIt;
+                    usingTailQualifiedLookup = true;
+                }
+            }
+        }
+    }
     if(overloadIt == functionOverloads.end())
     {
         // Static struct method call syntax: Type::method(...)
@@ -13239,6 +13297,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
     for(auto& info : overloadIt->second)
     {
+        if(usingTailQualifiedLookup && !qualifiedModuleFilter.empty() &&
+           !is_same_module_family(qualifiedModuleFilter, info.sourceModule))
+        {
+            continue;
+        }
         if(!isOverloadVisible(info))
         {
             if(privateModule.empty() && !info.sourceModule.empty())
