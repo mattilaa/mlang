@@ -1,5 +1,5 @@
 mod std::esc;
-mod std::fft;
+mod std::algorithm::fft;
 mod std::io;
 mod std::strbuf;
 mod std::term;
@@ -21,7 +21,7 @@ use std::esc::color_white;
 use std::esc::cursor;
 use std::esc::fg;
 use std::esc::reset;
-use std::fft::forward;
+use std::algorithm::fft::forward;
 use std::io::Stdin;
 use std::io::Stdout;
 use std::io::flush;

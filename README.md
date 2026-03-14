@@ -302,7 +302,7 @@ non-blocking mode, read/write timeouts) example:
 `examples/std_net_demo.mla`.
 Random API (`std::rand` seed/range helpers) example:
 `examples/std_rand_demo.mla`.
-FFT API (`std::fft` forward/inverse on split real/imag arrays) example:
+FFT API (`std::algorithm::fft` forward/inverse on split real/imag arrays) example:
 `examples/std_fft_demo.mla`.
 Regex API (`std::regex::Regex`, compile/match/find/captures) example:
 `examples/std_regex_demo.mla`.
@@ -499,7 +499,7 @@ jack_connect mlang_drum_machine:out_r system:playback_2
 
 ### JACK2 Stereo FFT Analyzer Demo
 Plays a stereo WAV via JACK2 and renders a real-time 100x25 ASCII spectrum
-analyzer with colorized stereo differences (left/right/overlap) using `std::fft`.
+analyzer with colorized stereo differences (left/right/overlap) using `std::algorithm::fft`.
 
 Demo directory:
 - `examples/fft_example/main.mla`

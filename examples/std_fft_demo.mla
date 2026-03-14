@@ -1,8 +1,8 @@
-/// Simple std::fft usage demo.
-mod std::fft;
+/// Simple std::algorithm::fft usage demo.
+mod std::algorithm::fft;
 
-use std::fft::forward;
-use std::fft::inverse;
+use std::algorithm::fft::forward;
+use std::algorithm::fft::inverse;
 
 fn main() -> i32 {
     // 8 complex samples in interleaved form: [re0, im0, re1, im1, ...].

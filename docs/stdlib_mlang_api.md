@@ -14,7 +14,7 @@ mod std::json;
 mod std::jsonrpc;
 mod std::bench;
 mod std::math;
-mod std::fft;
+mod std::algorithm::fft;
 mod std::net;
 mod std::printf;
 mod std::process;
@@ -46,7 +46,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/jsonrpc.mla`
 - `stdlib/std/bench.mla`
 - `stdlib/std/math.mla`
-- `stdlib/std/fft.mla`
+- `stdlib/std/algorithm/fft.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
 - `stdlib/std/process.mla`
@@ -670,9 +670,9 @@ Module file: `stdlib/std/math.mla`
 - `sum_range(start: int, end: int) -> int`
 - `factorial(n: int) -> int`
 
-## std::fft
+## std::algorithm::fft
 
-Module file: `stdlib/std/fft.mla`
+Module file: `stdlib/std/algorithm/fft.mla`
 
 Radix-2 FFT over interleaved complex arrays:
 `[re0, im0, re1, im1, ...]`.
