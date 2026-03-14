@@ -910,10 +910,12 @@ modal_kind: i64,
 modal_title: string,
 modal_body: string,
 modal_ok_selected: i32,
+modal_cwd: string,
 modal_input: string,
 modal_filter: string,
 modal_filter_mode: i32,
 modal_entries: &list<string>,
+modal_entry_kind: &list<i64>,
 modal_match_idx: &list<i64>,
 modal_sel: i64,
 modal_scroll: i64,
@@ -1146,7 +1148,7 @@ last_action: string) -> string {
         if modal_kind == 1 {
             let inner_w: i64 = min_i64(max_i64(52, width - 10), width - 6);
             let box_h: i64 = min_i64(max_i64(12, rows - 6), 22);
-            let list_rows: i64 = max_i64(3, box_h - 8);
+            let list_rows: i64 = max_i64(3, box_h - 9);
             let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
             let y0: i64 = max_i64(2, (rows - box_h) / 2);
             let top_fill: string = repeat(h, inner_w);
@@ -1154,9 +1156,12 @@ last_action: string) -> string {
             let bot: string = format!("{}{}{}", ll, top_fill, lr);
             let empty_in: string = repeat(" ", inner_w);
             let title_in: string = center_text(modal_title, inner_w);
+            let cwd_raw: string = format!("Dir: {}", modal_cwd);
+            let cwd_fit0: string = fit_right(cwd_raw, inner_w, " ");
+            let cwd_in: string = sub(cwd_fit0, 0, inner_w);
             let mode_s: string = modal_filter_mode == 1
-                ? format!("{}", "Ctrl-F FILTER: ON  (type to filter, j/k browse, h/l buttons)")
-                : format!("{}", "Ctrl-F FILTER: OFF (type path input, j/k browse, h/l buttons)");
+                ? format!("{}", "Ctrl-P FILTER: ON  (type to filter, Ctrl-J/K browse, Esc exit)")
+                : format!("{}", "Ctrl-P FILTER: OFF (type path input, j/k browse, h/l folder)");
             let mode_in_raw: string = fit_right(mode_s, inner_w, " ");
             let mode_in: string = sub(mode_in_raw, 0, inner_w);
             let path_raw: string = format!("Path: {}", modal_input);
@@ -1213,32 +1218,55 @@ last_action: string) -> string {
                     line = format!("{}{}{}", v, title_in, v);
                 } else if i == 2 {
                     free(line);
-                    line = format!("{}{}{}", v, mode_in, v);
+                    line = format!("{}{}{}", v, cwd_in, v);
                 } else if i == 3 {
                     free(line);
-                    line = format!("{}{}{}", v, path_in, v);
+                    line = format!("{}{}{}", v, mode_in, v);
                 } else if i == 4 {
                     free(line);
-                    line = format!("{}{}{}", v, filter_in, v);
-                } else if i >= 5 && i < (5 + list_rows) {
+                    line = format!("{}{}{}", v, path_in, v);
+                } else if i == 5 {
                     free(line);
-                    let ri: i64 = i - 5;
+                    line = format!("{}{}{}", v, filter_in, v);
+                } else if i >= 6 && i < (6 + list_rows) {
+                    free(line);
+                    let ri: i64 = i - 6;
                     let mi: i64 = scroll + ri;
                     if mi < mlen {
                         let eidx: i64 = modal_match_idx[mi];
-                        let name: string = modal_entries[eidx];
-                        let prefix: string = mi == sel ? "> " : "  ";
-                        let item_raw: string = format!("{}{}", prefix, name);
-                        let item_fit0: string = fit_right(item_raw, inner_w, " ");
-                        let item_fit: string = sub(item_fit0, 0, inner_w);
-                        if mi == sel {
-                            line = format!("{}{}{}{}{}{}{}", v, fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), item_fit, reset(), v);
+                        if eidx < 0 || eidx >= modal_entries.len() {
+                            line = format!("{}{}{}", v, empty_in, v);
                         } else {
-                            line = format!("{}{}{}", v, item_fit, v);
+                            let name: string = modal_entries[eidx];
+                            var kind: i64 = 3;
+                            if eidx < modal_entry_kind.len() {
+                                kind = modal_entry_kind[eidx];
+                            }
+                            var is_dir: i32 = 0;
+                            if kind == 0 || kind == 1 {
+                                is_dir = 1;
+                            }
+                            var is_mtr: i32 = 0;
+                            if kind == 2 {
+                                is_mtr = 1;
+                            }
+                            let prefix: string = is_dir == 1 ? "> " : "  ";
+                            let item_raw: string = format!("{}{}", prefix, name);
+                            let item_fit0: string = fit_right(item_raw, inner_w, " ");
+                            let item_fit: string = sub(item_fit0, 0, inner_w);
+                            if mi == sel {
+                                line = format!("{}{}{}{}{}{}{}", v, fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), item_fit, reset(), v);
+                            } else if is_mtr == 1 {
+                                line = format!("{}{}{}{}{}{}{}", v, fg_rgb(255, 214, 110), bold_on(), item_fit, reset(), fg_rgb(235, 228, 198), v);
+                            } else if is_dir == 0 {
+                                line = format!("{}{}{}{}{}", v, fg_rgb(120, 124, 132), item_fit, reset(), v);
+                            } else {
+                                line = format!("{}{}{}", v, item_fit, v);
+                            }
+                            free(item_fit);
+                            free(item_fit0);
+                            free(item_raw);
                         }
-                        free(item_fit);
-                        free(item_fit0);
-                        free(item_raw);
                     } else {
                         line = format!("{}{}{}", v, empty_in, v);
                     }
@@ -1261,6 +1289,9 @@ last_action: string) -> string {
             free(btn_ok);
             free(btn_right);
             free(btn_left);
+            free(cwd_in);
+            free(cwd_fit0);
+            free(cwd_raw);
             free(filter_in);
             free(filter_fit0);
             free(filter_raw);
