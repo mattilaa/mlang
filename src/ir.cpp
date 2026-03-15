@@ -5741,6 +5741,26 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                    : builder.CreateOr(Lb, Rb, "ortmp");
     }
 
+    if(node->op == BinaryOpNode::OP_BITAND)
+    {
+        if(!L->getType()->isIntegerTy() || !R->getType()->isIntegerTy())
+        {
+            reportError(node->line,
+                        "bitwise '&' requires integer operands");
+            return nullptr;
+        }
+        unsigned LBits = L->getType()->getIntegerBitWidth();
+        unsigned RBits = R->getType()->getIntegerBitWidth();
+        if(LBits != RBits)
+        {
+            if(LBits > RBits)
+                R = builder.CreateSExt(R, L->getType(), "bitand.sext");
+            else
+                L = builder.CreateSExt(L, R->getType(), "bitand.sext");
+        }
+        return builder.CreateAnd(L, R, "bitandtmp");
+    }
+
     auto typeKindName = [](TypeNode::TypeKind kind) -> std::string {
         switch(kind)
         {
@@ -5961,6 +5981,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     case BinaryOpNode::OP_NE:
         return isFloat ? builder.CreateFCmpONE(L, R, "cmptmp")
                        : builder.CreateICmpNE(L, R, "cmptmp");
+    case BinaryOpNode::OP_BITAND:
+        // Handled in dedicated branch above.
+        return nullptr;
     case BinaryOpNode::OP_AND:
     case BinaryOpNode::OP_OR:
         // Handled before numeric op checks.

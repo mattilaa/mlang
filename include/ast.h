@@ -270,6 +270,7 @@ public:
         OP_EQ,
         OP_NE,
         OP_SPACESHIP,
+        OP_BITAND,
         OP_AND,
         OP_OR
     };

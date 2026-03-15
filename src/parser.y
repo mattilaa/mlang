@@ -346,6 +346,7 @@ enum UpdatePosition
 
 %left PIPE_PIPE
 %left AMP_AMP
+%left AMP
 %left LT GT LE GE EQ NE SPACESHIP
 %left PLUS MINUS
 %left MULTIPLY DIVIDE MODULO
@@ -1349,6 +1350,7 @@ binary_expression
     | expression EQ expression { $$ = mla_ast_binary_op(EQ, $1, $3); }
     | expression NE expression { $$ = mla_ast_binary_op(NE, $1, $3); }
     | expression SPACESHIP expression { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
+    | expression AMP expression { $$ = mla_ast_binary_op(AMP, $1, $3); }
     | expression AMP_AMP expression { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
     | expression PIPE_PIPE expression { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
     ;
