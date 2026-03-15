@@ -210,6 +210,51 @@ Raw Pointer Dereference In Unsafe Compiles
     ${build}=    Run Process    ${MLANG}    -c    ${src}    stdout=PIPE    stderr=PIPE
     Should Be Equal As Integers    ${build.rc}    0    msg=Failed compile-only unsafe raw pointer test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
 
+Borrowed Pointer Variable And Move Same Call Fails
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/borrow_ptr_var_move_same_call_fail.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    struct Post { var content: str8; };
+    ...    fn consume_two(a: ptr<Post>, b: Post) -> i32 { return 0; }
+    ...    fn main() -> i32 {
+    ...        let p: Post = Post { content: "x" };
+    ...        let q: ptr<Post> = &p;
+    ...        return consume_two(q, p);
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/borrow_ptr_var_move_same_call_fail_bin    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${build.rc}    0
+    Should Contain    ${build.stderr}    cannot move 'p' while borrowed in call
+
+Borrowed Pointer Variable Overlap In Call Fails
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/borrow_ptr_var_overlap_call_fail.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    struct Post { var content: str8; };
+    ...    fn inspect_two(a: ptr<Post>, b: ptr<Post>) -> i32 { return 0; }
+    ...    fn main() -> i32 {
+    ...        let p: Post = Post { content: "x" };
+    ...        let q: ptr<Post> = &p;
+    ...        return inspect_two(q, &p);
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/borrow_ptr_var_overlap_call_fail_bin    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${build.rc}    0
+    Should Contain    ${build.stderr}    cannot borrow 'p'
+
+Mutable Borrow Call Arg Rejected While Shared Borrow Active
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/borrow_mut_call_shared_fail.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    struct Post { var content: str8; };
+    ...    fn inspect_one(a: ptr<Post>) -> i32 { return 0; }
+    ...    fn main() -> i32 {
+    ...        var p: Post = Post { content: "x" };
+    ...        let q: ptr<Post> = &p;
+    ...        return inspect_one(&mut p);
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/borrow_mut_call_shared_fail_bin    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${build.rc}    0
+    Should Contain    ${build.stderr}    cannot borrow 'p' as mutable because it is already borrowed
+
 Result Methods And Unwrap Warns
     ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn.mla
     ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn_bin

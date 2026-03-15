@@ -2422,6 +2422,81 @@ TEST_F(MLATest, OwnershipCannotMoveMethodReceiverAndPassAsArg)
               std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipCannotMixBorrowPointerVarAndMoveSameCall)
+{
+    std::string code = R"(
+        struct Post {
+            var content: str8;
+        };
+
+        fn consume_two(a: ptr<Post>, b: Post) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            let q: ptr<Post> = &p;
+            return consume_two(q, p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot move 'p' while borrowed in call"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotBorrowPointerVarAndAddressSameOwnerInCall)
+{
+    std::string code = R"(
+        struct Post {
+            var content: str8;
+        };
+
+        fn inspect_two(a: ptr<Post>, b: ptr<Post>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            let p: Post = Post { content: "x" };
+            let q: ptr<Post> = &p;
+            return inspect_two(q, &p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'p'"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipCannotBorrowMutInCallWhenSharedBorrowActive)
+{
+    std::string code = R"(
+        struct Post {
+            var content: str8;
+        };
+
+        fn inspect_one(a: ptr<Post>) -> i32 {
+            return 0;
+        }
+
+        fn main() -> i32 {
+            var p: Post = Post { content: "x" };
+            let q: ptr<Post> = &p;
+            return inspect_one(&mut p);
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("cannot borrow 'p' as mutable because it is already borrowed"),
+              std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipCannotAssignFieldWhileOwnerBorrowed)
 {
     std::string code = R"(
