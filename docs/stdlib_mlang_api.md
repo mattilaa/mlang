@@ -30,6 +30,7 @@ mod std::timer;
 mod std::fs;
 mod std::strbuf;
 mod std::bytes;
+mod std::serde;
 mod std::protocol;
 mod std::testing;
 mod std::thread;
@@ -64,6 +65,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/timer.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/bytes.mla`
+- `stdlib/std/serde.mla`
 - `stdlib/std/protocol.mla`
 - `stdlib/std/testing.mla`
 - `stdlib/std/thread.mla`
@@ -290,8 +292,10 @@ GoogleTest-like non-fatal expectation helpers:
 - `expect_false(cond: bool)`
 - `expect_eq(expected, actual)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
 - `expect_eq_i32(expected: i32, actual: i32)`
+- `expect_eq_i64(expected: i64, actual: i64)`
 - `expect_not_eq(left, right)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
 - `expect_not_eq_i32(left: i32, right: i32)`
+- `expect_not_eq_i64(left: i64, right: i64)`
 - `expect_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
 - `expect_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
 
@@ -301,8 +305,10 @@ Fatal verify helpers (abort on failure):
 - `verify_false(cond: bool)`
 - `verify_eq(expected, actual)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
 - `verify_eq_i32(expected: i32, actual: i32)`
+- `verify_eq_i64(expected: i64, actual: i64)`
 - `verify_not_eq(left, right)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
 - `verify_not_eq_i32(left: i32, right: i32)`
+- `verify_not_eq_i64(left: i64, right: i64)`
 - `verify_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
 - `verify_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
 
@@ -1025,6 +1031,57 @@ Module file: `stdlib/std/bytes.mla`
 ### Conversions
 - `Bytes::to_string(self: Bytes) -> string` (text-oriented C/UTF-8 string copy)
 - `Bytes::to_hex(self: Bytes) -> string` (binary-safe lowercase hex)
+
+## std::serde
+
+Module file: `stdlib/std/serde.mla`
+
+### Types
+- `Binary`
+- `Reader`
+- `BinarySerde` (trait for custom types)
+
+### Global helpers
+- `last_error() -> string`
+- `last_ok() -> i32`
+
+### `Binary` API
+- `Binary::new(initial_capacity: i64) -> Result<Binary, string>`
+- `Binary::from_file(path: string) -> Result<Binary, string>`
+- `Binary::len(self: Binary) -> i64`
+- `Binary::capacity(self: Binary) -> i64`
+- `Binary::clear(self: Binary) -> Result<i32, string>`
+- `Binary::reserve(self: Binary, min_capacity: i64) -> Result<i32, string>`
+- `Binary::write_u8(self: Binary, value: i32) -> Result<i32, string>`
+- `Binary::write_bool(self: Binary, value: bool) -> Result<i32, string>`
+- `Binary::write_i32(self: Binary, value: i32) -> Result<i32, string>`
+- `Binary::write_i64(self: Binary, value: i64) -> Result<i32, string>`
+- `Binary::write_f32(self: Binary, value: f32) -> Result<i32, string>`
+- `Binary::write_f64(self: Binary, value: f64) -> Result<i32, string>`
+- `Binary::write_string(self: Binary, value: string) -> Result<i32, string>`
+- `Binary::get_u8(self: Binary, index: i64) -> Result<i32, string>`
+- `Binary::to_reader(self: Binary) -> Result<Reader, string>`
+- `Binary::write_file(self: Binary, path: string) -> Result<i32, string>`
+- `Binary::raw_handle(self: Binary) -> i64`
+- `Binary::close(self: Binary) -> i32`
+
+### `Reader` API
+- `Reader::from_binary(binary: Binary) -> Result<Reader, string>`
+- `Reader::from_file(path: string) -> Result<Reader, string>`
+- `Reader::remaining(self: Reader) -> i64`
+- `Reader::read_u8(self: Reader) -> Result<i32, string>`
+- `Reader::read_bool(self: Reader) -> Result<bool, string>`
+- `Reader::read_i32(self: Reader) -> Result<i32, string>`
+- `Reader::read_i64(self: Reader) -> Result<i64, string>`
+- `Reader::read_f32(self: Reader) -> Result<f32, string>`
+- `Reader::read_f64(self: Reader) -> Result<f64, string>`
+- `Reader::read_string(self: Reader) -> Result<string, string>`
+- `Reader::raw_handle(self: Reader) -> i64`
+- `Reader::close(self: Reader) -> i32`
+
+### `BinarySerde` trait
+- `serialize(self: &mut Self, out_handle: i64) -> Result<i32, string>`
+- `deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string>`
 
 ## std::protocol
 

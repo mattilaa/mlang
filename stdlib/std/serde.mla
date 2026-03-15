@@ -1,0 +1,316 @@
+/// \file serde.mla
+/// \brief Binary serialization and deserialization helpers (std::serde).
+///
+/// This module provides:
+/// - `Binary`: growable binary output buffer
+/// - `Reader`: sequential binary reader
+/// - `BinarySerde`: trait for custom-type serialization contracts
+///
+/// Primitive encoding format is little-endian for numeric values and
+/// length-prefixed (`i64` byte length) for strings.
+///
+/// @defgroup std_serde std::serde
+/// @brief Binary serialization/deserialization.
+/// @{
+
+extern pub fn __mlang_std_serde_last_error() -> string;
+extern pub fn __mlang_std_serde_last_ok() -> i32;
+
+extern pub fn __mlang_std_serde_binary_new(initial_capacity: i64) -> i64;
+extern pub fn __mlang_std_serde_binary_free(handle: i64) -> i32;
+extern pub fn __mlang_std_serde_binary_len(handle: i64) -> i64;
+extern pub fn __mlang_std_serde_binary_capacity(handle: i64) -> i64;
+extern pub fn __mlang_std_serde_binary_clear(handle: i64) -> i32;
+extern pub fn __mlang_std_serde_binary_reserve(handle: i64, min_capacity: i64) -> i32;
+extern pub fn __mlang_std_serde_binary_append_u8(handle: i64, value: i32) -> i32;
+extern pub fn __mlang_std_serde_binary_append_bool(handle: i64, value: i32) -> i32;
+extern pub fn __mlang_std_serde_binary_append_i32(handle: i64, value: i32) -> i32;
+extern pub fn __mlang_std_serde_binary_append_i64(handle: i64, value: i64) -> i32;
+extern pub fn __mlang_std_serde_binary_append_f32(handle: i64, value: f32) -> i32;
+extern pub fn __mlang_std_serde_binary_append_f64(handle: i64, value: f64) -> i32;
+extern pub fn __mlang_std_serde_binary_append_string(handle: i64, s: string) -> i32;
+extern pub fn __mlang_std_serde_binary_get_u8(handle: i64, index: i64) -> i32;
+extern pub fn __mlang_std_serde_binary_write_file(handle: i64, path: string) -> i32;
+extern pub fn __mlang_std_serde_binary_read_file(path: string) -> i64;
+
+extern pub fn __mlang_std_serde_reader_new(binary_handle: i64) -> i64;
+extern pub fn __mlang_std_serde_reader_free(reader_handle: i64) -> i32;
+extern pub fn __mlang_std_serde_reader_remaining(reader_handle: i64) -> i64;
+extern pub fn __mlang_std_serde_reader_read_u8(reader_handle: i64) -> i32;
+extern pub fn __mlang_std_serde_reader_read_bool(reader_handle: i64) -> i32;
+extern pub fn __mlang_std_serde_reader_read_i32(reader_handle: i64) -> i32;
+extern pub fn __mlang_std_serde_reader_read_i64(reader_handle: i64) -> i64;
+extern pub fn __mlang_std_serde_reader_read_f32(reader_handle: i64) -> f32;
+extern pub fn __mlang_std_serde_reader_read_f64(reader_handle: i64) -> f64;
+extern pub fn __mlang_std_serde_reader_read_string(reader_handle: i64) -> string;
+
+/// @brief Return the last backend error string.
+/// @ingroup std_serde
+pub fn last_error() -> string {
+    return __mlang_std_serde_last_error();
+}
+
+/// @brief Return backend status of last serde operation (`1` ok, `0` fail).
+/// @ingroup std_serde
+pub fn last_ok() -> i32 {
+    return __mlang_std_serde_last_ok();
+}
+
+/// @brief Growable binary serialization buffer.
+/// @ingroup std_serde
+pub struct Binary {
+    var handle: i64;
+};
+
+/// @brief Sequential binary input reader.
+/// @ingroup std_serde
+pub struct Reader {
+    var handle: i64;
+};
+
+/// @brief Trait contract for custom type serde support.
+/// @ingroup std_serde
+trait BinarySerde {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string>;
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string>;
+}
+
+impl Binary {
+    /// @brief Create a new empty binary buffer.
+    pub fn new(initial_capacity: i64) -> Result<Binary, string> {
+        let h: i64 = __mlang_std_serde_binary_new(initial_capacity);
+        if h == 0 {
+            return Err<Binary, string>(last_error());
+        }
+        return Ok<Binary, string>(Binary { handle: h });
+    }
+
+    /// @brief Read full file bytes into a new binary buffer.
+    pub fn from_file(path: string) -> Result<Binary, string> {
+        let h: i64 = __mlang_std_serde_binary_read_file(path);
+        if h == 0 {
+            return Err<Binary, string>(last_error());
+        }
+        return Ok<Binary, string>(Binary { handle: h });
+    }
+
+    /// @brief Current serialized byte length.
+    pub fn len(self: Binary) -> i64 {
+        return __mlang_std_serde_binary_len(self.handle);
+    }
+
+    /// @brief Current allocated byte capacity.
+    pub fn capacity(self: Binary) -> i64 {
+        return __mlang_std_serde_binary_capacity(self.handle);
+    }
+
+    /// @brief Reset serialized byte length to 0.
+    pub fn clear(self: Binary) -> Result<i32, string> {
+        if __mlang_std_serde_binary_clear(self.handle) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Ensure capacity is at least `min_capacity` bytes.
+    pub fn reserve(self: Binary, min_capacity: i64) -> Result<i32, string> {
+        if __mlang_std_serde_binary_reserve(self.handle, min_capacity) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append one unsigned byte (`0..255`).
+    pub fn write_u8(self: Binary, value: i32) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_u8(self.handle, value) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append one bool byte (`0` or `1`).
+    pub fn write_bool(self: Binary, value: bool) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_bool(self.handle, i32(value)) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append one little-endian `i32`.
+    pub fn write_i32(self: Binary, value: i32) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_i32(self.handle, value) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append one little-endian `i64`.
+    pub fn write_i64(self: Binary, value: i64) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_i64(self.handle, value) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append one IEEE754 `f32`.
+    pub fn write_f32(self: Binary, value: f32) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_f32(self.handle, value) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append one IEEE754 `f64`.
+    pub fn write_f64(self: Binary, value: f64) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_f64(self.handle, value) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append length-prefixed UTF-8/string payload.
+    pub fn write_string(self: Binary, value: string) -> Result<i32, string> {
+        if __mlang_std_serde_binary_append_string(self.handle, value) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Read byte at index from output buffer.
+    pub fn get_u8(self: Binary, index: i64) -> Result<i32, string> {
+        let v: i32 = __mlang_std_serde_binary_get_u8(self.handle, index);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(v);
+    }
+
+    /// @brief Create an independent sequential reader over current bytes.
+    pub fn to_reader(self: Binary) -> Result<Reader, string> {
+        let h: i64 = __mlang_std_serde_reader_new(self.handle);
+        if h == 0 {
+            return Err<Reader, string>(last_error());
+        }
+        return Ok<Reader, string>(Reader { handle: h });
+    }
+
+    /// @brief Write serialized bytes to file.
+    pub fn write_file(self: Binary, path: string) -> Result<i32, string> {
+        if __mlang_std_serde_binary_write_file(self.handle, path) != 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Return underlying binary handle (for trait/custom codec plumbing).
+    pub fn raw_handle(self: Binary) -> i64 {
+        return self.handle;
+    }
+
+    /// @brief Free buffer resources.
+    pub fn close(self: Binary) -> i32 {
+        return __mlang_std_serde_binary_free(self.handle);
+    }
+}
+
+impl Reader {
+    /// @brief Create reader over a snapshot of a binary buffer.
+    pub fn from_binary(binary: Binary) -> Result<Reader, string> {
+        let h: i64 = __mlang_std_serde_reader_new(binary.handle);
+        binary.close();
+        if h == 0 {
+            return Err<Reader, string>(last_error());
+        }
+        return Ok<Reader, string>(Reader { handle: h });
+    }
+
+    /// @brief Create reader by loading all bytes from a file.
+    pub fn from_file(path: string) -> Result<Reader, string> {
+        let br: Result<Binary, string> = Binary::from_file(path);
+        if br.is_err() {
+            return Err<Reader, string>(br.unwrap_err());
+        }
+        let b: Binary = br.unwrap();
+        return Reader::from_binary(b);
+    }
+
+    /// @brief Unread bytes still available.
+    pub fn remaining(self: Reader) -> i64 {
+        return __mlang_std_serde_reader_remaining(self.handle);
+    }
+
+    /// @brief Read one unsigned byte.
+    pub fn read_u8(self: Reader) -> Result<i32, string> {
+        let v: i32 = __mlang_std_serde_reader_read_u8(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(v);
+    }
+
+    /// @brief Read one bool byte.
+    pub fn read_bool(self: Reader) -> Result<bool, string> {
+        let v: i32 = __mlang_std_serde_reader_read_bool(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<bool, string>(last_error());
+        }
+        return Ok<bool, string>(v != 0);
+    }
+
+    /// @brief Read one little-endian `i32`.
+    pub fn read_i32(self: Reader) -> Result<i32, string> {
+        let v: i32 = __mlang_std_serde_reader_read_i32(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<i32, string>(last_error());
+        }
+        return Ok<i32, string>(v);
+    }
+
+    /// @brief Read one little-endian `i64`.
+    pub fn read_i64(self: Reader) -> Result<i64, string> {
+        let v: i64 = __mlang_std_serde_reader_read_i64(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<i64, string>(last_error());
+        }
+        return Ok<i64, string>(v);
+    }
+
+    /// @brief Read one IEEE754 `f32`.
+    pub fn read_f32(self: Reader) -> Result<f32, string> {
+        let v: f32 = __mlang_std_serde_reader_read_f32(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<f32, string>(last_error());
+        }
+        return Ok<f32, string>(v);
+    }
+
+    /// @brief Read one IEEE754 `f64`.
+    pub fn read_f64(self: Reader) -> Result<f64, string> {
+        let v: f64 = __mlang_std_serde_reader_read_f64(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<f64, string>(last_error());
+        }
+        return Ok<f64, string>(v);
+    }
+
+    /// @brief Read one length-prefixed UTF-8/string value.
+    pub fn read_string(self: Reader) -> Result<string, string> {
+        let s: string = __mlang_std_serde_reader_read_string(self.handle);
+        if __mlang_std_serde_last_ok() == 0 {
+            return Err<string, string>(last_error());
+        }
+        return Ok<string, string>(s);
+    }
+
+    /// @brief Return underlying reader handle (for trait/custom codec plumbing).
+    pub fn raw_handle(self: Reader) -> i64 {
+        return self.handle;
+    }
+
+    /// @brief Free reader resources.
+    pub fn close(self: Reader) -> i32 {
+        return __mlang_std_serde_reader_free(self.handle);
+    }
+}
+
+/// @}

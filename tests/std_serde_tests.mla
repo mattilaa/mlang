@@ -1,0 +1,213 @@
+mod std::testing;
+mod std::serde;
+mod std::strbuf;
+
+use std::serde::Binary;
+use std::serde::BinarySerde;
+use std::serde::Reader;
+use std::strbuf::eq;
+use std::testing::verify;
+use std::testing::verify_eq;
+use std::testing::verify_eq_i32;
+
+struct DemoPacket {
+    var id: i32;
+    var name: string;
+    var enabled: bool;
+    var score: i64;
+};
+
+impl BinarySerde for DemoPacket {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let w1: Result<i32, string> = out.write_i32(self.id);
+        if w1.is_err() { return Err<i32, string>(w1.unwrap_err()); }
+
+        let w2: Result<i32, string> = out.write_string(self.name);
+        if w2.is_err() { return Err<i32, string>(w2.unwrap_err()); }
+
+        let w3: Result<i32, string> = out.write_bool(self.enabled);
+        if w3.is_err() { return Err<i32, string>(w3.unwrap_err()); }
+
+        let w4: Result<i32, string> = out.write_i64(self.score);
+        if w4.is_err() { return Err<i32, string>(w4.unwrap_err()); }
+
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let r1: Result<i32, string> = input.read_i32();
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+        self.id = r1.unwrap();
+
+        let r2: Result<string, string> = input.read_string();
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        self.name = r2.unwrap();
+
+        let r3: Result<bool, string> = input.read_bool();
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
+        self.enabled = r3.unwrap();
+
+        let r4: Result<i64, string> = input.read_i64();
+        if r4.is_err() { return Err<i32, string>(r4.unwrap_err()); }
+        self.score = r4.unwrap();
+
+        return Ok<i32, string>(0);
+    }
+}
+
+#[test]
+fn test_serde_primitive_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(0);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    let w1: Result<i32, string> = b.write_u8(255);
+    verify(!w1.is_err());
+    let w2: Result<i32, string> = b.write_bool(true);
+    verify(!w2.is_err());
+    let w3: Result<i32, string> = b.write_i32(-12345);
+    verify(!w3.is_err());
+    let w4: Result<i32, string> = b.write_i64(1234567890123);
+    verify(!w4.is_err());
+    let w5: Result<i32, string> = b.write_f32(1.5f);
+    verify(!w5.is_err());
+    let w6: Result<i32, string> = b.write_f64(2.25);
+    verify(!w6.is_err());
+    let w7: Result<i32, string> = b.write_string("hello-serde");
+    verify(!w7.is_err());
+
+    let expected_len: i64 = 45;
+    verify_eq(expected_len, b.len());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    let ur: Result<i32, string> = r.read_u8();
+    verify(!ur.is_err());
+    let u: i32 = ur.unwrap();
+
+    let bor: Result<bool, string> = r.read_bool();
+    verify(!bor.is_err());
+    let bo: bool = bor.unwrap();
+
+    let i32r: Result<i32, string> = r.read_i32();
+    verify(!i32r.is_err());
+    let i32v: i32 = i32r.unwrap();
+
+    let i64r: Result<i64, string> = r.read_i64();
+    verify(!i64r.is_err());
+    let i64v: i64 = i64r.unwrap();
+
+    let f32r: Result<f32, string> = r.read_f32();
+    verify(!f32r.is_err());
+    let f32v: f32 = f32r.unwrap();
+
+    let f64r: Result<f64, string> = r.read_f64();
+    verify(!f64r.is_err());
+    let f64v: f64 = f64r.unwrap();
+
+    let sr: Result<string, string> = r.read_string();
+    verify(!sr.is_err());
+    let s: string = sr.unwrap();
+
+    verify_eq_i32(255, u);
+    verify(bo == true);
+    verify_eq_i32(-12345, i32v);
+    let expected_i64v: i64 = 1234567890123;
+    verify_eq(expected_i64v, i64v);
+    verify(f32v == 1.5f);
+    verify(f64v == 2.25);
+    verify(eq(s, "hello-serde") == 1);
+    String::free(s);
+
+    let zero_i64: i64 = 0;
+    verify_eq(zero_i64, r.remaining());
+
+    let eof_read: Result<i32, string> = r.read_u8();
+    verify(eof_read.is_err());
+
+    r.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_custom_trait_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(64);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    var src: DemoPacket = DemoPacket {
+        id: 42,
+        name: "tracker",
+        enabled: true,
+        score: 987654321
+    };
+
+    let sw: Result<i32, string> = src.serialize(b.raw_handle());
+    verify(!sw.is_err());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    var dst: DemoPacket = DemoPacket {
+        id: 0,
+        name: "",
+        enabled: false,
+        score: 0
+    };
+
+    let dr: Result<i32, string> = dst.deserialize(r.raw_handle());
+    verify(!dr.is_err());
+
+    verify_eq_i32(42, dst.id);
+    verify(eq(dst.name, "tracker") == 1);
+    verify(dst.enabled == true);
+    let expected_score: i64 = 987654321;
+    verify_eq(expected_score, dst.score);
+
+    String::free(dst.name);
+    r.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_file_roundtrip() {
+    let path: string = "/tmp/mlang_std_serde_roundtrip.bin";
+
+    let br: Result<Binary, string> = Binary::new(16);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    let w1: Result<i32, string> = b.write_i32(77);
+    verify(!w1.is_err());
+    let w2: Result<i32, string> = b.write_string("file-io");
+    verify(!w2.is_err());
+    let wf: Result<i32, string> = b.write_file(path);
+    verify(!wf.is_err());
+
+    let br2: Result<Binary, string> = Binary::from_file(path);
+    verify(!br2.is_err());
+    let b2: Binary = br2.unwrap();
+
+    let rr: Result<Reader, string> = b2.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    let i32r: Result<i32, string> = r.read_i32();
+    verify(!i32r.is_err());
+    verify_eq_i32(77, i32r.unwrap());
+
+    let sr: Result<string, string> = r.read_string();
+    verify(!sr.is_err());
+    let s: string = sr.unwrap();
+    verify(eq(s, "file-io") == 1);
+    String::free(s);
+
+    r.close();
+    b2.close();
+    b.close();
+}

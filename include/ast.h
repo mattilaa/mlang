@@ -1044,6 +1044,7 @@ class TraitDefNode : public ASTNode
 {
 public:
     std::string name;
+    std::string sourceModule;
 
     TraitDefNode(const std::string& n) : name(n) {}
     std::string toString() const override;
@@ -1225,6 +1226,7 @@ public:
     FunctionListNode* functionList = nullptr;
     ImplListNode* implList = nullptr;
     EnumListNode* enumList = nullptr;
+    std::vector<TraitDefNode*> traitDefs;
     std::vector<ModDeclNode*> modules;
     std::vector<UseDeclNode*> imports;
     std::vector<VarDeclNode*> globalVars;

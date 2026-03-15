@@ -6,8 +6,8 @@
 ///
 /// Includes:
 /// - boolean checks: `expect_true/expect_false`, `verify_true/verify_false`
-/// - equality: `expect_eq`, `verify_eq`, `*_i32`
-/// - inequality: `expect_not_eq`, `verify_not_eq`, `*_i32`
+/// - equality: `expect_eq`, `verify_eq`, `*_i32`, `*_i64`
+/// - inequality: `expect_not_eq`, `verify_not_eq`, `*_i32`, `*_i64`
 /// - vector/list comparisons: `expect_array_eq`, `verify_array_eq`,
 ///   `expect_array_not_eq`, `verify_array_not_eq`
 /// - counters: `reset`, `checks`, `failures`, `result`
@@ -152,6 +152,18 @@ pub fn expect_not_eq_i32(left: i32, right: i32) -> void {
     __mlang_std_testing_expect_not_eq_i32(left, right);
 }
 
+/// Explicit i64 expectation helper.
+/// @ingroup std_testing
+pub fn expect_eq_i64(expected: i64, actual: i64) -> void {
+    __mlang_std_testing_expect_eq_i64(expected, actual);
+}
+
+/// Explicit i64 inequality expectation helper.
+/// @ingroup std_testing
+pub fn expect_not_eq_i64(left: i64, right: i64) -> void {
+    __mlang_std_testing_expect_not_eq_i64(left, right);
+}
+
 /// Expect inequality for i64 values.
 /// @ingroup std_testing
 pub fn expect_not_eq(left: i64, right: i64) -> void {
@@ -242,6 +254,18 @@ pub fn verify_eq(expected: i64, actual: i64) -> void {
 /// @ingroup std_testing
 pub fn verify_not_eq_i32(left: i32, right: i32) -> void {
     __mlang_std_testing_verify_not_eq_i32(left, right);
+}
+
+/// Explicit i64 verify helper (avoids overload ambiguity for integer literals).
+/// @ingroup std_testing
+pub fn verify_eq_i64(expected: i64, actual: i64) -> void {
+    __mlang_std_testing_verify_eq_i64(expected, actual);
+}
+
+/// Explicit i64 inequality verify helper.
+/// @ingroup std_testing
+pub fn verify_not_eq_i64(left: i64, right: i64) -> void {
+    __mlang_std_testing_verify_not_eq_i64(left, right);
 }
 
 /// Verify inequality for i64 values. Fatal on failure.

@@ -4723,6 +4723,23 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                     mapKeyValueTypes[std::string(arg.getName())] =
                         std::make_pair(mapInner->keyType, mapInner->valueType);
                 }
+                if(auto* structInner =
+                       dynamic_cast<StructTypeRefNode*>(refType->elementType))
+                {
+                    if(!resolveVisibleEnumName(structInner->structName).empty())
+                        enumVariableTypes[std::string(arg.getName())] =
+                            resolveVisibleEnumName(structInner->structName);
+                    else
+                        structVariableTypes[std::string(arg.getName())] =
+                            structInner->structName;
+                }
+                if(auto* genStructInner =
+                       dynamic_cast<GenericStructTypeRefNode*>(refType->elementType))
+                {
+                    std::string mangled = getOrCreateMonomorphizedStruct(
+                        genStructInner->structName, genStructInner->typeArgs);
+                    structVariableTypes[std::string(arg.getName())] = mangled;
+                }
                 // Immutable reference: param may not be mutated inside body.
                 if(!refType->isMutable)
                     constantVariables.insert(std::string(arg.getName()));

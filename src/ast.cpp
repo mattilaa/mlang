@@ -73,6 +73,10 @@ ASTNode* create_program_impl(ASTNode* top_level_list)
         {
             program->typeAliases.push_back(aliasDef);
         }
+        else if(auto* traitDef = dynamic_cast<TraitDefNode*>(item))
+        {
+            program->traitDefs.push_back(traitDef);
+        }
     }
 
     return program;
@@ -1706,6 +1710,10 @@ std::string ProgramNode::toString() const
     if(enumList)
     {
         result += enumList->toString();
+    }
+    for(const auto& traitDef : traitDefs)
+    {
+        result += traitDef->toString() + "\n";
     }
     if(structList)
     {

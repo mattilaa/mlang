@@ -298,6 +298,11 @@ bool ModuleLoader::loadModule(const std::string& moduleName,
                 en->sourceModule = moduleName;
         }
     }
+    for(auto* tr : moduleAst->traitDefs)
+    {
+        if(tr && tr->sourceModule.empty())
+            tr->sourceModule = moduleName;
+    }
     // Process any mod declarations in this module (recursive loading)
     if(!processModDeclarations(moduleAst, errorMsg))
     {
@@ -574,6 +579,27 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
         }
 
+        // Import traits so trait names can be referenced in impl blocks.
+        if(!module->traitDefs.empty())
+        {
+            for(auto* traitDef : module->traitDefs)
+            {
+                if(!traitDef)
+                    continue;
+                bool alreadyAdded = false;
+                for(auto* existing : program->traitDefs)
+                {
+                    if(existing->name == traitDef->name)
+                    {
+                        alreadyAdded = true;
+                        break;
+                    }
+                }
+                if(!alreadyAdded)
+                    program->traitDefs.push_back(traitDef);
+            }
+        }
+
         // For specific imports (not import all), verify the item is public
         if(!useDecl->importAll)
         {
@@ -666,6 +692,19 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                                 return false;
                             }
                         }
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            // Try to find as trait
+            if(!found && !module->traitDefs.empty())
+            {
+                for(auto* traitDef : module->traitDefs)
+                {
+                    if(traitDef && traitDef->name == useDecl->itemName)
+                    {
                         found = true;
                         break;
                     }

@@ -33,6 +33,10 @@ Currently provided:
    `pad_i64_left/pad_i64_right/zpad_i64`, UTF-8<->UTF-16 converters and helpers).
 - `std/bytes.mla`: dynamic raw byte buffer helpers for protocol/binary payloads
   (reserve/append/index/set, binary-safe `to_hex`, text-oriented `to_string`).
+- `std/serde.mla`: binary serialization/deserialization helpers with
+  growable output buffer and sequential reader
+  (`Binary::write_*`, `Reader::read_*`, file roundtrip helpers, and
+  `BinarySerde` trait for custom types).
 - `std/protocol.mla`: base framed TCP protocol transport helpers intended for
   project-level derived protocol stacks (`opcode + payload` framing).
 - `std/json.mla`: JSON parse/stringify + object/array navigation and iterators
