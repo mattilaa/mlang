@@ -9,11 +9,15 @@ fn test_expect_helpers_pass() {
     expect_true(1 < 2);
     expect_false(3 < 2);
     expect_eq(42, 42);
+    expect_not_eq(42, 41);
+    expect_not_eq_i32(12, 13);
     expect_eq("mlang", "mlang");
+    expect_not_eq("mlang", "lang");
     expect_true(true);
     expect_false(false);
+    expect_not_eq(true, false);
 
-    verify_eq_i32(6, checks());
+    verify_eq_i32(10, checks());
     verify_eq_i32(0, failures());
     verify_eq_i32(0, result());
 }
@@ -26,11 +30,13 @@ fn test_expect_helpers_record_nonfatal_failures() {
     expect_true(false);
     expect_false(true);
     expect_eq(1, 2);
+    expect_not_eq_i32(7, 7);
     expect_eq("a", "b");
+    expect_not_eq("same", "same");
 
     set_quiet(false);
-    verify_eq_i32(4, checks());
-    verify_eq_i32(4, failures());
+    verify_eq_i32(6, checks());
+    verify_eq_i32(6, failures());
     verify_true(result() == 1);
 }
 
@@ -51,6 +57,8 @@ fn test_expect_array_helpers() {
     let c_s: list<string> = ["a", "x"];
     expect_array_eq(a_s, b_s);
     expect_array_eq(a_s, c_s);
+    expect_array_not_eq(a_s, c_s);
+    expect_array_not_eq(a_s, b_s);
 
     set_quiet(false);
     verify_true(checks() > 0);
@@ -64,10 +72,14 @@ fn test_verify_helpers_pass() {
     verify_true(10 > 2);
     verify_false(2 > 10);
     verify_eq(7, 7);
+    verify_not_eq(7, 8);
+    verify_not_eq_i32(17, 18);
     verify_eq("ok", "ok");
+    verify_not_eq("ok", "ko");
     verify_true(true);
     verify_false(false);
     verify_eq(3, 3);
+    verify_not_eq(true, false);
 
     verify_eq_i32(0, failures());
 }
@@ -77,13 +89,32 @@ fn test_verify_array_helpers_pass() {
     reset();
     let a_i64: list<i64> = [10, 20, 30];
     let b_i64: list<i64> = [10, 20, 30];
+    let c_i64: list<i64> = [10, 21, 30];
     verify_array_eq(a_i64, b_i64);
     verify_array_eq(a_i64, b_i64);
+    verify_array_not_eq(a_i64, c_i64);
 
     let a_b: list<bool> = [true, false, true];
     let b_b: list<bool> = [true, false, true];
     verify_array_eq(a_b, b_b);
     verify_array_eq(a_b, b_b);
+    verify_not_eq("base_A", "base_B");
+    expect_not_eq("base_A", "base_B");
+    verify_eq_i32(0, failures());
+}
+
+#[test]
+fn test_vector_not_eq_helpers() {
+    reset();
+    let v1: list<i64> = [1, 2, 3];
+    let v2: list<i64> = [1, 2, 4];
+    let v3: list<i64> = [1, 2, 3];
+    verify_array_not_eq(v1, v2);
+    expect_array_not_eq(v1, v2);
+    set_quiet(true);
+    expect_array_not_eq(v1, v3);
+    set_quiet(false);
+    verify_eq_i32(1, failures());
 }
 
 #[test]

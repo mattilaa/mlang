@@ -288,14 +288,26 @@ Module file: `stdlib/std/testing.mla`
 GoogleTest-like non-fatal expectation helpers:
 - `expect_true(cond: bool)`
 - `expect_false(cond: bool)`
-- `expect_eq(expected, actual)` overloads for `i32`, `i64`, `bool`, `string`, `f32`, `f64`
-- uppercase aliases: `EXPECT_TRUE`, `EXPECT_FALSE`, `EXPECT_EQ`
+- `expect_eq(expected, actual)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `expect_eq_i32(expected: i32, actual: i32)`
+- `expect_not_eq(left, right)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `expect_not_eq_i32(left: i32, right: i32)`
+- `expect_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
+- `expect_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
 
 Fatal verify helpers (abort on failure):
 - `verify_true(cond: bool)`
+- `verify(cond: bool)` (alias of `verify_true`)
 - `verify_false(cond: bool)`
-- `verify_eq(expected, actual)` overloads for `i32`, `i64`, `bool`, `string`, `f32`, `f64`
-- uppercase aliases: `VERIFY_TRUE`, `VERIFY_FALSE`, `VERIFY_EQ`
+- `verify_eq(expected, actual)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `verify_eq_i32(expected: i32, actual: i32)`
+- `verify_not_eq(left, right)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `verify_not_eq_i32(left: i32, right: i32)`
+- `verify_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
+- `verify_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
+
+Failure diagnostics for `expect_eq`/`verify_eq` and `expect_not_eq`/`verify_not_eq`
+include compared values (`expected/actual` or `left/right`) in log output.
 
 Counters/result helpers:
 - `reset()`
@@ -310,11 +322,11 @@ mod std::testing;
 use std::testing::*;
 
 #[test]
-fn test_demo() -> i32 {
+fn test_demo() {
     reset();
     expect_true(2 > 1);
-    expect_eq("ok", "ok");
-    return result();
+    verify_eq("ok", "ok");
+    verify_not_eq("left", "right");
 }
 ```
 

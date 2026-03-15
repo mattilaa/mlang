@@ -284,6 +284,20 @@ void __mlang_std_testing_expect_eq_i32(int32_t expected, int32_t actual)
     }
 }
 
+void __mlang_std_testing_expect_not_eq_i32(int32_t expected, int32_t actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_not_eq(i32): left=%d right=%d (values are equal)\n",
+                expected, actual);
+    }
+}
+
 void __mlang_std_testing_expect_eq_i64(int64_t expected, int64_t actual)
 {
     ++g_testing_checks;
@@ -294,6 +308,20 @@ void __mlang_std_testing_expect_eq_i64(int64_t expected, int64_t actual)
     {
         fprintf(stderr,
                 "[  FAILED  ] expect_eq(i64): expected=%lld actual=%lld\n",
+                (long long)expected, (long long)actual);
+    }
+}
+
+void __mlang_std_testing_expect_not_eq_i64(int64_t expected, int64_t actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_not_eq(i64): left=%lld right=%lld (values are equal)\n",
                 (long long)expected, (long long)actual);
     }
 }
@@ -310,6 +338,22 @@ void __mlang_std_testing_expect_eq_bool(int32_t expected, int32_t actual)
     {
         fprintf(stderr,
                 "[  FAILED  ] expect_eq(bool): expected=%d actual=%d\n",
+                expected, actual);
+    }
+}
+
+void __mlang_std_testing_expect_not_eq_bool(int32_t expected, int32_t actual)
+{
+    ++g_testing_checks;
+    expected = expected ? 1 : 0;
+    actual = actual ? 1 : 0;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_not_eq(bool): left=%d right=%d (values are equal)\n",
                 expected, actual);
     }
 }
@@ -331,6 +375,23 @@ void __mlang_std_testing_expect_eq_string(const char* expected,
     }
 }
 
+void __mlang_std_testing_expect_not_eq_string(const char* expected,
+                                              const char* actual)
+{
+    ++g_testing_checks;
+    const char* exp = expected ? expected : "";
+    const char* act = actual ? actual : "";
+    if(strcmp(exp, act) != 0)
+        return;
+    ++g_testing_failures;
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_not_eq(string): left='%s' right='%s' (values are equal)\n",
+                exp, act);
+    }
+}
+
 void __mlang_std_testing_expect_eq_f32(float expected, float actual)
 {
     ++g_testing_checks;
@@ -345,6 +406,20 @@ void __mlang_std_testing_expect_eq_f32(float expected, float actual)
     }
 }
 
+void __mlang_std_testing_expect_not_eq_f32(float expected, float actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_not_eq(f32): left=%f right=%f (values are equal)\n",
+                expected, actual);
+    }
+}
+
 void __mlang_std_testing_expect_eq_f64(double expected, double actual)
 {
     ++g_testing_checks;
@@ -355,6 +430,20 @@ void __mlang_std_testing_expect_eq_f64(double expected, double actual)
     {
         fprintf(stderr,
                 "[  FAILED  ] expect_eq(f64): expected=%f actual=%f\n",
+                expected, actual);
+    }
+}
+
+void __mlang_std_testing_expect_not_eq_f64(double expected, double actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    if(!g_testing_quiet)
+    {
+        fprintf(stderr,
+                "[  FAILED  ] expect_not_eq(f64): left=%f right=%f (values are equal)\n",
                 expected, actual);
     }
 }
@@ -389,6 +478,18 @@ void __mlang_std_testing_verify_eq_i32(int32_t expected, int32_t actual)
     abort();
 }
 
+void __mlang_std_testing_verify_not_eq_i32(int32_t expected, int32_t actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    fprintf(stderr,
+            "[  FAILED  ] verify_not_eq(i32): left=%d right=%d (values are equal)\n",
+            expected, actual);
+    abort();
+}
+
 void __mlang_std_testing_verify_eq_i64(int64_t expected, int64_t actual)
 {
     ++g_testing_checks;
@@ -397,6 +498,18 @@ void __mlang_std_testing_verify_eq_i64(int64_t expected, int64_t actual)
     ++g_testing_failures;
     fprintf(stderr,
             "[  FAILED  ] verify_eq(i64): expected=%lld actual=%lld\n",
+            (long long)expected, (long long)actual);
+    abort();
+}
+
+void __mlang_std_testing_verify_not_eq_i64(int64_t expected, int64_t actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    fprintf(stderr,
+            "[  FAILED  ] verify_not_eq(i64): left=%lld right=%lld (values are equal)\n",
             (long long)expected, (long long)actual);
     abort();
 }
@@ -411,6 +524,20 @@ void __mlang_std_testing_verify_eq_bool(int32_t expected, int32_t actual)
     ++g_testing_failures;
     fprintf(stderr,
             "[  FAILED  ] verify_eq(bool): expected=%d actual=%d\n",
+            expected, actual);
+    abort();
+}
+
+void __mlang_std_testing_verify_not_eq_bool(int32_t expected, int32_t actual)
+{
+    ++g_testing_checks;
+    expected = expected ? 1 : 0;
+    actual = actual ? 1 : 0;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    fprintf(stderr,
+            "[  FAILED  ] verify_not_eq(bool): left=%d right=%d (values are equal)\n",
             expected, actual);
     abort();
 }
@@ -430,6 +557,21 @@ void __mlang_std_testing_verify_eq_string(const char* expected,
     abort();
 }
 
+void __mlang_std_testing_verify_not_eq_string(const char* expected,
+                                              const char* actual)
+{
+    ++g_testing_checks;
+    const char* exp = expected ? expected : "";
+    const char* act = actual ? actual : "";
+    if(strcmp(exp, act) != 0)
+        return;
+    ++g_testing_failures;
+    fprintf(stderr,
+            "[  FAILED  ] verify_not_eq(string): left='%s' right='%s' (values are equal)\n",
+            exp, act);
+    abort();
+}
+
 void __mlang_std_testing_verify_eq_f32(float expected, float actual)
 {
     ++g_testing_checks;
@@ -442,6 +584,18 @@ void __mlang_std_testing_verify_eq_f32(float expected, float actual)
     abort();
 }
 
+void __mlang_std_testing_verify_not_eq_f32(float expected, float actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    fprintf(stderr,
+            "[  FAILED  ] verify_not_eq(f32): left=%f right=%f (values are equal)\n",
+            expected, actual);
+    abort();
+}
+
 void __mlang_std_testing_verify_eq_f64(double expected, double actual)
 {
     ++g_testing_checks;
@@ -450,6 +604,18 @@ void __mlang_std_testing_verify_eq_f64(double expected, double actual)
     ++g_testing_failures;
     fprintf(stderr,
             "[  FAILED  ] verify_eq(f64): expected=%f actual=%f\n",
+            expected, actual);
+    abort();
+}
+
+void __mlang_std_testing_verify_not_eq_f64(double expected, double actual)
+{
+    ++g_testing_checks;
+    if(expected != actual)
+        return;
+    ++g_testing_failures;
+    fprintf(stderr,
+            "[  FAILED  ] verify_not_eq(f64): left=%f right=%f (values are equal)\n",
             expected, actual);
     abort();
 }

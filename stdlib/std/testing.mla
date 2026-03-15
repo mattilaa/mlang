@@ -1,5 +1,17 @@
 /// \file testing.mla
 /// \brief GoogleTest-like non-fatal expectation helpers for MLang tests.
+///
+/// @defgroup std_testing std::testing
+/// @brief Test assertions, counters, and mock helpers.
+///
+/// Includes:
+/// - boolean checks: `expect_true/expect_false`, `verify_true/verify_false`
+/// - equality: `expect_eq`, `verify_eq`, `*_i32`
+/// - inequality: `expect_not_eq`, `verify_not_eq`, `*_i32`
+/// - vector/list comparisons: `expect_array_eq`, `verify_array_eq`,
+///   `expect_array_not_eq`, `verify_array_not_eq`
+/// - counters: `reset`, `checks`, `failures`, `result`
+/// - lightweight mocks: `mock_*`
 
 extern pub fn __mlang_std_testing_reset() -> void;
 extern pub fn __mlang_std_testing_checks() -> i32;
@@ -10,30 +22,54 @@ extern pub fn __mlang_std_testing_expect_true(cond: i32) -> void;
 extern pub fn __mlang_std_testing_expect_false(cond: i32) -> void;
 extern pub fn __mlang_std_testing_expect_eq_i32(expected: i32,
                                                 actual: i32) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_i32(expected: i32,
+                                                    actual: i32) -> void;
 extern pub fn __mlang_std_testing_expect_eq_i64(expected: i64,
                                                 actual: i64) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_i64(expected: i64,
+                                                    actual: i64) -> void;
 extern pub fn __mlang_std_testing_expect_eq_bool(expected: i32,
                                                  actual: i32) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_bool(expected: i32,
+                                                     actual: i32) -> void;
 extern pub fn __mlang_std_testing_expect_eq_string(expected: string,
                                                    actual: string) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_string(expected: string,
+                                                       actual: string) -> void;
 extern pub fn __mlang_std_testing_expect_eq_f32(expected: f32,
                                                 actual: f32) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_f32(expected: f32,
+                                                    actual: f32) -> void;
 extern pub fn __mlang_std_testing_expect_eq_f64(expected: f64,
                                                 actual: f64) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_f64(expected: f64,
+                                                    actual: f64) -> void;
 extern pub fn __mlang_std_testing_verify_true(cond: i32) -> void;
 extern pub fn __mlang_std_testing_verify_false(cond: i32) -> void;
 extern pub fn __mlang_std_testing_verify_eq_i32(expected: i32,
                                                 actual: i32) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_i32(expected: i32,
+                                                    actual: i32) -> void;
 extern pub fn __mlang_std_testing_verify_eq_i64(expected: i64,
                                                 actual: i64) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_i64(expected: i64,
+                                                    actual: i64) -> void;
 extern pub fn __mlang_std_testing_verify_eq_bool(expected: i32,
                                                  actual: i32) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_bool(expected: i32,
+                                                     actual: i32) -> void;
 extern pub fn __mlang_std_testing_verify_eq_string(expected: string,
                                                    actual: string) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_string(expected: string,
+                                                       actual: string) -> void;
 extern pub fn __mlang_std_testing_verify_eq_f32(expected: f32,
                                                 actual: f32) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_f32(expected: f32,
+                                                    actual: f32) -> void;
 extern pub fn __mlang_std_testing_verify_eq_f64(expected: f64,
                                                 actual: f64) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_f64(expected: f64,
+                                                    actual: f64) -> void;
 extern pub fn __mlang_std_testing_mock_create() -> i64;
 extern pub fn __mlang_std_testing_mock_destroy(handle: i64) -> void;
 extern pub fn __mlang_std_testing_mock_reset(handle: i64) -> void;
@@ -56,119 +92,216 @@ pub struct Mock {
 };
 
 /// Reset per-test expectation counters.
+/// @ingroup std_testing
 pub fn reset() -> void {
     __mlang_std_testing_reset();
 }
 
 /// Return how many expectations have been evaluated.
+/// @ingroup std_testing
 pub fn checks() -> i32 {
     return __mlang_std_testing_checks();
 }
 
 /// Return how many expectations have failed.
+/// @ingroup std_testing
 pub fn failures() -> i32 {
     return __mlang_std_testing_failures();
 }
 
 /// Return 0 when no expectations failed, otherwise 1.
+/// @ingroup std_testing
 pub fn result() -> i32 {
     return __mlang_std_testing_result();
 }
 
 /// Toggle diagnostic emission for failing non-fatal expectations.
 /// Counters still update while quiet mode is enabled.
+/// @ingroup std_testing
 pub fn set_quiet(enabled: bool) -> void {
     __mlang_std_testing_set_quiet(bool_to_i32(enabled));
 }
 
 /// Expect condition to be true. Records failure without aborting.
+/// @ingroup std_testing
 pub fn expect_true(cond: bool) -> void {
     __mlang_std_testing_expect_true(bool_to_i32(cond));
 }
 
 /// Expect condition to be false. Records failure without aborting.
+/// @ingroup std_testing
 pub fn expect_false(cond: bool) -> void {
     __mlang_std_testing_expect_false(bool_to_i32(cond));
 }
 
 /// Explicit i32 expectation helper (avoids overload ambiguity for integer literals).
+/// @ingroup std_testing
 pub fn expect_eq_i32(expected: i32, actual: i32) -> void {
     __mlang_std_testing_expect_eq_i32(expected, actual);
 }
 
 /// Expect equality for i64 values.
+/// @ingroup std_testing
 pub fn expect_eq(expected: i64, actual: i64) -> void {
     __mlang_std_testing_expect_eq_i64(expected, actual);
 }
 
+/// Expect inequality for i32 values.
+/// @ingroup std_testing
+pub fn expect_not_eq_i32(left: i32, right: i32) -> void {
+    __mlang_std_testing_expect_not_eq_i32(left, right);
+}
+
+/// Expect inequality for i64 values.
+/// @ingroup std_testing
+pub fn expect_not_eq(left: i64, right: i64) -> void {
+    __mlang_std_testing_expect_not_eq_i64(left, right);
+}
+
 /// Expect equality for bool values.
+/// @ingroup std_testing
 pub fn expect_eq(expected: bool, actual: bool) -> void {
     __mlang_std_testing_expect_eq_bool(bool_to_i32(expected),
                                        bool_to_i32(actual));
 }
 
+/// Expect inequality for bool values.
+/// @ingroup std_testing
+pub fn expect_not_eq(left: bool, right: bool) -> void {
+    __mlang_std_testing_expect_not_eq_bool(bool_to_i32(left),
+                                           bool_to_i32(right));
+}
+
 /// Expect equality for string values.
+/// @ingroup std_testing
 pub fn expect_eq(expected: string, actual: string) -> void {
     __mlang_std_testing_expect_eq_string(expected, actual);
 }
 
+/// Expect inequality for string values.
+/// @ingroup std_testing
+pub fn expect_not_eq(left: string, right: string) -> void {
+    __mlang_std_testing_expect_not_eq_string(left, right);
+}
+
 /// Expect equality for f32 values.
+/// @ingroup std_testing
 pub fn expect_eq(expected: f32, actual: f32) -> void {
     __mlang_std_testing_expect_eq_f32(expected, actual);
 }
 
+/// Expect inequality for f32 values.
+/// @ingroup std_testing
+pub fn expect_not_eq(left: f32, right: f32) -> void {
+    __mlang_std_testing_expect_not_eq_f32(left, right);
+}
+
 /// Expect equality for f64 values.
+/// @ingroup std_testing
 pub fn expect_eq(expected: f64, actual: f64) -> void {
     __mlang_std_testing_expect_eq_f64(expected, actual);
 }
 
+/// Expect inequality for f64 values.
+/// @ingroup std_testing
+pub fn expect_not_eq(left: f64, right: f64) -> void {
+    __mlang_std_testing_expect_not_eq_f64(left, right);
+}
+
 /// Verify condition is true. Fatal on failure (aborts immediately).
+/// @ingroup std_testing
 pub fn verify_true(cond: bool) -> void {
     __mlang_std_testing_verify_true(bool_to_i32(cond));
 }
 
 /// Verify condition is true. Fatal on failure (aborts immediately).
+/// @ingroup std_testing
 pub fn verify(cond: bool) -> void {
     verify_true(cond);
 }
 
 /// Verify condition is false. Fatal on failure (aborts immediately).
+/// @ingroup std_testing
 pub fn verify_false(cond: bool) -> void {
     __mlang_std_testing_verify_false(bool_to_i32(cond));
 }
 
 /// Explicit i32 verify helper (avoids overload ambiguity for integer literals).
+/// @ingroup std_testing
 pub fn verify_eq_i32(expected: i32, actual: i32) -> void {
     __mlang_std_testing_verify_eq_i32(expected, actual);
 }
 
 /// Verify equality for i64 values. Fatal on failure.
+/// @ingroup std_testing
 pub fn verify_eq(expected: i64, actual: i64) -> void {
     __mlang_std_testing_verify_eq_i64(expected, actual);
 }
 
+/// Verify inequality for i32 values. Fatal on failure.
+/// @ingroup std_testing
+pub fn verify_not_eq_i32(left: i32, right: i32) -> void {
+    __mlang_std_testing_verify_not_eq_i32(left, right);
+}
+
+/// Verify inequality for i64 values. Fatal on failure.
+/// @ingroup std_testing
+pub fn verify_not_eq(left: i64, right: i64) -> void {
+    __mlang_std_testing_verify_not_eq_i64(left, right);
+}
+
 /// Verify equality for bool values. Fatal on failure.
+/// @ingroup std_testing
 pub fn verify_eq(expected: bool, actual: bool) -> void {
     __mlang_std_testing_verify_eq_bool(bool_to_i32(expected),
                                        bool_to_i32(actual));
 }
 
+/// Verify inequality for bool values. Fatal on failure.
+/// @ingroup std_testing
+pub fn verify_not_eq(left: bool, right: bool) -> void {
+    __mlang_std_testing_verify_not_eq_bool(bool_to_i32(left),
+                                           bool_to_i32(right));
+}
+
 /// Verify equality for string values. Fatal on failure.
+/// @ingroup std_testing
 pub fn verify_eq(expected: string, actual: string) -> void {
     __mlang_std_testing_verify_eq_string(expected, actual);
 }
 
+/// Verify inequality for string values. Fatal on failure.
+/// @ingroup std_testing
+pub fn verify_not_eq(left: string, right: string) -> void {
+    __mlang_std_testing_verify_not_eq_string(left, right);
+}
+
 /// Verify equality for f32 values. Fatal on failure.
+/// @ingroup std_testing
 pub fn verify_eq(expected: f32, actual: f32) -> void {
     __mlang_std_testing_verify_eq_f32(expected, actual);
 }
 
+/// Verify inequality for f32 values. Fatal on failure.
+/// @ingroup std_testing
+pub fn verify_not_eq(left: f32, right: f32) -> void {
+    __mlang_std_testing_verify_not_eq_f32(left, right);
+}
+
 /// Verify equality for f64 values. Fatal on failure.
+/// @ingroup std_testing
 pub fn verify_eq(expected: f64, actual: f64) -> void {
     __mlang_std_testing_verify_eq_f64(expected, actual);
 }
 
+/// Verify inequality for f64 values. Fatal on failure.
+/// @ingroup std_testing
+pub fn verify_not_eq(left: f64, right: f64) -> void {
+    __mlang_std_testing_verify_not_eq_f64(left, right);
+}
+
 /// Expect equality for i64 arrays (non-fatal).
+/// @ingroup std_testing
 pub fn expect_array_eq(expected: &list<i64>, actual: &list<i64>) -> void {
     if expected.len() != actual.len() {
         expect_true(false);
@@ -181,6 +314,7 @@ pub fn expect_array_eq(expected: &list<i64>, actual: &list<i64>) -> void {
 }
 
 /// Expect equality for i32 arrays (non-fatal).
+/// @ingroup std_testing
 pub fn expect_array_eq(expected: &list<i32>, actual: &list<i32>) -> void {
     if expected.len() != actual.len() {
         expect_true(false);
@@ -188,11 +322,12 @@ pub fn expect_array_eq(expected: &list<i32>, actual: &list<i32>) -> void {
     }
     let n: i64 = expected.len();
     for i in 0..n {
-        expect_eq(expected[i], actual[i]);
+        expect_eq_i32(expected[i], actual[i]);
     }
 }
 
 /// Expect equality for bool arrays (non-fatal).
+/// @ingroup std_testing
 pub fn expect_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
     if expected.len() != actual.len() {
         expect_true(false);
@@ -205,6 +340,7 @@ pub fn expect_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
 }
 
 /// Expect equality for string arrays (non-fatal).
+/// @ingroup std_testing
 pub fn expect_array_eq(expected: &list<string>, actual: &list<string>) -> void {
     if expected.len() != actual.len() {
         expect_true(false);
@@ -217,6 +353,7 @@ pub fn expect_array_eq(expected: &list<string>, actual: &list<string>) -> void {
 }
 
 /// Verify equality for i64 arrays (fatal).
+/// @ingroup std_testing
 pub fn verify_array_eq(expected: &list<i64>, actual: &list<i64>) -> void {
     if expected.len() != actual.len() {
         verify_true(false);
@@ -229,6 +366,7 @@ pub fn verify_array_eq(expected: &list<i64>, actual: &list<i64>) -> void {
 }
 
 /// Verify equality for i32 arrays (fatal).
+/// @ingroup std_testing
 pub fn verify_array_eq(expected: &list<i32>, actual: &list<i32>) -> void {
     if expected.len() != actual.len() {
         verify_true(false);
@@ -236,11 +374,12 @@ pub fn verify_array_eq(expected: &list<i32>, actual: &list<i32>) -> void {
     }
     let n: i64 = expected.len();
     for i in 0..n {
-        verify_eq(expected[i], actual[i]);
+        verify_eq_i32(expected[i], actual[i]);
     }
 }
 
 /// Verify equality for bool arrays (fatal).
+/// @ingroup std_testing
 pub fn verify_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
     if expected.len() != actual.len() {
         verify_true(false);
@@ -253,6 +392,7 @@ pub fn verify_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
 }
 
 /// Verify equality for string arrays (fatal).
+/// @ingroup std_testing
 pub fn verify_array_eq(expected: &list<string>, actual: &list<string>) -> void {
     if expected.len() != actual.len() {
         verify_true(false);
@@ -262,6 +402,150 @@ pub fn verify_array_eq(expected: &list<string>, actual: &list<string>) -> void {
     for i in 0..n {
         verify_eq(expected[i], actual[i]);
     }
+}
+
+/// Expect inequality for i64 arrays (non-fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn expect_array_not_eq(left: &list<i64>, right: &list<i64>) -> void {
+    if left.len() != right.len() {
+        expect_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            expect_true(true);
+            return;
+        }
+    }
+    expect_true(false);
+}
+
+/// Expect inequality for i32 arrays (non-fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn expect_array_not_eq(left: &list<i32>, right: &list<i32>) -> void {
+    if left.len() != right.len() {
+        expect_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            expect_true(true);
+            return;
+        }
+    }
+    expect_true(false);
+}
+
+/// Expect inequality for bool arrays (non-fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn expect_array_not_eq(left: &list<bool>, right: &list<bool>) -> void {
+    if left.len() != right.len() {
+        expect_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            expect_true(true);
+            return;
+        }
+    }
+    expect_true(false);
+}
+
+/// Expect inequality for string arrays (non-fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn expect_array_not_eq(left: &list<string>, right: &list<string>) -> void {
+    if left.len() != right.len() {
+        expect_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            expect_true(true);
+            return;
+        }
+    }
+    expect_true(false);
+}
+
+/// Verify inequality for i64 arrays (fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn verify_array_not_eq(left: &list<i64>, right: &list<i64>) -> void {
+    if left.len() != right.len() {
+        verify_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            verify_true(true);
+            return;
+        }
+    }
+    verify_true(false);
+}
+
+/// Verify inequality for i32 arrays (fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn verify_array_not_eq(left: &list<i32>, right: &list<i32>) -> void {
+    if left.len() != right.len() {
+        verify_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            verify_true(true);
+            return;
+        }
+    }
+    verify_true(false);
+}
+
+/// Verify inequality for bool arrays (fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn verify_array_not_eq(left: &list<bool>, right: &list<bool>) -> void {
+    if left.len() != right.len() {
+        verify_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            verify_true(true);
+            return;
+        }
+    }
+    verify_true(false);
+}
+
+/// Verify inequality for string arrays (fatal).
+/// Passes when arrays differ by length or at least one element.
+/// @ingroup std_testing
+pub fn verify_array_not_eq(left: &list<string>, right: &list<string>) -> void {
+    if left.len() != right.len() {
+        verify_true(true);
+        return;
+    }
+    let n: i64 = left.len();
+    for i in 0..n {
+        if left[i] != right[i] {
+            verify_true(true);
+            return;
+        }
+    }
+    verify_true(false);
 }
 
 /// Create a new mock state object.

@@ -1,7 +1,7 @@
 mod std::testing;
 mod std::strbuf;
 use std::strbuf::*;
-use std::testing::verify;
+use std::testing::*;
 
 extern fn strcmp(a: string, b: string) -> i32;
 
@@ -69,8 +69,9 @@ fn test_clone_independent() {
     // mutate both independently
     original.push_str("_A");
     copy.push_str("_B");
-    verify(!(streq(original, "base_A") != 1));
-    verify(!(streq(copy,     "base_B") != 1));
+    verify_eq_i32(1, streq(original, "base_A"));
+    verify_eq_i32(1, streq(copy, "base_B"));
+    verify_not_eq("base_A", "base_B");
     }
 
 // ── 6. let-bound clone as immutable string ────────────────────────────────────
