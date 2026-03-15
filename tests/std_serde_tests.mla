@@ -17,6 +17,136 @@ struct DemoPacket {
     var score: i64;
 };
 
+struct EnvelopeMeta {
+    var version: i32;
+    var tag: string;
+};
+
+struct SensorSample {
+    var ts_ns: i64;
+    var value: f64;
+    var ok: bool;
+};
+
+struct MultiNestedPacket {
+    var meta: EnvelopeMeta;
+    var primary: SensorSample;
+    var backup: SensorSample;
+    var retries: i32;
+    var note: string;
+};
+
+struct EngineFlags {
+    var safe_mode: bool;
+    var armed: bool;
+};
+
+struct ControlBlock {
+    var flags: EngineFlags;
+    var gain: i32;
+};
+
+struct DeepNestedPacket {
+    var id: i64;
+    var ctrl: ControlBlock;
+    var sample: SensorSample;
+    var label: string;
+};
+
+impl BinarySerde for EnvelopeMeta {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let w1: Result<i32, string> = out.write_i32(self.version);
+        if w1.is_err() { return Err<i32, string>(w1.unwrap_err()); }
+        let w2: Result<i32, string> = out.write_string(self.tag);
+        if w2.is_err() { return Err<i32, string>(w2.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let r1: Result<i32, string> = input.read_i32();
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+        self.version = r1.unwrap();
+        let r2: Result<string, string> = input.read_string();
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        self.tag = r2.unwrap();
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for SensorSample {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let w1: Result<i32, string> = out.write_i64(self.ts_ns);
+        if w1.is_err() { return Err<i32, string>(w1.unwrap_err()); }
+        let w2: Result<i32, string> = out.write_f64(self.value);
+        if w2.is_err() { return Err<i32, string>(w2.unwrap_err()); }
+        let w3: Result<i32, string> = out.write_bool(self.ok);
+        if w3.is_err() { return Err<i32, string>(w3.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let r1: Result<i64, string> = input.read_i64();
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+        self.ts_ns = r1.unwrap();
+        let r2: Result<f64, string> = input.read_f64();
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        self.value = r2.unwrap();
+        let r3: Result<bool, string> = input.read_bool();
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
+        self.ok = r3.unwrap();
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for EngineFlags {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let w1: Result<i32, string> = out.write_bool(self.safe_mode);
+        if w1.is_err() { return Err<i32, string>(w1.unwrap_err()); }
+        let w2: Result<i32, string> = out.write_bool(self.armed);
+        if w2.is_err() { return Err<i32, string>(w2.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let r1: Result<bool, string> = input.read_bool();
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+        self.safe_mode = r1.unwrap();
+        let r2: Result<bool, string> = input.read_bool();
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        self.armed = r2.unwrap();
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for ControlBlock {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let r1: Result<i32, string> = self.flags.serialize(out_handle);
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+
+        let out: Binary = Binary { handle: out_handle };
+        let r2: Result<i32, string> = out.write_i32(self.gain);
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let r1: Result<i32, string> = self.flags.deserialize(input_handle);
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+
+        let input: Reader = Reader { handle: input_handle };
+        let r2: Result<i32, string> = input.read_i32();
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        self.gain = r2.unwrap();
+        return Ok<i32, string>(0);
+    }
+}
+
 impl BinarySerde for DemoPacket {
     fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
         let out: Binary = Binary { handle: out_handle };
@@ -52,6 +182,84 @@ impl BinarySerde for DemoPacket {
         let r4: Result<i64, string> = input.read_i64();
         if r4.is_err() { return Err<i32, string>(r4.unwrap_err()); }
         self.score = r4.unwrap();
+
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for DeepNestedPacket {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let r1: Result<i32, string> = out.write_i64(self.id);
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+
+        let r2: Result<i32, string> = self.ctrl.serialize(out_handle);
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+
+        let r3: Result<i32, string> = self.sample.serialize(out_handle);
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
+
+        let r4: Result<i32, string> = out.write_string(self.label);
+        if r4.is_err() { return Err<i32, string>(r4.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let r1: Result<i64, string> = input.read_i64();
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+        self.id = r1.unwrap();
+
+        let r2: Result<i32, string> = self.ctrl.deserialize(input_handle);
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+
+        let r3: Result<i32, string> = self.sample.deserialize(input_handle);
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
+
+        let r4: Result<string, string> = input.read_string();
+        if r4.is_err() { return Err<i32, string>(r4.unwrap_err()); }
+        self.label = r4.unwrap();
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for MultiNestedPacket {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let r1: Result<i32, string> = self.meta.serialize(out_handle);
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+
+        let r2: Result<i32, string> = self.primary.serialize(out_handle);
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+
+        let r3: Result<i32, string> = self.backup.serialize(out_handle);
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
+
+        let out: Binary = Binary { handle: out_handle };
+        let r4: Result<i32, string> = out.write_i32(self.retries);
+        if r4.is_err() { return Err<i32, string>(r4.unwrap_err()); }
+        let r5: Result<i32, string> = out.write_string(self.note);
+        if r5.is_err() { return Err<i32, string>(r5.unwrap_err()); }
+
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let r1: Result<i32, string> = self.meta.deserialize(input_handle);
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+
+        let r2: Result<i32, string> = self.primary.deserialize(input_handle);
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+
+        let r3: Result<i32, string> = self.backup.deserialize(input_handle);
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
+
+        let input: Reader = Reader { handle: input_handle };
+        let r4: Result<i32, string> = input.read_i32();
+        if r4.is_err() { return Err<i32, string>(r4.unwrap_err()); }
+        self.retries = r4.unwrap();
+        let r5: Result<string, string> = input.read_string();
+        if r5.is_err() { return Err<i32, string>(r5.unwrap_err()); }
+        self.note = r5.unwrap();
 
         return Ok<i32, string>(0);
     }
@@ -209,5 +417,140 @@ fn test_serde_file_roundtrip() {
 
     r.close();
     b2.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_multi_nested_struct_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(128);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    var src: MultiNestedPacket = MultiNestedPacket {
+        meta: EnvelopeMeta {
+            version: 3,
+            tag: "mixbus-A"
+        },
+        primary: SensorSample {
+            ts_ns: 1711111111,
+            value: 0.875,
+            ok: true
+        },
+        backup: SensorSample {
+            ts_ns: 1711112222,
+            value: -0.125,
+            ok: false
+        },
+        retries: 2,
+        note: "nested-serde-ok"
+    };
+
+    let sw: Result<i32, string> = src.serialize(b.raw_handle());
+    verify(!sw.is_err());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    var dst: MultiNestedPacket = MultiNestedPacket {
+        meta: EnvelopeMeta {
+            version: 0,
+            tag: ""
+        },
+        primary: SensorSample {
+            ts_ns: 0,
+            value: 0.0,
+            ok: false
+        },
+        backup: SensorSample {
+            ts_ns: 0,
+            value: 0.0,
+            ok: false
+        },
+        retries: 0,
+        note: ""
+    };
+
+    let dr: Result<i32, string> = dst.deserialize(r.raw_handle());
+    verify(!dr.is_err());
+
+    verify_eq_i32(3, dst.meta.version);
+    verify(eq(dst.meta.tag, "mixbus-A") == 1);
+    verify_eq(1711111111, dst.primary.ts_ns);
+    verify(dst.primary.value == 0.875);
+    verify(dst.primary.ok == true);
+    verify_eq(1711112222, dst.backup.ts_ns);
+    verify(dst.backup.value == -0.125);
+    verify(dst.backup.ok == false);
+    verify_eq_i32(2, dst.retries);
+    verify(eq(dst.note, "nested-serde-ok") == 1);
+
+    String::free(dst.meta.tag);
+    String::free(dst.note);
+    r.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_three_level_nested_struct_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(128);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    var src: DeepNestedPacket = DeepNestedPacket {
+        id: 9001,
+        ctrl: ControlBlock {
+            flags: EngineFlags {
+                safe_mode: true,
+                armed: false
+            },
+            gain: 87
+        },
+        sample: SensorSample {
+            ts_ns: 1712223334,
+            value: 0.5,
+            ok: true
+        },
+        label: "three-level-ok"
+    };
+
+    let sw: Result<i32, string> = src.serialize(b.raw_handle());
+    verify(!sw.is_err());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    var dst: DeepNestedPacket = DeepNestedPacket {
+        id: 0,
+        ctrl: ControlBlock {
+            flags: EngineFlags {
+                safe_mode: false,
+                armed: false
+            },
+            gain: 0
+        },
+        sample: SensorSample {
+            ts_ns: 0,
+            value: 0.0,
+            ok: false
+        },
+        label: ""
+    };
+
+    let dr: Result<i32, string> = dst.deserialize(r.raw_handle());
+    verify(!dr.is_err());
+
+    verify_eq(9001, dst.id);
+    verify(dst.ctrl.flags.safe_mode == true);
+    verify(dst.ctrl.flags.armed == false);
+    verify_eq_i32(87, dst.ctrl.gain);
+    verify_eq(1712223334, dst.sample.ts_ns);
+    verify(dst.sample.value == 0.5);
+    verify(dst.sample.ok == true);
+    verify(eq(dst.label, "three-level-ok") == 1);
+
+    String::free(dst.label);
+    r.close();
     b.close();
 }
