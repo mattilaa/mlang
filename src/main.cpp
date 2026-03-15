@@ -212,6 +212,80 @@ static void write_mlang_commands_json(
     out << "] }";
 }
 
+static bool is_excluded_lsp_scan_dir(std::string_view name)
+{
+    return name == ".git" || name == "build" || name == "artifacts" ||
+           name == ".cache" || name == ".venv";
+}
+
+static void append_workspace_mla_files(
+    const std::filesystem::path& root,
+    std::unordered_set<std::string>& unique,
+    std::vector<std::string>& files)
+{
+    if(root.empty())
+        return;
+
+    std::error_code ec;
+    std::filesystem::path abs_root = std::filesystem::absolute(root, ec);
+    if(ec)
+        abs_root = root;
+    if(!std::filesystem::exists(abs_root, ec) || !std::filesystem::is_directory(abs_root, ec))
+        return;
+
+    std::filesystem::recursive_directory_iterator it(
+        abs_root, std::filesystem::directory_options::skip_permission_denied, ec);
+    std::filesystem::recursive_directory_iterator end;
+    if(ec)
+        return;
+    while(it != end)
+    {
+        const std::filesystem::directory_entry& entry = *it;
+        const std::filesystem::path p = entry.path();
+        std::error_code entry_ec;
+
+        if(entry.is_directory(entry_ec))
+        {
+            const std::string base = p.filename().string();
+            if(is_excluded_lsp_scan_dir(base))
+                it.disable_recursion_pending();
+            ++it;
+            continue;
+        }
+
+        if(entry_ec)
+        {
+            ++it;
+            continue;
+        }
+
+        if(!entry.is_regular_file(entry_ec))
+        {
+            ++it;
+            continue;
+        }
+        if(entry_ec)
+        {
+            ++it;
+            continue;
+        }
+
+        if(p.extension() == ".mla")
+        {
+            std::error_code abs_ec;
+            std::filesystem::path abs = std::filesystem::absolute(p, abs_ec);
+            const std::string norm =
+                (abs_ec ? p : abs).lexically_normal().string();
+            if(unique.insert(norm).second)
+                files.push_back(norm);
+        }
+        std::error_code inc_ec;
+        it.increment(inc_ec);
+        if(inc_ec)
+            break;
+    }
+}
+
 static std::vector<std::string> default_stdlib_paths()
 {
     std::vector<std::string> paths;
@@ -1557,6 +1631,9 @@ int main(int argc, char** argv)
         if(unique.insert(norm).second)
             files.push_back(norm);
     }
+    append_workspace_mla_files(std::filesystem::current_path(ec), unique, files);
+    for(const auto& root : moduleSearchPaths)
+        append_workspace_mla_files(std::filesystem::path(root), unique, files);
     std::vector<std::string> searchPaths;
     std::unordered_set<std::string> searchUnique;
     for(const auto& path : moduleSearchPaths)

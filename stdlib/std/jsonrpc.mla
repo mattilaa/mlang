@@ -686,45 +686,56 @@ fn __jsonrpc_spawn_workers(remaining: i32, inbound_handle: i64, done_handle: i64
 /// `__mlang_std_jsonrpc_runtime_dispatch` has a weak default implementation
 /// in libmlang_std (returns no response). Servers should override it.
 pub fn run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, string> {
-    var workers: i32 = worker_count;
-    if workers <= 0 {
-        workers = 1;
-    }
+    let _workers: i32 = worker_count;
+    let _resp_cap: i64 = response_capacity;
     var req_cap: i64 = frame_capacity;
     if req_cap < 1024 {
         req_cap = 1024;
     }
-    var resp_cap: i64 = response_capacity;
-    if resp_cap < 1024 {
-        resp_cap = 1024;
+
+    let transport: StdioTransport = stdio();
+    var frame = String::with_capacity(req_cap);
+
+    for _i in 0..2147483647 {
+        let rr: Result<i64, string> = transport.read_frame(frame, req_cap);
+        if rr.is_err() {
+            let err: string = rr.unwrap_err();
+            // EOF/stream close from client shutdown path.
+            if is_timeout_error(err) == 1 {
+                continue;
+            }
+            String::free(frame);
+            if __mlang_std_strbuf_contains(err, "missing Content-Length header") == 1 {
+                return Ok<i32, string>(0);
+            }
+            return Err<i32, string>(err);
+        }
+
+        let cr: Result<i32, string> = register_cancel_from_payload(frame);
+        if cr.is_ok() {
+            let c: i32 = match cr {
+                Ok(v) => v,
+                Err(_e) => 0
+            };
+            if c == 1 {
+                continue;
+            }
+        }
+
+        let response_payload: string = __mlang_std_jsonrpc_runtime_dispatch(frame);
+        if __mlang_std_strbuf_len(response_payload) > 0 {
+            let wr: Result<i32, string> = transport.write_frame(response_payload);
+            String::free(response_payload);
+            if wr.is_err() {
+                let e: string = wr.unwrap_err();
+                String::free(frame);
+                return Err<i32, string>(e);
+            }
+        } else {
+            String::free(response_payload);
+        }
     }
 
-    let rt_r: Result<Runtime, string> = Runtime::new(256);
-    if rt_r.is_err() {
-        return Err<i32, string>(rt_r.unwrap_err());
-    }
-    let rt: Runtime = match rt_r {
-        Ok(v) => v,
-        Err(_e) => Runtime { inbound_handle: 0, outbound_handle: 0 }
-    };
-
-    let done_handle: i64 = __mlang_std_sync_channel_new(workers + 1);
-    if done_handle == 0 {
-        rt.close();
-        return Err<i32, string>(__mlang_std_sync_last_error());
-    }
-
-    thread_spawn(__jsonrpc_reader_thread, rt.inbound_handle, done_handle, req_cap);
-    __jsonrpc_spawn_workers(workers, rt.inbound_handle, done_handle, req_cap, resp_cap);
-
-    var done_buf = String::with_capacity(32);
-    for _i in 0..(workers + 1) {
-        let _n: i64 = __mlang_std_sync_channel_recv(done_handle, done_buf, 32);
-    }
-
-    String::free(done_buf);
-    __mlang_std_sync_channel_close(done_handle);
-    __mlang_std_sync_channel_free(done_handle);
-    rt.close();
+    String::free(frame);
     return Ok<i32, string>(0);
 }

@@ -3276,6 +3276,45 @@ fn has_version_flag(args: list<str8>) -> bool {
     return false;
 }
 
+fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, string> {
+    let transport: StdioTransport = stdio();
+    var frame = String::with_capacity(frame_capacity);
+    for _i in 0..2147483647 {
+        let rr: Result<i64, string> = transport.read_frame(frame, frame_capacity);
+        if rr.is_err() {
+            let e: string = rr.unwrap_err();
+            String::free(frame);
+            if contains(e, "missing Content-Length header") == 1 {
+                return Ok<i32, string>(0);
+            }
+            return Err<i32, string>(e);
+        }
+
+        let id: i64 = extract_request_id(frame);
+        let result_json: string = dispatch_result_json(frame);
+        if id < 0 {
+            continue;
+        }
+
+        var response: string = String::new();
+        if len(result_json) > 0 {
+            response = make_result_response(id, result_json);
+        } else {
+            response = make_error_response(id, -32601, "Method not found");
+        }
+
+        let wr: Result<i32, string> = transport.write_frame(response);
+        String::free(response);
+        if wr.is_err() {
+            let ew: string = wr.unwrap_err();
+            String::free(frame);
+            return Err<i32, string>(ew);
+        }
+    }
+    String::free(frame);
+    return Ok<i32, string>(0);
+}
+
 fn main(argc: i32, args: list<str8>) -> i32 {
     if argc > 1 {
         if has_version_flag(args) {
@@ -3287,7 +3326,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     log_write(log_level_info(), format!("mlangd-mla {} starting stdio loop", version()));
-    let r: Result<i32, string> = run_stdio_loop(1, 262144, 262144);
+    let r: Result<i32, string> = run_server_stdio_loop(262144);
     if r.is_err() {
         log_write(log_level_error(), format!("stdio loop error: {}", r.unwrap_err()));
         if g_log_handle != 0 {
