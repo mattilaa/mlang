@@ -299,8 +299,8 @@ enum UpdatePosition
 %token MOD USE TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
 %token PLUS_PLUS MINUS_MINUS
-%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE NOT
-%token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE CARET NOT TILDE SHL SHR
+%token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
 %token LT GT LE GE EQ NE SPACESHIP
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
 %token FAT_ARROW
@@ -346,8 +346,11 @@ enum UpdatePosition
 
 %left PIPE_PIPE
 %left AMP_AMP
+%left PIPE
+%left CARET
 %left AMP
 %left LT GT LE GE EQ NE SPACESHIP
+%left SHL SHR
 %left PLUS MINUS
 %left MULTIPLY DIVIDE MODULO
 
@@ -805,6 +808,14 @@ assignment_statement
         { $$ = make_compound_assign($1, DIVIDE, $3, yylineno); }
     | postfix_expression MODULO_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
+    | postfix_expression PIPE_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, PIPE, $3, yylineno); }
+    | postfix_expression CARET_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, CARET, $3, yylineno); }
+    | postfix_expression SHL_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, SHL, $3, yylineno); }
+    | postfix_expression SHR_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, SHR, $3, yylineno); }
     | MULTIPLY unary_expression ASSIGN expression SEMICOLON
         { $$ = mla_ast_deref_assignment($2, $4, yylineno); }
     ;
@@ -1070,6 +1081,8 @@ condition_unary
         { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
     | NOT condition_unary
         { $$ = create_unary_op(NOT, $2); if($$) $$->line = yylineno; }
+    | TILDE condition_unary
+        { $$ = create_unary_op(TILDE, $2); if($$) $$->line = yylineno; }
     | AMP condition_unary
         { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
     | AMP_MUT condition_unary
@@ -1172,6 +1185,8 @@ unary_expression
         { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
     | NOT unary_expression
         { $$ = create_unary_op(NOT, $2); if($$) $$->line = yylineno; }
+    | TILDE unary_expression
+        { $$ = create_unary_op(TILDE, $2); if($$) $$->line = yylineno; }
     | AMP unary_expression
         { $$ = create_unary_op(AMP, $2); if($$) $$->line = yylineno; }
     | AMP_MUT unary_expression
@@ -1351,6 +1366,10 @@ binary_expression
     | expression NE expression { $$ = mla_ast_binary_op(NE, $1, $3); }
     | expression SPACESHIP expression { $$ = mla_ast_binary_op(SPACESHIP, $1, $3); }
     | expression AMP expression { $$ = mla_ast_binary_op(AMP, $1, $3); }
+    | expression PIPE expression { $$ = mla_ast_binary_op(PIPE, $1, $3); }
+    | expression CARET expression { $$ = mla_ast_binary_op(CARET, $1, $3); }
+    | expression SHL expression { $$ = mla_ast_binary_op(SHL, $1, $3); }
+    | expression SHR expression { $$ = mla_ast_binary_op(SHR, $1, $3); }
     | expression AMP_AMP expression { $$ = mla_ast_binary_op(AMP_AMP, $1, $3); }
     | expression PIPE_PIPE expression { $$ = mla_ast_binary_op(PIPE_PIPE, $1, $3); }
     ;

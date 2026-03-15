@@ -271,6 +271,10 @@ public:
         OP_NE,
         OP_SPACESHIP,
         OP_BITAND,
+        OP_BITOR,
+        OP_BITXOR,
+        OP_SHL,
+        OP_SHR,
         OP_AND,
         OP_OR
     };
@@ -310,6 +314,7 @@ public:
     {
         OP_NEG,
         OP_NOT,
+        OP_BITNOT,
         OP_ADDR,
         OP_ADDR_MUT, // &mut x — exclusive mutable borrow
         OP_DEREF

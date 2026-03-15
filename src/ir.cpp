@@ -5741,24 +5741,45 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                    : builder.CreateOr(Lb, Rb, "ortmp");
     }
 
-    if(node->op == BinaryOpNode::OP_BITAND)
+    if(node->op == BinaryOpNode::OP_BITAND || node->op == BinaryOpNode::OP_BITOR ||
+       node->op == BinaryOpNode::OP_BITXOR || node->op == BinaryOpNode::OP_SHL ||
+       node->op == BinaryOpNode::OP_SHR)
     {
         if(!L->getType()->isIntegerTy() || !R->getType()->isIntegerTy())
         {
             reportError(node->line,
-                        "bitwise '&' requires integer operands");
+                        "bitwise operations require integer operands");
             return nullptr;
         }
         unsigned LBits = L->getType()->getIntegerBitWidth();
         unsigned RBits = R->getType()->getIntegerBitWidth();
-        if(LBits != RBits)
+        if(node->op == BinaryOpNode::OP_SHL || node->op == BinaryOpNode::OP_SHR)
+        {
+            if(RBits != LBits)
+                R = builder.CreateIntCast(R, L->getType(), false, "bitshift.cast");
+        }
+        else if(LBits != RBits)
         {
             if(LBits > RBits)
                 R = builder.CreateSExt(R, L->getType(), "bitand.sext");
             else
                 L = builder.CreateSExt(L, R->getType(), "bitand.sext");
         }
-        return builder.CreateAnd(L, R, "bitandtmp");
+        switch(node->op)
+        {
+        case BinaryOpNode::OP_BITAND:
+            return builder.CreateAnd(L, R, "bitandtmp");
+        case BinaryOpNode::OP_BITOR:
+            return builder.CreateOr(L, R, "bitortmp");
+        case BinaryOpNode::OP_BITXOR:
+            return builder.CreateXor(L, R, "bitxortmp");
+        case BinaryOpNode::OP_SHL:
+            return builder.CreateShl(L, R, "shltmp");
+        case BinaryOpNode::OP_SHR:
+            return builder.CreateAShr(L, R, "shrtmp");
+        default:
+            return nullptr;
+        }
     }
 
     auto typeKindName = [](TypeNode::TypeKind kind) -> std::string {
@@ -5982,6 +6003,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         return isFloat ? builder.CreateFCmpONE(L, R, "cmptmp")
                        : builder.CreateICmpNE(L, R, "cmptmp");
     case BinaryOpNode::OP_BITAND:
+    case BinaryOpNode::OP_BITOR:
+    case BinaryOpNode::OP_BITXOR:
+    case BinaryOpNode::OP_SHL:
+    case BinaryOpNode::OP_SHR:
         // Handled in dedicated branch above.
         return nullptr;
     case BinaryOpNode::OP_AND:
@@ -6395,6 +6420,19 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
         reportError(node->line,
                     "unary '!' requires boolean or numeric operand");
         return nullptr;
+    }
+    case UnaryOpNode::OP_BITNOT:
+    {
+        llvm::Value* value = generateExpression(node->operand);
+        if(!value)
+            return nullptr;
+        if(!value->getType()->isIntegerTy())
+        {
+            reportError(node->line,
+                        "unary '~' requires integer operand");
+            return nullptr;
+        }
+        return builder.CreateNot(value, "bitnottmp");
     }
     case UnaryOpNode::OP_ADDR:
     {

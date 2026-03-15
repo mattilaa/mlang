@@ -211,6 +211,7 @@ static int is_try_question_context()
 "=="            { return EQ; }
 "!="            { return NE; }
 "!"             { return NOT; }
+"~"             { return TILDE; }
 ":"             { return COLON; }
 ";"             { return SEMICOLON; }
 "{"             { return LBRACE; }
@@ -232,6 +233,12 @@ static int is_try_question_context()
 "*="            { return MULTIPLY_ASSIGN; }
 "/="            { return DIVIDE_ASSIGN; }
 "%="            { return MODULO_ASSIGN; }
+"|="            { return PIPE_ASSIGN; }
+"^="            { return CARET_ASSIGN; }
+"<<="           { return SHL_ASSIGN; }
+">>="           { return SHR_ASSIGN; }
+"<<"            { return SHL; }
+">>"            { return SHR; }
 "+"             { return PLUS; }
 "-"             { return MINUS; }
 "*"             { return MULTIPLY; }
@@ -240,6 +247,7 @@ static int is_try_question_context()
 "&mut"          { return AMP_MUT; }
 "&&"            { return AMP_AMP; }
 "&"             { return AMP; }
+"^"             { return CARET; }
 "||"            { return PIPE_PIPE; }
 "|"             { return PIPE; }
 .               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }

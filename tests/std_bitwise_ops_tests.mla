@@ -1,0 +1,49 @@
+mod std::testing;
+
+use std::testing::verify;
+use std::testing::verify_eq;
+use std::testing::verify_eq_i32;
+
+#[test]
+fn test_bitwise_expression_ops_i32() {
+    let a: i32 = 8 | 1;
+    let b: i32 = 9 ^ 5;
+    let c: i32 = 1 << 5;
+    let d: i32 = 64 >> 3;
+    let e: i32 = ~i32(0);
+
+    verify_eq_i32(9, a);
+    verify_eq_i32(12, b);
+    verify_eq_i32(32, c);
+    verify_eq_i32(8, d);
+    verify_eq_i32(-1, e);
+}
+
+#[test]
+fn test_bitwise_compound_assignments_i32() {
+    var x: i32 = 6;
+    x |= 1;
+    verify_eq_i32(7, x);
+
+    x ^= 3;
+    verify_eq_i32(4, x);
+
+    x <<= 2;
+    verify_eq_i32(16, x);
+
+    x >>= 1;
+    verify_eq_i32(8, x);
+}
+
+#[test]
+fn test_bitwise_expression_ops_i64_and_mask_compare() {
+    let v: i64 = 42;
+    let mask: i64 = 8;
+    verify((v & mask) != 0);
+
+    var y: i64 = 3;
+    y <<= 10;
+    verify_eq(3072, y);
+    y >>= 9;
+    verify_eq(6, y);
+}

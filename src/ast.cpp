@@ -297,6 +297,18 @@ ASTNode* create_binary_op_impl(int op, ASTNode* left, ASTNode* right)
     case AMP:
         opType = BinaryOpNode::OP_BITAND;
         break;
+    case PIPE:
+        opType = BinaryOpNode::OP_BITOR;
+        break;
+    case CARET:
+        opType = BinaryOpNode::OP_BITXOR;
+        break;
+    case SHL:
+        opType = BinaryOpNode::OP_SHL;
+        break;
+    case SHR:
+        opType = BinaryOpNode::OP_SHR;
+        break;
     case AMP_AMP:
         opType = BinaryOpNode::OP_AND;
         break;
@@ -347,6 +359,9 @@ ASTNode* create_unary_op_impl(int op, ASTNode* operand)
         break;
     case NOT:
         opType = UnaryOpNode::OP_NOT;
+        break;
+    case TILDE:
+        opType = UnaryOpNode::OP_BITNOT;
         break;
     case AMP:
         opType = UnaryOpNode::OP_ADDR;
@@ -1329,6 +1344,18 @@ std::string BinaryOpNode::toString() const
     case OP_BITAND:
         op_str = "&";
         break;
+    case OP_BITOR:
+        op_str = "|";
+        break;
+    case OP_BITXOR:
+        op_str = "^";
+        break;
+    case OP_SHL:
+        op_str = "<<";
+        break;
+    case OP_SHR:
+        op_str = ">>";
+        break;
     case OP_AND:
         op_str = "&&";
         break;
@@ -1377,6 +1404,9 @@ std::string UnaryOpNode::toString() const
         break;
     case OP_NOT:
         op_str = "!";
+        break;
+    case OP_BITNOT:
+        op_str = "~";
         break;
     case OP_ADDR:
         op_str = "&";
