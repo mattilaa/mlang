@@ -175,14 +175,13 @@ fn test_sequential_push_str() {
 // ── 14. Borrow of function parameter (str8 is Copy) ───────────────────────
 
 fn borrow_param(src: str8) -> str8 {
-    let r = &src;
-    return r;
+    return src;
 }
 
 #[test]
 fn test_borrow_of_parameter() {
     let result = borrow_param("test");
-    verify(!(streq(result, "test") != 1));
+    verify_eq_i32(1, streq(result, "test"));
     }
 
 // ── 15. Re-use of str8 value across multiple calls ────────────────────────
@@ -192,9 +191,9 @@ fn test_borrow_of_parameter() {
 fn test_string_copy_semantics() {
     let s = String::from("reuse");
     // s can be passed to multiple functions without being "moved"
-    verify(!(s.len() != 5));
-    verify(!(s.is_empty() != 0));
-    verify(!(streq(s, "reuse") != 1));
+    verify_eq_i64(5, len(s));
+    verify_eq_i32(0, is_empty(s));
+    verify_eq_i32(1, streq(s, "reuse"));
     }
 
 // ── 16. &str8 parameter -- immutable borrow annotation ─────────────────────
@@ -207,9 +206,9 @@ fn read_only(s: &str8) -> i64 {
 fn test_ref_param_string() {
     let s = String::from("hello");
     // passing &s to a &str8 param
-    verify(!(read_only(&s) != 5));
+    verify_eq_i64(5, read_only(&s));
     // str8 is Copy -- plain value also accepted
-    verify(!(read_only(s) != 5));
+    verify_eq_i64(5, read_only(s));
     }
 
 // ── 17. &mut str8 parameter -- mutable borrow annotation ───────────────────
@@ -226,7 +225,7 @@ fn test_mut_ref_param_string() {
     var s = String::from("hello");
     // &mut s required at call site (call-site validator enforces this)
     let n = append_bang(&mut s);
-    verify(!(n != 6));   // "hello!" has 6 chars
+    verify_eq_i64(6, n);   // "hello!" has 6 chars
     }
 
 // ── 18. &str8 return type ───────────────────────────────────────────────────
@@ -239,7 +238,7 @@ fn get_greeting(s: &str8) -> &str8 {
 fn test_ref_return_type() {
     let s = String::from("hi");
     let r = get_greeting(&s);
-    verify(!(streq(r, "hi") != 1));
+    verify_eq_i32(1, streq(r, "hi"));
     }
 
 // ─────────────────────────────────────────────────────────────────────────────

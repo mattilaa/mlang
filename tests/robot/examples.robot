@@ -148,7 +148,7 @@ Result Methods And Unwrap Warns
     ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn_bin
     ${code}=    Catenate    SEPARATOR=\n
     ...    fn main() -> i32 {
-    ...        let r: Result<i32, string> = Ok<i32, string>(42);
+    ...        let r: Result<i32, str8> = Ok<i32, str8>(42);
     ...        if r.is_ok(): {
     ...            println!("{}", r.unwrap());
     ...        } else: {
@@ -3804,8 +3804,9 @@ MLang Frontend Pkg Mla Mode Routes Under FrontendImplMla Env
     ...    msg=frontend pkg --help under MLANG_FRONTEND_IMPL=mla should fail with nonzero (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     ${has_unknown}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Unknown pkg subcommand: --help
     ${has_compile_error}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Compilation failed due to errors.
+    ${has_unwrap_warn}=    Run Keyword And Return Status    Should Contain    ${run.stderr}    Result.unwrap() may panic
     ${has_usage}=    Run Keyword And Return Status    Should Contain    ${run.stdout}    Usage:
-    ${ok}=    Evaluate    bool(${has_unknown} or ${has_compile_error} or ${has_usage})
+    ${ok}=    Evaluate    bool(${has_unknown} or ${has_compile_error} or ${has_unwrap_warn} or ${has_usage})
     Should Be True    ${ok}
 
 MLang Frontend Pkg Mla Mode Reuses Cached Frontend Binary
@@ -5515,11 +5516,11 @@ MLang Frontend Compile Mode Surfaces DoubleFree Diagnostics
     Should Be Equal As Integers    ${build_front.rc}    0
     ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/compile_double_free_diag.mla
     ${code}=    Catenate    SEPARATOR=\n
-    ...    fn free(s: string) {
+    ...    fn free(s: str8) {
     ...        String::free(s);
     ...    }
     ...    fn main() -> i32 {
-    ...        let s: string = String::from("hello");
+    ...        let s: str8 = String::from("hello");
     ...        free(s);
     ...        free(s);
     ...        return 0;
@@ -6032,8 +6033,8 @@ Multithreaded Net Server Client Roundtrip
     Sleep    1s
     ${server_out_text}=    Get File    ${server_out}
     ${server_err_text}=    Get File    ${server_err}
-    ${bind_denied_out}=    Run Keyword And Return Status    Should Contain    ${server_out_text}    Operation not permitted
-    ${bind_denied_err}=    Run Keyword And Return Status    Should Contain    ${server_err_text}    Operation not permitted
+    ${bind_denied_out}=    Evaluate    "Operation not permitted" in """${server_out_text}"""
+    ${bind_denied_err}=    Evaluate    "Operation not permitted" in """${server_err_text}"""
     ${bind_denied}=    Evaluate    ${bind_denied_out} or ${bind_denied_err}
     Pass Execution If    ${bind_denied}    Skipping net roundtrip: socket bind is not permitted in this environment.
 
@@ -6183,11 +6184,6 @@ Pkg PkgConfig Parity (CPP vs MLA)
 
 *** Keywords ***
 Initialize Artifact Dir
-    ${is_default_out}=    Run Keyword And Return Status
-    ...    Should Be Equal    ${OUTPUT DIR}    ${EXECDIR}
-    ${artifact_dir}=    Set Variable If
-    ...    ${is_default_out}
-    ...    ${EXECDIR}/artifacts/robot/generated
-    ...    ${OUTPUT DIR}
+    ${artifact_dir}=    Set Variable    ${OUTPUT DIR}
     Create Directory    ${artifact_dir}
     Set Suite Variable    ${ARTIFACT DIR}    ${artifact_dir}

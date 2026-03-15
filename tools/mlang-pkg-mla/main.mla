@@ -73,7 +73,7 @@ fn print_usage() -> void {
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
     println!("running {}", program);
     let cr: Result<Child, str8> = spawn_inherit(program, args);
-    if (cr.is_err()) {
+    if cr.is_err() {
         println!("failed to spawn '{}': {}", program, cr.unwrap_err());
         return 1;
     }
