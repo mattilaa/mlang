@@ -1,7 +1,9 @@
 #include "ast.h"
 #include "ast_handle_helpers.h"
 #include "parser.hpp"
+#include <cctype>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 
 namespace {
@@ -2148,73 +2150,96 @@ std::string StructTypeRefNode::toString() const
 
 std::string GenericStructTypeRefNode::getMangledName() const
 {
+    auto normalize_type_name = [](const std::string& n) -> std::string
+    {
+        std::string out;
+        out.reserve(n.size());
+        char prev = '\0';
+        for(size_t i = 0; i < n.size(); ++i)
+        {
+            char c = n[i];
+            bool keep = std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+            char w = keep ? c : '_';
+            if(w == '_' && prev == '_')
+                continue;
+            out.push_back(w);
+            prev = w;
+        }
+        while(!out.empty() && out.back() == '_')
+            out.pop_back();
+        return out.empty() ? "unknown" : out;
+    };
+
+    std::function<std::string(TypeNode*)> mangle_type = [&](TypeNode* t)
+        -> std::string
+    {
+        if(!t)
+            return "unknown";
+        if(auto* sr = dynamic_cast<StructTypeRefNode*>(t))
+            return normalize_type_name(sr->structName);
+        if(auto* gr = dynamic_cast<GenericStructTypeRefNode*>(t))
+            return gr->getMangledName();
+        if(auto* gl = dynamic_cast<GenericListTypeNode*>(t))
+            return "list_" + mangle_type(gl->elementType);
+        if(auto* mp = dynamic_cast<MapTypeNode*>(t))
+            return "map_" + mangle_type(mp->keyType) + "_" +
+                   mangle_type(mp->valueType);
+        if(auto* tp = dynamic_cast<TupleTypeNode*>(t))
+        {
+            std::string out = "tuple";
+            if(tp->elementTypes)
+            {
+                for(auto* e : tp->elementTypes->types)
+                    out += "_" + mangle_type(e);
+            }
+            return out;
+        }
+        switch(t->kind)
+        {
+        case TypeNode::TYPE_BOOL:
+            return "bool";
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I32:
+            return "i32";
+        case TypeNode::TYPE_I8:
+            return "i8";
+        case TypeNode::TYPE_I16:
+            return "i16";
+        case TypeNode::TYPE_I64:
+            return "i64";
+        case TypeNode::TYPE_U8:
+            return "u8";
+        case TypeNode::TYPE_U16:
+            return "u16";
+        case TypeNode::TYPE_U32:
+            return "u32";
+        case TypeNode::TYPE_U64:
+            return "u64";
+        case TypeNode::TYPE_FLOAT:
+            return "f32";
+        case TypeNode::TYPE_DOUBLE:
+            return "f64";
+        case TypeNode::TYPE_STRING:
+            return "string";
+        case TypeNode::TYPE_STR8:
+            return "str8";
+        case TypeNode::TYPE_STR16:
+            return "str16";
+        case TypeNode::TYPE_LIST:
+            return "list";
+        case TypeNode::TYPE_MAP:
+            return "map";
+        case TypeNode::TYPE_TUPLE:
+            return "tuple";
+        default:
+            return "unknown";
+        }
+    };
+
     std::string mangled = structName;
     for(auto* typeArg : typeArgs)
     {
-        mangled += "_";
-        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeArg))
-        {
-            mangled += structRef->structName;
-        }
-        else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(typeArg))
-        {
-            mangled += genRef->getMangledName();
-        }
-        else
-        {
-            // Basic type
-            switch(typeArg->kind)
-            {
-            case TypeNode::TYPE_BOOL:
-                mangled += "bool";
-                break;
-            case TypeNode::TYPE_INT:
-                mangled += "i32";
-                break;
-            case TypeNode::TYPE_I8:
-                mangled += "i8";
-                break;
-            case TypeNode::TYPE_I16:
-                mangled += "i16";
-                break;
-            case TypeNode::TYPE_I32:
-                mangled += "i32";
-                break;
-            case TypeNode::TYPE_I64:
-                mangled += "i64";
-                break;
-            case TypeNode::TYPE_U8:
-                mangled += "u8";
-                break;
-            case TypeNode::TYPE_U16:
-                mangled += "u16";
-                break;
-            case TypeNode::TYPE_U32:
-                mangled += "u32";
-                break;
-            case TypeNode::TYPE_U64:
-                mangled += "u64";
-                break;
-            case TypeNode::TYPE_FLOAT:
-                mangled += "f32";
-                break;
-            case TypeNode::TYPE_DOUBLE:
-                mangled += "f64";
-                break;
-            case TypeNode::TYPE_STRING:
-                mangled += "string";
-                break;
-            case TypeNode::TYPE_STR8:
-                mangled += "str8";
-                break;
-            case TypeNode::TYPE_STR16:
-                mangled += "str16";
-                break;
-            default:
-                mangled += "unknown";
-                break;
-            }
-        }
+        mangled += "_" + mangle_type(typeArg);
     }
     return mangled;
 }

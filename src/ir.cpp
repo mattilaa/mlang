@@ -25,6 +25,106 @@ static bool is_same_module_family(const std::string& a, const std::string& b)
     return is_nested(a, b) || is_nested(b, a);
 }
 
+static std::string trim_copy(std::string s)
+{
+    size_t b = 0;
+    while(b < s.size() && std::isspace(static_cast<unsigned char>(s[b])))
+        ++b;
+    size_t e = s.size();
+    while(e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
+        --e;
+    return s.substr(b, e - b);
+}
+
+static bool is_wrapped_generic(const std::string& s, const char* head)
+{
+    size_t n = std::strlen(head);
+    return s.size() > n + 2 && s.compare(0, n, head) == 0 &&
+           s[n] == '<' && s.back() == '>';
+}
+
+static std::vector<std::string> split_top_level_commas(const std::string& s)
+{
+    std::vector<std::string> out;
+    int depth = 0;
+    size_t start = 0;
+    for(size_t i = 0; i < s.size(); ++i)
+    {
+        char c = s[i];
+        if(c == '<')
+            ++depth;
+        else if(c == '>')
+            --depth;
+        else if(c == ',' && depth == 0)
+        {
+            out.push_back(trim_copy(s.substr(start, i - start)));
+            start = i + 1;
+        }
+    }
+    out.push_back(trim_copy(s.substr(start)));
+    return out;
+}
+
+static TypeNode* type_from_text(std::string t)
+{
+    t = trim_copy(t);
+    if(t == "bool")
+        return new TypeNode(TypeNode::TYPE_BOOL);
+    if(t == "int" || t == "i32")
+        return new TypeNode(TypeNode::TYPE_I32);
+    if(t == "i8")
+        return new TypeNode(TypeNode::TYPE_I8);
+    if(t == "i16")
+        return new TypeNode(TypeNode::TYPE_I16);
+    if(t == "i64")
+        return new TypeNode(TypeNode::TYPE_I64);
+    if(t == "u8")
+        return new TypeNode(TypeNode::TYPE_U8);
+    if(t == "u16")
+        return new TypeNode(TypeNode::TYPE_U16);
+    if(t == "u32")
+        return new TypeNode(TypeNode::TYPE_U32);
+    if(t == "u64")
+        return new TypeNode(TypeNode::TYPE_U64);
+    if(t == "float" || t == "f32")
+        return new TypeNode(TypeNode::TYPE_FLOAT);
+    if(t == "double" || t == "f64")
+        return new TypeNode(TypeNode::TYPE_DOUBLE);
+    if(t == "string")
+        return new TypeNode(TypeNode::TYPE_STRING);
+    if(t == "str8")
+        return new TypeNode(TypeNode::TYPE_STR8);
+    if(t == "str16")
+        return new TypeNode(TypeNode::TYPE_STR16);
+
+    if(is_wrapped_generic(t, "list"))
+    {
+        std::string inner = t.substr(5, t.size() - 6);
+        return new GenericListTypeNode(type_from_text(inner));
+    }
+    if(is_wrapped_generic(t, "map"))
+    {
+        std::string inner = t.substr(4, t.size() - 5);
+        auto parts = split_top_level_commas(inner);
+        if(parts.size() == 2)
+        {
+            return new MapTypeNode(type_from_text(parts[0]),
+                                   type_from_text(parts[1]));
+        }
+    }
+    if(is_wrapped_generic(t, "tuple"))
+    {
+        std::string inner = t.substr(6, t.size() - 7);
+        auto parts = split_top_level_commas(inner);
+        auto* elems = new TypeListNode();
+        for(const auto& p : parts)
+            elems->addType(type_from_text(p));
+        return new TupleTypeNode(elems);
+    }
+
+    return new StructTypeRefNode(t);
+}
+
 // Recursively collect all IdentifierNode names referenced in an AST subtree.
 // Used for Non-Lexical Lifetime (NLL) borrow expiration.
 static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
@@ -1705,6 +1805,15 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         if(bindIt != activeTypeParamBindings.end() && bindIt->second)
         {
             return getLLVMTypeFromNode(bindIt->second);
+        }
+
+        // Generic container type args in generic structs can surface as
+        // textual struct refs (e.g. "list<i64>"). Reparse and resolve.
+        if(structRef->structName.find('<') != std::string::npos)
+        {
+            TypeNode* reparsed = type_from_text(structRef->structName);
+            if(reparsed && !dynamic_cast<StructTypeRefNode*>(reparsed))
+                return getLLVMTypeFromNode(reparsed);
         }
 
         // Check if this is a type parameter (like T, U) - should not reach here
@@ -18133,72 +18242,96 @@ CodeGenerator::substituteTypeParams(TypeNode* type,
 static std::string generateMangledName(const std::string& baseName,
                                        const std::vector<TypeNode*>& typeArgs)
 {
+    auto normalize_type_name = [](const std::string& n) -> std::string
+    {
+        std::string out;
+        out.reserve(n.size());
+        char prev = '\0';
+        for(size_t i = 0; i < n.size(); ++i)
+        {
+            char c = n[i];
+            bool keep = std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+            char w = keep ? c : '_';
+            if(w == '_' && prev == '_')
+                continue;
+            out.push_back(w);
+            prev = w;
+        }
+        while(!out.empty() && out.back() == '_')
+            out.pop_back();
+        return out.empty() ? "unknown" : out;
+    };
+
+    std::function<std::string(TypeNode*)> mangle_type = [&](TypeNode* t)
+        -> std::string
+    {
+        if(!t)
+            return "unknown";
+        if(auto* sr = dynamic_cast<StructTypeRefNode*>(t))
+            return normalize_type_name(sr->structName);
+        if(auto* gs = dynamic_cast<GenericStructTypeRefNode*>(t))
+            return gs->getMangledName();
+        if(auto* gl = dynamic_cast<GenericListTypeNode*>(t))
+            return "list_" + mangle_type(gl->elementType);
+        if(auto* mp = dynamic_cast<MapTypeNode*>(t))
+            return "map_" + mangle_type(mp->keyType) + "_" +
+                   mangle_type(mp->valueType);
+        if(auto* tp = dynamic_cast<TupleTypeNode*>(t))
+        {
+            std::string out = "tuple";
+            if(tp->elementTypes)
+            {
+                for(auto* e : tp->elementTypes->types)
+                    out += "_" + mangle_type(e);
+            }
+            return out;
+        }
+        switch(t->kind)
+        {
+        case TypeNode::TYPE_BOOL:
+            return "bool";
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I32:
+            return "i32";
+        case TypeNode::TYPE_I8:
+            return "i8";
+        case TypeNode::TYPE_I16:
+            return "i16";
+        case TypeNode::TYPE_I64:
+            return "i64";
+        case TypeNode::TYPE_U8:
+            return "u8";
+        case TypeNode::TYPE_U16:
+            return "u16";
+        case TypeNode::TYPE_U32:
+            return "u32";
+        case TypeNode::TYPE_U64:
+            return "u64";
+        case TypeNode::TYPE_FLOAT:
+            return "f32";
+        case TypeNode::TYPE_DOUBLE:
+            return "f64";
+        case TypeNode::TYPE_STRING:
+            return "string";
+        case TypeNode::TYPE_STR8:
+            return "str8";
+        case TypeNode::TYPE_STR16:
+            return "str16";
+        case TypeNode::TYPE_LIST:
+            return "list";
+        case TypeNode::TYPE_MAP:
+            return "map";
+        case TypeNode::TYPE_TUPLE:
+            return "tuple";
+        default:
+            return "unknown";
+        }
+    };
+
     std::string mangled = baseName;
     for(auto* typeArg : typeArgs)
     {
-        mangled += "_";
-        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(typeArg))
-        {
-            mangled += structRef->structName;
-        }
-        else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(typeArg))
-        {
-            mangled += genRef->getMangledName();
-        }
-        else
-        {
-            switch(typeArg->kind)
-            {
-            case TypeNode::TYPE_BOOL:
-                mangled += "bool";
-                break;
-            case TypeNode::TYPE_INT:
-                mangled += "i32";
-                break;
-            case TypeNode::TYPE_I8:
-                mangled += "i8";
-                break;
-            case TypeNode::TYPE_I16:
-                mangled += "i16";
-                break;
-            case TypeNode::TYPE_I32:
-                mangled += "i32";
-                break;
-            case TypeNode::TYPE_I64:
-                mangled += "i64";
-                break;
-            case TypeNode::TYPE_U8:
-                mangled += "u8";
-                break;
-            case TypeNode::TYPE_U16:
-                mangled += "u16";
-                break;
-            case TypeNode::TYPE_U32:
-                mangled += "u32";
-                break;
-            case TypeNode::TYPE_U64:
-                mangled += "u64";
-                break;
-            case TypeNode::TYPE_FLOAT:
-                mangled += "f32";
-                break;
-            case TypeNode::TYPE_DOUBLE:
-                mangled += "f64";
-                break;
-            case TypeNode::TYPE_STRING:
-                mangled += "string";
-                break;
-            case TypeNode::TYPE_STR8:
-                mangled += "str8";
-                break;
-            case TypeNode::TYPE_STR16:
-                mangled += "str16";
-                break;
-            default:
-                mangled += "unknown";
-                break;
-            }
-        }
+        mangled += "_" + mangle_type(typeArg);
     }
     return mangled;
 }
