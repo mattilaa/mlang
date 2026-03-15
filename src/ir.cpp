@@ -13096,6 +13096,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 auto pit = pointerBorrowTarget.find(idArg->name);
                 if(pit != pointerBorrowTarget.end())
                 {
+                    auto vit = variableTypes.find(idArg->name);
+                    if(vit == variableTypes.end() ||
+                       vit->second != TypeNode::TYPE_PTR)
+                    {
+                        continue;
+                    }
+                    if(!isMoveOnlyVariable(pit->second))
+                    {
+                        continue;
+                    }
                     if(!registerBorrowInCall(pit->second, "", true))
                         return false;
                     continue;
@@ -15600,6 +15610,16 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 auto pit = pointerBorrowTarget.find(idArg->name);
                 if(pit != pointerBorrowTarget.end())
                 {
+                    auto vit = variableTypes.find(idArg->name);
+                    if(vit == variableTypes.end() ||
+                       vit->second != TypeNode::TYPE_PTR)
+                    {
+                        continue;
+                    }
+                    if(!isMoveOnlyVariable(pit->second))
+                    {
+                        continue;
+                    }
                     if(!registerBorrowInCall(pit->second, "", true))
                         return false;
                     continue;
