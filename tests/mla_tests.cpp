@@ -2847,6 +2847,122 @@ TEST_F(MLATest, IsPrime)
     EXPECT_EQ(compileAndRun(code), "2\n3\n5\n7\n11\n13\n17\n19\n");
 }
 
+TEST_F(MLATest, AssertRuntimePasses)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            assert!(1);
+            assert!(2 + 2 == 4);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, AssertRuntimeFailurePrintsMessage)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            assert!(0);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    ASSERT_TRUE(compile(true));
+    const std::string err = runStderr();
+    EXPECT_NE(err.find("assert! failed"), std::string::npos);
+}
+
+TEST_F(MLATest, StaticAssertCompileTimeTruePasses)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            static_assert!(2 + 2 == 4);
+            static_assert!(1 || 0);
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 0);
+}
+
+TEST_F(MLATest, StaticAssertCompileTimeFalseFails)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            static_assert!(2 + 2 == 5);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("static_assert! failed"), std::string::npos);
+}
+
+TEST_F(MLATest, StaticAssertNonConstExpressionFails)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 1;
+            static_assert!(x > 0);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("static_assert! requires a compile-time boolean expression"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, RawPointerDereferenceOutsideUnsafeFails)
+{
+    std::string code = R"(
+        extern fn raw_i32_ptr() -> ptr<i32>;
+
+        fn main() -> i32 {
+            let p: ptr<i32> = raw_i32_ptr();
+            return *p;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("dereferencing raw pointer requires an unsafe block"),
+              std::string::npos);
+}
+
+TEST_F(MLATest, RawPointerDereferenceInsideUnsafeCompiles)
+{
+    std::string code = R"(
+        extern fn raw_i32_ptr() -> ptr<i32>;
+
+        fn main() -> i32 {
+            let p: ptr<i32> = raw_i32_ptr();
+            unsafe {
+                return *p;
+            }
+        }
+    )";
+    writeSource(code);
+    EXPECT_TRUE(compile(true));
+}
+
+TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            let x: i32 = 7;
+            let p: ptr<i32> = &x;
+            return *p;
+        }
+    )";
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
+}
+
 // ============================================================================
 // Main
 // ============================================================================

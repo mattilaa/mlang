@@ -143,6 +143,73 @@ Compile Error Returns Nonzero
     ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/compile_error_bin    stdout=PIPE    stderr=PIPE
     Should Not Be Equal As Integers    ${build.rc}    0    msg=Expected nonzero exit for compile error, got ${build.rc}\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
 
+Assert Macro Runtime Failure
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/assert_runtime_fail.mla
+    ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/assert_runtime_fail_bin
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        assert!(0);
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0    msg=Failed building assert! runtime failure test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+    ${run}=    Run Process    ${bin}    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run.rc}    0
+    Should Contain    ${run.stderr}    assert! failed
+
+Static Assert Compile Error
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/static_assert_fail.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        static_assert!(1 == 0);
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/static_assert_fail_bin    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${build.rc}    0
+    Should Contain    ${build.stderr}    static_assert! failed
+
+Static Assert Requires Compile Time Expression
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/static_assert_nonconst_fail.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let x: i32 = 1;
+    ...        static_assert!(x > 0);
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/static_assert_nonconst_fail_bin    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${build.rc}    0
+    Should Contain    ${build.stderr}    static_assert! requires a compile-time boolean expression
+
+Raw Pointer Dereference Requires Unsafe
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/raw_ptr_requires_unsafe.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    extern fn raw_i32_ptr() -> ptr<i32>;
+    ...    fn main() -> i32 {
+    ...        let p: ptr<i32> = raw_i32_ptr();
+    ...        return *p;
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    ${src}    -o    ${ARTIFACT DIR}/raw_ptr_requires_unsafe_bin    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${build.rc}    0
+    Should Contain    ${build.stderr}    dereferencing raw pointer requires an unsafe block
+
+Raw Pointer Dereference In Unsafe Compiles
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/raw_ptr_unsafe_ok.mla
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    extern fn raw_i32_ptr() -> ptr<i32>;
+    ...    fn main() -> i32 {
+    ...        let p: ptr<i32> = raw_i32_ptr();
+    ...        unsafe {
+    ...            return *p;
+    ...        }
+    ...    }
+    Create File    ${src}    ${code}
+    ${build}=    Run Process    ${MLANG}    -c    ${src}    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build.rc}    0    msg=Failed compile-only unsafe raw pointer test (rc=${build.rc})\nSTDOUT:\n${build.stdout}\nSTDERR:\n${build.stderr}
+
 Result Methods And Unwrap Warns
     ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn.mla
     ${bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/result_unwrap_warn_bin
