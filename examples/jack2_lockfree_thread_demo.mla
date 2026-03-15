@@ -4,14 +4,14 @@ mod std::time;
 use std::time::sleep_ms;
 
 extern fn __mlang_std_sync_lfqueue_new(capacity: i64) -> i64;
-extern fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: string) -> i32;
+extern fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: str8) -> i32;
 extern fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> i32;
 extern fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> i32;
-extern fn __mlang_std_sync_last_error() -> string;
-extern fn jack2_bridge_start(queue_handle: i64, client_name: string) -> i32;
+extern fn __mlang_std_sync_last_error() -> str8;
+extern fn jack2_bridge_start(queue_handle: i64, client_name: str8) -> i32;
 extern fn jack2_bridge_stop() -> i32;
 
-fn post_cmd(queue_handle: i64, cmd: string) -> i32 {
+fn post_cmd(queue_handle: i64, cmd: str8) -> i32 {
     for _i in 0..2000000 {
         let rc: i32 = __mlang_std_sync_lfqueue_send(queue_handle, cmd);
         if rc < 0 {
@@ -50,7 +50,7 @@ fn main() -> i32 {
         return 1;
     }
 
-    let notes: list<string> = [
+    let notes: list<str8> = [
         "play 440 220",
         "play 554.37 220",
         "play 659.25 220",

@@ -94,7 +94,7 @@ struct Animal {
 };
 
 struct Dog: Animal {
-    var name: string;
+    var name: str8;
 };
 
 // --- Main function demonstrating usage ---

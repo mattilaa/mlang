@@ -123,7 +123,7 @@ fn demo_sequential_push_str() -> void {
 // argument without taking ownership.  String is Copy, so the caller can pass
 // either a plain value or &val.
 
-fn identity_via_borrow(src: &string) -> &string {
+fn identity_via_borrow(src: &str8) -> &str8 {
     return src;
 }
 
@@ -139,7 +139,7 @@ fn demo_borrow_of_param() -> void {
 // ownership.  The same binding can be used multiple times.
 // Using &string in the signature makes the borrowing contract explicit.
 
-fn get_len(s: &string) -> i64 {
+fn get_len(s: &str8) -> i64 {
     return s.len();
 }
 

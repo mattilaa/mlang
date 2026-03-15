@@ -37,7 +37,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     let verbose: bool = result.flag("verbose");
     let dry_run: bool = result.flag("dry-run");
-    let output: string = result.get("output");
+    let output: str8 = result.get("output");
     let count: i64 = result.get_i64("count");
     let npos: i64 = result.positional_count();
 
@@ -48,7 +48,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     println!("positional_count={}", npos);
 
     if npos > 0: {
-        let input: string = result.positional(0);
+        let input: str8 = result.positional(0);
         println!("input={}", input);
     }
 

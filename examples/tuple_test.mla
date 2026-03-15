@@ -8,10 +8,10 @@ fn main() -> i32 {
     println!("z: {}", coords.2);
 
     // Mixed types
-    let data: tuple<string, i32, f64> = ("test", 42, 3.14);
+    let data: tuple<str8, i32, f64> = ("test", 42, 3.14);
     println!("{} {} {}", data.0, data.1, data.2);
 
-    let data2: tuple<string, i32, bool> = ("test", 42, true);
+    let data2: tuple<str8, i32, bool> = ("test", 42, true);
     println!("{} {} {}", data.0, data.1, data.2);
 
     return 0;

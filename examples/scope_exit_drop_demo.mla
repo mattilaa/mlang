@@ -2,14 +2,14 @@ mod std::strbuf;
 
 use std::strbuf::*;
 
-extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> i32;
+extern fn snprintf(dst: str8, size: i64, fmt: str8, ...) -> i32;
 
 struct OwnedBuffer {
-    var raw: string;
+    var raw: str8;
     var id: i32;
 };
 
-fn make_owned(id: i32, text: string) -> OwnedBuffer {
+fn make_owned(id: i32, text: str8) -> OwnedBuffer {
     let buf = String::with_capacity(128);
     snprintf(buf, 128, "owned(%d): %s", id, text);
     return OwnedBuffer { raw: buf, id: id };

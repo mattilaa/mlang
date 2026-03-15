@@ -7,8 +7,8 @@ use std::sync::Condvar;
 use std::sync::Mutex;
 
 fn main() -> i32 {
-    let mr: Result<Mutex, string> = Mutex::new();
-    let cr: Result<Condvar, string> = Condvar::new();
+    let mr: Result<Mutex, str8> = Mutex::new();
+    let cr: Result<Condvar, str8> = Condvar::new();
     if mr.is_err(): {
         println!("mutex/condvar create failed");
         return 1;
@@ -20,7 +20,7 @@ fn main() -> i32 {
     let m: Mutex = mr.unwrap();
     let c: Condvar = cr.unwrap();
     m.lock();
-    let w: Result<i32, string> = c.wait_timeout_ms(m, 10);
+    let w: Result<i32, str8> = c.wait_timeout_ms(m, 10);
     m.unlock();
     c.close();
     m.close();
@@ -30,7 +30,7 @@ fn main() -> i32 {
     }
     println!("condvar timeout result={}", w.unwrap());
 
-    let chr: Result<Channel, string> = Channel::new(4);
+    let chr: Result<Channel, str8> = Channel::new(4);
     if chr.is_err(): {
         println!("channel create failed");
         return 1;
@@ -38,7 +38,7 @@ fn main() -> i32 {
     let ch: Channel = chr.unwrap();
     ch.send("sync-message");
     var buf = String::with_capacity(128);
-    let rr: Result<i64, string> = ch.recv(buf, 128);
+    let rr: Result<i64, str8> = ch.recv(buf, 128);
     if rr.is_err(): {
         println!("channel recv failed");
         String::free(buf);

@@ -16,7 +16,7 @@ fn main() -> i32 {
     let d2: Distance = 14.0f;
     println!("avg={}", average(d1, d2));
 
-    let scores: SomeMap<string, i32> = {"Alice": 95, "Bob": 87};
+    let scores: SomeMap<str8, i32> = {"Alice": 95, "Bob": 87};
     println!("alice={}", scores["Alice"]);
 
     let ids: VecAlias<i32> = [7, 8, 9];

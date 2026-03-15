@@ -309,14 +309,14 @@ fn menu_item_count(focus_idx: i64) -> i64 {
     return 6;
 }
 
-fn menu_name(focus_idx: i64) -> string {
+fn menu_name(focus_idx: i64) -> str8 {
     if focus_idx == 0 { return format!("{}", "File"); }
     if focus_idx == 1 { return format!("{}", "View"); }
     if focus_idx == 2 { return format!("{}", "Edit"); }
     return format!("{}", "Help");
 }
 
-fn menu_item_name(focus_idx: i64, item_idx: i64) -> string {
+fn menu_item_name(focus_idx: i64, item_idx: i64) -> str8 {
     if focus_idx == 0 {
         if item_idx == 0 { return format!("{}", "New"); }
         if item_idx == 1 { return format!("{}", "Open"); }
@@ -353,16 +353,16 @@ fn ascii_is_printable(k: i32) -> i32 {
     return k >= 32 && k <= 126 ? 1 : 0;
 }
 
-fn append_char_to_owned(src: string, k: i32) -> string {
+fn append_char_to_owned(src: str8, k: i32) -> str8 {
     let b: i64 = builder_new(len(src) + 8);
     let _ = builder_append(b, src);
     let _ = builder_append_char(b, k);
-    let out: string = builder_take_string(b);
+    let out: str8 = builder_take_string(b);
     builder_free(b);
     return out;
 }
 
-fn remove_last_char_owned(src: string) -> string {
+fn remove_last_char_owned(src: str8) -> str8 {
     let n: i64 = len(src);
     if n <= 0 {
         return format!("{}", "");
@@ -370,7 +370,7 @@ fn remove_last_char_owned(src: string) -> string {
     return sub(src, 0, n - 1);
 }
 
-fn fuzzy_match_subseq(text: string, query: string) -> i32 {
+fn fuzzy_match_subseq(text: str8, query: str8) -> i32 {
     let qn: i64 = len(query);
     if qn == 0 {
         return 1;
@@ -381,8 +381,8 @@ fn fuzzy_match_subseq(text: string, query: string) -> i32 {
         if qi >= qn {
             break;
         }
-        let tc: string = sub(text, ti, 1);
-        let qc: string = sub(query, qi, 1);
+        let tc: str8 = sub(text, ti, 1);
+        let qc: str8 = sub(query, qi, 1);
         if eq(tc, qc) == 1 {
             qi = qi + 1;
         }
@@ -392,7 +392,7 @@ fn fuzzy_match_subseq(text: string, query: string) -> i32 {
     return qi >= qn ? 1 : 0;
 }
 
-fn build_file_match_index(entries: &list<string>, filter_q: string) -> list<i64> {
+fn build_file_match_index(entries: &list<str8>, filter_q: str8) -> list<i64> {
     var out: list<i64> = [];
     let n: i64 = entries.len();
     if n > 0 {
@@ -410,20 +410,20 @@ fn build_file_match_index(entries: &list<string>, filter_q: string) -> list<i64>
     return out;
 }
 
-fn path_join(dir: string, name: string) -> string {
+fn path_join(dir: str8, name: str8) -> str8 {
     if len(dir) == 0 {
         return format!("{}", name);
     }
     if ends_with(dir, "/") == 1 {
         return concat(dir, name);
     }
-    let with_sep: string = concat(dir, "/");
-    let out: string = concat(with_sep, name);
+    let with_sep: str8 = concat(dir, "/");
+    let out: str8 = concat(with_sep, name);
     free(with_sep);
     return out;
 }
 
-fn remove_trailing_slash_owned(path: string) -> string {
+fn remove_trailing_slash_owned(path: str8) -> str8 {
     let n: i64 = len(path);
     if n <= 1 {
         return format!("{}", path);
@@ -434,7 +434,7 @@ fn remove_trailing_slash_owned(path: string) -> string {
     return format!("{}", path);
 }
 
-fn list_has_string(src: &list<string>, v: string) -> i32 {
+fn list_has_string(src: &list<str8>, v: str8) -> i32 {
     let n: i64 = src.len();
     for i in 0..n {
         if eq(src[i], v) == 1 {
@@ -444,40 +444,40 @@ fn list_has_string(src: &list<string>, v: string) -> i32 {
     return 0;
 }
 
-fn list_toggle_string(src: &list<string>, v: string) -> list<string> {
-    var out: list<string> = [];
+fn list_toggle_string(src: &list<str8>, v: str8) -> list<str8> {
+    var out: list<str8> = [];
     var found: i32 = 0;
     let n: i64 = src.len();
     for i in 0..n {
         if eq(src[i], v) == 1 {
             found = 1;
         } else {
-            let copied: string = format!("{}", src[i]);
+            let copied: str8 = format!("{}", src[i]);
             out.push(copied);
         }
     }
     if found == 0 {
-        let copied: string = format!("{}", v);
+        let copied: str8 = format!("{}", v);
         out.push(copied);
     }
     return out;
 }
 
-fn tree_collect(root: string, rel_dir: string, depth: i64,
-                expanded: &list<string>,
-                disp: &list<string>, full_out: &list<string>, kind_out: &list<i64>) -> void {
-    let cur_dir: string = len(rel_dir) == 0 ? format!("{}", root): path_join(root, rel_dir);
-    let raw: list<string> = list_dir(cur_dir);
+fn tree_collect(root: str8, rel_dir: str8, depth: i64,
+                expanded: &list<str8>,
+                disp: &list<str8>, full_out: &list<str8>, kind_out: &list<i64>) -> void {
+    let cur_dir: str8 = len(rel_dir) == 0 ? format!("{}", root): path_join(root, rel_dir);
+    let raw: list<str8> = list_dir(cur_dir);
     let n: i64 = raw.len();
     for i in 0..n {
-        let name: string = raw[i];
-        let rel_path: string = len(rel_dir) == 0 ? format!("{}", name): path_join(rel_dir, name);
-        let full_path: string = path_join(root, rel_path);
-        let indent: string = repeat("  ", depth);
+        let name: str8 = raw[i];
+        let rel_path: str8 = len(rel_dir) == 0 ? format!("{}", name): path_join(rel_dir, name);
+        let full_path: str8 = path_join(root, rel_path);
+        let indent: str8 = repeat("  ", depth);
         if is_dir(full_path) == 1 {
             let expanded_now: i32 = list_has_string(expanded, full_path);
-            let marker: string = expanded_now == 1 ? "v ": "> ";
-            let shown: string = format!("{}{}{}{}", indent, marker, name, "/");
+            let marker: str8 = expanded_now == 1 ? "v ": "> ";
+            let shown: str8 = format!("{}{}{}{}", indent, marker, name, "/");
             disp.push(shown);
             full_out.push(full_path);
             kind_out.push(1);
@@ -485,7 +485,7 @@ fn tree_collect(root: string, rel_dir: string, depth: i64,
                 tree_collect(root, rel_path, depth + 1, expanded, disp, full_out, kind_out);
             }
         } else {
-            let shown: string = format!("{}{}{}", indent, "  ", name);
+            let shown: str8 = format!("{}{}{}", indent, "  ", name);
             disp.push(shown);
             full_out.push(full_path);
             kind_out.push(ends_with(name, ".mtr") == 1 ? 2 : 3);
@@ -499,21 +499,21 @@ fn tree_collect(root: string, rel_dir: string, depth: i64,
     free(cur_dir);
 }
 
-fn rebuild_file_dialog_tree(root: string, filter_q: string,
-                            expanded: &list<string>,
-                            full_out: &list<string>, kind_out: &list<i64>) -> list<string> {
-    var disp: list<string> = [];
-    let up0: string = parent_dir(root);
-    let up: string = remove_trailing_slash_owned(up0);
-    let up_label: string = format!("{}", "..");
+fn rebuild_file_dialog_tree(root: str8, filter_q: str8,
+                            expanded: &list<str8>,
+                            full_out: &list<str8>, kind_out: &list<i64>) -> list<str8> {
+    var disp: list<str8> = [];
+    let up0: str8 = parent_dir(root);
+    let up: str8 = remove_trailing_slash_owned(up0);
+    let up_label: str8 = format!("{}", "..");
     disp.push(up_label);
     full_out.push(up);
     kind_out.push(0);
-    let raw: list<string> = list_dir(root);
+    let raw: list<str8> = list_dir(root);
     let n: i64 = raw.len();
     for i in 0..n {
-        let name: string = raw[i];
-        let full_path: string = path_join(root, name);
+        let name: str8 = raw[i];
+        let full_path: str8 = path_join(root, name);
         disp.push(format!("{}", name));
         full_out.push(full_path);
         if is_dir(full_path) == 1 {
@@ -548,7 +548,7 @@ fn main() -> i32 {
         return 1;
     }
 
-    let loop_r: Result<EventLoop, string> = EventLoop::start(qh, 30, "tick");
+    let loop_r: Result<EventLoop, str8> = EventLoop::start(qh, 30, "tick");
     if loop_r.is_err() {
         println!("event loop init failed: {}", loop_r.unwrap_err());
         __mlang_std_sync_lfqueue_free(qh);
@@ -557,7 +557,7 @@ fn main() -> i32 {
     }
     let ticker: EventLoop = loop_r.unwrap();
 
-    let ev_buf: string = String::with_capacity(32);
+    let ev_buf: str8 = String::with_capacity(32);
     var cursor_row: i64 = 0;
     var seq_offset: i64 = 0;
     var current_view: i64 = view_pattern();
@@ -651,22 +651,22 @@ fn main() -> i32 {
     var modal_open: i32 = 0;
     var modal_kind: i64 = 0; // 0=about, 1=file dialog
     var modal_ok_selected: i32 = 1; // file-dialog focus: -1=list, 1=OK, 0=CANCEL
-    var modal_title: string = format!("{}", "About Mlau Tracker");
-    var modal_body: string = format!("{}", "Modal popup demo [Enter/Esc = OK]");
-    var file_dialog_input: string = format!("{}", "");
-    var file_dialog_filter: string = format!("{}", "");
+    var modal_title: str8 = format!("{}", "About Mlau Tracker");
+    var modal_body: str8 = format!("{}", "Modal popup demo [Enter/Esc = OK]");
+    var file_dialog_input: str8 = format!("{}", "");
+    var file_dialog_filter: str8 = format!("{}", "");
     var file_dialog_filter_mode: i32 = 0;
-    var file_dialog_cwd: string = format!("{}", ".");
-    var file_dialog_origin_cwd: string = format!("{}", ".");
-    var file_dialog_entries: list<string> = [];
-    var file_dialog_full: list<string> = [];
+    var file_dialog_cwd: str8 = format!("{}", ".");
+    var file_dialog_origin_cwd: str8 = format!("{}", ".");
+    var file_dialog_entries: list<str8> = [];
+    var file_dialog_full: list<str8> = [];
     var file_dialog_kind: list<i64> = [];
-    var file_dialog_expanded: list<string> = [];
+    var file_dialog_expanded: list<str8> = [];
     var file_dialog_match_idx: list<i64> = [];
     var file_dialog_sel: i64 = 0;
     var file_dialog_scroll: i64 = 0;
     var skip_lf_after_cr: i32 = 0;
-    var last_action: string = format!("{}", "(none)");
+    var last_action: str8 = format!("{}", "(none)");
 
     print!("{}{}{}{}", alt_screen_on(), cursor(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
     while quit == 0 {
@@ -804,8 +804,8 @@ fn main() -> i32 {
                 }
                 if file_dialog_filter_mode == 0 && keycode == std::ascii::AsciiKey::LowerH {
                     modal_ok_selected = -1;
-                    let up0: string = parent_dir(file_dialog_cwd);
-                    let up: string = remove_trailing_slash_owned(up0);
+                    let up0: str8 = parent_dir(file_dialog_cwd);
+                    let up: str8 = remove_trailing_slash_owned(up0);
                     free(file_dialog_cwd);
                     file_dialog_cwd = up;
                     free(up0);
@@ -827,7 +827,7 @@ fn main() -> i32 {
                     if file_dialog_match_idx.len() > 0 {
                         let pick_idx: i64 = file_dialog_match_idx[file_dialog_sel];
                         let picked_kind: i64 = pick_idx < file_dialog_kind.len() ? file_dialog_kind[pick_idx] : 3;
-                        let picked_full: string = pick_idx < file_dialog_full.len()
+                        let picked_full: str8 = pick_idx < file_dialog_full.len()
                             ? format!("{}", file_dialog_full[pick_idx])
                             : format!("{}", "");
                         if picked_kind == 0 || picked_kind == 1 {
@@ -856,7 +856,7 @@ fn main() -> i32 {
                             free(last_action);
                             last_action = format!("Open -> {}", file_dialog_input);
                         } else {
-                            let picked: string = file_dialog_entries[pick_idx];
+                            let picked: str8 = file_dialog_entries[pick_idx];
                             free(last_action);
                             last_action = format!("Blocked non-.mtr file: {}", picked);
                         }
@@ -866,11 +866,11 @@ fn main() -> i32 {
                 }
                 if keycode == std::ascii::AsciiKey::Backspace || keycode == std::ascii::AsciiKey::Del {
                     if file_dialog_filter_mode == 1 {
-                        let next_filter: string = remove_last_char_owned(file_dialog_filter);
+                        let next_filter: str8 = remove_last_char_owned(file_dialog_filter);
                         free(file_dialog_filter);
                         file_dialog_filter = next_filter;
                     } else {
-                        let next_input: string = remove_last_char_owned(file_dialog_input);
+                        let next_input: str8 = remove_last_char_owned(file_dialog_input);
                         free(file_dialog_input);
                         file_dialog_input = next_input;
                     }
@@ -901,9 +901,9 @@ fn main() -> i32 {
                         }
                         file_dialog_sel = sel_idx;
                         let pick_idx: i64 = file_dialog_match_idx[sel_idx];
-                        let picked: string = file_dialog_entries[pick_idx];
+                        let picked: str8 = file_dialog_entries[pick_idx];
                         let picked_kind: i64 = pick_idx < file_dialog_kind.len() ? file_dialog_kind[pick_idx] : 3;
-                        let picked_full: string = pick_idx < file_dialog_full.len()
+                        let picked_full: str8 = pick_idx < file_dialog_full.len()
                             ? format!("{}", file_dialog_full[pick_idx])
                             : format!("{}", "");
                         if picked_kind == 0 || picked_kind == 1 {
@@ -950,7 +950,7 @@ fn main() -> i32 {
                         // Fallback: with zero matches, Enter still opens ".." (first entry).
                         let pick_idx: i64 = 0;
                         let picked_kind: i64 = pick_idx < file_dialog_kind.len() ? file_dialog_kind[pick_idx] : 3;
-                        let picked_full: string = pick_idx < file_dialog_full.len()
+                        let picked_full: str8 = pick_idx < file_dialog_full.len()
                             ? format!("{}", file_dialog_full[pick_idx])
                             : format!("{}", "");
                         if picked_kind == 0 || picked_kind == 1 {
@@ -985,7 +985,7 @@ fn main() -> i32 {
                 }
                 if ascii_is_printable(keycode) == 1 {
                     if file_dialog_filter_mode == 1 {
-                        let next_filter: string = append_char_to_owned(file_dialog_filter, keycode);
+                        let next_filter: str8 = append_char_to_owned(file_dialog_filter, keycode);
                         free(file_dialog_filter);
                         file_dialog_filter = next_filter;
                         file_dialog_match_idx = build_file_match_index(file_dialog_entries, file_dialog_filter);
@@ -996,7 +996,7 @@ fn main() -> i32 {
                         }
                         file_dialog_scroll = 0;
                     } else {
-                        let next_input: string = append_char_to_owned(file_dialog_input, keycode);
+                        let next_input: str8 = append_char_to_owned(file_dialog_input, keycode);
                         free(file_dialog_input);
                         file_dialog_input = next_input;
                     }
@@ -1107,9 +1107,9 @@ fn main() -> i32 {
                         if open_menu == 1 {
                             let old_view: i64 = current_view;
                             var next_view: i64 = current_view;
-                            let mname: string = menu_name(focus_idx);
-                            let iname: string = menu_item_name(focus_idx, menu_sel);
-                            let action: string = format!("{} -> {}", mname, iname);
+                            let mname: str8 = menu_name(focus_idx);
+                            let iname: str8 = menu_item_name(focus_idx, menu_sel);
+                            let action: str8 = format!("{} -> {}", mname, iname);
                             if focus_idx == 0 && menu_sel == 0 {
                                 active_pattern = (active_pattern + 1) % pattern_steps_list.len();
                                 pattern_steps_list = song_set_at(pattern_steps_list, active_pattern, 1);
@@ -1130,7 +1130,7 @@ fn main() -> i32 {
                                 if file_dialog_full.len() > 0 {
                                     free_lines(file_dialog_full);
                                 }
-                                let cwd_s: string = cwd();
+                                let cwd_s: str8 = cwd();
                                 free(file_dialog_cwd);
                                 file_dialog_cwd = remove_trailing_slash_owned(cwd_s);
                                 free(file_dialog_origin_cwd);
@@ -1610,7 +1610,7 @@ fn main() -> i32 {
             view_anchor_row = play_event_row;
         }
         seq_offset = clamp_view_offset(seq_offset, view_anchor_row, visible, nrows);
-        let frame: string = render_tracker_ui(
+        let frame: str8 = render_tracker_ui(
             w, h,
             cursor_row, seq_offset, nrows,
             current_view, header_bpm, steps_pp, active_pattern,
@@ -1629,8 +1629,8 @@ fn main() -> i32 {
             file_dialog_cwd, file_dialog_input, file_dialog_filter, file_dialog_filter_mode,
             file_dialog_entries, file_dialog_kind, file_dialog_match_idx, file_dialog_sel, file_dialog_scroll,
             last_action);
-        let clear_home: string = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
-        let payload: string = concat(clear_home, frame);
+        let clear_home: str8 = format!("{}{}", cursor(cmd_home()), cursor(cmd_clear_screen()));
+        let payload: str8 = concat(clear_home, frame);
         write(out, payload);
         free(payload);
         free(clear_home);

@@ -1,8 +1,8 @@
 fn main() -> i32 {
-    let A: string = "▀";
-    let B: string = "▄";
-    let C: string = "─";
-    let blocks: [string; 4] = [A + B + C, B + A + C, A + C + B, B + C + A];
+    let A: str8 = "▀";
+    let B: str8 = "▄";
+    let C: str8 = "─";
+    let blocks: [str8; 4] = [A + B + C, B + A + C, A + C + B, B + C + A];
 
     var p: i64 = 0;
     for _y in 0..8 {

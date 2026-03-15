@@ -10,7 +10,7 @@ fn main() -> i32 {
     let t2: i64 = now_ms();
     println!("slept delta={}ms", t2 - t1);
 
-    let tr: Result<Timer, string> = Timer::after(40);
+    let tr: Result<Timer, str8> = Timer::after(40);
     if tr.is_err(): {
         println!("timer create failed");
         return 1;

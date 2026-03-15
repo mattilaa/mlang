@@ -1,4 +1,4 @@
-extern fn printf(format: string, value: i32) -> i32;
+extern fn printf(format: str8, value: i32) -> i32;
 extern fn cos(x: f64) -> f64;
 
 fn main() -> i32 {

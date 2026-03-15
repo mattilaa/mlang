@@ -8,14 +8,14 @@ use std::process::spawn;
 use std::strbuf::contains;
 
 fn main() -> i32 {
-    let child_r: Result<Child, string> = spawn("/bin/echo", ["hello from std::process"]);
+    let child_r: Result<Child, str8> = spawn("/bin/echo", ["hello from std::process"]);
     if child_r.is_err(): {
         println!("spawn failed: {}", child_r.unwrap_err());
         return 1;
     }
     let child: Child = child_r.unwrap();
 
-    let out_r: Result<ChildStdout, string> = child.stdout();
+    let out_r: Result<ChildStdout, str8> = child.stdout();
     if out_r.is_err(): {
         println!("stdout pipe failed: {}", out_r.unwrap_err());
         child.close();
@@ -24,7 +24,7 @@ fn main() -> i32 {
     let out: ChildStdout = out_r.unwrap();
 
     var buf = String::with_capacity(256);
-    let n_r: Result<i64, string> = out.read(buf, 256);
+    let n_r: Result<i64, str8> = out.read(buf, 256);
     if n_r.is_err(): {
         println!("stdout read failed: {}", n_r.unwrap_err());
         String::free(buf);
@@ -43,7 +43,7 @@ fn main() -> i32 {
     String::free(buf);
     out.close();
 
-    let st_r: Result<ExitStatus, string> = child.wait();
+    let st_r: Result<ExitStatus, str8> = child.wait();
     if st_r.is_err(): {
         println!("wait failed: {}", st_r.unwrap_err());
         child.close();

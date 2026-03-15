@@ -51,19 +51,19 @@ fn message_delay_ms(min_ms: i64, max_ms: i64) -> i64 {
     return range_i64(lo, hi);
 }
 
-fn connect_with_retry(port: i64, retries: i64) -> Result<i64, string> {
+fn connect_with_retry(port: i64, retries: i64) -> Result<i64, str8> {
     for _i in 0..retries {
-        let cr: Result<i64, string> = connect("127.0.0.1", port);
+        let cr: Result<i64, str8> = connect("127.0.0.1", port);
         if cr.is_ok() {
             return cr;
         }
     }
-    return Err<i64, string>(format!("connect failed after {} retries", retries));
+    return Err<i64, str8>(format!("connect failed after {} retries", retries));
 }
 
 fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max_delay_ms: i64) -> i32 {
     let fmt: str8 = "MM/DD/YYYY:HH:MM:SS.MS";
-    let cr: Result<i64, string> = connect_with_retry(port, 8000);
+    let cr: Result<i64, str8> = connect_with_retry(port, 8000);
     if cr.is_err() {
         println!("CLIENT_CONNECT_ERROR id={} err={}", client_id, cr.unwrap_err());
         return 1;
@@ -72,7 +72,7 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
     let s: i64 = cr.unwrap();
     for i in 0..rounds {
         let delay_ms: i64 = message_delay_ms(min_delay_ms, max_delay_ms);
-        let pre_sleep_ts: string = format_local(fmt);
+        let pre_sleep_ts: str8 = format_local(fmt);
         println!(
             "{} CLIENT_WAIT: id={} round={} delay_ms={}",
             pre_sleep_ts, client_id, i, delay_ms
@@ -84,9 +84,9 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
             _ => op_echo()
         };
 
-        let payload: string = format!("hello-from-client-{}-round-{}", client_id, i);
-        let sr: Result<i64, string> = send(s, opcode, payload);
-        let tx_ts: string = format_local(fmt);
+        let payload: str8 = format!("hello-from-client-{}-round-{}", client_id, i);
+        let sr: Result<i64, str8> = send(s, opcode, payload);
+        let tx_ts: str8 = format_local(fmt);
         println!(
             "{} CLIENT_TX: id={} round={} delay_ms={} opcode={} payload={}",
             tx_ts, client_id, i, delay_ms, opcode, payload
@@ -97,7 +97,7 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
             return 1;
         }
 
-        let rr: Result<ProtocolFrame, string> = recv(s, 2048, default_max_payload_bytes());
+        let rr: Result<ProtocolFrame, str8> = recv(s, 2048, default_max_payload_bytes());
         if rr.is_err() {
             println!("CLIENT_RECV_ERROR id={} round={} err={}", client_id, i, rr.unwrap_err());
             close(s);
@@ -105,7 +105,7 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
         }
 
         let frame: ProtocolFrame = rr.unwrap();
-        let rx_ts: string = format_local(fmt);
+        let rx_ts: str8 = format_local(fmt);
         let expected_opcode: i32 = match opcode {
             1 => op_pong(),
             10 => op_echo_reply(),
@@ -126,15 +126,15 @@ fn run_one_client(client_id: i64, port: i64, rounds: i64, min_delay_ms: i64, max
         String::free(frame.payload);
     }
 
-    let shutdown_payload: string = format!("shutdown-client-{}", client_id);
-    let sdr: Result<i64, string> = send(s, op_shutdown(), shutdown_payload);
+    let shutdown_payload: str8 = format!("shutdown-client-{}", client_id);
+    let sdr: Result<i64, str8> = send(s, op_shutdown(), shutdown_payload);
     if sdr.is_err() {
         println!("CLIENT_SHUTDOWN_SEND_ERROR id={} err={}", client_id, sdr.unwrap_err());
         close(s);
         return 1;
     }
 
-    let ackr: Result<ProtocolFrame, string> = recv(s, 1024, default_max_payload_bytes());
+    let ackr: Result<ProtocolFrame, str8> = recv(s, 1024, default_max_payload_bytes());
     if ackr.is_err() {
         println!("CLIENT_SHUTDOWN_ACK_ERROR id={} err={}", client_id, ackr.unwrap_err());
         close(s);

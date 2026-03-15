@@ -3,15 +3,15 @@ use std::strbuf::*;
 
 // A function that reads a string borrow — takes `string` by value,
 // which in mlang is a char* copy (an immutable view of the bytes).
-fn greet(name: string) -> void {
+fn greet(name: str8) -> void {
     println!("Hello, {}!", name);
 }
 
-fn print_both(a: string, b: string) -> void {
+fn print_both(a: str8, b: str8) -> void {
     println!("{} | {}", a, b);
 }
 
-fn count_chars(s: string) -> i64 {
+fn count_chars(s: str8) -> i64 {
     return len(s);
 }
 

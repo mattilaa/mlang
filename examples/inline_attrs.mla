@@ -27,7 +27,7 @@ fn clamp(val: i32, lo: i32, hi: i32) -> i32 {
 
 // #[inline(never)] -- keep as a real call (useful for debugging/profiling)
 #[inline(never)]
-fn report(label: string, val: i32) -> void {
+fn report(label: str8, val: i32) -> void {
     println!("{}: {}", label, val);
 }
 

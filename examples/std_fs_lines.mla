@@ -17,25 +17,25 @@ use std::strbuf::len;
 use std::strbuf::contains;
 
 fn main() -> i32 {
-    let path: string = "/tmp/mlang_scores.csv";
+    let path: str8 = "/tmp/mlang_scores.csv";
 
     // -- write sample file ------------------------------------------------
-    let content: string = "# Student score data\n# Format: name,score\nname,score\nAlice,95\nBob,87\nCarol,92\nDave,78\n";
-    let wr: Result<i32, string> = write_all_text(path, content);
+    let content: str8 = "# Student score data\n# Format: name,score\nname,score\nAlice,95\nBob,87\nCarol,92\nDave,78\n";
+    let wr: Result<i32, str8> = write_all_text(path, content);
     if wr.is_err(): {
         println!("error: could not write {}", path);
         return 1;
     }
 
     // -- open, read all lines, filter and report --------------------------
-    let fr: Result<File, string> = File::open(path);
+    let fr: Result<File, str8> = File::open(path);
     if fr.is_err(): {
         println!("error: could not open {}", path);
         return 1;
     }
     // File is moved into BufReader; do not call f.close() after this
     let reader: BufReader = BufReader::new(fr.unwrap());
-    let lines: list<string> = reader.lines();
+    let lines: list<str8> = reader.lines();
 
     var total: i64 = 0;
     var comment_count: i64 = 0;
@@ -72,10 +72,10 @@ fn main() -> i32 {
     free_lines(lines);
 
     // -- re-open and search for a specific entry --------------------------
-    let fr2: Result<File, string> = File::open(path);
+    let fr2: Result<File, str8> = File::open(path);
     if fr2.is_err(): { return 1; }
     let reader2: BufReader = BufReader::new(fr2.unwrap());
-    let lines2: list<string> = reader2.lines();
+    let lines2: list<str8> = reader2.lines();
 
     for line in lines2 {
         if contains(line, "Alice") == 1: {

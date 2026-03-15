@@ -6,7 +6,7 @@ extern fn c_float(x: f32) -> f32;
 extern fn c_double(x: f64) -> f64;
 extern fn c_str8(s: str8) -> i32;
 extern fn c_str16(s: str16) -> i32;
-extern fn c_string(s: string) -> i32;
+extern fn c_string(s: str8) -> i32;
 
 fn main() -> i32 {
     let a: i32 = 1;
@@ -17,6 +17,6 @@ fn main() -> i32 {
     let d: f64 = 2.5;
     let s8: str8 = "hello";
     let s16: str16 = "hi";
-    let s: string = "world";
+    let s: str8 = "world";
     return 0;
 }

@@ -4,21 +4,21 @@ use std::fs::BufReader;
 use std::fs::File;
 use std::fs::free_lines;
 
-fn run_demo() -> Result<i32, string> {
+fn run_demo() -> Result<i32, str8> {
     let f: File = File::open("foo.txt")?;
     let reader: BufReader = BufReader::new(f);
-    let lines: list<string> = reader.lines();
+    let lines: list<str8> = reader.lines();
 
     for line in lines {
         println!("{}", line);
     }
 
     free_lines(lines);
-    return Ok<i32, string>(0);
+    return Ok<i32, str8>(0);
 }
 
 fn main() -> i32 {
-    let rc: Result<i32, string> = run_demo();
+    let rc: Result<i32, str8> = run_demo();
     if rc.is_ok(): {
         return rc.unwrap();
     }

@@ -36,32 +36,32 @@ use std::term::stdin_restore;
 use std::vec::*;
 
 extern fn __mlang_std_sync_lfqueue_new(capacity: i64) -> i64;
-extern fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: string) -> i32;
-extern fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: string, capacity: i64) -> i64;
+extern fn __mlang_std_sync_lfqueue_send(queue_handle: i64, s: str8) -> i32;
+extern fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: str8, capacity: i64) -> i64;
 extern fn __mlang_std_sync_lfqueue_close(queue_handle: i64) -> i32;
 extern fn __mlang_std_sync_lfqueue_free(queue_handle: i64) -> i32;
-extern fn __mlang_std_sync_last_error() -> string;
-extern fn atoi(s: string) -> i32;
-extern fn __mlang_std_esc_cursor_code(code: i32) -> string;
+extern fn __mlang_std_sync_last_error() -> str8;
+extern fn atoi(s: str8) -> i32;
+extern fn __mlang_std_esc_cursor_code(code: i32) -> str8;
 
 extern fn jack2_sampler_start(cmd_queue_handle: i64,
                               event_queue_handle: i64,
-                              schema_path: string,
-                              sample_dir: string,
-                              client_name: string,
+                              schema_path: str8,
+                              sample_dir: str8,
+                              client_name: str8,
                               bpm: i32,
                               steps_per_beat: i32) -> i32;
 extern fn jack2_sampler_stop() -> i32;
 
-fn cursor_force(cmd: i32) -> string {
-    let gated: string = cursor(cmd);
+fn cursor_force(cmd: i32) -> str8 {
+    let gated: str8 = cursor(cmd);
     if len(gated) > 0 {
         return gated;
     }
     return __mlang_std_esc_cursor_code(cmd);
 }
 
-fn post_cmd(queue_handle: i64, cmd: string) -> i32 {
+fn post_cmd(queue_handle: i64, cmd: str8) -> i32 {
     for _i in 0..2000000 {
         let rc: i32 = __mlang_std_sync_lfqueue_send(queue_handle, cmd);
         if rc < 0 {
@@ -76,11 +76,11 @@ fn post_cmd(queue_handle: i64, cmd: string) -> i32 {
     return 1;
 }
 
-fn parse_lane_value(raw: string) -> string {
+fn parse_lane_value(raw: str8) -> str8 {
     if len(raw) > 0 {
-        let first: string = sub(raw, 0, 1);
+        let first: str8 = sub(raw, 0, 1);
         if eq(first, " ") == 1 || eq(first, "\t") == 1 {
-            let out: string = sub(raw, 1, len(raw) - 1);
+            let out: str8 = sub(raw, 1, len(raw) - 1);
             free(raw);
             free(first);
             return out;
@@ -90,9 +90,9 @@ fn parse_lane_value(raw: string) -> string {
     return raw;
 }
 
-fn parse_bpm_from(key: string, value: string, default_value: i32) -> i32 {
+fn parse_bpm_from(key: str8, value: str8, default_value: i32) -> i32 {
     if eq(key, "BPM") == 1 || eq(key, "bpm") == 1 || eq(key, "BMP") == 1 || eq(key, "bmp") == 1 {
-        let t: string = trim(value);
+        let t: str8 = trim(value);
         let v: i32 = atoi(t);
         free(t);
         return v > 0 ? v : default_value;
@@ -100,10 +100,10 @@ fn parse_bpm_from(key: string, value: string, default_value: i32) -> i32 {
     return default_value;
 }
 
-fn parse_steps_from(key: string, value: string, default_value: i32) -> i32 {
+fn parse_steps_from(key: str8, value: str8, default_value: i32) -> i32 {
     if eq(key, "steps") == 1 || eq(key, "Steps") == 1 || eq(key, "StepsPerBeat") == 1 ||
        eq(key, "stepsperbeat") == 1 || eq(key, "SPB") == 1 || eq(key, "spb") == 1 {
-        let t2: string = trim(value);
+        let t2: str8 = trim(value);
         let v2: i32 = atoi(t2);
         free(t2);
         return v2 > 0 ? v2 : default_value;
@@ -112,7 +112,7 @@ fn parse_steps_from(key: string, value: string, default_value: i32) -> i32 {
     return default_value;
 }
 
-fn has_name(names: Vec<string>, needle: string) -> i32 {
+fn has_name(names: Vec<str8>, needle: str8) -> i32 {
     for n in names {
         if eq(n, needle) == 1 {
             return 1;
@@ -121,7 +121,7 @@ fn has_name(names: Vec<string>, needle: string) -> i32 {
     return 0;
 }
 
-fn find_pattern_index(pattern_names: Vec<string>, pid: string) -> i64 {
+fn find_pattern_index(pattern_names: Vec<str8>, pid: str8) -> i64 {
     let n: i64 = pattern_names.len();
     for i in 0..n {
         if eq(pattern_names[i], pid) == 1 {
@@ -131,12 +131,12 @@ fn find_pattern_index(pattern_names: Vec<string>, pid: string) -> i64 {
     return -1;
 }
 
-fn set_pattern_steps(pattern_names: Vec<string>, pattern_steps: Vec<i64>, pid: string, steps: i64) -> void {
+fn set_pattern_steps(pattern_names: Vec<str8>, pattern_steps: Vec<i64>, pid: str8, steps: i64) -> void {
     pattern_names.push(pid);
     pattern_steps.push(steps);
 }
 
-fn get_pattern_steps(pattern_names: Vec<string>, pattern_steps: Vec<i64>, pid: string) -> i64 {
+fn get_pattern_steps(pattern_names: Vec<str8>, pattern_steps: Vec<i64>, pid: str8) -> i64 {
     var i: i64 = pattern_names.len() - 1;
     while i >= 0 {
         if eq(pattern_names[i], pid) == 1 {
@@ -151,24 +151,24 @@ fn get_pattern_steps(pattern_names: Vec<string>, pattern_steps: Vec<i64>, pid: s
     return 16;
 }
 
-fn strip_brackets(s: string) -> string {
-    let t: string = trim(s);
+fn strip_brackets(s: str8) -> str8 {
+    let t: str8 = trim(s);
     if len(t) >= 2 && starts_with(t, "[") == 1 && ends_with(t, "]") == 1 {
-        let out: string = sub(t, 1, len(t) - 2);
+        let out: str8 = sub(t, 1, len(t) - 2);
         free(t);
         return out;
     }
     return t;
 }
 
-fn parse_song_list(value: string) -> Vec<string> {
-    var out: Vec<string> = Vec::new();
-    let inner: string = strip_brackets(value);
-    var rest: string = inner;
+fn parse_song_list(value: str8) -> Vec<str8> {
+    var out: Vec<str8> = Vec::new();
+    let inner: str8 = strip_brackets(value);
+    var rest: str8 = inner;
     while len(rest) > 0 {
         let comma: i64 = find(rest, ",");
         if comma < 0 {
-            let tok: string = trim(rest);
+            let tok: str8 = trim(rest);
             if len(tok) > 0 {
                 out.push(tok);
             } else {
@@ -177,33 +177,33 @@ fn parse_song_list(value: string) -> Vec<string> {
             free(rest);
             break;
         }
-        let left_raw: string = sub(rest, 0, comma);
-        let tok2: string = trim(left_raw);
+        let left_raw: str8 = sub(rest, 0, comma);
+        let tok2: str8 = trim(left_raw);
         if len(tok2) > 0 {
             out.push(tok2);
         } else {
             free(tok2);
         }
         free(left_raw);
-        let next: string = sub(rest, comma + 1, len(rest) - (comma + 1));
+        let next: str8 = sub(rest, comma + 1, len(rest) - (comma + 1));
         free(rest);
         rest = next;
     }
     return out;
 }
 
-fn make_track_key(pattern_id: string, track_name: string) -> string {
-    let p: string = concat(pattern_id, "|");
-    let k: string = concat(p, track_name);
+fn make_track_key(pattern_id: str8, track_name: str8) -> str8 {
+    let p: str8 = concat(pattern_id, "|");
+    let k: str8 = concat(p, track_name);
     free(p);
     return k;
 }
 
-fn get_track_pattern(pattern_id: string,
-                     track_name: string,
-                     track_keys: Vec<string>,
-                     track_values: Vec<string>) -> string {
-    let key: string = make_track_key(pattern_id, track_name);
+fn get_track_pattern(pattern_id: str8,
+                     track_name: str8,
+                     track_keys: Vec<str8>,
+                     track_values: Vec<str8>) -> str8 {
+    let key: str8 = make_track_key(pattern_id, track_name);
     let n: i64 = track_keys.len();
     for i in 0..n {
         if eq(track_keys[i], key) == 1 {
@@ -216,14 +216,14 @@ fn get_track_pattern(pattern_id: string,
 }
 
 fn resolve_pattern_steps(base_steps: i64,
-                         pattern_id: string,
-                         sample_names: Vec<string>,
-                         track_keys: Vec<string>,
-                         track_values: Vec<string>) -> i64 {
+                         pattern_id: str8,
+                         sample_names: Vec<str8>,
+                         track_keys: Vec<str8>,
+                         track_values: Vec<str8>) -> i64 {
     var steps: i64 = base_steps > 0 ? base_steps : 16;
     let n: i64 = sample_names.len();
     for i in 0..n {
-        let lane: string = get_track_pattern(pattern_id, sample_names[i], track_keys, track_values);
+        let lane: str8 = get_track_pattern(pattern_id, sample_names[i], track_keys, track_values);
         if len(lane) > steps {
             steps = len(lane);
         }
@@ -231,11 +231,11 @@ fn resolve_pattern_steps(base_steps: i64,
     return steps;
 }
 
-fn is_hit(pattern: string, step: i64) -> i32 {
+fn is_hit(pattern: str8, step: i64) -> i32 {
     if step >= len(pattern) {
         return 0;
     }
-    let c: string = sub(pattern, step, 1);
+    let c: str8 = sub(pattern, step, 1);
     var ok: i32 = 0;
     if eq(c, "x") == 1 || eq(c, "X") == 1 {
         ok = 1;
@@ -246,14 +246,14 @@ fn is_hit(pattern: string, step: i64) -> i32 {
 
 fn emit_step(queue_handle: i64,
              step: i64,
-             pattern_id: string,
-             sample_names: Vec<string>,
-             track_keys: Vec<string>,
-             track_values: Vec<string>) -> i32 {
+             pattern_id: str8,
+             sample_names: Vec<str8>,
+             track_keys: Vec<str8>,
+             track_values: Vec<str8>) -> i32 {
     let n_tracks: i64 = sample_names.len();
     for i in 0..n_tracks {
-        let name: string = sample_names[i];
-        let pattern: string = get_track_pattern(pattern_id, name, track_keys, track_values);
+        let name: str8 = sample_names[i];
+        let pattern: str8 = get_track_pattern(pattern_id, name, track_keys, track_values);
         if is_hit(pattern, step) == 1 {
             if post_cmd(queue_handle, name) != 0 {
                 return 1;
@@ -263,11 +263,11 @@ fn emit_step(queue_handle: i64,
     return 0;
 }
 
-fn draw_lane(name: string, pattern: string, step: i64, pattern_steps: i64, running: bool) -> void {
+fn draw_lane(name: str8, pattern: str8, step: i64, pattern_steps: i64, running: bool) -> void {
     print!("[{}] ", name);
     for i in 0..pattern_steps {
         if i < len(pattern) {
-            let c: string = sub(pattern, i, 1);
+            let c: str8 = sub(pattern, i, 1);
             if running && i == step {
                 print!("{}{}{}", bold_on(), c, reset());
             } else {
@@ -286,10 +286,10 @@ fn draw_ui(bpm: i32,
            pattern_steps: i64,
            running: bool,
            step: i64,
-           pattern_id: string,
-           sample_names: Vec<string>,
-           track_keys: Vec<string>,
-           track_values: Vec<string>) -> void {
+           pattern_id: str8,
+           sample_names: Vec<str8>,
+           track_keys: Vec<str8>,
+           track_values: Vec<str8>) -> void {
     print!("{}{}{}", cursor_force(cmd_hide()), cursor(cmd_home()), cursor(cmd_clear_screen()));
     print!("\r[drum] SPACE=start/stop q=quit bpm={} spb={} pattern={} steps={} tracks={}\n",
            bpm, steps_per_beat, pattern_id, pattern_steps, sample_names.len());
@@ -301,8 +301,8 @@ fn draw_ui(bpm: i32,
 
     let n_tracks: i64 = sample_names.len();
     for i in 0..n_tracks {
-        let nm: string = sample_names[i];
-        let lane: string = get_track_pattern(pattern_id, nm, track_keys, track_values);
+        let nm: str8 = sample_names[i];
+        let lane: str8 = get_track_pattern(pattern_id, nm, track_keys, track_values);
         draw_lane(nm, lane, step, pattern_steps, running);
     }
 
@@ -318,34 +318,34 @@ fn draw_ui(bpm: i32,
 }
 
 fn main() -> i32 {
-    let schema_path: string = "examples/sampler_example/drumschema.txt";
-    let sample_dir: string = "examples/sampler_example";
+    let schema_path: str8 = "examples/sampler_example/drumschema.txt";
+    let sample_dir: str8 = "examples/sampler_example";
     let bpm_default: i32 = 130;
 
-    let fr: Result<File, string> = File::open(schema_path);
+    let fr: Result<File, str8> = File::open(schema_path);
     if fr.is_err() {
         eprintln!("failed to open schema: {}", schema_path);
         return 1;
     }
 
     let reader: BufReader = BufReader::new(fr.unwrap());
-    let lines: list<string> = reader.lines();
+    let lines: list<str8> = reader.lines();
 
     var bpm_cfg: i32 = bpm_default;
     var steps_per_beat: i32 = 4;
     var section: i32 = 0; // 1=samples, 2=patterns, 3=sequencer
     var in_pattern_sequence: i32 = 0;
-    var current_pattern_id: string = "";
+    var current_pattern_id: str8 = "";
 
-    var sample_names: Vec<string> = Vec::new();
-    var pattern_names: Vec<string> = Vec::new();
+    var sample_names: Vec<str8> = Vec::new();
+    var pattern_names: Vec<str8> = Vec::new();
     var pattern_steps: Vec<i64> = Vec::new();
-    var track_keys: Vec<string> = Vec::new();
-    var track_values: Vec<string> = Vec::new();
-    var song_order: Vec<string> = Vec::new();
+    var track_keys: Vec<str8> = Vec::new();
+    var track_values: Vec<str8> = Vec::new();
+    var song_order: Vec<str8> = Vec::new();
 
     for line in lines {
-        let tl: string = trim(line);
+        let tl: str8 = trim(line);
         if len(tl) == 0 || starts_with(tl, "#") == 1 {
             free(tl);
             continue;
@@ -376,7 +376,7 @@ fn main() -> i32 {
                 free(tl);
                 continue;
             }
-            let pid: string = strip_brackets(tl);
+            let pid: str8 = strip_brackets(tl);
             if eq(pid, "patterns") != 1 {
                 current_pattern_id = pid;
                 pattern_names.push(current_pattern_id);
@@ -395,10 +395,10 @@ fn main() -> i32 {
             continue;
         }
 
-        let key_raw: string = sub(tl, 0, pos);
-        let key: string = trim(key_raw);
-        let val_raw: string = sub(tl, pos + 1, len(tl) - (pos + 1));
-        let val: string = parse_lane_value(val_raw);
+        let key_raw: str8 = sub(tl, 0, pos);
+        let key: str8 = trim(key_raw);
+        let val_raw: str8 = sub(tl, pos + 1, len(tl) - (pos + 1));
+        let val: str8 = parse_lane_value(val_raw);
 
         if section == 1 {
             sample_names.push(key);
@@ -411,7 +411,7 @@ fn main() -> i32 {
 
             if bpm_cfg == old_bpm && steps_per_beat == old_spb {
                 if len(current_pattern_id) > 0 && in_pattern_sequence == 0 && (eq(key, "steps") == 1 || eq(key, "Steps") == 1) {
-                    let tsteps: string = trim(val);
+                    let tsteps: str8 = trim(val);
                     let steps_v: i32 = atoi(tsteps);
                     free(tsteps);
                     if steps_v > 0 {
@@ -430,7 +430,7 @@ fn main() -> i32 {
                         }
                     }
                     if known_sample == 1 {
-                        let tk: string = make_track_key(current_pattern_id, key);
+                        let tk: str8 = make_track_key(current_pattern_id, key);
                         track_keys.push(tk);
                         track_values.push(val);
                         free(key);
@@ -483,7 +483,7 @@ fn main() -> i32 {
     }
 
     var song_index: i64 = 0;
-    var current_song_pattern: string = song_order[0];
+    var current_song_pattern: str8 = song_order[0];
     var current_base_steps: i64 = 16;
     var i_ps0: i64 = pattern_names.len() - 1;
     while i_ps0 >= 0 {
@@ -499,12 +499,12 @@ fn main() -> i32 {
     var current_pattern_steps: i64 = current_base_steps;
     let nsm0: i64 = sample_names.len();
     for ti0 in 0..nsm0 {
-        let nm0: string = sample_names[ti0];
-        let lk0: string = make_track_key(current_song_pattern, nm0);
+        let nm0: str8 = sample_names[ti0];
+        let lk0: str8 = make_track_key(current_song_pattern, nm0);
         let nk0: i64 = track_keys.len();
         for kj0 in 0..nk0 {
             if eq(track_keys[kj0], lk0) == 1 {
-                let lane0: string = track_values[kj0];
+                let lane0: str8 = track_values[kj0];
                 if len(lane0) > current_pattern_steps {
                     current_pattern_steps = len(lane0);
                 }
@@ -544,7 +544,7 @@ fn main() -> i32 {
         }
     }
 
-    let event_loop_r: Result<EventLoop, string> = EventLoop::start(event_queue, 2, "poll");
+    let event_loop_r: Result<EventLoop, str8> = EventLoop::start(event_queue, 2, "poll");
     if event_loop_r.is_err() {
         eprintln!("[drum] failed to create std::event_loop");
         if raw_enabled == 1 {
@@ -564,7 +564,7 @@ fn main() -> i32 {
     var failed: i32 = 0;
     var step: i64 = 0;
     var ui_dirty: i32 = 1;
-    let ev_buf: string = with_capacity(64);
+    let ev_buf: str8 = with_capacity(64);
 
     while quit == false {
         for _i in 0..256 {
@@ -574,11 +574,11 @@ fn main() -> i32 {
             }
 
             if eq(ev_buf, "poll") == 1 {
-                let keys: string = with_capacity(64);
+                let keys: str8 = with_capacity(64);
                 let n_keys: i64 = read_line_nonblocking(input, keys, 64);
                 if n_keys > 0 {
                     for i in 0..n_keys {
-                        let k: string = sub(keys, i, 1);
+                        let k: str8 = sub(keys, i, 1);
                         if eq(k, "q") == 1 || eq(k, "Q") == 1 {
                             quit = true;
                             free(k);
@@ -602,9 +602,9 @@ fn main() -> i32 {
             if running && eq(ev_buf, "tick") == 1 {
                 let nsm: i64 = sample_names.len();
                 for ti in 0..nsm {
-                    let nm: string = sample_names[ti];
-                    let lk: string = make_track_key(current_song_pattern, nm);
-                    var lane: string = "";
+                    let nm: str8 = sample_names[ti];
+                    let lk: str8 = make_track_key(current_song_pattern, nm);
+                    var lane: str8 = "";
                     let nk: i64 = track_keys.len();
                     for kj in 0..nk {
                         if eq(track_keys[kj], lk) == 1 {
@@ -643,12 +643,12 @@ fn main() -> i32 {
                     current_pattern_steps = current_base_steps;
                     let nsm2: i64 = sample_names.len();
                     for ti2 in 0..nsm2 {
-                        let nm2: string = sample_names[ti2];
-                        let lk2: string = make_track_key(current_song_pattern, nm2);
+                        let nm2: str8 = sample_names[ti2];
+                        let lk2: str8 = make_track_key(current_song_pattern, nm2);
                         let nk2: i64 = track_keys.len();
                         for kj2 in 0..nk2 {
                             if eq(track_keys[kj2], lk2) == 1 {
-                                let lane2: string = track_values[kj2];
+                                let lane2: str8 = track_values[kj2];
                                 if len(lane2) > current_pattern_steps {
                                     current_pattern_steps = len(lane2);
                                 }
@@ -701,9 +701,9 @@ fn main() -> i32 {
 
             let n_tracks: i64 = sample_names.len();
             for ti3 in 0..n_tracks {
-                let nm3: string = sample_names[ti3];
-                let lk3: string = make_track_key(current_song_pattern, nm3);
-                var lane3: string = "";
+                let nm3: str8 = sample_names[ti3];
+                let lk3: str8 = make_track_key(current_song_pattern, nm3);
+                var lane3: str8 = "";
                 let nk3: i64 = track_keys.len();
                 for kj3 in 0..nk3 {
                     if eq(track_keys[kj3], lk3) == 1 {

@@ -1,12 +1,12 @@
-fn div(a: i32, b: i32) -> Result<i32, string> {
+fn div(a: i32, b: i32) -> Result<i32, str8> {
     if b == 0: {
-        return Err<i32, string>("divide by zero");
+        return Err<i32, str8>("divide by zero");
     }
-    return Ok<i32, string>(a / b);
+    return Ok<i32, str8>(a / b);
 }
 
 fn main() -> i32 {
-    let r: Result<i32, string> = div(10, 2);
+    let r: Result<i32, str8> = div(10, 2);
     let v: i32 = match r { Ok(x) => x, Err(e) => 0 };
     let w: i32 = match 1 + 1 { 1 => 10, 2 => 20, _ => 0 };
     let n: i32 = 2;

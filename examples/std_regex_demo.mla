@@ -6,14 +6,14 @@ use std::strbuf::sub;
 use std::strbuf::free;
 
 fn main() -> i32 {
-    let r: Result<Regex, string> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    let r: Result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
     if r.is_err(): {
         println!("compile failed: {}", r.unwrap_err());
         return 1;
     }
 
     let re: Regex = r.unwrap();
-    let text: string = "user-42";
+    let text: str8 = "user-42";
 
     if re.is_match(text) == 0: {
         println!("no match");
@@ -26,8 +26,8 @@ fn main() -> i32 {
     let g2s: i64 = re.match_start(text, 2);
     let g2e: i64 = re.match_end(text, 2);
 
-    let name: string = sub(text, g1s, g1e - g1s);
-    let id: string = sub(text, g2s, g2e - g2s);
+    let name: str8 = sub(text, g1s, g1e - g1s);
+    let id: str8 = sub(text, g2s, g2e - g2s);
     println!("name={} id={}", name, id);
 
     free(id);

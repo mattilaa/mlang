@@ -40,16 +40,16 @@ use std::term::stdin_restore;
 use std::term::stdout_size;
 use std::time::sleep_ms;
 
-extern fn jack2_fftviz_start(wav_path: string, client_name: string) -> i32;
+extern fn jack2_fftviz_start(wav_path: str8, client_name: str8) -> i32;
 extern fn jack2_fftviz_stop() -> i32;
 extern fn jack2_fftviz_running() -> i32;
 extern fn jack2_fftviz_sample_rate() -> i64;
 extern fn jack2_fftviz_total_frames() -> i64;
 extern fn jack2_fftviz_current_frame() -> i64;
 extern fn jack2_fftviz_snapshot_i64(channel: i32, window: i32) -> list<i64>;
-extern fn jack2_fftviz_block_ansi_i64(color_idx: i64) -> string;
-extern fn jack2_fftviz_bg_ansi_i64(bg_idx: i64) -> string;
-extern fn __mlang_std_esc_cursor_code(code: i32) -> string;
+extern fn jack2_fftviz_block_ansi_i64(color_idx: i64) -> str8;
+extern fn jack2_fftviz_bg_ansi_i64(bg_idx: i64) -> str8;
+extern fn __mlang_std_esc_cursor_code(code: i32) -> str8;
 
 fn abs_i64(x: i64) -> i64 {
     return x < 0 ? 0 - x : x;
@@ -169,8 +169,8 @@ fn cell_color_idx(on_l: i32, on_r: i32, ml: i64, mr: i64, max_vis: i64) -> i64 {
     return 163 + lvl;
 }
 
-fn cursor_force(cmd: i32) -> string {
-    let gated: string = cursor(cmd);
+fn cursor_force(cmd: i32) -> str8 {
+    let gated: str8 = cursor(cmd);
     if len(gated) > 0 {
         return gated;
     }
@@ -290,7 +290,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "20Hz";
+        let t: str8 = "20Hz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -304,7 +304,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "100Hz";
+        let t: str8 = "100Hz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -318,7 +318,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "500Hz";
+        let t: str8 = "500Hz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -332,7 +332,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "1KHz";
+        let t: str8 = "1KHz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -346,7 +346,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "4KHz";
+        let t: str8 = "4KHz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -360,7 +360,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "8KHz";
+        let t: str8 = "8KHz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -374,7 +374,7 @@ fn draw_freq_axis(width: i64, bins: i64, fft_window: i32, sr: i64) -> void {
         cur = p;
     }
     if p < width {
-        let t: string = "16KHz";
+        let t: str8 = "16KHz";
         let tl: i64 = len(t);
         if p + tl <= width {
             print!("{}", t);
@@ -550,11 +550,11 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
 }
 
 fn main(argc: i32, args: list<str8>) -> i32 {
-    var wav_path: string = "examples/fft_example/illusion.wav";
+    var wav_path: str8 = "examples/fft_example/illusion.wav";
     var mode: i32 = 0; // 1=music, 0=flat
     var i: i32 = 1;
     while i < argc {
-        let a: string = args[i];
+        let a: str8 = args[i];
         if eq(a, "--flat") == 1 {
             mode = 0;
         } else if eq(a, "--music") == 1 {

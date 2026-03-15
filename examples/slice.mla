@@ -67,7 +67,7 @@ fn main() -> i32 {
     // ---------------------------------------------------------------
     println!("\n=== enumerate loops ===");
 
-    let letters: list<string> = ["alpha", "beta", "gamma", "delta"];
+    let letters: list<str8> = ["alpha", "beta", "gamma", "delta"];
 
     // for (i, x) in coll -- direct
     println!("direct:");
@@ -75,19 +75,19 @@ fn main() -> i32 {
         println!("  {}: {}", i, name);
     }
 
-    let letters2: list<string> = ["alpha", "beta", "gamma", "delta"];
+    let letters2: list<str8> = ["alpha", "beta", "gamma", "delta"];
     println!(".enumerate():");
     for (i, name) in letters2.enumerate() {
         println!("  {}: {}", i, name);
     }
 
-    let letters3: list<string> = ["alpha", "beta", "gamma", "delta"];
+    let letters3: list<str8> = ["alpha", "beta", "gamma", "delta"];
     println!(".iter().enumerate():");
     for (i, name) in letters3.iter().enumerate() {
         println!("  {}: {}", i, name);
     }
 
-    let letters4: list<string> = ["alpha", "beta", "gamma", "delta"];
+    let letters4: list<str8> = ["alpha", "beta", "gamma", "delta"];
     println!(".into_iter().enumerate():");
     for (i, name) in letters4.into_iter().enumerate() {
         println!("  {}: {}", i, name);

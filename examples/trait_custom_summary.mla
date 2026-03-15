@@ -1,16 +1,16 @@
 trait Summary {
-    fn summarize(&self) -> string;
+    fn summarize(&self) -> str8;
 }
 
 struct SocialPost {
-    var username: string;
-    var content: string;
+    var username: str8;
+    var content: str8;
     var reply: bool;
     var repost: bool;
 };
 
 impl Summary for SocialPost {
-    fn summarize(&self) -> string {
+    fn summarize(&self) -> str8 {
         return format!("{}: {}", self.username, self.content);
     }
 }

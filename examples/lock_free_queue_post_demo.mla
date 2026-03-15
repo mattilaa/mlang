@@ -6,16 +6,16 @@ use std::sync::LockFreeQueue;
 use std::thread::join;
 use std::time::sleep_ms;
 
-extern pub fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: string, capacity: i64) -> i64;
-extern pub fn __mlang_std_sync_last_error() -> string;
+extern pub fn __mlang_std_sync_lfqueue_try_recv(queue_handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_sync_last_error() -> str8;
 
 struct Event {
     var id: i32;
-    var kind: string;
+    var kind: str8;
     var value: i32;
 };
 
-fn encode_event(e: Event) -> string {
+fn encode_event(e: Event) -> str8 {
     return format!("Event{{id:{}, kind:\"{}\", value:{}}}", e.id, e.kind, e.value);
 }
 
@@ -45,9 +45,9 @@ fn consumer_thread(queue_handle: i64) -> i32 {
 }
 
 fn post_event(q: LockFreeQueue, ev: Event) -> i32 {
-    let payload: string = encode_event(ev);
+    let payload: str8 = encode_event(ev);
     for _i in 0..2000000 {
-        let sr: Result<i32, string> = q.try_send(payload);
+        let sr: Result<i32, str8> = q.try_send(payload);
         if sr.is_err(): {
             eprintln!("[producer] send error: {}", sr.unwrap_err());
             return 1;
@@ -64,7 +64,7 @@ fn post_event(q: LockFreeQueue, ev: Event) -> i32 {
 }
 
 fn main() -> i32 {
-    let qr: Result<LockFreeQueue, string> = LockFreeQueue::new(4);
+    let qr: Result<LockFreeQueue, str8> = LockFreeQueue::new(4);
     if qr.is_err(): {
         eprintln!("queue new failed: {}", qr.unwrap_err());
         return 1;

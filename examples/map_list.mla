@@ -1,7 +1,7 @@
 fn main() -> i32 {
     // Test list
     let numbers: list<i32> = [1, 2, 3, 4, 5];
-    let names: list<string> = ["Alice", "Bob", "Charlie"];
+    let names: list<str8> = ["Alice", "Bob", "Charlie"];
 
     for x in numbers {
         println!("Num: {}", x);

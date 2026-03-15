@@ -47,19 +47,19 @@ use std::strbuf::zpad_i64;
 use std::unordered::__mlang_std_unordered_map_i64_i64_get_or;
 use type StringBuilder = i64;
 
-fn styled_line(width: i64, fg_c: i32, bg_c: i32, bold: i32, text: string) -> string {
-    let row: string = fit_right(text, width, " ");
+fn styled_line(width: i64, fg_c: i32, bg_c: i32, bold: i32, text: str8) -> str8 {
+    let row: str8 = fit_right(text, width, " ");
     if bold == 1 {
-        let out_b: string = format!("{}{}{}{}{}\r\n", bold_on(), fg(fg_c), bg(bg_c), row, reset());
+        let out_b: str8 = format!("{}{}{}{}{}\r\n", bold_on(), fg(fg_c), bg(bg_c), row, reset());
         free(row);
         return out_b;
     }
-    let out: string = format!("{}{}{}{}\r\n", fg(fg_c), bg(bg_c), row, reset());
+    let out: str8 = format!("{}{}{}{}\r\n", fg(fg_c), bg(bg_c), row, reset());
     free(row);
     return out;
 }
 
-fn styled_line_compact(fg_c: i32, bg_c: i32, bold: i32, text: string) -> string {
+fn styled_line_compact(fg_c: i32, bg_c: i32, bold: i32, text: str8) -> str8 {
     if bold == 1 {
         return format!("{}{}{}{}{}\r\n", bold_on(), fg(fg_c), bg(bg_c), text, reset());
     }
@@ -68,9 +68,9 @@ fn styled_line_compact(fg_c: i32, bg_c: i32, bold: i32, text: string) -> string 
 
 fn styled_line_compact_rgb(fg_r: i32, fg_g: i32, fg_b: i32,
 bg_r: i32, bg_g: i32, bg_b: i32,
-bold: i32, text: string) -> string {
-    let fg_s: string = fg_rgb(fg_r, fg_g, fg_b);
-    let bg_s: string = bg_rgb(bg_r, bg_g, bg_b);
+bold: i32, text: str8) -> str8 {
+    let fg_s: str8 = fg_rgb(fg_r, fg_g, fg_b);
+    let bg_s: str8 = bg_rgb(bg_r, bg_g, bg_b);
     if bold == 1 {
         return format!("{}{}{}{}{}\r\n", bold_on(), fg_s, bg_s, text, reset());
     }
@@ -81,40 +81,40 @@ fn styled_line_rgb(width: i64,
 fg_r: i32, fg_g: i32, fg_b: i32,
 bg_r: i32, bg_g: i32, bg_b: i32,
 bold: i32,
-text: string) -> string {
-    let row: string = fit_right(text, width, " ");
-    let fg_s: string = fg_rgb(fg_r, fg_g, fg_b);
-    let bg_s: string = bg_rgb(bg_r, bg_g, bg_b);
+text: str8) -> str8 {
+    let row: str8 = fit_right(text, width, " ");
+    let fg_s: str8 = fg_rgb(fg_r, fg_g, fg_b);
+    let bg_s: str8 = bg_rgb(bg_r, bg_g, bg_b);
     if bold == 1 {
-        let out_b: string = format!("{}{}{}{}{}\r\n", bold_on(), fg_s, bg_s, row, reset());
+        let out_b: str8 = format!("{}{}{}{}{}\r\n", bold_on(), fg_s, bg_s, row, reset());
         free(row);
         return out_b;
     }
-    let out: string = format!("{}{}{}{}\r\n", fg_s, bg_s, row, reset());
+    let out: str8 = format!("{}{}{}{}\r\n", fg_s, bg_s, row, reset());
     free(row);
     return out;
 }
 
-fn append_owned(builder: StringBuilder, s: string) -> void {
+fn append_owned(builder: StringBuilder, s: str8) -> void {
     let _ = builder_append(builder, s);
     free(s);
 }
 
-fn sep_line(width: i64) -> string {
-    let h: string = acs_hline();
-    let dash: string = repeat(h, width);
-    let out: string = styled_line_compact(color_bright_black(), color_black(), 0, dash);
+fn sep_line(width: i64) -> str8 {
+    let h: str8 = acs_hline();
+    let dash: str8 = repeat(h, width);
+    let out: str8 = styled_line_compact(color_bright_black(), color_black(), 0, dash);
     free(dash);
     free(h);
     return out;
 }
 
-fn borderify_ascii(line: string) -> string {
+fn borderify_ascii(line: str8) -> str8 {
     let n: i64 = len(line);
     let out_b: StringBuilder = builder_new(n + 64);
-    let v: string = acs_vline();
+    let v: str8 = acs_vline();
     for i in 0..n {
-        let ch: string = sub(line, i, 1);
+        let ch: str8 = sub(line, i, 1);
         if eq(ch, "|") == 1 {
             let _ = builder_append(out_b, v);
         } else {
@@ -123,12 +123,12 @@ fn borderify_ascii(line: string) -> string {
         free(ch);
     }
     free(v);
-    let out: string = builder_take_string(out_b);
+    let out: str8 = builder_take_string(out_b);
     builder_free(out_b);
     return out;
 }
 
-fn render_meter(step_in: i64, total: i64) -> string {
+fn render_meter(step_in: i64, total: i64) -> str8 {
     if total <= 0 {
         return "";
     }
@@ -139,9 +139,9 @@ fn render_meter(step_in: i64, total: i64) -> string {
     if step > total {
         step = total;
     }
-    let on: string = repeat("#", step);
-    let off: string = repeat(".", total - step);
-    let out: string = concat(on, off);
+    let on: str8 = repeat("#", step);
+    let off: str8 = repeat(".", total - step);
+    let out: str8 = concat(on, off);
     free(off);
     free(on);
     return out;
@@ -161,7 +161,7 @@ fn min_i64(a: i64, b: i64) -> i64 {
     return a < b ? a : b;
 }
 
-fn is_digit_ch(ch: string) -> i32 {
+fn is_digit_ch(ch: str8) -> i32 {
     if eq(ch, "0") == 1 { return 1; }
     if eq(ch, "1") == 1 { return 1; }
     if eq(ch, "2") == 1 { return 1; }
@@ -182,7 +182,7 @@ fn pattern_cell_key(pattern_id: i64, row: i64, ch: i64) -> i64 {
 fn pattern_cell(pattern_id: i64, row: i64, ch: i64,
                 note_map_h: i64, v1_map_h: i64, v2_map_h: i64,
                 pat_custom_map_h: i64, pat_cell_active_map_h: i64,
-                sel_sub: i64) -> string {
+                sel_sub: i64) -> str8 {
     let key: i64 = pattern_cell_key(pattern_id, row, ch);
     let is_custom: i64 = __mlang_std_unordered_map_i64_i64_get_or(pat_custom_map_h, pattern_id, 0);
     let cell_active: i64 = is_custom == 1
@@ -191,7 +191,7 @@ fn pattern_cell(pattern_id: i64, row: i64, ch: i64,
     var note_u8: i64 = 0;
     var v1: i64 = 0;
     var v2: i64 = 0;
-    var note_s: string = format!("{}", "---");
+    var note_s: str8 = format!("{}", "---");
     if cell_active == 1 {
         if is_custom == 1 {
             note_u8 = __mlang_std_unordered_map_i64_i64_get_or(note_map_h, key, 0);
@@ -211,17 +211,17 @@ fn pattern_cell(pattern_id: i64, row: i64, ch: i64,
         v1 = 0;
         v2 = 0;
     }
-    let note_fit: string = fit_right(note_s, 5, " ");
-    let v1_s: string = zpad_i64(v1, 3);
-    let v2_s: string = zpad_i64(v2, 3);
-    let row_base: string = format!("{}{}{}",
+    let note_fit: str8 = fit_right(note_s, 5, " ");
+    let v1_s: str8 = zpad_i64(v1, 3);
+    let v2_s: str8 = zpad_i64(v2, 3);
+    let row_base: str8 = format!("{}{}{}",
     fg_rgb(232, 224, 201), bg_rgb(106, 150, 176), bold_on());
-    let sel_on: string = format!("{}{}{}",
+    let sel_on: str8 = format!("{}{}{}",
     fg_rgb(10, 10, 10), bg_rgb(255, 241, 153), bold_on());
-    let note_p: string = sel_sub == 0 ? format!("{}{}{}", sel_on, note_fit, row_base): format!("{}", note_fit);
-    let v1_p: string = sel_sub == 1 ? format!("{}{}{}", sel_on, v1_s, row_base): format!("{}", v1_s);
-    let v2_p: string = sel_sub == 2 ? format!("{}{}{}", sel_on, v2_s, row_base): format!("{}", v2_s);
-    let out: string = format!("{} | {} | {}", note_p, v1_p, v2_p);
+    let note_p: str8 = sel_sub == 0 ? format!("{}{}{}", sel_on, note_fit, row_base): format!("{}", note_fit);
+    let v1_p: str8 = sel_sub == 1 ? format!("{}{}{}", sel_on, v1_s, row_base): format!("{}", v1_s);
+    let v2_p: str8 = sel_sub == 2 ? format!("{}{}{}", sel_on, v2_s, row_base): format!("{}", v2_s);
+    let out: str8 = format!("{} | {} | {}", note_p, v1_p, v2_p);
     free(v2_p);
     free(v1_p);
     free(note_p);
@@ -242,9 +242,9 @@ fn tracker_grid_line(row: i64,
                      pat_custom_map_h: i64, pat_cell_active_map_h: i64,
                      off_note0: i64, off_note1: i64, off_note2: i64, off_note3: i64,
                      off_v10: i64, off_v11: i64, off_v12: i64, off_v13: i64,
-                     off_v20: i64, off_v21: i64, off_v22: i64, off_v23: i64) -> string {
-    let row_s: string = pad_i64_left(row, 3, " ");
-    var line: string = format!("{} |", row_s);
+                     off_v20: i64, off_v21: i64, off_v22: i64, off_v23: i64) -> str8 {
+    let row_s: str8 = pad_i64_left(row, 3, " ");
+    var line: str8 = format!("{} |", row_s);
     free(row_s);
     for ch in 0..4 {
         let _ = edit_row;
@@ -265,8 +265,8 @@ fn tracker_grid_line(row: i64,
         if row == focus_row && ch == (focus_col - 1) {
             sel_sub = focus_sub;
         }
-        let cell: string = pattern_cell(pattern_id, row, ch, note_map_h, v1_map_h, v2_map_h, pat_custom_map_h, pat_cell_active_map_h, sel_sub);
-        let next: string = format!("{} {} |", line, cell);
+        let cell: str8 = pattern_cell(pattern_id, row, ch, note_map_h, v1_map_h, v2_map_h, pat_custom_map_h, pat_cell_active_map_h, sel_sub);
+        let next: str8 = format!("{} {} |", line, cell);
         free(cell);
         free(line);
         line = next;
@@ -274,12 +274,12 @@ fn tracker_grid_line(row: i64,
     return line;
 }
 
-fn tracker_header_line() -> string {
-    var line: string = format!("Row |");
+fn tracker_header_line() -> str8 {
+    var line: str8 = format!("Row |");
     for ch in 0..4 {
-        let name: string = format!("Ch{}", ch);
-        let name_fit: string = fit_right(name, 17, " ");
-        let next: string = format!("{} {} |", line, name_fit);
+        let name: str8 = format!("Ch{}", ch);
+        let name_fit: str8 = fit_right(name, 17, " ");
+        let next: str8 = format!("{} {} |", line, name_fit);
         free(name_fit);
         free(name);
         free(line);
@@ -288,15 +288,15 @@ fn tracker_header_line() -> string {
     return line;
 }
 
-fn tracker_subheader_line() -> string {
-    var line: string = format!("    |");
+fn tracker_subheader_line() -> str8 {
+    var line: str8 = format!("    |");
     for _ch in 0..4 {
-        let note_h: string = fit_right("Note", 5, " ");
-        let v1_h: string = fit_right("V1", 3, " ");
-        let v2_h: string = fit_right("V2", 3, " ");
-        let cols_raw: string = format!("{} | {} | {}", note_h, v1_h, v2_h);
-        let cols: string = fit_right(cols_raw, 17, " ");
-        let next: string = format!("{} {} |", line, cols);
+        let note_h: str8 = fit_right("Note", 5, " ");
+        let v1_h: str8 = fit_right("V1", 3, " ");
+        let v2_h: str8 = fit_right("V2", 3, " ");
+        let cols_raw: str8 = format!("{} | {} | {}", note_h, v1_h, v2_h);
+        let cols: str8 = fit_right(cols_raw, 17, " ");
+        let next: str8 = format!("{} {} |", line, cols);
         free(v2_h);
         free(v1_h);
         free(note_h);
@@ -308,7 +308,7 @@ fn tracker_subheader_line() -> string {
     return line;
 }
 
-fn pattern_sub_name(sub_idx: i64) -> string {
+fn pattern_sub_name(sub_idx: i64) -> str8 {
     if sub_idx == 0 { return "Note"; }
     if sub_idx == 1 { return "V1"; }
     return "V2";
@@ -361,7 +361,7 @@ fn event_cell_key(pattern_id: i64, event_row: i64) -> i64 {
     return pattern_id * 4096 + event_row;
 }
 
-fn event_focus_seg(seg: string, col_idx: i64, focus_col: i64, is_focus_row: i32) -> string {
+fn event_focus_seg(seg: str8, col_idx: i64, focus_col: i64, is_focus_row: i32) -> str8 {
     if is_focus_row == 1 && col_idx == focus_col {
         return format!("{}{}{}{}{}{}{}{}",
         fg_rgb(8, 8, 8), bg_rgb(255, 255, 214), bold_on(), seg,
@@ -376,7 +376,7 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
                    event_map_h: i64, val1_map_h: i64, val2_map_h: i64,
                    mod_map_h: i64, m1_map_h: i64, m2_map_h: i64,
                    off_event: i64, off_val1: i64, off_val2: i64,
-                   off_mod: i64, off_m1: i64, off_m2: i64) -> string {
+                   off_mod: i64, off_m1: i64, off_m2: i64) -> str8 {
     let key: i64 = event_cell_key(pattern_id, event_row);
     let off_event_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(event_map_h, key, 0);
     let off_val1_local: i64 = __mlang_std_unordered_map_i64_i64_get_or(val1_map_h, key, 0);
@@ -393,41 +393,41 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     let step: i64 = event_row_to_step(pattern_id, steps_per_pattern, event_row, ev_count_map_h, pat_custom_map_h);
     let base_row: i64 = step_to_event_row(pattern_id, step, ev_count_map_h, pat_custom_map_h);
     let e_row: i64 = (event_row - base_row) + 1;
-    let row_label: string = e_row == 1 ? zpad_i64(step + 1, 2): format!("{}", "..");
-    let erow_s: string = zpad_i64(e_row, 2);
+    let row_label: str8 = e_row == 1 ? zpad_i64(step + 1, 2): format!("{}", "..");
+    let erow_s: str8 = zpad_i64(e_row, 2);
 
-    let ev_names: list<string> = tracker_event_names();
+    let ev_names: list<str8> = tracker_event_names();
     let idx: i64 = wrap_mod((step + e_row + pattern_id) + off_event_local, ev_names.len());
-    let ev_s: string = ev_names[idx];
+    let ev_s: str8 = ev_names[idx];
     let v1_v: i64 = wrap_mod((step * 5 + e_row * 3 + pattern_id) + off_val1_local, 128);
     let v2_v: i64 = wrap_mod((step * 7 + e_row * 2 + pattern_id) + off_val2_local, 128);
     let mod_v: i64 = wrap_mod((step * 11 + e_row + pattern_id) + off_mod_local, 128);
     let m1_v: i64 = wrap_mod((step * 2 + e_row) + off_m1_local, 128);
     let m2_v: i64 = wrap_mod((step * 3 + e_row * 2) + off_m2_local, 128);
-    let v1_s: string = zpad_i64(v1_v, 3);
-    let v2_s: string = zpad_i64(v2_v, 3);
-    let m_s: string = zpad_i64(mod_v, 3);
-    let m1_s: string = zpad_i64(m1_v, 3);
-    let m2_s: string = zpad_i64(m2_v, 3);
+    let v1_s: str8 = zpad_i64(v1_v, 3);
+    let v2_s: str8 = zpad_i64(v2_v, 3);
+    let m_s: str8 = zpad_i64(mod_v, 3);
+    let m1_s: str8 = zpad_i64(m1_v, 3);
+    let m2_s: str8 = zpad_i64(m2_v, 3);
 
-    let row_col: string = fit_right(row_label, 3, " ");
-    let erow_col: string = fit_right(erow_s, 4, " ");
-    let ev_col: string = fit_right(ev_s, 10, " ");
-    let v1_col: string = fit_right(v1_s, 4, " ");
-    let v2_col: string = fit_right(v2_s, 4, " ");
-    let mod_col: string = fit_right(m_s, 4, " ");
-    let m1_col: string = fit_right(m1_s, 7, " ");
-    let m2_col: string = fit_right(m2_s, 7, " ");
+    let row_col: str8 = fit_right(row_label, 3, " ");
+    let erow_col: str8 = fit_right(erow_s, 4, " ");
+    let ev_col: str8 = fit_right(ev_s, 10, " ");
+    let v1_col: str8 = fit_right(v1_s, 4, " ");
+    let v2_col: str8 = fit_right(v2_s, 4, " ");
+    let mod_col: str8 = fit_right(m_s, 4, " ");
+    let m1_col: str8 = fit_right(m1_s, 7, " ");
+    let m2_col: str8 = fit_right(m2_s, 7, " ");
     let is_focus_row: i32 = event_row == focus_row ? 1: 0;
-    let row_p: string = event_focus_seg(row_col, 0, focus_col, is_focus_row);
-    let erow_p: string = event_focus_seg(erow_col, 1, focus_col, is_focus_row);
-    let ev_p: string = event_focus_seg(ev_col, 2, focus_col, is_focus_row);
-    let v1_p: string = event_focus_seg(v1_col, 3, focus_col, is_focus_row);
-    let v2_p: string = event_focus_seg(v2_col, 4, focus_col, is_focus_row);
-    let mod_p: string = event_focus_seg(mod_col, 5, focus_col, is_focus_row);
-    let m1_p: string = event_focus_seg(m1_col, 6, focus_col, is_focus_row);
-    let m2_p: string = event_focus_seg(m2_col, 7, focus_col, is_focus_row);
-    let line: string = format!(" {} | {} | {} | {} | {} | {} | {} | {} |",
+    let row_p: str8 = event_focus_seg(row_col, 0, focus_col, is_focus_row);
+    let erow_p: str8 = event_focus_seg(erow_col, 1, focus_col, is_focus_row);
+    let ev_p: str8 = event_focus_seg(ev_col, 2, focus_col, is_focus_row);
+    let v1_p: str8 = event_focus_seg(v1_col, 3, focus_col, is_focus_row);
+    let v2_p: str8 = event_focus_seg(v2_col, 4, focus_col, is_focus_row);
+    let mod_p: str8 = event_focus_seg(mod_col, 5, focus_col, is_focus_row);
+    let m1_p: str8 = event_focus_seg(m1_col, 6, focus_col, is_focus_row);
+    let m2_p: str8 = event_focus_seg(m2_col, 7, focus_col, is_focus_row);
+    let line: str8 = format!(" {} | {} | {} | {} | {} | {} | {} | {} |",
     row_p, erow_p, ev_p, v1_p, v2_p, mod_p, m1_p, m2_p);
     free(m2_p);
     free(m1_p);
@@ -452,20 +452,20 @@ fn event_grid_line(event_row: i64, pattern_id: i64, steps_per_pattern: i64,
     return line;
 }
 
-fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> string {
+fn highlighted_segment(seg: str8, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> str8 {
     if current_view == 0 && col_sel >= 1 && col_sel <= 4 {
         let n: i64 = len(seg);
         let b: StringBuilder = builder_new(n + 192);
-        let row_base: string = format!("{}{}{}",
+        let row_base: str8 = format!("{}{}{}",
         fg_rgb(232, 224, 201), bg_rgb(106, 150, 176), bold_on());
-        let edit_sub: string = format!("{}{}{}",
+        let edit_sub: str8 = format!("{}{}{}",
         fg_rgb(10, 10, 10), bg_rgb(255, 241, 153), bold_on());
-        let edit_sep: string = format!("{}{}",
+        let edit_sep: str8 = format!("{}{}",
         fg_rgb(166, 176, 188), bg_rgb(72, 104, 136));
         let _ = builder_append(b, row_base);
         var part_idx: i64 = 0;
         for i in 0..n {
-            let ch: string = sub(seg, i, 1);
+            let ch: str8 = sub(seg, i, 1);
             if eq(ch, "|") == 1 {
                 let _ = builder_append(b, edit_sep);
                 let _ = builder_append(b, ch);
@@ -482,10 +482,10 @@ fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pat
             }
             free(ch);
         }
-        let suffix: string = format!("{}{}{}{}",
+        let suffix: str8 = format!("{}{}{}{}",
         reset(), bold_on(), fg_rgb(232, 224, 201), bg_rgb(106, 150, 176));
         let _ = builder_append(b, suffix);
-        let out: string = builder_take_string(b);
+        let out: str8 = builder_take_string(b);
         builder_free(b);
         free(suffix);
         free(edit_sep);
@@ -509,13 +509,13 @@ fn highlighted_segment(seg: string, current_view: i64, col_sel: i64, sub_sel_pat
     reset(), bold_on(), fg_rgb(24, 24, 24), bg_rgb(106, 150, 176));
 }
 
-fn highlight_song_column_in_line(line: string, col_sel: i64,
+fn highlight_song_column_in_line(line: str8, col_sel: i64,
 base_fg_r: i64, base_fg_g: i64, base_fg_b: i64,
-base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> string {
+base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> str8 {
     if col_sel < 0 {
         return format!("{}", line);
     }
-    let base_style: string = format!("{}{}{}",
+    let base_style: str8 = format!("{}{}{}",
     bold_on(),
     fg_rgb(base_fg_r, base_fg_g, base_fg_b),
     bg_rgb(base_bg_r, base_bg_g, base_bg_b));
@@ -524,17 +524,17 @@ base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> string {
     var start: i64 = 0;
     var col: i64 = 0;
     for i in 0..n {
-        let ch: string = sub(line, i, 1);
+        let ch: str8 = sub(line, i, 1);
         var next_ok: i32 = 1;
         if(i + 1) < n {
-            let next_ch: string = sub(line, i + 1, 1);
+            let next_ch: str8 = sub(line, i + 1, 1);
             next_ok = eq(next_ch, " ");
             free(next_ch);
         }
         if eq(ch, "|") == 1 && next_ok == 1 {
-            let seg: string = sub(line, start, i - start);
+            let seg: str8 = sub(line, start, i - start);
             if col == col_sel {
-                let hl: string = format!("{}{}{}{}{}{}",
+                let hl: str8 = format!("{}{}{}{}{}{}",
                 fg_rgb(8, 8, 8), bg_rgb(255, 241, 153), bold_on(),
                 seg,
                 reset(), base_style);
@@ -551,17 +551,17 @@ base_bg_r: i64, base_bg_g: i64, base_bg_b: i64) -> string {
         free(ch);
     }
     if start < n {
-        let tail: string = sub(line, start, n - start);
+        let tail: str8 = sub(line, start, n - start);
         let _ = builder_append(b, tail);
         free(tail);
     }
-    let out: string = builder_take_string(b);
+    let out: str8 = builder_take_string(b);
     builder_free(b);
     free(base_style);
     return out;
 }
 
-fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> string {
+fn highlight_column_in_line(line: str8, current_view: i64, col_sel: i64, sub_sel_pattern: i64, edit_mode: i32) -> str8 {
     if col_sel < 0 {
         return format!("{}", line);
     }
@@ -570,10 +570,10 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
     var start: i64 = 0;
     var col: i64 = 0;
     for i in 0..n {
-        let ch: string = sub(line, i, 1);
+        let ch: str8 = sub(line, i, 1);
         var next_ok: i32 = 1;
         if(i + 1) < n {
-            let next_ch: string = sub(line, i + 1, 1);
+            let next_ch: str8 = sub(line, i + 1, 1);
             next_ok = eq(next_ch, " ");
             free(next_ch);
         }
@@ -583,7 +583,7 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
         if table_delim == 1 && current_view == 0 {
             var j: i64 = i + 1;
             while j < n {
-                let look: string = sub(line, j, 1);
+                let look: str8 = sub(line, j, 1);
                 if eq(look, " ") == 1 {
                     free(look);
                     j = j + 1;
@@ -597,9 +597,9 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
             }
         }
         if table_delim == 1 {
-            let seg: string = sub(line, start, i - start);
+            let seg: str8 = sub(line, start, i - start);
             if col == col_sel {
-                let hl: string = highlighted_segment(seg, current_view, col_sel, sub_sel_pattern, edit_mode);
+                let hl: str8 = highlighted_segment(seg, current_view, col_sel, sub_sel_pattern, edit_mode);
                 let _ = builder_append(b, hl);
                 free(hl);
             } else {
@@ -613,11 +613,11 @@ fn highlight_column_in_line(line: string, current_view: i64, col_sel: i64, sub_s
         free(ch);
     }
     if start < n {
-        let tail: string = sub(line, start, n - start);
+        let tail: str8 = sub(line, start, n - start);
         let _ = builder_append(b, tail);
         free(tail);
     }
-    let out: string = builder_take_string(b);
+    let out: str8 = builder_take_string(b);
     builder_free(b);
     return out;
 }
@@ -640,18 +640,18 @@ fn song_start_step(song_order: &list<i64>, pattern_steps_list: &list<i64>, order
     return start;
 }
 
-fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>, pattern_steps_list: &list<i64>) -> string {
-    let row_s: string = fit_right(pad_i64_left(order_row, 3, " "), 3, " ");
+fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>, pattern_steps_list: &list<i64>) -> str8 {
+    let row_s: str8 = fit_right(pad_i64_left(order_row, 3, " "), 3, " ");
     let pat_id: i64 = song_order[order_row % song_order.len()];
-    let pat_s: string = fit_right(zpad_i64(pat_id, 2), 3, " ");
+    let pat_s: str8 = fit_right(zpad_i64(pat_id, 2), 3, " ");
     let steps: i64 = pattern_steps(pat_id, pattern_steps_list);
-    let steps_s: string = fit_right(pad_i64_left(steps, 3, " "), 3, " ");
+    let steps_s: str8 = fit_right(pad_i64_left(steps, 3, " "), 3, " ");
     let bpm_v: i64 = song_bpm.len() == 0 ? 120: song_bpm[order_row % song_bpm.len()];
-    let bpm_s: string = fit_right(pad_i64_left(bpm_v, 3, " "), 3, " ");
+    let bpm_s: str8 = fit_right(pad_i64_left(bpm_v, 3, " "), 3, " ");
     let start_v: i64 = song_start_step(song_order, pattern_steps_list, order_row);
-    let beat_s: string = fit_right(pad_i64_left(start_v / 4, 5, " "), 5, " ");
-    let start_s: string = fit_right(pad_i64_left(start_v, 5, " "), 5, " ");
-    let line: string = format!(" {} | {} | {} | {} | {} | {} |",
+    let beat_s: str8 = fit_right(pad_i64_left(start_v / 4, 5, " "), 5, " ");
+    let start_s: str8 = fit_right(pad_i64_left(start_v, 5, " "), 5, " ");
+    let line: str8 = format!(" {} | {} | {} | {} | {} | {} |",
     row_s, pat_s, steps_s, bpm_s, beat_s, start_s);
     free(start_s);
     free(beat_s);
@@ -662,14 +662,14 @@ fn song_grid_line(order_row: i64, song_order: &list<i64>, song_bpm: &list<i64>, 
     return line;
 }
 
-fn song_header_line() -> string {
-    let row_h: string = fit_right("Row", 3, " ");
-    let pat_h: string = fit_right("Pat", 3, " ");
-    let stp_h: string = fit_right("Stp", 3, " ");
-    let bpm_h: string = fit_right("BPM", 3, " ");
-    let beat_h: string = fit_right("Beat", 5, " ");
-    let start_h: string = fit_right("Start", 5, " ");
-    let line: string = format!(" {} | {} | {} | {} | {} | {} |",
+fn song_header_line() -> str8 {
+    let row_h: str8 = fit_right("Row", 3, " ");
+    let pat_h: str8 = fit_right("Pat", 3, " ");
+    let stp_h: str8 = fit_right("Stp", 3, " ");
+    let bpm_h: str8 = fit_right("BPM", 3, " ");
+    let beat_h: str8 = fit_right("Beat", 5, " ");
+    let start_h: str8 = fit_right("Start", 5, " ");
+    let line: str8 = format!(" {} | {} | {} | {} | {} | {} |",
     row_h, pat_h, stp_h, bpm_h, beat_h, start_h);
     free(start_h);
     free(beat_h);
@@ -680,14 +680,14 @@ fn song_header_line() -> string {
     return line;
 }
 
-fn menu_tabs_line(focus_idx: i64, open_menu: i32, running: i32, edit_mode: i32) -> string {
-    let file_tab: string = (open_menu == 1 ?(focus_idx == 0 ? "[File]": " File "): " File ");
-    let view_tab: string = (open_menu == 1 ?(focus_idx == 1 ? "[View]": " View "): " View ");
-    let edit_tab: string = (open_menu == 1 ?(focus_idx == 2 ? "[Edit]": " Edit "): " Edit ");
-    let help_tab: string = (open_menu == 1 ?(focus_idx == 3 ? "[Help]": " Help "): " Help ");
-    let run_label: string = running == 1 ? "RUN": "STOP";
-    let edit_label: string = edit_mode != 0 ? "EDIT": "NAV";
-    let line: string = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
+fn menu_tabs_line(focus_idx: i64, open_menu: i32, running: i32, edit_mode: i32) -> str8 {
+    let file_tab: str8 = (open_menu == 1 ?(focus_idx == 0 ? "[File]": " File "): " File ");
+    let view_tab: str8 = (open_menu == 1 ?(focus_idx == 1 ? "[View]": " View "): " View ");
+    let edit_tab: str8 = (open_menu == 1 ?(focus_idx == 2 ? "[Edit]": " Edit "): " Edit ");
+    let help_tab: str8 = (open_menu == 1 ?(focus_idx == 3 ? "[Help]": " Help "): " Help ");
+    let run_label: str8 = running == 1 ? "RUN": "STOP";
+    let edit_label: str8 = edit_mode != 0 ? "EDIT": "NAV";
+    let line: str8 = format!(" {}   {}   {}   {}    [{}:{}]    F1..F4 menus",
     file_tab, view_tab, edit_tab, help_tab, run_label, edit_label);
     return line;
 }
@@ -705,7 +705,7 @@ fn menu_anchor_x(focus_idx: i64) -> i64 {
     return 28;
 }
 
-fn menu_item_text(focus_idx: i64, item_idx: i64) -> string {
+fn menu_item_text(focus_idx: i64, item_idx: i64) -> str8 {
     if focus_idx == 0 {
         if item_idx == 0 { return format!("{}", "New"); }
         if item_idx == 1 { return format!("{}", "Open"); }
@@ -738,7 +738,7 @@ fn menu_item_text(focus_idx: i64, item_idx: i64) -> string {
     return format!("{}", "System");
 }
 
-fn menu_item_shortcut(focus_idx: i64, item_idx: i64) -> string {
+fn menu_item_shortcut(focus_idx: i64, item_idx: i64) -> str8 {
     if focus_idx == 0 {
         if item_idx == 0 { return format!("{}", "ALT-N"); }
         if item_idx == 1 { return format!("{}", "ALT-O"); }
@@ -776,7 +776,7 @@ fn menu_item_count(focus_idx: i64) -> i64 {
     return 6;
 }
 
-fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_menu: i32) -> string {
+fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_menu: i32) -> str8 {
     if open_menu == 0 {
         return format!("{}", "");
     }
@@ -787,11 +787,11 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     }
     let total_items: i64 = menu_item_count(focus_idx);
     if row_idx == 0 || row_idx == (total_items + 1) {
-        let h: string = acs_hline();
-        let top: string = repeat(h, menu_w);
-        let l: string = row_idx == 0 ? acs_ulcorner(): acs_llcorner();
-        let r: string = row_idx == 0 ? acs_urcorner(): acs_lrcorner();
-        let line: string = format!("{}{}{}", l, top, r);
+        let h: str8 = acs_hline();
+        let top: str8 = repeat(h, menu_w);
+        let l: str8 = row_idx == 0 ? acs_ulcorner(): acs_llcorner();
+        let r: str8 = row_idx == 0 ? acs_urcorner(): acs_lrcorner();
+        let line: str8 = format!("{}{}{}", l, top, r);
         free(r);
         free(l);
         free(top);
@@ -799,14 +799,14 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
         return line;
     }
     let item_idx: i64 = row_idx - 1;
-    let item: string = menu_item_text(focus_idx, item_idx);
-    let short: string = menu_item_shortcut(focus_idx, item_idx);
-    let item_l: string = fit_right(item, 22, " ");
-    let short_l: string = fit_right(short, 11, " ");
-    let merged: string = format!("{} {}", item_l, short_l);
-    let fit_item: string = fit_right(merged, menu_w, " ");
-    let v: string = acs_vline();
-    var item_out: string = format!("{}", "");
+    let item: str8 = menu_item_text(focus_idx, item_idx);
+    let short: str8 = menu_item_shortcut(focus_idx, item_idx);
+    let item_l: str8 = fit_right(item, 22, " ");
+    let short_l: str8 = fit_right(short, 11, " ");
+    let merged: str8 = format!("{} {}", item_l, short_l);
+    let fit_item: str8 = fit_right(merged, menu_w, " ");
+    let v: str8 = acs_vline();
+    var item_out: str8 = format!("{}", "");
     if item_idx == menu_sel {
         free(item_out);
         item_out = format!("{}{}{}{}{}{}{}", fg_rgb(22, 28, 22), bg_rgb(80, 122, 76), bold_on(), fit_item, reset(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
@@ -814,7 +814,7 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
         free(item_out);
         item_out = format!("{}", fit_item);
     }
-    let line: string = format!("{}{}{}", v, item_out, v);
+    let line: str8 = format!("{}{}{}", v, item_out, v);
     free(v);
     free(item_out);
     free(item);
@@ -826,23 +826,23 @@ fn dropdown_line(width: i64, focus_idx: i64, menu_sel: i64, row_idx: i64, open_m
     return line;
 }
 
-fn ansi_cursor_pos(row1: i64, col1: i64) -> string {
-    let home: string = cursor(cmd_home());
-    let down: string = cursor_move(dir_down(), row1 - 1);
-    let right: string = cursor_move(dir_right(), col1 - 1);
+fn ansi_cursor_pos(row1: i64, col1: i64) -> str8 {
+    let home: str8 = cursor(cmd_home());
+    let down: str8 = cursor_move(dir_down(), row1 - 1);
+    let right: str8 = cursor_move(dir_right(), col1 - 1);
     return format!("{}{}{}", home, down, right);
 }
 
-fn center_text(text: string, width: i64) -> string {
+fn center_text(text: str8, width: i64) -> str8 {
     let n: i64 = len(text);
     if n >= width {
         return sub(text, 0, width);
     }
     let left_n: i64 = (width - n) / 2;
     let right_n: i64 = width - n - left_n;
-    let left: string = repeat(" ", left_n);
-    let right: string = repeat(" ", right_n);
-    let out: string = format!("{}{}{}", left, text, right);
+    let left: str8 = repeat(" ", left_n);
+    let right: str8 = repeat(" ", right_n);
+    let out: str8 = format!("{}{}{}", left, text, right);
     free(right);
     free(left);
     return out;
@@ -907,19 +907,19 @@ open_menu: i32,
 menu_sel: i64,
 modal_open: i32,
 modal_kind: i64,
-modal_title: string,
-modal_body: string,
+modal_title: str8,
+modal_body: str8,
 modal_ok_selected: i32,
-modal_cwd: string,
-modal_input: string,
-modal_filter: string,
+modal_cwd: str8,
+modal_input: str8,
+modal_filter: str8,
 modal_filter_mode: i32,
-modal_entries: &list<string>,
+modal_entries: &list<str8>,
 modal_entry_kind: &list<i64>,
 modal_match_idx: &list<i64>,
 modal_sel: i64,
 modal_scroll: i64,
-last_action: string) -> string {
+last_action: str8) -> str8 {
     let width: i64 = width_in < 40 ? 40: width_in;
     let rows: i64 = rows_in < 12 ? 12: rows_in;
     // Keep one spare terminal row to avoid bottom-edge newline scroll.
@@ -929,59 +929,59 @@ last_action: string) -> string {
     let grid_rows: i64 = grid_rows_raw < 4 ? 4: grid_rows_raw;
     let builder: StringBuilder = builder_new(width * rows + 512);
 
-    let loop_pos_s: string = loop_song_row >= 0 ? zpad_i64(loop_song_row, 2): format!("{}", "--");
-    let loop_tag: string = loop_song_row >= 0 ? format!("LOOP:ON@{}", loop_pos_s): format!("{}", "LOOP:OFF");
-    let title_line: string = format!(" Mlau Tracker V0.1   {}", loop_tag);
+    let loop_pos_s: str8 = loop_song_row >= 0 ? zpad_i64(loop_song_row, 2): format!("{}", "--");
+    let loop_tag: str8 = loop_song_row >= 0 ? format!("LOOP:ON@{}", loop_pos_s): format!("{}", "LOOP:OFF");
+    let title_line: str8 = format!(" Mlau Tracker V0.1   {}", loop_tag);
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, title_line));
     free(title_line);
     free(loop_tag);
     free(loop_pos_s);
 
-    let pat_s: string = zpad_i64(header_pattern, 2);
-    let pos_s: string = zpad_i64(song_pos, 2);
-    let info_line: string = format!(" Octave: 1    Volume: 64    BPM: {}    Steps/Pattern: {}    Pattern: {}", bpm, steps_per_pattern, pat_s);
+    let pat_s: str8 = zpad_i64(header_pattern, 2);
+    let pos_s: str8 = zpad_i64(song_pos, 2);
+    let info_line: str8 = format!(" Octave: 1    Volume: 64    BPM: {}    Steps/Pattern: {}    Pattern: {}", bpm, steps_per_pattern, pat_s);
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 1, info_line));
     free(info_line);
     free(pat_s);
-    let ch_line: string = format!(" Channel: 00 01 02 03   Song: Example song   Pos: {}", pos_s);
+    let ch_line: str8 = format!(" Channel: 00 01 02 03   Song: Example song   Pos: {}", pos_s);
     append_owned(builder, styled_line(width, color_cyan(), color_black(), 0, ch_line));
     free(ch_line);
     free(pos_s);
 
     append_owned(builder, sep_line(width));
 
-    let menu_tabs: string = menu_tabs_line(focus_idx, open_menu, running, edit_mode);
+    let menu_tabs: str8 = menu_tabs_line(focus_idx, open_menu, running, edit_mode);
     // Menu bar: darker than previous cyan-ish blue, but lighter than channel header.
     append_owned(builder, styled_line_rgb(width, 235, 228, 198, 26, 58, 92, 1, menu_tabs));
     free(menu_tabs);
 
     if current_view == 1 {
-        let ev_head_raw: string = format!("{}", " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |");
-        let ev_head_pad: string = fit_right(ev_head_raw, width, " ");
-        let ev_head: string = borderify_ascii(ev_head_pad);
+        let ev_head_raw: str8 = format!("{}", " Row | ERow | Event      | Val1 | Val2 | Mod  | ModVal1 | ModVal2 |");
+        let ev_head_pad: str8 = fit_right(ev_head_raw, width, " ");
+        let ev_head: str8 = borderify_ascii(ev_head_pad);
         free(ev_head_pad);
         free(ev_head_raw);
         append_owned(builder, styled_line_compact(color_bright_white(), color_bright_black(), 0, ev_head));
         free(ev_head);
     } else if current_view == 2 {
-        let song_head_raw: string = song_header_line();
-        let song_head_pad: string = fit_right(song_head_raw, width, " ");
-        let song_head: string = borderify_ascii(song_head_pad);
+        let song_head_raw: str8 = song_header_line();
+        let song_head_pad: str8 = fit_right(song_head_raw, width, " ");
+        let song_head: str8 = borderify_ascii(song_head_pad);
         free(song_head_pad);
         free(song_head_raw);
         append_owned(builder, styled_line_compact(color_bright_white(), color_bright_black(), 0, song_head));
         free(song_head);
     } else {
-        let head: string = tracker_header_line();
-        let head_pad: string = fit_right(head, width, " ");
-        let head_g: string = borderify_ascii(head_pad);
+        let head: str8 = tracker_header_line();
+        let head_pad: str8 = fit_right(head, width, " ");
+        let head_g: str8 = borderify_ascii(head_pad);
         free(head_pad);
         append_owned(builder, styled_line_compact_rgb(235, 228, 198, 14, 30, 66, 0, head_g));
         free(head_g);
         free(head);
-        let subhead: string = tracker_subheader_line();
-        let subhead_pad: string = fit_right(subhead, width, " ");
-        let subhead_g: string = borderify_ascii(subhead_pad);
+        let subhead: str8 = tracker_subheader_line();
+        let subhead_pad: str8 = fit_right(subhead, width, " ");
+        let subhead_g: str8 = borderify_ascii(subhead_pad);
         free(subhead_pad);
         append_owned(builder, styled_line_compact_rgb(214, 208, 188, 10, 24, 52, 0, subhead_g));
         free(subhead_g);
@@ -994,7 +994,7 @@ last_action: string) -> string {
 
     for i in 0..grid_rows {
         let r: i64 = seq_offset + i;
-        var line: string = format!("{}", "");
+        var line: str8 = format!("{}", "");
         if r < seq_len {
             free(line);
             if current_view == 1 {
@@ -1034,21 +1034,21 @@ last_action: string) -> string {
             let pat_sub_sel: i64 = edit_sub_pattern < 0 ? 0: (edit_sub_pattern > 2 ? 2: edit_sub_pattern);
             let evt_col_sel: i64 = edit_col_event < 2 ? 2: (edit_col_event > 7 ? 7: edit_col_event);
             if current_view == 0 {
-                let line_g: string = borderify_ascii(line);
+                let line_g: str8 = borderify_ascii(line);
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line_g));
                 free(line_g);
             } else if current_view == 1 {
-                let line_g: string = borderify_ascii(line);
+                let line_g: str8 = borderify_ascii(line);
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, line_g));
                 free(line_g);
             } else if current_view == 2 {
-                let focused_song_sel: string = highlight_song_column_in_line(
+                let focused_song_sel: str8 = highlight_song_column_in_line(
                 line, edit_col_song,
                 232, 224, 201,
                 (r % 4) == 0 ? 52: ((r % 2) == 0 ? 44: 36),
                 (r % 4) == 0 ? 62: ((r % 2) == 0 ? 54: 46),
                 (r % 4) == 0 ? 82: ((r % 2) == 0 ? 72: 64));
-                let focused_song_sel_g: string = borderify_ascii(focused_song_sel);
+                let focused_song_sel_g: str8 = borderify_ascii(focused_song_sel);
                 if(r % 4) == 0 {
                     append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 62, 82, 1, focused_song_sel_g));
                 } else if(r % 2) == 0 {
@@ -1059,25 +1059,25 @@ last_action: string) -> string {
                 free(focused_song_sel_g);
                 free(focused_song_sel);
             } else {
-                let focused: string = highlight_column_in_line(
+                let focused: str8 = highlight_column_in_line(
                 line,
                 current_view,
                 current_view == 1 ? evt_col_sel: (current_view == 0 ? pat_col_sel: edit_col_song),
                 current_view == 0 ? pat_sub_sel:-1,
                 edit_mode);
-                let focused_g: string = borderify_ascii(focused);
+                let focused_g: str8 = borderify_ascii(focused);
                 append_owned(builder, styled_line_compact_rgb(232, 224, 201, 106, 150, 176, 1, focused_g));
                 free(focused_g);
                 free(focused);
             }
         } else if current_view == 1 && row_step == active_step {
             // Same-step companion event rows: subtle blue highlight (not cyan/green).
-            let line_g: string = borderify_ascii(line);
+            let line_g: str8 = borderify_ascii(line);
             append_owned(builder, styled_line_compact_rgb(232, 224, 201, 52, 80, 112, 0, line_g));
             free(line_g);
         } else if current_view == 2 {
-            let focused_song: string = highlight_column_in_line(line, current_view, edit_col_song,-1, edit_mode);
-            let focused_song_g: string = borderify_ascii(focused_song);
+            let focused_song: str8 = highlight_column_in_line(line, current_view, edit_col_song,-1, edit_mode);
+            let focused_song_g: str8 = borderify_ascii(focused_song);
             if(r % 4) == 0 {
                 append_owned(builder, styled_line_compact_rgb(224, 218, 194, 42, 50, 66, 0, focused_song_g));
             } else if(r % 2) == 0 {
@@ -1089,11 +1089,11 @@ last_action: string) -> string {
             free(focused_song);
         } else if(stripe_key % 4) == 0 {
             // Beat stripe rows: slightly brighter for clearer rhythm grouping.
-            let line_g: string = borderify_ascii(line);
+            let line_g: str8 = borderify_ascii(line);
             append_owned(builder, styled_line_compact_rgb(224, 218, 194, 44, 50, 62, 0, line_g));
             free(line_g);
         } else {
-            let line_g: string = borderify_ascii(line);
+            let line_g: str8 = borderify_ascii(line);
             append_owned(builder, styled_line_compact(color_white(), color_black(), 0, line_g));
             free(line_g);
         }
@@ -1102,12 +1102,12 @@ last_action: string) -> string {
 
     append_owned(builder, sep_line(width));
 
-    let pos_s2: string = zpad_i64(song_pos, 2);
-    let pat_s2: string = zpad_i64(header_pattern, 2);
-    let step_s: string = zpad_i64(transport_step + 1, 3);
-    let total_s: string = zpad_i64(steps_per_pattern, 3);
-    let loop_s: string = loop_song_row >= 0 ? "ON": "OFF";
-    let transport: string = format!(" Pos:{}   Pattern:{}   Step:{}/{}   Loop:{}", pos_s2, pat_s2, step_s, total_s, loop_s);
+    let pos_s2: str8 = zpad_i64(song_pos, 2);
+    let pat_s2: str8 = zpad_i64(header_pattern, 2);
+    let step_s: str8 = zpad_i64(transport_step + 1, 3);
+    let total_s: str8 = zpad_i64(steps_per_pattern, 3);
+    let loop_s: str8 = loop_song_row >= 0 ? "ON": "OFF";
+    let transport: str8 = format!(" Pos:{}   Pattern:{}   Step:{}/{}   Loop:{}", pos_s2, pat_s2, step_s, total_s, loop_s);
     append_owned(builder, styled_line(width, color_bright_yellow(), color_blue(), 1, transport));
     free(transport);
     free(total_s);
@@ -1115,7 +1115,7 @@ last_action: string) -> string {
     free(pat_s2);
     free(pos_s2);
 
-    let base: string = builder_take_string(builder);
+    let base: str8 = builder_take_string(builder);
     builder_free(builder);
 
     if open_menu == 0 && modal_open == 0 {
@@ -1128,9 +1128,9 @@ last_action: string) -> string {
         let x: i64 = menu_anchor_x(focus_idx) + 1;
         for m in 0..drop_rows {
             let y: i64 = 6 + m;
-            let move: string = ansi_cursor_pos(y, x);
-            let line: string = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
-            let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+            let move: str8 = ansi_cursor_pos(y, x);
+            let line: str8 = dropdown_line(width, focus_idx, menu_sel, m, open_menu);
+            let painted: str8 = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
             let _ = builder_append(overlay_builder, painted);
             free(painted);
             free(line);
@@ -1139,37 +1139,37 @@ last_action: string) -> string {
     }
 
     if modal_open == 1 {
-        let h: string = acs_hline();
-        let v: string = acs_vline();
-        let ul: string = acs_ulcorner();
-        let ur: string = acs_urcorner();
-        let ll: string = acs_llcorner();
-        let lr: string = acs_lrcorner();
+        let h: str8 = acs_hline();
+        let v: str8 = acs_vline();
+        let ul: str8 = acs_ulcorner();
+        let ur: str8 = acs_urcorner();
+        let ll: str8 = acs_llcorner();
+        let lr: str8 = acs_lrcorner();
         if modal_kind == 1 {
             let inner_w: i64 = min_i64(max_i64(52, width - 10), width - 6);
             let box_h: i64 = min_i64(max_i64(12, rows - 6), 22);
             let list_rows: i64 = max_i64(3, box_h - 9);
             let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
             let y0: i64 = max_i64(2, (rows - box_h) / 2);
-            let top_fill: string = repeat(h, inner_w);
-            let top: string = format!("{}{}{}", ul, top_fill, ur);
-            let bot: string = format!("{}{}{}", ll, top_fill, lr);
-            let empty_in: string = repeat(" ", inner_w);
-            let title_in: string = center_text(modal_title, inner_w);
-            let cwd_raw: string = format!("Dir: {}", modal_cwd);
-            let cwd_fit0: string = fit_right(cwd_raw, inner_w, " ");
-            let cwd_in: string = sub(cwd_fit0, 0, inner_w);
-            let mode_s: string = modal_filter_mode == 1
+            let top_fill: str8 = repeat(h, inner_w);
+            let top: str8 = format!("{}{}{}", ul, top_fill, ur);
+            let bot: str8 = format!("{}{}{}", ll, top_fill, lr);
+            let empty_in: str8 = repeat(" ", inner_w);
+            let title_in: str8 = center_text(modal_title, inner_w);
+            let cwd_raw: str8 = format!("Dir: {}", modal_cwd);
+            let cwd_fit0: str8 = fit_right(cwd_raw, inner_w, " ");
+            let cwd_in: str8 = sub(cwd_fit0, 0, inner_w);
+            let mode_s: str8 = modal_filter_mode == 1
                 ? format!("{}", "Ctrl-P FILTER: ON  (type to filter, Ctrl-J/K browse, Esc exit)")
                 : format!("{}", "Ctrl-P FILTER: OFF (type path input, j/k browse, h/l folder)");
-            let mode_in_raw: string = fit_right(mode_s, inner_w, " ");
-            let mode_in: string = sub(mode_in_raw, 0, inner_w);
-            let path_raw: string = format!("Path: {}", modal_input);
-            let path_fit0: string = fit_right(path_raw, inner_w, " ");
-            let path_in: string = sub(path_fit0, 0, inner_w);
-            let filter_raw: string = format!("Filter: {}", modal_filter);
-            let filter_fit0: string = fit_right(filter_raw, inner_w, " ");
-            let filter_in: string = sub(filter_fit0, 0, inner_w);
+            let mode_in_raw: str8 = fit_right(mode_s, inner_w, " ");
+            let mode_in: str8 = sub(mode_in_raw, 0, inner_w);
+            let path_raw: str8 = format!("Path: {}", modal_input);
+            let path_fit0: str8 = fit_right(path_raw, inner_w, " ");
+            let path_in: str8 = sub(path_fit0, 0, inner_w);
+            let filter_raw: str8 = format!("Filter: {}", modal_filter);
+            let filter_fit0: str8 = fit_right(filter_raw, inner_w, " ");
+            let filter_in: str8 = sub(filter_fit0, 0, inner_w);
             let mlen: i64 = modal_match_idx.len();
             var sel: i64 = modal_sel;
             if mlen <= 0 {
@@ -1189,24 +1189,24 @@ last_action: string) -> string {
             if mlen > list_rows && scroll > (mlen - list_rows) {
                 scroll = mlen - list_rows;
             }
-            let btn_plain: string = "[ OK ] [ CANCEL ]";
+            let btn_plain: str8 = "[ OK ] [ CANCEL ]";
             let btn_w: i64 = len(btn_plain);
             let btn_left_n: i64 = (inner_w - btn_w) / 2;
             let btn_right_n: i64 = inner_w - btn_w - btn_left_n;
-            let btn_left: string = repeat(" ", btn_left_n);
-            let btn_right: string = repeat(" ", btn_right_n);
-            let btn_ok: string = modal_ok_selected == 1
+            let btn_left: str8 = repeat(" ", btn_left_n);
+            let btn_right: str8 = repeat(" ", btn_right_n);
+            let btn_ok: str8 = modal_ok_selected == 1
                 ? format!("{}{}{}{}{}", fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), "[ OK ]", reset())
                 : format!("{}", "[ OK ]");
-            let btn_cancel: string = modal_ok_selected == 0
+            let btn_cancel: str8 = modal_ok_selected == 0
                 ? format!("{}{}{}{}{}", fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), "[ CANCEL ]", reset())
                 : format!("{}", "[ CANCEL ]");
-            let btn_mix: string = format!("{} {}", btn_ok, btn_cancel);
-            let btn_text: string = format!("{}{}{}", btn_left, btn_mix, btn_right);
+            let btn_mix: str8 = format!("{} {}", btn_ok, btn_cancel);
+            let btn_text: str8 = format!("{}{}{}", btn_left, btn_mix, btn_right);
             for i in 0..box_h {
                 let y: i64 = y0 + i;
-                let move: string = ansi_cursor_pos(y, x0);
-                var line: string = format!("{}", "");
+                let move: str8 = ansi_cursor_pos(y, x0);
+                var line: str8 = format!("{}", "");
                 if i == 0 {
                     free(line);
                     line = format!("{}", top);
@@ -1237,7 +1237,7 @@ last_action: string) -> string {
                         if eidx < 0 || eidx >= modal_entries.len() {
                             line = format!("{}{}{}", v, empty_in, v);
                         } else {
-                            let name: string = modal_entries[eidx];
+                            let name: str8 = modal_entries[eidx];
                             var kind: i64 = 3;
                             if eidx < modal_entry_kind.len() {
                                 kind = modal_entry_kind[eidx];
@@ -1250,10 +1250,10 @@ last_action: string) -> string {
                             if kind == 2 {
                                 is_mtr = 1;
                             }
-                            let prefix: string = is_dir == 1 ? "> " : "  ";
-                            let item_raw: string = format!("{}{}", prefix, name);
-                            let item_fit0: string = fit_right(item_raw, inner_w, " ");
-                            let item_fit: string = sub(item_fit0, 0, inner_w);
+                            let prefix: str8 = is_dir == 1 ? "> " : "  ";
+                            let item_raw: str8 = format!("{}{}", prefix, name);
+                            let item_fit0: str8 = fit_right(item_raw, inner_w, " ");
+                            let item_fit: str8 = sub(item_fit0, 0, inner_w);
                             if mi == sel {
                                 line = format!("{}{}{}{}{}{}{}", v, fg_rgb(8, 8, 8), bg_rgb(152, 190, 140), bold_on(), item_fit, reset(), v);
                             } else if is_mtr == 1 {
@@ -1277,7 +1277,7 @@ last_action: string) -> string {
                     free(line);
                     line = format!("{}{}{}", v, empty_in, v);
                 }
-                let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+                let painted: str8 = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
                 let _ = builder_append(overlay_builder, painted);
                 free(painted);
                 free(line);
@@ -1312,23 +1312,23 @@ last_action: string) -> string {
             let box_h: i64 = 7;
             let x0: i64 = max_i64(2, (width - (inner_w + 2)) / 2);
             let y0: i64 = max_i64(3, (rows - box_h) / 2);
-            let top_fill: string = repeat(h, inner_w);
-            let top: string = format!("{}{}{}", ul, top_fill, ur);
-            let bot: string = format!("{}{}{}", ll, top_fill, lr);
-            let empty_in: string = repeat(" ", inner_w);
-            let title_in: string = center_text(modal_title, inner_w);
-            let body_in: string = center_text(modal_body, inner_w);
-            let btn_plain: string = "[ OK ]";
+            let top_fill: str8 = repeat(h, inner_w);
+            let top: str8 = format!("{}{}{}", ul, top_fill, ur);
+            let bot: str8 = format!("{}{}{}", ll, top_fill, lr);
+            let empty_in: str8 = repeat(" ", inner_w);
+            let title_in: str8 = center_text(modal_title, inner_w);
+            let body_in: str8 = center_text(modal_body, inner_w);
+            let btn_plain: str8 = "[ OK ]";
             let btn_w: i64 = len(btn_plain);
             let btn_left_n: i64 = (inner_w - btn_w) / 2;
             let btn_right_n: i64 = inner_w - btn_w - btn_left_n;
-            let btn_left: string = repeat(" ", btn_left_n);
-            let btn_right: string = repeat(" ", btn_right_n);
-            let modal_base: string = format!("{}{}{}", bold_on(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
+            let btn_left: str8 = repeat(" ", btn_left_n);
+            let btn_right: str8 = repeat(" ", btn_right_n);
+            let modal_base: str8 = format!("{}{}{}", bold_on(), fg_rgb(235, 228, 198), bg_rgb(26, 58, 92));
             for i in 0..box_h {
                 let y: i64 = y0 + i;
-                let move: string = ansi_cursor_pos(y, x0);
-                var line: string = format!("{}", "");
+                let move: str8 = ansi_cursor_pos(y, x0);
+                var line: str8 = format!("{}", "");
                 if i == 0 {
                     free(line);
                     line = format!("{}", top);
@@ -1354,7 +1354,7 @@ last_action: string) -> string {
                     free(line);
                     line = format!("{}{}{}", v, empty_in, v);
                 }
-                let painted: string = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
+                let painted: str8 = format!("{}{}{}{}{}", move, fg_rgb(235, 228, 198), bg_rgb(26, 58, 92), line, reset());
                 let _ = builder_append(overlay_builder, painted);
                 free(painted);
                 free(line);
@@ -1379,10 +1379,10 @@ last_action: string) -> string {
     }
     let _ = builder_append(overlay_builder, reset());
     let _ = builder_append(overlay_builder, cursor(cmd_home()));
-    let overlay: string = builder_take_string(overlay_builder);
+    let overlay: str8 = builder_take_string(overlay_builder);
     builder_free(overlay_builder);
 
-    let out: string = concat(base, overlay);
+    let out: str8 = concat(base, overlay);
     free(overlay);
     free(base);
     return out;

@@ -1,5 +1,5 @@
 fn main() -> i32 {
-    let scores: map<string, i32> = {"Alice": 95, "Bob": 87, "Charlie": 92};
+    let scores: map<str8, i32> = {"Alice": 95, "Bob": 87, "Charlie": 92};
 
     // Iterate over keys only
     for name in scores.keys() {
