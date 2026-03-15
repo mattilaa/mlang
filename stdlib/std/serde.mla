@@ -176,6 +176,86 @@ impl Binary {
         return Ok<i32, string>(0);
     }
 
+    /// @brief Append `list<i32>` as `len(i64)` + elements.
+    pub fn write_list_i32(self: Binary, values: list<i32>) -> Result<i32, string> {
+        let l: i64 = values.len();
+        let wl: Result<i32, string> = self.write_i64(l);
+        if wl.is_err() {
+            return wl;
+        }
+        for i in 0..l {
+            let we: Result<i32, string> = self.write_i32(values[i]);
+            if we.is_err() {
+                return we;
+            }
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append `list<i64>` as `len(i64)` + elements.
+    pub fn write_list_i64(self: Binary, values: list<i64>) -> Result<i32, string> {
+        let l: i64 = values.len();
+        let wl: Result<i32, string> = self.write_i64(l);
+        if wl.is_err() {
+            return wl;
+        }
+        for i in 0..l {
+            let we: Result<i32, string> = self.write_i64(values[i]);
+            if we.is_err() {
+                return we;
+            }
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append `list<bool>` as `len(i64)` + elements.
+    pub fn write_list_bool(self: Binary, values: list<bool>) -> Result<i32, string> {
+        let l: i64 = values.len();
+        let wl: Result<i32, string> = self.write_i64(l);
+        if wl.is_err() {
+            return wl;
+        }
+        for i in 0..l {
+            let we: Result<i32, string> = self.write_bool(values[i]);
+            if we.is_err() {
+                return we;
+            }
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append `list<f64>` as `len(i64)` + elements.
+    pub fn write_list_f64(self: Binary, values: list<f64>) -> Result<i32, string> {
+        let l: i64 = values.len();
+        let wl: Result<i32, string> = self.write_i64(l);
+        if wl.is_err() {
+            return wl;
+        }
+        for i in 0..l {
+            let we: Result<i32, string> = self.write_f64(values[i]);
+            if we.is_err() {
+                return we;
+            }
+        }
+        return Ok<i32, string>(0);
+    }
+
+    /// @brief Append `list<string>` as `len(i64)` + elements.
+    pub fn write_list_string(self: Binary, values: list<string>) -> Result<i32, string> {
+        let l: i64 = values.len();
+        let wl: Result<i32, string> = self.write_i64(l);
+        if wl.is_err() {
+            return wl;
+        }
+        for i in 0..l {
+            let we: Result<i32, string> = self.write_string(values[i]);
+            if we.is_err() {
+                return we;
+            }
+        }
+        return Ok<i32, string>(0);
+    }
+
     /// @brief Read byte at index from output buffer.
     pub fn get_u8(self: Binary, index: i64) -> Result<i32, string> {
         let v: i32 = __mlang_std_serde_binary_get_u8(self.handle, index);
@@ -300,6 +380,111 @@ impl Reader {
             return Err<string, string>(last_error());
         }
         return Ok<string, string>(s);
+    }
+
+    /// @brief Read `list<i32>` encoded as `len(i64)` + elements.
+    pub fn read_list_i32(self: Reader) -> Result<list<i32>, string> {
+        let lr: Result<i64, string> = self.read_i64();
+        if lr.is_err() {
+            return Err<list<i32>, string>(lr.unwrap_err());
+        }
+        let l: i64 = lr.unwrap();
+        if l < 0 {
+            return Err<list<i32>, string>("negative list length");
+        }
+        var out: list<i32> = [];
+        for _i in 0..l {
+            let vr: Result<i32, string> = self.read_i32();
+            if vr.is_err() {
+                return Err<list<i32>, string>(vr.unwrap_err());
+            }
+            out.push(vr.unwrap());
+        }
+        return Ok<list<i32>, string>(out);
+    }
+
+    /// @brief Read `list<i64>` encoded as `len(i64)` + elements.
+    pub fn read_list_i64(self: Reader) -> Result<list<i64>, string> {
+        let lr: Result<i64, string> = self.read_i64();
+        if lr.is_err() {
+            return Err<list<i64>, string>(lr.unwrap_err());
+        }
+        let l: i64 = lr.unwrap();
+        if l < 0 {
+            return Err<list<i64>, string>("negative list length");
+        }
+        var out: list<i64> = [];
+        for _i in 0..l {
+            let vr: Result<i64, string> = self.read_i64();
+            if vr.is_err() {
+                return Err<list<i64>, string>(vr.unwrap_err());
+            }
+            out.push(vr.unwrap());
+        }
+        return Ok<list<i64>, string>(out);
+    }
+
+    /// @brief Read `list<bool>` encoded as `len(i64)` + elements.
+    pub fn read_list_bool(self: Reader) -> Result<list<bool>, string> {
+        let lr: Result<i64, string> = self.read_i64();
+        if lr.is_err() {
+            return Err<list<bool>, string>(lr.unwrap_err());
+        }
+        let l: i64 = lr.unwrap();
+        if l < 0 {
+            return Err<list<bool>, string>("negative list length");
+        }
+        var out: list<bool> = [];
+        for _i in 0..l {
+            let vr: Result<bool, string> = self.read_bool();
+            if vr.is_err() {
+                return Err<list<bool>, string>(vr.unwrap_err());
+            }
+            out.push(vr.unwrap());
+        }
+        return Ok<list<bool>, string>(out);
+    }
+
+    /// @brief Read `list<f64>` encoded as `len(i64)` + elements.
+    pub fn read_list_f64(self: Reader) -> Result<list<f64>, string> {
+        let lr: Result<i64, string> = self.read_i64();
+        if lr.is_err() {
+            return Err<list<f64>, string>(lr.unwrap_err());
+        }
+        let l: i64 = lr.unwrap();
+        if l < 0 {
+            return Err<list<f64>, string>("negative list length");
+        }
+        var out: list<f64> = [];
+        for _i in 0..l {
+            let vr: Result<f64, string> = self.read_f64();
+            if vr.is_err() {
+                return Err<list<f64>, string>(vr.unwrap_err());
+            }
+            out.push(vr.unwrap());
+        }
+        return Ok<list<f64>, string>(out);
+    }
+
+    /// @brief Read `list<string>` encoded as `len(i64)` + elements.
+    pub fn read_list_string(self: Reader) -> Result<list<string>, string> {
+        let lr: Result<i64, string> = self.read_i64();
+        if lr.is_err() {
+            return Err<list<string>, string>(lr.unwrap_err());
+        }
+        let l: i64 = lr.unwrap();
+        if l < 0 {
+            return Err<list<string>, string>("negative list length");
+        }
+        var out: list<string> = [];
+        for _i in 0..l {
+            let vr: Result<string, string> = self.read_string();
+            if vr.is_err() {
+                return Err<list<string>, string>(vr.unwrap_err());
+            }
+            out.push(vr.unwrap());
+        }
+        return Ok<list<string>, string>(out);
     }
 
     /// @brief Return underlying reader handle (for trait/custom codec plumbing).

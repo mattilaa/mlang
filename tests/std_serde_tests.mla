@@ -53,6 +53,17 @@ struct DeepNestedPacket {
     var label: string;
 };
 
+struct VecBucket {
+    var bins: list<i32>;
+    var marks: list<bool>;
+};
+
+struct VecEnvelope {
+    var title: string;
+    var offsets: list<i64>;
+    var nested: VecBucket;
+};
+
 impl BinarySerde for EnvelopeMeta {
     fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
         let out: Binary = Binary { handle: out_handle };
@@ -261,6 +272,57 @@ impl BinarySerde for MultiNestedPacket {
         if r5.is_err() { return Err<i32, string>(r5.unwrap_err()); }
         self.note = r5.unwrap();
 
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for VecBucket {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let w1: Result<i32, string> = out.write_list_i32(self.bins);
+        if w1.is_err() { return Err<i32, string>(w1.unwrap_err()); }
+        let w2: Result<i32, string> = out.write_list_bool(self.marks);
+        if w2.is_err() { return Err<i32, string>(w2.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let b1: Result<list<i32>, string> = input.read_list_i32();
+        if b1.is_err() { return Err<i32, string>(b1.unwrap_err()); }
+        self.bins = b1.unwrap();
+
+        let b2: Result<list<bool>, string> = input.read_list_bool();
+        if b2.is_err() { return Err<i32, string>(b2.unwrap_err()); }
+        self.marks = b2.unwrap();
+        return Ok<i32, string>(0);
+    }
+}
+
+impl BinarySerde for VecEnvelope {
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string> {
+        let out: Binary = Binary { handle: out_handle };
+        let w1: Result<i32, string> = out.write_string(self.title);
+        if w1.is_err() { return Err<i32, string>(w1.unwrap_err()); }
+        let w2: Result<i32, string> = out.write_list_i64(self.offsets);
+        if w2.is_err() { return Err<i32, string>(w2.unwrap_err()); }
+        let w3: Result<i32, string> = self.nested.serialize(out_handle);
+        if w3.is_err() { return Err<i32, string>(w3.unwrap_err()); }
+        return Ok<i32, string>(0);
+    }
+
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string> {
+        let input: Reader = Reader { handle: input_handle };
+        let r1: Result<string, string> = input.read_string();
+        if r1.is_err() { return Err<i32, string>(r1.unwrap_err()); }
+        self.title = r1.unwrap();
+
+        let r2: Result<list<i64>, string> = input.read_list_i64();
+        if r2.is_err() { return Err<i32, string>(r2.unwrap_err()); }
+        self.offsets = r2.unwrap();
+
+        let r3: Result<i32, string> = self.nested.deserialize(input_handle);
+        if r3.is_err() { return Err<i32, string>(r3.unwrap_err()); }
         return Ok<i32, string>(0);
     }
 }
@@ -551,6 +613,74 @@ fn test_serde_three_level_nested_struct_roundtrip() {
     verify(eq(dst.label, "three-level-ok") == 1);
 
     String::free(dst.label);
+    r.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_nested_struct_with_vectors_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(128);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    var src: VecEnvelope = VecEnvelope {
+        title: "vec-envelope",
+        offsets: [10, 20, 30, 40],
+        nested: VecBucket {
+            bins: [3, 1, 4, 1, 5, 9],
+            marks: [true, false, true, false, true, true]
+        }
+    };
+
+    let sw: Result<i32, string> = src.serialize(b.raw_handle());
+    verify(!sw.is_err());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    var dst: VecEnvelope = VecEnvelope {
+        title: "",
+        offsets: [],
+        nested: VecBucket {
+            bins: [],
+            marks: []
+        }
+    };
+
+    let dr: Result<i32, string> = dst.deserialize(r.raw_handle());
+    verify(!dr.is_err());
+
+    verify(eq(dst.title, "vec-envelope") == 1);
+    verify_eq(4, dst.offsets.len());
+    verify_eq(6, dst.nested.bins.len());
+    verify_eq(6, dst.nested.marks.len());
+
+    String::free(dst.title);
+    r.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_read_list_result_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(64);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    let w: Result<i32, string> = b.write_list_i64([11, 22, 33, 44]);
+    verify(!w.is_err());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    let vals_r: Result<list<i64>, string> = r.read_list_i64();
+    verify(!vals_r.is_err());
+    let vals: list<i64> = vals_r.unwrap();
+    verify_eq(4, vals.len());
+    verify_eq(11, vals[0]);
+    verify_eq(44, vals[3]);
+
     r.close();
     b.close();
 }
