@@ -17,7 +17,7 @@ fn test_type_name_property_primitive() {
 #[test]
 fn test_type_name_property_collections() {
     let ids: list<i32> = [7, 8, 9];
-    if eq(ids.name, "list<i32>") != 1 { verify(false); }
+    verify(!(eq(ids.name, "list<i32>") != 1));
 
     let scores: map<string, i32> = {"Alice": 95, "Bob": 87};
     verify(contains(scores.name, "map<string, i32>") == 1);
@@ -26,6 +26,6 @@ fn test_type_name_property_collections() {
 #[test]
 fn test_type_name_property_does_not_break_real_name_field() {
     let p: Person = Person { name: "Ada" };
-    if eq(p.name, "Ada") != 1 { verify(false); }
+    verify(!(eq(p.name, "Ada") != 1));
     verify(eq(p.name.name, "string") == 1);
 }

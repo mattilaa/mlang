@@ -22,83 +22,83 @@ fn approx_double(a: f64, b: f64, eps: f64) -> bool {
 
 #[test]
 fn test_math_int() {
-    if add(2, 3) != 5: { verify(false); }
-    if subtract(10, 4) != 6: { verify(false); }
-    if multiply(3, 7) != 21: { verify(false); }
-    if square(6) != 36: { verify(false); }
-    if sum_range(1, 5) != 10: { verify(false); }
-    if factorial(5) != 120: { verify(false); }
+    verify(!(add(2, 3) != 5));
+    verify(!(subtract(10, 4) != 6));
+    verify(!(multiply(3, 7) != 21));
+    verify(!(square(6) != 36));
+    verify(!(sum_range(1, 5) != 10));
+    verify(!(factorial(5) != 120));
 
-    if abs(0 - 9) != 9: { verify(false); }
-    if min(4, 9) != 4: { verify(false); }
-    if max(4, 9) != 9: { verify(false); }
-    if clamp(7, 0, 5) != 5: { verify(false); }
-    if pow(2, 3) != 8: { verify(false); }
-    if sqrt(81) != 9: { verify(false); }
+    verify(!(abs(0 - 9) != 9));
+    verify(!(min(4, 9) != 4));
+    verify(!(max(4, 9) != 9));
+    verify(!(clamp(7, 0, 5) != 5));
+    verify(!(pow(2, 3) != 8));
+    verify(!(sqrt(81) != 9));
 
-    if sin(0) != 0: { verify(false); }
-    if cos(0) != 1: { verify(false); }
-    if tan(0) != 0: { verify(false); }
-    if floor(7) != 7: { verify(false); }
-    if ceil(7) != 7: { verify(false); }
-    if round(7) != 7: { verify(false); }
-    if log(1) != 0: { verify(false); }
-    if exp(0) != 1: { verify(false); }
-    if modulo(17, 5) != 2: { verify(false); }
+    verify(!(sin(0) != 0));
+    verify(!(cos(0) != 1));
+    verify(!(tan(0) != 0));
+    verify(!(floor(7) != 7));
+    verify(!(ceil(7) != 7));
+    verify(!(round(7) != 7));
+    verify(!(log(1) != 0));
+    verify(!(exp(0) != 1));
+    verify(!(modulo(17, 5) != 2));
 
     }
 
 #[test]
 fn test_math_f32() {
     let eps: f32 = 0.0001f;
-    if !approx_float(add(2.5f, 3.25f), 5.75f, eps): { verify(false); }
-    if !approx_float(subtract(5.5f, 2.0f), 3.5f, eps): { verify(false); }
-    if !approx_float(multiply(2.0f, 3.5f), 7.0f, eps): { verify(false); }
-    if !approx_float(square(4.0f), 16.0f, eps): { verify(false); }
+    verify(!(!approx_float(add(2.5f, 3.25f), 5.75f, eps)));
+    verify(!(!approx_float(subtract(5.5f, 2.0f), 3.5f, eps)));
+    verify(!(!approx_float(multiply(2.0f, 3.5f), 7.0f, eps)));
+    verify(!(!approx_float(square(4.0f), 16.0f, eps)));
 
-    if !approx_float(abs(0.0f - 3.5f), 3.5f, eps): { verify(false); }
-    if !approx_float(min(1.5f, 2.5f), 1.5f, eps): { verify(false); }
-    if !approx_float(max(1.5f, 2.5f), 2.5f, eps): { verify(false); }
-    if !approx_float(clamp(2.75f, 0.5f, 2.0f), 2.0f, eps): { verify(false); }
-    if !approx_float(pow(2.0f, 3.0f), 8.0f, eps): { verify(false); }
-    if !approx_float(sqrt(9.0f), 3.0f, eps): { verify(false); }
+    verify(!(!approx_float(abs(0.0f - 3.5f), 3.5f, eps)));
+    verify(!(!approx_float(min(1.5f, 2.5f), 1.5f, eps)));
+    verify(!(!approx_float(max(1.5f, 2.5f), 2.5f, eps)));
+    verify(!(!approx_float(clamp(2.75f, 0.5f, 2.0f), 2.0f, eps)));
+    verify(!(!approx_float(pow(2.0f, 3.0f), 8.0f, eps)));
+    verify(!(!approx_float(sqrt(9.0f), 3.0f, eps)));
 
-    if !approx_float(sin(0.0f), 0.0f, eps): { verify(false); }
-    if !approx_float(cos(0.0f), 1.0f, eps): { verify(false); }
-    if !approx_float(tan(0.0f), 0.0f, eps): { verify(false); }
-    if !approx_float(floor(2.7f), 2.0f, eps): { verify(false); }
-    if !approx_float(ceil(2.2f), 3.0f, eps): { verify(false); }
-    if !approx_float(round(2.4f), 2.0f, eps): { verify(false); }
-    if !approx_float(log(exp(1.0f)), 1.0f, 0.001f): { verify(false); }
-    if !approx_float(exp(0.0f), 1.0f, eps): { verify(false); }
-    if !approx_float(modulo(5.5f, 2.0f), 1.5f, eps): { verify(false); }
+    verify(!(!approx_float(sin(0.0f), 0.0f, eps)));
+    verify(!(!approx_float(cos(0.0f), 1.0f, eps)));
+    verify(!(!approx_float(tan(0.0f), 0.0f, eps)));
+    verify(!(!approx_float(floor(2.7f), 2.0f, eps)));
+    verify(!(!approx_float(ceil(2.2f), 3.0f, eps)));
+    verify(!(!approx_float(round(2.4f), 2.0f, eps)));
+    verify(!(!approx_float(log(exp(1.0f)), 1.0f, 0.001f)));
+    verify(!(!approx_float(exp(0.0f), 1.0f, eps)));
+    verify(!(!approx_float(modulo(5.5f, 2.0f), 1.5f, eps)));
 
     }
 
 #[test]
 fn test_math_f64() {
     let eps: f64 = 0.0000001;
-    if !approx_double(add(2.5, 3.25), 5.75, eps): { verify(false); }
-    if !approx_double(subtract(5.5, 2.0), 3.5, eps): { verify(false); }
-    if !approx_double(multiply(2.0, 3.5), 7.0, eps): { verify(false); }
-    if !approx_double(square(4.0), 16.0, eps): { verify(false); }
+    verify(!(!approx_double(add(2.5, 3.25), 5.75, eps)));
+    verify(!(!approx_double(subtract(5.5, 2.0), 3.5, eps)));
+    verify(!(!approx_double(multiply(2.0, 3.5), 7.0, eps)));
+    verify(!(!approx_double(square(4.0), 16.0, eps)));
 
-    if !approx_double(abs(0.0 - 3.5), 3.5, eps): { verify(false); }
-    if !approx_double(min(1.5, 2.5), 1.5, eps): { verify(false); }
-    if !approx_double(max(1.5, 2.5), 2.5, eps): { verify(false); }
-    if !approx_double(clamp(2.75, 0.5, 2.0), 2.0, eps): { verify(false); }
-    if !approx_double(pow(2.0, 3.0), 8.0, eps): { verify(false); }
-    if !approx_double(sqrt(9.0), 3.0, eps): { verify(false); }
+    verify(!(!approx_double(abs(0.0 - 3.5), 3.5, eps)));
+    verify(!(!approx_double(min(1.5, 2.5), 1.5, eps)));
+    verify(!(!approx_double(max(1.5, 2.5), 2.5, eps)));
+    verify(!(!approx_double(clamp(2.75, 0.5, 2.0), 2.0, eps)));
+    verify(!(!approx_double(pow(2.0, 3.0), 8.0, eps)));
+    verify(!(!approx_double(sqrt(9.0), 3.0, eps)));
 
-    if !approx_double(sin(0.0), 0.0, eps): { verify(false); }
-    if !approx_double(cos(0.0), 1.0, eps): { verify(false); }
-    if !approx_double(tan(0.0), 0.0, eps): { verify(false); }
-    if !approx_double(floor(2.7), 2.0, eps): { verify(false); }
-    if !approx_double(ceil(2.2), 3.0, eps): { verify(false); }
-    if !approx_double(round(2.4), 2.0, eps): { verify(false); }
-    if !approx_double(log(exp(1.0)), 1.0, 0.0001): { verify(false); }
-    if !approx_double(exp(0.0), 1.0, eps): { verify(false); }
-    if !approx_double(modulo(5.5, 2.0), 1.5, eps): { verify(false); }
+    verify(!(!approx_double(sin(0.0), 0.0, eps)));
+    verify(!(!approx_double(cos(0.0), 1.0, eps)));
+    verify(!(!approx_double(tan(0.0), 0.0, eps)));
+    verify(!(!approx_double(floor(2.7), 2.0, eps)));
+    verify(!(!approx_double(ceil(2.2), 3.0, eps)));
+    verify(!(!approx_double(round(2.4), 2.0, eps)));
+    verify(!(!approx_double(log(exp(1.0)), 1.0, 0.0001)));
+    verify(!(!approx_double(exp(0.0), 1.0, eps)));
+    verify(!(!approx_double(modulo(5.5, 2.0), 1.5, eps)));
 
     }
 
@@ -107,34 +107,34 @@ fn test_complex_i32_ops() {
     let a1: Complex<i32> = Complex<i32> { re: 2, im: 3 };
     let b1: Complex<i32> = Complex<i32> { re: 4, im: 5 };
     let s: Complex<i32> = a1 + b1;
-    if s.re != 6: { verify(false); }
-    if s.im != 8: { verify(false); }
+    verify(!(s.re != 6));
+    verify(!(s.im != 8));
 
     let b2: Complex<i32> = Complex<i32> { re: 4, im: 5 };
     let a2: Complex<i32> = Complex<i32> { re: 2, im: 3 };
     let d: Complex<i32> = b2 - a2;
-    if d.re != 2: { verify(false); }
-    if d.im != 2: { verify(false); }
+    verify(!(d.re != 2));
+    verify(!(d.im != 2));
 
     let a3: Complex<i32> = Complex<i32> { re: 2, im: 3 };
     let b3: Complex<i32> = Complex<i32> { re: 4, im: 5 };
     let p: Complex<i32> = a3 * b3;
-    if p.re != -7: { verify(false); }
-    if p.im != 22: { verify(false); }
+    verify(!(p.re != -7));
+    verify(!(p.im != 22));
 
     let a4: Complex<i32> = Complex<i32> { re: 2, im: 3 };
     let c: Complex<i32> = a4.conj();
-    if c.re != 2: { verify(false); }
-    if c.im != -3: { verify(false); }
+    verify(!(c.re != 2));
+    verify(!(c.im != -3));
 
     let a5: Complex<i32> = Complex<i32> { re: 2, im: 3 };
     let n: i32 = a5.norm_sqr();
-    if n != 13: { verify(false); }
+    verify(!(n != 13));
 
     let a6: Complex<i32> = Complex<i32> { re: 2, im: 3 };
     let neg: Complex<i32> = -a6;
-    if neg.re != -2: { verify(false); }
-    if neg.im != -3: { verify(false); }
+    verify(!(neg.re != -2));
+    verify(!(neg.im != -3));
 
     }
 
@@ -142,7 +142,7 @@ fn test_complex_i32_ops() {
 fn test_complex_f32_abs() {
     let eps: f32 = 0.0001f;
     let z: Complex<f32> = Complex<f32> { re: 3.0f, im: 4.0f };
-    if !approx_float(z.abs(), 5.0f, eps): { verify(false); }
+    verify(!(!approx_float(z.abs(), 5.0f, eps)));
     }
 
 #[test]
@@ -150,14 +150,14 @@ fn test_complex_u32_add_mul() {
     let a1: Complex<u32> = Complex<u32> { re: 2, im: 3 };
     let b1: Complex<u32> = Complex<u32> { re: 4, im: 5 };
     let s: Complex<u32> = a1 + b1;
-    if s.re != 6: { verify(false); }
-    if s.im != 8: { verify(false); }
+    verify(!(s.re != 6));
+    verify(!(s.im != 8));
 
     let a2: Complex<u32> = Complex<u32> { re: 2, im: 3 };
     let b2: Complex<u32> = Complex<u32> { re: 4, im: 5 };
     let p: Complex<u32> = a2 * b2;
-    if p.re != 4294967289: { verify(false); } // wraps on u32 for 8-15
-    if p.im != 22: { verify(false); }
+    verify(!(p.re != 4294967289)); // wraps on u32 for 8-15
+    verify(!(p.im != 22));
     }
 
 #[test]
@@ -165,14 +165,14 @@ fn test_complex_i64_add_mul() {
     let a1: Complex<i64> = Complex<i64> { re: 2, im: 3 };
     let b1: Complex<i64> = Complex<i64> { re: 4, im: 5 };
     let s: Complex<i64> = a1 + b1;
-    if s.re != 6: { verify(false); }
-    if s.im != 8: { verify(false); }
+    verify(!(s.re != 6));
+    verify(!(s.im != 8));
 
     let a2: Complex<i64> = Complex<i64> { re: 2, im: 3 };
     let b2: Complex<i64> = Complex<i64> { re: 4, im: 5 };
     let p: Complex<i64> = a2 * b2;
-    if p.re != -7: { verify(false); }
-    if p.im != 22: { verify(false); }
+    verify(!(p.re != -7));
+    verify(!(p.im != 22));
     }
 
 #[test]
@@ -180,12 +180,12 @@ fn test_complex_u64_add_mul() {
     let a1: Complex<u64> = Complex<u64> { re: 2, im: 3 };
     let b1: Complex<u64> = Complex<u64> { re: 4, im: 5 };
     let s: Complex<u64> = a1 + b1;
-    if s.re != 6: { verify(false); }
-    if s.im != 8: { verify(false); }
+    verify(!(s.re != 6));
+    verify(!(s.im != 8));
 
     let a2: Complex<u64> = Complex<u64> { re: 2, im: 3 };
     let b2: Complex<u64> = Complex<u64> { re: 4, im: 5 };
     let p: Complex<u64> = a2 * b2;
-    if p.re + 7 != 0: { verify(false); } // wraps on u64 for 8-15
-    if p.im != 22: { verify(false); }
+    verify(!(p.re + 7 != 0)); // wraps on u64 for 8-15
+    verify(!(p.im != 22));
     }

@@ -13,8 +13,8 @@ fn test_if_let_typed_block_complex_guard() {
     else: {
         verify(false);
     }
-    if seen != 7: { verify(false); }
-    if outer != 12: { verify(false); }
+    verify(!(seen != 7));
+    verify(!(outer != 12));
     }
 
 #[test]
@@ -22,7 +22,7 @@ fn test_if_let_typed_single_statement() {
     var seen: i32 = 0;
     if let i: i32 = source(3): i == 3: seen = i;
     else: seen = 99;
-    if seen != 3: { verify(false); }
+    verify(!(seen != 3));
     }
 
 #[test]
@@ -35,8 +35,8 @@ fn test_if_let_untyped_block() {
     else: {
         verify(false);
     }
-    if seen != 6: { verify(false); }
-    if outer != 44: { verify(false); }
+    verify(!(seen != 6));
+    verify(!(outer != 44));
     }
 
 #[test]
@@ -44,7 +44,7 @@ fn test_if_let_untyped_single_statement() {
     var seen: i32 = 0;
     if let i = source(8): i == 8: seen = i;
     else: seen = 77;
-    if seen != 8: { verify(false); }
+    verify(!(seen != 8));
     }
 
 #[test]
@@ -58,8 +58,8 @@ fn test_if_var_typed_block_mutable_shadow() {
     else: {
         verify(false);
     }
-    if seen != 15: { verify(false); }
-    if outer != 5: { verify(false); }
+    verify(!(seen != 15));
+    verify(!(outer != 5));
     }
 
 #[test]
@@ -67,7 +67,7 @@ fn test_if_var_typed_single_statement() {
     var seen: i32 = 0;
     if var i: i32 = source(2): i == 2: seen = i;
     else: seen = 66;
-    if seen != 2: { verify(false); }
+    verify(!(seen != 2));
     }
 
 #[test]
@@ -81,8 +81,8 @@ fn test_if_var_untyped_block() {
     else: {
         verify(false);
     }
-    if seen != 11: { verify(false); }
-    if outer != 9: { verify(false); }
+    verify(!(seen != 11));
+    verify(!(outer != 9));
     }
 
 #[test]
@@ -90,7 +90,7 @@ fn test_if_var_untyped_single_statement() {
     var seen: i32 = 0;
     if var i = source(9): i == 9: seen = i;
     else: seen = 55;
-    if seen != 9: { verify(false); }
+    verify(!(seen != 9));
     }
 
 #[test]
@@ -113,8 +113,8 @@ fn test_else_if_chain_let_and_var_combinations() {
     else: {
         verify(false);
     }
-    if branch != 42: { verify(false); }
-    if outer != 12: { verify(false); }
+    verify(!(branch != 42));
+    verify(!(outer != 12));
     }
 
 #[test]
@@ -128,7 +128,7 @@ fn test_if_else_if_else_block_without_colon() {
     } else {
         branch = 3;
     }
-    if branch != 2: { verify(false); }
+    verify(!(branch != 2));
     }
 
 #[test]
@@ -145,7 +145,7 @@ fn test_nested_no_colon_if_blocks() {
     } else {
         seen = 3;
     }
-    if seen != 1: { verify(false); }
+    verify(!(seen != 1));
     }
 
 #[test]
@@ -160,8 +160,8 @@ fn test_if_let_eq_initializer_with_complex_guard_block() {
         verify(false);
     }
 
-    if seen != 1: { verify(false); }
-    if outer != 1: { verify(false); }
+    verify(!(seen != 1));
+    verify(!(outer != 1));
     }
 
 #[test]
@@ -177,5 +177,5 @@ fn test_else_if_let_eq_initializer_with_complex_guard_block() {
         verify(false);
     }
 
-    if seen != 5: { verify(false); }
+    verify(!(seen != 5));
     }

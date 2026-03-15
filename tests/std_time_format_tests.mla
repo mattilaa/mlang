@@ -15,34 +15,34 @@ use std::testing::verify;
 #[test]
 fn test_local_datetime_shape() {
     let s: string = local_datetime();
-    if len(s) != 19 { verify(false); }
-    if contains(s, ":") != 1 { verify(false); }
-    if contains(s, "/") != 1 { verify(false); }
+    verify(!(len(s) != 19));
+    verify(!(contains(s, ":") != 1));
+    verify(!(contains(s, "/") != 1));
     }
 
 #[test]
 fn test_local_datetime_ms_shape() {
     let s: string = local_datetime_ms();
-    if len(s) != 23 { verify(false); }
-    if contains(s, ".") != 1 { verify(false); }
+    verify(!(len(s) != 23));
+    verify(!(contains(s, ".") != 1));
     }
 
 #[test]
 fn test_local_datetime_ns_shape() {
     let s: string = local_datetime_ns();
-    if len(s) != 29 { verify(false); }
-    if contains(s, ".") != 1 { verify(false); }
+    verify(!(len(s) != 29));
+    verify(!(contains(s, ".") != 1));
     }
 
 #[test]
 fn test_format_local_custom_pattern_shape() {
     let fmt: str8 = "DD/MM/YYYY:HH:MM:SS.MS";
     let s: string = format_local(fmt);
-    if len(s) != 23 { verify(false); }
-    if eq(sub(s, 2, 1), "/") != 1 { verify(false); }
-    if eq(sub(s, 5, 1), "/") != 1 { verify(false); }
-    if eq(sub(s, 10, 1), ":") != 1 { verify(false); }
-    if eq(sub(s, 13, 1), ":") != 1 { verify(false); }
-    if eq(sub(s, 16, 1), ":") != 1 { verify(false); }
-    if eq(sub(s, 19, 1), ".") != 1 { verify(false); }
+    verify(!(len(s) != 23));
+    verify(!(eq(sub(s, 2, 1), "/") != 1));
+    verify(!(eq(sub(s, 5, 1), "/") != 1));
+    verify(!(eq(sub(s, 10, 1), ":") != 1));
+    verify(!(eq(sub(s, 13, 1), ":") != 1));
+    verify(!(eq(sub(s, 16, 1), ":") != 1));
+    verify(!(eq(sub(s, 19, 1), ".") != 1));
     }

@@ -14,14 +14,14 @@ fn test_hash_map_basic_insert_get_remove() {
     m.insert(20, 200);
     m.insert(10, 111);
 
-    if m.len() != 2: { verify(false); }
-    if m.contains(10) == 0: { verify(false); }
-    if m.get_or(10, -1) != 111: { verify(false); }
-    if m.get_or(999, -1) != -1: { verify(false); }
+    verify(!(m.len() != 2));
+    verify(!(m.contains(10) == 0));
+    verify(!(m.get_or(10, -1) != 111));
+    verify(!(m.get_or(999, -1) != -1));
 
-    if m.remove(20) == 0: { verify(false); }
-    if m.contains(20) != 0: { verify(false); }
-    if m.len() != 1: { verify(false); }
+    verify(!(m.remove(20) == 0));
+    verify(!(m.contains(20) != 0));
+    verify(!(m.len() != 1));
 
     m.close();
     }
@@ -34,12 +34,10 @@ fn test_hash_map_rehash_many_values() {
         m.insert(i, i * 3);
     }
 
-    if m.len() != 300: { verify(false); }
+    verify(!(m.len() != 300));
 
     for i in 0..300 {
-        if m.get_or(i, -1) != i * 3: {
-            verify(false);
-        }
+        verify(!(m.get_or(i, -1) != i * 3));
     }
 
     m.close();
@@ -53,12 +51,12 @@ fn test_hash_set_basic() {
     s.insert(8);
     s.insert(7);
 
-    if s.len() != 2: { verify(false); }
-    if s.contains(7) == 0: { verify(false); }
-    if s.contains(9) != 0: { verify(false); }
+    verify(!(s.len() != 2));
+    verify(!(s.contains(7) == 0));
+    verify(!(s.contains(9) != 0));
 
-    if s.remove(8) == 0: { verify(false); }
-    if s.contains(8) != 0: { verify(false); }
+    verify(!(s.remove(8) == 0));
+    verify(!(s.contains(8) != 0));
 
     s.close();
     }
@@ -71,12 +69,12 @@ fn test_quick_map_api() {
     q.set(2, 20);
     q.set(1, 11);
 
-    if q.len() != 2: { verify(false); }
-    if q.has(1) == 0: { verify(false); }
-    if q.get(1, -1) != 11: { verify(false); }
-    if q.get(99, -1) != -1: { verify(false); }
-    if q.del(2) == 0: { verify(false); }
-    if q.has(2) != 0: { verify(false); }
+    verify(!(q.len() != 2));
+    verify(!(q.has(1) == 0));
+    verify(!(q.get(1, -1) != 11));
+    verify(!(q.get(99, -1) != -1));
+    verify(!(q.del(2) == 0));
+    verify(!(q.has(2) != 0));
 
     q.close();
     }
@@ -89,12 +87,12 @@ fn test_quick_map_vec_api() {
     q.set(2, 20);
     q.set(1, 11);
 
-    if q.len() != 2: { verify(false); }
-    if q.has(1) == 0: { verify(false); }
-    if q.get(1, -1) != 11: { verify(false); }
-    if q.get(99, -1) != -1: { verify(false); }
-    if q.del(2) == 0: { verify(false); }
-    if q.has(2) != 0: { verify(false); }
+    verify(!(q.len() != 2));
+    verify(!(q.has(1) == 0));
+    verify(!(q.get(1, -1) != 11));
+    verify(!(q.get(99, -1) != -1));
+    verify(!(q.del(2) == 0));
+    verify(!(q.has(2) != 0));
 
     q.close();
     }

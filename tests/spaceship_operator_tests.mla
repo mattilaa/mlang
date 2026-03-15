@@ -6,9 +6,9 @@ fn test_spaceship_numeric_i32() {
     let lt: i32 = 1 <=> 2;
     let eqv: i32 = 7 <=> 7;
     let gt: i32 = 9 <=> 3;
-    if lt != -1: { verify(false); }
-    if eqv != 0: { verify(false); }
-    if gt != 1: { verify(false); }
+    verify(!(lt != -1));
+    verify(!(eqv != 0));
+    verify(!(gt != 1));
     }
 
 #[test]
@@ -16,9 +16,9 @@ fn test_spaceship_numeric_float() {
     let lt: i32 = 1.5f <=> 2.0f;
     let eqv: i32 = 3.0 <=> 3.0;
     let gt: i32 = 9.25 <=> 2.5;
-    if lt != -1: { verify(false); }
-    if eqv != 0: { verify(false); }
-    if gt != 1: { verify(false); }
+    verify(!(lt != -1));
+    verify(!(eqv != 0));
+    verify(!(gt != 1));
     }
 
 /// @brief Semantic-version style example type used by `<=>` trait tests.
@@ -58,7 +58,7 @@ fn test_spaceship_trait_compare_by_ref() {
     let c3: Version = Version { major: 1, minor: 2 };
     let ac: i32 = a3 <=> c3;
 
-    if ab != -1: { verify(false); }
-    if ba != 1: { verify(false); }
-    if ac != 0: { verify(false); }
+    verify(!(ab != -1));
+    verify(!(ba != 1));
+    verify(!(ac != 0));
     }

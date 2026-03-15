@@ -14,17 +14,17 @@ use std::testing::verify;
 #[test]
 fn test_now_components_in_valid_ranges() {
     let dt: DateTime = now();
-    if dt.year < 1970: { verify(false); }
-    if dt.month < 1: { verify(false); }
-    if dt.month > 12: { verify(false); }
-    if dt.day < 1: { verify(false); }
-    if dt.day > 31: { verify(false); }
-    if dt.hour < 0: { verify(false); }
-    if dt.hour > 23: { verify(false); }
-    if dt.minute < 0: { verify(false); }
-    if dt.minute > 59: { verify(false); }
-    if dt.second < 0: { verify(false); }
-    if dt.second > 60: { verify(false); }
+    verify(!(dt.year < 1970));
+    verify(!(dt.month < 1));
+    verify(!(dt.month > 12));
+    verify(!(dt.day < 1));
+    verify(!(dt.day > 31));
+    verify(!(dt.hour < 0));
+    verify(!(dt.hour > 23));
+    verify(!(dt.minute < 0));
+    verify(!(dt.minute > 59));
+    verify(!(dt.second < 0));
+    verify(!(dt.second > 60));
     }
 
 #[test]
@@ -33,7 +33,7 @@ fn test_format_date_shape() {
         year: 2026, month: 2, day: 9, hour: 21, minute: 11, second: 6
     };
     let s: string = format_date(dt);
-    if len(s) != 10: { verify(false); }
+    verify(!(len(s) != 10));
     verify(eq(s, "02/09/2026") == 1);
 }
 
@@ -43,7 +43,7 @@ fn test_format_time_shape() {
         year: 2026, month: 2, day: 9, hour: 3, minute: 4, second: 5
     };
     let s: string = format_time(dt);
-    if len(s) != 8: { verify(false); }
+    verify(!(len(s) != 8));
     verify(eq(s, "03:04:05") == 1);
 }
 
@@ -53,6 +53,6 @@ fn test_format_iso8601_shape() {
         year: 2026, month: 12, day: 31, hour: 23, minute: 59, second: 58
     };
     let s: string = format_iso8601(dt);
-    if len(s) != 19: { verify(false); }
+    verify(!(len(s) != 19));
     verify(eq(s, "2026-12-31T23:59:58") == 1);
 }

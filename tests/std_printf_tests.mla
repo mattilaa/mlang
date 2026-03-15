@@ -22,16 +22,16 @@ fn test_printf_plain() {
 #[test]
 fn test_printf_format_i32() {
     let s: string = format!("val={}\n", 42);
-    if contains(s, "val=42") != 1: { verify(false); }
+    verify(!(contains(s, "val=42") != 1));
     printf(s);
     }
 
 #[test]
 fn test_printf_format_multi_args() {
     let s: string = format!("a={} b={} c={}\n", 1, 2, 3);
-    if contains(s, "a=1") != 1: { verify(false); }
-    if contains(s, "b=2") != 1: { verify(false); }
-    if contains(s, "c=3") != 1: { verify(false); }
+    verify(!(contains(s, "a=1") != 1));
+    verify(!(contains(s, "b=2") != 1));
+    verify(!(contains(s, "c=3") != 1));
     printf(s);
     }
 
@@ -39,7 +39,7 @@ fn test_printf_format_multi_args() {
 fn test_printf_format_string_arg() {
     let name: string = "world";
     let s: string = format!("hello {}\n", name);
-    if contains(s, "hello world") != 1: { verify(false); }
+    verify(!(contains(s, "hello world") != 1));
     printf(s);
     }
 
@@ -48,8 +48,8 @@ fn test_printf_format_bool() {
     let s_true: string = format!("flag={}\n", true);
     let s_false: string = format!("flag={}\n", false);
     // bools print as 1 / 0
-    if contains(s_true,  "flag=1") != 1: { verify(false); }
-    if contains(s_false, "flag=0") != 1: { verify(false); }
+    verify(!(contains(s_true,  "flag=1") != 1));
+    verify(!(contains(s_false, "flag=0") != 1));
     printf(s_true);
     printf(s_false);
     }
@@ -57,7 +57,7 @@ fn test_printf_format_bool() {
 #[test]
 fn test_printf_negative_number() {
     let s: string = format!("neg={}\n", -99);
-    if contains(s, "neg=-99") != 1: { verify(false); }
+    verify(!(contains(s, "neg=-99") != 1));
     printf(s);
     }
 
@@ -65,7 +65,7 @@ fn test_printf_negative_number() {
 fn test_printf_i64_large() {
     let big: i64 = 1000000;
     let s: string = format!("big={}\n", big);
-    if contains(s, "big=1000000") != 1: { verify(false); }
+    verify(!(contains(s, "big=1000000") != 1));
     printf(s);
     }
 
@@ -91,7 +91,7 @@ fn test_printf_sequence() {
 fn test_printf_no_trailing_newline() {
     // printf does not append a newline -- verify format string has no \n
     let s: string = format!("no-nl-{}", 7);
-    if ends_with(s, "\n") == 1: { verify(false); }
+    verify(!(ends_with(s, "\n") == 1));
     printf(s);
     printf("\n");   // emit newline separately so output stays clean
     }
@@ -102,7 +102,7 @@ fn test_printf_no_trailing_newline() {
 fn test_format_string_length() {
     let s: string = format!("abc={}", 123);
     // "abc=123" is 7 characters
-    if len(s) != 7: { verify(false); }
+    verify(!(len(s) != 7));
     printf(s);
     printf("\n");
     }
@@ -110,7 +110,7 @@ fn test_format_string_length() {
 #[test]
 fn test_format_string_eq() {
     let s: string = format!("{}", 0);
-    if eq(s, "0") != 1: { verify(false); }
+    verify(!(eq(s, "0") != 1));
     printf(s);
     printf("\n");
     }
@@ -118,8 +118,8 @@ fn test_format_string_eq() {
 #[test]
 fn test_format_starts_and_ends() {
     let s: string = format!("start-{}-end", 42);
-    if starts_with(s, "start-") != 1: { verify(false); }
-    if ends_with(s, "-end") != 1: { verify(false); }
+    verify(!(starts_with(s, "start-") != 1));
+    verify(!(ends_with(s, "-end") != 1));
     printf(s);
     printf("\n");
     }
@@ -134,7 +134,7 @@ fn test_eprintf_plain() {
 #[test]
 fn test_eprintf_format() {
     let s: string = format!("error code={}\n", 404);
-    if contains(s, "error code=404") != 1: { verify(false); }
+    verify(!(contains(s, "error code=404") != 1));
     eprintf(s);
     }
 

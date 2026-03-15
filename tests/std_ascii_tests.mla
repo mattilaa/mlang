@@ -10,48 +10,48 @@ use std::testing::verify;
 
 #[test]
 fn test_ascii_key_basic_values() {
-    if std::ascii::AsciiKey::Nul != 0: { verify(false); }
-    if std::ascii::AsciiKey::Esc != 27: { verify(false); }
-    if std::ascii::AsciiKey::Space != 32: { verify(false); }
-    if std::ascii::AsciiKey::Digit0 != 48: { verify(false); }
-    if std::ascii::AsciiKey::UpperA != 65: { verify(false); }
-    if std::ascii::AsciiKey::LowerA != 97: { verify(false); }
-    if std::ascii::AsciiKey::Del != 127: { verify(false); }
+    verify(!(std::ascii::AsciiKey::Nul != 0));
+    verify(!(std::ascii::AsciiKey::Esc != 27));
+    verify(!(std::ascii::AsciiKey::Space != 32));
+    verify(!(std::ascii::AsciiKey::Digit0 != 48));
+    verify(!(std::ascii::AsciiKey::UpperA != 65));
+    verify(!(std::ascii::AsciiKey::LowerA != 97));
+    verify(!(std::ascii::AsciiKey::Del != 127));
     }
 
 #[test]
 fn test_ascii_key_ranges() {
-    if std::ascii::AsciiKey::Digit9 < std::ascii::AsciiKey::Digit0: { verify(false); }
-    if std::ascii::AsciiKey::UpperZ < std::ascii::AsciiKey::UpperA: { verify(false); }
-    if std::ascii::AsciiKey::LowerZ < std::ascii::AsciiKey::LowerA: { verify(false); }
+    verify(!(std::ascii::AsciiKey::Digit9 < std::ascii::AsciiKey::Digit0));
+    verify(!(std::ascii::AsciiKey::UpperZ < std::ascii::AsciiKey::UpperA));
+    verify(!(std::ascii::AsciiKey::LowerZ < std::ascii::AsciiKey::LowerA));
     }
 
 #[test]
 fn test_unicode_box_codepoints() {
-    if UnicodeBoxGlyph::LightHorizontal != 9472: { verify(false); }
-    if UnicodeBoxGlyph::LightVertical != 9474: { verify(false); }
-    if UnicodeBoxGlyph::LightDownRight != 9484: { verify(false); }
-    if UnicodeBoxGlyph::DoubleVerticalHorizontal != 9580: { verify(false); }
-    if UnicodeBoxGlyph::FullBlock != 9608: { verify(false); }
-    if UnicodeBoxGlyph::CheckMark != 10003: { verify(false); }
+    verify(!(UnicodeBoxGlyph::LightHorizontal != 9472));
+    verify(!(UnicodeBoxGlyph::LightVertical != 9474));
+    verify(!(UnicodeBoxGlyph::LightDownRight != 9484));
+    verify(!(UnicodeBoxGlyph::DoubleVerticalHorizontal != 9580));
+    verify(!(UnicodeBoxGlyph::FullBlock != 9608));
+    verify(!(UnicodeBoxGlyph::CheckMark != 10003));
     }
 
 #[test]
 fn test_unicode_box_glyph_mapping() {
-    if eq(unicode_box_glyph(UnicodeBoxGlyph::LightHorizontal), "─") != 1: { verify(false); }
-    if eq(unicode_box_glyph(UnicodeBoxGlyph::LightVertical), "│") != 1: { verify(false); }
-    if eq(unicode_box_glyph(UnicodeBoxGlyph::LightDownRight), "┌") != 1: { verify(false); }
-    if eq(unicode_box_glyph(UnicodeBoxGlyph::FullBlock), "█") != 1: { verify(false); }
-    if eq(unicode_box_glyph(UnicodeBoxGlyph::RightArrow), "→") != 1: { verify(false); }
-    if eq(unicode_box_glyph(UnicodeBoxGlyph::CheckMark), "✓") != 1: { verify(false); }
+    verify(!(eq(unicode_box_glyph(UnicodeBoxGlyph::LightHorizontal), "─") != 1));
+    verify(!(eq(unicode_box_glyph(UnicodeBoxGlyph::LightVertical), "│") != 1));
+    verify(!(eq(unicode_box_glyph(UnicodeBoxGlyph::LightDownRight), "┌") != 1));
+    verify(!(eq(unicode_box_glyph(UnicodeBoxGlyph::FullBlock), "█") != 1));
+    verify(!(eq(unicode_box_glyph(UnicodeBoxGlyph::RightArrow), "→") != 1));
+    verify(!(eq(unicode_box_glyph(UnicodeBoxGlyph::CheckMark), "✓") != 1));
     }
 
 #[test]
 fn test_ascii_fallback_mapping() {
-    if eq(ascii_box_fallback(UnicodeBoxGlyph::LightHorizontal), "-") != 1: { verify(false); }
-    if eq(ascii_box_fallback(UnicodeBoxGlyph::LightVertical), "|") != 1: { verify(false); }
-    if eq(ascii_box_fallback(UnicodeBoxGlyph::LightDownRight), "+") != 1: { verify(false); }
-    if eq(ascii_box_fallback(UnicodeBoxGlyph::FullBlock), "#") != 1: { verify(false); }
-    if eq(ascii_box_fallback(UnicodeBoxGlyph::LeftArrow), "<") != 1: { verify(false); }
-    if eq(ascii_box_fallback(UnicodeBoxGlyph::CheckMark), "v") != 1: { verify(false); }
+    verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::LightHorizontal), "-") != 1));
+    verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::LightVertical), "|") != 1));
+    verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::LightDownRight), "+") != 1));
+    verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::FullBlock), "#") != 1));
+    verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::LeftArrow), "<") != 1));
+    verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::CheckMark), "v") != 1));
     }

@@ -19,9 +19,9 @@ fn test_infer_int_and_float() {
     var d = 2.0;
     d = d + 1.0;
 
-    if b != 42: { verify(false); }
-    if f <= 1.0f: { verify(false); }
-    if d < 3.0: { verify(false); }
+    verify(!(b != 42));
+    verify(!(f <= 1.0f));
+    verify(!(d < 3.0));
     }
 
 #[test]
@@ -36,8 +36,8 @@ fn test_infer_list_map_tuple_struct() {
     let typed_tuple: tuple<i32, f32, i32> = t;
 
     let p = Point { x: 3, y: 4 };
-    if p.x != 3: { verify(false); }
-    if p.y != 4: { verify(false); }
+    verify(!(p.x != 3));
+    verify(!(p.y != 4));
     let typed_point: Point = p;
 
     }

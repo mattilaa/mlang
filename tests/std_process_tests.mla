@@ -10,114 +10,91 @@ use std::process::ExitStatus;
 use std::process::spawn;
 use std::strbuf::contains;
 use std::testing::verify;
+use std::testing::verify_eq;
 
 #[test]
 fn test_spawn_echo_and_capture_stdout() {
     let child_r: Result<Child, string> = spawn("/bin/echo", ["hello-process"]);
-    if child_r.is_err(): { verify(false); }
+    verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
     let out_r: Result<ChildStdout, string> = child.stdout();
-    if out_r.is_err(): {
-        verify(false);
-    }
+    verify(!(out_r.is_err()));
     let out: ChildStdout = out_r.unwrap();
 
     var buf = String::with_capacity(256);
     let n_r: Result<i64, string> = out.read(buf, 256);
-    if n_r.is_err(): {
-        verify(false);
-    }
+    verify(!(n_r.is_err()));
     let n: i64 = n_r.unwrap();
     let ok: i32 = n > 0 ? 1 : 0;
     if ok == 1: {
-        if contains(buf, "hello-process") != 1: {
-            verify(false);
-        }
+        verify(!(contains(buf, "hello-process") != 1));
     }
     String::free(buf);
     out.close();
 
     let st_r: Result<ExitStatus, string> = child.wait();
-    if st_r.is_err(): {
-        verify(false);
-    }
+    verify(!(st_r.is_err()));
     let st: ExitStatus = st_r.unwrap();
     child.close();
-    if ok != 1: { verify(false); }
-    verify(st.success() == 1);
+    verify(!(ok != 1));
+    verify_eq(st.success() , 1);
 }
 
 #[test]
 fn test_spawn_sh_stderr_and_exit_code() {
     let child_r: Result<Child, string> = spawn("/bin/sh", ["-c", "echo process-error 1>&2; exit 7"]);
-    if child_r.is_err(): { verify(false); }
+    verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
     let err_r: Result<ChildStderr, string> = child.stderr();
-    if err_r.is_err(): {
-        verify(false);
-    }
+    verify(!(err_r.is_err()));
     let errp: ChildStderr = err_r.unwrap();
 
     var buf = String::with_capacity(256);
     let n_r: Result<i64, string> = errp.read(buf, 256);
-    if n_r.is_err(): {
-        verify(false);
-    }
+    verify(!(n_r.is_err()));
     let saw_err: i32 = contains(buf, "process-error") == 1 ? 1 : 0;
     String::free(buf);
     errp.close();
 
     let st_r: Result<ExitStatus, string> = child.wait();
-    if st_r.is_err(): {
-        verify(false);
-    }
+    verify(!(st_r.is_err()));
     let st: ExitStatus = st_r.unwrap();
     child.close();
-    if saw_err != 1: { verify(false); }
-    if st.exited() != 1: { verify(false); }
-    verify(st.code() == 7);
+    verify(!(saw_err != 1));
+    verify(!(st.exited() != 1));
+    verify_eq(st.code() , 7);
 }
 
 #[test]
 fn test_stdin_stdout_pipe_roundtrip() {
     let child_r: Result<Child, string> = spawn("/bin/cat", []);
-    if child_r.is_err(): { verify(false); }
+    verify(!(child_r.is_err()));
     let child: Child = child_r.unwrap();
 
     let in_r: Result<ChildStdin, string> = child.stdin();
     let out_r: Result<ChildStdout, string> = child.stdout();
-    if in_r.is_err(): {
-        verify(false);
-    }
-    if out_r.is_err(): {
-        verify(false);
-    }
+    verify(!(in_r.is_err()));
+    verify(!(out_r.is_err()));
     let inp: ChildStdin = in_r.unwrap();
     let out: ChildStdout = out_r.unwrap();
 
     let w_r: Result<i64, string> = inp.write("cat-roundtrip\n");
-    if w_r.is_err(): {
-        verify(false);
-    }
+    verify(!(w_r.is_err()));
     inp.close();
 
     var buf = String::with_capacity(256);
     let r_r: Result<i64, string> = out.read(buf, 256);
-    if r_r.is_err(): {
-        verify(false);
-    }
+    verify(!(r_r.is_err()));
     let ok: i32 = contains(buf, "cat-roundtrip") == 1 ? 1 : 0;
     String::free(buf);
     out.close();
 
     let st_r: Result<ExitStatus, string> = child.wait();
-    if st_r.is_err(): {
-        verify(false);
-    }
+    verify(!(st_r.is_err()));
     let st: ExitStatus = st_r.unwrap();
     child.close();
-    if ok != 1: { verify(false); }
-    verify(st.success() == 1);
+    verify(!(ok != 1));
+    verify_eq(st.success() , 1);
 }

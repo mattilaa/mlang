@@ -26,22 +26,22 @@ use std::testing::verify;
 #[test]
 fn test_esc_fg_bg_codes() {
     if supports_ansi() == 1: {
-        if find(fg(color_red()), "[31m") != 1: { verify(false); }
-        if find(bg(color_blue()), "[44m") != 1: { verify(false); }
+        verify(!(find(fg(color_red()), "[31m") != 1));
+        verify(!(find(bg(color_blue()), "[44m") != 1));
     } else {
-        if len(fg(color_red())) != 0: { verify(false); }
-        if len(bg(color_blue())) != 0: { verify(false); }
+        verify(!(len(fg(color_red())) != 0));
+        verify(!(len(bg(color_blue())) != 0));
     }
     }
 
 #[test]
 fn test_esc_style_codes() {
     if supports_ansi() == 1: {
-        if find(bold_on(), "[1m") != 1: { verify(false); }
-        if find(bold_off(), "[22m") != 1: { verify(false); }
+        verify(!(find(bold_on(), "[1m") != 1));
+        verify(!(find(bold_off(), "[22m") != 1));
     } else {
-        if len(bold_on()) != 0: { verify(false); }
-        if len(bold_off()) != 0: { verify(false); }
+        verify(!(len(bold_on()) != 0));
+        verify(!(len(bold_off()) != 0));
     }
     }
 
@@ -52,29 +52,29 @@ fn test_esc_cursor_commands() {
     let show: string = cursor(cmd_show());
     let clear: string = cursor(cmd_clear_screen());
     if supports_ansi() == 1: {
-        if find(home, "[H") != 1: { verify(false); }
-        if find(hide, "[?25l") != 1: { verify(false); }
-        if find(show, "[?25h") != 1: { verify(false); }
-        if find(clear, "[2J") != 1: { verify(false); }
+        verify(!(find(home, "[H") != 1));
+        verify(!(find(hide, "[?25l") != 1));
+        verify(!(find(show, "[?25h") != 1));
+        verify(!(find(clear, "[2J") != 1));
     } else {
-        if len(home) != 0: { verify(false); }
-        if len(hide) != 0: { verify(false); }
-        if len(show) != 0: { verify(false); }
-        if len(clear) != 0: { verify(false); }
+        verify(!(len(home) != 0));
+        verify(!(len(hide) != 0));
+        verify(!(len(show) != 0));
+        verify(!(len(clear) != 0));
     }
     }
 
 #[test]
 fn test_esc_cursor_move_and_reset() {
     if supports_ansi() == 1: {
-        if find(cursor_move(dir_up(), 3), "[3A") != 1: { verify(false); }
-        if find(cursor_move(dir_right(), 12), "[12C") != 1: { verify(false); }
+        verify(!(find(cursor_move(dir_up(), 3), "[3A") != 1));
+        verify(!(find(cursor_move(dir_right(), 12), "[12C") != 1));
         let rs: string = reset();
-        if find(rs, "[0m") != 1: { verify(false); }
-        if len(rs) < 4: { verify(false); }
+        verify(!(find(rs, "[0m") != 1));
+        verify(!(len(rs) < 4));
     } else {
-        if len(cursor_move(dir_up(), 3)) != 0: { verify(false); }
-        if len(cursor_move(dir_right(), 12)) != 0: { verify(false); }
-        if len(reset()) != 0: { verify(false); }
+        verify(!(len(cursor_move(dir_up(), 3)) != 0));
+        verify(!(len(cursor_move(dir_right(), 12)) != 0));
+        verify(!(len(reset()) != 0));
     }
     }
