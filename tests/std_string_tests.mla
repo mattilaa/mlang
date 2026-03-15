@@ -4,8 +4,8 @@ mod std::strbuf;
 use std::strbuf::*;
 use std::testing::verify;
 
-extern fn snprintf(dst: string, size: i64, fmt: string, ...) -> i32;
-extern fn strcmp(a: string, b: string) -> i32;
+extern fn snprintf(dst: str8, size: i64, fmt: str8, ...) -> i32;
+extern fn strcmp(a: str8, b: str8) -> i32;
 
 fn test_string_new_and_free_impl() -> i32 {
     let s = String::new();
@@ -146,7 +146,7 @@ fn test_string_builder_dynamic_growth_and_take_impl() -> i32 {
     if builder_len(b) != 16 { builder_free(b); return 1; }
     if builder_capacity(b) < 16 { builder_free(b); return 1; }
 
-    let s: string = builder_take_string(b);
+    let s: str8 = builder_take_string(b);
     if eq(s, "abcdefghijklmnop") != 1 { free(s); builder_free(b); return 1; }
     if builder_len(b) != 0 { free(s); builder_free(b); return 1; }
     free(s);
@@ -166,7 +166,7 @@ fn test_string_builder_reserve_clear_and_clone_impl() -> i32 {
     if builder_capacity(b) < 64 { builder_free(b); return 1; }
     if builder_append(b, "hello") != 5 { builder_free(b); return 1; }
 
-    let c: string = builder_to_string(b);
+    let c: str8 = builder_to_string(b);
     if eq(c, "hello") != 1 { free(c); builder_free(b); return 1; }
     free(c);
 

@@ -14,7 +14,7 @@ use std::testing::verify;
 
 #[test]
 fn test_local_datetime_shape() {
-    let s: string = local_datetime();
+    let s: str8 = local_datetime();
     verify(!(len(s) != 19));
     verify(!(contains(s, ":") != 1));
     verify(!(contains(s, "/") != 1));
@@ -22,14 +22,14 @@ fn test_local_datetime_shape() {
 
 #[test]
 fn test_local_datetime_ms_shape() {
-    let s: string = local_datetime_ms();
+    let s: str8 = local_datetime_ms();
     verify(!(len(s) != 23));
     verify(!(contains(s, ".") != 1));
     }
 
 #[test]
 fn test_local_datetime_ns_shape() {
-    let s: string = local_datetime_ns();
+    let s: str8 = local_datetime_ns();
     verify(!(len(s) != 29));
     verify(!(contains(s, ".") != 1));
     }
@@ -37,7 +37,7 @@ fn test_local_datetime_ns_shape() {
 #[test]
 fn test_format_local_custom_pattern_shape() {
     let fmt: str8 = "DD/MM/YYYY:HH:MM:SS.MS";
-    let s: string = format_local(fmt);
+    let s: str8 = format_local(fmt);
     verify(!(len(s) != 23));
     verify(!(eq(sub(s, 2, 1), "/") != 1));
     verify(!(eq(sub(s, 5, 1), "/") != 1));

@@ -52,7 +52,7 @@ fn test_algorithm_fuzzy_match_and_score() {
 
 #[test]
 fn test_algorithm_fuzzy_ranked_indices() {
-    let items: list<string> = [
+    let items: list<str8> = [
         "stdlib/std/fs.mla",
         "examples/esc_widgets/tracker_ui_demo.mla",
         "tools/mlangd-mla/main.mla"
@@ -64,7 +64,7 @@ fn test_algorithm_fuzzy_ranked_indices() {
 
 #[test]
 fn test_algorithm_fuzzy_best_index() {
-    let items: list<string> = ["abc", "axbyc", "zzz"];
+    let items: list<str8> = ["abc", "axbyc", "zzz"];
     let best: i64 = best_index(items, "abc");
     verify(best == 0);
     let none: i64 = best_index(items, "qqq");
@@ -202,14 +202,14 @@ fn test_algorithm_rand_namespace_reproducible() {
 
 #[test]
 fn test_algorithm_regex_namespace_basic() {
-    let rr: Result<Regex, string> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    let rr: Result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
     verify(rr.is_err() == false);
     let re: Regex = rr.unwrap();
-    let text: string = "user-42";
+    let text: str8 = "user-42";
     let s: i64 = re.find_start(text);
     let e: i64 = re.find_end(text);
     verify(s == 0 && e == 7);
-    let m: string = sub(text, s, e - s);
+    let m: str8 = sub(text, s, e - s);
     let ok: i32 = eq(m, "user-42");
     free(m);
     re.close();

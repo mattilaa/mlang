@@ -1064,7 +1064,7 @@ std::string TypeNode::toString() const
     case TYPE_DOUBLE:
         return "f64";
     case TYPE_STRING:
-        return "string";
+        return "str8";
     case TYPE_STR8:
         return "str8";
     case TYPE_STR16:
@@ -1573,13 +1573,13 @@ std::string CastExpressionNode::toString() const
     switch(targetType)
     {
     case TypeNode::TYPE_INT:
-        typeName = "int";
+        typeName = "i32";
         break;
     case TypeNode::TYPE_FLOAT:
-        typeName = "float";
+        typeName = "f32";
         break;
     case TypeNode::TYPE_DOUBLE:
-        typeName = "double";
+        typeName = "f64";
         break;
     default:
         typeName = "unknown";
@@ -1675,7 +1675,7 @@ std::string EnumDefNode::toString() const
         switch(kind)
         {
         case TypeNode::TYPE_INT:
-            return "int";
+            return "i32";
         case TypeNode::TYPE_I8:
             return "i8";
         case TypeNode::TYPE_I16:
@@ -2256,7 +2256,7 @@ std::string GenericStructTypeRefNode::getMangledName() const
         case TypeNode::TYPE_DOUBLE:
             return "f64";
         case TypeNode::TYPE_STRING:
-            return "string";
+            return "str8";
         case TypeNode::TYPE_STR8:
             return "str8";
         case TypeNode::TYPE_STR16:

@@ -3,11 +3,11 @@ mod std::strbuf;
 use std::strbuf::*;
 use std::testing::*;
 
-extern fn strcmp(a: string, b: string) -> i32;
+extern fn strcmp(a: str8, b: str8) -> i32;
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-fn streq(a: string, b: string) -> i32 {
+fn streq(a: str8, b: str8) -> i32 {
     return strcmp(a, b) == 0 ? 1 : 0;
 }
 
@@ -17,7 +17,7 @@ fn streq(a: string, b: string) -> i32 {
 fn test_immutable_borrow_read() {
     let s = String::from("hello");
     let r = &s;
-    // r holds the same char* as s — reading it gives the same string
+    // r holds the same char* as s — reading it gives the same str8
     verify(!(streq(r, "hello") != 1));
     }
 
@@ -35,7 +35,7 @@ fn test_multiple_immutable_borrows() {
 
 // ── 3. Borrow passed to a function ────────────────────────────────────────────
 
-fn identity(x: string) -> string {
+fn identity(x: str8) -> str8 {
     return x;
 }
 
@@ -74,7 +74,7 @@ fn test_clone_independent() {
     verify_not_eq("base_A", "base_B");
     }
 
-// ── 6. let-bound clone as immutable string ────────────────────────────────────
+// ── 6. let-bound clone as immutable str8 ────────────────────────────────────
 
 #[test]
 fn test_clone_let_read() {
@@ -98,7 +98,7 @@ fn test_clone_then_borrow() {
 
 // ── 8. &mut borrow — take exclusive mutable reference ────────────────────────
 
-fn append_via_ref(r: string, suffix: string) -> string {
+fn append_via_ref(r: str8, suffix: str8) -> str8 {
     return concat(r, suffix);
 }
 
@@ -138,7 +138,7 @@ fn test_push_str_after_borrow_expires() {
     verify(!(streq(snap, "foo")    != 1));
     }
 
-// ── 11. string len() method ──────────────────────────────────────────────────
+// ── 11. str8 len() method ──────────────────────────────────────────────────
 
 #[test]
 fn test_string_len_method() {
@@ -150,7 +150,7 @@ fn test_string_len_method() {
     verify(!(t.len() != 3));
     }
 
-// ── 12. string is_empty() method ────────────────────────────────────────────
+// ── 12. str8 is_empty() method ────────────────────────────────────────────
 
 #[test]
 fn test_string_is_empty_method() {
@@ -172,9 +172,9 @@ fn test_sequential_push_str() {
     verify(!(s.len() != 3));
     }
 
-// ── 14. Borrow of function parameter (string is Copy) ───────────────────────
+// ── 14. Borrow of function parameter (str8 is Copy) ───────────────────────
 
-fn borrow_param(src: string) -> string {
+fn borrow_param(src: str8) -> str8 {
     let r = &src;
     return r;
 }
@@ -185,8 +185,8 @@ fn test_borrow_of_parameter() {
     verify(!(streq(result, "test") != 1));
     }
 
-// ── 15. Re-use of string value across multiple calls ────────────────────────
-//    (verifies string Copy semantics — no spurious move errors)
+// ── 15. Re-use of str8 value across multiple calls ────────────────────────
+//    (verifies str8 Copy semantics — no spurious move errors)
 
 #[test]
 fn test_string_copy_semantics() {
@@ -197,25 +197,25 @@ fn test_string_copy_semantics() {
     verify(!(streq(s, "reuse") != 1));
     }
 
-// ── 16. &string parameter -- immutable borrow annotation ─────────────────────
+// ── 16. &str8 parameter -- immutable borrow annotation ─────────────────────
 
-fn read_only(s: &string) -> i64 {
+fn read_only(s: &str8) -> i64 {
     return s.len();
 }
 
 #[test]
 fn test_ref_param_string() {
     let s = String::from("hello");
-    // passing &s to a &string param
+    // passing &s to a &str8 param
     verify(!(read_only(&s) != 5));
-    // string is Copy -- plain value also accepted
+    // str8 is Copy -- plain value also accepted
     verify(!(read_only(s) != 5));
     }
 
-// ── 17. &mut string parameter -- mutable borrow annotation ───────────────────
+// ── 17. &mut str8 parameter -- mutable borrow annotation ───────────────────
 // push_str updates the callee-local alloca; verify via returned length.
 
-fn append_bang(s: &mut string) -> i64 {
+fn append_bang(s: &mut str8) -> i64 {
     s.push_str("!");
     return s.len();
 }
@@ -228,9 +228,9 @@ fn test_mut_ref_param_string() {
     verify(!(n != 6));   // "hello!" has 6 chars
     }
 
-// ── 18. &string return type ───────────────────────────────────────────────────
+// ── 18. &str8 return type ───────────────────────────────────────────────────
 
-fn get_greeting(s: &string) -> &string {
+fn get_greeting(s: &str8) -> &str8 {
     return s;
 }
 

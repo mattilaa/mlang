@@ -5,7 +5,7 @@ use std::strbuf::*;
 use std::testing::verify;
 
 struct Person {
-    var name: string;
+    var name: str8;
 };
 
 #[test]
@@ -19,13 +19,13 @@ fn test_type_name_property_collections() {
     let ids: list<i32> = [7, 8, 9];
     verify(!(eq(ids.name, "list<i32>") != 1));
 
-    let scores: map<string, i32> = {"Alice": 95, "Bob": 87};
-    verify(contains(scores.name, "map<string, i32>") == 1);
+    let scores: map<str8, i32> = {"Alice": 95, "Bob": 87};
+    verify(contains(scores.name, "map<str8, i32>") == 1);
 }
 
 #[test]
 fn test_type_name_property_does_not_break_real_name_field() {
     let p: Person = Person { name: "Ada" };
     verify(!(eq(p.name, "Ada") != 1));
-    verify(eq(p.name.name, "string") == 1);
+    verify(eq(p.name.name, "str8") == 1);
 }

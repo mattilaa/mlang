@@ -12,10 +12,10 @@ String allocation intrinsics are also available:
 - `String::with_capacity(cap)`
 - `String::free(buf)`
 
-`String` here is a compiler wrapper namespace over the builtin `string` type
+`String` here is a compiler wrapper namespace over the builtin `str8` type
 (not a separate type).
 
-For higher-level string helpers and UTF conversions, see:
+For higher-level str8 helpers and UTF conversions, see:
 - `stdlib/std/strbuf.mla`
   (`len`, `is_empty`, `clone`, `eq`, `compare`, `starts_with`, `ends_with`,
    `contains`, `find`, `rfind`, `concat`, `repeat`,
@@ -120,7 +120,7 @@ Recent language features are documented in:
 Includes:
 - `use type` aliases (including generic aliases) and block-scoped shadowing
 - alias-overlap diagnostics with `file:row:column` locations
-- `f32` / `f64` primitives and `float` / `double` aliases
+- `f32` / `f64` primitives
 - modern `if/else if/else` block syntax without mandatory `:`
 - guarded `if` forms, including `if let ... = ...: guard` and
   `if let ... == ...: guard`
@@ -137,7 +137,7 @@ Recent branch-level additions reflected in these docs:
 - `use type` aliases with generic + block scope support and overlap diagnostics
 - Guarded `if/else if` and guarded `while` forms; optional plain-colon warnings
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
-- `f32`/`f64` primitive names and `float`/`double` aliases
+- `f32`/`f64` primitive names
 - Lambda and fold expressions with example coverage
 - Enum backing types (`: i64`, `: u8`), range checks, and compatibility checks
 - Terminal helpers (`std::term`, `std::esc`) including ANSI auto-disable on non-TTY

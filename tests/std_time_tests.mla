@@ -16,7 +16,7 @@ fn test_now_ms_increases() {
 
 #[test]
 fn test_timer_wait_and_elapsed() {
-    let tr: Result<Timer, string> = Timer::after(20);
+    let tr: Result<Timer, str8> = Timer::after(20);
     if tr.is_err(): { verify(false); }
     let t: Timer = tr.unwrap();
     if t.elapsed() == 1: {
@@ -32,7 +32,7 @@ fn test_timer_wait_and_elapsed() {
 
 #[test]
 fn test_timer_reset_changes_remaining() {
-    let tr: Result<Timer, string> = Timer::after(100);
+    let tr: Result<Timer, str8> = Timer::after(100);
     if tr.is_err(): { verify(false); }
     let t: Timer = tr.unwrap();
     if t.reset(10) != 0: {

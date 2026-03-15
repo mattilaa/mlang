@@ -11,7 +11,7 @@ use std::testing::verify;
 
 fn worker_echo_from_clone(stream_handle: i64) -> i32 {
     let s: TcpStream = TcpStream::from_handle(stream_handle);
-    let w: Result<i64, string> = s.write("from-thread");
+    let w: Result<i64, str8> = s.write("from-thread");
     s.close();
     if w.is_err(): {
         return 1;
@@ -20,25 +20,25 @@ fn worker_echo_from_clone(stream_handle: i64) -> i32 {
 }
 
 fn test_tcp_loopback_ping_pong_impl() -> i32 {
-    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    let listener_r: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
-    let port_r: Result<i64, string> = listener.local_port();
+    let port_r: Result<i64, str8> = listener.local_port();
     if port_r.is_err(): {
         listener.close();
         return 0;
     }
     let port: i64 = port_r.unwrap();
 
-    let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    let client_r: Result<TcpStream, str8> = TcpStream::connect("127.0.0.1", port);
     if client_r.is_err(): {
         listener.close();
         return 0;
     }
     let client: TcpStream = client_r.unwrap();
 
-    let server_r: Result<TcpStream, string> = listener.accept();
+    let server_r: Result<TcpStream, str8> = listener.accept();
     if server_r.is_err(): {
         client.close();
         listener.close();
@@ -46,7 +46,7 @@ fn test_tcp_loopback_ping_pong_impl() -> i32 {
     }
     let server: TcpStream = server_r.unwrap();
 
-    let cw: Result<i64, string> = client.write("ping");
+    let cw: Result<i64, str8> = client.write("ping");
     if cw.is_err(): {
         server.close();
         client.close();
@@ -55,7 +55,7 @@ fn test_tcp_loopback_ping_pong_impl() -> i32 {
     }
 
     var in1 = String::with_capacity(16);
-    let sr: Result<i64, string> = server.read(in1, 16);
+    let sr: Result<i64, str8> = server.read(in1, 16);
     if sr.is_err(): {
         String::free(in1);
         server.close();
@@ -72,7 +72,7 @@ fn test_tcp_loopback_ping_pong_impl() -> i32 {
     }
     String::free(in1);
 
-    let sw: Result<i64, string> = server.write("pong");
+    let sw: Result<i64, str8> = server.write("pong");
     if sw.is_err(): {
         server.close();
         client.close();
@@ -81,7 +81,7 @@ fn test_tcp_loopback_ping_pong_impl() -> i32 {
     }
 
     var in2 = String::with_capacity(16);
-    let cr: Result<i64, string> = client.read(in2, 16);
+    let cr: Result<i64, str8> = client.read(in2, 16);
     if cr.is_err(): {
         String::free(in2);
         server.close();
@@ -104,25 +104,25 @@ fn test_tcp_loopback_ping_pong() {
 }
 
 fn test_tcp_stream_nonblocking_and_timeouts_impl() -> i32 {
-    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    let listener_r: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
-    let port_r: Result<i64, string> = listener.local_port();
+    let port_r: Result<i64, str8> = listener.local_port();
     if port_r.is_err(): {
         listener.close();
         return 0;
     }
     let port: i64 = port_r.unwrap();
 
-    let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    let client_r: Result<TcpStream, str8> = TcpStream::connect("127.0.0.1", port);
     if client_r.is_err(): {
         listener.close();
         return 0;
     }
     let client: TcpStream = client_r.unwrap();
 
-    let server_r: Result<TcpStream, string> = listener.accept();
+    let server_r: Result<TcpStream, str8> = listener.accept();
     if server_r.is_err(): {
         client.close();
         listener.close();
@@ -130,21 +130,21 @@ fn test_tcp_stream_nonblocking_and_timeouts_impl() -> i32 {
     }
     let server: TcpStream = server_r.unwrap();
 
-    let nb: Result<i32, string> = client.set_nonblocking(1);
+    let nb: Result<i32, str8> = client.set_nonblocking(1);
     if nb.is_err(): {
         server.close();
         client.close();
         listener.close();
         return 1;
     }
-    let rt: Result<i32, string> = server.set_read_timeout_ms(200);
+    let rt: Result<i32, str8> = server.set_read_timeout_ms(200);
     if rt.is_err(): {
         server.close();
         client.close();
         listener.close();
         return 1;
     }
-    let wt: Result<i32, string> = server.set_write_timeout_ms(200);
+    let wt: Result<i32, str8> = server.set_write_timeout_ms(200);
     if wt.is_err(): {
         server.close();
         client.close();
@@ -164,25 +164,25 @@ fn test_tcp_stream_nonblocking_and_timeouts() {
 }
 
 fn test_tcp_stream_try_clone_for_thread_handoff_impl() -> i32 {
-    let listener_r: Result<TcpListener, string> = TcpListener::bind("127.0.0.1", 0);
+    let listener_r: Result<TcpListener, str8> = TcpListener::bind("127.0.0.1", 0);
     if listener_r.is_err(): { return 0; }
     let listener: TcpListener = listener_r.unwrap();
 
-    let port_r: Result<i64, string> = listener.local_port();
+    let port_r: Result<i64, str8> = listener.local_port();
     if port_r.is_err(): {
         listener.close();
         return 0;
     }
     let port: i64 = port_r.unwrap();
 
-    let client_r: Result<TcpStream, string> = TcpStream::connect("127.0.0.1", port);
+    let client_r: Result<TcpStream, str8> = TcpStream::connect("127.0.0.1", port);
     if client_r.is_err(): {
         listener.close();
         return 0;
     }
     let client: TcpStream = client_r.unwrap();
 
-    let server_r: Result<TcpStream, string> = listener.accept();
+    let server_r: Result<TcpStream, str8> = listener.accept();
     if server_r.is_err(): {
         client.close();
         listener.close();
@@ -190,7 +190,7 @@ fn test_tcp_stream_try_clone_for_thread_handoff_impl() -> i32 {
     }
     let server: TcpStream = server_r.unwrap();
 
-    let clone_r: Result<TcpStream, string> = server.try_clone();
+    let clone_r: Result<TcpStream, str8> = server.try_clone();
     if clone_r.is_err(): {
         server.close();
         client.close();
@@ -203,7 +203,7 @@ fn test_tcp_stream_try_clone_for_thread_handoff_impl() -> i32 {
     let join_rc: i32 = join(h);
 
     var buf = String::with_capacity(64);
-    let r: Result<i64, string> = client.read(buf, 64);
+    let r: Result<i64, str8> = client.read(buf, 64);
     let same: i32 = eq(buf, "from-thread");
     String::free(buf);
 

@@ -2,7 +2,7 @@ mod std::testing;
 use type Distance = f32;
 use type SomeMap = map<K, V>;
 use type VecAlias<T> = list<T>;
-use type Name = string;
+use type Name = str8;
 use type NameList = list<Name>;
 use std::testing::verify;
 
@@ -26,7 +26,7 @@ fn test_concrete_type_alias() {
 }
 
 fn test_generic_type_alias_map_impl() -> i32 {
-    let scores: SomeMap<string, i32> = {"Alice": 95, "Bob": 87};
+    let scores: SomeMap<str8, i32> = {"Alice": 95, "Bob": 87};
     return scores["Alice"] == 95 ? 0 : 1;
 }
 

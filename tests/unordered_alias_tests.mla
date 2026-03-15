@@ -5,9 +5,9 @@ use std::testing::verify;
 
 #[test]
 fn test_unordered_map_alias_basic() {
-    let scores: UnorderedMap<string, i32> =
-        UnorderedMap<string, i32> { data: {"Alice": 95, "Bob": 87} };
-    let raw: map<string, i32> = scores.data;
+    let scores: UnorderedMap<str8, i32> =
+        UnorderedMap<str8, i32> { data: {"Alice": 95, "Bob": 87} };
+    let raw: map<str8, i32> = scores.data;
     verify(raw["Alice"] == 95);
 }
 

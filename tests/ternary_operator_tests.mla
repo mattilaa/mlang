@@ -6,13 +6,13 @@ use std::testing::verify;
 
 #[test]
 fn test_ternary_with_function_call_condition() {
-    let s: string = "ok";
+    let s: str8 = "ok";
     verify(eq(s, "ok") == 1);
 }
 
 #[test]
 fn test_ternary_false_branch() {
-    let s: string = "bad";
+    let s: str8 = "bad";
     verify(!(eq(s, "ok") == 1));
 }
 

@@ -32,7 +32,7 @@ fn test_format_date_shape() {
     let dt: DateTime = DateTime {
         year: 2026, month: 2, day: 9, hour: 21, minute: 11, second: 6
     };
-    let s: string = format_date(dt);
+    let s: str8 = format_date(dt);
     verify(!(len(s) != 10));
     verify(eq(s, "02/09/2026") == 1);
 }
@@ -42,7 +42,7 @@ fn test_format_time_shape() {
     let dt: DateTime = DateTime {
         year: 2026, month: 2, day: 9, hour: 3, minute: 4, second: 5
     };
-    let s: string = format_time(dt);
+    let s: str8 = format_time(dt);
     verify(!(len(s) != 8));
     verify(eq(s, "03:04:05") == 1);
 }
@@ -52,7 +52,7 @@ fn test_format_iso8601_shape() {
     let dt: DateTime = DateTime {
         year: 2026, month: 12, day: 31, hour: 23, minute: 59, second: 58
     };
-    let s: string = format_iso8601(dt);
+    let s: str8 = format_iso8601(dt);
     verify(!(len(s) != 19));
     verify(eq(s, "2026-12-31T23:59:58") == 1);
 }

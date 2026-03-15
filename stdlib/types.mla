@@ -38,14 +38,11 @@
 // @builtin f64
 // 64-bit floating point.
 
-// @builtin string
-// Default string type (alias of str8).
-// `String` is the compiler-provided wrapper namespace for string intrinsics
-// (e.g. `String::new`, `String::with_capacity`, `String::free`).
-// It is not a separate runtime type.
-
 // @builtin str8
 // UTF-8 string type.
+// `String` is the compiler-provided wrapper namespace for str8 intrinsics
+// (e.g. `String::new`, `String::with_capacity`, `String::free`).
+// It is not a separate runtime type.
 
 // @builtin str16
 // UTF-16 string type.
@@ -86,7 +83,7 @@
 //   - unwrap() -> T (warning: may panic on Err)
 //   - unwrap_err() -> E
 // Prefer match or is_ok/is_err checks before unwrap().
-// The `?` operator propagates Err values and, for Result<_, string>, appends
+// The `?` operator propagates Err values and, for Result<_, str8>, appends
 // call-site context (`function:line`) to build an error stack.
 
 // @builtin Ok

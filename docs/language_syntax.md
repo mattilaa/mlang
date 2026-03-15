@@ -37,13 +37,9 @@ Notes:
 
 ## Numeric Primitive Names
 
-Available primitive float types:
+Available primitive floating-point types:
 - `f32`
 - `f64`
-
-Language aliases:
-- `float` aliases `f32`
-- `double` aliases `f64`
 
 ## Type Name Property (`.name`)
 
@@ -57,7 +53,7 @@ println!("{}", i.name);  // i32
 
 For collection values, the returned name includes inner types when available:
 - `list<i32>`
-- `map<string, i32>`
+- `map<str8, i32>`
 
 If a struct defines a real field named `name`, normal field access is used
 instead of the synthetic type-name property.
@@ -198,7 +194,7 @@ fn some() {
 }
 
 fn name() {
-    return "alice";   // inferred as string
+    return "alice";   // inferred as str8
 }
 ```
 

@@ -70,7 +70,7 @@ static TypeNode* type_from_text(std::string t)
     t = trim_copy(t);
     if(t == "bool")
         return new TypeNode(TypeNode::TYPE_BOOL);
-    if(t == "int" || t == "i32")
+    if(t == "i32")
         return new TypeNode(TypeNode::TYPE_I32);
     if(t == "i8")
         return new TypeNode(TypeNode::TYPE_I8);
@@ -86,12 +86,12 @@ static TypeNode* type_from_text(std::string t)
         return new TypeNode(TypeNode::TYPE_U32);
     if(t == "u64")
         return new TypeNode(TypeNode::TYPE_U64);
-    if(t == "float" || t == "f32")
+    if(t == "f32")
         return new TypeNode(TypeNode::TYPE_FLOAT);
-    if(t == "double" || t == "f64")
+    if(t == "f64")
         return new TypeNode(TypeNode::TYPE_DOUBLE);
     if(t == "string")
-        return new TypeNode(TypeNode::TYPE_STRING);
+        return new TypeNode(TypeNode::TYPE_STR8);
     if(t == "str8")
         return new TypeNode(TypeNode::TYPE_STR8);
     if(t == "str16")
@@ -476,7 +476,7 @@ static std::string enumBaseTypeName(TypeNode::TypeKind kind)
     switch(kind)
     {
     case TypeNode::TYPE_INT:
-        return "int";
+        return "i32";
     case TypeNode::TYPE_I8:
         return "i8";
     case TypeNode::TYPE_I16:
@@ -528,7 +528,7 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
     case TypeNode::TYPE_BOOL:
         return "bool";
     case TypeNode::TYPE_INT:
-        return "int";
+        return "i32";
     case TypeNode::TYPE_I32:
         return "i32";
     case TypeNode::TYPE_I64:
@@ -538,7 +538,7 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
     case TypeNode::TYPE_DOUBLE:
         return "f64";
     case TypeNode::TYPE_STRING:
-        return "string";
+        return "str8";
     case TypeNode::TYPE_STR8:
         return "str8";
     case TypeNode::TYPE_STR16:
@@ -622,13 +622,13 @@ static std::string displayTypeName(TypeNode* type)
     case TypeNode::TYPE_BOOL:
         return "bool";
     case TypeNode::TYPE_INT:
-        return "int";
+        return "i32";
     case TypeNode::TYPE_FLOAT:
         return "f32";
     case TypeNode::TYPE_DOUBLE:
         return "f64";
     case TypeNode::TYPE_STRING:
-        return "string";
+        return "str8";
     case TypeNode::TYPE_STR8:
         return "str8";
     case TypeNode::TYPE_STR16:
@@ -2300,7 +2300,7 @@ std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
         return "f64";
     if(dynamic_cast<StringLiteralNode*>(expr) ||
        dynamic_cast<FormatNode*>(expr))
-        return "string";
+        return "str8";
 
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
@@ -3562,7 +3562,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     // Reserved type keywords and type/name conflicts.
     const std::unordered_set<std::string> reservedTypeNames = {
-        "void",  "bool", "int",  "float", "double", "string", "str8", "str16",
+        "void",  "bool", "f32",  "f64",   "str8",   "str16",
         "list",  "map",  "tuple","i8",    "i16",    "i32",    "i64",
         "u8",    "u16",  "u32",  "u64"};
 
@@ -5786,7 +5786,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         switch(kind)
         {
         case TypeNode::TYPE_STRING:
-            return "string";
+            return "str8";
         case TypeNode::TYPE_STR8:
             return "str8";
         case TypeNode::TYPE_STR16:
@@ -5794,11 +5794,11 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         case TypeNode::TYPE_BOOL:
             return "bool";
         case TypeNode::TYPE_INT:
-            return "int";
+            return "i32";
         case TypeNode::TYPE_FLOAT:
-            return "float";
+            return "f32";
         case TypeNode::TYPE_DOUBLE:
-            return "double";
+            return "f64";
         case TypeNode::TYPE_I8:
             return "i8";
         case TypeNode::TYPE_I16:
@@ -8990,13 +8990,13 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
     case TypeNode::TYPE_BOOL:
         return "bool";
     case TypeNode::TYPE_INT:
-        return "int";
+        return "i32";
     case TypeNode::TYPE_FLOAT:
-        return "float";
+        return "f32";
     case TypeNode::TYPE_DOUBLE:
-        return "double";
+        return "f64";
     case TypeNode::TYPE_STRING:
-        return "string";
+        return "str8";
     case TypeNode::TYPE_STR8:
         return "str8";
     case TypeNode::TYPE_STR16:
@@ -9233,10 +9233,9 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
         return;
 
     std::set<std::string> knownTypeNames = {
-        "void", "bool", "int",   "float",  "double", "string", "str8",
-        "str16","list", "map",   "tuple",  "ptr",    "i8",     "i16",
-        "i32",  "i64",  "u8",    "u16",    "u32",    "u64",    "f32",
-        "f64"};
+        "void", "bool", "str8",  "str16",  "list",   "map",    "tuple",
+        "ptr",  "i8",   "i16",   "i32",    "i64",    "u8",     "u16",
+        "u32",  "u64",  "f32",   "f64"};
     if(program->structList)
     {
         for(auto* st : program->structList->structs)
@@ -17034,8 +17033,6 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
                     typeArg = new TypeNode(TypeNode::TYPE_DOUBLE);
                 else if(typeArgStr == "bool")
                     typeArg = new TypeNode(TypeNode::TYPE_BOOL);
-                else if(typeArgStr == "string")
-                    typeArg = new TypeNode(TypeNode::TYPE_STRING);
                 else if(typeArgStr == "str8")
                     typeArg = new TypeNode(TypeNode::TYPE_STR8);
                 else if(typeArgStr == "str16")
@@ -18373,7 +18370,7 @@ static std::string generateMangledName(const std::string& baseName,
         case TypeNode::TYPE_DOUBLE:
             return "f64";
         case TypeNode::TYPE_STRING:
-            return "string";
+            return "str8";
         case TypeNode::TYPE_STR8:
             return "str8";
         case TypeNode::TYPE_STR16:

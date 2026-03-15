@@ -52,9 +52,9 @@ fn test_expect_array_helpers() {
     expect_array_eq(a_i32, b_i32);
     expect_array_eq(a_i32, c_i32);
 
-    let a_s: list<string> = ["a", "b"];
-    let b_s: list<string> = ["a", "b"];
-    let c_s: list<string> = ["a", "x"];
+    let a_s: list<str8> = ["a", "b"];
+    let b_s: list<str8> = ["a", "b"];
+    let c_s: list<str8> = ["a", "x"];
     expect_array_eq(a_s, b_s);
     expect_array_eq(a_s, c_s);
     expect_array_not_eq(a_s, c_s);

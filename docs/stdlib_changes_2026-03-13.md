@@ -9,11 +9,11 @@ This change set aligns the language and stdlib with Rust-style numeric names and
   - `u32`, `u64` (and existing `u8`, `u16`)
   - `f32`, `f64`
 - Legacy C-like spellings are removed from `.mla` source usage:
-  - `int`, `float`, `double`
+  - `i32`, `f32`, `f64`
 
 ## Compiler changes
 - Updated parser/lexer behavior to prioritize Rust-style type tokens/casts (`i32(...)`, `f32(...)`, `f64(...)`).
-- Updated compiler type string canonicalization/mangling to use `i32/f32/f64` style naming.
+- Updated compiler type str8 canonicalization/mangling to use `i32/f32/f64` style naming.
 - Added generic method type-binding flow so monomorphized generic struct methods can resolve type parameters correctly in method bodies.
 - Added lazy generation path for monomorphized trait operator methods so symbols are emitted when first used.
 
@@ -33,4 +33,4 @@ This change set aligns the language and stdlib with Rust-style numeric names and
 - Updated test source snippets in `tests/mla_tests.cpp` to use canonical numeric names/casts.
 
 ## Notes
-- This is a breaking source-level change for code that still uses `int/float/double` in `.mla` files.
+- This is a breaking source-level change for code that still uses `i32/f32/f64` in `.mla` files.

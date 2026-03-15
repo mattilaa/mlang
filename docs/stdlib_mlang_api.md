@@ -75,14 +75,14 @@ The source-of-truth implementation files are:
 ## Built-in Collection Methods (Compiler Intrinsics)
 
 These methods are language/compiler intrinsics and are available directly on
-collection/string values (including values typed through `use type` aliases).
+collection/str8 values (including values typed through `use type` aliases).
 
-### `string`
+### `str8`
 `String` in `String::new/with_capacity/free` is a compiler wrapper namespace
 for this builtin type, not a distinct type declaration.
 
 - `s.len() -> i64`
-- `s.is_empty() -> int`
+- `s.is_empty() -> i32`
 
 ### `list<T>` / `Vec<T>`
 
@@ -119,7 +119,7 @@ Example:
 
 ```mla
 use type Distance = f32;
-use type SomeMap = map<string, i32>;
+use type SomeMap = map<str8, i32>;
 
 let scores: SomeMap = {"Alice": 95, "Bob": 87};
 
@@ -142,10 +142,10 @@ Module file: `stdlib/std/argparser.mla`
 - `ParseResult`
 
 ### Parser setup
-- `ArgParser::new(prog: string, desc: string) -> ArgParser`
-- `ArgParser::flag(self: ArgParser, long_name: string, short_name: string, help: string) -> void`
-- `ArgParser::option(self: ArgParser, long_name: string, short_name: string, help: string, default_val: string) -> void`
-- `ArgParser::positional(self: ArgParser, name: string, help: string) -> void`
+- `ArgParser::new(prog: str8, desc: str8) -> ArgParser`
+- `ArgParser::flag(self: ArgParser, long_name: str8, short_name: str8, help: str8) -> void`
+- `ArgParser::option(self: ArgParser, long_name: str8, short_name: str8, help: str8, default_val: str8) -> void`
+- `ArgParser::positional(self: ArgParser, name: str8, help: str8) -> void`
 - `ArgParser::parse(self: ArgParser, argc: i32, args: list<str8>) -> ParseResult`
 - `ArgParser::print_help(self: ArgParser) -> void`
 - `ArgParser::free(self: ArgParser) -> void`
@@ -153,12 +153,12 @@ Module file: `stdlib/std/argparser.mla`
 ### Parse results
 - `ParseResult::ok(self: ParseResult) -> bool`
 - `ParseResult::has_error(self: ParseResult) -> bool`
-- `ParseResult::error(self: ParseResult) -> string`
+- `ParseResult::error(self: ParseResult) -> str8`
 - `ParseResult::help_requested(self: ParseResult) -> bool`
-- `ParseResult::flag(self: ParseResult, name: string) -> bool`
-- `ParseResult::get(self: ParseResult, name: string) -> string`
-- `ParseResult::get_i64(self: ParseResult, name: string) -> i64`
-- `ParseResult::positional(self: ParseResult, idx: i64) -> string`
+- `ParseResult::flag(self: ParseResult, name: str8) -> bool`
+- `ParseResult::get(self: ParseResult, name: str8) -> str8`
+- `ParseResult::get_i64(self: ParseResult, name: str8) -> i64`
+- `ParseResult::positional(self: ParseResult, idx: i64) -> str8`
 - `ParseResult::positional_count(self: ParseResult) -> i64`
 - `ParseResult::free(self: ParseResult) -> void`
 
@@ -175,35 +175,35 @@ Module file: `stdlib/std/compiler.mla`
 - `ResolvedSymbol`
 
 ### Global helpers
-- `session_create() -> Result<Session, string>`
+- `session_create() -> Result<Session, str8>`
 - `last_status() -> i32`
-- `status_name(status: i32) -> string`
-- `version() -> string`
-- `last_error() -> string`
+- `status_name(status: i32) -> str8`
+- `version() -> str8`
+- `last_error() -> str8`
 
 ### Session lifecycle and document state
-- `Session::destroy(self: Session) -> Result<i32, string>`
-- `Session::open_document(self: Session, uri: string, language_id: string, text: string, version: i32) -> Result<i32, string>`
-- `Session::change_document(self: Session, uri: string, text: string, version: i32) -> Result<i32, string>`
-- `Session::close_document(self: Session, uri: string) -> Result<i32, string>`
+- `Session::destroy(self: Session) -> Result<i32, str8>`
+- `Session::open_document(self: Session, uri: str8, language_id: str8, text: str8, version: i32) -> Result<i32, str8>`
+- `Session::change_document(self: Session, uri: str8, text: str8, version: i32) -> Result<i32, str8>`
+- `Session::close_document(self: Session, uri: str8) -> Result<i32, str8>`
 
 ### Diagnostics and editor queries
-- `Session::syntax_diagnostic_count(self: Session, uri: string) -> Result<i32, string>`
-- `Session::syntax_diagnostic_get(self: Session, uri: string, index: i32) -> Result<SyntaxDiagnostic, string>`
-- `Session::hover(self: Session, uri: string, line: i32, column: i32) -> Result<string, string>`
-- `Session::completion_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string>`
-- `Session::completion_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<string, string>`
+- `Session::syntax_diagnostic_count(self: Session, uri: str8) -> Result<i32, str8>`
+- `Session::syntax_diagnostic_get(self: Session, uri: str8, index: i32) -> Result<SyntaxDiagnostic, str8>`
+- `Session::hover(self: Session, uri: str8, line: i32, column: i32) -> Result<str8, str8>`
+- `Session::completion_count(self: Session, uri: str8, line: i32, column: i32) -> Result<i32, str8>`
+- `Session::completion_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> Result<str8, str8>`
 
 ### Symbols, definitions, references, rename
-- `Session::document_symbol_count(self: Session, uri: string) -> Result<i32, string>`
-- `Session::document_symbol_get(self: Session, uri: string, index: i32) -> Result<DocumentSymbol, string>`
-- `Session::definition(self: Session, uri: string, line: i32, column: i32) -> Result<DefinitionLocation, string>`
-- `Session::references_count(self: Session, uri: string, line: i32, column: i32) -> Result<i32, string>`
-- `Session::reference_get(self: Session, uri: string, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, string>`
-- `Session::resolve_symbol(self: Session, uri: string, line: i32, column: i32) -> Result<ResolvedSymbol, string>`
-- `Session::rename_is_safe(self: Session, uri: string, line: i32, column: i32, new_name: string) -> Result<i32, string>`
-- `Session::semantic_cache_warm(self: Session, uri: string) -> Result<i32, string>`
-- `Session::semantic_cache_clear(self: Session) -> Result<i32, string>`
+- `Session::document_symbol_count(self: Session, uri: str8) -> Result<i32, str8>`
+- `Session::document_symbol_get(self: Session, uri: str8, index: i32) -> Result<DocumentSymbol, str8>`
+- `Session::definition(self: Session, uri: str8, line: i32, column: i32) -> Result<DefinitionLocation, str8>`
+- `Session::references_count(self: Session, uri: str8, line: i32, column: i32) -> Result<i32, str8>`
+- `Session::reference_get(self: Session, uri: str8, line: i32, column: i32, index: i32) -> Result<ReferenceLocation, str8>`
+- `Session::resolve_symbol(self: Session, uri: str8, line: i32, column: i32) -> Result<ResolvedSymbol, str8>`
+- `Session::rename_is_safe(self: Session, uri: str8, line: i32, column: i32, new_name: str8) -> Result<i32, str8>`
+- `Session::semantic_cache_warm(self: Session, uri: str8) -> Result<i32, str8>`
+- `Session::semantic_cache_clear(self: Session) -> Result<i32, str8>`
 
 ## std::date
 
@@ -214,9 +214,9 @@ Module file: `stdlib/std/date.mla`
 
 ### API
 - `now() -> DateTime`
-- `format_iso8601(dt: DateTime) -> string`
-- `format_date(dt: DateTime) -> string`
-- `format_time(dt: DateTime) -> string`
+- `format_iso8601(dt: DateTime) -> str8`
+- `format_date(dt: DateTime) -> str8`
+- `format_time(dt: DateTime) -> str8`
 
 ## std::event_loop
 
@@ -226,7 +226,7 @@ Module file: `stdlib/std/event_loop.mla`
 - `EventLoop`
 
 ### API
-- `EventLoop::start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<EventLoop, string>`
+- `EventLoop::start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<EventLoop, str8>`
 - `EventLoop::stop(self: EventLoop) -> i32`
 - `EventLoop::close(self: EventLoop) -> i32`
 
@@ -290,27 +290,27 @@ Module file: `stdlib/std/testing.mla`
 GoogleTest-like non-fatal expectation helpers:
 - `expect_true(cond: bool)`
 - `expect_false(cond: bool)`
-- `expect_eq(expected, actual)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `expect_eq(expected, actual)` overloads for `i64`, `bool`, `str8`, `f32`, `f64`
 - `expect_eq_i32(expected: i32, actual: i32)`
 - `expect_eq_i64(expected: i64, actual: i64)`
-- `expect_not_eq(left, right)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `expect_not_eq(left, right)` overloads for `i64`, `bool`, `str8`, `f32`, `f64`
 - `expect_not_eq_i32(left: i32, right: i32)`
 - `expect_not_eq_i64(left: i64, right: i64)`
-- `expect_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
-- `expect_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
+- `expect_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<str8>`
+- `expect_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<str8>`
 
 Fatal verify helpers (abort on failure):
 - `verify_true(cond: bool)`
 - `verify(cond: bool)` (alias of `verify_true`)
 - `verify_false(cond: bool)`
-- `verify_eq(expected, actual)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `verify_eq(expected, actual)` overloads for `i64`, `bool`, `str8`, `f32`, `f64`
 - `verify_eq_i32(expected: i32, actual: i32)`
 - `verify_eq_i64(expected: i64, actual: i64)`
-- `verify_not_eq(left, right)` overloads for `i64`, `bool`, `string`, `f32`, `f64`
+- `verify_not_eq(left, right)` overloads for `i64`, `bool`, `str8`, `f32`, `f64`
 - `verify_not_eq_i32(left: i32, right: i32)`
 - `verify_not_eq_i64(left: i64, right: i64)`
-- `verify_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
-- `verify_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<string>`
+- `verify_array_eq(expected, actual)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<str8>`
+- `verify_array_not_eq(left, right)` overloads for `list<i64>`, `list<i32>`, `list<bool>`, `list<str8>`
 
 Failure diagnostics for `expect_eq`/`verify_eq` and `expect_not_eq`/`verify_not_eq`
 include compared values (`expected/actual` or `left/right`) in log output.
@@ -350,37 +350,37 @@ Sequences auto-disable to `""` when `std::term::supports_ansi()` is false.
 - `CursorDirection` (alias of `i32`)
 
 ### Color/style API
-- `reset() -> string`
-- `fg(color: Color) -> string`
-- `bg(color: Color) -> string`
-- `bold_on() -> string`
-- `bold_off() -> string`
-- `underline_on() -> string`
-- `underline_off() -> string`
-- `inverse_on() -> string`
-- `inverse_off() -> string`
-- `standout_on() -> string`
-- `standout_off() -> string`
-- `clear_eol() -> string`
-- `alt_screen_on() -> string`
-- `alt_screen_off() -> string`
+- `reset() -> str8`
+- `fg(color: Color) -> str8`
+- `bg(color: Color) -> str8`
+- `bold_on() -> str8`
+- `bold_off() -> str8`
+- `underline_on() -> str8`
+- `underline_off() -> str8`
+- `inverse_on() -> str8`
+- `inverse_off() -> str8`
+- `standout_on() -> str8`
+- `standout_off() -> str8`
+- `clear_eol() -> str8`
+- `alt_screen_on() -> str8`
+- `alt_screen_off() -> str8`
 
 ### Cursor API
-- `cursor(cmd: CursorCommand) -> string`
-- `cursor_move(dir: CursorDirection, amount: i32) -> string`
+- `cursor(cmd: CursorCommand) -> str8`
+- `cursor_move(dir: CursorDirection, amount: i32) -> str8`
 
 ### ACS (ncurses-style line drawing)
-- `acs_hline() -> string`
-- `acs_vline() -> string`
-- `acs_ulcorner() -> string`
-- `acs_urcorner() -> string`
-- `acs_llcorner() -> string`
-- `acs_lrcorner() -> string`
-- `acs_ltee() -> string`
-- `acs_rtee() -> string`
-- `acs_ttee() -> string`
-- `acs_btee() -> string`
-- `acs_plus() -> string`
+- `acs_hline() -> str8`
+- `acs_vline() -> str8`
+- `acs_ulcorner() -> str8`
+- `acs_urcorner() -> str8`
+- `acs_llcorner() -> str8`
+- `acs_lrcorner() -> str8`
+- `acs_ltee() -> str8`
+- `acs_rtee() -> str8`
+- `acs_ttee() -> str8`
+- `acs_btee() -> str8`
+- `acs_plus() -> str8`
 
 ### TUI Safety Helper (recommended for all terminal UIs)
 Use this pattern in every TUI example to avoid broken scrolling/cursor state:
@@ -453,18 +453,18 @@ Module file: `stdlib/std/fs.mla`
 - `BufReader`
 
 ### File API
-- `File::open(path: string) -> Result<File, string>`
-- `File::create(path: string) -> Result<File, string>`
+- `File::open(path: str8) -> Result<File, str8>`
+- `File::create(path: str8) -> Result<File, str8>`
 - `File::close(self: File) -> i32`
-- `File::write(self: File, s: string) -> Result<i64, string>`
-- `File::write_line(self: File, s: string) -> Result<i64, string>`
+- `File::write(self: File, s: str8) -> Result<i64, str8>`
+- `File::write_line(self: File, s: str8) -> Result<i64, str8>`
 
 ### Reader API
 - `BufReader::new(file: File) -> BufReader`
 - `BufReader::with_capacity(file: File, capacity: i64) -> BufReader`
-- `BufReader::read_line(self: BufReader, buf: string) -> Result<i64, string>`
-- `BufReader::lines(self: BufReader) -> list<string>`
-- `free_lines(lines: list<string>) -> void`
+- `BufReader::read_line(self: BufReader, buf: str8) -> Result<i64, str8>`
+- `BufReader::lines(self: BufReader) -> list<str8>`
+- `free_lines(lines: list<str8>) -> void`
 
 ## std::io
 
@@ -486,35 +486,35 @@ Module file: `stdlib/std/io.mla`
 - `stdout() -> Stdout`
 - `stderr() -> Stderr`
 - `cursor_with_capacity(capacity: i64) -> Cursor`
-- `cursor_from_string(s: string) -> Cursor`
+- `cursor_from_string(s: str8) -> Cursor`
 - `cursor_free(c: Cursor) -> void`
 
 ### Stream read/write
-- `read_line(input: Stdin, buf: string, capacity: i64) -> i64`
-- `read_line_nonblocking(input: Stdin, buf: string, capacity: i64) -> i64`
-- `write(out: Stdout, s: string) -> i64`
-- `write(err: Stderr, s: string) -> i64`
-- `writeln(out: Stdout, s: string) -> i64`
-- `writeln(err: Stderr, s: string) -> i64`
-- `flush(out: Stdout) -> int`
-- `flush(err: Stderr) -> int`
+- `read_line(input: Stdin, buf: str8, capacity: i64) -> i64`
+- `read_line_nonblocking(input: Stdin, buf: str8, capacity: i64) -> i64`
+- `write(out: Stdout, s: str8) -> i64`
+- `write(err: Stderr, s: str8) -> i64`
+- `writeln(out: Stdout, s: str8) -> i64`
+- `writeln(err: Stderr, s: str8) -> i64`
+- `flush(out: Stdout) -> i32`
+- `flush(err: Stderr) -> i32`
 
 ### Buffering controls
-- `buffering_unbuffered() -> int`
-- `buffering_line() -> int`
-- `buffering_full() -> int`
-- `set_stdin_buffering(mode: int, size: i64) -> int`
-- `set_stdout_buffering(mode: int, size: i64) -> int`
-- `set_stderr_buffering(mode: int, size: i64) -> int`
+- `buffering_unbuffered() -> i32`
+- `buffering_line() -> i32`
+- `buffering_full() -> i32`
+- `set_stdin_buffering(mode: i32, size: i64) -> i32`
+- `set_stdout_buffering(mode: i32, size: i64) -> i32`
+- `set_stderr_buffering(mode: i32, size: i64) -> i32`
 
 ### Locking and synchronized writes
 - `lock(out: Stdout) -> StdoutLock`
-- `unlock(lockToken: StdoutLock) -> int`
-- `try_lock(out: Stdout) -> int`
-- `write_locked(lockToken: StdoutLock, s: string) -> i64`
-- `writeln_locked(lockToken: StdoutLock, s: string) -> i64`
-- `write_sync(out: Stdout, s: string) -> i64`
-- `writeln_sync(out: Stdout, s: string) -> i64`
+- `unlock(lockToken: StdoutLock) -> i32`
+- `try_lock(out: Stdout) -> i32`
+- `write_locked(lockToken: StdoutLock, s: str8) -> i64`
+- `writeln_locked(lockToken: StdoutLock, s: str8) -> i64`
+- `write_sync(out: Stdout, s: str8) -> i64`
+- `writeln_sync(out: Stdout, s: str8) -> i64`
 - `__drop(lockToken: StdoutLock) -> void`
 
 ### Trait-like adapters and operations
@@ -526,11 +526,11 @@ Module file: `stdlib/std/io.mla`
 - `as_seek(c: Cursor) -> Seek`
 - `as_buf_read(input: Stdin) -> BufRead`
 - `as_buf_read(c: Cursor) -> BufRead`
-- `read(reader: Read, buf: string, capacity: i64) -> i64`
-- `write(writer: Write, s: string) -> i64`
-- `read_line(reader: BufRead, buf: string, capacity: i64) -> i64`
-- `seek(seeker: Seek, offset: i64, whence: int) -> i64`
-- `to_string(c: Cursor) -> string`
+- `read(reader: Read, buf: str8, capacity: i64) -> i64`
+- `write(writer: Write, s: str8) -> i64`
+- `read_line(reader: BufRead, buf: str8, capacity: i64) -> i64`
+- `seek(seeker: Seek, offset: i64, whence: i32) -> i64`
+- `to_string(c: Cursor) -> str8`
 
 ## std::json
 
@@ -552,35 +552,35 @@ Module file: `stdlib/std/json.mla`
 - `kind_object()`
 
 ### Document API
-- `JsonDoc::parse(text: string) -> Result<JsonDoc, string>`
-- `JsonDoc::from_file(path: string) -> Result<JsonDoc, string>`
-- `JsonDoc::root(self: JsonDoc) -> Result<JsonValue, string>`
-- `JsonDoc::stringify(self: JsonDoc) -> Result<string, string>`
-- `JsonDoc::stringify_pretty(self: JsonDoc) -> Result<string, string>`
+- `JsonDoc::parse(text: str8) -> Result<JsonDoc, str8>`
+- `JsonDoc::from_file(path: str8) -> Result<JsonDoc, str8>`
+- `JsonDoc::root(self: JsonDoc) -> Result<JsonValue, str8>`
+- `JsonDoc::stringify(self: JsonDoc) -> Result<str8, str8>`
+- `JsonDoc::stringify_pretty(self: JsonDoc) -> Result<str8, str8>`
 - `JsonDoc::free(self: JsonDoc) -> void`
-- `last_error() -> string`
+- `last_error() -> str8`
 
 ### Value API
-- `JsonValue::kind(self: JsonValue) -> int`
-- `JsonValue::size(self: JsonValue) -> Result<i64, string>`
-- `JsonValue::get(self: JsonValue, key: string) -> Result<JsonValue, string>`
-- `JsonValue::index(self: JsonValue, i: i64) -> Result<JsonValue, string>`
-- `JsonValue::as_bool(self: JsonValue) -> Result<int, string>`
-- `JsonValue::as_i64(self: JsonValue) -> Result<i64, string>`
-- `JsonValue::as_f64(self: JsonValue) -> Result<double, string>`
-- `JsonValue::as_string(self: JsonValue) -> Result<string, string>`
-- `JsonValue::key_at(self: JsonValue, i: i64) -> Result<string, string>`
-- `JsonValue::iter_array(self: JsonValue) -> Result<JsonArrayIter, string>`
-- `JsonValue::iter_object(self: JsonValue) -> Result<JsonObjectIter, string>`
+- `JsonValue::kind(self: JsonValue) -> i32`
+- `JsonValue::size(self: JsonValue) -> Result<i64, str8>`
+- `JsonValue::get(self: JsonValue, key: str8) -> Result<JsonValue, str8>`
+- `JsonValue::index(self: JsonValue, i: i64) -> Result<JsonValue, str8>`
+- `JsonValue::as_bool(self: JsonValue) -> Result<i32, str8>`
+- `JsonValue::as_i64(self: JsonValue) -> Result<i64, str8>`
+- `JsonValue::as_f64(self: JsonValue) -> Result<f64, str8>`
+- `JsonValue::as_string(self: JsonValue) -> Result<str8, str8>`
+- `JsonValue::key_at(self: JsonValue, i: i64) -> Result<str8, str8>`
+- `JsonValue::iter_array(self: JsonValue) -> Result<JsonArrayIter, str8>`
+- `JsonValue::iter_object(self: JsonValue) -> Result<JsonObjectIter, str8>`
 - `JsonValue::free(self: JsonValue) -> void`
 
 ### Iterator API
-- `JsonArrayIter::has_next(self: JsonArrayIter) -> int`
-- `JsonArrayIter::current(self: JsonArrayIter) -> Result<JsonValue, string>`
+- `JsonArrayIter::has_next(self: JsonArrayIter) -> i32`
+- `JsonArrayIter::current(self: JsonArrayIter) -> Result<JsonValue, str8>`
 - `JsonArrayIter::advance(self: JsonArrayIter) -> JsonArrayIter`
-- `JsonObjectIter::has_next(self: JsonObjectIter) -> int`
-- `JsonObjectIter::current_key(self: JsonObjectIter) -> Result<string, string>`
-- `JsonObjectIter::current_value(self: JsonObjectIter) -> Result<JsonValue, string>`
+- `JsonObjectIter::has_next(self: JsonObjectIter) -> i32`
+- `JsonObjectIter::current_key(self: JsonObjectIter) -> Result<str8, str8>`
+- `JsonObjectIter::current_value(self: JsonObjectIter) -> Result<JsonValue, str8>`
 - `JsonObjectIter::advance(self: JsonObjectIter) -> JsonObjectIter`
 
 ## std::jsonrpc
@@ -593,34 +593,34 @@ Module file: `stdlib/std/jsonrpc.mla`
 
 ### Transport API
 - `stdio() -> StdioTransport`
-- `StdioTransport::read_frame(self, buf: string, capacity: i64) -> Result<i64, string>`
-- `StdioTransport::read_frame_timeout(self, buf: string, capacity: i64, timeout_ms: i64) -> Result<i64, string>`
-- `StdioTransport::write_frame(self, payload: string) -> Result<i32, string>`
-- `build_frame(payload: string) -> string`
-- `parse_frame(frame: string, out: string, capacity: i64) -> Result<i64, string>`
-- `last_error() -> string`
+- `StdioTransport::read_frame(self, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `StdioTransport::read_frame_timeout(self, buf: str8, capacity: i64, timeout_ms: i64) -> Result<i64, str8>`
+- `StdioTransport::write_frame(self, payload: str8) -> Result<i32, str8>`
+- `build_frame(payload: str8) -> str8`
+- `parse_frame(frame: str8, out: str8, capacity: i64) -> Result<i64, str8>`
+- `last_error() -> str8`
 
 ### Runtime queues
-- `Runtime::new(queue_capacity: i64) -> Result<Runtime, string>`
-- `Runtime::push_inbound(self, payload: string) -> Result<i32, string>`
-- `Runtime::try_pop_inbound(self, buf: string, capacity: i64) -> Result<i64, string>`
-- `Runtime::push_outbound(self, payload: string) -> Result<i32, string>`
-- `Runtime::try_pop_outbound(self, buf: string, capacity: i64) -> Result<i64, string>`
+- `Runtime::new(queue_capacity: i64) -> Result<Runtime, str8>`
+- `Runtime::push_inbound(self, payload: str8) -> Result<i32, str8>`
+- `Runtime::try_pop_inbound(self, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `Runtime::push_outbound(self, payload: str8) -> Result<i32, str8>`
+- `Runtime::try_pop_outbound(self, buf: str8, capacity: i64) -> Result<i64, str8>`
 - `Runtime::close(self) -> void`
-- `flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: string, capacity: i64) -> Result<i32, string>`
-- `run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, string>`
+- `flush_one_outbound(rt: Runtime, transport: StdioTransport, scratch: str8, capacity: i64) -> Result<i32, str8>`
+- `run_stdio_loop(worker_count: i32, frame_capacity: i64, response_capacity: i64) -> Result<i32, str8>`
 
 ### Cancellation API
-- `cancel_mark(request_id: i64) -> Result<i32, string>`
-- `cancel_is_marked(request_id: i64) -> int`
-- `cancel_take(request_id: i64) -> int`
-- `cancel_clear(request_id: i64) -> int`
+- `cancel_mark(request_id: i64) -> Result<i32, str8>`
+- `cancel_is_marked(request_id: i64) -> i32`
+- `cancel_take(request_id: i64) -> i32`
+- `cancel_clear(request_id: i64) -> i32`
 - `cancel_clear_all() -> i32`
-- `register_cancel_from_payload(payload: string) -> Result<i32, string>`
-- `is_timeout_error(err: string) -> int`
+- `register_cancel_from_payload(payload: str8) -> Result<i32, str8>`
+- `is_timeout_error(err: str8) -> i32`
 
 ### Runtime Dispatch Hook
-- `__mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string`
+- `__mlang_std_jsonrpc_runtime_dispatch(request_payload: str8) -> str8`
 - Provided as a weak default in `libmlang_std` (returns empty response).
 - Override this symbol in your server program to implement method dispatch.
 
@@ -633,26 +633,26 @@ Module file: `stdlib/std/net.mla`
 - `TcpStream`
 
 ### Listener API
-- `TcpListener::bind(addr: string, port: i64) -> Result<TcpListener, string>`
-- `TcpListener::accept(self: TcpListener) -> Result<TcpStream, string>`
-- `TcpListener::local_port(self: TcpListener) -> Result<i64, string>`
+- `TcpListener::bind(addr: str8, port: i64) -> Result<TcpListener, str8>`
+- `TcpListener::accept(self: TcpListener) -> Result<TcpStream, str8>`
+- `TcpListener::local_port(self: TcpListener) -> Result<i64, str8>`
 - `TcpListener::close(self: TcpListener) -> i32`
-- `TcpListener::set_backlog(self: TcpListener, backlog: i64) -> Result<i32, string>`
+- `TcpListener::set_backlog(self: TcpListener, backlog: i64) -> Result<i32, str8>`
 
 ### Stream API
-- `TcpStream::connect(addr: string, port: i64) -> Result<TcpStream, string>`
-- `TcpStream::read(self: TcpStream, buf: string, capacity: i64) -> Result<i64, string>`
-- `TcpStream::write(self: TcpStream, s: string) -> Result<i64, string>`
+- `TcpStream::connect(addr: str8, port: i64) -> Result<TcpStream, str8>`
+- `TcpStream::read(self: TcpStream, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `TcpStream::write(self: TcpStream, s: str8) -> Result<i64, str8>`
 - `TcpStream::close(self: TcpStream) -> i32`
-- `TcpStream::set_nonblocking(self: TcpStream, enabled: int) -> Result<i32, string>`
-- `TcpStream::set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, string>`
-- `TcpStream::set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, string>`
-- `TcpStream::try_clone(self: TcpStream) -> Result<TcpStream, string>`
+- `TcpStream::set_nonblocking(self: TcpStream, enabled: i32) -> Result<i32, str8>`
+- `TcpStream::set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8>`
+- `TcpStream::set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8>`
+- `TcpStream::try_clone(self: TcpStream) -> Result<TcpStream, str8>`
 - `TcpStream::from_handle(handle: i64) -> TcpStream`
 - `TcpStream::raw_handle(self: TcpStream) -> i64`
 
 ### Errors
-- `last_error() -> string`
+- `last_error() -> str8`
 
 ## std::printf
 
@@ -661,15 +661,15 @@ Module file: `stdlib/std/printf.mla`
 MLang-facing wrappers over C-style output that accept preformatted strings.
 
 ### API
-- `printf(s: string) -> void`
-- `eprintf(s: string) -> void`
-- `fprintf(fd: i32, s: string) -> void`
+- `printf(s: str8) -> void`
+- `eprintf(s: str8) -> void`
+- `fprintf(fd: i32, s: str8) -> void`
 
 ## std::math
 
 Module file: `stdlib/std/math.mla`
 
-### Numeric helpers (overloaded for `int`, `float`, `double`)
+### Numeric helpers (overloaded for `i32`, `f32`, `f64`)
 - `add(a, b)`
 - `subtract(a, b)`
 - `multiply(a, b)`
@@ -691,8 +691,8 @@ Module file: `stdlib/std/math.mla`
 - `modulo(a, b)`
 
 ### Integer-specific
-- `sum_range(start: int, end: int) -> int`
-- `factorial(n: int) -> int`
+- `sum_range(start: i32, end: i32) -> i32`
+- `factorial(n: i32) -> i32`
 
 ## std::algorithm::fft
 
@@ -765,29 +765,29 @@ Module file: `stdlib/std/process.mla`
 - `ExitStatus`
 
 ### Spawn
-- `spawn(program: string, args: list<string>) -> Result<Child, string>`
-- `spawn_inherit(program: string, args: list<string>) -> Result<Child, string>`
-- `last_error() -> string`
+- `spawn(program: str8, args: list<str8>) -> Result<Child, str8>`
+- `spawn_inherit(program: str8, args: list<str8>) -> Result<Child, str8>`
+- `last_error() -> str8`
 
 ### Child and pipe API
-- `Child::stdin(self: Child) -> Result<ChildStdin, string>`
-- `Child::stdout(self: Child) -> Result<ChildStdout, string>`
-- `Child::stderr(self: Child) -> Result<ChildStderr, string>`
-- `Child::wait(self: Child) -> Result<ExitStatus, string>`
-- `Child::kill(self: Child, sig: i32) -> Result<i32, string>`
+- `Child::stdin(self: Child) -> Result<ChildStdin, str8>`
+- `Child::stdout(self: Child) -> Result<ChildStdout, str8>`
+- `Child::stderr(self: Child) -> Result<ChildStderr, str8>`
+- `Child::wait(self: Child) -> Result<ExitStatus, str8>`
+- `Child::kill(self: Child, sig: i32) -> Result<i32, str8>`
 - `Child::close(self: Child) -> i32`
-- `ChildStdin::write(self: ChildStdin, s: string) -> Result<i64, string>`
+- `ChildStdin::write(self: ChildStdin, s: str8) -> Result<i64, str8>`
 - `ChildStdin::close(self: ChildStdin) -> i32`
-- `ChildStdout::read(self: ChildStdout, buf: string, capacity: i64) -> Result<i64, string>`
+- `ChildStdout::read(self: ChildStdout, buf: str8, capacity: i64) -> Result<i64, str8>`
 - `ChildStdout::close(self: ChildStdout) -> i32`
-- `ChildStderr::read(self: ChildStderr, buf: string, capacity: i64) -> Result<i64, string>`
+- `ChildStderr::read(self: ChildStderr, buf: str8, capacity: i64) -> Result<i64, str8>`
 - `ChildStderr::close(self: ChildStderr) -> i32`
 
 ### Exit status
-- `ExitStatus::success(self: ExitStatus) -> int`
-- `ExitStatus::exited(self: ExitStatus) -> int`
+- `ExitStatus::success(self: ExitStatus) -> i32`
+- `ExitStatus::exited(self: ExitStatus) -> i32`
 - `ExitStatus::code(self: ExitStatus) -> i32`
-- `ExitStatus::signaled(self: ExitStatus) -> int`
+- `ExitStatus::signaled(self: ExitStatus) -> i32`
 - `ExitStatus::signal(self: ExitStatus) -> i32`
 
 ## std::rand
@@ -811,18 +811,18 @@ Module file: `stdlib/std/regex.mla`
 - `Regex`
 
 ### Compile / lifetime
-- `Regex::compile(pattern: string) -> Result<Regex, string>`
+- `Regex::compile(pattern: str8) -> Result<Regex, str8>`
 - `Regex::close(self: Regex) -> i32`
 
 ### Matching
-- `Regex::is_match(self: Regex, text: string) -> i32`
-- `Regex::find_start(self: Regex, text: string) -> i64`
-- `Regex::find_end(self: Regex, text: string) -> i64`
-- `Regex::match_start(self: Regex, text: string, group_index: i64) -> i64`
-- `Regex::match_end(self: Regex, text: string, group_index: i64) -> i64`
+- `Regex::is_match(self: Regex, text: str8) -> i32`
+- `Regex::find_start(self: Regex, text: str8) -> i64`
+- `Regex::find_end(self: Regex, text: str8) -> i64`
+- `Regex::match_start(self: Regex, text: str8, group_index: i64) -> i64`
+- `Regex::match_end(self: Regex, text: str8, group_index: i64) -> i64`
 
 ### Errors
-- `last_error() -> string`
+- `last_error() -> str8`
 
 ## std::sync
 
@@ -832,36 +832,36 @@ Module file: `stdlib/std/sync.mla`
 - `Mutex`
 - `Condvar`
 - `Channel`
-- `LockFreeQueue` (SPSC string queue)
+- `LockFreeQueue` (SPSC str8 queue)
 
 ### Mutex
-- `Mutex::new() -> Result<Mutex, string>`
-- `Mutex::lock(self: Mutex) -> Result<i32, string>`
-- `Mutex::unlock(self: Mutex) -> Result<i32, string>`
+- `Mutex::new() -> Result<Mutex, str8>`
+- `Mutex::lock(self: Mutex) -> Result<i32, str8>`
+- `Mutex::unlock(self: Mutex) -> Result<i32, str8>`
 - `Mutex::close(self: Mutex) -> i32`
 
 ### Condvar
-- `Condvar::new() -> Result<Condvar, string>`
-- `Condvar::wait(self: Condvar, mutex: Mutex) -> Result<i32, string>`
-- `Condvar::wait_timeout_ms(self: Condvar, mutex: Mutex, timeout_ms: i64) -> Result<i32, string>`
-- `Condvar::notify_one(self: Condvar) -> Result<i32, string>`
-- `Condvar::notify_all(self: Condvar) -> Result<i32, string>`
+- `Condvar::new() -> Result<Condvar, str8>`
+- `Condvar::wait(self: Condvar, mutex: Mutex) -> Result<i32, str8>`
+- `Condvar::wait_timeout_ms(self: Condvar, mutex: Mutex, timeout_ms: i64) -> Result<i32, str8>`
+- `Condvar::notify_one(self: Condvar) -> Result<i32, str8>`
+- `Condvar::notify_all(self: Condvar) -> Result<i32, str8>`
 - `Condvar::close(self: Condvar) -> i32`
 
-### Channel (string)
-- `Channel::new(capacity: i64) -> Result<Channel, string>`
-- `Channel::send(self: Channel, s: string) -> Result<i32, string>`
-- `Channel::post(self: Channel, s: string) -> Result<i32, string>` (alias of `send`)
-- `Channel::recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
-- `Channel::try_recv(self: Channel, buf: string, capacity: i64) -> Result<i64, string>`
+### Channel (str8)
+- `Channel::new(capacity: i64) -> Result<Channel, str8>`
+- `Channel::send(self: Channel, s: str8) -> Result<i32, str8>`
+- `Channel::post(self: Channel, s: str8) -> Result<i32, str8>` (alias of `send`)
+- `Channel::recv(self: Channel, buf: str8, capacity: i64) -> Result<i64, str8>`
+- `Channel::try_recv(self: Channel, buf: str8, capacity: i64) -> Result<i64, str8>`
 - `Channel::close(self: Channel) -> i32`
 - `Channel::free(self: Channel) -> i32`
 
-### LockFreeQueue (string, single-producer/single-consumer)
-- `LockFreeQueue::new(capacity: i64) -> Result<LockFreeQueue, string>`
-- `LockFreeQueue::try_send(self: LockFreeQueue, s: string) -> Result<i32, string>`
+### LockFreeQueue (str8, single-producer/single-consumer)
+- `LockFreeQueue::new(capacity: i64) -> Result<LockFreeQueue, str8>`
+- `LockFreeQueue::try_send(self: LockFreeQueue, s: str8) -> Result<i32, str8>`
   - returns `0` on success, `1` when full
-- `LockFreeQueue::try_recv(self: LockFreeQueue, buf: string, capacity: i64) -> Result<i64, string>`
+- `LockFreeQueue::try_recv(self: LockFreeQueue, buf: str8, capacity: i64) -> Result<i64, str8>`
   - returns bytes copied (>0), `-2` when empty, `0` when closed and drained
 - `LockFreeQueue::close(self: LockFreeQueue) -> i32`
 - `LockFreeQueue::free(self: LockFreeQueue) -> i32`
@@ -884,7 +884,7 @@ Terminal capability detection and termios helpers.
 - `color_truecolor() -> ColorLevel` (16777216)
 
 ### Capability queries
-- `term_name() -> string`
+- `term_name() -> str8`
 - `supports_ansi() -> i32`
 - `stdin_is_tty() -> i32`
 - `stdout_is_tty() -> i32`
@@ -910,10 +910,10 @@ Module file: `stdlib/std/time.mla`
 - `now_ms() -> i64`
 - `now_ns() -> i64`
 - `sleep_ms(ms: i64) -> void`
-- `format_local(pattern: str8) -> string`
-- `local_datetime() -> string` (`MM/DD/YYYY:HH:MM:SS`)
-- `local_datetime_ms() -> string` (`MM/DD/YYYY:HH:MM:SS.MS`)
-- `local_datetime_ns() -> string` (`MM/DD/YYYY:HH:MM:SS.NS`)
+- `format_local(pattern: str8) -> str8`
+- `local_datetime() -> str8` (`MM/DD/YYYY:HH:MM:SS`)
+- `local_datetime_ms() -> str8` (`MM/DD/YYYY:HH:MM:SS.MS`)
+- `local_datetime_ns() -> str8` (`MM/DD/YYYY:HH:MM:SS.NS`)
 
 `format_local` token support:
 - `YYYY` year
@@ -925,9 +925,9 @@ Module file: `stdlib/std/time.mla`
 - `NS` nanoseconds
 
 ### Timer
-- `Timer::after(timeout_ms: i64) -> Result<Timer, string>`
+- `Timer::after(timeout_ms: i64) -> Result<Timer, str8>`
 - `Timer::reset(self: Timer, timeout_ms: i64) -> i32`
-- `Timer::elapsed(self: Timer) -> int`
+- `Timer::elapsed(self: Timer) -> i32`
 - `Timer::remaining_ms(self: Timer) -> i64`
 - `Timer::wait(self: Timer) -> i32`
 - `Timer::close(self: Timer) -> i32`
@@ -941,7 +941,7 @@ Module file: `stdlib/std/timer.mla`
 - `AsyncTicker`
 
 ### Interval timer API
-- `IntervalTimer::every_ms(interval_ms: i64) -> Result<IntervalTimer, string>`
+- `IntervalTimer::every_ms(interval_ms: i64) -> Result<IntervalTimer, str8>`
 - `IntervalTimer::reset(self: IntervalTimer) -> i32`
 - `IntervalTimer::remaining_ms(self: IntervalTimer) -> i64`
 - `IntervalTimer::wait_next(self: IntervalTimer) -> i32`
@@ -949,7 +949,7 @@ Module file: `stdlib/std/timer.mla`
 - `IntervalTimer::close(self: IntervalTimer) -> i32`
 
 ### Async ticker API
-- `AsyncTicker::start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<AsyncTicker, string>`
+- `AsyncTicker::start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<AsyncTicker, str8>`
 - `AsyncTicker::stop(self: AsyncTicker) -> i32`
 - `AsyncTicker::close(self: AsyncTicker) -> i32`
 
@@ -958,12 +958,12 @@ Module file: `stdlib/std/timer.mla`
 Module file: `stdlib/std/strbuf.mla`
 
 ### Allocation
-- `String::new() -> string` (compiler intrinsic wrapper)
-- `String::with_capacity(capacity: i64) -> string` (compiler intrinsic wrapper)
-- `String::free(buf: string) -> void` (compiler intrinsic wrapper)
-- `new() -> string`
-- `with_capacity(capacity: i64) -> string`
-- `free(buf: string) -> void`
+- `String::new() -> str8` (compiler intrinsic wrapper)
+- `String::with_capacity(capacity: i64) -> str8` (compiler intrinsic wrapper)
+- `String::free(buf: str8) -> void` (compiler intrinsic wrapper)
+- `new() -> str8`
+- `with_capacity(capacity: i64) -> str8`
+- `free(buf: str8) -> void`
 
 ### Dynamic builder
 - `StringBuilder`
@@ -975,33 +975,33 @@ Module file: `stdlib/std/strbuf.mla`
 - `builder_set_page_size(builder: StringBuilder, page_size: i64) -> i32`
 - `builder_clear(builder: StringBuilder) -> i32`
 - `builder_reserve(builder: StringBuilder, min_capacity: i64) -> i32`
-- `builder_append(builder: StringBuilder, s: string) -> i64` (bytes appended, `-1` on failure)
+- `builder_append(builder: StringBuilder, s: str8) -> i64` (bytes appended, `-1` on failure)
 - `builder_append_char(builder: StringBuilder, ch: i32) -> i64` (`1` on success, `-1` on failure)
-- `builder_to_string(builder: StringBuilder) -> string` (clone)
-- `builder_take_string(builder: StringBuilder) -> string` (moves out current buffer and resets builder)
+- `builder_to_string(builder: StringBuilder) -> str8` (clone)
+- `builder_take_string(builder: StringBuilder) -> str8` (moves out current buffer and resets builder)
 - `builder_free(builder: StringBuilder) -> void`
 
 ### String helpers
-- `len(s: string) -> i64`
-- `is_empty(s: string) -> int`
-- `clone(s: string) -> string`
-- `eq(a: string, b: string) -> int`
-- `compare(a: string, b: string) -> i64`
-- `starts_with(s: string, prefix: string) -> int`
-- `ends_with(s: string, suffix: string) -> int`
-- `contains(s: string, needle: string) -> int`
-- `find(s: string, needle: string) -> i64`
-- `rfind(s: string, needle: string) -> i64`
-- `concat(a: string, b: string) -> string`
-- `repeat(s: string, count: i64) -> string`
-- `trim(s: string) -> string`
-- `ltrim(s: string) -> string`
-- `rtrim(s: string) -> string`
+- `len(s: str8) -> i64`
+- `is_empty(s: str8) -> i32`
+- `clone(s: str8) -> str8`
+- `eq(a: str8, b: str8) -> i32`
+- `compare(a: str8, b: str8) -> i64`
+- `starts_with(s: str8, prefix: str8) -> i32`
+- `ends_with(s: str8, suffix: str8) -> i32`
+- `contains(s: str8, needle: str8) -> i32`
+- `find(s: str8, needle: str8) -> i64`
+- `rfind(s: str8, needle: str8) -> i64`
+- `concat(a: str8, b: str8) -> str8`
+- `repeat(s: str8, count: i64) -> str8`
+- `trim(s: str8) -> str8`
+- `ltrim(s: str8) -> str8`
+- `rtrim(s: str8) -> str8`
 
 ### Unicode conversion
-- `to_utf16(s: string) -> str16`
-- `from_utf16(s: str16) -> string`
-- `to_utf8(s: str16) -> string`
+- `to_utf16(s: str8) -> str16`
+- `from_utf16(s: str16) -> str8`
+- `to_utf8(s: str16) -> str8`
 - `free_utf16(s: str16) -> void`
 
 ## std::bytes
@@ -1012,10 +1012,10 @@ Module file: `stdlib/std/bytes.mla`
 - `Bytes`
 
 ### Lifecycle
-- `Bytes::new(initial_capacity: i64) -> Result<Bytes, string>`
-- `Bytes::from_string(s: string) -> Result<Bytes, string>`
+- `Bytes::new(initial_capacity: i64) -> Result<Bytes, str8>`
+- `Bytes::from_string(s: str8) -> Result<Bytes, str8>`
 - `Bytes::close(self: Bytes) -> i32`
-- `last_error() -> string`
+- `last_error() -> str8`
 
 ### Buffer operations
 - `Bytes::len(self: Bytes) -> i64`
@@ -1023,14 +1023,14 @@ Module file: `stdlib/std/bytes.mla`
 - `Bytes::clear(self: Bytes) -> i32`
 - `Bytes::reserve(self: Bytes, min_capacity: i64) -> i32`
 - `Bytes::append_byte(self: Bytes, value: i32) -> i32`
-- `Bytes::append_string(self: Bytes, s: string) -> i64`
+- `Bytes::append_string(self: Bytes, s: str8) -> i64`
 - `Bytes::append_bytes(self: Bytes, other: Bytes) -> i64`
 - `Bytes::get(self: Bytes, index: i64) -> i32`
 - `Bytes::set(self: Bytes, index: i64, value: i32) -> i32`
 
 ### Conversions
-- `Bytes::to_string(self: Bytes) -> string` (text-oriented C/UTF-8 string copy)
-- `Bytes::to_hex(self: Bytes) -> string` (binary-safe lowercase hex)
+- `Bytes::to_string(self: Bytes) -> str8` (text-oriented C/UTF-8 str8 copy)
+- `Bytes::to_hex(self: Bytes) -> str8` (binary-safe lowercase hex)
 
 ## std::serde
 
@@ -1042,46 +1042,46 @@ Module file: `stdlib/std/serde.mla`
 - `BinarySerde` (trait for custom types)
 
 ### Global helpers
-- `last_error() -> string`
+- `last_error() -> str8`
 - `last_ok() -> i32`
 
 ### `Binary` API
-- `Binary::new(initial_capacity: i64) -> Result<Binary, string>`
-- `Binary::from_file(path: string) -> Result<Binary, string>`
+- `Binary::new(initial_capacity: i64) -> Result<Binary, str8>`
+- `Binary::from_file(path: str8) -> Result<Binary, str8>`
 - `Binary::len(self: Binary) -> i64`
 - `Binary::capacity(self: Binary) -> i64`
-- `Binary::clear(self: Binary) -> Result<i32, string>`
-- `Binary::reserve(self: Binary, min_capacity: i64) -> Result<i32, string>`
-- `Binary::write_u8(self: Binary, value: i32) -> Result<i32, string>`
-- `Binary::write_bool(self: Binary, value: bool) -> Result<i32, string>`
-- `Binary::write_i32(self: Binary, value: i32) -> Result<i32, string>`
-- `Binary::write_i64(self: Binary, value: i64) -> Result<i32, string>`
-- `Binary::write_f32(self: Binary, value: f32) -> Result<i32, string>`
-- `Binary::write_f64(self: Binary, value: f64) -> Result<i32, string>`
-- `Binary::write_string(self: Binary, value: string) -> Result<i32, string>`
-- `Binary::get_u8(self: Binary, index: i64) -> Result<i32, string>`
-- `Binary::to_reader(self: Binary) -> Result<Reader, string>`
-- `Binary::write_file(self: Binary, path: string) -> Result<i32, string>`
+- `Binary::clear(self: Binary) -> Result<i32, str8>`
+- `Binary::reserve(self: Binary, min_capacity: i64) -> Result<i32, str8>`
+- `Binary::write_u8(self: Binary, value: i32) -> Result<i32, str8>`
+- `Binary::write_bool(self: Binary, value: bool) -> Result<i32, str8>`
+- `Binary::write_i32(self: Binary, value: i32) -> Result<i32, str8>`
+- `Binary::write_i64(self: Binary, value: i64) -> Result<i32, str8>`
+- `Binary::write_f32(self: Binary, value: f32) -> Result<i32, str8>`
+- `Binary::write_f64(self: Binary, value: f64) -> Result<i32, str8>`
+- `Binary::write_string(self: Binary, value: str8) -> Result<i32, str8>`
+- `Binary::get_u8(self: Binary, index: i64) -> Result<i32, str8>`
+- `Binary::to_reader(self: Binary) -> Result<Reader, str8>`
+- `Binary::write_file(self: Binary, path: str8) -> Result<i32, str8>`
 - `Binary::raw_handle(self: Binary) -> i64`
 - `Binary::close(self: Binary) -> i32`
 
 ### `Reader` API
-- `Reader::from_binary(binary: Binary) -> Result<Reader, string>`
-- `Reader::from_file(path: string) -> Result<Reader, string>`
+- `Reader::from_binary(binary: Binary) -> Result<Reader, str8>`
+- `Reader::from_file(path: str8) -> Result<Reader, str8>`
 - `Reader::remaining(self: Reader) -> i64`
-- `Reader::read_u8(self: Reader) -> Result<i32, string>`
-- `Reader::read_bool(self: Reader) -> Result<bool, string>`
-- `Reader::read_i32(self: Reader) -> Result<i32, string>`
-- `Reader::read_i64(self: Reader) -> Result<i64, string>`
-- `Reader::read_f32(self: Reader) -> Result<f32, string>`
-- `Reader::read_f64(self: Reader) -> Result<f64, string>`
-- `Reader::read_string(self: Reader) -> Result<string, string>`
+- `Reader::read_u8(self: Reader) -> Result<i32, str8>`
+- `Reader::read_bool(self: Reader) -> Result<bool, str8>`
+- `Reader::read_i32(self: Reader) -> Result<i32, str8>`
+- `Reader::read_i64(self: Reader) -> Result<i64, str8>`
+- `Reader::read_f32(self: Reader) -> Result<f32, str8>`
+- `Reader::read_f64(self: Reader) -> Result<f64, str8>`
+- `Reader::read_string(self: Reader) -> Result<str8, str8>`
 - `Reader::raw_handle(self: Reader) -> i64`
 - `Reader::close(self: Reader) -> i32`
 
 ### `BinarySerde` trait
-- `serialize(self: &mut Self, out_handle: i64) -> Result<i32, string>`
-- `deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string>`
+- `serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8>`
+- `deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8>`
 
 ## std::protocol
 
@@ -1092,11 +1092,11 @@ Module file: `stdlib/std/protocol.mla`
 
 ### API
 - `default_max_payload_bytes() -> i64`
-- `last_error() -> string`
-- `connect(addr: string, port: i64) -> Result<i64, string>` (protocol stream handle)
+- `last_error() -> str8`
+- `connect(addr: str8, port: i64) -> Result<i64, str8>` (protocol stream handle)
 - `from_stream(stream: TcpStream) -> i64` (protocol stream handle)
-- `send(stream_handle: i64, opcode: i32, payload: string) -> Result<i64, string>`
-- `recv(stream_handle: i64, payload_capacity: i64, max_payload_bytes: i64) -> Result<ProtocolFrame, string>`
+- `send(stream_handle: i64, opcode: i32, payload: str8) -> Result<i64, str8>`
+- `recv(stream_handle: i64, payload_capacity: i64, max_payload_bytes: i64) -> Result<ProtocolFrame, str8>`
 - `close(stream_handle: i64) -> i32`
 - `raw_handle(stream_handle: i64) -> i64`
 
@@ -1111,11 +1111,11 @@ Module file: `stdlib/std/protocol.mla`
 Module file: `stdlib/std/thread.mla`
 
 ### Thread and mutex
-- `join(handle: Handle<Thread>) -> int`
+- `join(handle: Handle<Thread>) -> i32`
 - `mutex_new() -> Handle<Mutex>`
-- `mutex_lock_handle(handle: Handle<Mutex>) -> int`
-- `mutex_unlock_handle(handle: Handle<Mutex>) -> int`
-- `mutex_free(handle: Handle<Mutex>) -> int`
+- `mutex_lock_handle(handle: Handle<Mutex>) -> i32`
+- `mutex_unlock_handle(handle: Handle<Mutex>) -> i32`
+- `mutex_free(handle: Handle<Mutex>) -> i32`
 
 ### Atomics
 - `atomic_new(initial: i64) -> Handle<Atomic64>`
@@ -1138,7 +1138,7 @@ above.
 - `Vec::new() -> Vec<T>` — create an empty Vec; element type inferred from context
 - `Vec::new_i32() -> Vec<i32>` — empty Vec with explicit `i32` element type
 - `Vec::new_i64() -> Vec<i64>` — empty Vec with explicit `i64` element type
-- `Vec::new_str() -> Vec<string>` — empty Vec with explicit `string` element type
+- `Vec::new_str() -> Vec<str8>` — empty Vec with explicit `str8` element type
 
 ### Macros
 

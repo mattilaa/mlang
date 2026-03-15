@@ -3,46 +3,46 @@ mod std::strbuf;
 use std::strbuf::contains;
 use std::testing::verify;
 
-fn ok_num() -> Result<i32, string> {
-    return Ok<i32, string>(41);
+fn ok_num() -> Result<i32, str8> {
+    return Ok<i32, str8>(41);
 }
 
-fn err_num() -> Result<i32, string> {
-    return Err<i32, string>("boom");
+fn err_num() -> Result<i32, str8> {
+    return Err<i32, str8>("boom");
 }
 
-fn add_one(x: i32) -> Result<i32, string> {
-    return Ok<i32, string>(x + 1);
+fn add_one(x: i32) -> Result<i32, str8> {
+    return Ok<i32, str8>(x + 1);
 }
 
-fn chain_ok() -> Result<i32, string> {
+fn chain_ok() -> Result<i32, str8> {
     let a: i32 = ok_num()?;
     let b: i32 = add_one(a)?;
-    return Ok<i32, string>(b);
+    return Ok<i32, str8>(b);
 }
 
-fn chain_err() -> Result<i32, string> {
+fn chain_err() -> Result<i32, str8> {
     let a: i32 = err_num()?;
-    return Ok<i32, string>(a);
+    return Ok<i32, str8>(a);
 }
 
-fn leaf_fail() -> Result<i32, string> {
-    return Err<i32, string>("boom");
+fn leaf_fail() -> Result<i32, str8> {
+    return Err<i32, str8>("boom");
 }
 
-fn mid_fail() -> Result<i32, string> {
+fn mid_fail() -> Result<i32, str8> {
     let v: i32 = leaf_fail()?;
-    return Ok<i32, string>(v);
+    return Ok<i32, str8>(v);
 }
 
-fn top_fail() -> Result<i32, string> {
+fn top_fail() -> Result<i32, str8> {
     let v: i32 = mid_fail()?;
-    return Ok<i32, string>(v);
+    return Ok<i32, str8>(v);
 }
 
 #[test]
 fn test_try_ok_path() {
-    let r: Result<i32, string> = chain_ok();
+    let r: Result<i32, str8> = chain_ok();
     if r.is_err(): {
         verify(false);
     }
@@ -51,17 +51,17 @@ fn test_try_ok_path() {
 
 #[test]
 fn test_try_err_propagation() {
-    let r: Result<i32, string> = chain_err();
+    let r: Result<i32, str8> = chain_err();
     verify(r.is_err());
 }
 
 #[test]
 fn test_try_err_context_stack() {
-    let r: Result<i32, string> = top_fail();
+    let r: Result<i32, str8> = top_fail();
     if r.is_ok(): {
         verify(false);
     }
-    let msg: string = r.unwrap_err();
+    let msg: str8 = r.unwrap_err();
     if contains(msg, "boom") == 0: {
         verify(false);
     }

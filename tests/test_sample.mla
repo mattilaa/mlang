@@ -11,6 +11,6 @@ fn test_addition() {
 
 #[test]
 fn test_result_ok() {
-    let r: Result<i32, string> = Ok<i32, string>(123);
+    let r: Result<i32, str8> = Ok<i32, str8>(123);
     verify(r.is_ok());
 }

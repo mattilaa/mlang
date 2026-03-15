@@ -29,7 +29,7 @@ fn test_infer_i32() -> i32 {
 }
 
 fn test_infer_string() -> i32 {
-    let s: string = infer_string();
+    let s: str8 = infer_string();
     if s.len() != 5 {
         return 1;
     }

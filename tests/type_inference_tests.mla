@@ -30,7 +30,7 @@ fn test_infer_list_map_tuple_struct() {
     let typed_nums: list<i32> = nums;
 
     let m = {"a": 3, "b": 4};
-    let typed_map: map<string, i32> = m;
+    let typed_map: map<str8, i32> = m;
 
     let t = (7, 2.5f, 9);
     let typed_tuple: tuple<i32, f32, i32> = t;

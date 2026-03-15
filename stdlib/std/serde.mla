@@ -13,8 +13,10 @@
 /// @brief Binary serialization/deserialization.
 /// @{
 
+/// @cond INTERNAL
 mod std::bitset;
 use std::bitset::BitSet;
+/// @endcond
 
 extern pub fn __mlang_std_serde_last_error() -> string;
 extern pub fn __mlang_std_serde_last_ok() -> i32;

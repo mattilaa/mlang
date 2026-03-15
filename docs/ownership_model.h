@@ -22,7 +22,7 @@
  *
  * In phase 1, the following are classified as `Copy`:
  * - scalar numeric types
- *   (`int`, `i8..i64`, `u8..u64`, `f32`, `f64`, `float` alias, `double` alias)
+ *   (`i8..i64`, `u8..u64`, `f32`, `f64`)
  * - `bool`
  * - raw pointers (`ptr<T>`)
  * - enums
@@ -36,7 +36,7 @@
  * @brief Values that transfer ownership when assigned or passed by value.
  *
  * In phase 1, the following are classified as move-only by default:
- * - `string`, `str8`, `str16`
+ * - `str8`, `str16`
  * - `list<T>`
  * - `map<K, V>`
  * - unknown or generic-parameter-backed struct types when field ownership

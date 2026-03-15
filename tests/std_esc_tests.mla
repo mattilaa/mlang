@@ -47,10 +47,10 @@ fn test_esc_style_codes() {
 
 #[test]
 fn test_esc_cursor_commands() {
-    let home: string = cursor(cmd_home());
-    let hide: string = cursor(cmd_hide());
-    let show: string = cursor(cmd_show());
-    let clear: string = cursor(cmd_clear_screen());
+    let home: str8 = cursor(cmd_home());
+    let hide: str8 = cursor(cmd_hide());
+    let show: str8 = cursor(cmd_show());
+    let clear: str8 = cursor(cmd_clear_screen());
     if supports_ansi() == 1: {
         verify(!(find(home, "[H") != 1));
         verify(!(find(hide, "[?25l") != 1));
@@ -69,7 +69,7 @@ fn test_esc_cursor_move_and_reset() {
     if supports_ansi() == 1: {
         verify(!(find(cursor_move(dir_up(), 3), "[3A") != 1));
         verify(!(find(cursor_move(dir_right(), 12), "[12C") != 1));
-        let rs: string = reset();
+        let rs: str8 = reset();
         verify(!(find(rs, "[0m") != 1));
         verify(!(len(rs) < 4));
     } else {

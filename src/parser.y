@@ -285,7 +285,7 @@ enum UpdatePosition
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL INT FLOAT DOUBLE STRING STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
+%token FUNCTION RETURN IF ELSE VOID BOOL FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH
@@ -451,8 +451,7 @@ enum_base_type_opt
     ;
 
 enum_int_type
-    : INT { $$ = TypeNode::TYPE_INT; }
-    | I8  { $$ = TypeNode::TYPE_I8; }
+    : I8  { $$ = TypeNode::TYPE_I8; }
     | I16 { $$ = TypeNode::TYPE_I16; }
     | I32 { $$ = TypeNode::TYPE_I32; }
     | I64 { $$ = TypeNode::TYPE_I64; }
@@ -664,10 +663,8 @@ parameter
 type
     : VOID   { $$ = mla_ast_type_node(TypeNode::TYPE_VOID); }
     | BOOL   { $$ = mla_ast_type_node(TypeNode::TYPE_BOOL); }
-    | INT    { $$ = mla_ast_type_node(TypeNode::TYPE_INT); }
     | FLOAT  { $$ = mla_ast_type_node(TypeNode::TYPE_FLOAT); }
     | DOUBLE { $$ = mla_ast_type_node(TypeNode::TYPE_DOUBLE); }
-    | STRING { $$ = mla_ast_type_node(TypeNode::TYPE_STRING); }
     | STR8   { $$ = mla_ast_type_node(TypeNode::TYPE_STR8); }
     | STR16  { $$ = mla_ast_type_node(TypeNode::TYPE_STR16); }
     | LIST   { $$ = mla_ast_list_type(); }

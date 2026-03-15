@@ -11,7 +11,7 @@ use std::testing::verify;
 
 #[test]
 fn test_regex_compile_and_is_match() {
-    let rr: Result<Regex, string> = Regex::compile("h[ae]llo");
+    let rr: Result<Regex, str8> = Regex::compile("h[ae]llo");
     if rr.is_err(): { verify(false); }
     let re: Regex = rr.unwrap();
 
@@ -30,18 +30,18 @@ fn test_regex_compile_and_is_match() {
 
 #[test]
 fn test_regex_find_offsets() {
-    let rr: Result<Regex, string> = Regex::compile("[0-9]+");
+    let rr: Result<Regex, str8> = Regex::compile("[0-9]+");
     if rr.is_err(): { verify(false); }
     let re: Regex = rr.unwrap();
 
-    let text: string = "abc123xyz";
+    let text: str8 = "abc123xyz";
     let s: i64 = re.find_start(text);
     let e: i64 = re.find_end(text);
     if s != 3 || e != 6: {
         verify(false);
     }
 
-    let m: string = sub(text, s, e - s);
+    let m: str8 = sub(text, s, e - s);
     let ok: i32 = eq(m, "123");
     free(m);
     re.close();
@@ -50,11 +50,11 @@ fn test_regex_find_offsets() {
 
 #[test]
 fn test_regex_capture_groups() {
-    let rr: Result<Regex, string> = Regex::compile("([A-Za-z]+)-([0-9]+)");
+    let rr: Result<Regex, str8> = Regex::compile("([A-Za-z]+)-([0-9]+)");
     if rr.is_err(): { verify(false); }
     let re: Regex = rr.unwrap();
 
-    let text: string = "user-42";
+    let text: str8 = "user-42";
     let g1s: i64 = re.match_start(text, 1);
     let g1e: i64 = re.match_end(text, 1);
     let g2s: i64 = re.match_start(text, 2);
@@ -63,8 +63,8 @@ fn test_regex_capture_groups() {
         verify(false);
     }
 
-    let name: string = sub(text, g1s, g1e - g1s);
-    let id: string = sub(text, g2s, g2e - g2s);
+    let name: str8 = sub(text, g1s, g1e - g1s);
+    let id: str8 = sub(text, g2s, g2e - g2s);
     let ok_name: i32 = eq(name, "user");
     let ok_id: i32 = eq(id, "42");
     free(id);
@@ -76,12 +76,12 @@ fn test_regex_capture_groups() {
 
 #[test]
 fn test_regex_compile_error_reports_message() {
-    let rr: Result<Regex, string> = Regex::compile("([0-9]+");
+    let rr: Result<Regex, str8> = Regex::compile("([0-9]+");
     if rr.is_ok(): {
         let re: Regex = rr.unwrap();
         verify(false);
     }
-    let err: string = rr.unwrap_err();
+    let err: str8 = rr.unwrap_err();
     if eq(err, "") == 1: { verify(false); }
     if eq(last_error(), "") == 1: { verify(false); }
     }

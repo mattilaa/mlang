@@ -13,25 +13,25 @@ use std::strbuf::eq;
 use std::testing::verify;
 
 fn test_parse_and_navigate_impl() -> i32 {
-    let doc_r: Result<JsonDoc, string> = JsonDoc::parse("{\"a\":1,\"arr\":[10,20],\"s\":\"ok\"}");
+    let doc_r: Result<JsonDoc, str8> = JsonDoc::parse("{\"a\":1,\"arr\":[10,20],\"s\":\"ok\"}");
     if doc_r.is_err(): { return 1; }
     let doc: JsonDoc = doc_r.unwrap();
 
-    let root_r: Result<JsonValue, string> = doc.root();
+    let root_r: Result<JsonValue, str8> = doc.root();
     if root_r.is_err(): {
         doc.free();
         return 1;
     }
     let root: JsonValue = root_r.unwrap();
 
-    let a_r: Result<JsonValue, string> = root.get("a");
+    let a_r: Result<JsonValue, str8> = root.get("a");
     if a_r.is_err(): {
         root.free();
         doc.free();
         return 1;
     }
     let a: JsonValue = a_r.unwrap();
-    let av: Result<i64, string> = a.as_i64();
+    let av: Result<i64, str8> = a.as_i64();
     if av.is_err(): {
         a.free();
         root.free();
@@ -46,14 +46,14 @@ fn test_parse_and_navigate_impl() -> i32 {
     }
     a.free();
 
-    let arr_r: Result<JsonValue, string> = root.get("arr");
+    let arr_r: Result<JsonValue, str8> = root.get("arr");
     if arr_r.is_err(): {
         root.free();
         doc.free();
         return 1;
     }
     let arr: JsonValue = arr_r.unwrap();
-    let i1_r: Result<JsonValue, string> = arr.index(1);
+    let i1_r: Result<JsonValue, str8> = arr.index(1);
     if i1_r.is_err(): {
         arr.free();
         root.free();
@@ -61,7 +61,7 @@ fn test_parse_and_navigate_impl() -> i32 {
         return 1;
     }
     let i1: JsonValue = i1_r.unwrap();
-    let iv: Result<i64, string> = i1.as_i64();
+    let iv: Result<i64, str8> = i1.as_i64();
     if iv.is_err(): {
         i1.free();
         arr.free();
@@ -79,14 +79,14 @@ fn test_parse_and_navigate_impl() -> i32 {
     i1.free();
     arr.free();
 
-    let s_r: Result<JsonValue, string> = root.get("s");
+    let s_r: Result<JsonValue, str8> = root.get("s");
     if s_r.is_err(): {
         root.free();
         doc.free();
         return 1;
     }
     let s: JsonValue = s_r.unwrap();
-    let sv: Result<string, string> = s.as_string();
+    let sv: Result<str8, str8> = s.as_string();
     if sv.is_err(): {
         s.free();
         root.free();
@@ -112,17 +112,17 @@ fn test_parse_and_navigate() {
 }
 
 fn test_stringify_and_parse_error_impl() -> i32 {
-    let bad: Result<JsonDoc, string> = JsonDoc::parse("{\"a\":");
+    let bad: Result<JsonDoc, str8> = JsonDoc::parse("{\"a\":");
     if bad.is_err(): {
         let ok_flag: i32 = 0;
     } else: {
         return 1;
     }
 
-    let ok: Result<JsonDoc, string> = JsonDoc::parse("{\"x\":42}");
+    let ok: Result<JsonDoc, str8> = JsonDoc::parse("{\"x\":42}");
     if ok.is_err(): { return 1; }
     let doc: JsonDoc = ok.unwrap();
-    let out: Result<string, string> = doc.stringify();
+    let out: Result<str8, str8> = doc.stringify();
     if out.is_err(): {
         doc.free();
         return 1;
@@ -134,28 +134,28 @@ fn test_stringify_and_parse_error_impl() -> i32 {
 
 #[test]
 fn test_iterators_and_from_file() -> i32 {
-    let path: string = "/tmp/mlang_std_json_iter_test.json";
-    let create_r: Result<File, string> = File::create(path);
+    let path: str8 = "/tmp/mlang_std_json_iter_test.json";
+    let create_r: Result<File, str8> = File::create(path);
     if create_r.is_err(): { return 1; }
     let f: File = create_r.unwrap();
-    let w1: Result<i64, string> = f.write("{\"a\":1,\"arr\":[10,20],\"name\":\"x\"}");
+    let w1: Result<i64, str8> = f.write("{\"a\":1,\"arr\":[10,20],\"name\":\"x\"}");
     if w1.is_err(): {
         f.close();
         return 1;
     }
     if f.close() != 0: { return 1; }
 
-    let doc_r: Result<JsonDoc, string> = JsonDoc::from_file(path);
+    let doc_r: Result<JsonDoc, str8> = JsonDoc::from_file(path);
     if doc_r.is_err(): { return 1; }
     let doc: JsonDoc = doc_r.unwrap();
-    let root_r: Result<JsonValue, string> = doc.root();
+    let root_r: Result<JsonValue, str8> = doc.root();
     if root_r.is_err(): {
         doc.free();
         return 1;
     }
     let root: JsonValue = root_r.unwrap();
 
-    let obj_it_r: Result<JsonObjectIter, string> = root.iter_object();
+    let obj_it_r: Result<JsonObjectIter, str8> = root.iter_object();
     if obj_it_r.is_err(): {
         root.free();
         doc.free();
@@ -165,18 +165,18 @@ fn test_iterators_and_from_file() -> i32 {
     var saw_a: i32 = 0;
     var saw_arr: i32 = 0;
     if obj_it.has_next() == 1: {
-        let key_r: Result<string, string> = obj_it.current_key();
+        let key_r: Result<str8, str8> = obj_it.current_key();
         if key_r.is_err(): {
             root.free();
             doc.free();
             return 1;
         }
-        let key: string = key_r.unwrap();
+        let key: str8 = key_r.unwrap();
         if eq(key, "a") == 1: { saw_a = 1; }
         if eq(key, "arr") == 1: { saw_arr = 1; }
         String::free(key);
 
-        let val_r: Result<JsonValue, string> = obj_it.current_value();
+        let val_r: Result<JsonValue, str8> = obj_it.current_value();
         if val_r.is_err(): {
             root.free();
             doc.free();
@@ -188,18 +188,18 @@ fn test_iterators_and_from_file() -> i32 {
         obj_it = obj_it.advance();
     }
     if obj_it.has_next() == 1: {
-        let key_r: Result<string, string> = obj_it.current_key();
+        let key_r: Result<str8, str8> = obj_it.current_key();
         if key_r.is_err(): {
             root.free();
             doc.free();
             return 1;
         }
-        let key: string = key_r.unwrap();
+        let key: str8 = key_r.unwrap();
         if eq(key, "a") == 1: { saw_a = 1; }
         if eq(key, "arr") == 1: { saw_arr = 1; }
         String::free(key);
 
-        let val_r: Result<JsonValue, string> = obj_it.current_value();
+        let val_r: Result<JsonValue, str8> = obj_it.current_value();
         if val_r.is_err(): {
             root.free();
             doc.free();
@@ -211,18 +211,18 @@ fn test_iterators_and_from_file() -> i32 {
         obj_it = obj_it.advance();
     }
     if obj_it.has_next() == 1: {
-        let key_r: Result<string, string> = obj_it.current_key();
+        let key_r: Result<str8, str8> = obj_it.current_key();
         if key_r.is_err(): {
             root.free();
             doc.free();
             return 1;
         }
-        let key: string = key_r.unwrap();
+        let key: str8 = key_r.unwrap();
         if eq(key, "a") == 1: { saw_a = 1; }
         if eq(key, "arr") == 1: { saw_arr = 1; }
         String::free(key);
 
-        let val_r: Result<JsonValue, string> = obj_it.current_value();
+        let val_r: Result<JsonValue, str8> = obj_it.current_value();
         if val_r.is_err(): {
             root.free();
             doc.free();
@@ -244,14 +244,14 @@ fn test_iterators_and_from_file() -> i32 {
         return 1;
     }
 
-    let arr_r: Result<JsonValue, string> = root.get("arr");
+    let arr_r: Result<JsonValue, str8> = root.get("arr");
     if arr_r.is_err(): {
         root.free();
         doc.free();
         return 1;
     }
     let arr: JsonValue = arr_r.unwrap();
-    let arr_it_r: Result<JsonArrayIter, string> = arr.iter_array();
+    let arr_it_r: Result<JsonArrayIter, str8> = arr.iter_array();
     if arr_it_r.is_err(): {
         arr.free();
         root.free();
@@ -261,7 +261,7 @@ fn test_iterators_and_from_file() -> i32 {
     var arr_it: JsonArrayIter = arr_it_r.unwrap();
     var sum: i64 = 0;
     if arr_it.has_next() == 1: {
-        let item_r: Result<JsonValue, string> = arr_it.current();
+        let item_r: Result<JsonValue, str8> = arr_it.current();
         if item_r.is_err(): {
             arr.free();
             root.free();
@@ -269,7 +269,7 @@ fn test_iterators_and_from_file() -> i32 {
             return 1;
         }
         let item: JsonValue = item_r.unwrap();
-        let n_r: Result<i64, string> = item.as_i64();
+        let n_r: Result<i64, str8> = item.as_i64();
         if n_r.is_err(): {
             item.free();
             arr.free();
@@ -282,7 +282,7 @@ fn test_iterators_and_from_file() -> i32 {
         arr_it = arr_it.advance();
     }
     if arr_it.has_next() == 1: {
-        let item_r: Result<JsonValue, string> = arr_it.current();
+        let item_r: Result<JsonValue, str8> = arr_it.current();
         if item_r.is_err(): {
             arr.free();
             root.free();
@@ -290,7 +290,7 @@ fn test_iterators_and_from_file() -> i32 {
             return 1;
         }
         let item: JsonValue = item_r.unwrap();
-        let n_r: Result<i64, string> = item.as_i64();
+        let n_r: Result<i64, str8> = item.as_i64();
         if n_r.is_err(): {
             item.free();
             arr.free();

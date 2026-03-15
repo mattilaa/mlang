@@ -21,14 +21,14 @@ fn test_printf_plain() {
 
 #[test]
 fn test_printf_format_i32() {
-    let s: string = format!("val={}\n", 42);
+    let s: str8 = format!("val={}\n", 42);
     verify(!(contains(s, "val=42") != 1));
     printf(s);
     }
 
 #[test]
 fn test_printf_format_multi_args() {
-    let s: string = format!("a={} b={} c={}\n", 1, 2, 3);
+    let s: str8 = format!("a={} b={} c={}\n", 1, 2, 3);
     verify(!(contains(s, "a=1") != 1));
     verify(!(contains(s, "b=2") != 1));
     verify(!(contains(s, "c=3") != 1));
@@ -37,16 +37,16 @@ fn test_printf_format_multi_args() {
 
 #[test]
 fn test_printf_format_string_arg() {
-    let name: string = "world";
-    let s: string = format!("hello {}\n", name);
+    let name: str8 = "world";
+    let s: str8 = format!("hello {}\n", name);
     verify(!(contains(s, "hello world") != 1));
     printf(s);
     }
 
 #[test]
 fn test_printf_format_bool() {
-    let s_true: string = format!("flag={}\n", true);
-    let s_false: string = format!("flag={}\n", false);
+    let s_true: str8 = format!("flag={}\n", true);
+    let s_false: str8 = format!("flag={}\n", false);
     // bools print as 1 / 0
     verify(!(contains(s_true,  "flag=1") != 1));
     verify(!(contains(s_false, "flag=0") != 1));
@@ -56,7 +56,7 @@ fn test_printf_format_bool() {
 
 #[test]
 fn test_printf_negative_number() {
-    let s: string = format!("neg={}\n", -99);
+    let s: str8 = format!("neg={}\n", -99);
     verify(!(contains(s, "neg=-99") != 1));
     printf(s);
     }
@@ -64,7 +64,7 @@ fn test_printf_negative_number() {
 #[test]
 fn test_printf_i64_large() {
     let big: i64 = 1000000;
-    let s: string = format!("big={}\n", big);
+    let s: str8 = format!("big={}\n", big);
     verify(!(contains(s, "big=1000000") != 1));
     printf(s);
     }
@@ -89,18 +89,18 @@ fn test_printf_sequence() {
 
 #[test]
 fn test_printf_no_trailing_newline() {
-    // printf does not append a newline -- verify format string has no \n
-    let s: string = format!("no-nl-{}", 7);
+    // printf does not append a newline -- verify format str8 has no \n
+    let s: str8 = format!("no-nl-{}", 7);
     verify(!(ends_with(s, "\n") == 1));
     printf(s);
     printf("\n");   // emit newline separately so output stays clean
     }
 
-// -- format string correctness --------------------------------------------
+// -- format str8 correctness --------------------------------------------
 
 #[test]
 fn test_format_string_length() {
-    let s: string = format!("abc={}", 123);
+    let s: str8 = format!("abc={}", 123);
     // "abc=123" is 7 characters
     verify(!(len(s) != 7));
     printf(s);
@@ -109,7 +109,7 @@ fn test_format_string_length() {
 
 #[test]
 fn test_format_string_eq() {
-    let s: string = format!("{}", 0);
+    let s: str8 = format!("{}", 0);
     verify(!(eq(s, "0") != 1));
     printf(s);
     printf("\n");
@@ -117,7 +117,7 @@ fn test_format_string_eq() {
 
 #[test]
 fn test_format_starts_and_ends() {
-    let s: string = format!("start-{}-end", 42);
+    let s: str8 = format!("start-{}-end", 42);
     verify(!(starts_with(s, "start-") != 1));
     verify(!(ends_with(s, "-end") != 1));
     printf(s);
@@ -133,7 +133,7 @@ fn test_eprintf_plain() {
 
 #[test]
 fn test_eprintf_format() {
-    let s: string = format!("error code={}\n", 404);
+    let s: str8 = format!("error code={}\n", 404);
     verify(!(contains(s, "error code=404") != 1));
     eprintf(s);
     }
@@ -147,13 +147,13 @@ fn test_eprintf_empty() {
 
 #[test]
 fn test_fprintf_fd1_stdout() {
-    let s: string = format!("fprintf fd={}\n", 1);
+    let s: str8 = format!("fprintf fd={}\n", 1);
     fprintf(1, s);
     }
 
 #[test]
 fn test_fprintf_fd2_stderr() {
-    let s: string = format!("fprintf fd={}\n", 2);
+    let s: str8 = format!("fprintf fd={}\n", 2);
     fprintf(2, s);
     }
 
