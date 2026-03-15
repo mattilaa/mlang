@@ -12934,7 +12934,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
             if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
             {
-                if(unary->op == UnaryOpNode::OP_ADDR)
+                if(unary->op == UnaryOpNode::OP_ADDR ||
+                   unary->op == UnaryOpNode::OP_ADDR_MUT)
                     collectMovedOwners(unary->operand, true);
                 else
                     collectMovedOwners(unary->operand, borrowed);
@@ -13027,49 +13028,26 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         {
             collectMovedOwners(arg, false);
 
-            auto* unary = dynamic_cast<UnaryOpNode*>(arg);
-            if(!unary || unary->op != UnaryOpNode::OP_ADDR)
-                continue;
-
-            std::string owner;
-            std::string path;
-            bool isWholeOwner = true;
-            if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
-                continue;
-
-            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
-               isVariableMoved(owner))
+            auto registerBorrowInCall = [&](const std::string& owner,
+                                            const std::string& path,
+                                            bool isWholeOwner) -> bool
             {
-                reportError(node->line,
-                            "cannot borrow moved value: '" + owner + "'");
-                return false;
-            }
-
-            auto activeIt = activeBorrowers.find(owner);
-            if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
-            {
-                std::string by = *activeIt->second.begin();
-                reportError(node->line, "cannot borrow '" + owner +
-                                            "' while already borrowed by '" +
-                                            by + "'");
-                return false;
-            }
-
-            if(isWholeOwner)
-            {
-                if(wholeOwnersInCall.count(owner) ||
-                   (subpathsInCall.count(owner) &&
-                    !subpathsInCall[owner].empty()))
+                if(isWholeOwner)
                 {
-                    reportError(node->line,
-                                "cannot borrow overlapping parts of '" + owner +
-                                    "' in call to '" + calleeName + "'");
-                    return false;
+                    if(wholeOwnersInCall.count(owner) ||
+                       (subpathsInCall.count(owner) &&
+                        !subpathsInCall[owner].empty()))
+                    {
+                        reportError(node->line,
+                                    "cannot borrow overlapping parts of '" +
+                                        owner + "' in call to '" + calleeName +
+                                        "'");
+                        return false;
+                    }
+                    wholeOwnersInCall.insert(owner);
+                    return true;
                 }
-                wholeOwnersInCall.insert(owner);
-            }
-            else
-            {
+
                 if(wholeOwnersInCall.count(owner))
                 {
                     reportError(node->line,
@@ -13110,7 +13088,86 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     return false;
                 }
                 paths.insert(path);
+                return true;
+            };
+
+            if(auto* idArg = dynamic_cast<IdentifierNode*>(arg))
+            {
+                auto pit = pointerBorrowTarget.find(idArg->name);
+                if(pit != pointerBorrowTarget.end())
+                {
+                    if(!registerBorrowInCall(pit->second, "", true))
+                        return false;
+                    continue;
+                }
             }
+
+            auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+            if(!unary ||
+               (unary->op != UnaryOpNode::OP_ADDR &&
+                unary->op != UnaryOpNode::OP_ADDR_MUT))
+                continue;
+
+            std::string owner;
+            std::string path;
+            bool isWholeOwner = true;
+            if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
+                continue;
+
+            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
+               isVariableMoved(owner))
+            {
+                reportError(node->line,
+                            "cannot borrow moved value: '" + owner + "'");
+                return false;
+            }
+
+            const bool wantsMutable = (unary->op == UnaryOpNode::OP_ADDR_MUT);
+            auto activeIt = activeBorrowers.find(owner);
+            auto mutIt = activeMutBorrower.find(owner);
+            if(wantsMutable)
+            {
+                if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+                {
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as mutable because it is already borrowed");
+                    return false;
+                }
+                if(mutIt != activeMutBorrower.end())
+                {
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as mutable more than once at a time");
+                    return false;
+                }
+            }
+            else
+            {
+                if(mutIt != activeMutBorrower.end())
+                {
+                    reportError(node->line,
+                                "cannot borrow '" + owner +
+                                    "' as immutable because it is also borrowed "
+                                    "as mutable by '" +
+                                    mutIt->second + "'");
+                    return false;
+                }
+                if(activeIt != activeBorrowers.end() &&
+                   !activeIt->second.empty())
+                {
+                    std::string by = *activeIt->second.begin();
+                    reportError(node->line, "cannot borrow '" + owner +
+                                                "' while already borrowed by '" +
+                                                by + "'");
+                    return false;
+                }
+            }
+
+            if(!registerBorrowInCall(owner, path, isWholeOwner))
+                return false;
         }
 
         for(const auto& movedOwner : movedOwnersInCall)
@@ -15381,7 +15438,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
             if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
             {
-                if(unary->op == UnaryOpNode::OP_ADDR)
+                if(unary->op == UnaryOpNode::OP_ADDR ||
+                   unary->op == UnaryOpNode::OP_ADDR_MUT)
                     collectMovedOwners(unary->operand, true);
                 else
                     collectMovedOwners(unary->operand, borrowed);
@@ -15474,49 +15532,26 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             collectMovedOwners(arg, false);
 
-            auto* unary = dynamic_cast<UnaryOpNode*>(arg);
-            if(!unary || unary->op != UnaryOpNode::OP_ADDR)
-                continue;
-
-            std::string owner;
-            std::string path;
-            bool isWholeOwner = true;
-            if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
-                continue;
-
-            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
-               isVariableMoved(owner))
+            auto registerBorrowInCall = [&](const std::string& owner,
+                                            const std::string& path,
+                                            bool isWholeOwner) -> bool
             {
-                reportError(node->line,
-                            "cannot borrow moved value: '" + owner + "'");
-                return false;
-            }
-
-            auto activeIt = activeBorrowers.find(owner);
-            if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
-            {
-                std::string by = *activeIt->second.begin();
-                reportError(node->line, "cannot borrow '" + owner +
-                                            "' while already borrowed by '" +
-                                            by + "'");
-                return false;
-            }
-
-            if(isWholeOwner)
-            {
-                if(wholeOwnersInCall.count(owner) ||
-                   (subpathsInCall.count(owner) &&
-                    !subpathsInCall[owner].empty()))
+                if(isWholeOwner)
                 {
-                    reportError(node->line,
-                                "cannot borrow overlapping parts of '" + owner +
-                                    "' in call to '" + calleeName + "'");
-                    return false;
+                    if(wholeOwnersInCall.count(owner) ||
+                       (subpathsInCall.count(owner) &&
+                        !subpathsInCall[owner].empty()))
+                    {
+                        reportError(node->line,
+                                    "cannot borrow overlapping parts of '" +
+                                        owner + "' in call to '" + calleeName +
+                                        "'");
+                        return false;
+                    }
+                    wholeOwnersInCall.insert(owner);
+                    return true;
                 }
-                wholeOwnersInCall.insert(owner);
-            }
-            else
-            {
+
                 if(wholeOwnersInCall.count(owner))
                 {
                     reportError(node->line,
@@ -15557,7 +15592,86 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return false;
                 }
                 paths.insert(path);
+                return true;
+            };
+
+            if(auto* idArg = dynamic_cast<IdentifierNode*>(arg))
+            {
+                auto pit = pointerBorrowTarget.find(idArg->name);
+                if(pit != pointerBorrowTarget.end())
+                {
+                    if(!registerBorrowInCall(pit->second, "", true))
+                        return false;
+                    continue;
+                }
             }
+
+            auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+            if(!unary ||
+               (unary->op != UnaryOpNode::OP_ADDR &&
+                unary->op != UnaryOpNode::OP_ADDR_MUT))
+                continue;
+
+            std::string owner;
+            std::string path;
+            bool isWholeOwner = true;
+            if(!describeBorrowPath(unary->operand, owner, path, isWholeOwner))
+                continue;
+
+            if(globalNamedValues.find(owner) == globalNamedValues.end() &&
+               isVariableMoved(owner))
+            {
+                reportError(node->line,
+                            "cannot borrow moved value: '" + owner + "'");
+                return false;
+            }
+
+            const bool wantsMutable = (unary->op == UnaryOpNode::OP_ADDR_MUT);
+            auto activeIt = activeBorrowers.find(owner);
+            auto mutIt = activeMutBorrower.find(owner);
+            if(wantsMutable)
+            {
+                if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+                {
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as mutable because it is already borrowed");
+                    return false;
+                }
+                if(mutIt != activeMutBorrower.end())
+                {
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as mutable more than once at a time");
+                    return false;
+                }
+            }
+            else
+            {
+                if(mutIt != activeMutBorrower.end())
+                {
+                    reportError(node->line,
+                                "cannot borrow '" + owner +
+                                    "' as immutable because it is also borrowed "
+                                    "as mutable by '" +
+                                    mutIt->second + "'");
+                    return false;
+                }
+                if(activeIt != activeBorrowers.end() &&
+                   !activeIt->second.empty())
+                {
+                    std::string by = *activeIt->second.begin();
+                    reportError(node->line, "cannot borrow '" + owner +
+                                                "' while already borrowed by '" +
+                                                by + "'");
+                    return false;
+                }
+            }
+
+            if(!registerBorrowInCall(owner, path, isWholeOwner))
+                return false;
         }
 
         for(const auto& movedOwner : movedOwnersInCall)
