@@ -13,7 +13,7 @@
 ///   use std::music::note_name_u8;
 ///
 ///   let n: i64 = note_wrap_u8(130);   // 2
-///   let s: string = note_name_u8(n);  // "D-0"
+///   let s: str8 = note_name_u8(n);  // "D-0"
 
 /// @brief Wrap arbitrary integer to note-u8 domain `0..127`.
 pub fn note_wrap_u8(v: i64) -> i64 {
@@ -25,30 +25,30 @@ pub fn note_wrap_u8(v: i64) -> i64 {
 }
 
 /// @brief Convert wrapped note-u8 (`0..127`) to tracker note text (`C-0..G-10`).
-pub fn note_name_u8(v: i64) -> string {
+pub fn note_name_u8(v: i64) -> str8 {
     let n: i64 = note_wrap_u8(v);
     let semitone: i64 = n % 12;
     let octave: i64 = n / 12;
-    let names: list<string> = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+    let names: list<str8> = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
     return format!("{}{}", names[semitone], octave);
 }
 
 /// @brief Tracker event names used by ESC widgets demo.
-pub fn tracker_event_names() -> list<string> {
+pub fn tracker_event_names() -> list<str8> {
     return ["PitchB", "NoteOn", "Delay", "Cut", "Pan", "Vol", "Gate", "Arp"];
 }
 
 /// @brief Tracker event `Val1` enum names used by ESC widgets demo.
-pub fn tracker_event_val1_names() -> list<string> {
+pub fn tracker_event_val1_names() -> list<str8> {
     return ["A4", "C-5", "32", "16", "L32", "V48", "On", "Maj"];
 }
 
 /// @brief Tracker event `Val2` enum names used by ESC widgets demo.
-pub fn tracker_event_val2_names() -> list<string> {
+pub fn tracker_event_val2_names() -> list<str8> {
     return ["32", "64", "08", "00", "96", "12", "01", "07"];
 }
 
 /// @brief Tracker event modifier names used by ESC widgets demo.
-pub fn tracker_event_mod_names() -> list<string> {
+pub fn tracker_event_mod_names() -> list<str8> {
     return ["Exp", "LFO", "Gate", "Env", "Rnd", "None", "Slew", "Echo"];
 }

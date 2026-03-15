@@ -186,7 +186,7 @@ pub enum UnicodeBoxGlyph : i32 {
 };
 
 /// \brief Returns UTF-8 text for a box-drawing glyph enum value.
-pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> string {
+pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::LightHorizontal: { return "─"; }
     if g == UnicodeBoxGlyph::HeavyHorizontal: { return "━"; }
     if g == UnicodeBoxGlyph::LightVertical: { return "│"; }
@@ -231,7 +231,7 @@ pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> string {
 }
 
 /// \brief ASCII-safe fallback glyph map (single-byte) for terminals without Unicode.
-pub fn ascii_box_fallback(g: UnicodeBoxGlyph) -> string {
+pub fn ascii_box_fallback(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::LightHorizontal || g == UnicodeBoxGlyph::HeavyHorizontal || g == UnicodeBoxGlyph::DoubleHorizontal: { return "-"; }
     if g == UnicodeBoxGlyph::LightVertical || g == UnicodeBoxGlyph::HeavyVertical || g == UnicodeBoxGlyph::DoubleVertical: { return "|"; }
     if g == UnicodeBoxGlyph::LightDownRight || g == UnicodeBoxGlyph::LightDownLeft || g == UnicodeBoxGlyph::LightUpRight || g == UnicodeBoxGlyph::LightUpLeft: { return "+"; }

@@ -10,7 +10,7 @@ extern pub fn __mlang_std_timer_interval_remaining_ms(handle: i64) -> i64;
 extern pub fn __mlang_std_timer_interval_wait_next(handle: i64) -> i32;
 extern pub fn __mlang_std_timer_interval_poll(handle: i64) -> i32;
 extern pub fn __mlang_std_timer_interval_free(handle: i64) -> i32;
-extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: string) -> i64;
+extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: str8) -> i64;
 extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> i32;
 extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> i32;
 
@@ -26,12 +26,12 @@ pub struct AsyncTicker {
 
 impl IntervalTimer {
     /// @brief Create periodic timer that ticks every `interval_ms`.
-    pub fn every_ms(interval_ms: i64) -> Result<IntervalTimer, string> {
+    pub fn every_ms(interval_ms: i64) -> Result<IntervalTimer, str8> {
         let h: i64 = __mlang_std_timer_interval_new(interval_ms);
         if h == 0 {
-            return Err<IntervalTimer, string>("std::timer::IntervalTimer::every_ms failed");
+            return Err<IntervalTimer, str8>("std::timer::IntervalTimer::every_ms failed");
         }
-        return Ok<IntervalTimer, string>(IntervalTimer { handle: h });
+        return Ok<IntervalTimer, str8>(IntervalTimer { handle: h });
     }
 
     /// @brief Reset next tick deadline to now + interval.
@@ -63,12 +63,12 @@ impl IntervalTimer {
 
 impl AsyncTicker {
     /// @brief Start async ticker thread that posts `event_name` to lock-free queue every `interval_ms`.
-    pub fn start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<AsyncTicker, string> {
+    pub fn start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<AsyncTicker, str8> {
         let h: i64 = __mlang_std_timer_async_ticker_new(queue_handle, interval_ms, event_name);
         if h == 0 {
-            return Err<AsyncTicker, string>("std::timer::AsyncTicker::start failed");
+            return Err<AsyncTicker, str8>("std::timer::AsyncTicker::start failed");
         }
-        return Ok<AsyncTicker, string>(AsyncTicker { handle: h });
+        return Ok<AsyncTicker, str8>(AsyncTicker { handle: h });
     }
 
     /// @brief Stop ticker thread.

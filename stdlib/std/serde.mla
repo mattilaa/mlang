@@ -18,7 +18,7 @@ mod std::bitset;
 use std::bitset::BitSet;
 /// @endcond
 
-extern pub fn __mlang_std_serde_last_error() -> string;
+extern pub fn __mlang_std_serde_last_error() -> str8;
 extern pub fn __mlang_std_serde_last_ok() -> i32;
 
 extern pub fn __mlang_std_serde_binary_new(initial_capacity: i64) -> i64;
@@ -33,10 +33,10 @@ extern pub fn __mlang_std_serde_binary_append_i32(handle: i64, value: i32) -> i3
 extern pub fn __mlang_std_serde_binary_append_i64(handle: i64, value: i64) -> i32;
 extern pub fn __mlang_std_serde_binary_append_f32(handle: i64, value: f32) -> i32;
 extern pub fn __mlang_std_serde_binary_append_f64(handle: i64, value: f64) -> i32;
-extern pub fn __mlang_std_serde_binary_append_string(handle: i64, s: string) -> i32;
+extern pub fn __mlang_std_serde_binary_append_string(handle: i64, s: str8) -> i32;
 extern pub fn __mlang_std_serde_binary_get_u8(handle: i64, index: i64) -> i32;
-extern pub fn __mlang_std_serde_binary_write_file(handle: i64, path: string) -> i32;
-extern pub fn __mlang_std_serde_binary_read_file(path: string) -> i64;
+extern pub fn __mlang_std_serde_binary_write_file(handle: i64, path: str8) -> i32;
+extern pub fn __mlang_std_serde_binary_read_file(path: str8) -> i64;
 
 extern pub fn __mlang_std_serde_reader_new(binary_handle: i64) -> i64;
 extern pub fn __mlang_std_serde_reader_free(reader_handle: i64) -> i32;
@@ -47,11 +47,11 @@ extern pub fn __mlang_std_serde_reader_read_i32(reader_handle: i64) -> i32;
 extern pub fn __mlang_std_serde_reader_read_i64(reader_handle: i64) -> i64;
 extern pub fn __mlang_std_serde_reader_read_f32(reader_handle: i64) -> f32;
 extern pub fn __mlang_std_serde_reader_read_f64(reader_handle: i64) -> f64;
-extern pub fn __mlang_std_serde_reader_read_string(reader_handle: i64) -> string;
+extern pub fn __mlang_std_serde_reader_read_string(reader_handle: i64) -> str8;
 
 /// @brief Return the last backend error string.
 /// @ingroup std_serde
-pub fn last_error() -> string {
+pub fn last_error() -> str8 {
     return __mlang_std_serde_last_error();
 }
 
@@ -76,27 +76,27 @@ pub struct Reader {
 /// @brief Trait contract for custom type serde support.
 /// @ingroup std_serde
 trait BinarySerde {
-    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, string>;
-    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, string>;
+    fn serialize(self: &mut Self, out_handle: i64) -> Result<i32, str8>;
+    fn deserialize(self: &mut Self, input_handle: i64) -> Result<i32, str8>;
 }
 
 impl Binary {
     /// @brief Create a new empty binary buffer.
-    pub fn new(initial_capacity: i64) -> Result<Binary, string> {
+    pub fn new(initial_capacity: i64) -> Result<Binary, str8> {
         let h: i64 = __mlang_std_serde_binary_new(initial_capacity);
         if h == 0 {
-            return Err<Binary, string>(last_error());
+            return Err<Binary, str8>(last_error());
         }
-        return Ok<Binary, string>(Binary { handle: h });
+        return Ok<Binary, str8>(Binary { handle: h });
     }
 
     /// @brief Read full file bytes into a new binary buffer.
-    pub fn from_file(path: string) -> Result<Binary, string> {
+    pub fn from_file(path: str8) -> Result<Binary, str8> {
         let h: i64 = __mlang_std_serde_binary_read_file(path);
         if h == 0 {
-            return Err<Binary, string>(last_error());
+            return Err<Binary, str8>(last_error());
         }
-        return Ok<Binary, string>(Binary { handle: h });
+        return Ok<Binary, str8>(Binary { handle: h });
     }
 
     /// @brief Current serialized byte length.
@@ -110,162 +110,162 @@ impl Binary {
     }
 
     /// @brief Reset serialized byte length to 0.
-    pub fn clear(self: Binary) -> Result<i32, string> {
+    pub fn clear(self: Binary) -> Result<i32, str8> {
         if __mlang_std_serde_binary_clear(self.handle) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Ensure capacity is at least `min_capacity` bytes.
-    pub fn reserve(self: Binary, min_capacity: i64) -> Result<i32, string> {
+    pub fn reserve(self: Binary, min_capacity: i64) -> Result<i32, str8> {
         if __mlang_std_serde_binary_reserve(self.handle, min_capacity) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append one unsigned byte (`0..255`).
-    pub fn write_u8(self: Binary, value: i32) -> Result<i32, string> {
+    pub fn write_u8(self: Binary, value: i32) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_u8(self.handle, value) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append one bool byte (`0` or `1`).
-    pub fn write_bool(self: Binary, value: bool) -> Result<i32, string> {
+    pub fn write_bool(self: Binary, value: bool) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_bool(self.handle, i32(value)) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append one little-endian `i32`.
-    pub fn write_i32(self: Binary, value: i32) -> Result<i32, string> {
+    pub fn write_i32(self: Binary, value: i32) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_i32(self.handle, value) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append one little-endian `i64`.
-    pub fn write_i64(self: Binary, value: i64) -> Result<i32, string> {
+    pub fn write_i64(self: Binary, value: i64) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_i64(self.handle, value) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append one IEEE754 `f32`.
-    pub fn write_f32(self: Binary, value: f32) -> Result<i32, string> {
+    pub fn write_f32(self: Binary, value: f32) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_f32(self.handle, value) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append one IEEE754 `f64`.
-    pub fn write_f64(self: Binary, value: f64) -> Result<i32, string> {
+    pub fn write_f64(self: Binary, value: f64) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_f64(self.handle, value) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append length-prefixed UTF-8/string payload.
-    pub fn write_string(self: Binary, value: string) -> Result<i32, string> {
+    pub fn write_string(self: Binary, value: str8) -> Result<i32, str8> {
         if __mlang_std_serde_binary_append_string(self.handle, value) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append `list<i32>` as `len(i64)` + elements.
-    pub fn write_list_i32(self: Binary, values: list<i32>) -> Result<i32, string> {
+    pub fn write_list_i32(self: Binary, values: list<i32>) -> Result<i32, str8> {
         let l: i64 = values.len();
-        let wl: Result<i32, string> = self.write_i64(l);
+        let wl: Result<i32, str8> = self.write_i64(l);
         if wl.is_err() {
             return wl;
         }
         for i in 0..l {
-            let we: Result<i32, string> = self.write_i32(values[i]);
+            let we: Result<i32, str8> = self.write_i32(values[i]);
             if we.is_err() {
                 return we;
             }
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append `list<i64>` as `len(i64)` + elements.
-    pub fn write_list_i64(self: Binary, values: list<i64>) -> Result<i32, string> {
+    pub fn write_list_i64(self: Binary, values: list<i64>) -> Result<i32, str8> {
         let l: i64 = values.len();
-        let wl: Result<i32, string> = self.write_i64(l);
+        let wl: Result<i32, str8> = self.write_i64(l);
         if wl.is_err() {
             return wl;
         }
         for i in 0..l {
-            let we: Result<i32, string> = self.write_i64(values[i]);
+            let we: Result<i32, str8> = self.write_i64(values[i]);
             if we.is_err() {
                 return we;
             }
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append `list<bool>` as `len(i64)` + elements.
-    pub fn write_list_bool(self: Binary, values: list<bool>) -> Result<i32, string> {
+    pub fn write_list_bool(self: Binary, values: list<bool>) -> Result<i32, str8> {
         let l: i64 = values.len();
-        let wl: Result<i32, string> = self.write_i64(l);
+        let wl: Result<i32, str8> = self.write_i64(l);
         if wl.is_err() {
             return wl;
         }
         for i in 0..l {
-            let we: Result<i32, string> = self.write_bool(values[i]);
+            let we: Result<i32, str8> = self.write_bool(values[i]);
             if we.is_err() {
                 return we;
             }
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append `list<f64>` as `len(i64)` + elements.
-    pub fn write_list_f64(self: Binary, values: list<f64>) -> Result<i32, string> {
+    pub fn write_list_f64(self: Binary, values: list<f64>) -> Result<i32, str8> {
         let l: i64 = values.len();
-        let wl: Result<i32, string> = self.write_i64(l);
+        let wl: Result<i32, str8> = self.write_i64(l);
         if wl.is_err() {
             return wl;
         }
         for i in 0..l {
-            let we: Result<i32, string> = self.write_f64(values[i]);
+            let we: Result<i32, str8> = self.write_f64(values[i]);
             if we.is_err() {
                 return we;
             }
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
-    /// @brief Append `list<string>` as `len(i64)` + elements.
-    pub fn write_list_string(self: Binary, values: list<string>) -> Result<i32, string> {
+    /// @brief Append `list<str8>` as `len(i64)` + elements.
+    pub fn write_list_string(self: Binary, values: list<str8>) -> Result<i32, str8> {
         let l: i64 = values.len();
-        let wl: Result<i32, string> = self.write_i64(l);
+        let wl: Result<i32, str8> = self.write_i64(l);
         if wl.is_err() {
             return wl;
         }
         for i in 0..l {
-            let we: Result<i32, string> = self.write_string(values[i]);
+            let we: Result<i32, str8> = self.write_string(values[i]);
             if we.is_err() {
                 return we;
             }
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Append packed bitset as `bit_len(i64)` + bit payload bytes.
-    pub fn write_bitset(self: Binary, bits_handle: i64, bit_len: i64) -> Result<i32, string> {
+    pub fn write_bitset(self: Binary, bits_handle: i64, bit_len: i64) -> Result<i32, str8> {
         let bits: BitSet = BitSet { handle: bits_handle };
         let n: i64 = bit_len;
-        let w0: Result<i32, string> = self.write_i64(n);
+        let w0: Result<i32, str8> = self.write_i64(n);
         if w0.is_err() {
             return w0;
         }
@@ -276,9 +276,9 @@ impl Binary {
             for bj in 0..8 {
                 let idx: i64 = bi * 8 + bj;
                 if idx < n {
-                    let br: Result<bool, string> = bits.get(idx);
+                    let br: Result<bool, str8> = bits.get(idx);
                     if br.is_err() {
-                        return Err<i32, string>(br.unwrap_err());
+                        return Err<i32, str8>(br.unwrap_err());
                     }
                     if br.unwrap() {
                         v += mask;
@@ -286,38 +286,38 @@ impl Binary {
                 }
                 mask *= 2;
             }
-            let wb: Result<i32, string> = self.write_u8(v);
+            let wb: Result<i32, str8> = self.write_u8(v);
             if wb.is_err() {
                 return wb;
             }
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Read byte at index from output buffer.
-    pub fn get_u8(self: Binary, index: i64) -> Result<i32, string> {
+    pub fn get_u8(self: Binary, index: i64) -> Result<i32, str8> {
         let v: i32 = __mlang_std_serde_binary_get_u8(self.handle, index);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(v);
+        return Ok<i32, str8>(v);
     }
 
     /// @brief Create an independent sequential reader over current bytes.
-    pub fn to_reader(self: Binary) -> Result<Reader, string> {
+    pub fn to_reader(self: Binary) -> Result<Reader, str8> {
         let h: i64 = __mlang_std_serde_reader_new(self.handle);
         if h == 0 {
-            return Err<Reader, string>(last_error());
+            return Err<Reader, str8>(last_error());
         }
-        return Ok<Reader, string>(Reader { handle: h });
+        return Ok<Reader, str8>(Reader { handle: h });
     }
 
     /// @brief Write serialized bytes to file.
-    pub fn write_file(self: Binary, path: string) -> Result<i32, string> {
+    pub fn write_file(self: Binary, path: str8) -> Result<i32, str8> {
         if __mlang_std_serde_binary_write_file(self.handle, path) != 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(0);
+        return Ok<i32, str8>(0);
     }
 
     /// @brief Return underlying binary handle (for trait/custom codec plumbing).
@@ -333,20 +333,20 @@ impl Binary {
 
 impl Reader {
     /// @brief Create reader over a snapshot of a binary buffer.
-    pub fn from_binary(binary: Binary) -> Result<Reader, string> {
+    pub fn from_binary(binary: Binary) -> Result<Reader, str8> {
         let h: i64 = __mlang_std_serde_reader_new(binary.handle);
         binary.close();
         if h == 0 {
-            return Err<Reader, string>(last_error());
+            return Err<Reader, str8>(last_error());
         }
-        return Ok<Reader, string>(Reader { handle: h });
+        return Ok<Reader, str8>(Reader { handle: h });
     }
 
     /// @brief Create reader by loading all bytes from a file.
-    pub fn from_file(path: string) -> Result<Reader, string> {
-        let br: Result<Binary, string> = Binary::from_file(path);
+    pub fn from_file(path: str8) -> Result<Reader, str8> {
+        let br: Result<Binary, str8> = Binary::from_file(path);
         if br.is_err() {
-            return Err<Reader, string>(br.unwrap_err());
+            return Err<Reader, str8>(br.unwrap_err());
         }
         let b: Binary = br.unwrap();
         return Reader::from_binary(b);
@@ -358,200 +358,200 @@ impl Reader {
     }
 
     /// @brief Read one unsigned byte.
-    pub fn read_u8(self: Reader) -> Result<i32, string> {
+    pub fn read_u8(self: Reader) -> Result<i32, str8> {
         let v: i32 = __mlang_std_serde_reader_read_u8(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(v);
+        return Ok<i32, str8>(v);
     }
 
     /// @brief Read one bool byte.
-    pub fn read_bool(self: Reader) -> Result<bool, string> {
+    pub fn read_bool(self: Reader) -> Result<bool, str8> {
         let v: i32 = __mlang_std_serde_reader_read_bool(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<bool, string>(last_error());
+            return Err<bool, str8>(last_error());
         }
-        return Ok<bool, string>(v != 0);
+        return Ok<bool, str8>(v != 0);
     }
 
     /// @brief Read one little-endian `i32`.
-    pub fn read_i32(self: Reader) -> Result<i32, string> {
+    pub fn read_i32(self: Reader) -> Result<i32, str8> {
         let v: i32 = __mlang_std_serde_reader_read_i32(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<i32, string>(last_error());
+            return Err<i32, str8>(last_error());
         }
-        return Ok<i32, string>(v);
+        return Ok<i32, str8>(v);
     }
 
     /// @brief Read one little-endian `i64`.
-    pub fn read_i64(self: Reader) -> Result<i64, string> {
+    pub fn read_i64(self: Reader) -> Result<i64, str8> {
         let v: i64 = __mlang_std_serde_reader_read_i64(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<i64, string>(last_error());
+            return Err<i64, str8>(last_error());
         }
-        return Ok<i64, string>(v);
+        return Ok<i64, str8>(v);
     }
 
     /// @brief Read one IEEE754 `f32`.
-    pub fn read_f32(self: Reader) -> Result<f32, string> {
+    pub fn read_f32(self: Reader) -> Result<f32, str8> {
         let v: f32 = __mlang_std_serde_reader_read_f32(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<f32, string>(last_error());
+            return Err<f32, str8>(last_error());
         }
-        return Ok<f32, string>(v);
+        return Ok<f32, str8>(v);
     }
 
     /// @brief Read one IEEE754 `f64`.
-    pub fn read_f64(self: Reader) -> Result<f64, string> {
+    pub fn read_f64(self: Reader) -> Result<f64, str8> {
         let v: f64 = __mlang_std_serde_reader_read_f64(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<f64, string>(last_error());
+            return Err<f64, str8>(last_error());
         }
-        return Ok<f64, string>(v);
+        return Ok<f64, str8>(v);
     }
 
     /// @brief Read one length-prefixed UTF-8/string value.
-    pub fn read_string(self: Reader) -> Result<string, string> {
-        let s: string = __mlang_std_serde_reader_read_string(self.handle);
+    pub fn read_string(self: Reader) -> Result<str8, str8> {
+        let s: str8 = __mlang_std_serde_reader_read_string(self.handle);
         if __mlang_std_serde_last_ok() == 0 {
-            return Err<string, string>(last_error());
+            return Err<str8, str8>(last_error());
         }
-        return Ok<string, string>(s);
+        return Ok<str8, str8>(s);
     }
 
     /// @brief Read `list<i32>` encoded as `len(i64)` + elements.
-    pub fn read_list_i32(self: Reader) -> Result<list<i32>, string> {
-        let lr: Result<i64, string> = self.read_i64();
+    pub fn read_list_i32(self: Reader) -> Result<list<i32>, str8> {
+        let lr: Result<i64, str8> = self.read_i64();
         if lr.is_err() {
-            return Err<list<i32>, string>(lr.unwrap_err());
+            return Err<list<i32>, str8>(lr.unwrap_err());
         }
         let l: i64 = lr.unwrap();
         if l < 0 {
-            return Err<list<i32>, string>("negative list length");
+            return Err<list<i32>, str8>("negative list length");
         }
         var out: list<i32> = [];
         for _i in 0..l {
-            let vr: Result<i32, string> = self.read_i32();
+            let vr: Result<i32, str8> = self.read_i32();
             if vr.is_err() {
-                return Err<list<i32>, string>(vr.unwrap_err());
+                return Err<list<i32>, str8>(vr.unwrap_err());
             }
             out.push(vr.unwrap());
         }
-        return Ok<list<i32>, string>(out);
+        return Ok<list<i32>, str8>(out);
     }
 
     /// @brief Read `list<i64>` encoded as `len(i64)` + elements.
-    pub fn read_list_i64(self: Reader) -> Result<list<i64>, string> {
-        let lr: Result<i64, string> = self.read_i64();
+    pub fn read_list_i64(self: Reader) -> Result<list<i64>, str8> {
+        let lr: Result<i64, str8> = self.read_i64();
         if lr.is_err() {
-            return Err<list<i64>, string>(lr.unwrap_err());
+            return Err<list<i64>, str8>(lr.unwrap_err());
         }
         let l: i64 = lr.unwrap();
         if l < 0 {
-            return Err<list<i64>, string>("negative list length");
+            return Err<list<i64>, str8>("negative list length");
         }
         var out: list<i64> = [];
         for _i in 0..l {
-            let vr: Result<i64, string> = self.read_i64();
+            let vr: Result<i64, str8> = self.read_i64();
             if vr.is_err() {
-                return Err<list<i64>, string>(vr.unwrap_err());
+                return Err<list<i64>, str8>(vr.unwrap_err());
             }
             out.push(vr.unwrap());
         }
-        return Ok<list<i64>, string>(out);
+        return Ok<list<i64>, str8>(out);
     }
 
     /// @brief Read `list<bool>` encoded as `len(i64)` + elements.
-    pub fn read_list_bool(self: Reader) -> Result<list<bool>, string> {
-        let lr: Result<i64, string> = self.read_i64();
+    pub fn read_list_bool(self: Reader) -> Result<list<bool>, str8> {
+        let lr: Result<i64, str8> = self.read_i64();
         if lr.is_err() {
-            return Err<list<bool>, string>(lr.unwrap_err());
+            return Err<list<bool>, str8>(lr.unwrap_err());
         }
         let l: i64 = lr.unwrap();
         if l < 0 {
-            return Err<list<bool>, string>("negative list length");
+            return Err<list<bool>, str8>("negative list length");
         }
         var out: list<bool> = [];
         for _i in 0..l {
-            let vr: Result<bool, string> = self.read_bool();
+            let vr: Result<bool, str8> = self.read_bool();
             if vr.is_err() {
-                return Err<list<bool>, string>(vr.unwrap_err());
+                return Err<list<bool>, str8>(vr.unwrap_err());
             }
             out.push(vr.unwrap());
         }
-        return Ok<list<bool>, string>(out);
+        return Ok<list<bool>, str8>(out);
     }
 
     /// @brief Read `list<f64>` encoded as `len(i64)` + elements.
-    pub fn read_list_f64(self: Reader) -> Result<list<f64>, string> {
-        let lr: Result<i64, string> = self.read_i64();
+    pub fn read_list_f64(self: Reader) -> Result<list<f64>, str8> {
+        let lr: Result<i64, str8> = self.read_i64();
         if lr.is_err() {
-            return Err<list<f64>, string>(lr.unwrap_err());
+            return Err<list<f64>, str8>(lr.unwrap_err());
         }
         let l: i64 = lr.unwrap();
         if l < 0 {
-            return Err<list<f64>, string>("negative list length");
+            return Err<list<f64>, str8>("negative list length");
         }
         var out: list<f64> = [];
         for _i in 0..l {
-            let vr: Result<f64, string> = self.read_f64();
+            let vr: Result<f64, str8> = self.read_f64();
             if vr.is_err() {
-                return Err<list<f64>, string>(vr.unwrap_err());
+                return Err<list<f64>, str8>(vr.unwrap_err());
             }
             out.push(vr.unwrap());
         }
-        return Ok<list<f64>, string>(out);
+        return Ok<list<f64>, str8>(out);
     }
 
-    /// @brief Read `list<string>` encoded as `len(i64)` + elements.
-    pub fn read_list_string(self: Reader) -> Result<list<string>, string> {
-        let lr: Result<i64, string> = self.read_i64();
+    /// @brief Read `list<str8>` encoded as `len(i64)` + elements.
+    pub fn read_list_string(self: Reader) -> Result<list<str8>, str8> {
+        let lr: Result<i64, str8> = self.read_i64();
         if lr.is_err() {
-            return Err<list<string>, string>(lr.unwrap_err());
+            return Err<list<str8>, str8>(lr.unwrap_err());
         }
         let l: i64 = lr.unwrap();
         if l < 0 {
-            return Err<list<string>, string>("negative list length");
+            return Err<list<str8>, str8>("negative list length");
         }
-        var out: list<string> = [];
+        var out: list<str8> = [];
         for _i in 0..l {
-            let vr: Result<string, string> = self.read_string();
+            let vr: Result<str8, str8> = self.read_string();
             if vr.is_err() {
-                return Err<list<string>, string>(vr.unwrap_err());
+                return Err<list<str8>, str8>(vr.unwrap_err());
             }
             out.push(vr.unwrap());
         }
-        return Ok<list<string>, string>(out);
+        return Ok<list<str8>, str8>(out);
     }
 
     /// @brief Read packed bitset encoded as `bit_len(i64)` + bit payload bytes.
-    pub fn read_bitset(self: Reader) -> Result<BitSet, string> {
-        let nr: Result<i64, string> = self.read_i64();
+    pub fn read_bitset(self: Reader) -> Result<BitSet, str8> {
+        let nr: Result<i64, str8> = self.read_i64();
         if nr.is_err() {
-            return Err<BitSet, string>(nr.unwrap_err());
+            return Err<BitSet, str8>(nr.unwrap_err());
         }
         let n: i64 = nr.unwrap();
         if n < 0 {
-            return Err<BitSet, string>("negative bitset length");
+            return Err<BitSet, str8>("negative bitset length");
         }
-        let bsr: Result<BitSet, string> = BitSet::new(n);
+        let bsr: Result<BitSet, str8> = BitSet::new(n);
         if bsr.is_err() {
-            return Err<BitSet, string>(bsr.unwrap_err());
+            return Err<BitSet, str8>(bsr.unwrap_err());
         }
         let bs: BitSet = bsr.unwrap();
         if bs.resize(n, false) != 0 {
-            let e: string = std::bitset::last_error();
+            let e: str8 = std::bitset::last_error();
             bs.close();
-            return Err<BitSet, string>(e);
+            return Err<BitSet, str8>(e);
         }
 
         let byte_len: i64 = (n + 7) / 8;
         for bi in 0..byte_len {
-            let vr: Result<i32, string> = self.read_u8();
+            let vr: Result<i32, str8> = self.read_u8();
             if vr.is_err() {
                 bs.close();
-                return Err<BitSet, string>(vr.unwrap_err());
+                return Err<BitSet, str8>(vr.unwrap_err());
             }
             let v: i32 = vr.unwrap();
             var mask: i32 = 1;
@@ -560,15 +560,15 @@ impl Reader {
                 if idx < n {
                     let bit_on: bool = (v & mask) != 0;
                     if bs.set(idx, bit_on) != 0 {
-                        let e: string = std::bitset::last_error();
+                        let e: str8 = std::bitset::last_error();
                         bs.close();
-                        return Err<BitSet, string>(e);
+                        return Err<BitSet, str8>(e);
                     }
                 }
                 mask *= 2;
             }
         }
-        return Ok<BitSet, string>(bs);
+        return Ok<BitSet, str8>(bs);
     }
 
     /// @brief Return underlying reader handle (for trait/custom codec plumbing).

@@ -23,8 +23,8 @@
 ///     }
 ///
 ///     let verbose: bool = result.flag("verbose");
-///     let output: string = result.get("output");
-///     let input: string = result.positional(0);
+///     let output: str8 = result.get("output");
+///     let input: str8 = result.positional(0);
 ///     println!("verbose={} output={} input={}", verbose, output, input);
 ///     return 0;
 /// }
@@ -67,25 +67,25 @@
 // Extern C functions                                                   //
 // ------------------------------------------------------------------- //
 
-extern pub fn __mlang_std_argparser_new(prog: string, desc: string) -> i64;
+extern pub fn __mlang_std_argparser_new(prog: str8, desc: str8) -> i64;
 extern pub fn __mlang_std_argparser_free(handle: i64) -> void;
-extern pub fn __mlang_std_argparser_add_flag(handle: i64, long_name: string, short_name: string, help: string) -> void;
-extern pub fn __mlang_std_argparser_add_option(handle: i64, long_name: string, short_name: string, help: string, default_val: string) -> void;
-extern pub fn __mlang_std_argparser_add_positional(handle: i64, name: string, help: string) -> void;
+extern pub fn __mlang_std_argparser_add_flag(handle: i64, long_name: str8, short_name: str8, help: str8) -> void;
+extern pub fn __mlang_std_argparser_add_option(handle: i64, long_name: str8, short_name: str8, help: str8, default_val: str8) -> void;
+extern pub fn __mlang_std_argparser_add_positional(handle: i64, name: str8, help: str8) -> void;
 extern pub fn __mlang_std_argparser_print_help(handle: i64) -> void;
 
 extern pub fn __mlang_std_argparser_parse_begin(parser_handle: i64) -> i64;
-extern pub fn __mlang_std_argparser_parse_add(result_handle: i64, arg: string) -> void;
+extern pub fn __mlang_std_argparser_parse_add(result_handle: i64, arg: str8) -> void;
 extern pub fn __mlang_std_argparser_parse_finish(parser_handle: i64, result_handle: i64) -> void;
 
 extern pub fn __mlang_std_parseresult_free(handle: i64) -> void;
 extern pub fn __mlang_std_parseresult_ok(handle: i64) -> i32;
 extern pub fn __mlang_std_parseresult_help_requested(handle: i64) -> i32;
-extern pub fn __mlang_std_parseresult_error(handle: i64) -> string;
-extern pub fn __mlang_std_parseresult_flag(handle: i64, name: string) -> i32;
-extern pub fn __mlang_std_parseresult_get(handle: i64, name: string) -> string;
-extern pub fn __mlang_std_parseresult_get_i64(handle: i64, name: string) -> i64;
-extern pub fn __mlang_std_parseresult_positional(handle: i64, idx: i64) -> string;
+extern pub fn __mlang_std_parseresult_error(handle: i64) -> str8;
+extern pub fn __mlang_std_parseresult_flag(handle: i64, name: str8) -> i32;
+extern pub fn __mlang_std_parseresult_get(handle: i64, name: str8) -> str8;
+extern pub fn __mlang_std_parseresult_get_i64(handle: i64, name: str8) -> i64;
+extern pub fn __mlang_std_parseresult_positional(handle: i64, idx: i64) -> str8;
 extern pub fn __mlang_std_parseresult_positional_count(handle: i64) -> i64;
 
 // ------------------------------------------------------------------- //
@@ -106,7 +106,7 @@ impl ArgParser {
     /// @brief Create a new argument parser.
     /// @param prog  Program name shown in usage line.
     /// @param desc  Short description shown below usage.
-    pub fn new(prog: string, desc: string) -> ArgParser {
+    pub fn new(prog: str8, desc: str8) -> ArgParser {
         let h: i64 = __mlang_std_argparser_new(prog, desc);
         return ArgParser { handle: h };
     }
@@ -115,7 +115,7 @@ impl ArgParser {
     /// @param long_name   Long flag name without "--" (e.g. "verbose").
     /// @param short_name  Single-char short name without "-" (e.g. "v"), or "" for none.
     /// @param help        Help text shown in --help output.
-    pub fn flag(self: ArgParser, long_name: string, short_name: string, help: string) -> void {
+    pub fn flag(self: ArgParser, long_name: str8, short_name: str8, help: str8) -> void {
         __mlang_std_argparser_add_flag(self.handle, long_name, short_name, help);
     }
 
@@ -124,14 +124,14 @@ impl ArgParser {
     /// @param short_name  Single-char short name, or "" for none.
     /// @param help        Help text.
     /// @param default_val Default value string (use "" for no default).
-    pub fn option(self: ArgParser, long_name: string, short_name: string, help: string, default_val: string) -> void {
+    pub fn option(self: ArgParser, long_name: str8, short_name: str8, help: str8, default_val: str8) -> void {
         __mlang_std_argparser_add_option(self.handle, long_name, short_name, help, default_val);
     }
 
     /// @brief Declare a positional argument.
     /// @param name  Positional name shown in usage (e.g. "input").
     /// @param help  Help text.
-    pub fn positional(self: ArgParser, name: string, help: string) -> void {
+    pub fn positional(self: ArgParser, name: str8, help: str8) -> void {
         __mlang_std_argparser_add_positional(self.handle, name, help);
     }
 
@@ -148,7 +148,7 @@ impl ArgParser {
         var i: i32 = 0;
         for arg in args {
             if i > 0 {
-                let s: string = format!("{}", arg);
+                let s: str8 = format!("{}", arg);
                 __mlang_std_argparser_parse_add(rh, s);
             }
             i = i + 1;
@@ -180,7 +180,7 @@ impl ParseResult {
     }
 
     /// @brief Return the parse error message, or "" if no error.
-    pub fn error(self: ParseResult) -> string {
+    pub fn error(self: ParseResult) -> str8 {
         return __mlang_std_parseresult_error(self.handle);
     }
 
@@ -191,25 +191,25 @@ impl ParseResult {
 
     /// @brief Return true if the named flag was set.
     /// @param name  Long flag name (e.g. "verbose").
-    pub fn flag(self: ParseResult, name: string) -> bool {
+    pub fn flag(self: ParseResult, name: str8) -> bool {
         return __mlang_std_parseresult_flag(self.handle, name) == 1;
     }
 
     /// @brief Return the string value of an option.
     /// @param name  Long option name (e.g. "output").
-    pub fn get(self: ParseResult, name: string) -> string {
+    pub fn get(self: ParseResult, name: str8) -> str8 {
         return __mlang_std_parseresult_get(self.handle, name);
     }
 
     /// @brief Return the integer value of an option.
     /// @param name  Long option name.
-    pub fn get_i64(self: ParseResult, name: string) -> i64 {
+    pub fn get_i64(self: ParseResult, name: str8) -> i64 {
         return __mlang_std_parseresult_get_i64(self.handle, name);
     }
 
     /// @brief Return positional argument at zero-based index.
     /// @param idx  Zero-based index.
-    pub fn positional(self: ParseResult, idx: i64) -> string {
+    pub fn positional(self: ParseResult, idx: i64) -> str8 {
         return __mlang_std_parseresult_positional(self.handle, idx);
     }
 

@@ -8,53 +8,53 @@
 /// - `Regex::match_end(text, group)`
 /// - `Regex::find_start(text)` / `Regex::find_end(text)` (group 0 helpers)
 
-extern pub fn __mlang_std_regex_last_error() -> string;
-extern pub fn __mlang_std_regex_compile(pattern: string) -> i64;
+extern pub fn __mlang_std_regex_last_error() -> str8;
+extern pub fn __mlang_std_regex_compile(pattern: str8) -> i64;
 extern pub fn __mlang_std_regex_free(handle: i64) -> i32;
-extern pub fn __mlang_std_regex_is_match(handle: i64, text: string) -> i32;
-extern pub fn __mlang_std_regex_match_start(handle: i64, text: string, group_index: i64) -> i64;
-extern pub fn __mlang_std_regex_match_end(handle: i64, text: string, group_index: i64) -> i64;
+extern pub fn __mlang_std_regex_is_match(handle: i64, text: str8) -> i32;
+extern pub fn __mlang_std_regex_match_start(handle: i64, text: str8, group_index: i64) -> i64;
+extern pub fn __mlang_std_regex_match_end(handle: i64, text: str8, group_index: i64) -> i64;
 
 pub struct Regex {
     var handle: i64;
 };
 
-pub fn last_error() -> string {
+pub fn last_error() -> str8 {
     return __mlang_std_regex_last_error();
 }
 
 impl Regex {
     /// Compile a pattern using POSIX ERE syntax.
-    pub fn compile(pattern: string) -> Result<Regex, string> {
+    pub fn compile(pattern: str8) -> Result<Regex, str8> {
         let h: i64 = __mlang_std_regex_compile(pattern);
         if h == 0 {
-            return Err<Regex, string>(last_error());
+            return Err<Regex, str8>(last_error());
         }
-        return Ok<Regex, string>(Regex { handle: h });
+        return Ok<Regex, str8>(Regex { handle: h });
     }
 
     /// Return 1 if pattern matches anywhere in `text`, else 0.
-    pub fn is_match(self: Regex, text: string) -> i32 {
+    pub fn is_match(self: Regex, text: str8) -> i32 {
         return __mlang_std_regex_is_match(self.handle, text);
     }
 
     /// Start byte offset of the selected capture group. Returns -1 on no match.
-    pub fn match_start(self: Regex, text: string, group_index: i64) -> i64 {
+    pub fn match_start(self: Regex, text: str8, group_index: i64) -> i64 {
         return __mlang_std_regex_match_start(self.handle, text, group_index);
     }
 
     /// End byte offset (exclusive) of the selected capture group. Returns -1 on no match.
-    pub fn match_end(self: Regex, text: string, group_index: i64) -> i64 {
+    pub fn match_end(self: Regex, text: str8, group_index: i64) -> i64 {
         return __mlang_std_regex_match_end(self.handle, text, group_index);
     }
 
     /// Start byte offset of whole match (group 0), or -1.
-    pub fn find_start(self: Regex, text: string) -> i64 {
+    pub fn find_start(self: Regex, text: str8) -> i64 {
         return self.match_start(text, 0);
     }
 
     /// End byte offset of whole match (group 0), or -1.
-    pub fn find_end(self: Regex, text: string) -> i64 {
+    pub fn find_end(self: Regex, text: str8) -> i64 {
         return self.match_end(text, 0);
     }
 

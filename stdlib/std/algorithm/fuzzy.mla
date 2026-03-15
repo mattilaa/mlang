@@ -18,11 +18,11 @@ use std::strbuf::len;
 use std::strbuf::sub;
 /// \endcond
 
-fn boundary_bonus(text: string, idx: i64) -> i64 {
+fn boundary_bonus(text: str8, idx: i64) -> i64 {
     if idx <= 0 {
         return 3;
     }
-    let prev: string = sub(text, idx - 1, 1);
+    let prev: str8 = sub(text, idx - 1, 1);
     let is_boundary: i32 =
         eq(prev, "_") == 1 ||
         eq(prev, "-") == 1 ||
@@ -35,7 +35,7 @@ fn boundary_bonus(text: string, idx: i64) -> i64 {
 
 /// @brief Return `1` when `query` is an ordered subsequence of `text`.
 /// @ingroup algorithm_fuzzy
-pub fn is_match(text: string, query: string) -> i32 {
+pub fn is_match(text: str8, query: str8) -> i32 {
     let qn: i64 = len(query);
     if qn == 0 {
         return 1;
@@ -46,8 +46,8 @@ pub fn is_match(text: string, query: string) -> i32 {
         if qi >= qn {
             break;
         }
-        let tc: string = sub(text, ti, 1);
-        let qc: string = sub(query, qi, 1);
+        let tc: str8 = sub(text, ti, 1);
+        let qc: str8 = sub(query, qi, 1);
         if eq(tc, qc) == 1 {
             qi = qi + 1;
         }
@@ -60,7 +60,7 @@ pub fn is_match(text: string, query: string) -> i32 {
 /// @brief Score how well `query` matches `text`.
 /// Returns `-1` when not matched; otherwise non-negative score.
 /// @ingroup algorithm_fuzzy
-pub fn score(text: string, query: string) -> i64 {
+pub fn score(text: str8, query: str8) -> i64 {
     let qn: i64 = len(query);
     if qn == 0 {
         return 0;
@@ -74,8 +74,8 @@ pub fn score(text: string, query: string) -> i64 {
         if qi >= qn {
             break;
         }
-        let tc: string = sub(text, ti, 1);
-        let qc: string = sub(query, qi, 1);
+        let tc: str8 = sub(text, ti, 1);
+        let qc: str8 = sub(query, qi, 1);
         if eq(tc, qc) == 1 {
             s = s + 10;
             if last_ti + 1 == ti {
@@ -103,7 +103,7 @@ pub fn score(text: string, query: string) -> i64 {
 
 /// @brief Return matching indices ranked by descending fuzzy score.
 /// @ingroup algorithm_fuzzy
-pub fn filter_indices(items: &list<string>, query: string) -> list<i64> {
+pub fn filter_indices(items: &list<str8>, query: str8) -> list<i64> {
     let n: i64 = items.len();
     if len(query) == 0 {
         var all: list<i64> = [];
@@ -151,7 +151,7 @@ pub fn filter_indices(items: &list<string>, query: string) -> list<i64> {
 
 /// @brief Best matching index or `-1` when there is no match.
 /// @ingroup algorithm_fuzzy
-pub fn best_index(items: &list<string>, query: string) -> i64 {
+pub fn best_index(items: &list<str8>, query: str8) -> i64 {
     let ranked: list<i64> = filter_indices(items, query);
     if ranked.len() == 0 {
         return -1;

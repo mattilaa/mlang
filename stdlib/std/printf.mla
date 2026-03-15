@@ -18,9 +18,9 @@
 ///   - `eprintf(s)`        write `s` to stderr (no implicit newline)
 ///   - `fprintf(fd, s)`    write `s` to fd 1 (stdout) or 2 (stderr)
 
-extern pub fn __mlang_std_io_printf(s: string) -> void;
-extern pub fn __mlang_std_io_eprintf(s: string) -> void;
-extern pub fn __mlang_std_io_fprintf(fd: i32, s: string) -> void;
+extern pub fn __mlang_std_io_printf(s: str8) -> void;
+extern pub fn __mlang_std_io_eprintf(s: str8) -> void;
+extern pub fn __mlang_std_io_fprintf(fd: i32, s: str8) -> void;
 
 /// @brief Write a pre-formatted string to stdout (no implicit newline).
 ///
@@ -28,7 +28,7 @@ extern pub fn __mlang_std_io_fprintf(fd: i32, s: string) -> void;
 /// ```mlang
 /// printf(format!("count = {}\n", n));
 /// ```
-pub fn printf(s: string) -> void {
+pub fn printf(s: str8) -> void {
     __mlang_std_io_printf(s);
 }
 
@@ -37,7 +37,7 @@ pub fn printf(s: string) -> void {
 /// ```mlang
 /// eprintf(format!("fatal: {}\n", msg));
 /// ```
-pub fn eprintf(s: string) -> void {
+pub fn eprintf(s: str8) -> void {
     __mlang_std_io_eprintf(s);
 }
 
@@ -45,6 +45,6 @@ pub fn eprintf(s: string) -> void {
 ///
 /// @param fd   1 for stdout, 2 for stderr.
 /// @param s    Pre-formatted string.
-pub fn fprintf(fd: i32, s: string) -> void {
+pub fn fprintf(fd: i32, s: str8) -> void {
     __mlang_std_io_fprintf(fd, s);
 }

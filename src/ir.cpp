@@ -90,8 +90,6 @@ static TypeNode* type_from_text(std::string t)
         return new TypeNode(TypeNode::TYPE_FLOAT);
     if(t == "f64")
         return new TypeNode(TypeNode::TYPE_DOUBLE);
-    if(t == "string")
-        return new TypeNode(TypeNode::TYPE_STR8);
     if(t == "str8")
         return new TypeNode(TypeNode::TYPE_STR8);
     if(t == "str16")
@@ -123,6 +121,11 @@ static TypeNode* type_from_text(std::string t)
     }
 
     return new StructTypeRefNode(t);
+}
+
+static std::string type_name_for_error(TypeNode* typeNode)
+{
+    return typeNode ? typeNode->toString() : "<unknown>";
 }
 
 // Recursively collect all IdentifierNode names referenced in an AST subtree.
@@ -1817,9 +1820,7 @@ llvm::Type* CodeGenerator::getLLVMTypeFromNode(TypeNode* typeNode)
         }
 
         // Check if this is a type parameter (like T, U) - should not reach here
-        // in properly monomorphized code
-        std::cerr << "Unknown struct type: " << structRef->structName
-                  << std::endl;
+        // in properly monomorphized code.
         return nullptr;
     }
 
@@ -4571,7 +4572,7 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
         if(!paramType)
         {
             reportError(param->line,
-                        "unknown parameter type for '" + param->name + "'");
+                        "unknown type: " + type_name_for_error(param->type));
             paramType = llvm::Type::getInt32Ty(context); // fallback
         }
         paramTypes.push_back(paramType);
@@ -4581,7 +4582,7 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
     if(!returnType)
     {
         reportError(node->line,
-                    "unknown return type for function '" + node->name + "'");
+                    "unknown type: " + type_name_for_error(node->returnType));
         returnType = llvm::Type::getVoidTy(context); // fallback
     }
 
@@ -14782,7 +14783,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
         if(!paramType)
         {
             reportError(param->line,
-                        "unknown parameter type for '" + param->name + "'");
+                        "unknown type: " + type_name_for_error(param->type));
             paramType = llvm::Type::getInt32Ty(context);
         }
         paramTypes.push_back(paramType);
@@ -14792,7 +14793,7 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
     if(!returnType)
     {
         reportError(method->line,
-                    "unknown return type for method '" + method->name + "'");
+                    "unknown type: " + type_name_for_error(method->returnType));
         returnType = llvm::Type::getVoidTy(context);
     }
 

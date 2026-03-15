@@ -73,11 +73,11 @@ use std::fs::file_exists;
 use std::fs::read_all_text;
 
 extern fn strcmp(a: str8, b: str8) -> i32;
-extern fn __mlang_std_fs_open_write(path: string) -> i64;
-extern fn __mlang_std_fs_write(handle: i64, s: string) -> i64;
+extern fn __mlang_std_fs_open_write(path: str8) -> i64;
+extern fn __mlang_std_fs_write(handle: i64, s: str8) -> i64;
 extern fn __mlang_std_fs_close(handle: i64) -> i32;
-extern fn __mlang_std_time_local_datetime() -> string;
-extern fn __mlang_std_time_log_level_tag(level: i32, color: i32) -> string;
+extern fn __mlang_std_time_local_datetime() -> str8;
+extern fn __mlang_std_time_log_level_tag(level: i32, color: i32) -> str8;
 
 var g_session_ready: i32 = 0;
 var g_session_handle: i64 = 0;
@@ -94,7 +94,7 @@ fn log_level_info() -> i32 { return 2; }
 fn log_level_debug() -> i32 { return 3; }
 fn log_level_verbose() -> i32 { return 4; }
 
-fn log_level_name(level: i32) -> string {
+fn log_level_name(level: i32) -> str8 {
     if level == log_level_error() { return "ERROR"; }
     if level == log_level_warn() { return "WARN"; }
     if level == log_level_info() { return "INFO"; }
@@ -144,22 +144,22 @@ fn should_log(level: i32) -> bool {
     return false;
 }
 
-fn log_level_tag(level: i32) -> string {
+fn log_level_tag(level: i32) -> str8 {
     return __mlang_std_time_log_level_tag(level, g_log_color);
 }
 
-fn log_write(level: i32, message: string) -> void {
+fn log_write(level: i32, message: str8) -> void {
     if should_log(level) == false {
         return;
     }
-    let ts: string = __mlang_std_time_local_datetime();
-    let tag: string = log_level_tag(level);
-    let line: string = format!("{} {} {}", ts, tag, message);
+    let ts: str8 = __mlang_std_time_local_datetime();
+    let tag: str8 = log_level_tag(level);
+    let line: str8 = format!("{} {} {}", ts, tag, message);
     let _ = __mlang_std_fs_write(g_log_handle, line);
     let _ = __mlang_std_fs_write(g_log_handle, "\n");
 }
 
-fn log_path_for_dir(dir: string) -> string {
+fn log_path_for_dir(dir: str8) -> str8 {
     if len(dir) == 0 {
         return "/tmp/mlangd-mla.log";
     }
@@ -174,7 +174,7 @@ fn setup_logging(args: list<str8>) -> i32 {
     var expect_level: bool = false;
     var expect_dir: bool = false;
     var enable_log: bool = false;
-    var log_dir: string = "/tmp";
+    var log_dir: str8 = "/tmp";
     var chosen_level: i32 = log_level_info();
     var use_color: bool = false;
 
@@ -223,7 +223,7 @@ fn setup_logging(args: list<str8>) -> i32 {
             continue;
         }
 
-        let arg_s: string = format!("{}", arg);
+        let arg_s: str8 = format!("{}", arg);
         if starts_with(arg_s, "--log-level=") == 1 {
             eprintln!("mlangd-mla: use '--log-level <LEVEL>' (space form), not --log-level=<LEVEL>");
             return 1;
@@ -254,7 +254,7 @@ fn setup_logging(args: list<str8>) -> i32 {
         return 0;
     }
 
-    let path: string = log_path_for_dir(log_dir);
+    let path: str8 = log_path_for_dir(log_dir);
     let handle: i64 = __mlang_std_fs_open_write(path);
     if handle == 0 {
         eprintln!("mlangd-mla: failed to open log file: {}", path);
@@ -279,7 +279,7 @@ fn ensure_session() -> i32 {
     if g_session_ready == 1 {
         return 0;
     }
-    let sr: Result<Session, string> = session_create();
+    let sr: Result<Session, str8> = session_create();
     if sr.is_err() {
         return 1;
     }
@@ -316,24 +316,24 @@ fn ensure_text_store() -> i32 {
     return 0;
 }
 
-fn make_result_response(id: i64, result_json: string) -> string {
-    let id_s: string = format!("{}", id);
-    let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
-    let p2: string = concat(p1, ",\"result\":");
-    let p3: string = concat(p2, result_json);
-    let out: string = concat(p3, "}");
+fn make_result_response(id: i64, result_json: str8) -> str8 {
+    let id_s: str8 = format!("{}", id);
+    let p1: str8 = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
+    let p2: str8 = concat(p1, ",\"result\":");
+    let p3: str8 = concat(p2, result_json);
+    let out: str8 = concat(p3, "}");
     return out;
 }
 
-fn make_error_response(id: i64, code: i32, message: string) -> string {
-    let id_s: string = format!("{}", id);
-    let code_s: string = format!("{}", code);
-    let p1: string = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
-    let p2: string = concat(p1, ",\"error\":{\"code\":");
-    let p3: string = concat(p2, code_s);
-    let p4: string = concat(p3, ",\"message\":\"");
-    let p5: string = concat(p4, message);
-    let out: string = concat(p5, "\"}}");
+fn make_error_response(id: i64, code: i32, message: str8) -> str8 {
+    let id_s: str8 = format!("{}", id);
+    let code_s: str8 = format!("{}", code);
+    let p1: str8 = concat("{\"jsonrpc\":\"2.0\",\"id\":", id_s);
+    let p2: str8 = concat(p1, ",\"error\":{\"code\":");
+    let p3: str8 = concat(p2, code_s);
+    let p4: str8 = concat(p3, ",\"message\":\"");
+    let p5: str8 = concat(p4, message);
+    let out: str8 = concat(p5, "\"}}");
     return out;
 }
 
@@ -351,23 +351,23 @@ fn lsp_col(v: i32) -> i32 {
     return 0;
 }
 
-fn location_json(uri: string, line1: i32, col1: i32) -> string {
-    let euri: string = json_escape(uri);
-    let out: string = format!(
+fn location_json(uri: str8, line1: i32, col1: i32) -> str8 {
+    let euri: str8 = json_escape(uri);
+    let out: str8 = format!(
         "{{\"uri\":\"{}\",\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}}}",
         euri, lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
     );
     return out;
 }
 
-fn range_json(line1: i32, col1: i32) -> string {
+fn range_json(line1: i32, col1: i32) -> str8 {
     return format!(
         "{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}}",
         lsp_line(line1), lsp_col(col1), lsp_line(line1), lsp_col(col1)
     );
 }
 
-fn is_ident_char(ch: string) -> bool {
+fn is_ident_char(ch: str8) -> bool {
     if len(ch) != 1 { return false; }
     if contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) == 1 {
         return true;
@@ -375,7 +375,7 @@ fn is_ident_char(ch: string) -> bool {
     return false;
 }
 
-fn line_text_at(text: string, line0: i64) -> string {
+fn line_text_at(text: str8, line0: i64) -> str8 {
     if line0 < 0 { return String::new(); }
     let n: i64 = len(text);
     var cur: i64 = 0;
@@ -387,7 +387,7 @@ fn line_text_at(text: string, line0: i64) -> string {
             found_start = 1;
             break;
         }
-        let ch: string = sub(text, i, 1);
+        let ch: str8 = sub(text, i, 1);
         if eq(ch, "\n") == 1 {
             cur = cur + 1;
         }
@@ -402,7 +402,7 @@ fn line_text_at(text: string, line0: i64) -> string {
     var endi: i64 = start;
     var found_end: i32 = 0;
     for j in start..n {
-        let ch: string = sub(text, j, 1);
+        let ch: str8 = sub(text, j, 1);
         if eq(ch, "\n") == 1 { break; }
         endi = j + 1;
         found_end = 1;
@@ -413,7 +413,7 @@ fn line_text_at(text: string, line0: i64) -> string {
     return sub(text, start, endi - start);
 }
 
-fn offset_to_line_col1(text: string, off: i64) -> i64 {
+fn offset_to_line_col1(text: str8, off: i64) -> i64 {
     let n: i64 = len(text);
     var pos: i64 = off;
     if pos < 0 { pos = 0; }
@@ -421,7 +421,7 @@ fn offset_to_line_col1(text: string, off: i64) -> i64 {
     var line1: i64 = 1;
     var col1: i64 = 1;
     for i in 0..pos {
-        let ch: string = sub(text, i, 1);
+        let ch: str8 = sub(text, i, 1);
         if eq(ch, "\n") == 1 {
             line1 = line1 + 1;
             col1 = 1;
@@ -432,9 +432,9 @@ fn offset_to_line_col1(text: string, off: i64) -> i64 {
     return line1 * 1000000 + col1;
 }
 
-fn root_path_from_store() -> string {
+fn root_path_from_store() -> str8 {
     if ensure_text_store() != 0 { return String::new(); }
-    let root_uri: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+    let root_uri: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
     if len(root_uri) == 0 { return String::new(); }
     if starts_with(root_uri, "file://") == 1 {
         return sub(root_uri, 7, len(root_uri) - 7);
@@ -442,13 +442,13 @@ fn root_path_from_store() -> string {
     return root_uri;
 }
 
-fn path_to_file_uri(path: string) -> string {
+fn path_to_file_uri(path: str8) -> str8 {
     if len(path) == 0 { return String::new(); }
     if starts_with(path, "file://") == 1 { return path; }
     return concat("file://", path);
 }
 
-fn file_uri_to_path(uri: string) -> string {
+fn file_uri_to_path(uri: str8) -> str8 {
     if len(uri) == 0 { return String::new(); }
     if starts_with(uri, "file://") == 1 {
         return sub(uri, 7, len(uri) - 7);
@@ -456,7 +456,7 @@ fn file_uri_to_path(uri: string) -> string {
     return uri;
 }
 
-fn first_match_location(path: string, text: string, pattern: string) -> string {
+fn first_match_location(path: str8, text: str8, pattern: str8) -> str8 {
     let off: i64 = find(text, pattern);
     if off < 0 { return String::new(); }
     let packed: i64 = offset_to_line_col1(text, off);
@@ -465,86 +465,86 @@ fn first_match_location(path: string, text: string, pattern: string) -> string {
     return location_json(path_to_file_uri(path), line1, col1);
 }
 
-fn attribute_doc_location(line_text: string) -> string {
-    let root: string = root_path_from_store();
+fn attribute_doc_location(line_text: str8) -> str8 {
+    let root: str8 = root_path_from_store();
     if len(root) == 0 { return String::new(); }
-    let doc_path: string = concat(root, "/docs/language_attributes.md");
+    let doc_path: str8 = concat(root, "/docs/language_attributes.md");
     if file_exists(doc_path) != 1 { return String::new(); }
-    let text_r: Result<string, string> = read_all_text(doc_path);
+    let text_r: Result<str8, str8> = read_all_text(doc_path);
     if text_r.is_err() { return String::new(); }
-    let text: string = text_r.unwrap();
+    let text: str8 = text_r.unwrap();
     // Check longest forms first so #[inline] does not match inside #[inline(always)]
     if contains(line_text, "#[inline(always)]") == 1 {
-        let loc: string = first_match_location(doc_path, text, "## `#[inline(always)]`");
+        let loc: str8 = first_match_location(doc_path, text, "## `#[inline(always)]`");
         if len(loc) > 0 { return loc; }
     }
     if contains(line_text, "#[inline(never)]") == 1 {
-        let loc: string = first_match_location(doc_path, text, "## `#[inline(never)]`");
+        let loc: str8 = first_match_location(doc_path, text, "## `#[inline(never)]`");
         if len(loc) > 0 { return loc; }
     }
     if contains(line_text, "#[inline]") == 1 {
-        let loc: string = first_match_location(doc_path, text, "## `#[inline]`");
+        let loc: str8 = first_match_location(doc_path, text, "## `#[inline]`");
         if len(loc) > 0 { return loc; }
     }
     if contains(line_text, "#[test]") == 1 {
-        let loc: string = first_match_location(doc_path, text, "## `#[test]`");
+        let loc: str8 = first_match_location(doc_path, text, "## `#[test]`");
         if len(loc) > 0 { return loc; }
     }
     if contains(line_text, "#[derive(Debug)]") == 1 {
-        let loc: string = first_match_location(doc_path, text, "## `#[derive(Debug)]`");
+        let loc: str8 = first_match_location(doc_path, text, "## `#[derive(Debug)]`");
         if len(loc) > 0 { return loc; }
     }
     return String::new();
 }
 
-fn runtime_builtin_location(word: string) -> string {
-    let root: string = root_path_from_store();
+fn runtime_builtin_location(word: str8) -> str8 {
+    let root: str8 = root_path_from_store();
     if len(root) == 0 { return String::new(); }
-    let docs_lang: string = concat(root, "/docs/language_reference.h");
-    let docs_runtime: string = concat(root, "/docs/runtime_builtins.h");
+    let docs_lang: str8 = concat(root, "/docs/language_reference.h");
+    let docs_runtime: str8 = concat(root, "/docs/runtime_builtins.h");
 
     if file_exists(docs_lang) == 1 {
-        let text_r: Result<string, string> = read_all_text(docs_lang);
+        let text_r: Result<str8, str8> = read_all_text(docs_lang);
         if text_r.is_ok() {
-            let text: string = text_r.unwrap();
-            let p1: string = first_match_location(docs_lang, text, word);
+            let text: str8 = text_r.unwrap();
+            let p1: str8 = first_match_location(docs_lang, text, word);
             if len(p1) > 0 { return p1; }
-            let p2: string = first_match_location(docs_lang, text, format!("Mlang{}", word));
+            let p2: str8 = first_match_location(docs_lang, text, format!("Mlang{}", word));
             if len(p2) > 0 { return p2; }
         }
     }
 
     if file_exists(docs_runtime) == 1 {
-        let text_r2: Result<string, string> = read_all_text(docs_runtime);
+        let text_r2: Result<str8, str8> = read_all_text(docs_runtime);
         if text_r2.is_ok() {
-            let text2: string = text_r2.unwrap();
-            let p3: string = first_match_location(docs_runtime, text2, word);
+            let text2: str8 = text_r2.unwrap();
+            let p3: str8 = first_match_location(docs_runtime, text2, word);
             if len(p3) > 0 { return p3; }
-            let p4: string = first_match_location(docs_runtime, text2, format!("mlang_{}", word));
+            let p4: str8 = first_match_location(docs_runtime, text2, format!("mlang_{}", word));
             if len(p4) > 0 { return p4; }
         }
     }
     return String::new();
 }
 
-fn builtin_type_location(word: string) -> string {
+fn builtin_type_location(word: str8) -> str8 {
     if len(word) == 0 { return String::new(); }
-    var lookup: string = word;
+    var lookup: str8 = word;
     if eq(lookup, "String") == 1 {
         lookup = "string";
     }
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var p1: string = String::new();
-    var p2: string = String::new();
-    var p3: string = concat(here, "/stdlib/types.mla");
-    var p4: string = concat(here, "/types.mla");
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var p1: str8 = String::new();
+    var p2: str8 = String::new();
+    var p3: str8 = concat(here, "/stdlib/types.mla");
+    var p4: str8 = concat(here, "/types.mla");
     if len(root) > 0 {
         p1 = concat(root, "/stdlib/types.mla");
         p2 = concat(root, "/types.mla");
     }
 
-    var path: string = String::new();
+    var path: str8 = String::new();
     if len(path) == 0 {
         if len(p1) > 0 {
             if file_exists(p1) == 1 {
@@ -571,14 +571,14 @@ fn builtin_type_location(word: string) -> string {
     }
     if len(path) == 0 { return String::new(); }
 
-    let text_r: Result<string, string> = read_all_text(path);
+    let text_r: Result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
-    let text: string = text_r.unwrap();
-    let marker: string = format!("@builtin {}", lookup);
+    let text: str8 = text_r.unwrap();
+    let marker: str8 = format!("@builtin {}", lookup);
     return first_match_location(path, text, marker);
 }
 
-fn builtin_result_method_location(member: string) -> string {
+fn builtin_result_method_location(member: str8) -> str8 {
     if eq(member, "is_ok") != 1 {
         if eq(member, "is_err") != 1 {
             if eq(member, "unwrap") != 1 {
@@ -589,18 +589,18 @@ fn builtin_result_method_location(member: string) -> string {
         }
     }
 
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var p1: string = String::new();
-    var p2: string = String::new();
-    var p3: string = concat(here, "/stdlib/types.mla");
-    var p4: string = concat(here, "/types.mla");
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var p1: str8 = String::new();
+    var p2: str8 = String::new();
+    var p3: str8 = concat(here, "/stdlib/types.mla");
+    var p4: str8 = concat(here, "/types.mla");
     if len(root) > 0 {
         p1 = concat(root, "/stdlib/types.mla");
         p2 = concat(root, "/types.mla");
     }
 
-    var path: string = String::new();
+    var path: str8 = String::new();
     if len(path) == 0 {
         if len(p1) > 0 {
             if file_exists(p1) == 1 { path = p1; }
@@ -623,23 +623,23 @@ fn builtin_result_method_location(member: string) -> string {
     return location_json(path_to_file_uri(path), 90, 1);
 }
 
-fn string_intrinsic_location(member: string) -> string {
-    var target: string = String::new();
+fn string_intrinsic_location(member: str8) -> str8 {
+    var target: str8 = String::new();
     if eq(member, "new") == 1 { target = "new"; }
     if eq(member, "with_capacity") == 1 { target = "with_capacity"; }
     if eq(member, "from") == 1 { target = "from"; }
     if eq(member, "free") == 1 { target = "free"; }
     if len(target) == 0 { return String::new(); }
 
-    let root: string = root_path_from_store();
-    var p1: string = String::new();
-    var p2: string = String::new();
+    let root: str8 = root_path_from_store();
+    var p1: str8 = String::new();
+    var p2: str8 = String::new();
     if len(root) > 0 {
         p1 = concat(root, "/stdlib/std/strbuf.mla");
         p2 = concat(root, "/std/strbuf.mla");
     }
 
-    var path: string = String::new();
+    var path: str8 = String::new();
     if len(p1) > 0 {
         if file_exists(p1) == 1 {
             path = p1;
@@ -653,8 +653,8 @@ fn string_intrinsic_location(member: string) -> string {
         }
     }
     if len(path) == 0 {
-        let here: string = cwd();
-        let p3: string = concat(here, "/stdlib/std/strbuf.mla");
+        let here: str8 = cwd();
+        let p3: str8 = concat(here, "/stdlib/std/strbuf.mla");
         if file_exists(p3) == 1 {
             path = p3;
         }
@@ -662,28 +662,28 @@ fn string_intrinsic_location(member: string) -> string {
     if len(path) == 0 {
         // String::from is compiler intrinsic lowered via __mlang_std_strbuf_clone.
         if eq(target, "from") == 1 {
-            let root2: string = root_path_from_store();
-            let here2: string = cwd();
-            var dpath: string = String::new();
+            let root2: str8 = root_path_from_store();
+            let here2: str8 = cwd();
+            var dpath: str8 = String::new();
             if len(root2) > 0 {
-                let d1: string = concat(root2, "/stdlib/std/strbuf/detail.mla");
+                let d1: str8 = concat(root2, "/stdlib/std/strbuf/detail.mla");
                 if file_exists(d1) == 1 { dpath = d1; }
             }
             if len(dpath) == 0 {
                 if len(root2) > 0 {
-                    let d2: string = concat(root2, "/std/strbuf/detail.mla");
+                    let d2: str8 = concat(root2, "/std/strbuf/detail.mla");
                     if file_exists(d2) == 1 { dpath = d2; }
                 }
             }
             if len(dpath) == 0 {
-                let d3: string = concat(here2, "/stdlib/std/strbuf/detail.mla");
+                let d3: str8 = concat(here2, "/stdlib/std/strbuf/detail.mla");
                 if file_exists(d3) == 1 { dpath = d3; }
             }
             if len(dpath) > 0 {
-                let dtext_r: Result<string, string> = read_all_text(dpath);
+                let dtext_r: Result<str8, str8> = read_all_text(dpath);
                 if dtext_r.is_ok() {
-                    let dtext: string = dtext_r.unwrap();
-                    let dloc: string = first_match_location(dpath, dtext, "extern fn __mlang_std_strbuf_clone(");
+                    let dtext: str8 = dtext_r.unwrap();
+                    let dloc: str8 = first_match_location(dpath, dtext, "extern fn __mlang_std_strbuf_clone(");
                     if len(dloc) > 0 { return dloc; }
                 }
             }
@@ -691,36 +691,36 @@ fn string_intrinsic_location(member: string) -> string {
         return String::new();
     }
 
-    let text_r: Result<string, string> = read_all_text(path);
+    let text_r: Result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
-    let text: string = text_r.unwrap();
-    let pat: string = format!("pub fn {}", target);
-    let loc: string = first_match_location(path, text, pat);
+    let text: str8 = text_r.unwrap();
+    let pat: str8 = format!("pub fn {}", target);
+    let loc: str8 = first_match_location(path, text, pat);
     if len(loc) > 0 { return loc; }
 
     if eq(target, "from") == 1 {
-        let root2: string = root_path_from_store();
-        let here2: string = cwd();
-        var dpath2: string = String::new();
+        let root2: str8 = root_path_from_store();
+        let here2: str8 = cwd();
+        var dpath2: str8 = String::new();
         if len(root2) > 0 {
-            let d1b: string = concat(root2, "/stdlib/std/strbuf/detail.mla");
+            let d1b: str8 = concat(root2, "/stdlib/std/strbuf/detail.mla");
             if file_exists(d1b) == 1 { dpath2 = d1b; }
         }
         if len(dpath2) == 0 {
             if len(root2) > 0 {
-                let d2b: string = concat(root2, "/std/strbuf/detail.mla");
+                let d2b: str8 = concat(root2, "/std/strbuf/detail.mla");
                 if file_exists(d2b) == 1 { dpath2 = d2b; }
             }
         }
         if len(dpath2) == 0 {
-            let d3b: string = concat(here2, "/stdlib/std/strbuf/detail.mla");
+            let d3b: str8 = concat(here2, "/stdlib/std/strbuf/detail.mla");
             if file_exists(d3b) == 1 { dpath2 = d3b; }
         }
         if len(dpath2) > 0 {
-            let dtext_r2: Result<string, string> = read_all_text(dpath2);
+            let dtext_r2: Result<str8, str8> = read_all_text(dpath2);
             if dtext_r2.is_ok() {
-                let dtext2: string = dtext_r2.unwrap();
-                let dloc2: string = first_match_location(dpath2, dtext2, "extern fn __mlang_std_strbuf_clone(");
+                let dtext2: str8 = dtext_r2.unwrap();
+                let dloc2: str8 = first_match_location(dpath2, dtext2, "extern fn __mlang_std_strbuf_clone(");
                 if len(dloc2) > 0 { return dloc2; }
             }
         }
@@ -728,50 +728,50 @@ fn string_intrinsic_location(member: string) -> string {
     return String::new();
 }
 
-fn associated_type_method_location(query_text: string, type_name: string, method: string) -> string {
+fn associated_type_method_location(query_text: str8, type_name: str8, method: str8) -> str8 {
     if len(query_text) == 0 { return String::new(); }
     if len(type_name) == 0 { return String::new(); }
     if len(method) == 0 { return String::new(); }
 
-    let type_base: string = base_type_name(type_name);
+    let type_base: str8 = base_type_name(type_name);
     if eq(type_base, "TcpListener") == 1 || eq(type_base, "TcpStream") == 1 {
-        let net_path: string = module_file_path("std::net");
+        let net_path: str8 = module_file_path("std::net");
         if len(net_path) > 0 {
-            let net_text_r: Result<string, string> = read_all_text(net_path);
+            let net_text_r: Result<str8, str8> = read_all_text(net_path);
             if net_text_r.is_ok() {
-                let net_text: string = net_text_r.unwrap();
-                let net_loc: string = first_match_location(net_path, net_text, format!("fn {}(", method));
+                let net_text: str8 = net_text_r.unwrap();
+                let net_loc: str8 = first_match_location(net_path, net_text, format!("fn {}(", method));
                 if len(net_loc) > 0 { return net_loc; }
             }
         }
     }
 
-    var type_mod: string = find_module_for_qualifier(query_text, type_base);
+    var type_mod: str8 = find_module_for_qualifier(query_text, type_base);
     if len(type_mod) == 0 {
         type_mod = module_for_type_in_scope(query_text, type_base);
     }
     if len(type_mod) == 0 { return String::new(); }
 
-    let path: string = module_file_path(type_mod);
+    let path: str8 = module_file_path(type_mod);
     if len(path) == 0 { return String::new(); }
 
-    let text_r: Result<string, string> = read_all_text(path);
+    let text_r: Result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
-    let text: string = text_r.unwrap();
+    let text: str8 = text_r.unwrap();
     return first_match_location(path, text, format!("fn {}(", method));
 }
 
-fn std_net_method_location(method: string) -> string {
+fn std_net_method_location(method: str8) -> str8 {
     if len(method) == 0 { return String::new(); }
-    let p: string = module_file_path("std::net");
+    let p: str8 = module_file_path("std::net");
     if len(p) == 0 { return String::new(); }
-    let tr: Result<string, string> = read_all_text(p);
+    let tr: Result<str8, str8> = read_all_text(p);
     if tr.is_err() { return String::new(); }
-    let t: string = tr.unwrap();
+    let t: str8 = tr.unwrap();
     return first_match_location(p, t, format!("fn {}(", method));
 }
 
-fn thread_intrinsic_location(name: string) -> string {
+fn thread_intrinsic_location(name: str8) -> str8 {
     if eq(name, "thread_spawn") == 0 &&
        eq(name, "thread_join") == 0 &&
        eq(name, "mutex_create") == 0 &&
@@ -786,29 +786,29 @@ fn thread_intrinsic_location(name: string) -> string {
         return String::new();
     }
 
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var path: string = String::new();
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var path: str8 = String::new();
     if len(root) > 0 {
-        let p1: string = concat(root, "/stdlib/std/thread/detail.mla");
+        let p1: str8 = concat(root, "/stdlib/std/thread/detail.mla");
         if file_exists(p1) == 1 { path = p1; }
     }
     if len(path) == 0 {
-        let p2: string = concat(here, "/stdlib/std/thread/detail.mla");
+        let p2: str8 = concat(here, "/stdlib/std/thread/detail.mla");
         if file_exists(p2) == 1 { path = p2; }
     }
     if len(path) == 0 { return String::new(); }
 
-    let text_r: Result<string, string> = read_all_text(path);
+    let text_r: Result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
-    let text: string = text_r.unwrap();
+    let text: str8 = text_r.unwrap();
     return first_match_location(path, text, format!("extern fn {}(", name));
 }
 
 /// @brief Replace all "::" occurrences with "/" for module-to-path conversion.
-fn colon_to_slash(s: string) -> string {
-    var result: string = String::new();
-    var remaining: string = s;
+fn colon_to_slash(s: str8) -> str8 {
+    var result: str8 = String::new();
+    var remaining: str8 = s;
     for i in 0..50 {
         let idx: i64 = find(remaining, "::");
         if idx < 0 { break; }
@@ -822,12 +822,12 @@ fn colon_to_slash(s: string) -> string {
 }
 
 /// @brief Trim leading/trailing ASCII spaces and tabs.
-fn trim_ascii_ws(s: string) -> string {
+fn trim_ascii_ws(s: str8) -> str8 {
     var start: i64 = 0;
     var end: i64 = len(s);
     for _i in 0..5000 {
         if start >= end { break; }
-        let ch: string = sub(s, start, 1);
+        let ch: str8 = sub(s, start, 1);
         if eq(ch, " ") == 1 || eq(ch, "\t") == 1 {
             start = start + 1;
         } else {
@@ -836,7 +836,7 @@ fn trim_ascii_ws(s: string) -> string {
     }
     for _j in 0..5000 {
         if end <= start { break; }
-        let ch2: string = sub(s, end - 1, 1);
+        let ch2: str8 = sub(s, end - 1, 1);
         if eq(ch2, " ") == 1 || eq(ch2, "\t") == 1 {
             end = end - 1;
         } else {
@@ -849,72 +849,72 @@ fn trim_ascii_ws(s: string) -> string {
 
 /// @brief Resolve a module name (e.g. "std::thread") to a file:// URI at line 1.
 /// Returns empty string when the file cannot be found.
-fn module_file_location(module_name: string) -> string {
-    let modn: string = trim_ascii_ws(module_name);
+fn module_file_location(module_name: str8) -> str8 {
+    let modn: str8 = trim_ascii_ws(module_name);
     if len(modn) == 0 { return String::new(); }
-    let rel_path: string = colon_to_slash(modn);
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var path: string = String::new();
+    let rel_path: str8 = colon_to_slash(modn);
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var path: str8 = String::new();
     if len(root) > 0 {
-        let p1: string = format!("{}/stdlib/{}.mla", root, rel_path);
+        let p1: str8 = format!("{}/stdlib/{}.mla", root, rel_path);
         if file_exists(p1) == 1 { path = p1; }
     }
     if len(path) == 0 {
         if len(root) > 0 {
-            let p2: string = format!("{}/{}.mla", root, rel_path);
+            let p2: str8 = format!("{}/{}.mla", root, rel_path);
             if file_exists(p2) == 1 { path = p2; }
         }
     }
     if len(path) == 0 {
-        let p3: string = format!("{}/stdlib/{}.mla", here, rel_path);
+        let p3: str8 = format!("{}/stdlib/{}.mla", here, rel_path);
         if file_exists(p3) == 1 { path = p3; }
     }
     if len(path) == 0 {
-        let p4: string = format!("{}/{}.mla", here, rel_path);
+        let p4: str8 = format!("{}/{}.mla", here, rel_path);
         if file_exists(p4) == 1 { path = p4; }
     }
     if len(path) == 0 { return String::new(); }
     return location_json(path_to_file_uri(path), 1, 1);
 }
 
-fn module_file_path(module_name: string) -> string {
-    let modn: string = trim_ascii_ws(module_name);
+fn module_file_path(module_name: str8) -> str8 {
+    let modn: str8 = trim_ascii_ws(module_name);
     if len(modn) == 0 { return String::new(); }
-    let rel_path: string = colon_to_slash(modn);
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var path: string = String::new();
+    let rel_path: str8 = colon_to_slash(modn);
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var path: str8 = String::new();
     if len(root) > 0 {
-        let p1: string = format!("{}/stdlib/{}.mla", root, rel_path);
+        let p1: str8 = format!("{}/stdlib/{}.mla", root, rel_path);
         if file_exists(p1) == 1 { path = p1; }
     }
     if len(path) == 0 {
         if len(root) > 0 {
-            let p2: string = format!("{}/{}.mla", root, rel_path);
+            let p2: str8 = format!("{}/{}.mla", root, rel_path);
             if file_exists(p2) == 1 { path = p2; }
         }
     }
     if len(path) == 0 {
-        let p3: string = format!("{}/stdlib/{}.mla", here, rel_path);
+        let p3: str8 = format!("{}/stdlib/{}.mla", here, rel_path);
         if file_exists(p3) == 1 { path = p3; }
     }
     if len(path) == 0 {
-        let p4: string = format!("{}/{}.mla", here, rel_path);
+        let p4: str8 = format!("{}/{}.mla", here, rel_path);
         if file_exists(p4) == 1 { path = p4; }
     }
     return path;
 }
 
 /// @brief Extract module name from a "use mod::path::*;" or "use mod::path::Item;" line.
-fn use_line_module_name(line_text: string) -> string {
-    let line: string = trim_ascii_ws(line_text);
+fn use_line_module_name(line_text: str8) -> str8 {
+    let line: str8 = trim_ascii_ws(line_text);
     if starts_with(line, "use ") == 0 { return String::new(); }
-    let rest0: string = sub(line, 4, len(line) - 4);
+    let rest0: str8 = sub(line, 4, len(line) - 4);
     var end: i64 = len(rest0);
     let semi: i64 = find(rest0, ";");
     if semi >= 0 { end = semi; }
-    let rest: string = trim_ascii_ws(sub(rest0, 0, end));
+    let rest: str8 = trim_ascii_ws(sub(rest0, 0, end));
     if ends_with(rest, "::*") == 1 {
         return sub(rest, 0, len(rest) - 3);
     }
@@ -929,10 +929,10 @@ fn use_line_module_name(line_text: string) -> string {
 }
 
 /// @brief Extract module name from a "mod std::thread;" line.
-fn mod_line_module_name(line_text: string) -> string {
-    let line: string = trim_ascii_ws(line_text);
+fn mod_line_module_name(line_text: str8) -> str8 {
+    let line: str8 = trim_ascii_ws(line_text);
     if starts_with(line, "mod ") == 0 { return String::new(); }
-    let rest0: string = sub(line, 4, len(line) - 4);
+    let rest0: str8 = sub(line, 4, len(line) - 4);
     let semi: i64 = find(rest0, ";");
     if semi >= 0 { return trim_ascii_ws(sub(rest0, 0, semi)); }
     return trim_ascii_ws(rest0);
@@ -941,33 +941,33 @@ fn mod_line_module_name(line_text: string) -> string {
 /// @brief Given a bare module qualifier word (e.g. "thread" from "thread::join()"),
 /// scan the file text for a matching use/mod declaration and return the full module
 /// name (e.g. "std::thread"), or empty string if not found.
-fn find_module_for_qualifier(text: string, word: string) -> string {
+fn find_module_for_qualifier(text: str8, word: str8) -> str8 {
     if len(word) == 0 { return String::new(); }
     let n: i64 = len(text);
     var cur: i64 = 0;
     for _i in 0..5000 {
         if cur >= n { break; }
-        let rem: string = sub(text, cur, n - cur);
+        let rem: str8 = sub(text, cur, n - cur);
         let nl: i64 = find(rem, "\n");
         var llen: i64 = len(rem);
         if nl >= 0 { llen = nl; }
-        let line: string = sub(rem, 0, llen);
+        let line: str8 = sub(rem, 0, llen);
         cur = cur + llen + 1;
-        var mod_name: string = String::new();
-        let line_t: string = trim_ascii_ws(line);
+        var mod_name: str8 = String::new();
+        let line_t: str8 = trim_ascii_ws(line);
         if starts_with(line_t, "use ") == 1 {
             // Resolve imported symbols, e.g.:
             //   use std::net::TcpListener;  => TcpListener -> std::net
             // Wildcard imports are intentionally not used for qualifier mapping
             // because they do not declare a concrete qualifier symbol.
-            let rest0: string = sub(line_t, 4, len(line_t) - 4);
+            let rest0: str8 = sub(line_t, 4, len(line_t) - 4);
             var end: i64 = len(rest0);
             let semi: i64 = find(rest0, ";");
             if semi >= 0 { end = semi; }
-            let rest: string = trim_ascii_ws(sub(rest0, 0, end));
+            let rest: str8 = trim_ascii_ws(sub(rest0, 0, end));
             let use_sep: i64 = rfind(rest, "::");
             if use_sep >= 0 {
-                let imported_name: string = sub(rest, use_sep + 2, len(rest) - use_sep - 2);
+                let imported_name: str8 = sub(rest, use_sep + 2, len(rest) - use_sep - 2);
                 if eq(imported_name, word) == 1 {
                     return sub(rest, 0, use_sep);
                 }
@@ -979,7 +979,7 @@ fn find_module_for_qualifier(text: string, word: string) -> string {
         }
         if len(mod_name) > 0 {
             let lsep: i64 = rfind(mod_name, "::");
-            var last_part: string = mod_name;
+            var last_part: str8 = mod_name;
             if lsep >= 0 {
                 last_part = sub(mod_name, lsep + 2, len(mod_name) - lsep - 2);
             }
@@ -989,14 +989,14 @@ fn find_module_for_qualifier(text: string, word: string) -> string {
     return String::new();
 }
 
-fn module_for_type_in_scope(text: string, type_name: string) -> string {
+fn module_for_type_in_scope(text: str8, type_name: str8) -> str8 {
     if len(text) == 0 { return String::new(); }
     if len(type_name) == 0 { return String::new(); }
     let n: i64 = line_count(text);
     for i in 0..n {
-        let raw: string = line_text_at(text, i);
-        let line_t: string = trim_ascii_ws(raw);
-        var modn: string = String::new();
+        let raw: str8 = line_text_at(text, i);
+        let line_t: str8 = trim_ascii_ws(raw);
+        var modn: str8 = String::new();
         if starts_with(line_t, "use ") == 1 {
             modn = use_line_module_name(line_t);
         }
@@ -1004,11 +1004,11 @@ fn module_for_type_in_scope(text: string, type_name: string) -> string {
             modn = mod_line_module_name(line_t);
         }
         if len(modn) == 0 { continue; }
-        let p: string = module_file_path(modn);
+        let p: str8 = module_file_path(modn);
         if len(p) == 0 { continue; }
-        let tr: Result<string, string> = read_all_text(p);
+        let tr: Result<str8, str8> = read_all_text(p);
         if tr.is_err() { continue; }
-        let t: string = tr.unwrap();
+        let t: str8 = tr.unwrap();
         if contains(t, format!("impl {}", type_name)) == 1 { return modn; }
         if contains(t, format!("struct {}", type_name)) == 1 { return modn; }
         if contains(t, format!("enum {}", type_name)) == 1 { return modn; }
@@ -1016,10 +1016,10 @@ fn module_for_type_in_scope(text: string, type_name: string) -> string {
     return String::new();
 }
 
-fn dot_call_receiver_name(line_text: string, member: string) -> string {
+fn dot_call_receiver_name(line_text: str8, member: str8) -> str8 {
     if len(line_text) == 0 { return String::new(); }
     if len(member) == 0 { return String::new(); }
-    let pat: string = format!(".{}(", member);
+    let pat: str8 = format!(".{}(", member);
     let dot_at: i64 = find(line_text, pat);
     if dot_at <= 0 { return String::new(); }
 
@@ -1027,7 +1027,7 @@ fn dot_call_receiver_name(line_text: string, member: string) -> string {
     var start: i64 = left_end;
     for i in 0..left_end {
         let pos: i64 = left_end - i - 1;
-        let ch: string = sub(line_text, pos, 1);
+        let ch: str8 = sub(line_text, pos, 1);
         if is_ident_char(ch) == 1 {
             start = pos;
             continue;
@@ -1038,17 +1038,17 @@ fn dot_call_receiver_name(line_text: string, member: string) -> string {
     return sub(line_text, start, left_end - start);
 }
 
-fn static_call_receiver_name(line_text: string, member: string) -> string {
+fn static_call_receiver_name(line_text: str8, member: str8) -> str8 {
     if len(line_text) == 0 { return String::new(); }
     if len(member) == 0 { return String::new(); }
-    let pat: string = format!("::{}(", member);
+    let pat: str8 = format!("::{}(", member);
     let pos: i64 = find(line_text, pat);
     if pos <= 0 { return String::new(); }
     let left_end: i64 = pos;
     var start: i64 = left_end;
     for i in 0..left_end {
         let p: i64 = left_end - i - 1;
-        let ch: string = sub(line_text, p, 1);
+        let ch: str8 = sub(line_text, p, 1);
         if is_ident_char(ch) == 1 {
             start = p;
             continue;
@@ -1059,18 +1059,18 @@ fn static_call_receiver_name(line_text: string, member: string) -> string {
     return sub(line_text, start, left_end - start);
 }
 
-fn first_static_call_pair(line_text: string) -> string {
+fn first_static_call_pair(line_text: str8) -> str8 {
     let lp: i64 = find(line_text, "(");
     if lp < 0 { return "::"; }
-    let left: string = sub(line_text, 0, lp);
+    let left: str8 = sub(line_text, 0, lp);
     let sep: i64 = rfind(left, "::");
     if sep <= 0 { return "::"; }
-    let method: string = trim_ascii_ws(sub(left, sep + 2, len(left) - sep - 2));
+    let method: str8 = trim_ascii_ws(sub(left, sep + 2, len(left) - sep - 2));
     if len(method) == 0 { return "::"; }
     var qend: i64 = sep;
     for i in 0..sep {
         let p: i64 = sep - i - 1;
-        let ch: string = sub(left, p, 1);
+        let ch: str8 = sub(left, p, 1);
         if eq(ch, " ") == 1 || eq(ch, "\t") == 1 {
             qend = p;
             continue;
@@ -1081,7 +1081,7 @@ fn first_static_call_pair(line_text: string) -> string {
     let qend0: i64 = qend;
     for i in 0..qend0 {
         let p: i64 = qend0 - i - 1;
-        let ch: string = sub(left, p, 1);
+        let ch: str8 = sub(left, p, 1);
         if is_ident_char(ch) == 1 {
             qstart = p;
             continue;
@@ -1089,23 +1089,23 @@ fn first_static_call_pair(line_text: string) -> string {
         break;
     }
     if qend <= qstart { return "::"; }
-    let recv: string = sub(left, qstart, qend - qstart);
+    let recv: str8 = sub(left, qstart, qend - qstart);
     if len(recv) == 0 { return "::"; }
     return format!("{}::{}", recv, method);
 }
 
-fn first_dot_call_pair(line_text: string) -> string {
+fn first_dot_call_pair(line_text: str8) -> str8 {
     let lp: i64 = find(line_text, "(");
     if lp < 0 { return "::"; }
-    let left: string = sub(line_text, 0, lp);
+    let left: str8 = sub(line_text, 0, lp);
     let dot: i64 = rfind(left, ".");
     if dot <= 0 { return "::"; }
-    let method: string = trim_ascii_ws(sub(left, dot + 1, len(left) - dot - 1));
+    let method: str8 = trim_ascii_ws(sub(left, dot + 1, len(left) - dot - 1));
     if len(method) == 0 { return "::"; }
     var qend: i64 = dot;
     for i in 0..dot {
         let p: i64 = dot - i - 1;
-        let ch: string = sub(left, p, 1);
+        let ch: str8 = sub(left, p, 1);
         if eq(ch, " ") == 1 || eq(ch, "\t") == 1 {
             qend = p;
             continue;
@@ -1116,7 +1116,7 @@ fn first_dot_call_pair(line_text: string) -> string {
     let qend0: i64 = qend;
     for i in 0..qend0 {
         let p: i64 = qend0 - i - 1;
-        let ch: string = sub(left, p, 1);
+        let ch: str8 = sub(left, p, 1);
         if is_ident_char(ch) == 1 {
             qstart = p;
             continue;
@@ -1124,32 +1124,32 @@ fn first_dot_call_pair(line_text: string) -> string {
         break;
     }
     if qend <= qstart { return "::"; }
-    let recv: string = sub(left, qstart, qend - qstart);
+    let recv: str8 = sub(left, qstart, qend - qstart);
     if len(recv) == 0 { return "::"; }
     return format!("{}::{}", recv, method);
 }
 
-fn local_binding_type(text: string, name: string) -> string {
+fn local_binding_type(text: str8, name: str8) -> str8 {
     if len(text) == 0 { return String::new(); }
     if len(name) == 0 { return String::new(); }
 
     let n: i64 = line_count(text);
     for i in 0..n {
-        let raw: string = line_text_at(text, i);
-        let line: string = trim_ascii_ws(raw);
+        let raw: str8 = line_text_at(text, i);
+        let line: str8 = trim_ascii_ws(raw);
         if starts_with(line, "let ") == 0 {
             if starts_with(line, "var ") == 0 {
                 continue;
             }
         }
-        let rest: string = sub(line, 4, len(line) - 4);
+        let rest: str8 = sub(line, 4, len(line) - 4);
         let c: i64 = find(rest, ":");
         if c < 0 { continue; }
 
-        let lhs: string = trim_ascii_ws(sub(rest, 0, c));
+        let lhs: str8 = trim_ascii_ws(sub(rest, 0, c));
         if eq(lhs, name) != 1 { continue; }
 
-        var ty: string = trim_ascii_ws(sub(rest, c + 1, len(rest) - c - 1));
+        var ty: str8 = trim_ascii_ws(sub(rest, c + 1, len(rest) - c - 1));
         let eqi: i64 = find(ty, "=");
         if eqi >= 0 {
             ty = trim_ascii_ws(sub(ty, 0, eqi));
@@ -1158,27 +1158,27 @@ fn local_binding_type(text: string, name: string) -> string {
     }
     // Infer `let x = y.unwrap();` from `y: Result<T, E>`.
     for i in 0..n {
-        let raw: string = line_text_at(text, i);
-        let line: string = trim_ascii_ws(raw);
+        let raw: str8 = line_text_at(text, i);
+        let line: str8 = trim_ascii_ws(raw);
         if starts_with(line, "let ") == 0 {
             if starts_with(line, "var ") == 0 {
                 continue;
             }
         }
-        let rest: string = sub(line, 4, len(line) - 4);
+        let rest: str8 = sub(line, 4, len(line) - 4);
         let eqi: i64 = find(rest, "=");
         if eqi < 0 { continue; }
-        let lhs: string = trim_ascii_ws(sub(rest, 0, eqi));
+        let lhs: str8 = trim_ascii_ws(sub(rest, 0, eqi));
         if eq(lhs, name) != 1 { continue; }
-        let rhs: string = trim_ascii_ws(sub(rest, eqi + 1, len(rest) - eqi - 1));
+        let rhs: str8 = trim_ascii_ws(sub(rest, eqi + 1, len(rest) - eqi - 1));
         let uat: i64 = find(rhs, ".unwrap()");
         if uat <= 0 { continue; }
-        let src: string = trim_ascii_ws(sub(rhs, 0, uat));
+        let src: str8 = trim_ascii_ws(sub(rhs, 0, uat));
         if len(src) == 0 { continue; }
         if eq(src, name) == 1 { continue; }
-        let src_ty: string = local_binding_type(text, src);
+        let src_ty: str8 = local_binding_type(text, src);
         if starts_with(src_ty, "Result<") == 1 {
-            let inner: string = sub(src_ty, 7, len(src_ty) - 7);
+            let inner: str8 = sub(src_ty, 7, len(src_ty) - 7);
             let comma: i64 = find(inner, ",");
             if comma > 0 {
                 return trim_ascii_ws(sub(inner, 0, comma));
@@ -1188,8 +1188,8 @@ fn local_binding_type(text: string, name: string) -> string {
     return String::new();
 }
 
-fn base_type_name(type_text: string) -> string {
-    let t: string = trim_ascii_ws(type_text);
+fn base_type_name(type_text: str8) -> str8 {
+    let t: str8 = trim_ascii_ws(type_text);
     if len(t) == 0 { return String::new(); }
     let lt: i64 = find(t, "<");
     if lt > 0 {
@@ -1199,16 +1199,16 @@ fn base_type_name(type_text: string) -> string {
 }
 
 /// @brief Resolve module import definition from a single source line.
-fn module_import_location_from_line(line_text: string) -> string {
-    let line_trim: string = trim_ascii_ws(line_text);
+fn module_import_location_from_line(line_text: str8) -> str8 {
+    let line_trim: str8 = trim_ascii_ws(line_text);
     if starts_with(line_trim, "use ") == 1 {
-        let use_mod: string = use_line_module_name(line_trim);
+        let use_mod: str8 = use_line_module_name(line_trim);
         if len(use_mod) > 0 {
             return module_file_location(use_mod);
         }
     }
     if starts_with(line_trim, "mod ") == 1 {
-        let mod_n: string = mod_line_module_name(line_trim);
+        let mod_n: str8 = mod_line_module_name(line_trim);
         if len(mod_n) > 0 {
             return module_file_location(mod_n);
         }
@@ -1216,7 +1216,7 @@ fn module_import_location_from_line(line_text: string) -> string {
     return String::new();
 }
 
-fn c_type_target(word: string) -> string {
+fn c_type_target(word: str8) -> str8 {
     if eq(word, "i8") == 1 { return "int8_t"; }
     if eq(word, "i16") == 1 { return "int16_t"; }
     if eq(word, "i32") == 1 { return "int32_t"; }
@@ -1237,21 +1237,21 @@ fn c_type_target(word: string) -> string {
     return String::new();
 }
 
-fn symbol_location_in_c_file(path: string, symbol: string) -> string {
+fn symbol_location_in_c_file(path: str8, symbol: str8) -> str8 {
     if len(path) == 0 { return String::new(); }
     if file_exists(path) != 1 { return String::new(); }
-    let text_r: Result<string, string> = read_all_text(path);
+    let text_r: Result<str8, str8> = read_all_text(path);
     if text_r.is_err() { return String::new(); }
-    let text: string = text_r.unwrap();
+    let text: str8 = text_r.unwrap();
     return first_match_location(path, text, symbol);
 }
 
-fn c_extern_binding_location(symbol: string) -> string {
+fn c_extern_binding_location(symbol: str8) -> str8 {
     if starts_with(symbol, "__mlang_") == 0 { return String::new(); }
 
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var loc: string = String::new();
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var loc: str8 = String::new();
 
     if starts_with(symbol, "__mlang_compiler_") == 1 {
         if len(root) > 0 {
@@ -1272,9 +1272,9 @@ fn c_extern_binding_location(symbol: string) -> string {
     }
 
     if starts_with(symbol, "__mlang_std_") == 1 {
-        let rest: string = sub(symbol, 12, len(symbol) - 12);
+        let rest: str8 = sub(symbol, 12, len(symbol) - 12);
         let us: i64 = find(rest, "_");
-        var module_name: string = rest;
+        var module_name: str8 = rest;
         if us >= 0 {
             module_name = sub(rest, 0, us);
         }
@@ -1295,21 +1295,21 @@ fn c_extern_binding_location(symbol: string) -> string {
     return String::new();
 }
 
-fn c_internals_location(word: string) -> string {
-    let extern_loc: string = c_extern_binding_location(word);
+fn c_internals_location(word: str8) -> str8 {
+    let extern_loc: str8 = c_extern_binding_location(word);
     if len(extern_loc) > 0 { return extern_loc; }
 
-    let target: string = c_type_target(word);
+    let target: str8 = c_type_target(word);
     if len(target) == 0 { return String::new(); }
 
-    let root: string = root_path_from_store();
-    let here: string = cwd();
-    var p1: string = String::new();
-    var p2: string = String::new();
-    var p3: string = String::new();
-    var p4: string = String::new();
-    var p5: string = String::new();
-    var p6: string = String::new();
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    var p1: str8 = String::new();
+    var p2: str8 = String::new();
+    var p3: str8 = String::new();
+    var p4: str8 = String::new();
+    var p5: str8 = String::new();
+    var p6: str8 = String::new();
     if len(root) > 0 {
         p1 = concat(root, "/include/mlang_c_types.h");
         p2 = concat(root, "/docs/runtime_builtins.h");
@@ -1319,7 +1319,7 @@ fn c_internals_location(word: string) -> string {
     p4 = concat(here, "/docs/runtime_builtins.h");
     p6 = concat(here, "/mlang_c_types.h");
 
-    var path: string = String::new();
+    var path: str8 = String::new();
     if len(path) == 0 {
         if len(p1) > 0 {
             if file_exists(p1) == 1 {
@@ -1349,67 +1349,67 @@ fn c_internals_location(word: string) -> string {
         }
     }
     if len(path) > 0 {
-        let text_r: Result<string, string> = read_all_text(path);
+        let text_r: Result<str8, str8> = read_all_text(path);
         if text_r.is_ok() {
-            let text: string = text_r.unwrap();
-            let tloc: string = first_match_location(path, text, target);
+            let text: str8 = text_r.unwrap();
+            let tloc: str8 = first_match_location(path, text, target);
             if len(tloc) > 0 { return tloc; }
         }
     }
 
     if starts_with(target, "mlang_") == 0 {
-        var hname: string = "stdint.h";
+        var hname: str8 = "stdint.h";
         if eq(target, "bool") == 1 {
             hname = "stdbool.h";
         }
-        var hp1: string = String::new();
-        var hp2: string = String::new();
-        var hp3: string = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/";
-        var hp4: string = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/";
-        var hp5: string = "/usr/include/";
+        var hp1: str8 = String::new();
+        var hp2: str8 = String::new();
+        var hp3: str8 = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/";
+        var hp4: str8 = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/";
+        var hp5: str8 = "/usr/include/";
         if len(root) > 0 {
             hp1 = concat(root, "/");
         }
         hp2 = concat(here, "/");
 
-        var hpath: string = String::new();
-        let c1: string = concat(hp1, hname);
+        var hpath: str8 = String::new();
+        let c1: str8 = concat(hp1, hname);
         if file_exists(c1) == 1 { hpath = c1; }
         if len(hpath) == 0 {
-            let c2: string = concat(hp2, hname);
+            let c2: str8 = concat(hp2, hname);
             if file_exists(c2) == 1 { hpath = c2; }
         }
         if len(hpath) == 0 {
-            let c3: string = concat(hp3, hname);
+            let c3: str8 = concat(hp3, hname);
             if file_exists(c3) == 1 { hpath = c3; }
         }
         if len(hpath) == 0 {
-            let c4: string = concat(hp4, hname);
+            let c4: str8 = concat(hp4, hname);
             if file_exists(c4) == 1 { hpath = c4; }
         }
         if len(hpath) == 0 {
-            let c5: string = concat(hp5, hname);
+            let c5: str8 = concat(hp5, hname);
             if file_exists(c5) == 1 { hpath = c5; }
         }
         if len(hpath) > 0 {
-            let htext_r: Result<string, string> = read_all_text(hpath);
+            let htext_r: Result<str8, str8> = read_all_text(hpath);
             if htext_r.is_ok() {
-                let htext: string = htext_r.unwrap();
-                let hloc: string = first_match_location(hpath, htext, target);
+                let htext: str8 = htext_r.unwrap();
+                let hloc: str8 = first_match_location(hpath, htext, target);
                 if len(hloc) > 0 { return hloc; }
             }
         }
 
-        var srcp1: string = String::new();
-        var srcp2: string = String::new();
-        var srcp3: string = String::new();
+        var srcp1: str8 = String::new();
+        var srcp2: str8 = String::new();
+        var srcp3: str8 = String::new();
         if len(root) > 0 {
             srcp1 = concat(root, "/stdlib/src/std_math.c");
             srcp2 = concat(root, "/stdlib/src/std_strbuf.c");
         }
         srcp3 = concat(here, "/stdlib/src/std_math.c");
 
-        var spath: string = String::new();
+        var spath: str8 = String::new();
         if len(srcp1) > 0 {
             if file_exists(srcp1) == 1 { spath = srcp1; }
         }
@@ -1424,10 +1424,10 @@ fn c_internals_location(word: string) -> string {
             }
         }
         if len(spath) > 0 {
-            let stext_r: Result<string, string> = read_all_text(spath);
+            let stext_r: Result<str8, str8> = read_all_text(spath);
             if stext_r.is_ok() {
-                let stext: string = stext_r.unwrap();
-                let sloc: string = first_match_location(spath, stext, target);
+                let stext: str8 = stext_r.unwrap();
+                let sloc: str8 = first_match_location(spath, stext, target);
                 if len(sloc) > 0 { return sloc; }
             }
         }
@@ -1450,24 +1450,24 @@ fn c_internals_location(word: string) -> string {
         }
     }
     if len(path) > 0 {
-        let text2_r: Result<string, string> = read_all_text(path);
+        let text2_r: Result<str8, str8> = read_all_text(path);
         if text2_r.is_ok() {
-            let text2: string = text2_r.unwrap();
-            let tloc2: string = first_match_location(path, text2, target);
+            let text2: str8 = text2_r.unwrap();
+            let tloc2: str8 = first_match_location(path, text2, target);
             if len(tloc2) > 0 { return tloc2; }
         }
     }
     return String::new();
 }
 
-fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
+fn extract_word_and_prefix(line_text: str8, col0: i64) -> str8 {
     let n: i64 = len(line_text);
     if n <= 0 { return "::"; }
     var idx: i64 = col0;
     if idx < 0 { idx = 0; }
     if idx > n { idx = n; }
     if idx > 0 {
-        let ch: string = sub(line_text, idx - 1, 1);
+        let ch: str8 = sub(line_text, idx - 1, 1);
         if is_ident_char(ch) == 1 {
             idx = idx - 1;
         }
@@ -1476,7 +1476,7 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
         if n == 0 { return "::"; }
         idx = n - 1;
     }
-    let c0: string = sub(line_text, idx, 1);
+    let c0: str8 = sub(line_text, idx, 1);
     if is_ident_char(c0) == 0 {
         return "::";
     }
@@ -1485,27 +1485,27 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
     let idx0: i64 = idx;
     for k in 0..idx0 {
         let pos: i64 = idx0 - k - 1;
-        let ch: string = sub(line_text, pos, 1);
+        let ch: str8 = sub(line_text, pos, 1);
         if is_ident_char(ch) == 0 { break; }
         starti = pos;
     }
     var endi: i64 = idx + 1;
     for j in (idx0 + 1)..n {
-        let ch: string = sub(line_text, j, 1);
+        let ch: str8 = sub(line_text, j, 1);
         if is_ident_char(ch) == 0 { break; }
         endi = j + 1;
     }
-    let word: string = sub(line_text, starti, endi - starti);
+    let word: str8 = sub(line_text, starti, endi - starti);
 
-    var prefix: string = String::new();
-    let left: string = sub(line_text, 0, starti);
+    var prefix: str8 = String::new();
+    let left: str8 = sub(line_text, 0, starti);
     let sep: i64 = rfind(left, "::");
     if sep >= 0 {
         var sep0: i64 = -1;
         let ln: i64 = len(left);
         if sep + 1 < ln {
-            let a: string = sub(left, sep, 1);
-            let b: string = sub(left, sep + 1, 1);
+            let a: str8 = sub(left, sep, 1);
+            let b: str8 = sub(left, sep + 1, 1);
             if eq(a, ":") == 1 {
                 if eq(b, ":") == 1 {
                     sep0 = sep;
@@ -1514,8 +1514,8 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
         }
         if sep0 < 0 {
             if sep > 0 {
-                let a: string = sub(left, sep - 1, 1);
-                let b: string = sub(left, sep, 1);
+                let a: str8 = sub(left, sep - 1, 1);
+                let b: str8 = sub(left, sep, 1);
                 if eq(a, ":") == 1 {
                     if eq(b, ":") == 1 {
                         sep0 = sep - 1;
@@ -1525,8 +1525,8 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
         }
         if sep0 < 0 {
             if sep > 1 {
-                let a: string = sub(left, sep - 2, 1);
-                let b: string = sub(left, sep - 1, 1);
+                let a: str8 = sub(left, sep - 2, 1);
+                let b: str8 = sub(left, sep - 1, 1);
                 if eq(a, ":") == 1 {
                     if eq(b, ":") == 1 {
                         sep0 = sep - 2;
@@ -1540,7 +1540,7 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
         var qend: i64 = sep0;
         for t in 0..sep0 {
             let pos: i64 = sep0 - t - 1;
-            let ch: string = sub(left, pos, 1);
+            let ch: str8 = sub(left, pos, 1);
             if eq(ch, " ") == 1 {
                 qend = pos;
                 continue;
@@ -1555,7 +1555,7 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
         let qend0: i64 = qend;
         for t in 0..qend0 {
             let pos: i64 = qend0 - t - 1;
-            let ch: string = sub(left, pos, 1);
+            let ch: str8 = sub(left, pos, 1);
             if is_ident_char(ch) == 1 {
                 qstart = pos;
                 continue;
@@ -1570,27 +1570,27 @@ fn extract_word_and_prefix(line_text: string, col0: i64) -> string {
     return format!("{}::{}", prefix, word);
 }
 
-fn word_at_col(line_text: string, col0: i64) -> string {
+fn word_at_col(line_text: str8, col0: i64) -> str8 {
     let n: i64 = len(line_text);
     if n <= 0 { return String::new(); }
     var idx: i64 = col0;
     if idx < 0 { idx = 0; }
     if idx > n { idx = n; }
     if idx > 0 {
-        let chp: string = sub(line_text, idx - 1, 1);
+        let chp: str8 = sub(line_text, idx - 1, 1);
         if is_ident_char(chp) == 1 {
             idx = idx - 1;
         }
     }
     if idx >= n { idx = n - 1; }
     if idx < 0 { return String::new(); }
-    let ch: string = sub(line_text, idx, 1);
+    let ch: str8 = sub(line_text, idx, 1);
     if is_ident_char(ch) == 0 { return String::new(); }
     var s: i64 = idx;
     let idx0: i64 = idx;
     for i in 0..idx0 {
         let p: i64 = idx0 - i - 1;
-        let c: string = sub(line_text, p, 1);
+        let c: str8 = sub(line_text, p, 1);
         if is_ident_char(c) == 1 {
             s = p;
             continue;
@@ -1599,7 +1599,7 @@ fn word_at_col(line_text: string, col0: i64) -> string {
     }
     var e: i64 = idx + 1;
     for i in (idx0 + 1)..n {
-        let c: string = sub(line_text, i, 1);
+        let c: str8 = sub(line_text, i, 1);
         if is_ident_char(c) == 1 {
             e = i + 1;
             continue;
@@ -1610,7 +1610,7 @@ fn word_at_col(line_text: string, col0: i64) -> string {
     return sub(line_text, s, e - s);
 }
 
-fn symbol_kind_lsp(sig: string) -> i32 {
+fn symbol_kind_lsp(sig: str8) -> i32 {
     if contains(sig, "fn ") == 1 {
         return 12;
     }
@@ -1626,7 +1626,7 @@ fn symbol_kind_lsp(sig: string) -> i32 {
     return 13;
 }
 
-fn completion_kind_lsp(label: string) -> i32 {
+fn completion_kind_lsp(label: str8) -> i32 {
     if ends_with(label, "!") == 1 { return 14; }
     if eq(label, "fn") == 1 { return 14; }
     if eq(label, "let") == 1 { return 14; }
@@ -1657,7 +1657,7 @@ fn completion_kind_lsp(label: string) -> i32 {
     return 6;
 }
 
-fn completion_detail(label: string) -> string {
+fn completion_detail(label: str8) -> str8 {
     if ends_with(label, "!") == 1 { return "builtin macro"; }
     if eq(label, "fn") == 1 { return "keyword: function definition"; }
     if eq(label, "let") == 1 { return "keyword: immutable binding"; }
@@ -1692,7 +1692,7 @@ fn completion_detail(label: string) -> string {
     return String::new();
 }
 
-fn completion_documentation(label: string) -> string {
+fn completion_documentation(label: str8) -> str8 {
     if eq(label, "i32") == 1 {
         return "Alias for a 32-bit signed integer. Maps to C int32_t in the runtime ABI.";
     }
@@ -1771,18 +1771,18 @@ fn completion_documentation(label: string) -> string {
     return String::new();
 }
 
-fn completion_symbol_detail_in_uri(target_uri: string, label: string) -> string {
+fn completion_symbol_detail_in_uri(target_uri: str8, label: str8) -> str8 {
     if len(target_uri) == 0 { return String::new(); }
     if len(label) == 0 { return String::new(); }
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.document_symbol_count(target_uri);
+    let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
     if cr.is_err() { return String::new(); }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
     for i in 0..n {
-        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(target_uri, i);
+        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(target_uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -1800,11 +1800,11 @@ fn completion_symbol_detail_in_uri(target_uri: string, label: string) -> string 
         if len(sym.signature) > 0 { return sym.signature; }
         if len(sym.type_info) > 0 { return sym.type_info; }
         if ensure_text_store() == 0 {
-            let text: string = text_store_get(g_text_store_handle, target_uri);
+            let text: str8 = text_store_get(g_text_store_handle, target_uri);
             if len(text) > 0 {
                 let line0: i64 = sym.line - 1;
                 if line0 >= 0 {
-                    let ltxt: string = line_text_at(text, line0);
+                    let ltxt: str8 = line_text_at(text, line0);
                     if contains(ltxt, "struct ") == 1 {
                         if contains(ltxt, label) == 1 {
                             return format!("struct {}", label);
@@ -1827,17 +1827,17 @@ fn completion_symbol_detail_in_uri(target_uri: string, label: string) -> string 
     return String::new();
 }
 
-fn doc_comment_above_symbol(text: string, line1: i32) -> string {
+fn doc_comment_above_symbol(text: str8, line1: i32) -> str8 {
     if len(text) == 0 { return String::new(); }
     if line1 <= 1 { return String::new(); }
-    var out: string = String::new();
+    var out: str8 = String::new();
     var found: i32 = 0;
     var y: i64 = line1 - 2;
     while y >= 0 {
-        let raw: string = line_text_at(text, y);
-        let line: string = trim_ascii_ws(raw);
+        let raw: str8 = line_text_at(text, y);
+        let line: str8 = trim_ascii_ws(raw);
         if starts_with(line, "///") == 1 {
-            var body: string = sub(line, 3, len(line) - 3);
+            var body: str8 = sub(line, 3, len(line) - 3);
             body = trim_ascii_ws(body);
             if found == 0 {
                 out = body;
@@ -1860,13 +1860,13 @@ fn doc_comment_above_symbol(text: string, line1: i32) -> string {
     return out;
 }
 
-fn declaration_doc_in_text(text: string, label: string) -> string {
+fn declaration_doc_in_text(text: str8, label: str8) -> str8 {
     if len(text) == 0 { return String::new(); }
     if len(label) == 0 { return String::new(); }
     let n: i64 = line_count(text);
     for i in 0..n {
-        let raw: string = line_text_at(text, i);
-        let line: string = trim_ascii_ws(raw);
+        let raw: str8 = line_text_at(text, i);
+        let line: str8 = trim_ascii_ws(raw);
         if contains(line, format!("struct {}", label)) == 1 {            return doc_comment_above_symbol(text, i + 1);
         }
         if contains(line, format!("enum {}", label)) == 1 {            return doc_comment_above_symbol(text, i + 1);
@@ -1877,22 +1877,22 @@ fn declaration_doc_in_text(text: string, label: string) -> string {
     return String::new();
 }
 
-fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
+fn completion_symbol_doc_in_uri(target_uri: str8, label: str8) -> str8 {
     if len(target_uri) == 0 { return String::new(); }
     if len(label) == 0 { return String::new(); }
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.document_symbol_count(target_uri);
+    let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
     if cr.is_err() { return String::new(); }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
-    var text_cache: string = String::new();
+    var text_cache: str8 = String::new();
     if ensure_text_store() == 0 {
         text_cache = text_store_get(g_text_store_handle, target_uri);
     }
     for i in 0..n {
-        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(target_uri, i);
+        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(target_uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -1908,7 +1908,7 @@ fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
         };
         if eq(sym.name, label) != 1 { continue; }
         if len(text_cache) > 0 {
-            let doc_comment: string = doc_comment_above_symbol(text_cache, sym.line);
+            let doc_comment: str8 = doc_comment_above_symbol(text_cache, sym.line);
             if len(doc_comment) > 0 { return doc_comment; }
         }
         if len(sym.type_info) > 0 {
@@ -1922,43 +1922,43 @@ fn completion_symbol_doc_in_uri(target_uri: string, label: string) -> string {
         if len(sym.signature) > 0 { return sym.signature; }
     }
     if len(text_cache) > 0 {
-        let fallback_doc: string = declaration_doc_in_text(text_cache, label);
+        let fallback_doc: str8 = declaration_doc_in_text(text_cache, label);
         if len(fallback_doc) > 0 { return fallback_doc; }
     }
     return String::new();
 }
 
-fn completion_symbol_detail(current_uri: string, label: string) -> string {
-    let d0: string = completion_symbol_detail_in_uri(current_uri, label);
+fn completion_symbol_detail(current_uri: str8, label: str8) -> str8 {
+    let d0: str8 = completion_symbol_detail_in_uri(current_uri, label);
     if len(d0) > 0 { return d0; }
     if ensure_uri_store() != 0 { return String::new(); }
     let n: i64 = uri_store_count(g_uri_store_handle);
     for i in 0..n {
-        let u: string = uri_store_get(g_uri_store_handle, i);
+        let u: str8 = uri_store_get(g_uri_store_handle, i);
         if len(u) == 0 { continue; }
         if eq(u, current_uri) == 1 { continue; }
-        let d: string = completion_symbol_detail_in_uri(u, label);
+        let d: str8 = completion_symbol_detail_in_uri(u, label);
         if len(d) > 0 { return d; }
     }
     return String::new();
 }
 
-fn completion_symbol_doc(current_uri: string, label: string) -> string {
-    let d0: string = completion_symbol_doc_in_uri(current_uri, label);
+fn completion_symbol_doc(current_uri: str8, label: str8) -> str8 {
+    let d0: str8 = completion_symbol_doc_in_uri(current_uri, label);
     if len(d0) > 0 { return d0; }
     if ensure_uri_store() != 0 { return String::new(); }
     let n: i64 = uri_store_count(g_uri_store_handle);
     for i in 0..n {
-        let u: string = uri_store_get(g_uri_store_handle, i);
+        let u: str8 = uri_store_get(g_uri_store_handle, i);
         if len(u) == 0 { continue; }
         if eq(u, current_uri) == 1 { continue; }
-        let d: string = completion_symbol_doc_in_uri(u, label);
+        let d: str8 = completion_symbol_doc_in_uri(u, label);
         if len(d) > 0 { return d; }
     }
     return String::new();
 }
 
-fn handle_did_open(payload: string) -> i32 {
+fn handle_did_open(payload: str8) -> i32 {
     if ensure_session() != 0 {
         return 1;
     }
@@ -1968,14 +1968,14 @@ fn handle_did_open(payload: string) -> i32 {
     if ensure_text_store() != 0 {
         return 1;
     }
-    let uri: string = extract_text_document_uri(payload);
-    let lang: string = extract_text_document_language_id(payload);
-    let text: string = extract_text_document_text(payload);
+    let uri: str8 = extract_text_document_uri(payload);
+    let lang: str8 = extract_text_document_language_id(payload);
+    let text: str8 = extract_text_document_text(payload);
     let version: i64 = extract_text_document_version(payload);
     if len(uri) == 0 { return 1; }
     if len(lang) == 0 { return 1; }
     let s: Session = current_session();
-    let r: Result<i32, string> = s.open_document(uri, lang, text, version);
+    let r: Result<i32, str8> = s.open_document(uri, lang, text, version);
     if r.is_err() {
         return 1;
     }
@@ -1989,19 +1989,19 @@ fn handle_did_open(payload: string) -> i32 {
     return 0;
 }
 
-fn handle_did_change(payload: string) -> i32 {
+fn handle_did_change(payload: str8) -> i32 {
     if ensure_session() != 0 {
         return 1;
     }
     if ensure_text_store() != 0 {
         return 1;
     }
-    let uri: string = extract_text_document_uri(payload);
-    let text: string = extract_first_change_text(payload);
+    let uri: str8 = extract_text_document_uri(payload);
+    let text: str8 = extract_first_change_text(payload);
     let version: i64 = extract_text_document_version(payload);
     if len(uri) == 0 { return 1; }
     let s: Session = current_session();
-    let r: Result<i32, string> = s.change_document(uri, text, version);
+    let r: Result<i32, str8> = s.change_document(uri, text, version);
     if r.is_err() {
         return 1;
     }
@@ -2012,14 +2012,14 @@ fn handle_did_change(payload: string) -> i32 {
     return 0;
 }
 
-fn handle_did_close(payload: string) -> i32 {
+fn handle_did_close(payload: str8) -> i32 {
     if ensure_session() != 0 {
         return 1;
     }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return 1; }
     let s: Session = current_session();
-    let r: Result<i32, string> = s.close_document(uri);
+    let r: Result<i32, str8> = s.close_document(uri);
     if r.is_err() {
         return 1;
     }
@@ -2033,25 +2033,25 @@ fn handle_did_close(payload: string) -> i32 {
     return 0;
 }
 
-fn handle_code_action(payload: string) -> string {
+fn handle_code_action(payload: str8) -> str8 {
     if ensure_text_store() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "[]"; }
-    let text: string = text_store_get(g_text_store_handle, uri);
+    let text: str8 = text_store_get(g_text_store_handle, uri);
     if len(text) == 0 { return "[]"; }
-    let uri_e: string = json_escape(uri);
+    let uri_e: str8 = json_escape(uri);
 
-    var out: string = String::new();
+    var out: str8 = String::new();
     out = concat(out, "[");
     var j: i32 = 0;
 
     if contains(payload, "source.organizeImports") == 1 {
         let import_lines: i64 = organize_imports_line_count(text);
         if import_lines > 0 {
-            let new_block_raw: string = organize_imports_text(text);
+            let new_block_raw: str8 = organize_imports_text(text);
             if len(new_block_raw) > 0 {
-                let new_block: string = json_escape(new_block_raw);
-                let action_oi: string = format!(
+                let new_block: str8 = json_escape(new_block_raw);
+                let action_oi: str8 = format!(
                     "{{\"title\":\"Organize Imports\",\"kind\":\"source.organizeImports\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":0}}}},\"newText\":\"{}\"}}]}}}}}}",
                     uri_e, import_lines, new_block
                 );
@@ -2066,7 +2066,7 @@ fn handle_code_action(payload: string) -> string {
     }
 
     if contains(payload, "quickfix") == 1 {
-        let msg: string = extract_first_diagnostic_message(payload);
+        let msg: str8 = extract_first_diagnostic_message(payload);
         let sl: i64 = extract_first_diagnostic_start_line(payload);
         let sc: i64 = extract_first_diagnostic_start_character(payload);
         let el: i64 = extract_first_diagnostic_end_line(payload);
@@ -2094,7 +2094,7 @@ fn handle_code_action(payload: string) -> string {
                             }
                             if target_line >= 0 {
                                 if should_insert_semicolon(text, target_line, target_char) == 1 {
-                                    let action_qf: string = format!(
+                                    let action_qf: str8 = format!(
                                         "{{\"title\":\"Insert ';'\",\"kind\":\"quickfix\",\"edit\":{{\"changes\":{{\"{}\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\";\"}}]}}}}}}",
                                         uri_e, target_line, target_char, target_line, target_char
                                     );
@@ -2117,24 +2117,24 @@ fn handle_code_action(payload: string) -> string {
     return out;
 }
 
-fn handle_definition(payload: string) -> string {
+fn handle_definition(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "[]"; }
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
-    var query_text: string = String::new();
+    var query_text: str8 = String::new();
     if ensure_text_store() == 0 {
         query_text = text_store_get(g_text_store_handle, uri);
     }
     if len(query_text) == 0 {
-        let p: string = file_uri_to_path(uri);
+        let p: str8 = file_uri_to_path(uri);
         if len(p) > 0 {
             if file_exists(p) == 1 {
-                let tr: Result<string, string> = read_all_text(p);
+                let tr: Result<str8, str8> = read_all_text(p);
                 if tr.is_ok() {
                     query_text = tr.unwrap();
                 }
@@ -2143,110 +2143,110 @@ fn handle_definition(payload: string) -> string {
     }
 
     if len(query_text) > 0 {
-            let line_text: string = line_text_at(query_text, line);
-            let import_loc0: string = module_import_location_from_line(line_text);
+            let line_text: str8 = line_text_at(query_text, line);
+            let import_loc0: str8 = module_import_location_from_line(line_text);
             if len(import_loc0) > 0 { return format!("[{}]", import_loc0); }
             if line > 0 {
-                let line_prev: string = line_text_at(query_text, line - 1);
-                let import_loc1: string = module_import_location_from_line(line_prev);
+                let line_prev: str8 = line_text_at(query_text, line - 1);
+                let import_loc1: str8 = module_import_location_from_line(line_prev);
                 if len(import_loc1) > 0 { return format!("[{}]", import_loc1); }
             }
             if contains(line_text, "#[") == 1 {
-                let attr_loc: string = attribute_doc_location(line_text);
+                let attr_loc: str8 = attribute_doc_location(line_text);
                 if len(attr_loc) > 0 { return format!("[{}]", attr_loc); }
             }
-            let line_trim: string = trim_ascii_ws(line_text);
+            let line_trim: str8 = trim_ascii_ws(line_text);
             if starts_with(line_trim, "use ") == 1 {
-                let use_mod: string = use_line_module_name(line_trim);
+                let use_mod: str8 = use_line_module_name(line_trim);
                 if len(use_mod) > 0 {
-                    let use_loc: string = module_file_location(use_mod);
+                    let use_loc: str8 = module_file_location(use_mod);
                     if len(use_loc) > 0 { return format!("[{}]", use_loc); }
                 }
             }
             if starts_with(line_trim, "mod ") == 1 {
-                let mod_n: string = mod_line_module_name(line_trim);
+                let mod_n: str8 = mod_line_module_name(line_trim);
                 if len(mod_n) > 0 {
-                    let mod_loc: string = module_file_location(mod_n);
+                    let mod_loc: str8 = module_file_location(mod_n);
                     if len(mod_loc) > 0 { return format!("[{}]", mod_loc); }
                 }
                 return "[]";
             }
             if contains(line_text, "TcpListener::bind(") == 1 {
-                let nloc0: string = std_net_method_location("bind");
+                let nloc0: str8 = std_net_method_location("bind");
                 if len(nloc0) > 0 { return format!("[{}]", nloc0); }
             }
             if contains(line_text, ".local_port(") == 1 {
-                let nloc1: string = std_net_method_location("local_port");
+                let nloc1: str8 = std_net_method_location("local_port");
                 if len(nloc1) > 0 { return format!("[{}]", nloc1); }
             }
-            let sc_pair: string = first_static_call_pair(line_text);
+            let sc_pair: str8 = first_static_call_pair(line_text);
             let sc_sep: i64 = find(sc_pair, "::");
             if sc_sep > 0 {
-                let sc_recv: string = sub(sc_pair, 0, sc_sep);
-                let sc_method: string = sub(sc_pair, sc_sep + 2, len(sc_pair) - sc_sep - 2);
+                let sc_recv: str8 = sub(sc_pair, 0, sc_sep);
+                let sc_method: str8 = sub(sc_pair, sc_sep + 2, len(sc_pair) - sc_sep - 2);
                 if len(sc_recv) > 0 && len(sc_method) > 0 {
-                    let sc_loc: string = associated_type_method_location(query_text, sc_recv, sc_method);
+                    let sc_loc: str8 = associated_type_method_location(query_text, sc_recv, sc_method);
                     if len(sc_loc) > 0 { return format!("[{}]", sc_loc); }
                 }
             }
-            let dc_pair: string = first_dot_call_pair(line_text);
+            let dc_pair: str8 = first_dot_call_pair(line_text);
             let dc_sep: i64 = find(dc_pair, "::");
             if dc_sep > 0 {
-                let dc_recv: string = sub(dc_pair, 0, dc_sep);
-                let dc_method: string = sub(dc_pair, dc_sep + 2, len(dc_pair) - dc_sep - 2);
-                let dc_ty: string = local_binding_type(query_text, dc_recv);
+                let dc_recv: str8 = sub(dc_pair, 0, dc_sep);
+                let dc_method: str8 = sub(dc_pair, dc_sep + 2, len(dc_pair) - dc_sep - 2);
+                let dc_ty: str8 = local_binding_type(query_text, dc_recv);
                 if len(dc_ty) > 0 && len(dc_method) > 0 {
-                    let dc_loc: string = associated_type_method_location(query_text, base_type_name(dc_ty), dc_method);
+                    let dc_loc: str8 = associated_type_method_location(query_text, base_type_name(dc_ty), dc_method);
                     if len(dc_loc) > 0 { return format!("[{}]", dc_loc); }
                     if eq(base_type_name(dc_ty), "Result") == 1 {
-                        let rloc0: string = builtin_result_method_location(dc_method);
+                        let rloc0: str8 = builtin_result_method_location(dc_method);
                         if len(rloc0) > 0 { return format!("[{}]", rloc0); }
                     }
                 }
             }
-            let packed: string = extract_word_and_prefix(line_text, col);
+            let packed: str8 = extract_word_and_prefix(line_text, col);
             let sep: i64 = find(packed, "::");
             if sep >= 0 {
-                let prefix: string = sub(packed, 0, sep);
-                var word: string = sub(packed, sep + 2, len(packed) - sep - 2);
+                let prefix: str8 = sub(packed, 0, sep);
+                var word: str8 = sub(packed, sep + 2, len(packed) - sep - 2);
                 if len(word) == 0 {
                     word = word_at_col(line_text, col);
                 }
                 if len(prefix) > 0 {
                     if eq(prefix, "String") == 1 {
-                        let loc: string = string_intrinsic_location(word);
+                        let loc: str8 = string_intrinsic_location(word);
                         if len(loc) > 0 { return format!("[{}]", loc); }
                     }
-                    let assoc_loc: string = associated_type_method_location(query_text, prefix, word);
+                    let assoc_loc: str8 = associated_type_method_location(query_text, prefix, word);
                     if len(assoc_loc) > 0 { return format!("[{}]", assoc_loc); }
-                    let static_recv: string = static_call_receiver_name(line_text, word);
+                    let static_recv: str8 = static_call_receiver_name(line_text, word);
                     if len(static_recv) > 0 {
-                        let static_assoc: string = associated_type_method_location(query_text, static_recv, word);
+                        let static_assoc: str8 = associated_type_method_location(query_text, static_recv, word);
                         if len(static_assoc) > 0 { return format!("[{}]", static_assoc); }
                     }
-                    let result_mloc: string = builtin_result_method_location(word);
+                    let result_mloc: str8 = builtin_result_method_location(word);
                     if len(result_mloc) > 0 { return format!("[{}]", result_mloc); }
                 }
                 if len(prefix) == 0 {
-                    let result_mloc2: string = builtin_result_method_location(word);
+                    let result_mloc2: str8 = builtin_result_method_location(word);
                     if len(result_mloc2) > 0 {
                         if contains(line_text, format!(".{}(", word)) == 1 {
                             return format!("[{}]", result_mloc2);
                         }
                     }
                     if len(word) > 0 {
-                        let recv_static: string = static_call_receiver_name(line_text, word);
+                        let recv_static: str8 = static_call_receiver_name(line_text, word);
                         if len(recv_static) > 0 {
-                            let recv_static_assoc: string = associated_type_method_location(query_text, recv_static, word);
+                            let recv_static_assoc: str8 = associated_type_method_location(query_text, recv_static, word);
                             if len(recv_static_assoc) > 0 { return format!("[{}]", recv_static_assoc); }
                         }
-                        let recv: string = dot_call_receiver_name(line_text, word);
+                        let recv: str8 = dot_call_receiver_name(line_text, word);
                         if len(recv) > 0 {
-                            let recv_ty: string = local_binding_type(query_text, recv);
+                            let recv_ty: str8 = local_binding_type(query_text, recv);
                             if len(recv_ty) > 0 {
-                                let recv_assoc: string = associated_type_method_location(query_text, base_type_name(recv_ty), word);
+                                let recv_assoc: str8 = associated_type_method_location(query_text, base_type_name(recv_ty), word);
                                 if len(recv_assoc) > 0 { return format!("[{}]", recv_assoc); }
-                                let recv_result_loc: string = builtin_result_method_location(word);
+                                let recv_result_loc: str8 = builtin_result_method_location(word);
                                 if len(recv_result_loc) > 0 {
                                     if eq(base_type_name(recv_ty), "Result") == 1 {
                                         return format!("[{}]", recv_result_loc);
@@ -2254,36 +2254,36 @@ fn handle_definition(payload: string) -> string {
                                 }
                             }
                         }
-                        let qual_mod: string = find_module_for_qualifier(query_text, word);
+                        let qual_mod: str8 = find_module_for_qualifier(query_text, word);
                         if len(qual_mod) > 0 {
-                            let qual_loc: string = module_file_location(qual_mod);
+                            let qual_loc: str8 = module_file_location(qual_mod);
                             if len(qual_loc) > 0 { return format!("[{}]", qual_loc); }
                         }
                         if eq(word, "new") == 1 {
                             if contains(line_text, "String::new") == 1 {
-                                let sloc1: string = string_intrinsic_location(word);
+                                let sloc1: str8 = string_intrinsic_location(word);
                                 if len(sloc1) > 0 { return format!("[{}]", sloc1); }
                             }
                         }
                         if eq(word, "with_capacity") == 1 {
                             if contains(line_text, "String::with_capacity") == 1 {
-                                let sloc2: string = string_intrinsic_location(word);
+                                let sloc2: str8 = string_intrinsic_location(word);
                                 if len(sloc2) > 0 { return format!("[{}]", sloc2); }
                             }
                         }
                         if eq(word, "free") == 1 {
                             if contains(line_text, "String::free") == 1 {
-                                let sloc3: string = string_intrinsic_location(word);
+                                let sloc3: str8 = string_intrinsic_location(word);
                                 if len(sloc3) > 0 { return format!("[{}]", sloc3); }
                             }
                         }
-                        let btloc: string = builtin_type_location(word);
+                        let btloc: str8 = builtin_type_location(word);
                         if len(btloc) > 0 { return format!("[{}]", btloc); }
-                        let thloc: string = thread_intrinsic_location(word);
+                        let thloc: str8 = thread_intrinsic_location(word);
                         if len(thloc) > 0 { return format!("[{}]", thloc); }
-                        let cloc: string = c_internals_location(word);
+                        let cloc: str8 = c_internals_location(word);
                         if len(cloc) > 0 { return format!("[{}]", cloc); }
-                        let loc2: string = runtime_builtin_location(word);
+                        let loc2: str8 = runtime_builtin_location(word);
                         if len(loc2) > 0 { return format!("[{}]", loc2); }
                     }
                 }
@@ -2291,22 +2291,22 @@ fn handle_definition(payload: string) -> string {
     }
 
     let s: Session = current_session();
-    let dr: Result<DefinitionLocation, string> =
+    let dr: Result<DefinitionLocation, str8> =
         s.definition(uri, line + 1, col + 1);
     if dr.is_err() {
         if len(query_text) > 0 {
-            let line_text2: string = line_text_at(query_text, line);
-            let packed2: string = extract_word_and_prefix(line_text2, col);
+            let line_text2: str8 = line_text_at(query_text, line);
+            let packed2: str8 = extract_word_and_prefix(line_text2, col);
             let sep2: i64 = find(packed2, "::");
             if sep2 >= 0 {
-                var word2: string = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
+                var word2: str8 = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
                 if len(word2) == 0 {
                     word2 = word_at_col(line_text2, col);
                 }
                 if len(word2) > 0 {
-                    let root_uri2: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                    let root_uri2: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
                     if len(root_uri2) > 0 {
-                        let c_loc_ws: string = workspace_c_definition_search(root_uri2, word2);
+                        let c_loc_ws: str8 = workspace_c_definition_search(root_uri2, word2);
                         if len(c_loc_ws) > 0 { return format!("[{}]", c_loc_ws); }
                     }
                 }
@@ -2320,58 +2320,58 @@ fn handle_definition(payload: string) -> string {
         Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
     };
     if len(query_text) > 0 {
-            let line_text2: string = line_text_at(query_text, line);
-            let sc_pair2: string = first_static_call_pair(line_text2);
+            let line_text2: str8 = line_text_at(query_text, line);
+            let sc_pair2: str8 = first_static_call_pair(line_text2);
             let sc_sep2: i64 = find(sc_pair2, "::");
             if sc_sep2 > 0 {
-                let sc_recv2: string = sub(sc_pair2, 0, sc_sep2);
-                let sc_method2: string = sub(sc_pair2, sc_sep2 + 2, len(sc_pair2) - sc_sep2 - 2);
+                let sc_recv2: str8 = sub(sc_pair2, 0, sc_sep2);
+                let sc_method2: str8 = sub(sc_pair2, sc_sep2 + 2, len(sc_pair2) - sc_sep2 - 2);
                 if len(sc_recv2) > 0 && len(sc_method2) > 0 {
-                    let sc_loc2: string = associated_type_method_location(query_text, sc_recv2, sc_method2);
+                    let sc_loc2: str8 = associated_type_method_location(query_text, sc_recv2, sc_method2);
                     if len(sc_loc2) > 0 { return format!("[{}]", sc_loc2); }
                 }
             }
-            let dc_pair2: string = first_dot_call_pair(line_text2);
+            let dc_pair2: str8 = first_dot_call_pair(line_text2);
             let dc_sep2: i64 = find(dc_pair2, "::");
             if dc_sep2 > 0 {
-                let dc_recv2: string = sub(dc_pair2, 0, dc_sep2);
-                let dc_method2: string = sub(dc_pair2, dc_sep2 + 2, len(dc_pair2) - dc_sep2 - 2);
-                let dc_ty2: string = local_binding_type(query_text, dc_recv2);
+                let dc_recv2: str8 = sub(dc_pair2, 0, dc_sep2);
+                let dc_method2: str8 = sub(dc_pair2, dc_sep2 + 2, len(dc_pair2) - dc_sep2 - 2);
+                let dc_ty2: str8 = local_binding_type(query_text, dc_recv2);
                 if len(dc_ty2) > 0 && len(dc_method2) > 0 {
-                    let dc_loc2: string = associated_type_method_location(query_text, base_type_name(dc_ty2), dc_method2);
+                    let dc_loc2: str8 = associated_type_method_location(query_text, base_type_name(dc_ty2), dc_method2);
                     if len(dc_loc2) > 0 { return format!("[{}]", dc_loc2); }
                     if eq(base_type_name(dc_ty2), "Result") == 1 {
-                        let rloc3: string = builtin_result_method_location(dc_method2);
+                        let rloc3: str8 = builtin_result_method_location(dc_method2);
                         if len(rloc3) > 0 { return format!("[{}]", rloc3); }
                     }
                 }
             }
-            let packed2: string = extract_word_and_prefix(line_text2, col);
+            let packed2: str8 = extract_word_and_prefix(line_text2, col);
             let sep2: i64 = find(packed2, "::");
             if sep2 >= 0 {
-                let prefix2: string = sub(packed2, 0, sep2);
-                var word2: string = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
+                let prefix2: str8 = sub(packed2, 0, sep2);
+                var word2: str8 = sub(packed2, sep2 + 2, len(packed2) - sep2 - 2);
                 if len(word2) == 0 {
                     word2 = word_at_col(line_text2, col);
                 }
                 if len(word2) > 0 {
-                    let static_recv2: string = static_call_receiver_name(line_text2, word2);
+                    let static_recv2: str8 = static_call_receiver_name(line_text2, word2);
                     if len(static_recv2) > 0 {
-                        let static_assoc2: string = associated_type_method_location(query_text, static_recv2, word2);
+                        let static_assoc2: str8 = associated_type_method_location(query_text, static_recv2, word2);
                         if len(static_assoc2) > 0 { return format!("[{}]", static_assoc2); }
                     }
                     if len(prefix2) > 0 {
-                        let assoc2: string = associated_type_method_location(query_text, prefix2, word2);
+                        let assoc2: str8 = associated_type_method_location(query_text, prefix2, word2);
                         if len(assoc2) > 0 { return format!("[{}]", assoc2); }
                     }
-                    let dot_recv2: string = dot_call_receiver_name(line_text2, word2);
+                    let dot_recv2: str8 = dot_call_receiver_name(line_text2, word2);
                     if len(dot_recv2) > 0 {
-                        let dot_ty2: string = local_binding_type(query_text, dot_recv2);
+                        let dot_ty2: str8 = local_binding_type(query_text, dot_recv2);
                         if len(dot_ty2) > 0 {
-                            let dot_assoc2: string = associated_type_method_location(query_text, base_type_name(dot_ty2), word2);
+                            let dot_assoc2: str8 = associated_type_method_location(query_text, base_type_name(dot_ty2), word2);
                             if len(dot_assoc2) > 0 { return format!("[{}]", dot_assoc2); }
                             if eq(base_type_name(dot_ty2), "Result") == 1 {
-                                let rloc2: string = builtin_result_method_location(word2);
+                                let rloc2: str8 = builtin_result_method_location(word2);
                                 if len(rloc2) > 0 { return format!("[{}]", rloc2); }
                             }
                         }
@@ -2379,14 +2379,14 @@ fn handle_definition(payload: string) -> string {
                 }
             }
     }
-    let loc: string = location_json(d.uri, d.line, d.column);
-    let out: string = format!("[{}]", loc);
+    let loc: str8 = location_json(d.uri, d.line, d.column);
+    let out: str8 = format!("[{}]", loc);
     return out;
 }
 
-fn handle_references(payload: string) -> string {
+fn handle_references(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "[]"; }
@@ -2394,18 +2394,18 @@ fn handle_references(payload: string) -> string {
     if col < 0 { return "[]"; }
 
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    let cr: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let include_decl: i32 = extract_include_declaration(payload);
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
-    var def_uri: string = String::new();
+    var def_uri: str8 = String::new();
     var def_line: i32 = -1;
     var def_col: i32 = -1;
     if include_decl == 0 {
-        let dr: Result<DefinitionLocation, string> = s.definition(uri, line + 1, col + 1);
+        let dr: Result<DefinitionLocation, str8> = s.definition(uri, line + 1, col + 1);
         if dr.is_ok() {
             let d: DefinitionLocation = match dr {
                 Ok(v) => v,
@@ -2417,13 +2417,13 @@ fn handle_references(payload: string) -> string {
         }
     }
 
-    var out: string = String::new();
-    let p0: string = concat(out, "[");
+    var out: str8 = String::new();
+    let p0: str8 = concat(out, "[");
     out = p0;
     var j: i32 = 0;
 
     for i in 0..n {
-        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        let rr: Result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err() { continue; }
         let r: ReferenceLocation = match rr {
             Ok(v) => v,
@@ -2438,7 +2438,7 @@ fn handle_references(payload: string) -> string {
                 }
             }
         }
-        let loc: string = location_json(r.uri, r.line, r.column);
+        let loc: str8 = location_json(r.uri, r.line, r.column);
         if j > 0 {
             out = format!("{},{}", out, loc);
         } else {
@@ -2447,14 +2447,14 @@ fn handle_references(payload: string) -> string {
         j = j + 1;
     }
 
-    let prev2: string = out;
+    let prev2: str8 = out;
     out = concat(out, "]");
     return out;
 }
 
-fn handle_hover(payload: string) -> string {
+fn handle_hover(payload: str8) -> str8 {
     if ensure_session() != 0 { return "null"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "null"; }
@@ -2462,23 +2462,23 @@ fn handle_hover(payload: string) -> string {
     if col < 0 { return "null"; }
 
     let s: Session = current_session();
-    let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
+    let hr: Result<str8, str8> = s.hover(uri, line + 1, col + 1);
     if hr.is_err() { return "null"; }
-    let h: string = match hr {
+    let h: str8 = match hr {
         Ok(v) => v,
         Err(_e) => String::new()
     };
-    let esc: string = json_escape(h);
-    let out: string = format!(
+    let esc: str8 = json_escape(h);
+    let out: str8 = format!(
         "{{\"contents\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
         esc
     );
     return out;
 }
 
-fn handle_completion(payload: string) -> string {
+fn handle_completion(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "[]"; }
@@ -2486,38 +2486,38 @@ fn handle_completion(payload: string) -> string {
     if col < 0 { return "[]"; }
 
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.completion_count(uri, line + 1, col + 1);
+    let cr: Result<i32, str8> = s.completion_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
 
-    var out: string = String::new();
-    let p0: string = concat(out, "[");
+    var out: str8 = String::new();
+    let p0: str8 = concat(out, "[");
     out = p0;
     var j: i32 = 0;
 
     for i in 0..n {
-        let ir: Result<string, string> = s.completion_get(uri, line + 1, col + 1, i);
+        let ir: Result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
         if ir.is_err() { continue; }
-        let label_raw: string = match ir {
+        let label_raw: str8 = match ir {
             Ok(v) => v,
             Err(_e) => String::new()
         };
-        let label: string = json_escape(label_raw);
+        let label: str8 = json_escape(label_raw);
         let kind: i32 = completion_kind_lsp(label_raw);
-        var detail_raw: string = completion_detail(label_raw);
-        var doc_raw: string = completion_documentation(label_raw);
+        var detail_raw: str8 = completion_detail(label_raw);
+        var doc_raw: str8 = completion_documentation(label_raw);
         if len(detail_raw) == 0 {
             detail_raw = completion_symbol_detail(uri, label_raw);
         }
         if len(doc_raw) == 0 {
             doc_raw = completion_symbol_doc(uri, label_raw);
         }
-        let detail: string = json_escape(detail_raw);
-        let doc: string = json_escape(doc_raw);
-        var item: string = String::new();
+        let detail: str8 = json_escape(detail_raw);
+        let doc: str8 = json_escape(doc_raw);
+        var item: str8 = String::new();
         if len(doc_raw) > 0 {
             item = format!(
                 "{{\"label\":\"{}\",\"kind\":{},\"detail\":\"{}\",\"documentation\":{{\"kind\":\"plaintext\",\"value\":\"{}\"}}}}",
@@ -2537,26 +2537,26 @@ fn handle_completion(payload: string) -> string {
         j = j + 1;
     }
 
-    let prev2: string = out;
+    let prev2: str8 = out;
     out = concat(out, "]");
     return out;
 }
 
-fn handle_document_symbol(payload: string) -> string {
+fn handle_document_symbol(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "[]"; }
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    let cr: Result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
-    var out: string = String::new();
+    var out: str8 = String::new();
     out = concat(out, "[");
     for i in 0..n {
-        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -2570,28 +2570,28 @@ fn handle_document_symbol(payload: string) -> string {
                 column: 0
             }
         };
-        let name_e: string = json_escape(sym.name);
-        let range: string = range_json(sym.line, sym.column);
+        let name_e: str8 = json_escape(sym.name);
+        let range: str8 = range_json(sym.line, sym.column);
         let kind: i32 = symbol_kind_lsp(sym.signature);
-        let item: string = format!(
+        let item: str8 = format!(
             "{{\"name\":\"{}\",\"kind\":{},\"range\":{},\"selectionRange\":{}}}",
             name_e, kind, range, range
         );
-        let prev: string = out;
+        let prev: str8 = out;
         if i > 0 {
             out = format!("{},{}", out, item);
         } else {
             out = format!("{}{}", out, item);
         }
     }
-    let prev2: string = out;
+    let prev2: str8 = out;
     out = concat(out, "]");
     return out;
 }
 
-fn handle_document_highlight(payload: string) -> string {
+fn handle_document_highlight(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "[]"; }
@@ -2599,30 +2599,30 @@ fn handle_document_highlight(payload: string) -> string {
     if col < 0 { return "[]"; }
 
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    let cr: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
 
-    var out: string = String::new();
+    var out: str8 = String::new();
     out = concat(out, "[");
     var j: i32 = 0;
     for i in 0..n {
-        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        let rr: Result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err() { continue; }
         let r: ReferenceLocation = match rr {
             Ok(v) => v,
             Err(_e) => ReferenceLocation { uri: String::new(), line: 0, column: 0 }
         };
         if eq(r.uri, uri) != 1 { continue; }
-        let range: string = range_json(r.line, r.column);
-        let item: string = format!(
+        let range: str8 = range_json(r.line, r.column);
+        let item: str8 = format!(
             "{{\"range\":{},\"kind\":1}}",
             range
         );
-        let prev: string = out;
+        let prev: str8 = out;
         if j > 0 {
             out = format!("{},{}", out, item);
         } else {
@@ -2630,14 +2630,14 @@ fn handle_document_highlight(payload: string) -> string {
         }
         j = j + 1;
     }
-    let prev2: string = out;
+    let prev2: str8 = out;
     out = concat(out, "]");
     return out;
 }
 
-fn handle_signature_help(payload: string) -> string {
+fn handle_signature_help(payload: str8) -> str8 {
     if ensure_session() != 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
@@ -2645,8 +2645,8 @@ fn handle_signature_help(payload: string) -> string {
     if col < 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
 
     let s: Session = current_session();
-    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
-    var sig: string = String::new();
+    let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
+    var sig: str8 = String::new();
     if rr.is_ok() {
         let sym: ResolvedSymbol = match rr {
             Ok(v) => v,
@@ -2668,23 +2668,23 @@ fn handle_signature_help(payload: string) -> string {
     if len(sig) == 0 {
         if ensure_text_store() == 0 {
             if ensure_uri_store() == 0 {
-                let query_text: string = text_store_get(g_text_store_handle, uri);
+                let query_text: str8 = text_store_get(g_text_store_handle, uri);
                 if len(query_text) > 0 {
-                    let callee: string = signature_help_callee(query_text, line, col);
+                    let callee: str8 = signature_help_callee(query_text, line, col);
                     if len(callee) > 0 {
-                        let pat: string = format!("fn {}(", callee);
+                        let pat: str8 = format!("fn {}(", callee);
                         let uri_count: i64 = uri_store_count(g_uri_store_handle);
                         for ui in 0..uri_count {
-                            let doc_uri: string = uri_store_get(g_uri_store_handle, ui);
+                            let doc_uri: str8 = uri_store_get(g_uri_store_handle, ui);
                             if len(doc_uri) == 0 { continue; }
-                            let cr: Result<i32, string> = s.document_symbol_count(doc_uri);
+                            let cr: Result<i32, str8> = s.document_symbol_count(doc_uri);
                             if cr.is_err() { continue; }
                             let n: i32 = match cr {
                                 Ok(v) => v,
                                 Err(_e) => 0
                             };
                             for i in 0..n {
-                                let sr: Result<DocumentSymbol, string> = s.document_symbol_get(doc_uri, i);
+                                let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(doc_uri, i);
                                 if sr.is_err() { continue; }
                                 let d: DocumentSymbol = match sr {
                                     Ok(v) => v,
@@ -2712,7 +2712,7 @@ fn handle_signature_help(payload: string) -> string {
         }
     }
     if len(sig) == 0 {
-        let hr: Result<string, string> = s.hover(uri, line + 1, col + 1);
+        let hr: Result<str8, str8> = s.hover(uri, line + 1, col + 1);
         if hr.is_err() { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
         sig = match hr {
             Ok(v) => v,
@@ -2720,23 +2720,23 @@ fn handle_signature_help(payload: string) -> string {
         };
     }
     if len(sig) == 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
-    let label: string = json_escape(sig);
+    let label: str8 = json_escape(sig);
     return format!(
         "{{\"signatures\":[{{\"label\":\"{}\"}}],\"activeSignature\":0,\"activeParameter\":0}}",
         label
     );
 }
 
-fn handle_prepare_rename(payload: string) -> string {
+fn handle_prepare_rename(payload: str8) -> str8 {
     if ensure_session() != 0 { return "null"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "null"; }
     if line < 0 { return "null"; }
     if col < 0 { return "null"; }
     let s: Session = current_session();
-    let rr: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     if rr.is_err() { return "null"; }
     let sym: ResolvedSymbol = match rr {
         Ok(v) => v,
@@ -2763,19 +2763,19 @@ fn handle_prepare_rename(payload: string) -> string {
     );
 }
 
-fn handle_rename(payload: string) -> string {
+fn handle_rename(payload: str8) -> str8 {
     if ensure_session() != 0 { return "null"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
-    let new_name: string = extract_new_name(payload);
+    let new_name: str8 = extract_new_name(payload);
     if len(uri) == 0 { return "null"; }
     if line < 0 { return "null"; }
     if col < 0 { return "null"; }
     if len(new_name) == 0 { return "null"; }
 
     let s: Session = current_session();
-    let safe_r: Result<i32, string> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
+    let safe_r: Result<i32, str8> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
     if safe_r.is_err() { return "null"; }
     let safe: i32 = match safe_r {
         Ok(v) => v,
@@ -2783,7 +2783,7 @@ fn handle_rename(payload: string) -> string {
     };
     if safe != 1 { return "null"; }
 
-    let sym_r: Result<ResolvedSymbol, string> = s.resolve_symbol(uri, line + 1, col + 1);
+    let sym_r: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     if sym_r.is_err() { return "null"; }
     let sym: ResolvedSymbol = match sym_r {
         Ok(v) => v,
@@ -2803,19 +2803,19 @@ fn handle_rename(payload: string) -> string {
     let old_len: i32 = len(sym.name);
     if old_len <= 0 { return "null"; }
 
-    let refs_r: Result<i32, string> = s.references_count(uri, line + 1, col + 1);
+    let refs_r: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if refs_r.is_err() { return "null"; }
     let n: i32 = match refs_r {
         Ok(v) => v,
         Err(_e) => 0
     };
 
-    var changes: string = String::new();
+    var changes: str8 = String::new();
     changes = concat(changes, "[");
     var j: i32 = 0;
-    let new_e: string = json_escape(new_name);
+    let new_e: str8 = json_escape(new_name);
     for i in 0..n {
-        let rr: Result<ReferenceLocation, string> = s.reference_get(uri, line + 1, col + 1, i);
+        let rr: Result<ReferenceLocation, str8> = s.reference_get(uri, line + 1, col + 1, i);
         if rr.is_err() { continue; }
         let r: ReferenceLocation = match rr {
             Ok(v) => v,
@@ -2825,8 +2825,8 @@ fn handle_rename(payload: string) -> string {
         let sl: i32 = lsp_line(r.line);
         let sc: i32 = lsp_col(r.column);
         let ec: i32 = sc + old_len;
-        let uri_e: string = json_escape(r.uri);
-        let change: string = format!(
+        let uri_e: str8 = json_escape(r.uri);
+        let change: str8 = format!(
             "{{\"textDocument\":{{\"uri\":\"{}\",\"version\":null}},\"edits\":[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]}}",
             uri_e, sl, sc, sl, ec, new_e
         );
@@ -2845,33 +2845,33 @@ fn handle_rename(payload: string) -> string {
     );
 }
 
-fn handle_diagnostic(payload: string) -> string {
+fn handle_diagnostic(payload: str8) -> str8 {
     if ensure_session() != 0 { return "{\"kind\":\"full\",\"items\":[]}"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"kind\":\"full\",\"items\":[]}"; }
-    let previous_result_id: string = extract_previous_result_id(payload);
+    let previous_result_id: str8 = extract_previous_result_id(payload);
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.syntax_diagnostic_count(uri);
+    let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err() { return "{\"kind\":\"full\",\"items\":[]}"; }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
     };
-    var items: string = String::new();
+    var items: str8 = String::new();
     items = concat(items, "[");
-    var result_id: string = format!("v1|{}", n);
+    var result_id: str8 = format!("v1|{}", n);
     var j: i32 = 0;
     for i in 0..n {
-        let dr: Result<SyntaxDiagnostic, string> = s.syntax_diagnostic_get(uri, i);
+        let dr: Result<SyntaxDiagnostic, str8> = s.syntax_diagnostic_get(uri, i);
         if dr.is_err() { continue; }
         let d: SyntaxDiagnostic = match dr {
             Ok(v) => v,
             Err(_e) => SyntaxDiagnostic { line: 0, column: 0, message: String::new() }
         };
-        let msg: string = json_escape(d.message);
+        let msg: str8 = json_escape(d.message);
         let sl: i32 = lsp_line(d.line);
         let sc: i32 = lsp_col(d.column);
-        let item: string = format!(
+        let item: str8 = format!(
             "{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"severity\":1,\"message\":\"{}\"}}",
             sl, sc, sl, sc, msg
         );
@@ -2886,43 +2886,43 @@ fn handle_diagnostic(payload: string) -> string {
     items = concat(items, "]");
     if len(previous_result_id) > 0 {
         if eq(previous_result_id, result_id) == 1 {
-            let result_id_e: string = json_escape(result_id);
+            let result_id_e: str8 = json_escape(result_id);
             return format!(
                 "{{\"kind\":\"unchanged\",\"resultId\":\"{}\"}}",
                 result_id_e
             );
         }
     }
-    let result_id_e: string = json_escape(result_id);
+    let result_id_e: str8 = json_escape(result_id);
     return format!(
         "{{\"kind\":\"full\",\"resultId\":\"{}\",\"items\":{}}}",
         result_id_e, items
     );
 }
 
-fn handle_workspace_symbol(payload: string) -> string {
+fn handle_workspace_symbol(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
     if ensure_uri_store() != 0 { return "[]"; }
-    let query: string = extract_workspace_query(payload);
+    let query: str8 = extract_workspace_query(payload);
     let uri_count: i64 = uri_store_count(g_uri_store_handle);
     if uri_count <= 0 { return "[]"; }
 
     let s: Session = current_session();
-    var out: string = String::new();
+    var out: str8 = String::new();
     out = concat(out, "[");
     var j: i32 = 0;
 
     for ui in 0..uri_count {
-        let uri: string = uri_store_get(g_uri_store_handle, ui);
+        let uri: str8 = uri_store_get(g_uri_store_handle, ui);
         if len(uri) == 0 { continue; }
-        let cr: Result<i32, string> = s.document_symbol_count(uri);
+        let cr: Result<i32, str8> = s.document_symbol_count(uri);
         if cr.is_err() { continue; }
         let n: i32 = match cr {
             Ok(v) => v,
             Err(_e) => 0
         };
         for i in 0..n {
-            let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+            let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
             if sr.is_err() { continue; }
             let sym: DocumentSymbol = match sr {
                 Ok(v) => v,
@@ -2940,9 +2940,9 @@ fn handle_workspace_symbol(payload: string) -> string {
                 if contains(sym.name, query) != 1 { continue; }
             }
             let kind: i32 = symbol_kind_lsp(sym.signature);
-            let name_e: string = json_escape(sym.name);
-            let loc: string = location_json(uri, sym.line, sym.column);
-            let item: string = format!(
+            let name_e: str8 = json_escape(sym.name);
+            let loc: str8 = location_json(uri, sym.line, sym.column);
+            let item: str8 = format!(
                 "{{\"name\":\"{}\",\"kind\":{},\"location\":{}}}",
                 name_e, kind, loc
             );
@@ -2957,7 +2957,7 @@ fn handle_workspace_symbol(payload: string) -> string {
     if j == 0 {
         if len(query) > 0 {
             if ensure_text_store() == 0 {
-                let root_uri: string = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                let root_uri: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
                 if len(root_uri) > 0 {
                     return workspace_symbol_search(root_uri, query);
                 }
@@ -2968,7 +2968,7 @@ fn handle_workspace_symbol(payload: string) -> string {
     return out;
 }
 
-fn semantic_token_type(sig: string) -> i32 {
+fn semantic_token_type(sig: str8) -> i32 {
     let kind_lsp: i32 = symbol_kind_lsp(sig);
     if kind_lsp == 12 {
         return 2; // function
@@ -2997,7 +2997,7 @@ fn semantic_token_type(sig: string) -> i32 {
     return 4; // variable
 }
 
-fn semantic_token_modifiers(sig: string) -> i32 {
+fn semantic_token_modifiers(sig: str8) -> i32 {
     // bit 0: declaration
     // bit 1: static
     // bit 2: readonly
@@ -3011,12 +3011,12 @@ fn semantic_token_modifiers(sig: string) -> i32 {
     return mods;
 }
 
-fn handle_semantic_tokens_full(payload: string) -> string {
+fn handle_semantic_tokens_full(payload: str8) -> str8 {
     if ensure_session() != 0 { return "{\"data\":[]}"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"data\":[]}"; }
     let s: Session = current_session();
-    let cr: Result<i32, string> = s.document_symbol_count(uri);
+    let cr: Result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err() { return "{\"data\":[]}"; }
     let n: i32 = match cr {
         Ok(v) => v,
@@ -3024,14 +3024,14 @@ fn handle_semantic_tokens_full(payload: string) -> string {
     };
     if n <= 0 { return "{\"data\":[]}"; }
 
-    var data: string = String::new();
+    var data: str8 = String::new();
     data = concat(data, "[");
     var j: i32 = 0;
     var prev_line: i32 = 0;
     var prev_col: i32 = 0;
 
     for i in 0..n {
-        let sr: Result<DocumentSymbol, string> = s.document_symbol_get(uri, i);
+        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
         if sr.is_err() { continue; }
         let sym: DocumentSymbol = match sr {
             Ok(v) => v,
@@ -3058,7 +3058,7 @@ fn handle_semantic_tokens_full(payload: string) -> string {
         let tlen: i32 = len(sym.name);
         let ttype: i32 = semantic_token_type(sym.signature);
         let tmods: i32 = semantic_token_modifiers(sym.signature);
-        let chunk: string = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
+        let chunk: str8 = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
         if j > 0 {
             data = format!("{},{}", data, chunk);
         } else {
@@ -3073,30 +3073,30 @@ fn handle_semantic_tokens_full(payload: string) -> string {
     return format!("{{\"data\":{}}}", data);
 }
 
-fn handle_implementation(payload: string) -> string {
+fn handle_implementation(payload: str8) -> str8 {
     if ensure_text_store() != 0 { return "[]"; }
     if ensure_uri_store() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
     if len(uri) == 0 { return "[]"; }
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
-    let query_text: string = text_store_get(g_text_store_handle, uri);
+    let query_text: str8 = text_store_get(g_text_store_handle, uri);
     if len(query_text) == 0 { return "[]"; }
 
     let uri_count: i64 = uri_store_count(g_uri_store_handle);
     if uri_count <= 0 { return "[]"; }
 
-    var out: string = String::new();
+    var out: str8 = String::new();
     out = concat(out, "[");
     var j: i32 = 0;
 
     for ui in 0..uri_count {
-        let doc_uri: string = uri_store_get(g_uri_store_handle, ui);
+        let doc_uri: str8 = uri_store_get(g_uri_store_handle, ui);
         if len(doc_uri) == 0 { continue; }
-        let candidate_text: string = text_store_get(g_text_store_handle, doc_uri);
+        let candidate_text: str8 = text_store_get(g_text_store_handle, doc_uri);
         if len(candidate_text) == 0 { continue; }
         let packed: i64 = find_implementation_pos(query_text, line, col, candidate_text);
         if packed <= 0 { continue; }
@@ -3108,7 +3108,7 @@ fn handle_implementation(payload: string) -> string {
         }
         let line1: i32 = packed / divisor;
         let col1: i32 = packed - line1 * divisor;
-        let loc: string = location_json(doc_uri, line1, col1);
+        let loc: str8 = location_json(doc_uri, line1, col1);
         if j > 0 {
             out = format!("{},{}", out, loc);
         } else {
@@ -3120,30 +3120,30 @@ fn handle_implementation(payload: string) -> string {
     return out;
 }
 
-fn handle_formatting(payload: string) -> string {
+fn handle_formatting(payload: str8) -> str8 {
     if ensure_text_store() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "[]"; }
-    let text: string = text_store_get(g_text_store_handle, uri);
+    let text: str8 = text_store_get(g_text_store_handle, uri);
     if len(text) == 0 { return "[]"; }
     let tab_size: i64 = extract_format_tab_size(payload);
     let insert_spaces: i32 = extract_format_insert_spaces(payload);
-    let formatted: string = format_text_with_options(text, tab_size, insert_spaces);
+    let formatted: str8 = format_text_with_options(text, tab_size, insert_spaces);
     if eq(formatted, text) == 1 { return "[]"; }
     let lc: i64 = line_count(text);
     var end_line: i64 = lc - 1;
     if end_line < 0 { end_line = 0; }
     let end_char: i64 = line_length(text, end_line);
-    let fmt_e: string = json_escape(formatted);
+    let fmt_e: str8 = json_escape(formatted);
     return format!(
         "[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
         end_line, end_char, fmt_e
     );
 }
 
-fn handle_range_formatting(payload: string) -> string {
+fn handle_range_formatting(payload: str8) -> str8 {
     if ensure_text_store() != 0 { return "[]"; }
-    let uri: string = extract_text_document_uri(payload);
+    let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "[]"; }
     let start_line: i64 = extract_range_start_line(payload);
     let start_char: i64 = extract_range_start_character(payload);
@@ -3153,33 +3153,33 @@ fn handle_range_formatting(payload: string) -> string {
     if start_char < 0 { return "[]"; }
     if end_line < start_line { return "[]"; }
     if end_char < 0 { return "[]"; }
-    let text: string = text_store_get(g_text_store_handle, uri);
+    let text: str8 = text_store_get(g_text_store_handle, uri);
     if len(text) == 0 { return "[]"; }
-    let raw: string = extract_range_text(text, start_line, start_char, end_line, end_char);
+    let raw: str8 = extract_range_text(text, start_line, start_char, end_line, end_char);
     let tab_size: i64 = extract_format_tab_size(payload);
     let insert_spaces: i32 = extract_format_insert_spaces(payload);
-    let formatted: string = format_text_with_options(raw, tab_size, insert_spaces);
+    let formatted: str8 = format_text_with_options(raw, tab_size, insert_spaces);
     if eq(formatted, raw) == 1 { return "[]"; }
-    let fmt_e: string = json_escape(formatted);
+    let fmt_e: str8 = json_escape(formatted);
     return format!(
         "[{{\"range\":{{\"start\":{{\"line\":{},\"character\":{}}},\"end\":{{\"line\":{},\"character\":{}}}}},\"newText\":\"{}\"}}]",
         start_line, start_char, end_line, end_char, fmt_e
     );
 }
 
-fn dispatch_result_json(payload: string) -> string {
-    let method: string = extract_method(payload);
+fn dispatch_result_json(payload: str8) -> str8 {
+    let method: str8 = extract_method(payload);
     log_write(log_level_verbose(), format!("request method={}", method));
 
     if eq(method, "initialize") == 1 {
         let _ = ensure_session();
         if ensure_text_store() == 0 {
-            let root_uri: string = extract_root_uri(payload);
+            let root_uri: str8 = extract_root_uri(payload);
             if len(root_uri) > 0 {
                 let _ = text_store_upsert(g_text_store_handle, "__mlang_root_uri__", root_uri);
             }
         }
-        let ver_e: string = json_escape(version());
+        let ver_e: str8 = json_escape(version());
         return format!(
             "{{\"capabilities\":{{\"textDocumentSync\":{{\"openClose\":true,\"change\":1}},\"definitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"hoverProvider\":true,\"documentHighlightProvider\":true,\"completionProvider\":{{\"triggerCharacters\":[\".\",\":\"]}},\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},\"renameProvider\":{{\"prepareProvider\":true}},\"documentSymbolProvider\":true,\"workspaceSymbolProvider\":true,\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"codeActionProvider\":true,\"diagnosticProvider\":{{\"interFileDependencies\":false,\"workspaceDiagnostics\":false}},\"semanticTokensProvider\":{{\"legend\":{{\"tokenTypes\":[\"keyword\",\"macro\",\"function\",\"parameter\",\"variable\",\"type\",\"enumMember\"],\"tokenModifiers\":[\"declaration\",\"static\",\"readonly\"]}},\"full\":true}}}},\"serverInfo\":{{\"name\":\"mlangd-mla\",\"version\":\"{}\"}}}}",
             ver_e
@@ -3244,9 +3244,9 @@ fn dispatch_result_json(payload: string) -> string {
 }
 
 /// Dispatcher hook consumed by std::jsonrpc::run_stdio_loop.
-fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: string) -> string {
+fn __mlang_std_jsonrpc_runtime_dispatch(request_payload: str8) -> str8 {
     let id: i64 = extract_request_id(request_payload);
-    let result_json: string = dispatch_result_json(request_payload);
+    let result_json: str8 = dispatch_result_json(request_payload);
     if id < 0 {
         log_write(log_level_verbose(), "notification handled");
         return String::new();
@@ -3276,43 +3276,43 @@ fn has_version_flag(args: list<str8>) -> bool {
     return false;
 }
 
-fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, string> {
+fn run_server_stdio_loop(frame_capacity: i64) -> Result<i32, str8> {
     let transport: StdioTransport = stdio();
     var frame = String::with_capacity(frame_capacity);
     for _i in 0..2147483647 {
-        let rr: Result<i64, string> = transport.read_frame(frame, frame_capacity);
+        let rr: Result<i64, str8> = transport.read_frame(frame, frame_capacity);
         if rr.is_err() {
-            let e: string = rr.unwrap_err();
+            let e: str8 = rr.unwrap_err();
             String::free(frame);
             if contains(e, "missing Content-Length header") == 1 {
-                return Ok<i32, string>(0);
+                return Ok<i32, str8>(0);
             }
-            return Err<i32, string>(e);
+            return Err<i32, str8>(e);
         }
 
         let id: i64 = extract_request_id(frame);
-        let result_json: string = dispatch_result_json(frame);
+        let result_json: str8 = dispatch_result_json(frame);
         if id < 0 {
             continue;
         }
 
-        var response: string = String::new();
+        var response: str8 = String::new();
         if len(result_json) > 0 {
             response = make_result_response(id, result_json);
         } else {
             response = make_error_response(id, -32601, "Method not found");
         }
 
-        let wr: Result<i32, string> = transport.write_frame(response);
+        let wr: Result<i32, str8> = transport.write_frame(response);
         String::free(response);
         if wr.is_err() {
-            let ew: string = wr.unwrap_err();
+            let ew: str8 = wr.unwrap_err();
             String::free(frame);
-            return Err<i32, string>(ew);
+            return Err<i32, str8>(ew);
         }
     }
     String::free(frame);
-    return Ok<i32, string>(0);
+    return Ok<i32, str8>(0);
 }
 
 fn main(argc: i32, args: list<str8>) -> i32 {
@@ -3326,7 +3326,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
     log_write(log_level_info(), format!("mlangd-mla {} starting stdio loop", version()));
-    let r: Result<i32, string> = run_server_stdio_loop(262144);
+    let r: Result<i32, str8> = run_server_stdio_loop(262144);
     if r.is_err() {
         log_write(log_level_error(), format!("stdio loop error: {}", r.unwrap_err()));
         if g_log_handle != 0 {

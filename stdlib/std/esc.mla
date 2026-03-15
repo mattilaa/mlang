@@ -8,12 +8,12 @@
 ///
 /// Escape sequences auto-disable when `std::term::supports_ansi()` is false.
 
-extern pub fn __mlang_std_esc_reset() -> string;
-extern pub fn __mlang_std_esc_sgr_code(code: i32) -> string;
-extern pub fn __mlang_std_esc_sgr_palette(is_bg: i32, idx: i32) -> string;
-extern pub fn __mlang_std_esc_sgr_rgb(is_bg: i32, r: i32, g: i32, b: i32) -> string;
-extern pub fn __mlang_std_esc_cursor_code(code: i32) -> string;
-extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> string;
+extern pub fn __mlang_std_esc_reset() -> str8;
+extern pub fn __mlang_std_esc_sgr_code(code: i32) -> str8;
+extern pub fn __mlang_std_esc_sgr_palette(is_bg: i32, idx: i32) -> str8;
+extern pub fn __mlang_std_esc_sgr_rgb(is_bg: i32, r: i32, g: i32, b: i32) -> str8;
+extern pub fn __mlang_std_esc_cursor_code(code: i32) -> str8;
+extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> str8;
 extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
 
 use type Color = i32;
@@ -99,126 +99,126 @@ fn bg_code(c: Color) -> i32 {
 }
 
 /// @brief Reset all SGR styles/colors.
-pub fn reset() -> string {
+pub fn reset() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_reset();
 }
 
 /// @brief Set foreground color.
-pub fn fg(color: Color) -> string {
+pub fn fg(color: Color) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(fg_code(color));
 }
 
 /// @brief Set background color.
-pub fn bg(color: Color) -> string {
+pub fn bg(color: Color) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(bg_code(color));
 }
 
 /// @brief Set 256-color foreground (0..255).
-pub fn fg_256(index: i32) -> string {
+pub fn fg_256(index: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_palette(0, index);
 }
 
 /// @brief Set 256-color background (0..255).
-pub fn bg_256(index: i32) -> string {
+pub fn bg_256(index: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_palette(1, index);
 }
 
 /// @brief Set truecolor foreground using RGB channels (0..255 each).
-pub fn fg_rgb(r: i32, g: i32, b: i32) -> string {
+pub fn fg_rgb(r: i32, g: i32, b: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_rgb(0, r, g, b);
 }
 
 /// @brief Set truecolor background using RGB channels (0..255 each).
-pub fn bg_rgb(r: i32, g: i32, b: i32) -> string {
+pub fn bg_rgb(r: i32, g: i32, b: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_rgb(1, r, g, b);
 }
 
 /// @brief Enable bold text.
-pub fn bold_on() -> string {
+pub fn bold_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(1);
 }
 
 /// @brief Disable bold/dim text.
-pub fn bold_off() -> string {
+pub fn bold_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(22);
 }
 
 /// @brief Enable underline.
-pub fn underline_on() -> string {
+pub fn underline_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(4);
 }
 
 /// @brief Disable underline.
-pub fn underline_off() -> string {
+pub fn underline_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(24);
 }
 
 /// @brief Enable inverse video.
-pub fn inverse_on() -> string {
+pub fn inverse_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(7);
 }
 
 /// @brief Disable inverse video.
-pub fn inverse_off() -> string {
+pub fn inverse_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(27);
 }
 
 /// @brief Return a cursor control escape sequence.
-pub fn cursor(cmd: CursorCommand) -> string {
+pub fn cursor(cmd: CursorCommand) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_code(cmd);
 }
 
 /// @brief Move cursor by `amount` in given direction.
-pub fn cursor_move(dir: CursorDirection, amount: i32) -> string {
+pub fn cursor_move(dir: CursorDirection, amount: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_move(dir, amount);
 }
 
 /// @brief Enter alternate screen buffer (ncurses-like full-screen mode).
-pub fn alt_screen_on() -> string {
+pub fn alt_screen_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[?1049h";
 }
 
 /// @brief Leave alternate screen buffer.
-pub fn alt_screen_off() -> string {
+pub fn alt_screen_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[?1049l";
 }
 
 /// @brief Clear from cursor to end-of-line.
-pub fn clear_eol() -> string {
+pub fn clear_eol() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[K";
 }
 
 /// @brief ncurses-style standout aliases.
-pub fn standout_on() -> string { return inverse_on(); }
-pub fn standout_off() -> string { return inverse_off(); }
+pub fn standout_on() -> str8 { return inverse_on(); }
+pub fn standout_off() -> str8 { return inverse_off(); }
 
 /// @brief ncurses-style ACS line-drawing (ASCII-safe).
-pub fn acs_hline() -> string { return format!("{}", "─"); }
-pub fn acs_vline() -> string { return format!("{}", "│"); }
-pub fn acs_ulcorner() -> string { return format!("{}", "┌"); }
-pub fn acs_urcorner() -> string { return format!("{}", "┐"); }
-pub fn acs_llcorner() -> string { return format!("{}", "└"); }
-pub fn acs_lrcorner() -> string { return format!("{}", "┘"); }
-pub fn acs_ltee() -> string { return format!("{}", "├"); }
-pub fn acs_rtee() -> string { return format!("{}", "┤"); }
-pub fn acs_ttee() -> string { return format!("{}", "┬"); }
-pub fn acs_btee() -> string { return format!("{}", "┴"); }
-pub fn acs_plus() -> string { return format!("{}", "┼"); }
+pub fn acs_hline() -> str8 { return format!("{}", "─"); }
+pub fn acs_vline() -> str8 { return format!("{}", "│"); }
+pub fn acs_ulcorner() -> str8 { return format!("{}", "┌"); }
+pub fn acs_urcorner() -> str8 { return format!("{}", "┐"); }
+pub fn acs_llcorner() -> str8 { return format!("{}", "└"); }
+pub fn acs_lrcorner() -> str8 { return format!("{}", "┘"); }
+pub fn acs_ltee() -> str8 { return format!("{}", "├"); }
+pub fn acs_rtee() -> str8 { return format!("{}", "┤"); }
+pub fn acs_ttee() -> str8 { return format!("{}", "┬"); }
+pub fn acs_btee() -> str8 { return format!("{}", "┴"); }
+pub fn acs_plus() -> str8 { return format!("{}", "┼"); }

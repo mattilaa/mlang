@@ -32,10 +32,10 @@ extern pub fn __mlang_std_testing_expect_eq_bool(expected: i32,
                                                  actual: i32) -> void;
 extern pub fn __mlang_std_testing_expect_not_eq_bool(expected: i32,
                                                      actual: i32) -> void;
-extern pub fn __mlang_std_testing_expect_eq_string(expected: string,
-                                                   actual: string) -> void;
-extern pub fn __mlang_std_testing_expect_not_eq_string(expected: string,
-                                                       actual: string) -> void;
+extern pub fn __mlang_std_testing_expect_eq_string(expected: str8,
+                                                   actual: str8) -> void;
+extern pub fn __mlang_std_testing_expect_not_eq_string(expected: str8,
+                                                       actual: str8) -> void;
 extern pub fn __mlang_std_testing_expect_eq_f32(expected: f32,
                                                 actual: f32) -> void;
 extern pub fn __mlang_std_testing_expect_not_eq_f32(expected: f32,
@@ -58,10 +58,10 @@ extern pub fn __mlang_std_testing_verify_eq_bool(expected: i32,
                                                  actual: i32) -> void;
 extern pub fn __mlang_std_testing_verify_not_eq_bool(expected: i32,
                                                      actual: i32) -> void;
-extern pub fn __mlang_std_testing_verify_eq_string(expected: string,
-                                                   actual: string) -> void;
-extern pub fn __mlang_std_testing_verify_not_eq_string(expected: string,
-                                                       actual: string) -> void;
+extern pub fn __mlang_std_testing_verify_eq_string(expected: str8,
+                                                   actual: str8) -> void;
+extern pub fn __mlang_std_testing_verify_not_eq_string(expected: str8,
+                                                       actual: str8) -> void;
 extern pub fn __mlang_std_testing_verify_eq_f32(expected: f32,
                                                 actual: f32) -> void;
 extern pub fn __mlang_std_testing_verify_not_eq_f32(expected: f32,
@@ -74,12 +74,12 @@ extern pub fn __mlang_std_testing_mock_create() -> i64;
 extern pub fn __mlang_std_testing_mock_destroy(handle: i64) -> void;
 extern pub fn __mlang_std_testing_mock_reset(handle: i64) -> void;
 extern pub fn __mlang_std_testing_mock_expect_called(handle: i64,
-                                                     name: string,
+                                                     name: str8,
                                                      expected_calls: i32) -> void;
 extern pub fn __mlang_std_testing_mock_called(handle: i64,
-                                              name: string) -> void;
+                                              name: str8) -> void;
 extern pub fn __mlang_std_testing_mock_actual_calls(handle: i64,
-                                                    name: string) -> i32;
+                                                    name: str8) -> i32;
 extern pub fn __mlang_std_testing_mock_verify(handle: i64) -> i32;
 
 fn bool_to_i32(v: bool) -> i32 {
@@ -186,13 +186,13 @@ pub fn expect_not_eq(left: bool, right: bool) -> void {
 
 /// Expect equality for string values.
 /// @ingroup std_testing
-pub fn expect_eq(expected: string, actual: string) -> void {
+pub fn expect_eq(expected: str8, actual: str8) -> void {
     __mlang_std_testing_expect_eq_string(expected, actual);
 }
 
 /// Expect inequality for string values.
 /// @ingroup std_testing
-pub fn expect_not_eq(left: string, right: string) -> void {
+pub fn expect_not_eq(left: str8, right: str8) -> void {
     __mlang_std_testing_expect_not_eq_string(left, right);
 }
 
@@ -290,13 +290,13 @@ pub fn verify_not_eq(left: bool, right: bool) -> void {
 
 /// Verify equality for string values. Fatal on failure.
 /// @ingroup std_testing
-pub fn verify_eq(expected: string, actual: string) -> void {
+pub fn verify_eq(expected: str8, actual: str8) -> void {
     __mlang_std_testing_verify_eq_string(expected, actual);
 }
 
 /// Verify inequality for string values. Fatal on failure.
 /// @ingroup std_testing
-pub fn verify_not_eq(left: string, right: string) -> void {
+pub fn verify_not_eq(left: str8, right: str8) -> void {
     __mlang_std_testing_verify_not_eq_string(left, right);
 }
 
@@ -365,7 +365,7 @@ pub fn expect_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
 
 /// Expect equality for string arrays (non-fatal).
 /// @ingroup std_testing
-pub fn expect_array_eq(expected: &list<string>, actual: &list<string>) -> void {
+pub fn expect_array_eq(expected: &list<str8>, actual: &list<str8>) -> void {
     if expected.len() != actual.len() {
         expect_true(false);
         return;
@@ -417,7 +417,7 @@ pub fn verify_array_eq(expected: &list<bool>, actual: &list<bool>) -> void {
 
 /// Verify equality for string arrays (fatal).
 /// @ingroup std_testing
-pub fn verify_array_eq(expected: &list<string>, actual: &list<string>) -> void {
+pub fn verify_array_eq(expected: &list<str8>, actual: &list<str8>) -> void {
     if expected.len() != actual.len() {
         verify_true(false);
         return;
@@ -485,7 +485,7 @@ pub fn expect_array_not_eq(left: &list<bool>, right: &list<bool>) -> void {
 /// Expect inequality for string arrays (non-fatal).
 /// Passes when arrays differ by length or at least one element.
 /// @ingroup std_testing
-pub fn expect_array_not_eq(left: &list<string>, right: &list<string>) -> void {
+pub fn expect_array_not_eq(left: &list<str8>, right: &list<str8>) -> void {
     if left.len() != right.len() {
         expect_true(true);
         return;
@@ -557,7 +557,7 @@ pub fn verify_array_not_eq(left: &list<bool>, right: &list<bool>) -> void {
 /// Verify inequality for string arrays (fatal).
 /// Passes when arrays differ by length or at least one element.
 /// @ingroup std_testing
-pub fn verify_array_not_eq(left: &list<string>, right: &list<string>) -> void {
+pub fn verify_array_not_eq(left: &list<str8>, right: &list<str8>) -> void {
     if left.len() != right.len() {
         verify_true(true);
         return;
@@ -601,17 +601,17 @@ pub fn mock_reset(handle: i64) -> void {
 }
 
 /// Set expected invocation count for a call name.
-pub fn mock_expect_call(handle: i64, name: string, expected_calls: i32) -> void {
+pub fn mock_expect_call(handle: i64, name: str8, expected_calls: i32) -> void {
     __mlang_std_testing_mock_expect_called(handle, name, expected_calls);
 }
 
 /// Record one invocation for a call name.
-pub fn mock_called(handle: i64, name: string) -> void {
+pub fn mock_called(handle: i64, name: str8) -> void {
     __mlang_std_testing_mock_called(handle, name);
 }
 
 /// Return the currently recorded call count for a call name.
-pub fn mock_calls(handle: i64, name: string) -> i32 {
+pub fn mock_calls(handle: i64, name: str8) -> i32 {
     return __mlang_std_testing_mock_actual_calls(handle, name);
 }
 

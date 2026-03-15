@@ -1452,7 +1452,7 @@ static bool is_reserved_type_keyword(const char* s)
         return false;
     return strcmp(s, "void") == 0 || strcmp(s, "bool") == 0 ||
            strcmp(s, "f32") == 0 ||
-           strcmp(s, "f64") == 0 || strcmp(s, "string") == 0 ||
+           strcmp(s, "f64") == 0 ||
            strcmp(s, "str8") == 0 || strcmp(s, "str16") == 0 ||
            strcmp(s, "list") == 0 || strcmp(s, "map") == 0 ||
            strcmp(s, "tuple") == 0 || strcmp(s, "i8") == 0 ||

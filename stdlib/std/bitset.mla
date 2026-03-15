@@ -4,7 +4,7 @@
 /// Unlike `list<bool>`, this stores bits densely (1 bit per value).
 /// Useful for protocol flags, bloom-like masks, and compact state vectors.
 
-extern pub fn __mlang_std_bitset_last_error() -> string;
+extern pub fn __mlang_std_bitset_last_error() -> str8;
 extern pub fn __mlang_std_bitset_new(bit_capacity: i64) -> i64;
 extern pub fn __mlang_std_bitset_free(handle: i64) -> i32;
 extern pub fn __mlang_std_bitset_len(handle: i64) -> i64;
@@ -28,18 +28,18 @@ pub struct BitSet {
 };
 
 /// @brief Last backend error string.
-pub fn last_error() -> string {
+pub fn last_error() -> str8 {
     return __mlang_std_bitset_last_error();
 }
 
 impl BitSet {
     /// @brief Create bitset with reserved capacity in bits.
-    pub fn new(bit_capacity: i64) -> Result<BitSet, string> {
+    pub fn new(bit_capacity: i64) -> Result<BitSet, str8> {
         let h: i64 = __mlang_std_bitset_new(bit_capacity);
         if h == 0 {
-            return Err<BitSet, string>(last_error());
+            return Err<BitSet, str8>(last_error());
         }
-        return Ok<BitSet, string>(BitSet { handle: h });
+        return Ok<BitSet, str8>(BitSet { handle: h });
     }
 
     /// @brief Number of active bits.
@@ -70,12 +70,12 @@ impl BitSet {
     }
 
     /// @brief Read bit at index (`Err` on out-of-range).
-    pub fn get(self: BitSet, index: i64) -> Result<bool, string> {
+    pub fn get(self: BitSet, index: i64) -> Result<bool, str8> {
         let v: i32 = __mlang_std_bitset_get(self.handle, index);
         if v < 0 {
-            return Err<bool, string>(last_error());
+            return Err<bool, str8>(last_error());
         }
-        return Ok<bool, string>(v == 1);
+        return Ok<bool, str8>(v == 1);
     }
 
     /// @brief Flip bit at index.
@@ -90,12 +90,12 @@ impl BitSet {
     }
 
     /// @brief Remove and return last bit (`Err` on empty).
-    pub fn pop(self: BitSet) -> Result<bool, string> {
+    pub fn pop(self: BitSet) -> Result<bool, str8> {
         let v: i32 = __mlang_std_bitset_pop(self.handle);
         if v < 0 {
-            return Err<bool, string>(last_error());
+            return Err<bool, str8>(last_error());
         }
-        return Ok<bool, string>(v == 1);
+        return Ok<bool, str8>(v == 1);
     }
 
     /// @brief Count number of set bits.

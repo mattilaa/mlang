@@ -60,12 +60,12 @@ fn usage() -> void {
     writeln(stdout(), "Usage: mlang-format [-i] [--style file] [--root <dir>] [--assume-filename <path>] [path]");
 }
 
-fn fail(message: string) -> i32 {
+fn fail(message: str8) -> i32 {
     writeln(stderr(), message);
     return 1;
 }
 
-fn parse_indent_width(line: string, fallback: i64) -> i64 {
+fn parse_indent_width(line: str8, fallback: i64) -> i64 {
     if starts_with(line, "IndentWidth:") == 0 {
         return fallback;
     }
@@ -86,7 +86,7 @@ fn parse_indent_width(line: string, fallback: i64) -> i64 {
     return fallback;
 }
 
-fn parse_ensure_trailing_newline(line: string, fallback: bool) -> bool {
+fn parse_ensure_trailing_newline(line: str8, fallback: bool) -> bool {
     if starts_with(line, "EnsureTrailingNewline:") == 0 {
         return fallback;
     }
@@ -105,7 +105,7 @@ fn parse_ensure_trailing_newline(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
-fn parse_space_after_comma(line: string, fallback: bool) -> bool {
+fn parse_space_after_comma(line: str8, fallback: bool) -> bool {
     if starts_with(line, "SpaceAfterComma:") == 0 {
         return fallback;
     }
@@ -116,7 +116,7 @@ fn parse_space_after_comma(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
-fn parse_space_after_colon(line: string, fallback: bool) -> bool {
+fn parse_space_after_colon(line: str8, fallback: bool) -> bool {
     if starts_with(line, "SpaceAfterColon:") == 0 {
         return fallback;
     }
@@ -127,7 +127,7 @@ fn parse_space_after_colon(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
-fn parse_space_around_operators(line: string, fallback: bool) -> bool {
+fn parse_space_around_operators(line: str8, fallback: bool) -> bool {
     if starts_with(line, "SpaceAroundOperators:") == 0 {
         return fallback;
     }
@@ -138,7 +138,7 @@ fn parse_space_around_operators(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
-fn parse_space_around_relational_operators(line: string, fallback: bool) -> bool {
+fn parse_space_around_relational_operators(line: str8, fallback: bool) -> bool {
     if starts_with(line, "SpaceAroundRelationalOperators:") == 0 {
         return fallback;
     }
@@ -149,7 +149,7 @@ fn parse_space_around_relational_operators(line: string, fallback: bool) -> bool
     return fallback;
 }
 
-fn parse_space_inside_braces_single_line(line: string, fallback: bool) -> bool {
+fn parse_space_inside_braces_single_line(line: str8, fallback: bool) -> bool {
     if starts_with(line, "SpaceInsideBracesSingleLine:") == 0 {
         return fallback;
     }
@@ -160,7 +160,7 @@ fn parse_space_inside_braces_single_line(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
-fn parse_compact_fat_arrow(line: string, fallback: bool) -> bool {
+fn parse_compact_fat_arrow(line: str8, fallback: bool) -> bool {
     if starts_with(line, "CompactFatArrow:") == 0 {
         return fallback;
     }
@@ -171,18 +171,18 @@ fn parse_compact_fat_arrow(line: string, fallback: bool) -> bool {
     return fallback;
 }
 
-fn read_config(path: string) -> FormatConfig {
-    let open_r: Result<File, string> = File::open(path);
+fn read_config(path: str8) -> FormatConfig {
+    let open_r: Result<File, str8> = File::open(path);
     if open_r.is_err() {
         return default_config();
     }
     let file: File = open_r.unwrap();
     let reader: BufReader = BufReader::new(file);
-    let lines: list<string> = reader.lines();
+    let lines: list<str8> = reader.lines();
 
     var cfg: FormatConfig = default_config();
     for raw in lines {
-        let line: string = trim(raw);
+        let line: str8 = trim(raw);
         if len(line) == 0 {
             continue;
         }
@@ -219,7 +219,7 @@ fn read_config(path: string) -> FormatConfig {
     return cfg;
 }
 
-fn normalize_start_dir(start_path: string) -> string {
+fn normalize_start_dir(start_path: str8) -> str8 {
     if len(start_path) == 0 {
         return cwd();
     }
@@ -229,12 +229,12 @@ fn normalize_start_dir(start_path: string) -> string {
     return start_path;
 }
 
-fn find_config(start_path: string, root_path: string) -> string {
-    var current: string = normalize_start_dir(start_path);
+fn find_config(start_path: str8, root_path: str8) -> str8 {
+    var current: str8 = normalize_start_dir(start_path);
     var root_enabled: bool = len(root_path) > 0;
 
     for _i in 0..128 {
-        let candidate: string = concat(current, "/.mlang-format");
+        let candidate: str8 = concat(current, "/.mlang-format");
         if file_exists(candidate) == 1 {
             return candidate;
         }
@@ -243,7 +243,7 @@ fn find_config(start_path: string, root_path: string) -> string {
                 return "";
             }
         }
-        let parent: string = parent_dir(current);
+        let parent: str8 = parent_dir(current);
         if eq(parent, current) == 1 {
             return "";
         }
@@ -259,8 +259,8 @@ fn bool_to_int(v: bool) -> i32 {
     return 0;
 }
 
-fn apply_config_format(text: string, cfg: FormatConfig) -> string {
-    var formatted: string = format_text_with_style_options(
+fn apply_config_format(text: str8, cfg: FormatConfig) -> str8 {
+    var formatted: str8 = format_text_with_style_options(
         text,
         cfg.indent_width,
         1,
@@ -280,19 +280,19 @@ fn apply_config_format(text: string, cfg: FormatConfig) -> string {
     return rtrim(formatted);
 }
 
-fn read_stdin_all() -> string {
+fn read_stdin_all() -> str8 {
     let input: Stdin = stdin();
-    let buf: string = String::with_capacity(8192);
-    var out: string = String::new();
+    let buf: str8 = String::with_capacity(8192);
+    var out: str8 = String::new();
     for _i in 0..2147483647 {
         let n: i64 = read_line(input, buf, 8192);
         if n < 0 {
             break;
         }
-        let t1: string = concat(out, buf);
+        let t1: str8 = concat(out, buf);
         String::free(out);
         out = t1;
-        let t2: string = concat(out, "\n");
+        let t2: str8 = concat(out, "\n");
         String::free(out);
         out = t2;
     }
@@ -302,10 +302,10 @@ fn read_stdin_all() -> string {
 
 fn main(argc: i32, args: list<str8>) -> i32 {
     var in_place: bool = false;
-    var root_path: string = "";
-    var assume_filename: string = "";
-    var style: string = "file";
-    var target_path: string = "";
+    var root_path: str8 = "";
+    var assume_filename: str8 = "";
+    var style: str8 = "file";
+    var target_path: str8 = "";
 
     var seen_prog: bool = false;
     var expect_root: bool = false;
@@ -380,7 +380,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             continue;
         }
 
-        let arg_s: string = format!("{}", arg);
+        let arg_s: str8 = format!("{}", arg);
         if starts_with(arg_s, "--assume-filename=") == 1 {
             let off: i64 = len("--assume-filename=");
             assume_filename = sub(arg_s, off, len(arg_s) - off);
@@ -427,7 +427,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
 
-    var config_anchor: string = cwd();
+    var config_anchor: str8 = cwd();
     if len(target_path) > 0 {
         config_anchor = target_path;
     }
@@ -435,21 +435,21 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         config_anchor = assume_filename;
     }
 
-    let config_path: string = find_config(config_anchor, root_path);
+    let config_path: str8 = find_config(config_anchor, root_path);
     var cfg: FormatConfig = default_config();
     if len(config_path) > 0 {
         cfg = read_config(config_path);
     }
 
     if len(target_path) > 0 {
-        let read_r: Result<string, string> = read_all_text(target_path);
+        let read_r: Result<str8, str8> = read_all_text(target_path);
         if read_r.is_err() {
             return fail(format!("mlang-format: failed to read '{}'", target_path));
         }
-        let text: string = read_r.unwrap();
-        let formatted: string = apply_config_format(text, cfg);
+        let text: str8 = read_r.unwrap();
+        let formatted: str8 = apply_config_format(text, cfg);
         if in_place {
-            let wr: Result<i32, string> = write_all_text(target_path, formatted);
+            let wr: Result<i32, str8> = write_all_text(target_path, formatted);
             if wr.is_err() {
                 return fail(format!("mlang-format: failed to write '{}'", target_path));
             }
@@ -459,8 +459,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 0;
     }
 
-    let stdin_text: string = read_stdin_all();
-    let formatted_stdin: string = apply_config_format(stdin_text, cfg);
+    let stdin_text: str8 = read_stdin_all();
+    let formatted_stdin: str8 = apply_config_format(stdin_text, cfg);
     write_sync(stdout(), formatted_stdin);
     return 0;
 }

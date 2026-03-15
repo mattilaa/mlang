@@ -31,26 +31,26 @@ pub fn now() -> DateTime {
 }
 
 /// @brief Format as `YYYY-MM-DDTHH:MM:SS`.
-pub fn format_iso8601(dt: DateTime) -> string {
-    let mm: string = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
-    let dd: string = dt.day < 10 ? format!("0{}", dt.day) : format!("{}", dt.day);
-    let hh: string = dt.hour < 10 ? format!("0{}", dt.hour) : format!("{}", dt.hour);
-    let mi: string = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
-    let ss: string = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
+pub fn format_iso8601(dt: DateTime) -> str8 {
+    let mm: str8 = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
+    let dd: str8 = dt.day < 10 ? format!("0{}", dt.day) : format!("{}", dt.day);
+    let hh: str8 = dt.hour < 10 ? format!("0{}", dt.hour) : format!("{}", dt.hour);
+    let mi: str8 = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
+    let ss: str8 = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
     return format!("{}-{}-{}T{}:{}:{}", dt.year, mm, dd, hh, mi, ss);
 }
 
 /// @brief Format as `MM/DD/YYYY`.
-pub fn format_date(dt: DateTime) -> string {
-    let mm: string = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
-    let dd: string = dt.day < 10 ? format!("0{}", dt.day) : format!("{}", dt.day);
+pub fn format_date(dt: DateTime) -> str8 {
+    let mm: str8 = dt.month < 10 ? format!("0{}", dt.month) : format!("{}", dt.month);
+    let dd: str8 = dt.day < 10 ? format!("0{}", dt.day) : format!("{}", dt.day);
     return format!("{}/{}/{}", mm, dd, dt.year);
 }
 
 /// @brief Format as `HH:MM:SS`.
-pub fn format_time(dt: DateTime) -> string {
-    let hh: string = dt.hour < 10 ? format!("0{}", dt.hour) : format!("{}", dt.hour);
-    let mi: string = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
-    let ss: string = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
+pub fn format_time(dt: DateTime) -> str8 {
+    let hh: str8 = dt.hour < 10 ? format!("0{}", dt.hour) : format!("{}", dt.hour);
+    let mi: str8 = dt.minute < 10 ? format!("0{}", dt.minute) : format!("{}", dt.minute);
+    let ss: str8 = dt.second < 10 ? format!("0{}", dt.second) : format!("{}", dt.second);
     return format!("{}:{}:{}", hh, mi, ss);
 }

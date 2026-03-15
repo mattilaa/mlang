@@ -6,7 +6,7 @@ mod std::sync;
 use std::sync::LockFreeQueue;
 /// \endcond
 
-extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: string) -> i64;
+extern pub fn __mlang_std_timer_async_ticker_new(queue_handle: i64, interval_ms: i64, event_name: str8) -> i64;
 extern pub fn __mlang_std_timer_async_ticker_stop(handle: i64) -> i32;
 extern pub fn __mlang_std_timer_async_ticker_free(handle: i64) -> i32;
 
@@ -18,16 +18,16 @@ pub struct EventLoop {
 impl EventLoop {
     /// @brief Start event loop ticker thread that periodically posts `event_name`
     /// to `queue_handle`. Use lock-free queue try_recv in main loop.
-    pub fn start(queue_handle: i64, interval_ms: i64, event_name: string) -> Result<EventLoop, string> {
+    pub fn start(queue_handle: i64, interval_ms: i64, event_name: str8) -> Result<EventLoop, str8> {
         let h: i64 = __mlang_std_timer_async_ticker_new(queue_handle, interval_ms, event_name);
         if h == 0 {
-            return Err<EventLoop, string>("std::event_loop::EventLoop::start failed");
+            return Err<EventLoop, str8>("std::event_loop::EventLoop::start failed");
         }
-        return Ok<EventLoop, string>(EventLoop { ticker_handle: h });
+        return Ok<EventLoop, str8>(EventLoop { ticker_handle: h });
     }
 
     /// @brief Start ticker using `std::sync::LockFreeQueue`.
-    pub fn start_queue(queue: LockFreeQueue, interval_ms: i64, event_name: string) -> Result<EventLoop, string> {
+    pub fn start_queue(queue: LockFreeQueue, interval_ms: i64, event_name: str8) -> Result<EventLoop, str8> {
         return EventLoop::start(queue.handle, interval_ms, event_name);
     }
 

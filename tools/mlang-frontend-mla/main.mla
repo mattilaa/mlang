@@ -34,14 +34,14 @@ use std::strbuf::trim;
 /// \endcond
 
 struct FrontendState {
-    var backend: string;
-    var passthrough: list<string>;
+    var backend: str8;
+    var passthrough: list<str8>;
     var show_help: i32;
     var show_version: i32;
-    var parse_error: string;
+    var parse_error: str8;
 };
 
-fn print_usage(program: string) -> void {
+fn print_usage(program: str8) -> void {
     println!("Usage: {} [--backend <mlang_bin>] [compiler args...]", program);
     println!("Version: {}", version());
     println!("");
@@ -94,14 +94,14 @@ fn print_usage(program: string) -> void {
     println!("  (or set MLANG_STDLIB_LIB_PATH=~/.local/lib)");
 }
 
-fn run_inherit(program: string, args: list<string>) -> i32 {
-    let cr: Result<Child, string> = spawn_inherit(program, args);
+fn run_inherit(program: str8, args: list<str8>) -> i32 {
+    let cr: Result<Child, str8> = spawn_inherit(program, args);
     if (cr.is_err()) {
         eprintln!("failed to spawn '{}': {}", program, cr.unwrap_err());
         return 1;
     }
     let child: Child = cr.unwrap();
-    let wr: Result<ExitStatus, string> = child.wait();
+    let wr: Result<ExitStatus, str8> = child.wait();
     if (wr.is_err()) {
         eprintln!("wait failed for '{}': {}", program, wr.unwrap_err());
         child.close();
@@ -115,28 +115,28 @@ fn run_inherit(program: string, args: list<string>) -> i32 {
     return st.code();
 }
 
-fn run_capture_stdout(program: string, args: list<string>) -> Result<string, string> {
-    let cr: Result<Child, string> = spawn(program, args);
+fn run_capture_stdout(program: str8, args: list<str8>) -> Result<str8, str8> {
+    let cr: Result<Child, str8> = spawn(program, args);
     if (cr.is_err()) {
-        return Err<string, string>(format!("failed to spawn '{}': {}", program, cr.unwrap_err()));
+        return Err<str8, str8>(format!("failed to spawn '{}': {}", program, cr.unwrap_err()));
     }
     let child: Child = cr.unwrap();
-    let or: Result<ChildStdout, string> = child.stdout();
+    let or: Result<ChildStdout, str8> = child.stdout();
     if (or.is_err()) {
         child.close();
-        return Err<string, string>("failed to capture stdout");
+        return Err<str8, str8>("failed to capture stdout");
     }
     let out: ChildStdout = or.unwrap();
 
-    var buf: string = String::with_capacity(4096);
-    var text: string = String::new();
+    var buf: str8 = String::with_capacity(4096);
+    var text: str8 = String::new();
     for _i in 0..8192 {
-        let rr: Result<i64, string> = out.read(buf, 4096);
+        let rr: Result<i64, str8> = out.read(buf, 4096);
         if (rr.is_err()) {
             out.close();
             child.close();
             String::free(buf);
-            return Err<string, string>("failed to read child stdout");
+            return Err<str8, str8>("failed to read child stdout");
         }
         let n: i64 = rr.unwrap();
         if (n <= 0) {
@@ -147,24 +147,24 @@ fn run_capture_stdout(program: string, args: list<string>) -> Result<string, str
     out.close();
     String::free(buf);
 
-    let wr: Result<ExitStatus, string> = child.wait();
+    let wr: Result<ExitStatus, str8> = child.wait();
     if (wr.is_err()) {
         child.close();
-        return Err<string, string>("wait failed");
+        return Err<str8, str8>("wait failed");
     }
     let st: ExitStatus = wr.unwrap();
     child.close();
     if (st.success() != 1) {
-        return Err<string, string>(format!("command exited with {}", st.code()));
+        return Err<str8, str8>(format!("command exited with {}", st.code()));
     }
-    return Ok<string, string>(text);
+    return Ok<str8, str8>(text);
 }
 
-fn shell_quote(s: string) -> string {
-    var out: string = "'";
+fn shell_quote(s: str8) -> str8 {
+    var out: str8 = "'";
     let n: i64 = len(s);
     for i in 0..n {
-        let ch: string = sub(s, i, 1);
+        let ch: str8 = sub(s, i, 1);
         if eq(ch, "'") == 1 {
             out = concat(out, "'\\''");
         } else {
@@ -175,8 +175,8 @@ fn shell_quote(s: string) -> string {
     return out;
 }
 
-fn build_shell_command(program: string, args: list<string>) -> string {
-    var cmd: string = shell_quote(program);
+fn build_shell_command(program: str8, args: list<str8>) -> str8 {
+    var cmd: str8 = shell_quote(program);
     let n: i64 = args.len();
     for i in 0..n {
         cmd = concat(cmd, " ");
@@ -185,17 +185,17 @@ fn build_shell_command(program: string, args: list<string>) -> string {
     return cmd;
 }
 
-fn run_shell_inherit(cmd: string) -> i32 {
+fn run_shell_inherit(cmd: str8) -> i32 {
     return run_inherit("/bin/sh", ["-c", cmd]);
 }
 
-fn split_lines(content: string) -> list<string> {
-    var out: list<string> = [];
-    var cur: string = String::new();
+fn split_lines(content: str8) -> list<str8> {
+    var out: list<str8> = [];
+    var cur: str8 = String::new();
     let n: i64 = len(content);
     if n == 0 { return out; }
     for i in 0..n {
-        let ch: string = sub(content, i, 1);
+        let ch: str8 = sub(content, i, 1);
         if eq(ch, "\n") == 1 {
             out.push(cur);
             cur = String::new();
@@ -212,7 +212,7 @@ fn split_lines(content: string) -> list<string> {
     return out;
 }
 
-fn basename(path: string) -> string {
+fn basename(path: str8) -> str8 {
     let p: i64 = rfind(path, "/");
     if p < 0 { return path; }
     let n: i64 = len(path);
@@ -220,14 +220,14 @@ fn basename(path: string) -> string {
     return sub(path, p + 1, n - p - 1);
 }
 
-fn parent_dir(path: string) -> string {
+fn parent_dir(path: str8) -> str8 {
     let p: i64 = rfind(path, "/");
     if p < 0 { return "."; }
     if p == 0 { return "/"; }
     return sub(path, 0, p);
 }
 
-fn join_path(base: string, tail: string) -> string {
+fn join_path(base: str8, tail: str8) -> str8 {
     if len(base) == 0 {
         return tail;
     }
@@ -237,14 +237,14 @@ fn join_path(base: string, tail: string) -> string {
     return concat(concat(base, "/"), tail);
 }
 
-fn stdlib_lib_exists(dir: string) -> i32 {
+fn stdlib_lib_exists(dir: str8) -> i32 {
     if file_exists(concat(dir, "/libmlang_std.a")) == 1 { return 1; }
     if file_exists(concat(dir, "/libmlang_std.so")) == 1 { return 1; }
     if file_exists(concat(dir, "/libmlang_std.dylib")) == 1 { return 1; }
     return 0;
 }
 
-fn list_contains(values: list<string>, needle: string) -> i32 {
+fn list_contains(values: list<str8>, needle: str8) -> i32 {
     for v in values {
         if eq(v, needle) == 1 {
             return 1;
@@ -253,12 +253,12 @@ fn list_contains(values: list<string>, needle: string) -> i32 {
     return 0;
 }
 
-fn split_env_paths(env: string) -> list<string> {
-    var out: list<string> = [];
-    var cur: string = String::new();
+fn split_env_paths(env: str8) -> list<str8> {
+    var out: list<str8> = [];
+    var cur: str8 = String::new();
     let n: i64 = len(env);
     for i in 0..n {
-        let ch: string = sub(env, i, 1);
+        let ch: str8 = sub(env, i, 1);
         if eq(ch, ":") == 1 {
             if len(trim(cur)) > 0 {
                 out.push(cur);
@@ -274,30 +274,30 @@ fn split_env_paths(env: string) -> list<string> {
     return out;
 }
 
-fn default_stdlib_paths() -> list<string> {
-    var out: list<string> = [];
-    let stdlib_path: string = getenv_value("MLANG_STDLIB_PATH");
+fn default_stdlib_paths() -> list<str8> {
+    var out: list<str8> = [];
+    let stdlib_path: str8 = getenv_value("MLANG_STDLIB_PATH");
     if len(stdlib_path) > 0 {
-        let env_paths: list<string> = split_env_paths(stdlib_path);
+        let env_paths: list<str8> = split_env_paths(stdlib_path);
         for p in env_paths {
             if len(trim(p)) > 0 {
                 out.push(p);
             }
         }
     }
-    let src_dir: string = getenv_value("MLANG_STDLIB_SOURCE_DIR");
+    let src_dir: str8 = getenv_value("MLANG_STDLIB_SOURCE_DIR");
     if len(src_dir) > 0 {
         out.push(src_dir);
     }
-    let xdg: string = getenv_value("XDG_DATA_HOME");
+    let xdg: str8 = getenv_value("XDG_DATA_HOME");
     if len(xdg) > 0 {
         out.push(concat(xdg, "/mlang/stdlib"));
     }
-    let home: string = getenv_value("HOME");
+    let home: str8 = getenv_value("HOME");
     if len(home) > 0 {
         out.push(concat(home, "/.local/share/mlang/stdlib"));
     }
-    let install_dir: string = getenv_value("MLANG_STDLIB_INSTALL_DIR");
+    let install_dir: str8 = getenv_value("MLANG_STDLIB_INSTALL_DIR");
     if len(install_dir) > 0 {
         out.push(install_dir);
     }
@@ -306,8 +306,8 @@ fn default_stdlib_paths() -> list<string> {
     return out;
 }
 
-fn extend_unique(dest: list<string>, src: list<string>) -> list<string> {
-    var out: list<string> = [];
+fn extend_unique(dest: list<str8>, src: list<str8>) -> list<str8> {
+    var out: list<str8> = [];
     for v in dest { out.push(v); }
     for v in src {
         if list_contains(out, v) == 0 {
@@ -317,27 +317,27 @@ fn extend_unique(dest: list<string>, src: list<string>) -> list<string> {
     return out;
 }
 
-fn append_stdlib_paths(paths: list<string>) -> list<string> {
+fn append_stdlib_paths(paths: list<str8>) -> list<str8> {
     return extend_unique(paths, default_stdlib_paths());
 }
 
-fn default_stdlib_lib_paths() -> list<string> {
-    var out: list<string> = [];
-    let lib_path: string = getenv_value("MLANG_STDLIB_LIB_PATH");
+fn default_stdlib_lib_paths() -> list<str8> {
+    var out: list<str8> = [];
+    let lib_path: str8 = getenv_value("MLANG_STDLIB_LIB_PATH");
     if len(lib_path) > 0 {
-        let env_lib_paths: list<string> = split_env_paths(lib_path);
+        let env_lib_paths: list<str8> = split_env_paths(lib_path);
         for p in env_lib_paths {
             if len(trim(p)) > 0 {
                 out.push(p);
             }
         }
     }
-    let home: string = getenv_value("HOME");
+    let home: str8 = getenv_value("HOME");
     if len(home) > 0 {
         out.push(concat(home, "/.local/lib"));
         out.push(concat(home, "/.local/lib/mlang"));
     }
-    let install_lib: string = getenv_value("MLANG_STDLIB_LIB_INSTALL_DIR");
+    let install_lib: str8 = getenv_value("MLANG_STDLIB_LIB_INSTALL_DIR");
     if len(install_lib) > 0 {
         out.push(install_lib);
     }
@@ -348,8 +348,8 @@ fn default_stdlib_lib_paths() -> list<string> {
     return out;
 }
 
-fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> {
-    var out: list<string> = [];
+fn ensure_stdlib_link_args(args: list<str8>, backend: str8) -> list<str8> {
+    var out: list<str8> = [];
     var has_stdlib: i32 = 0;
     for a in args {
         if eq(a, "-lmlang_std") == 1 || eq(a, "-lmlang_stdlib") == 1 {
@@ -361,22 +361,22 @@ fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> 
         return out;
     }
 
-    var search_paths: list<string> = [];
-    let be_dir: string = parent_dir(backend);
+    var search_paths: list<str8> = [];
+    let be_dir: str8 = parent_dir(backend);
     if len(trim(be_dir)) > 0 {
         search_paths.push(be_dir);
         search_paths.push(concat(be_dir, "/../lib"));
         search_paths.push(concat(be_dir, "/../"));
     }
-    let stdlib_lib_paths: list<string> = default_stdlib_lib_paths();
+    let stdlib_lib_paths: list<str8> = default_stdlib_lib_paths();
     for p in stdlib_lib_paths {
         search_paths.push(p);
     }
 
-    var seen: list<string> = [];
-    var found: string = "";
+    var seen: list<str8> = [];
+    var found: str8 = "";
     for p in search_paths {
-        let trimmed: string = trim(p);
+        let trimmed: str8 = trim(p);
         if len(trimmed) == 0 { continue; }
         if list_contains(seen, trimmed) == 1 { continue; }
         seen.push(trimmed);
@@ -389,7 +389,7 @@ fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> 
         return out;
     }
 
-    let link_dir_flag: string = format!("-L{}", found);
+    let link_dir_flag: str8 = format!("-L{}", found);
     if list_contains(out, link_dir_flag) == 0 {
         out.push(link_dir_flag);
     }
@@ -400,25 +400,25 @@ fn ensure_stdlib_link_args(args: list<string>, backend: string) -> list<string> 
     return out;
 }
 
-fn collect_dir_mla_files(path: string) -> list<string> {
-    let cmd: string = format!("find {} -maxdepth 1 -type f -name '*.mla' | sort", shell_quote(path));
-    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-c", cmd]);
+fn collect_dir_mla_files(path: str8) -> list<str8> {
+    let cmd: str8 = format!("find {} -maxdepth 1 -type f -name '*.mla' | sort", shell_quote(path));
+    let rr: Result<str8, str8> = run_capture_stdout("/bin/sh", ["-c", cmd]);
     if rr.is_err() {
         return [];
     }
     return split_lines(rr.unwrap());
 }
 
-fn path_is_directory(path: string) -> i32 {
-    let cmd: string = format!("test -d {}", shell_quote(path));
+fn path_is_directory(path: str8) -> i32 {
+    let cmd: str8 = format!("test -d {}", shell_quote(path));
     let rc: i32 = run_inherit("/bin/sh", ["-c", cmd]);
     return rc == 0 ? 1 : 0;
 }
 
-fn file_mtime_ge(lhs: string, rhs: string) -> i32 {
-    let qlhs: string = shell_quote(lhs);
-    let qrhs: string = shell_quote(rhs);
-    var cmd: string = concat("test -e ", qlhs);
+fn file_mtime_ge(lhs: str8, rhs: str8) -> i32 {
+    let qlhs: str8 = shell_quote(lhs);
+    let qrhs: str8 = shell_quote(rhs);
+    var cmd: str8 = concat("test -e ", qlhs);
     cmd = concat(cmd, " && test -e ");
     cmd = concat(cmd, qrhs);
     cmd = concat(cmd, " && ! test ");
@@ -429,29 +429,29 @@ fn file_mtime_ge(lhs: string, rhs: string) -> i32 {
     return rc == 0 ? 1 : 0;
 }
 
-fn abspath(path: string) -> string {
-    let trimmed: string = trim(path);
+fn abspath(path: str8) -> str8 {
+    let trimmed: str8 = trim(path);
     if len(trimmed) == 0 { return String::new(); }
-    var dir: string = trimmed;
+    var dir: str8 = trimmed;
     if path_is_directory(trimmed) == 0 {
         dir = parent_dir(trimmed);
     }
     if len(trim(dir)) == 0 { dir = "."; }
-    let cmd: string = format!("cd {} && pwd", shell_quote(dir));
-    let rr: Result<string, string> = run_capture_stdout("/bin/sh", ["-c", cmd]);
+    let cmd: str8 = format!("cd {} && pwd", shell_quote(dir));
+    let rr: Result<str8, str8> = run_capture_stdout("/bin/sh", ["-c", cmd]);
     if rr.is_err() {
         return dir;
     }
     return trim(rr.unwrap());
 }
 
-fn split_toml_array(input: string) -> list<string> {
-    var out: list<string> = [];
-    var cur: string = String::new();
+fn split_toml_array(input: str8) -> list<str8> {
+    var out: list<str8> = [];
+    var cur: str8 = String::new();
     var in_quotes: i32 = 0;
     let n: i64 = len(input);
     for i in 0..n {
-        let ch: string = sub(input, i, 1);
+        let ch: str8 = sub(input, i, 1);
         if eq(ch, "\"") == 1 {
             if in_quotes == 0 {
                 in_quotes = 1;
@@ -462,7 +462,7 @@ fn split_toml_array(input: string) -> list<string> {
             continue;
         }
         if eq(ch, ",") == 1 && in_quotes == 0 {
-            let trimmed: string = trim(cur);
+            let trimmed: str8 = trim(cur);
             if len(trimmed) > 0 {
                 out.push(trimmed);
             }
@@ -471,15 +471,15 @@ fn split_toml_array(input: string) -> list<string> {
         }
         cur = concat(cur, ch);
     }
-    let trimmed: string = trim(cur);
+    let trimmed: str8 = trim(cur);
     if len(trimmed) > 0 {
         out.push(trimmed);
     }
     return out;
 }
 
-fn unquote(s: string) -> string {
-    let t: string = trim(s);
+fn unquote(s: str8) -> str8 {
+    let t: str8 = trim(s);
     let n: i64 = len(t);
     if n >= 2 && eq(sub(t, 0, 1), "\"") == 1 && eq(sub(t, n - 1, 1), "\"") == 1 {
         return sub(t, 1, n - 2);
@@ -487,16 +487,16 @@ fn unquote(s: string) -> string {
     return t;
 }
 
-fn parse_module_paths_from_toml(manifest: string) -> list<string> {
-    let rr: Result<string, string> = read_all_text(manifest);
+fn parse_module_paths_from_toml(manifest: str8) -> list<str8> {
+    let rr: Result<str8, str8> = read_all_text(manifest);
     if rr.is_err() {
         return [];
     }
-    let lines: list<string> = split_lines(rr.unwrap());
-    var out: list<string> = [];
-    var section: string = String::new();
+    let lines: list<str8> = split_lines(rr.unwrap());
+    var out: list<str8> = [];
+    var section: str8 = String::new();
     for line in lines {
-        let trimmed: string = trim(line);
+        let trimmed: str8 = trim(line);
         if len(trimmed) == 0 { continue; }
         if eq(sub(trimmed, 0, 1), "#") == 1 { continue; }
         if len(trimmed) >= 2 && eq(sub(trimmed, 0, 1), "[") == 1 && eq(sub(trimmed, len(trimmed) - 1, 1), "]") == 1 {
@@ -508,23 +508,23 @@ fn parse_module_paths_from_toml(manifest: string) -> list<string> {
         }
         let eq_idx: i64 = find(trimmed, "=");
         if eq_idx < 0 { continue; }
-        let key: string = trim(sub(trimmed, 0, eq_idx));
+        let key: str8 = trim(sub(trimmed, 0, eq_idx));
         if eq(key, "module_paths") == 0 {
             continue;
         }
-        let value: string = trim(sub(trimmed, eq_idx + 1, len(trimmed) - eq_idx - 1));
+        let value: str8 = trim(sub(trimmed, eq_idx + 1, len(trimmed) - eq_idx - 1));
         if len(value) == 0 { continue; }
         if len(value) >= 2 && eq(sub(value, 0, 1), "[") == 1 && eq(sub(value, len(value) - 1, 1), "]") == 1 {
-            let inner: string = sub(value, 1, len(value) - 2);
-            let toml_parts: list<string> = split_toml_array(inner);
+            let inner: str8 = sub(value, 1, len(value) - 2);
+            let toml_parts: list<str8> = split_toml_array(inner);
             for part in toml_parts {
-                let path: string = unquote(part);
+                let path: str8 = unquote(part);
                 if len(path) > 0 {
                     out.push(path);
                 }
             }
         } else {
-            let path: string = unquote(value);
+            let path: str8 = unquote(value);
             if len(path) > 0 {
                 out.push(path);
             }
@@ -533,17 +533,17 @@ fn parse_module_paths_from_toml(manifest: string) -> list<string> {
     return out;
 }
 
-fn find_manifest_path(start_dir: string) -> string {
-    var cur: string = abspath(start_dir);
+fn find_manifest_path(start_dir: str8) -> str8 {
+    var cur: str8 = abspath(start_dir);
     if len(cur) == 0 {
         cur = ".";
     }
     while len(cur) > 0 {
-        let candidate: string = join_path(cur, "mlang.toml");
+        let candidate: str8 = join_path(cur, "mlang.toml");
         if file_exists(candidate) == 1 {
             return candidate;
         }
-        let parent: string = parent_dir(cur);
+        let parent: str8 = parent_dir(cur);
         if eq(parent, cur) == 1 {
             break;
         }
@@ -552,19 +552,19 @@ fn find_manifest_path(start_dir: string) -> string {
     return String::new();
 }
 
-fn getenv_value(name: string) -> string {
-    let rr: Result<string, string> = run_capture_stdout("/usr/bin/printenv", [name]);
+fn getenv_value(name: str8) -> str8 {
+    let rr: Result<str8, str8> = run_capture_stdout("/usr/bin/printenv", [name]);
     if rr.is_err() {
         return String::new();
     }
     return trim(rr.unwrap());
 }
 
-fn tiny_hash_u31(s: string) -> i64 {
+fn tiny_hash_u31(s: str8) -> i64 {
     var h: i64 = 216613626;
     let n: i64 = len(s);
     for i in 0..n {
-        let ch: string = sub(s, i, 1);
+        let ch: str8 = sub(s, i, 1);
         let v: i64 = find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_-.:", ch);
         let add: i64 = v >= 0 ? (v + 1) : 97;
         h = (h * 131 + add) % 2147483647;
@@ -575,11 +575,11 @@ fn tiny_hash_u31(s: string) -> i64 {
     return h;
 }
 
-fn tiny_hash_u31_alt(s: string) -> i64 {
+fn tiny_hash_u31_alt(s: str8) -> i64 {
     var h: i64 = 16777619;
     let n: i64 = len(s);
     for i in 0..n {
-        let ch: string = sub(s, i, 1);
+        let ch: str8 = sub(s, i, 1);
         let v: i64 = find("9876543210ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba:.-_/",
                           ch);
         let add: i64 = v >= 0 ? (v + 3) : 131;
@@ -591,9 +591,9 @@ fn tiny_hash_u31_alt(s: string) -> i64 {
     return h;
 }
 
-fn pkg_frontend_bin_path(backend: string, src: string) -> string {
-    let cache_key: string = getenv_value("MLANG_PKG_CACHE_KEY");
-    let seed: string = format!("{}|{}|{}", backend, src, cache_key);
+fn pkg_frontend_bin_path(backend: str8, src: str8) -> str8 {
+    let cache_key: str8 = getenv_value("MLANG_PKG_CACHE_KEY");
+    let seed: str8 = format!("{}|{}|{}", backend, src, cache_key);
     let h1: i64 = tiny_hash_u31(seed);
     let h2: i64 = tiny_hash_u31_alt(seed);
     let bl: i64 = len(backend);
@@ -601,58 +601,58 @@ fn pkg_frontend_bin_path(backend: string, src: string) -> string {
     return format!("/tmp/mlang-pkg-mla-{}-{}-{}-{}", h1, h2, bl, sl);
 }
 
-fn find_pkg_frontend_source(backend: string) -> string {
-    let c1: string = "tools/mlang-pkg-mla/main.mla";
+fn find_pkg_frontend_source(backend: str8) -> str8 {
+    let c1: str8 = "tools/mlang-pkg-mla/main.mla";
     if file_exists(c1) == 1 { return c1; }
-    let be_dir: string = parent_dir(backend);
-    let c2: string = concat(be_dir, "/../tools/mlang-pkg-mla/main.mla");
+    let be_dir: str8 = parent_dir(backend);
+    let c2: str8 = concat(be_dir, "/../tools/mlang-pkg-mla/main.mla");
     if file_exists(c2) == 1 { return c2; }
-    let c3: string = concat(be_dir, "/tools/mlang-pkg-mla/main.mla");
+    let c3: str8 = concat(be_dir, "/tools/mlang-pkg-mla/main.mla");
     if file_exists(c3) == 1 { return c3; }
     return String::new();
 }
 
-fn run_pkg_frontend_mla(backend: string, passthrough: list<string>) -> i32 {
-    let src: string = find_pkg_frontend_source(backend);
+fn run_pkg_frontend_mla(backend: str8, passthrough: list<str8>) -> i32 {
+    let src: str8 = find_pkg_frontend_source(backend);
     if len(src) == 0 { return -1; }
-    let tmp_bin: string = pkg_frontend_bin_path(backend, src);
+    let tmp_bin: str8 = pkg_frontend_bin_path(backend, src);
     var need_compile: i32 = 1;
     if file_exists(tmp_bin) == 1 && file_mtime_ge(tmp_bin, src) == 1 {
         need_compile = 0;
     }
     if need_compile == 1 {
-        let compile_base: list<string> = [
+        let compile_base: list<str8> = [
             src,
             "-Wno-colon-if",
             "-Wno-colon-while",
             "-o", tmp_bin
         ];
-        let compile_args: list<string> = ensure_stdlib_link_args(compile_base, backend);
-        let compile_cmd: string = build_shell_command(backend, compile_args);
+        let compile_args: list<str8> = ensure_stdlib_link_args(compile_base, backend);
+        let compile_cmd: str8 = build_shell_command(backend, compile_args);
         let compile_rc: i32 = run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", compile_cmd));
         if compile_rc != 0 {
             return -1;
         }
     }
-    var run_args: list<string> = ["--backend", backend];
+    var run_args: list<str8> = ["--backend", backend];
     let n: i64 = passthrough.len();
     for i in 0..n {
         run_args.push(passthrough[i]);
     }
-    let run_cmd: string = build_shell_command(tmp_bin, run_args);
+    let run_cmd: str8 = build_shell_command(tmp_bin, run_args);
     return run_shell_inherit(concat("MLANG_FRONTEND_IMPL=cpp ", run_cmd));
 }
 
-fn backend_can_run_pkg_mla(backend: string) -> i32 {
-    let be_name: string = basename(backend);
+fn backend_can_run_pkg_mla(backend: str8) -> i32 {
+    let be_name: str8 = basename(backend);
     if contains(be_name, "mlang") == 1 {
         return 1;
     }
     return 0;
 }
 
-fn clone_args(args: list<string>) -> list<string> {
-    var out: list<string> = [];
+fn clone_args(args: list<str8>) -> list<str8> {
+    var out: list<str8> = [];
     let n: i64 = args.len();
     for i in 0..n {
         out.push(args[i]);
@@ -660,19 +660,19 @@ fn clone_args(args: list<string>) -> list<string> {
     return out;
 }
 
-fn is_test_suite_file(path: string) -> i32 {
-    let name: string = basename(path);
+fn is_test_suite_file(path: str8) -> i32 {
+    let name: str8 = basename(path);
     if starts_with(name, "test_") == 1 { return 1; }
     if ends_with(name, "_tests.mla") == 1 { return 1; }
     return 0;
 }
 
-fn is_bench_suite_file(path: string) -> i32 {
-    let name: string = basename(path);
+fn is_bench_suite_file(path: str8) -> i32 {
+    let name: str8 = basename(path);
     return starts_with(name, "bench_");
 }
 
-fn is_digit_char(ch: string) -> i32 {
+fn is_digit_char(ch: str8) -> i32 {
     if eq(ch, "0") == 1 { return 1; }
     if eq(ch, "1") == 1 { return 1; }
     if eq(ch, "2") == 1 { return 1; }
@@ -686,11 +686,11 @@ fn is_digit_char(ch: string) -> i32 {
     return 0;
 }
 
-fn is_signed_decimal(s: string) -> i32 {
+fn is_signed_decimal(s: str8) -> i32 {
     let n: i64 = len(s);
     if n <= 0 { return 0; }
     var start: i64 = 0;
-    let first: string = sub(s, 0, 1);
+    let first: str8 = sub(s, 0, 1);
     if eq(first, "+") == 1 || eq(first, "-") == 1 {
         if n == 1 { return 0; }
         start = 1;
@@ -701,11 +701,11 @@ fn is_signed_decimal(s: string) -> i32 {
     return 1;
 }
 
-fn normalize_signed_decimal(s: string) -> string {
+fn normalize_signed_decimal(s: str8) -> str8 {
     let n: i64 = len(s);
     if n <= 0 { return s; }
-    let first: string = sub(s, 0, 1);
-    var sign: string = String::new();
+    let first: str8 = sub(s, 0, 1);
+    var sign: str8 = String::new();
     var start: i64 = 0;
     if eq(first, "+") == 1 || eq(first, "-") == 1 {
         sign = first;
@@ -721,14 +721,14 @@ fn normalize_signed_decimal(s: string) -> string {
     if start >= n {
         return "0";
     }
-    let digits: string = sub(s, start, n - start);
+    let digits: str8 = sub(s, start, n - start);
     if eq(sign, "-") == 1 {
         return concat("-", digits);
     }
     return digits;
 }
 
-fn abs_decimal_leq(s_abs: string, limit_abs: string) -> i32 {
+fn abs_decimal_leq(s_abs: str8, limit_abs: str8) -> i32 {
     let a_len: i64 = len(s_abs);
     let l_len: i64 = len(limit_abs);
     if a_len < l_len { return 1; }
@@ -736,27 +736,27 @@ fn abs_decimal_leq(s_abs: string, limit_abs: string) -> i32 {
     return compare(s_abs, limit_abs) <= 0;
 }
 
-fn fits_i32_decimal(s: string) -> i32 {
+fn fits_i32_decimal(s: str8) -> i32 {
     if eq(s, "0") == 1 { return 1; }
     if starts_with(s, "-") == 1 {
-        let abs_s: string = sub(s, 1, len(s) - 1);
+        let abs_s: str8 = sub(s, 1, len(s) - 1);
         return abs_decimal_leq(abs_s, "2147483648");
     }
     return abs_decimal_leq(s, "2147483647");
 }
 
-fn is_effective_zero_decimal(s: string) -> i32 {
+fn is_effective_zero_decimal(s: str8) -> i32 {
     let n: i64 = len(s);
     if n <= 0 { return 0; }
     var start: i64 = 0;
-    let first: string = sub(s, 0, 1);
+    let first: str8 = sub(s, 0, 1);
     if eq(first, "+") == 1 || eq(first, "-") == 1 {
         if n == 1 { return 0; }
         start = 1;
     }
     var saw_digit: i32 = 0;
     for i in start..n {
-        let ch: string = sub(s, i, 1);
+        let ch: str8 = sub(s, i, 1);
         if is_digit_char(ch) == 0 { return 0; }
         saw_digit = 1;
         if eq(ch, "0") == 0 { return 0; }
@@ -765,21 +765,21 @@ fn is_effective_zero_decimal(s: string) -> i32 {
     return 1;
 }
 
-fn normalize_bench_iters_value(v: string) -> string {
+fn normalize_bench_iters_value(v: str8) -> str8 {
     if starts_with(v, "-") == 1 || is_effective_zero_decimal(v) == 1 {
         return "1";
     }
     return v;
 }
 
-fn normalize_bench_warmup_value(v: string) -> string {
+fn normalize_bench_warmup_value(v: str8) -> str8 {
     if starts_with(v, "-") == 1 {
         return "0";
     }
     return v;
 }
 
-fn option_takes_value(a: string) -> i32 {
+fn option_takes_value(a: str8) -> i32 {
     if eq(a, "-o") == 1 { return 1; }
     if eq(a, "-L") == 1 { return 1; }
     if eq(a, "-l") == 1 { return 1; }
@@ -788,7 +788,7 @@ fn option_takes_value(a: string) -> i32 {
     return 0;
 }
 
-fn is_known_test_or_bench_flag(a: string) -> i32 {
+fn is_known_test_or_bench_flag(a: str8) -> i32 {
     if eq(a, "-c") == 1 { return 1; }
     if eq(a, "-S") == 1 { return 1; }
     if eq(a, "-emit-llvm") == 1 { return 1; }
@@ -809,7 +809,7 @@ fn is_known_test_or_bench_flag(a: string) -> i32 {
     return 0;
 }
 
-fn is_test_or_bench_mode_only_flag(a: string) -> i32 {
+fn is_test_or_bench_mode_only_flag(a: str8) -> i32 {
     if eq(a, "--no-run") == 1 { return 1; }
     if eq(a, "--bench-iters") == 1 { return 1; }
     if eq(a, "--bench-warmup") == 1 { return 1; }
@@ -818,20 +818,20 @@ fn is_test_or_bench_mode_only_flag(a: string) -> i32 {
     return 0;
 }
 
-fn file_has_test_attr(path: string) -> i32 {
-    let rr: Result<string, string> = read_all_text(path);
+fn file_has_test_attr(path: str8) -> i32 {
+    let rr: Result<str8, str8> = read_all_text(path);
     if rr.is_err() {
         return 0;
     }
     return contains(rr.unwrap(), "#[test]");
 }
 
-fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, extra_args: list<string>) -> i32 {
-    let files_all: list<string> = collect_dir_mla_files(path);
-    var files: list<string> = [];
+fn run_test_directory_mode(backend: str8, path: str8, benchmark_mode: i32, extra_args: list<str8>) -> i32 {
+    let files_all: list<str8> = collect_dir_mla_files(path);
+    var files: list<str8> = [];
     for f in files_all {
         if len(trim(f)) == 0 { continue; }
-        let name: string = basename(f);
+        let name: str8 = basename(f);
         if eq(name, "__mlang_test_root.mla") == 1 { continue; }
         if benchmark_mode == 1 {
             if is_bench_suite_file(f) == 0 { continue; }
@@ -854,9 +854,9 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
 
     var fail_count: i32 = 0;
     for f in files {
-        let suite_name: string = basename(f);
+        let suite_name: str8 = basename(f);
         println!("[SUITE] {}", suite_name);
-        var cmd: list<string> = [];
+        var cmd: list<str8> = [];
         if benchmark_mode == 1 {
             cmd.push("bench");
             cmd.push(f);
@@ -881,16 +881,16 @@ fn run_test_directory_mode(backend: string, path: string, benchmark_mode: i32, e
     return 1;
 }
 
-fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<string> {
-    var out: list<string> = [];
-    var bench_iters_v: string = String::new();
-    var bench_warmup_v: string = String::new();
+fn sanitize_dir_suite_args(args: list<str8>, benchmark_mode: i32) -> list<str8> {
+    var out: list<str8> = [];
+    var bench_iters_v: str8 = String::new();
+    var bench_warmup_v: str8 = String::new();
     var have_bench_iters: i32 = 0;
     var have_bench_warmup: i32 = 0;
     let n: i64 = args.len();
     var i: i64 = 0;
     while i < n {
-        let a: string = args[i];
+        let a: str8 = args[i];
         if eq(a, "-L") == 1 || eq(a, "-l") == 1 || eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
             if i + 1 < n {
                 if eq(a, "--bench-iters") == 1 || eq(a, "--bench-warmup") == 1 {
@@ -950,7 +950,7 @@ fn sanitize_dir_suite_args(args: list<string>, benchmark_mode: i32) -> list<stri
     return out;
 }
 
-fn parse_options(argv: list<string>) -> FrontendState {
+fn parse_options(argv: list<str8>) -> FrontendState {
     var out: FrontendState = FrontendState {
         backend: "mlang",
         passthrough: [],
@@ -963,7 +963,7 @@ fn parse_options(argv: list<string>) -> FrontendState {
     var i: i64 = 1;
     var passthrough_started: i32 = 0;
     while i < n {
-        let arg: string = argv[i];
+        let arg: str8 = argv[i];
         if passthrough_started == 1 {
             out.passthrough.push(arg);
             i = i + 1;
@@ -974,7 +974,7 @@ fn parse_options(argv: list<string>) -> FrontendState {
                 out.parse_error = "missing value after --backend";
                 return out;
             }
-            let backend_value: string = argv[i + 1];
+            let backend_value: str8 = argv[i + 1];
             if starts_with(backend_value, "-") == 1 {
                 out.parse_error = "missing value after --backend";
                 return out;
@@ -1001,12 +1001,12 @@ fn parse_options(argv: list<string>) -> FrontendState {
 
 fn main(argc: i32, args: list<str8>) -> i32 {
     let _ = argc;
-    var argv: list<string> = [];
+    var argv: list<str8> = [];
     for a in args {
         argv.push(format!("{}", a));
     }
 
-    var program: string = "mlang-frontend-mla";
+    var program: str8 = "mlang-frontend-mla";
     if (argv.len() > 0) {
         program = argv[0];
     }
@@ -1026,22 +1026,22 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         println!("mlang-frontend-mla {}", version());
         return 0;
     }
-    let passthrough: list<string> = st.passthrough;
+    let passthrough: list<str8> = st.passthrough;
     if (passthrough.len() == 0) {
         eprintln!("Error: No input file specified");
         print_usage(program);
         return 1;
     }
-    let first: string = passthrough[0];
+    let first: str8 = passthrough[0];
     if eq(first, "pkg") == 1 {
-        let impl_val: string = getenv_value("MLANG_PKG_IMPL");
+        let impl_val: str8 = getenv_value("MLANG_PKG_IMPL");
         let force_cpp: i32 = eq(impl_val, "cpp");
         var prefer_mla: i32 = 0;
         if len(impl_val) == 0 || eq(impl_val, "mla") == 1 {
             prefer_mla = 1;
         }
         if prefer_mla == 1 && force_cpp == 0 && backend_can_run_pkg_mla(st.backend) == 1 {
-            var pkg_args: list<string> = [];
+            var pkg_args: list<str8> = [];
             let pkg_n: i64 = passthrough.len();
             for pi in 0..pkg_n {
                 pkg_args.push(passthrough[pi]);
@@ -1051,7 +1051,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 return mla_rc;
             }
         }
-        var passthrough_args: list<string> = [];
+        var passthrough_args: list<str8> = [];
         let pass_n: i64 = passthrough.len();
         for pi in 0..pass_n {
             passthrough_args.push(passthrough[pi]);
@@ -1077,7 +1077,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         idx = 1;
     }
     if mode_test == 0 {
-        var compile_in: list<string> = [];
+        var compile_in: list<str8> = [];
         let compile_n: i64 = passthrough.len();
         var compile_test_mode: i32 = 0;
         var compile_test_short_circuit: i32 = 0;
@@ -1087,7 +1087,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         var has_no_colon_while: i32 = 0;
         var ci: i64 = 0;
         while ci < compile_n {
-            let ca: string = passthrough[ci];
+            let ca: str8 = passthrough[ci];
             if eq(ca, "--tests") == 1 {
                 compile_test_mode = 1;
                 compile_in.push(ca);
@@ -1122,13 +1122,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     let _ = run_inherit(st.backend, ["--help"]);
                     return 1;
                 }
-                let cv: string = passthrough[ci + 1];
+                let cv: str8 = passthrough[ci + 1];
                 if compile_test_mode == 1 && eq(ca, "--bench-iters") == 1 {
                     if is_signed_decimal(cv) == 0 {
                         eprintln!("Invalid value for --bench-iters");
                         return 1;
                     }
-                    let cv_norm: string = normalize_signed_decimal(cv);
+                    let cv_norm: str8 = normalize_signed_decimal(cv);
                     if fits_i32_decimal(cv_norm) == 0 {
                         eprintln!("Invalid value for --bench-iters");
                         return 1;
@@ -1139,7 +1139,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                         eprintln!("Invalid value for --bench-warmup");
                         return 1;
                     }
-                    let cv_norm: string = normalize_signed_decimal(cv);
+                    let cv_norm: str8 = normalize_signed_decimal(cv);
                     if fits_i32_decimal(cv_norm) == 0 {
                         eprintln!("Invalid value for --bench-warmup");
                         return 1;
@@ -1179,22 +1179,22 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 compile_in.push("-Wno-colon-while");
             }
         }
-        let compile_args: list<string> = ensure_stdlib_link_args(compile_in, st.backend);
+        let compile_args: list<str8> = ensure_stdlib_link_args(compile_in, st.backend);
         return run_inherit(st.backend, compile_args);
     }
 
-    var input_path: string = "tests";
-    var extra_args: list<string> = [];
+    var input_path: str8 = "tests";
+    var extra_args: list<str8> = [];
     var test_no_run: i32 = 0;
     var bench_no_run: i32 = 0;
-    var bench_iters_value: string = String::new();
-    var bench_warmup_value: string = String::new();
+    var bench_iters_value: str8 = String::new();
+    var bench_warmup_value: str8 = String::new();
     var bench_iters_seen: i32 = 0;
     var bench_warmup_seen: i32 = 0;
     let n: i64 = passthrough.len();
     var i: i64 = idx;
 	    while i < n {
-        let a: string = passthrough[i];
+        let a: str8 = passthrough[i];
         if eq(a, "--version") == 1 {
             return run_inherit(st.backend, ["--version"]);
         }
@@ -1207,13 +1207,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 let _ = run_inherit(st.backend, ["--help"]);
                 return 1;
             }
-            let v: string = passthrough[i + 1];
+            let v: str8 = passthrough[i + 1];
             if eq(a, "--bench-iters") == 1 {
                 if is_signed_decimal(v) == 0 {
                     eprintln!("Invalid value for --bench-iters");
                     return 1;
                 }
-                let v_norm: string = normalize_signed_decimal(v);
+                let v_norm: str8 = normalize_signed_decimal(v);
                 if fits_i32_decimal(v_norm) == 0 {
                     eprintln!("Invalid value for --bench-iters");
                     return 1;
@@ -1225,7 +1225,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     eprintln!("Invalid value for --bench-warmup");
                     return 1;
                 }
-                let v_norm: string = normalize_signed_decimal(v);
+                let v_norm: str8 = normalize_signed_decimal(v);
                 if fits_i32_decimal(v_norm) == 0 {
                     eprintln!("Invalid value for --bench-warmup");
                     return 1;
@@ -1304,14 +1304,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
     if input_is_dir == 1 {
-        let suite_args: list<string> = sanitize_dir_suite_args(extra_args, mode_bench);
+        let suite_args: list<str8> = sanitize_dir_suite_args(extra_args, mode_bench);
         return run_test_directory_mode(st.backend, input_path, mode_bench, suite_args);
     }
     if mode_bench == 1 && bench_no_run == 1 {
         extra_args.push("--no-run");
     }
 
-    var single: list<string> = [];
+    var single: list<str8> = [];
     if mode_bench == 1 {
         single.push("bench");
         single.push(input_path);

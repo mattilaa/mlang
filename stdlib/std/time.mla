@@ -11,7 +11,7 @@
 extern pub fn __mlang_std_time_now_ms() -> i64;
 extern pub fn __mlang_std_time_now_ns() -> i64;
 extern pub fn __mlang_std_time_sleep_ms(ms: i64) -> void;
-extern pub fn __mlang_std_time_format_local(pattern: str8) -> string;
+extern pub fn __mlang_std_time_format_local(pattern: str8) -> str8;
 extern pub fn __mlang_std_time_timer_new(timeout_ms: i64) -> i64;
 extern pub fn __mlang_std_time_timer_reset(handle: i64, timeout_ms: i64) -> i32;
 extern pub fn __mlang_std_time_timer_elapsed(handle: i64) -> i32;
@@ -47,23 +47,23 @@ pub fn now_ns() -> i64 {
 ///
 /// Example:
 ///   let fmt: str8 = "DD/MM/YYYY:HH:MM:SS.MS";
-///   let ts: string = format_local(fmt);
-pub fn format_local(pattern: str8) -> string {
+///   let ts: str8 = format_local(fmt);
+pub fn format_local(pattern: str8) -> str8 {
     return __mlang_std_time_format_local(pattern);
 }
 
 /// @brief Local wall-clock timestamp `MM/DD/YYYY:HH:MM:SS`.
-pub fn local_datetime() -> string {
+pub fn local_datetime() -> str8 {
     return __mlang_std_time_format_local("MM/DD/YYYY:HH:MM:SS");
 }
 
 /// @brief Local wall-clock timestamp `MM/DD/YYYY:HH:MM:SS.MS`.
-pub fn local_datetime_ms() -> string {
+pub fn local_datetime_ms() -> str8 {
     return __mlang_std_time_format_local("MM/DD/YYYY:HH:MM:SS.MS");
 }
 
 /// @brief Local wall-clock timestamp `MM/DD/YYYY:HH:MM:SS.NS`.
-pub fn local_datetime_ns() -> string {
+pub fn local_datetime_ns() -> str8 {
     return __mlang_std_time_format_local("MM/DD/YYYY:HH:MM:SS.NS");
 }
 
@@ -74,12 +74,12 @@ pub fn sleep_ms(ms: i64) -> void {
 
 impl Timer {
     /// @brief Create timer that elapses after `timeout_ms`.
-    pub fn after(timeout_ms: i64) -> Result<Timer, string> {
+    pub fn after(timeout_ms: i64) -> Result<Timer, str8> {
         let h: i64 = __mlang_std_time_timer_new(timeout_ms);
         if h == 0 {
-            return Err<Timer, string>("std::time Timer::after failed");
+            return Err<Timer, str8>("std::time Timer::after failed");
         }
-        return Ok<Timer, string>(Timer { handle: h });
+        return Ok<Timer, str8>(Timer { handle: h });
     }
 
     /// @brief Reset timer deadline to now + `timeout_ms`.
