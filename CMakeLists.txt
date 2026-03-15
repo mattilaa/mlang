@@ -221,6 +221,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fft.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_strbuf.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_bytes.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_bitset.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_serde.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_protocol.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_vec.c

@@ -13,6 +13,9 @@
 /// @brief Binary serialization/deserialization.
 /// @{
 
+mod std::bitset;
+use std::bitset::BitSet;
+
 extern pub fn __mlang_std_serde_last_error() -> string;
 extern pub fn __mlang_std_serde_last_ok() -> i32;
 
@@ -256,6 +259,39 @@ impl Binary {
         return Ok<i32, string>(0);
     }
 
+    /// @brief Append packed bitset as `bit_len(i64)` + bit payload bytes.
+    pub fn write_bitset(self: Binary, bits_handle: i64, bit_len: i64) -> Result<i32, string> {
+        let bits: BitSet = BitSet { handle: bits_handle };
+        let n: i64 = bit_len;
+        let w0: Result<i32, string> = self.write_i64(n);
+        if w0.is_err() {
+            return w0;
+        }
+        let byte_len: i64 = (n + 7) / 8;
+        for bi in 0..byte_len {
+            var v: i32 = 0;
+            var mask: i32 = 1;
+            for bj in 0..8 {
+                let idx: i64 = bi * 8 + bj;
+                if idx < n {
+                    let br: Result<bool, string> = bits.get(idx);
+                    if br.is_err() {
+                        return Err<i32, string>(br.unwrap_err());
+                    }
+                    if br.unwrap() {
+                        v += mask;
+                    }
+                }
+                mask *= 2;
+            }
+            let wb: Result<i32, string> = self.write_u8(v);
+            if wb.is_err() {
+                return wb;
+            }
+        }
+        return Ok<i32, string>(0);
+    }
+
     /// @brief Read byte at index from output buffer.
     pub fn get_u8(self: Binary, index: i64) -> Result<i32, string> {
         let v: i32 = __mlang_std_serde_binary_get_u8(self.handle, index);
@@ -485,6 +521,52 @@ impl Reader {
             out.push(vr.unwrap());
         }
         return Ok<list<string>, string>(out);
+    }
+
+    /// @brief Read packed bitset encoded as `bit_len(i64)` + bit payload bytes.
+    pub fn read_bitset(self: Reader) -> Result<BitSet, string> {
+        let nr: Result<i64, string> = self.read_i64();
+        if nr.is_err() {
+            return Err<BitSet, string>(nr.unwrap_err());
+        }
+        let n: i64 = nr.unwrap();
+        if n < 0 {
+            return Err<BitSet, string>("negative bitset length");
+        }
+        let bsr: Result<BitSet, string> = BitSet::new(n);
+        if bsr.is_err() {
+            return Err<BitSet, string>(bsr.unwrap_err());
+        }
+        let bs: BitSet = bsr.unwrap();
+        if bs.resize(n, false) != 0 {
+            let e: string = std::bitset::last_error();
+            bs.close();
+            return Err<BitSet, string>(e);
+        }
+
+        let byte_len: i64 = (n + 7) / 8;
+        for bi in 0..byte_len {
+            let vr: Result<i32, string> = self.read_u8();
+            if vr.is_err() {
+                bs.close();
+                return Err<BitSet, string>(vr.unwrap_err());
+            }
+            let v: i32 = vr.unwrap();
+            var mask: i32 = 1;
+            for bj in 0..8 {
+                let idx: i64 = bi * 8 + bj;
+                if idx < n {
+                    let bit_on: bool = (v & mask) != 0;
+                    if bs.set(idx, bit_on) != 0 {
+                        let e: string = std::bitset::last_error();
+                        bs.close();
+                        return Err<BitSet, string>(e);
+                    }
+                }
+                mask *= 2;
+            }
+        }
+        return Ok<BitSet, string>(bs);
     }
 
     /// @brief Return underlying reader handle (for trait/custom codec plumbing).

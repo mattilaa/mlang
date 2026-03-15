@@ -1,7 +1,9 @@
 mod std::testing;
 mod std::serde;
+mod std::bitset;
 mod std::strbuf;
 
+use std::bitset::BitSet;
 use std::serde::Binary;
 use std::serde::BinarySerde;
 use std::serde::Reader;
@@ -682,5 +684,45 @@ fn test_serde_read_list_result_roundtrip() {
     verify_eq(44, vals[3]);
 
     r.close();
+    b.close();
+}
+
+#[test]
+fn test_serde_bitset_roundtrip() {
+    let br: Result<Binary, string> = Binary::new(32);
+    verify(!br.is_err());
+    let b: Binary = br.unwrap();
+
+    let bsr: Result<BitSet, string> = BitSet::new(0);
+    verify(!bsr.is_err());
+    let bs: BitSet = bsr.unwrap();
+    verify(bs.resize(11, false) == 0);
+    verify(bs.set(0, true) == 0);
+    verify(bs.set(5, true) == 0);
+    verify(bs.set(10, true) == 0);
+
+    let w: Result<i32, string> = b.write_bitset(bs.raw_handle(), bs.len());
+    verify(!w.is_err());
+
+    let rr: Result<Reader, string> = b.to_reader();
+    verify(!rr.is_err());
+    let r: Reader = rr.unwrap();
+
+    let out_r: Result<BitSet, string> = r.read_bitset();
+    verify(!out_r.is_err());
+    let out: BitSet = out_r.unwrap();
+
+    verify_eq(11, out.len());
+    verify_eq(3, out.count_ones());
+    let v0: Result<bool, string> = out.get(0);
+    let v5: Result<bool, string> = out.get(5);
+    let v10: Result<bool, string> = out.get(10);
+    verify(!v0.is_err() && v0.unwrap());
+    verify(!v5.is_err() && v5.unwrap());
+    verify(!v10.is_err() && v10.unwrap());
+
+    out.close();
+    r.close();
+    bs.close();
     b.close();
 }

@@ -1,0 +1,135 @@
+/// \file bitset.mla
+/// \brief Packed dynamic bitset container (`std::bitset`).
+///
+/// Unlike `list<bool>`, this stores bits densely (1 bit per value).
+/// Useful for protocol flags, bloom-like masks, and compact state vectors.
+
+extern pub fn __mlang_std_bitset_last_error() -> string;
+extern pub fn __mlang_std_bitset_new(bit_capacity: i64) -> i64;
+extern pub fn __mlang_std_bitset_free(handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_len(handle: i64) -> i64;
+extern pub fn __mlang_std_bitset_capacity(handle: i64) -> i64;
+extern pub fn __mlang_std_bitset_clear(handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_resize(handle: i64, new_len: i64, fill_bit: i32) -> i32;
+extern pub fn __mlang_std_bitset_set(handle: i64, index: i64, value: i32) -> i32;
+extern pub fn __mlang_std_bitset_get(handle: i64, index: i64) -> i32;
+extern pub fn __mlang_std_bitset_toggle(handle: i64, index: i64) -> i32;
+extern pub fn __mlang_std_bitset_push(handle: i64, value: i32) -> i32;
+extern pub fn __mlang_std_bitset_pop(handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_count_ones(handle: i64) -> i64;
+extern pub fn __mlang_std_bitset_and_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_or_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_xor_eq(lhs_handle: i64, rhs_handle: i64) -> i32;
+extern pub fn __mlang_std_bitset_not_eq(handle: i64) -> i32;
+
+/// @brief Owned packed bit vector.
+pub struct BitSet {
+    var handle: i64;
+};
+
+/// @brief Last backend error string.
+pub fn last_error() -> string {
+    return __mlang_std_bitset_last_error();
+}
+
+impl BitSet {
+    /// @brief Create bitset with reserved capacity in bits.
+    pub fn new(bit_capacity: i64) -> Result<BitSet, string> {
+        let h: i64 = __mlang_std_bitset_new(bit_capacity);
+        if h == 0 {
+            return Err<BitSet, string>(last_error());
+        }
+        return Ok<BitSet, string>(BitSet { handle: h });
+    }
+
+    /// @brief Number of active bits.
+    pub fn len(self: BitSet) -> i64 {
+        return __mlang_std_bitset_len(self.handle);
+    }
+
+    /// @brief Reserved capacity in bits.
+    pub fn capacity(self: BitSet) -> i64 {
+        return __mlang_std_bitset_capacity(self.handle);
+    }
+
+    /// @brief Clear all bits (length becomes 0).
+    pub fn clear(self: BitSet) -> i32 {
+        return __mlang_std_bitset_clear(self.handle);
+    }
+
+    /// @brief Resize to `new_len`; added bits are filled with `fill`.
+    pub fn resize(self: BitSet, new_len: i64, fill: bool) -> i32 {
+        let iv: i32 = fill == true ? 1 : 0;
+        return __mlang_std_bitset_resize(self.handle, new_len, iv);
+    }
+
+    /// @brief Set bit at index.
+    pub fn set(self: BitSet, index: i64, value: bool) -> i32 {
+        let iv: i32 = value == true ? 1 : 0;
+        return __mlang_std_bitset_set(self.handle, index, iv);
+    }
+
+    /// @brief Read bit at index (`Err` on out-of-range).
+    pub fn get(self: BitSet, index: i64) -> Result<bool, string> {
+        let v: i32 = __mlang_std_bitset_get(self.handle, index);
+        if v < 0 {
+            return Err<bool, string>(last_error());
+        }
+        return Ok<bool, string>(v == 1);
+    }
+
+    /// @brief Flip bit at index.
+    pub fn toggle(self: BitSet, index: i64) -> i32 {
+        return __mlang_std_bitset_toggle(self.handle, index);
+    }
+
+    /// @brief Append one bit to end.
+    pub fn push(self: BitSet, value: bool) -> i32 {
+        let iv: i32 = value == true ? 1 : 0;
+        return __mlang_std_bitset_push(self.handle, iv);
+    }
+
+    /// @brief Remove and return last bit (`Err` on empty).
+    pub fn pop(self: BitSet) -> Result<bool, string> {
+        let v: i32 = __mlang_std_bitset_pop(self.handle);
+        if v < 0 {
+            return Err<bool, string>(last_error());
+        }
+        return Ok<bool, string>(v == 1);
+    }
+
+    /// @brief Count number of set bits.
+    pub fn count_ones(self: BitSet) -> i64 {
+        return __mlang_std_bitset_count_ones(self.handle);
+    }
+
+    /// @brief In-place AND with `rhs_handle`; lengths must match.
+    pub fn and_eq(self: BitSet, rhs_handle: i64) -> i32 {
+        return __mlang_std_bitset_and_eq(self.handle, rhs_handle);
+    }
+
+    /// @brief In-place OR with `rhs_handle`; lengths must match.
+    pub fn or_eq(self: BitSet, rhs_handle: i64) -> i32 {
+        return __mlang_std_bitset_or_eq(self.handle, rhs_handle);
+    }
+
+    /// @brief In-place XOR with `rhs_handle`; lengths must match.
+    pub fn xor_eq(self: BitSet, rhs_handle: i64) -> i32 {
+        return __mlang_std_bitset_xor_eq(self.handle, rhs_handle);
+    }
+
+    /// @brief In-place bit inversion over active length.
+    pub fn not_eq(self: BitSet) -> i32 {
+        return __mlang_std_bitset_not_eq(self.handle);
+    }
+
+    /// @brief Raw handle for interop.
+    pub fn raw_handle(self: BitSet) -> i64 {
+        return self.handle;
+    }
+
+    /// @brief Free resources.
+    pub fn close(self: BitSet) -> i32 {
+        return __mlang_std_bitset_free(self.handle);
+    }
+}

@@ -1,0 +1,96 @@
+mod std::testing;
+mod std::bitset;
+
+use std::bitset::BitSet;
+use std::testing::verify;
+use std::testing::verify_eq;
+
+#[test]
+fn test_bitset_set_get_toggle_and_count() {
+    let r: Result<BitSet, string> = BitSet::new(8);
+    verify(!r.is_err());
+    let bs: BitSet = r.unwrap();
+    verify(bs.resize(8, false) == 0);
+
+    verify(bs.set(0, true) == 0);
+    verify(bs.set(3, true) == 0);
+    verify(bs.set(7, true) == 0);
+    verify_eq(3, bs.count_ones());
+
+    let b0: Result<bool, string> = bs.get(0);
+    let b1: Result<bool, string> = bs.get(1);
+    let b3: Result<bool, string> = bs.get(3);
+    verify(!b0.is_err() && b0.unwrap());
+    verify(!b1.is_err() && !b1.unwrap());
+    verify(!b3.is_err() && b3.unwrap());
+
+    verify(bs.toggle(3) == 0);
+    let b3b: Result<bool, string> = bs.get(3);
+    verify(!b3b.is_err() && !b3b.unwrap());
+    verify_eq(2, bs.count_ones());
+
+    bs.close();
+}
+
+#[test]
+fn test_bitset_push_pop_resize_and_bounds() {
+    let r: Result<BitSet, string> = BitSet::new(0);
+    verify(!r.is_err());
+    let bs: BitSet = r.unwrap();
+
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify(bs.push(true) == 0);
+    verify_eq(3, bs.len());
+
+    let p1: Result<bool, string> = bs.pop();
+    let p2: Result<bool, string> = bs.pop();
+    verify(!p1.is_err() && p1.unwrap());
+    verify(!p2.is_err() && !p2.unwrap());
+    verify_eq(1, bs.len());
+
+    verify(bs.resize(10, true) == 0);
+    verify_eq(10, bs.len());
+    let b9: Result<bool, string> = bs.get(9);
+    verify(!b9.is_err() && b9.unwrap());
+
+    let oob: Result<bool, string> = bs.get(20);
+    verify(oob.is_err());
+
+    bs.close();
+}
+
+#[test]
+fn test_bitset_bitwise_ops() {
+    let ar: Result<BitSet, string> = BitSet::new(8);
+    let br: Result<BitSet, string> = BitSet::new(8);
+    verify(!ar.is_err());
+    verify(!br.is_err());
+    let a: BitSet = ar.unwrap();
+    let b: BitSet = br.unwrap();
+
+    verify(a.resize(8, false) == 0);
+    verify(b.resize(8, false) == 0);
+    verify(a.set(0, true) == 0);
+    verify(a.set(2, true) == 0);
+    verify(a.set(4, true) == 0);
+    verify(b.set(2, true) == 0);
+    verify(b.set(3, true) == 0);
+    verify(b.set(4, true) == 0);
+
+    verify(a.and_eq(b.raw_handle()) == 0);
+    verify_eq(2, a.count_ones());
+    let a2: Result<bool, string> = a.get(2);
+    let a4: Result<bool, string> = a.get(4);
+    verify(!a2.is_err() && a2.unwrap());
+    verify(!a4.is_err() && a4.unwrap());
+
+    verify(a.not_eq() == 0);
+    verify_eq(6, a.count_ones());
+
+    verify(a.xor_eq(b.raw_handle()) == 0);
+    verify_eq(7, a.count_ones());
+
+    a.close();
+    b.close();
+}
