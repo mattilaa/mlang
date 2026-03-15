@@ -88,6 +88,9 @@ ASTNode* mla_ast_print_stmt(int kind, char* format_str, ASTNode* args, int line)
 ASTNode* mla_ast_print_expr_stmt(int kind, ASTNode* expr, int line);
 ASTNode* mla_ast_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line);
+ASTNode* mla_ast_assert(ASTNode* condition, int line);
+ASTNode* mla_ast_static_assert(ASTNode* condition, int line);
+ASTNode* mla_ast_unsafe_block(ASTNode* block, int line);
 ASTNode* mla_ast_break_stmt(int line);
 ASTNode* mla_ast_continue_stmt(int line);
 ASTNode* mla_ast_expression_statement(ASTNode* expr);

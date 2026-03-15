@@ -8,6 +8,7 @@
 #include <llvm/Target/TargetMachine.h>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -131,6 +132,7 @@ private:
     int benchmarkIterations = 100000;
     int benchmarkWarmupIterations = 10000;
     bool includeTests = true;
+    int unsafeDepth = 0;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
@@ -270,6 +272,11 @@ private:
     std::string getBorrowedOwnerForPointerExpression(
         ExpressionNode* expr) const;
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
+    bool evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out);
+    bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
+    bool convertValueToRuntimeBool(llvm::Value* value, int line,
+                                   const std::string& context,
+                                   llvm::Value*& outBool);
     bool validateNoEscapingBorrow(ExpressionNode* expr, int line,
                                   const std::string& action);
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
@@ -313,7 +320,9 @@ private:
     void generateWhileStatement(WhileNode* node);
     void generatePrintStatement(PrintNode* node);
     llvm::Value* generateFormatExpression(FormatNode* node);
+    void generateAssert(AssertNode* node);
     void generateAssertEq(AssertEqNode* node);
+    void generateStaticAssert(StaticAssertNode* node);
     void generateBreakStatement(BreakNode* node);
     void generateContinueStatement(ContinueNode* node);
     void enterCleanupScope();

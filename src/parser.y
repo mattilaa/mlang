@@ -157,6 +157,9 @@ ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
 ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line);
+ASTNode* mla_ast_assert(ASTNode* condition, int line);
+ASTNode* mla_ast_static_assert(ASTNode* condition, int line);
+ASTNode* mla_ast_unsafe_block(ASTNode* block, int line);
 ASTNode* mla_ast_break_stmt(int line);
 ASTNode* mla_ast_continue_stmt(int line);
 ASTNode* mla_ast_generic_list_type(ASTNode* element_type);
@@ -297,7 +300,7 @@ enum UpdatePosition
 %token LET VAR
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE TYPE_KW COLONCOLON
-%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ
+%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE CARET NOT TILDE SHL SHR
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
@@ -335,7 +338,7 @@ enum UpdatePosition
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
-%type <ast> print_statement argument_list assert_eq_statement
+%type <ast> print_statement argument_list assert_eq_statement assert_statement static_assert_statement
 %type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
@@ -725,6 +728,8 @@ statement
     | struct_init
     | print_statement
     | assert_eq_statement
+    | assert_statement
+    | static_assert_statement
     | break_statement
     | continue_statement
     ;
@@ -837,6 +842,8 @@ continue_statement
 block_statement
     : LBRACE statement_list RBRACE { $$ = mla_ast_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
     | LBRACE RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    | UNSAFE block_statement
+        { $$ = mla_ast_unsafe_block($2, yylineno); }
     ;
 
 for_statement
@@ -944,6 +951,16 @@ print_statement
 assert_eq_statement
     : ASSERT_EQ LPAREN expression COMMA expression RPAREN SEMICOLON
         { $$ = mla_ast_assert_eq($3, $5, yylineno); }
+    ;
+
+assert_statement
+    : ASSERT LPAREN expression RPAREN SEMICOLON
+        { $$ = mla_ast_assert($3, yylineno); }
+    ;
+
+static_assert_statement
+    : STATIC_ASSERT LPAREN expression RPAREN SEMICOLON
+        { $$ = mla_ast_static_assert($3, yylineno); }
     ;
 
 argument_list

@@ -1532,7 +1532,15 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
     std::string ownerName =
         getBorrowedOwnerForPointerExpression(pointerExpr);
     if(ownerName.empty())
+    {
+        if(unsafeDepth <= 0)
+        {
+            reportError(line,
+                        "dereferencing raw pointer requires an unsafe block");
+            return false;
+        }
         return true;
+    }
 
     if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
        isVariableMoved(ownerName))
@@ -1543,6 +1551,171 @@ bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
     }
 
     return true;
+}
+
+bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
+{
+    if(!expr)
+        return false;
+    if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
+    {
+        out = i->value;
+        return true;
+    }
+    if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
+    {
+        out = b->value ? 1 : 0;
+        return true;
+    }
+    if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        int64_t v = 0;
+        if(!evaluateCompileTimeInt(un->operand, v))
+            return false;
+        switch(un->op)
+        {
+        case UnaryOpNode::OP_NEG:
+            out = -v;
+            return true;
+        case UnaryOpNode::OP_NOT:
+            out = (v == 0) ? 1 : 0;
+            return true;
+        case UnaryOpNode::OP_BITNOT:
+            out = ~v;
+            return true;
+        default:
+            return false;
+        }
+    }
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        int64_t lhs = 0;
+        int64_t rhs = 0;
+        if(!evaluateCompileTimeInt(bin->left, lhs) ||
+           !evaluateCompileTimeInt(bin->right, rhs))
+            return false;
+        switch(bin->op)
+        {
+        case BinaryOpNode::OP_PLUS:
+            out = lhs + rhs;
+            return true;
+        case BinaryOpNode::OP_MINUS:
+            out = lhs - rhs;
+            return true;
+        case BinaryOpNode::OP_MULTIPLY:
+            out = lhs * rhs;
+            return true;
+        case BinaryOpNode::OP_DIVIDE:
+            if(rhs == 0)
+                return false;
+            out = lhs / rhs;
+            return true;
+        case BinaryOpNode::OP_MODULO:
+            if(rhs == 0)
+                return false;
+            out = lhs % rhs;
+            return true;
+        case BinaryOpNode::OP_BITAND:
+            out = lhs & rhs;
+            return true;
+        case BinaryOpNode::OP_BITOR:
+            out = lhs | rhs;
+            return true;
+        case BinaryOpNode::OP_BITXOR:
+            out = lhs ^ rhs;
+            return true;
+        case BinaryOpNode::OP_SHL:
+            out = lhs << rhs;
+            return true;
+        case BinaryOpNode::OP_SHR:
+            out = lhs >> rhs;
+            return true;
+        case BinaryOpNode::OP_LT:
+            out = lhs < rhs ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_GT:
+            out = lhs > rhs ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_LE:
+            out = lhs <= rhs ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_GE:
+            out = lhs >= rhs ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_EQ:
+            out = lhs == rhs ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_NE:
+            out = lhs != rhs ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_AND:
+            out = (lhs != 0 && rhs != 0) ? 1 : 0;
+            return true;
+        case BinaryOpNode::OP_OR:
+            out = (lhs != 0 || rhs != 0) ? 1 : 0;
+            return true;
+        default:
+            return false;
+        }
+    }
+    if(auto* tern = dynamic_cast<TernaryNode*>(expr))
+    {
+        bool cond = false;
+        if(!evaluateCompileTimeBool(tern->condition, cond))
+            return false;
+        return evaluateCompileTimeInt(cond ? tern->trueExpr : tern->falseExpr,
+                                      out);
+    }
+    return false;
+}
+
+bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
+{
+    int64_t value = 0;
+    if(!evaluateCompileTimeInt(expr, value))
+        return false;
+    out = value != 0;
+    return true;
+}
+
+bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
+                                              const std::string& context,
+                                              llvm::Value*& outBool)
+{
+    if(!value)
+        return false;
+    llvm::Type* ty = value->getType();
+    if(ty->isIntegerTy(1))
+    {
+        outBool = value;
+        return true;
+    }
+    if(ty->isIntegerTy())
+    {
+        outBool = builder.CreateICmpNE(value,
+                                       llvm::ConstantInt::get(ty, 0),
+                                       context + ".bool");
+        return true;
+    }
+    if(ty->isFloatingPointTy())
+    {
+        outBool = builder.CreateFCmpONE(value,
+                                        llvm::ConstantFP::get(ty, 0.0),
+                                        context + ".bool");
+        return true;
+    }
+    std::string typeStr;
+    if(ty->isStructTy())
+        typeStr = ty->getStructName().str().empty() ? "struct"
+                                                    : ty->getStructName().str();
+    else if(ty->isPointerTy())
+        typeStr = "pointer";
+    else
+        typeStr = "non-boolean";
+    reportError(line, context +
+                          " condition must be a boolean or numeric type, got '" +
+                          typeStr + "'");
+    return false;
 }
 
 bool CodeGenerator::validateNoEscapingBorrow(ExpressionNode* expr, int line,
@@ -2992,6 +3165,51 @@ llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
     return buffer;
 }
 
+void CodeGenerator::generateAssert(AssertNode* node)
+{
+    initializeFormatFunctions();
+
+    llvm::Value* cond = generateExpression(node->condition);
+    if(!cond)
+        return;
+
+    llvm::Value* condBool = nullptr;
+    if(!convertValueToRuntimeBool(cond, node->line, "assert!", condBool))
+        return;
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* okBB =
+        llvm::BasicBlock::Create(context, "assert.ok", function);
+    llvm::BasicBlock* failBB =
+        llvm::BasicBlock::Create(context, "assert.fail");
+    builder.CreateCondBr(condBool, okBB, failBB);
+
+    failBB->insertInto(function);
+    builder.SetInsertPoint(failBB);
+
+    std::string cFormat = "assert! failed\n";
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "assertmsg");
+#else
+    llvm::Value* formatStr =
+        builder.CreateGlobalStringPtr(cFormat, "assertmsg");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrVal =
+        builder.CreateLoad(ptrType, stderrPtr, "stderr");
+    builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+    builder.CreateCall(abortFunc);
+    builder.CreateUnreachable();
+
+    builder.SetInsertPoint(okBB);
+}
+
 void CodeGenerator::generateAssertEq(AssertEqNode* node)
 {
     initializeFormatFunctions();
@@ -3088,6 +3306,21 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
     builder.CreateUnreachable();
 
     builder.SetInsertPoint(okBB);
+}
+
+void CodeGenerator::generateStaticAssert(StaticAssertNode* node)
+{
+    bool cond = false;
+    if(!evaluateCompileTimeBool(node->condition, cond))
+    {
+        reportError(node->line,
+                    "static_assert! requires a compile-time boolean expression");
+        return;
+    }
+    if(!cond)
+    {
+        reportError(node->line, "static_assert! failed");
+    }
 }
 
 llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
@@ -4792,6 +5025,7 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     variableTypes.clear();
     structVariableTypes.clear();
     enumVariableTypes.clear();
+    unsafeDepth = 0;
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
@@ -5006,6 +5240,8 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
     {
         enterCleanupScope();
+        if(blockNode->isUnsafe)
+            unsafeDepth++;
         const auto& blkStmts = blockNode->statements->statements;
         if(blkStmts.empty())
         {
@@ -5038,15 +5274,25 @@ void CodeGenerator::generateStatement(StatementNode* node)
                     clearPointerBorrow(ptr);
             }
         }
+        if(blockNode->isUnsafe)
+            unsafeDepth--;
         exitCleanupScope();
     }
     else if(auto printNode = dynamic_cast<PrintNode*>(node))
     {
         generatePrintStatement(printNode);
     }
-    else if(auto assertNode = dynamic_cast<AssertEqNode*>(node))
+    else if(auto assertNode = dynamic_cast<AssertNode*>(node))
     {
-        generateAssertEq(assertNode);
+        generateAssert(assertNode);
+    }
+    else if(auto assertEqNode = dynamic_cast<AssertEqNode*>(node))
+    {
+        generateAssertEq(assertEqNode);
+    }
+    else if(auto staticAssertNode = dynamic_cast<StaticAssertNode*>(node))
+    {
+        generateStaticAssert(staticAssertNode);
     }
     else if(auto breakNode = dynamic_cast<BreakNode*>(node))
     {
@@ -9788,10 +10034,20 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
                 resolve_expr(arg, scope);
             return;
         }
+        if(auto* assertStmt = dynamic_cast<AssertNode*>(s))
+        {
+            resolve_expr(assertStmt->condition, scope);
+            return;
+        }
         if(auto* assertEq = dynamic_cast<AssertEqNode*>(s))
         {
             resolve_expr(assertEq->left, scope);
             resolve_expr(assertEq->right, scope);
+            return;
+        }
+        if(auto* staticAssertStmt = dynamic_cast<StaticAssertNode*>(s))
+        {
+            resolve_expr(staticAssertStmt->condition, scope);
             return;
         }
         if(auto* block = dynamic_cast<BlockStatementNode*>(s))

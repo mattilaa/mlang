@@ -159,6 +159,8 @@ static void write_mlang_commands_json(
         "eprint!",
         "debug!",
         "format!",
+        "assert!",
+        "static_assert!",
         "assert_eq!"
     };
     for(size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); ++i)

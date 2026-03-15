@@ -641,6 +641,7 @@ class BlockStatementNode : public StatementNode
 {
 public:
     StatementListNode* statements;
+    bool isUnsafe = false;
     BlockStatementNode(StatementListNode* s) : statements(s) {}
     std::string toString() const override;
 };
@@ -877,6 +878,24 @@ public:
     ExpressionNode* right;
 
     AssertEqNode(ExpressionNode* l, ExpressionNode* r) : left(l), right(r) {}
+    std::string toString() const override;
+};
+
+class AssertNode : public StatementNode
+{
+public:
+    ExpressionNode* condition;
+
+    AssertNode(ExpressionNode* c) : condition(c) {}
+    std::string toString() const override;
+};
+
+class StaticAssertNode : public StatementNode
+{
+public:
+    ExpressionNode* condition;
+
+    StaticAssertNode(ExpressionNode* c) : condition(c) {}
     std::string toString() const override;
 };
 

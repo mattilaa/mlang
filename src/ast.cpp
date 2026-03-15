@@ -1047,6 +1047,31 @@ ASTNode* create_assert_eq_impl(ASTNode* left, ASTNode* right, int line)
     return node;
 }
 
+ASTNode* create_assert_impl(ASTNode* condition, int line)
+{
+    auto* node = new AssertNode(static_cast<ExpressionNode*>(condition));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_static_assert_impl(ASTNode* condition, int line)
+{
+    auto* node = new StaticAssertNode(static_cast<ExpressionNode*>(condition));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_unsafe_block_impl(ASTNode* block, int line)
+{
+    auto* node = dynamic_cast<BlockStatementNode*>(block);
+    if(node)
+    {
+        node->isUnsafe = true;
+        node->line = line;
+    }
+    return node;
+}
+
 // toString() implementations
 
 std::string TypeNode::toString() const
@@ -1799,7 +1824,7 @@ std::string BlockStatementNode::toString() const
         result += statements->toString();
     }
     result += "}\n";
-    return result;
+    return isUnsafe ? ("unsafe " + result) : result;
 }
 
 std::string ExpressionStatementNode::toString() const
@@ -2046,6 +2071,17 @@ std::string FormatNode::toString() const
 std::string AssertEqNode::toString() const
 {
     return "assert_eq!(" + left->toString() + ", " + right->toString() + ");";
+}
+
+std::string AssertNode::toString() const
+{
+    return "assert!(" + (condition ? condition->toString() : "false") + ");";
+}
+
+std::string StaticAssertNode::toString() const
+{
+    return "static_assert!(" +
+           (condition ? condition->toString() : "false") + ");";
 }
 
 // Generic list type

@@ -141,6 +141,7 @@ static int is_try_question_context()
 "enum"          { return ENUM; }
 "for"           { return FOR; }
 "while"         { return WHILE; }
+"unsafe"        { return UNSAFE; }
 "in"            { return IN; }
 "break"         { return BREAK; }
 "continue"      { return CONTINUE; }
@@ -177,6 +178,8 @@ static int is_try_question_context()
 "debug!"        { return DEBUGPRINT; }
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
+"assert!"       { return ASSERT; }
+"static_assert!" { return STATIC_ASSERT; }
 "vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]"    { return DERIVE_DEBUG; }
 "#[test]"             { return TEST_ATTR; }

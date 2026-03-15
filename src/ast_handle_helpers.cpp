@@ -370,6 +370,21 @@ ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line)
     return create_assert_eq_impl(left, right, line);
 }
 
+ASTNode* mla_ast_assert(ASTNode* condition, int line)
+{
+    return create_assert_impl(condition, line);
+}
+
+ASTNode* mla_ast_static_assert(ASTNode* condition, int line)
+{
+    return create_static_assert_impl(condition, line);
+}
+
+ASTNode* mla_ast_unsafe_block(ASTNode* block, int line)
+{
+    return create_unsafe_block_impl(block, line);
+}
+
 ASTNode* mla_ast_break_stmt(int line)
 {
     return create_break_stmt_impl(line);
