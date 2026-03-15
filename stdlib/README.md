@@ -54,6 +54,9 @@ Currently provided:
   - `std::algorithm::numeric`: numeric helpers for `list<i64>`
     (`accumulate_i64`, `partial_sum_i64`, `adjacent_difference_i64`,
      `inner_product_i64`)
+  - `std::algorithm::ranges`: C++20 ranges-style helpers for `list<i64>`
+    (`unique_i64`, `unique_stable_i64`, `find_i64`, `count_i64`,
+     `contains_i64`, `remove_i64`, `take_i64`, `drop_i64`)
   - `std::algorithm::rand`: random helpers mirroring `std::rand`
   - `std::algorithm::regex`: regex helpers mirroring `std::regex`
   - `std::algorithm::fft`: FFT helpers for forward/inverse transforms

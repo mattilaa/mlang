@@ -1,0 +1,127 @@
+/// \file ranges.mla
+/// \brief Ranges-style algorithms under std::algorithm.
+///
+/// C++20 `<ranges>` inspired helpers for `list<i64>`.
+///
+/// @defgroup algorithm_ranges std::algorithm::ranges
+/// @ingroup algorithm
+/// @brief Ranges-style sequence algorithms.
+/// @{
+
+/// @brief Return first index of value, or -1 when not found.
+/// @ingroup algorithm_ranges
+pub fn find_i64(data: &list<i64>, value: i64) -> i64 {
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// @brief Return count of elements equal to value.
+/// @ingroup algorithm_ranges
+pub fn count_i64(data: &list<i64>, value: i64) -> i64 {
+    var out: i64 = 0;
+    let n: i64 = data.len();
+    for i in 0..n {
+        if data[i] == value {
+            out = out + 1;
+        }
+    }
+    return out;
+}
+
+/// @brief Return 1 when value exists; else 0.
+/// @ingroup algorithm_ranges
+pub fn contains_i64(data: &list<i64>, value: i64) -> i32 {
+    return find_i64(data, value) >= 0 ? 1 : 0;
+}
+
+/// @brief Return a copy without elements equal to value.
+/// Similar to C++ remove-erase style result container.
+/// @ingroup algorithm_ranges
+pub fn remove_i64(data: &list<i64>, value: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let v: i64 = data[i];
+        if v != value {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+/// @brief Return first n elements (or all when n >= len).
+/// @ingroup algorithm_ranges
+pub fn take_i64(data: &list<i64>, n: i64) -> list<i64> {
+    var out: list<i64> = [];
+    if n <= 0 {
+        return out;
+    }
+    let len: i64 = data.len();
+    let end: i64 = n < len ? n : len;
+    for i in 0..end {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Return elements after skipping first n.
+/// @ingroup algorithm_ranges
+pub fn drop_i64(data: &list<i64>, n: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let len: i64 = data.len();
+    if n <= 0 {
+        for i in 0..len {
+            out.push(data[i]);
+        }
+        return out;
+    }
+    if n >= len {
+        return out;
+    }
+    for i in n..len {
+        out.push(data[i]);
+    }
+    return out;
+}
+
+/// @brief Remove adjacent duplicates and return compacted copy.
+/// Equivalent behavior to C++20 `std::ranges::unique` result sequence.
+/// @ingroup algorithm_ranges
+pub fn unique_i64(data: &list<i64>) -> list<i64> {
+    let n: i64 = data.len();
+    if n == 0 {
+        return [];
+    }
+    var out: list<i64> = [];
+    var last: i64 = data[0];
+    out.push(last);
+    for i in 1..n {
+        let v: i64 = data[i];
+        if v != last {
+            out.push(v);
+            last = v;
+        }
+    }
+    return out;
+}
+
+/// @brief Remove all duplicates while preserving first-occurrence order.
+/// @ingroup algorithm_ranges
+pub fn unique_stable_i64(data: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let v: i64 = data[i];
+        if out.contains(v) == false {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+/// @}

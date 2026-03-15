@@ -16,6 +16,7 @@ mod std::bench;
 mod std::math;
 mod std::algorithm::order;
 mod std::algorithm::numeric;
+mod std::algorithm::ranges;
 mod std::algorithm::fft;
 mod std::net;
 mod std::printf;
@@ -50,6 +51,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/math.mla`
 - `stdlib/std/algorithm/order.mla`
 - `stdlib/std/algorithm/numeric.mla`
+- `stdlib/std/algorithm/ranges.mla`
 - `stdlib/std/algorithm/fft.mla`
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
@@ -716,6 +718,22 @@ Numeric sequence helpers for `list<i64>`.
 - `partial_sum_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `adjacent_difference_i64(data: &list<i64>, init: i64) -> list<i64>`
 - `inner_product_i64(a: &list<i64>, b: &list<i64>, init: i64) -> i64`
+
+## std::algorithm::ranges
+
+Module file: `stdlib/std/algorithm/ranges.mla`
+
+C++20 ranges-style helpers for `list<i64>`.
+
+### API
+- `find_i64(data: &list<i64>, value: i64) -> i64` (first index or `-1`)
+- `count_i64(data: &list<i64>, value: i64) -> i64`
+- `contains_i64(data: &list<i64>, value: i64) -> i32`
+- `remove_i64(data: &list<i64>, value: i64) -> list<i64>`
+- `take_i64(data: &list<i64>, n: i64) -> list<i64>`
+- `drop_i64(data: &list<i64>, n: i64) -> list<i64>`
+- `unique_i64(data: &list<i64>) -> list<i64>` (adjacent duplicate removal, `std::ranges::unique`-style)
+- `unique_stable_i64(data: &list<i64>) -> list<i64>` (full dedup preserving first occurrence order)
 
 ## std::process
 

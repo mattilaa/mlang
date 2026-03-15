@@ -5,6 +5,7 @@
 /// - `std::algorithm::fuzzy`
 /// - `std::algorithm::order`
 /// - `std::algorithm::numeric`
+/// - `std::algorithm::ranges`
 /// - `std::algorithm::rand`
 /// - `std::algorithm::regex`
 /// - `std::algorithm::fft`
@@ -18,6 +19,7 @@
 mod std::algorithm::fuzzy;
 mod std::algorithm::order;
 mod std::algorithm::numeric;
+mod std::algorithm::ranges;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::algorithm::fft;

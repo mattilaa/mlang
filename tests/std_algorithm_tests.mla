@@ -3,6 +3,7 @@ mod std::algorithm::fuzzy;
 mod std::algorithm::fft;
 mod std::algorithm::numeric;
 mod std::algorithm::order;
+mod std::algorithm::ranges;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::strbuf;
@@ -25,6 +26,14 @@ use std::algorithm::order::reverse_i64;
 use std::algorithm::order::sort_i64;
 use std::algorithm::order::unique_sorted_i64;
 use std::algorithm::order::upper_bound_i64;
+use std::algorithm::ranges::contains_i64;
+use std::algorithm::ranges::count_i64;
+use std::algorithm::ranges::drop_i64;
+use std::algorithm::ranges::find_i64;
+use std::algorithm::ranges::remove_i64;
+use std::algorithm::ranges::take_i64;
+use std::algorithm::ranges::unique_i64;
+use std::algorithm::ranges::unique_stable_i64;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -36,10 +45,10 @@ use std::testing::verify;
 
 #[test]
 fn test_algorithm_fuzzy_match_and_score() {
-    if is_match("tracker_ui_demo.mla", "trui") != 1 { verify(false); }
-    if is_match("tracker_ui_demo.mla", "tuiz") != 0 { verify(false); }
-    if score("tracker_ui_demo.mla", "trui") < 0 { verify(false); }
-    }
+    verify(is_match("tracker_ui_demo.mla", "trui") == 1);
+    verify(is_match("tracker_ui_demo.mla", "tuiz") == 0);
+    verify(score("tracker_ui_demo.mla", "trui") >= 0);
+}
 
 #[test]
 fn test_algorithm_fuzzy_ranked_indices() {
@@ -49,7 +58,7 @@ fn test_algorithm_fuzzy_ranked_indices() {
         "tools/mlangd-mla/main.mla"
     ];
     let ranked: list<i64> = filter_indices(items, "escwid");
-    if ranked.len() <= 0 { verify(false); }
+    verify(ranked.len() > 0);
     verify(ranked[0] == 1);
 }
 
@@ -57,98 +66,126 @@ fn test_algorithm_fuzzy_ranked_indices() {
 fn test_algorithm_fuzzy_best_index() {
     let items: list<string> = ["abc", "axbyc", "zzz"];
     let best: i64 = best_index(items, "abc");
-    if best != 0 { verify(false); }
+    verify(best == 0);
     let none: i64 = best_index(items, "qqq");
     verify(none == -1);
 }
 
 #[test]
 fn test_algorithm_fft_namespace_roundtrip() {
-    if !is_power_of_two(8) {
-        verify(false);
-    }
-    if is_power_of_two(6) {
-        verify(false);
-    }
+    verify(is_power_of_two(8));
+    verify(!is_power_of_two(6));
 
     let data: list<i64> = [1, 0, 2, 0, 3, 0, 4, 0];
     let freq: list<i64> = forward(data);
-    if freq.len() == 0 { verify(false); }
+    verify(freq.len() > 0);
     let out: list<i64> = inverse(freq);
-    if out.len() == 0 { verify(false); }
+    verify(out.len() > 0);
     for i in 0..4 {
         let base: i64 = i * 2;
         let re: i64 = out[base];
         let im: i64 = out[base + 1];
-        if re != (i + 1) { verify(false); }
-        if im != 0 { verify(false); }
+        verify(re == (i + 1));
+        verify(im == 0);
     }
-    }
+}
 
 #[test]
 fn test_algorithm_order_sort_and_reverse() {
     let data: list<i64> = [5, 1, 3, 3, 2];
     let sorted: list<i64> = sort_i64(data);
-    if is_sorted_i64(sorted) != 1 { verify(false); }
-    if sorted.len() != 5 { verify(false); }
-    if sorted[0] != 1 { verify(false); }
-    if sorted[1] != 2 { verify(false); }
-    if sorted[2] != 3 { verify(false); }
-    if sorted[3] != 3 { verify(false); }
-    if sorted[4] != 5 { verify(false); }
+    verify(is_sorted_i64(sorted) == 1);
+    verify(sorted.len() == 5);
+    verify(sorted[0] == 1);
+    verify(sorted[1] == 2);
+    verify(sorted[2] == 3);
+    verify(sorted[3] == 3);
+    verify(sorted[4] == 5);
 
     let rev: list<i64> = reverse_i64(sorted);
-    if rev[0] != 5 { verify(false); }
-    if rev[4] != 1 { verify(false); }
-    }
+    verify(rev[0] == 5);
+    verify(rev[4] == 1);
+}
 
 #[test]
 fn test_algorithm_order_bounds_and_binary_search() {
     let data: list<i64> = [1, 2, 3, 3, 5, 8];
-    if lower_bound_i64(data, 0) != 0 { verify(false); }
-    if lower_bound_i64(data, 3) != 2 { verify(false); }
-    if lower_bound_i64(data, 4) != 4 { verify(false); }
-    if upper_bound_i64(data, 3) != 4 { verify(false); }
-    if upper_bound_i64(data, 8) != 6 { verify(false); }
-    if binary_search_i64(data, 5) != 1 { verify(false); }
-    if binary_search_i64(data, 6) != 0 { verify(false); }
-    }
+    verify(lower_bound_i64(data, 0) == 0);
+    verify(lower_bound_i64(data, 3) == 2);
+    verify(lower_bound_i64(data, 4) == 4);
+    verify(upper_bound_i64(data, 3) == 4);
+    verify(upper_bound_i64(data, 8) == 6);
+    verify(binary_search_i64(data, 5) == 1);
+    verify(binary_search_i64(data, 6) == 0);
+}
 
 #[test]
 fn test_algorithm_order_unique_sorted() {
     let data: list<i64> = [1, 1, 2, 2, 2, 7, 9, 9];
     let uniq: list<i64> = unique_sorted_i64(data);
-    if uniq.len() != 4 { verify(false); }
-    if uniq[0] != 1 { verify(false); }
-    if uniq[1] != 2 { verify(false); }
-    if uniq[2] != 7 { verify(false); }
-    if uniq[3] != 9 { verify(false); }
-    }
+    verify(uniq.len() == 4);
+    verify(uniq[0] == 1);
+    verify(uniq[1] == 2);
+    verify(uniq[2] == 7);
+    verify(uniq[3] == 9);
+}
+
+#[test]
+fn test_algorithm_ranges_unique_variants() {
+    let data: list<i64> = [1, 1, 2, 2, 3, 1, 1, 4, 4];
+    let adj: list<i64> = unique_i64(data);
+    verify(adj.len() == 5);
+    verify(adj[0] == 1 && adj[1] == 2 && adj[2] == 3 && adj[3] == 1 && adj[4] == 4);
+
+    let stable: list<i64> = unique_stable_i64(data);
+    verify(stable.len() == 4);
+    verify(stable[0] == 1 && stable[1] == 2 && stable[2] == 3 && stable[3] == 4);
+}
+
+#[test]
+fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
+    let data: list<i64> = [5, 6, 6, 7, 8, 6];
+    verify(find_i64(data, 6) == 1);
+    verify(find_i64(data, 42) == -1);
+    verify(count_i64(data, 6) == 3);
+    verify(contains_i64(data, 8) == 1);
+    verify(contains_i64(data, 9) == 0);
+
+    let removed: list<i64> = remove_i64(data, 6);
+    verify(removed.len() == 3);
+    verify(removed[0] == 5 && removed[1] == 7 && removed[2] == 8);
+
+    let take3: list<i64> = take_i64(data, 3);
+    verify(take3.len() == 3 && take3[0] == 5 && take3[1] == 6 && take3[2] == 6);
+
+    let drop4: list<i64> = drop_i64(data, 4);
+    verify(drop4.len() == 2 && drop4[0] == 8 && drop4[1] == 6);
+}
 
 #[test]
 fn test_algorithm_numeric_accumulate_and_inner_product() {
     let a: list<i64> = [1, 2, 3, 4];
     let b: list<i64> = [10, 20, 30];
-    if accumulate_i64(a, 0) != 10 { verify(false); }
-    if accumulate_i64(a, 5) != 15 { verify(false); }
-    if inner_product_i64(a, b, 7) != (7 + 10 + 40 + 90) { verify(false); }
-    }
+    verify(accumulate_i64(a, 0) == 10);
+    verify(accumulate_i64(a, 5) == 15);
+    verify(inner_product_i64(a, b, 7) == (7 + 10 + 40 + 90));
+}
 
 #[test]
 fn test_algorithm_numeric_partial_sum_and_adjacent_difference() {
     let data: list<i64> = [2, 3, 5];
     let ps: list<i64> = partial_sum_i64(data, 10);
-    if ps.len() != 3 { verify(false); }
-    if ps[0] != 12 { verify(false); }
-    if ps[1] != 15 { verify(false); }
-    if ps[2] != 20 { verify(false); }
+    verify(ps.len() == 3);
+    verify(ps[0] == 12);
+    verify(ps[1] == 15);
+    verify(ps[2] == 20);
 
     let ad: list<i64> = adjacent_difference_i64(ps, 10);
-    if ad.len() != 3 { verify(false); }
-    if ad[0] != 2 { verify(false); }
-    if ad[1] != 3 { verify(false); }
-    if ad[2] != 5 { verify(false); }
-    }
+    verify(ad.len() == 3);
+    verify(ad[0] == 2);
+    verify(ad[1] == 3);
+    verify(ad[2] == 5);
+}
 
 #[test]
 fn test_algorithm_rand_namespace_reproducible() {
@@ -156,24 +193,22 @@ fn test_algorithm_rand_namespace_reproducible() {
     let a: u64 = next_u64();
     seed(123);
     let b: u64 = next_u64();
-    if a != b { verify(false); }
+    verify(a == b);
     for _i in 0..200 {
         let v: i64 = range_i64(10, 20);
-        if v < 10 || v > 20 { verify(false); }
+        verify(v >= 10 && v <= 20);
     }
-    }
+}
 
 #[test]
 fn test_algorithm_regex_namespace_basic() {
     let rr: Result<Regex, string> = Regex::compile("([A-Za-z]+)-([0-9]+)");
-    if rr.is_err(): { verify(false); }
+    verify(rr.is_err() == false);
     let re: Regex = rr.unwrap();
     let text: string = "user-42";
     let s: i64 = re.find_start(text);
     let e: i64 = re.find_end(text);
-    if s != 0 || e != 7: {
-        verify(false);
-    }
+    verify(s == 0 && e == 7);
     let m: string = sub(text, s, e - s);
     let ok: i32 = eq(m, "user-42");
     free(m);
