@@ -9,12 +9,14 @@
 /// @brief Fuzzy string matching helpers.
 /// @{
 
+/// \cond INTERNAL_IMPORTS
 mod std::strbuf;
 
 use std::strbuf::eq;
 use std::strbuf::free;
 use std::strbuf::len;
 use std::strbuf::sub;
+/// \endcond
 
 fn boundary_bonus(text: string, idx: i64) -> i64 {
     if idx <= 0 {

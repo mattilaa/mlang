@@ -16,6 +16,7 @@
 /// Re-exports algorithm-oriented modules under a common namespace.
 /// @{
 
+/// \cond INTERNAL_IMPORTS
 mod std::algorithm::fuzzy;
 mod std::algorithm::order;
 mod std::algorithm::numeric;
@@ -23,5 +24,6 @@ mod std::algorithm::ranges;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::algorithm::fft;
+/// \endcond
 
 /// @}

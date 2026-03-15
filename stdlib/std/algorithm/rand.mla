@@ -8,8 +8,10 @@
 /// @brief Random number helpers.
 /// @{
 
+/// \cond INTERNAL_IMPORTS
 mod std::time;
 use std::time::now_ns;
+/// \endcond
 
 extern pub fn __mlang_std_rand_seed_i64(seed: i64) -> void;
 extern pub fn __mlang_std_rand_next_u64() -> u64;
