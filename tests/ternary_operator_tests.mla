@@ -3,6 +3,23 @@ mod std::strbuf;
 
 use std::strbuf::eq;
 use std::testing::verify;
+use std::testing::verify_eq_i32;
+
+struct TernaryObj {
+    var id: i32;
+};
+
+fn choose_true() -> bool {
+    return true;
+}
+
+fn make_obj_a() -> TernaryObj {
+    return TernaryObj { id: 1 };
+}
+
+fn make_obj_b() -> TernaryObj {
+    return TernaryObj { id: 2 };
+}
 
 #[test]
 fn test_ternary_with_function_call_condition() {
@@ -23,4 +40,16 @@ fn test_ternary_multiline() {
         7 :
         9;
     verify(y == 7);
+}
+
+#[test]
+fn test_ternary_function_call_condition() {
+    let y: i32 = choose_true() ? 11 : 22;
+    verify_eq_i32(11, y);
+}
+
+#[test]
+fn test_ternary_object_instantiation_branches() {
+    let o: TernaryObj = choose_true() ? make_obj_a() : make_obj_b();
+    verify_eq_i32(1, o.id);
 }

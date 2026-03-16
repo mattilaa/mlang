@@ -1186,6 +1186,8 @@ expression
 ternary_expression
     : binary_expression QUESTION ternary_expression COLON ternary_expression
         { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
+    | function_call QUESTION ternary_expression COLON ternary_expression
+        { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
     | binary_expression
     | unary_expression
     ;
