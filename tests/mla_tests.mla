@@ -2,28 +2,31 @@ mod std::strbuf;
 mod std::algorithm::fft;
 mod std::testing;
 use std::strbuf::eq;
-use std::testing::verify;
+use std::testing::verify_eq;
+use std::testing::verify_eq_i32;
+use std::testing::verify_false;
+use std::testing::verify_true;
 
 #[test]
 fn test_main_default_return_works() {
     let x: i32 = 1;
-    verify(x == 1);
+    verify_eq_i32(1, x);
 }
 
 #[test]
 fn test_if_else_flow_works() {
     let x: i32 = 2;
-    verify(x == 2);
+    verify_eq_i32(2, x);
 }
 
 #[test]
 fn test_basic_list_and_map_types() {
     let ids: list<i32> = [7, 8, 9];
-    verify(ids.len() == 3);
+    verify_eq(3, ids.len());
 
     let scores: map<str8, i32> = {"Alice": 95, "Bob": 87};
-    verify(scores.len() == 2);
-    verify(scores["Alice"] == 95);
+    verify_eq(2, scores.len());
+    verify_eq_i32(95, scores["Alice"]);
 }
 
 struct TestInnerState {
@@ -39,11 +42,12 @@ fn test_struct_field_list_mutation_methods() {
     var st: TestInnerState = TestInnerState { values: [] };
     st.values.push(7);
     st.values.push(9);
-    verify(st.values.len() == 2);
-    verify(st.values.pop() == 9);
-    verify(st.values.len() == 1);
+    verify_eq(2, st.values.len());
+    verify_eq(9, st.values.pop());
+    verify_eq(1, st.values.len());
     st.values.clear();
-    verify(st.values.is_empty());
+    verify_true(st.values.is_empty());
+    verify_false(st.values.len() > 0);
 }
 
 #[test]
@@ -53,9 +57,9 @@ fn test_nested_struct_field_list_mutation_methods() {
     };
     st.inner.values.push(11);
     st.inner.values.push(22);
-    verify(st.inner.values.len() == 2);
-    verify(st.inner.values.pop() == 22);
-    verify(st.inner.values.len() == 1);
+    verify_eq(2, st.inner.values.len());
+    verify_eq(22, st.inner.values.pop());
+    verify_eq(1, st.inner.values.len());
 }
 
 struct ParseStateLike {
@@ -71,24 +75,91 @@ fn test_struct_state_with_string_list_field_push_pattern() {
     };
     st.passthrough.push("--version");
     st.passthrough.push("--help");
-    verify(st.passthrough.len() == 2);
-    verify(eq(st.passthrough.pop(), "--help") == 1);
-    verify(eq(st.passthrough.pop(), "--version") == 1);
+    verify_eq(2, st.passthrough.len());
+    verify_true(eq(st.passthrough.pop(), "--help") == 1);
+    verify_true(eq(st.passthrough.pop(), "--version") == 1);
 }
 
 #[test]
 fn test_condition_allows_indexed_or_chain() {
     let out: list<i64> = [1, 0, 2, 0, 3, 0, 4, 0];
-    verify(out[0] == 1 && out[2] == 2 && out[4] == 3 && out[6] == 4);
+    verify_true(out[0] == 1 && out[2] == 2 && out[4] == 3 && out[6] == 4);
 }
 
 #[test]
 fn test_qualified_module_function_call_in_expression() {
     let data: list<i64> = [1, 0, 0, 0, 0, 0, 0, 0];
     let probe: list<i64> = std::algorithm::fft::forward(data);
-    verify(probe.len() > 0);
+    verify_true(probe.len() > 0);
     let out: list<i64> = std::algorithm::fft::inverse(
         std::algorithm::fft::forward([1, 0, 0, 0, 0, 0, 0, 0])
     );
-    verify(out.len() > 0);
+    verify_true(out.len() > 0);
+}
+
+#[test]
+fn test_nested_function_basic_call() {
+    fn add_local(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+    let v: i32 = add_local(5, 7);
+    verify_eq_i32(12, v);
+}
+
+#[test]
+fn test_nested_function_two_levels() {
+    fn outer_sum(a: i32, b: i32) -> i32 {
+        fn inner_twice(v: i32) -> i32 {
+            return v * 2;
+        }
+        return inner_twice(a + b);
+    }
+    verify_eq_i32(10, outer_sum(2, 3));
+    verify_eq_i32(18, outer_sum(4, 5));
+}
+
+#[test]
+fn test_nested_function_recursive() {
+    fn local_fact(n: i32) -> i32 {
+        if n <= 1 {
+            return 1;
+        }
+        return n * local_fact(n - 1);
+    }
+    verify_eq_i32(1, local_fact(1));
+    verify_eq_i32(120, local_fact(5));
+}
+
+#[test]
+fn test_nested_function_name_shadowing_behavior() {
+    let value: i32 = 7;
+    fn bump(value: i32) -> i32 {
+        // Parameter name intentionally shadows the outer variable name.
+        return value + 1;
+    }
+    verify_eq_i32(11, bump(10));
+    verify_eq_i32(7, value);
+}
+
+#[test]
+fn test_nested_function_complex_composition() {
+    fn normalize(v: i32) -> i32 {
+        fn abs_local(x: i32) -> i32 {
+            return x < 0 ? -x : x;
+        }
+        fn clamp10(x: i32) -> i32 {
+            if x < 0 {
+                return 0;
+            }
+            if x > 10 {
+                return 10;
+            }
+            return x;
+        }
+        return clamp10(abs_local(v));
+    }
+
+    verify_eq_i32(4, normalize(-4));
+    verify_eq_i32(3, normalize(3));
+    verify_eq_i32(10, normalize(24));
 }
