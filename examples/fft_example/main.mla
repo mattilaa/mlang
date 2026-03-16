@@ -174,7 +174,7 @@ fn clamp_i32(x: i32, lo: i32, hi: i32) -> i32 {
     return x;
 }
 
-fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32) -> void {
+fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, dark_bg: i32) -> void {
     var rr: i32 = r;
     var gg: i32 = g;
     var bb: i32 = b;
@@ -188,10 +188,11 @@ fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32) -
     rr = clamp_i32(rr, 0, 255);
     gg = clamp_i32(gg, 0, 255);
     bb = clamp_i32(bb, 0, 255);
+    let bg_s: str8 = dark_bg == 1 ? bg_rgb(12, 18, 38) : bg_rgb(0, 0, 0);
     if dot_mode == 1 {
-        print!("{}{}.", fg_rgb(rr, gg, bb), bg_rgb(8, 12, 28));
+        print!("{}{}.", fg_rgb(rr, gg, bb), bg_s);
     } else {
-        print!("{}{}█", fg_rgb(rr, gg, bb), bg_rgb(8, 12, 28));
+        print!("{}{}█", fg_rgb(rr, gg, bb), bg_s);
     }
 }
 
@@ -428,7 +429,8 @@ fn begin_white_bar_line(width: i64) -> void {
 }
 
 fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
-                cur_frame: i64, total_frames: i64, sr: i64, mode: i32, fft_window: i32, dot_mode: i32) -> void {
+                cur_frame: i64, total_frames: i64, sr: i64, mode: i32, fft_window: i32,
+                dot_mode: i32, dark_bg: i32) -> void {
     // 1 header row + 1 bottom frequency row.
     let graph_h: i64 = height - 2;
     let bins_full: i64 = (freq_l.len() / 2);
@@ -441,10 +443,11 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     print!("{}{}", cursor_force(cmd_home()), reset());
     begin_white_bar_line(width);
     print!(
-        "FFT {}x{} sr={} L=cyan R=magenta B=yellow/white mode={} glyph={} [f/m/x/q] win={} frame={}/{}\r\n",
+        "FFT {}x{} sr={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} [f/m/x/b/q] win={} frame={}/{}\r\n",
         width, height, sr,
         mode == 1 ? "music" : "flat",
         dot_mode == 1 ? "dot" : "block",
+        dark_bg == 1 ? "blue" : "black",
         fft_window, cur_frame, total_frames
     );
     print!("{}", reset());
@@ -579,12 +582,20 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     while row > 0 {
         row = row - 1;
         // Pre-fill row with very dark blue background, then overlay FFT cells.
-        print!("{}", bg_rgb(8, 12, 28));
+        if dark_bg == 1 {
+            print!("{}", bg_rgb(12, 18, 38));
+        } else {
+            print!("{}", bg_rgb(0, 0, 0));
+        }
         for _i in 0..width {
             print!(" ");
         }
         print!("\r");
-        print!("{}", bg_rgb(8, 12, 28));
+        if dark_bg == 1 {
+            print!("{}", bg_rgb(12, 18, 38));
+        } else {
+            print!("{}", bg_rgb(0, 0, 0));
+        }
         for x in 0..width {
             let ml: i64 = col_ml[x];
             let mr: i64 = col_mr[x];
@@ -597,7 +608,7 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 let rr: i64 = (col_r[x] * lum) / 255;
                 let gg: i64 = (col_g[x] * lum) / 255;
                 let bb: i64 = (col_b[x] * lum) / 255;
-                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode);
+                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg);
             } else {
                 print!(" ");
             }
@@ -613,6 +624,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var wav_path: str8 = "examples/fft_example/illusion.wav";
     var mode: i32 = 0; // 1=music, 0=flat
     var dot_mode: i32 = 0; // 1=dot, 0=block
+    var dark_bg: i32 = 1; // 1=dark blue, 0=black
     var i: i32 = 1;
     while i < argc {
         let a: str8 = args[i];
@@ -662,6 +674,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             if find(key_buf, "x") >= 0 || find(key_buf, "X") >= 0 {
                 dot_mode = dot_mode == 0 ? 1 : 0;
             }
+            if find(key_buf, "b") >= 0 || find(key_buf, "B") >= 0 {
+                dark_bg = dark_bg == 0 ? 1 : 0;
+            }
         }
 
         let term_sz: TermSize = stdout_size();
@@ -674,7 +689,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let freq_l: list<i64> = forward(snap_l);
         let freq_r: list<i64> = forward(snap_r);
         let cur_frame: i64 = jack2_fftviz_current_frame();
-        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, sr, mode, fft_window, dot_mode);
+        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, sr, mode, fft_window, dot_mode, dark_bg);
         sleep_ms(16);
         if jack2_fftviz_running() == 0 {
             tail_ticks = tail_ticks - 1;
