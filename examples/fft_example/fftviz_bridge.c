@@ -320,6 +320,50 @@ static void try_connect_outputs(void)
         const char* tgt_l = playback_ports[0];
         const char* tgt_r = playback_ports[1] ? playback_ports[1] : playback_ports[0];
 
+        // Prefer common system playback pairs first (CoreAudio/JACK bridges).
+        const char* sys_p1 = NULL;
+        const char* sys_p2 = NULL;
+        const char* sys_p3 = NULL;
+        const char* sys_p4 = NULL;
+        const char* pb_first = NULL;
+        const char* pb_second = NULL;
+        for(int i = 0; playback_ports[i]; ++i)
+        {
+            const char* p = playback_ports[i];
+            if(strcmp(p, "system:playback_1") == 0)
+                sys_p1 = p;
+            else if(strcmp(p, "system:playback_2") == 0)
+                sys_p2 = p;
+            else if(strcmp(p, "system:playback_3") == 0)
+                sys_p3 = p;
+            else if(strcmp(p, "system:playback_4") == 0)
+                sys_p4 = p;
+
+            if(strstr(p, "playback"))
+            {
+                if(!pb_first)
+                    pb_first = p;
+                else if(!pb_second)
+                    pb_second = p;
+            }
+        }
+
+        if(sys_p1 && sys_p2)
+        {
+            tgt_l = sys_p1;
+            tgt_r = sys_p2;
+        }
+        else if(sys_p3 && sys_p4)
+        {
+            tgt_l = sys_p3;
+            tgt_r = sys_p4;
+        }
+        else if(pb_first)
+        {
+            tgt_l = pb_first;
+            tgt_r = pb_second ? pb_second : pb_first;
+        }
+
         if(prefix && prefix[0])
         {
             const char* first = NULL;
@@ -345,8 +389,28 @@ static void try_connect_outputs(void)
         }
 
         int rc0 = jack_connect(g_client, out_l_name, tgt_l);
-        int rc1 = 0;
-        rc1 = jack_connect(g_client, out_r_name, tgt_r);
+        int rc1 = jack_connect(g_client, out_r_name, tgt_r);
+
+        // If the preferred pair failed, try system:playback_3/4 as fallback.
+        if((rc0 != 0 || rc1 != 0) && sys_p3 && sys_p4 &&
+           (strcmp(tgt_l, sys_p3) != 0 || strcmp(tgt_r, sys_p4) != 0))
+        {
+            int frc0 = jack_connect(g_client, out_l_name, sys_p3);
+            int frc1 = jack_connect(g_client, out_r_name, sys_p4);
+            fprintf(stderr,
+                    "[fftviz] fallback connect L:%s -> %s rc=%d\n",
+                    out_l_name, sys_p3, frc0);
+            fprintf(stderr,
+                    "[fftviz] fallback connect R:%s -> %s rc=%d\n",
+                    out_r_name, sys_p4, frc1);
+            if(frc0 == 0 || frc1 == 0)
+            {
+                rc0 = frc0;
+                rc1 = frc1;
+                tgt_l = sys_p3;
+                tgt_r = sys_p4;
+            }
+        }
 
         fprintf(stderr,
                 "[fftviz] connect L:%s -> %s rc=%d\n",

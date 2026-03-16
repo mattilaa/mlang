@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+# Default to playback_3/4 on macOS JACK setups where 1/2 are often non-audible.
+# User-provided env vars still override these defaults.
+export FFTVIZ_OUT_L="${FFTVIZ_OUT_L:-system:playback_3}"
+export FFTVIZ_OUT_R="${FFTVIZ_OUT_R:-system:playback_4}"
+
 WAV_PATH="examples/fft_example/illusion.wav"
 OUT_EXE="/tmp/mlang_fft_analyzer_demo"
 OUT_OBJ="/tmp/fftviz_bridge.o"
@@ -43,4 +48,8 @@ echo "[fft_demo] building MLang demo..."
   -o "$OUT_EXE"
 
 echo "[fft_demo] running analyzer on: $WAV_PATH args: ${EXTRA_ARGS[*]:-<none>}"
-"$OUT_EXE" "$WAV_PATH" "${EXTRA_ARGS[@]}"
+if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+  "$OUT_EXE" "$WAV_PATH" "${EXTRA_ARGS[@]}"
+else
+  "$OUT_EXE" "$WAV_PATH"
+fi
