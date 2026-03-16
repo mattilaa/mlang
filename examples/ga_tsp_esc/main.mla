@@ -247,37 +247,92 @@ fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i
 }
 
 fn draw_segment(points: &list<i64>, w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
+    fn build_path_hv(w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
+        var path: list<i64> = [];
+        let sx: i64 = x1 >= x0 ? 1 : -1;
+        var x: i64 = x0;
+        while true {
+            let xi: i64 = clamp_i64(x, 0, w - 1);
+            let yi: i64 = clamp_i64(y0, 0, h - 1);
+            path.push(idx_2d(xi, yi, w));
+            if x == x1 {
+                break;
+            }
+            x += sx;
+        }
+        let sy: i64 = y1 >= y0 ? 1 : -1;
+        var y: i64 = y0;
+        while true {
+            let xi: i64 = clamp_i64(x1, 0, w - 1);
+            let yi: i64 = clamp_i64(y, 0, h - 1);
+            path.push(idx_2d(xi, yi, w));
+            if y == y1 {
+                break;
+            }
+            y += sy;
+        }
+        return path;
+    }
+
+    fn build_path_vh(w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
+        var path: list<i64> = [];
+        let sy: i64 = y1 >= y0 ? 1 : -1;
+        var y: i64 = y0;
+        while true {
+            let xi: i64 = clamp_i64(x0, 0, w - 1);
+            let yi: i64 = clamp_i64(y, 0, h - 1);
+            path.push(idx_2d(xi, yi, w));
+            if y == y1 {
+                break;
+            }
+            y += sy;
+        }
+        let sx: i64 = x1 >= x0 ? 1 : -1;
+        var x: i64 = x0;
+        while true {
+            let xi: i64 = clamp_i64(x, 0, w - 1);
+            let yi: i64 = clamp_i64(y1, 0, h - 1);
+            path.push(idx_2d(xi, yi, w));
+            if x == x1 {
+                break;
+            }
+            x += sx;
+        }
+        return path;
+    }
+
+    fn overlap_score(existing: &list<i64>, candidate: &list<i64>) -> i64 {
+        var score: i64 = 0;
+        let n: i64 = candidate.len();
+        for i in 0..n {
+            if has_value(existing, candidate[i]) {
+                score += 2;
+            }
+            if i > 0 && candidate[i] == candidate[i - 1] {
+                score += 1;
+            }
+        }
+        return score;
+    }
+
+    let hv: list<i64> = build_path_hv(w, h, x0, y0, x1, y1);
+    let vh: list<i64> = build_path_vh(w, h, x0, y0, x1, y1);
+    let use_hv: bool = overlap_score(points, hv) <= overlap_score(points, vh);
+    var chosen: list<i64> = [];
+    if use_hv {
+        chosen = hv;
+    } else {
+        chosen = vh;
+    }
+
     var out: list<i64> = [];
     let pn: i64 = points.len();
     for i in 0..pn {
         out.push(points[i]);
     }
-
-    // Orthogonal routing for clear corner glyphs:
-    // first horizontal (x0,y0)->(x1,y0), then vertical (x1,y0)->(x1,y1).
-    let sx: i64 = x1 >= x0 ? 1 : -1;
-    var x: i64 = x0;
-    let y_mid: i64 = y0;
-    while true {
-        let xi: i64 = clamp_i64(x, 0, w - 1);
-        let yi: i64 = clamp_i64(y_mid, 0, h - 1);
-        out.push(idx_2d(xi, yi, w));
-        if x == x1 {
-            break;
-        }
-        x += sx;
-    }
-
-    let sy: i64 = y1 >= y0 ? 1 : -1;
-    var y: i64 = y0;
-    while true {
-        let xi: i64 = clamp_i64(x1, 0, w - 1);
-        let yi: i64 = clamp_i64(y, 0, h - 1);
-        out.push(idx_2d(xi, yi, w));
-        if y == y1 {
-            break;
-        }
-        y += sy;
+    let cn: i64 = chosen.len();
+    for i in 0..cn {
+        out.push(chosen[i]);
     }
     return out;
 }
