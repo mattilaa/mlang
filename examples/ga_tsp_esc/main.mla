@@ -1,0 +1,755 @@
+mod std::algorithm::genetic;
+mod std::algorithm::rand;
+mod std::esc;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+mod std::ascii;
+
+use std::algorithm::genetic::argmax_i64;
+use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::reproduce_next_population_i64;
+use std::algorithm::rand::range_i64;
+use std::algorithm::rand::seed;
+use std::ascii::AsciiKey;
+use std::esc::acs_hline;
+use std::esc::acs_vline;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::bold_on;
+use std::esc::bold_off;
+use std::esc::color_bright_black;
+use std::esc::color_bright_cyan;
+use std::esc::color_bright_green;
+use std::esc::color_bright_magenta;
+use std::esc::color_bright_white;
+use std::esc::color_bright_yellow;
+use std::esc::bg;
+use std::esc::color_black;
+use std::esc::color_bright_blue;
+use std::esc::cursor;
+use std::esc::fg;
+use std::esc::reset;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::Stdin;
+use std::term::stdout_size;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::time::now_ms;
+use std::time::sleep_ms;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::sub;
+use std::strbuf::builder_append;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+
+fn iabs(v: i64) -> i64 {
+    return v < 0 ? -v : v;
+}
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a : b;
+}
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a : b;
+}
+
+fn clamp_i64(v: i64, lo: i64, hi: i64) -> i64 {
+    if v < lo {
+        return lo;
+    }
+    if v > hi {
+        return hi;
+    }
+    return v;
+}
+
+fn project_lons_to_x(lons_e4: &list<i64>, w: i64) -> list<i64> {
+    let n: i64 = lons_e4.len();
+    var out: list<i64> = [];
+    if n <= 0 {
+        return out;
+    }
+    var lo: i64 = lons_e4[0];
+    var hi: i64 = lons_e4[0];
+    for i in 1..n {
+        if lons_e4[i] < lo { lo = lons_e4[i]; }
+        if lons_e4[i] > hi { hi = lons_e4[i]; }
+    }
+    let span: i64 = hi - lo;
+    for i in 0..n {
+        if span <= 0 {
+            out.push(w / 2);
+        } else {
+            let x: i64 = 1 + ((lons_e4[i] - lo) * (w - 3)) / span;
+            out.push(clamp_i64(x, 1, w - 2));
+        }
+    }
+    return out;
+}
+
+fn project_lats_to_y(lats_e4: &list<i64>, h: i64) -> list<i64> {
+    let n: i64 = lats_e4.len();
+    var out: list<i64> = [];
+    if n <= 0 {
+        return out;
+    }
+    var lo: i64 = lats_e4[0];
+    var hi: i64 = lats_e4[0];
+    for i in 1..n {
+        if lats_e4[i] < lo { lo = lats_e4[i]; }
+        if lats_e4[i] > hi { hi = lats_e4[i]; }
+    }
+    let span: i64 = hi - lo;
+    for i in 0..n {
+        if span <= 0 {
+            out.push(h / 2);
+        } else {
+            let y: i64 = 1 + ((hi - lats_e4[i]) * (h - 3)) / span;
+            out.push(clamp_i64(y, 1, h - 2));
+        }
+    }
+    return out;
+}
+
+fn idx_2d(x: i64, y: i64, w: i64) -> i64 {
+    return y * w + x;
+}
+
+fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_e4: &list<i64>, lons_e4: &list<i64>) -> i64 {
+    let n: i64 = route.len();
+    if n <= 1 {
+        return 0;
+    }
+    var total: i64 = 0;
+    for i in 0..n {
+        let a: i64 = route[i];
+        let ni: i64 = (i + 1) % n;
+        let b: i64 = route[ni];
+        let geo_lat: i64 = iabs(lats_e4[a] - lats_e4[b]);
+        let geo_lon: i64 = iabs(lons_e4[a] - lons_e4[b]);
+        // GPS-driven distance: latitude + longitude adjusted for mid-Europe scale.
+        let geo_lon_scaled: i64 = (geo_lon * 7) / 10;
+        total += geo_lat + geo_lon_scaled;
+    }
+    return total;
+}
+
+fn geo_seg_cost(a: i64, b: i64, lats_e4: &list<i64>, lons_e4: &list<i64>) -> i64 {
+    let geo_lat: i64 = iabs(lats_e4[a] - lats_e4[b]);
+    let geo_lon: i64 = iabs(lons_e4[a] - lons_e4[b]);
+    let geo_lon_scaled: i64 = (geo_lon * 7) / 10;
+    return geo_lat + geo_lon_scaled;
+}
+
+fn nearest_neighbor_route(start_city: i64, city_count: i64, lats_e4: &list<i64>, lons_e4: &list<i64>) -> list<i64> {
+    var route: list<i64> = [];
+    var cur: i64 = start_city;
+    route.push(cur);
+    while route.len() < city_count {
+        var best_next: i64 = -1;
+        var best_cost: i64 = 1000000000000;
+        for c in 0..city_count {
+            if !has_value(route, c) {
+                let seg: i64 = geo_seg_cost(cur, c, lats_e4, lons_e4);
+                if seg < best_cost {
+                    best_cost = seg;
+                    best_next = c;
+                }
+            }
+        }
+        if best_next < 0 {
+            break;
+        }
+        route.push(best_next);
+        cur = best_next;
+    }
+    return route;
+}
+
+fn with_genome(flat: &list<i64>, index: i64, gene_count: i64, route: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let total: i64 = flat.len();
+    let base: i64 = index * gene_count;
+    let end: i64 = base + gene_count;
+    for i in 0..total {
+        if i >= base && i < end {
+            out.push(route[i - base]);
+        } else {
+            out.push(flat[i]);
+        }
+    }
+    return out;
+}
+
+fn has_value(values: &list<i64>, needle: i64) -> bool {
+    let n: i64 = values.len();
+    for i in 0..n {
+        if values[i] == needle {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn repair_permutation(raw: &list<i64>, city_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = raw.len();
+    for i in 0..n {
+        var v: i64 = raw[i];
+        if city_count > 0 {
+            v = v % city_count;
+            if v < 0 {
+                v += city_count;
+            }
+        }
+        if !has_value(out, v) {
+            out.push(v);
+        }
+    }
+    for c in 0..city_count {
+        if !has_value(out, c) {
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+fn get_genome(flat: &list<i64>, index: i64, gene_count: i64) -> list<i64> {
+    let start: i64 = index * gene_count;
+    var out: list<i64> = [];
+    for i in 0..gene_count {
+        out.push(flat[start + i]);
+    }
+    return out;
+}
+
+fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for p in 0..pop_size {
+        let g: list<i64> = get_genome(flat, p, gene_count);
+        let fixed: list<i64> = repair_permutation(g, gene_count);
+        for i in 0..gene_count {
+            out.push(fixed[i]);
+        }
+    }
+    return out;
+}
+
+fn draw_segment(points: &list<i64>, w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let pn: i64 = points.len();
+    for i in 0..pn {
+        out.push(points[i]);
+    }
+
+    // Orthogonal routing for clear corner glyphs:
+    // first horizontal (x0,y0)->(x1,y0), then vertical (x1,y0)->(x1,y1).
+    let sx: i64 = x1 >= x0 ? 1 : -1;
+    var x: i64 = x0;
+    let y_mid: i64 = y0;
+    while true {
+        let xi: i64 = clamp_i64(x, 0, w - 1);
+        let yi: i64 = clamp_i64(y_mid, 0, h - 1);
+        out.push(idx_2d(xi, yi, w));
+        if x == x1 {
+            break;
+        }
+        x += sx;
+    }
+
+    let sy: i64 = y1 >= y0 ? 1 : -1;
+    var y: i64 = y0;
+    while true {
+        let xi: i64 = clamp_i64(x1, 0, w - 1);
+        let yi: i64 = clamp_i64(y, 0, h - 1);
+        out.push(idx_2d(xi, yi, w));
+        if y == y1 {
+            break;
+        }
+        y += sy;
+    }
+    return out;
+}
+
+fn route_to_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = route.len();
+    if n <= 1 {
+        return out;
+    }
+    for i in 0..n {
+        let a: i64 = route[i];
+        let b: i64 = route[(i + 1) % n];
+        out = draw_segment(out, w, h, xs[a], ys[a], xs[b], ys[b]);
+    }
+    return out;
+}
+
+fn print_hline(count: i64) -> void {
+    let h: str8 = acs_hline();
+    for _i in 0..count {
+        print!("{}", h);
+    }
+}
+
+fn bput(builder: i64, s: str8) -> void {
+    let _ = builder_append(builder, s);
+}
+
+fn bput_line_fit(builder: i64, s: str8, width: i64) -> void {
+    if width <= 1 {
+        bput(builder, "\r\n");
+        return;
+    }
+    let safe_w: i64 = width - 1;
+    let n: i64 = len(s);
+    if n > safe_w {
+        let clipped: str8 = sub(s, 0, safe_w);
+        bput(builder, clipped);
+        free(clipped);
+    } else {
+        bput(builder, s);
+    }
+    bput(builder, "\r\n");
+}
+
+fn clone_i64_list(src: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = src.len();
+    for i in 0..n {
+        out.push(src[i]);
+    }
+    return out;
+}
+
+fn route_cell_glyph(points: &list<i64>, x: i64, y: i64, w: i64, h: i64) -> str8 {
+    let left: bool = x > 0 ? has_value(points, idx_2d(x - 1, y, w)) : false;
+    let right: bool = x + 1 < w ? has_value(points, idx_2d(x + 1, y, w)) : false;
+    let up: bool = y > 0 ? has_value(points, idx_2d(x, y - 1, w)) : false;
+    let down: bool = y + 1 < h ? has_value(points, idx_2d(x, y + 1, w)) : false;
+
+    if (left || right) && !(up || down) { return "─"; }
+    if (up || down) && !(left || right) { return "│"; }
+    if right && down && !left && !up { return "┌"; }
+    if left && down && !right && !up { return "┐"; }
+    if right && up && !left && !down { return "└"; }
+    if left && up && !right && !down { return "┘"; }
+    if left && right && up && down { return "┼"; }
+    if left && right && down { return "┬"; }
+    if left && right && up { return "┴"; }
+    if up && down && right { return "├"; }
+    if up && down && left { return "┤"; }
+    if left && right { return "─"; }
+    if up && down { return "│"; }
+    if (left || right) && (up || down) { return "┼"; }
+    return "•";
+}
+
+fn reverse_segment(route: &list<i64>, start: i64, end: i64) -> list<i64> {
+    let n: i64 = route.len();
+    var out: list<i64> = [];
+    for k in 0..n {
+        if k < start || k > end {
+            out.push(route[k]);
+        } else {
+            let src: i64 = end - (k - start);
+            out.push(route[src]);
+        }
+    }
+    return out;
+}
+
+fn two_opt_improve(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_e4: &list<i64>, lons_e4: &list<i64>) -> list<i64> {
+    var cur: list<i64> = clone_i64_list(route);
+    let n: i64 = cur.len();
+    if n < 4 {
+        return cur;
+    }
+
+    var improved: i32 = 1;
+    while improved == 1 {
+        improved = 0;
+        let i_end: i64 = n - 2;
+        var cur_cost: i64 = route_cost(cur, xs, ys, lats_e4, lons_e4);
+
+        for i in 1..i_end {
+            let j_start: i64 = i + 1;
+            let j_end: i64 = n - 1;
+            for j in j_start..j_end {
+                let cand: list<i64> = reverse_segment(cur, i, j);
+                let c: i64 = route_cost(cand, xs, ys, lats_e4, lons_e4);
+                if c < cur_cost {
+                    cur = cand;
+                    cur_cost = c;
+                    improved = 1;
+                }
+            }
+        }
+    }
+    return cur;
+}
+
+fn inject_elite_front(pop_flat: &list<i64>, pop_size: i64, gene_count: i64, elite: &list<i64>) -> list<i64> {
+    if pop_size <= 0 || gene_count <= 0 {
+        return clone_i64_list(pop_flat);
+    }
+    var out: list<i64> = [];
+    for i in 0..gene_count {
+        out.push(elite[i]);
+    }
+    for p in 1..pop_size {
+        let g: list<i64> = get_genome(pop_flat, p, gene_count);
+        for i in 0..gene_count {
+            out.push(g[i]);
+        }
+    }
+    return out;
+}
+
+fn main() -> i32 {
+    seed(now_ms());
+
+    let term = stdout_size();
+    var cols: i64 = term.cols;
+    var rows: i64 = term.rows;
+
+    var w: i64 = clamp_i64(cols - 8, 10, 110);
+    var h: i64 = clamp_i64(rows - 13, 4, 34);
+
+    let city_count: i64 = 18;
+    let pop_size: i64 = 120;
+    let generations_total: i64 = 1100;
+    let gens_per_frame: i64 = 2;
+    let mutation_permille_hi: i64 = 70;
+    let mutation_permille_lo: i64 = 12;
+    let tournament_size: i64 = 6;
+    let fitness_bias: i64 = 2000000;
+
+    let city_names: list<str8> = [
+        "Helsinki", "Stockholm", "Oslo", "Copenhagen", "Tallinn", "Riga",
+        "Vilnius", "Warsaw", "Berlin", "Prague", "Vienna", "Bratislava",
+        "Budapest", "Ljubljana", "Zagreb", "Rome", "Paris", "Madrid"
+    ];
+    // GPS coordinates (lat/lon * 10000) for the listed capitals.
+    let lats_e4: list<i64> = [
+        601699, 593293, 599139, 556761, 594370, 569496,
+        546872, 522297, 525200, 500755, 482082, 481486,
+        474979, 460569, 458150, 419028, 488566, 404168
+    ];
+    let lons_e4: list<i64> = [
+        249384, 180686, 107522, 125683, 247537, 241052,
+        252797, 210122, 134050, 144378, 163738, 171078,
+        190402, 145058, 159819, 124964, 23522, -37038
+    ];
+
+    var xs: list<i64> = project_lons_to_x(lons_e4, w);
+    var ys: list<i64> = project_lats_to_y(lats_e4, h);
+
+    var population: list<i64> = random_population_i64(pop_size, city_count, 0, city_count - 1);
+    population = repair_population(population, pop_size, city_count);
+    let initial_route: list<i64> = get_genome(population, 0, city_count);
+    let random_cost: i64 = route_cost(initial_route, xs, ys, lats_e4, lons_e4);
+    var best_route: list<i64> = get_genome(population, 0, city_count);
+    var render_route: list<i64> = get_genome(population, 0, city_count);
+    var pending_route: list<i64> = get_genome(population, 0, city_count);
+    var has_pending_route: i32 = 0;
+    var best_cost: i64 = random_cost;
+    var gen: i64 = 0;
+    var last_improve_gen: i64 = 0;
+    var walker_step: i64 = range_i64(0, 1000000);
+
+    let start_ms: i64 = now_ms();
+    let wrap_off: str8 = "\x1b[?7l";
+    let wrap_on: str8 = "\x1b[?7h";
+    print!("{}{}{}{}{}", alt_screen_on(), wrap_off, cursor(cmd_hide()), cursor(cmd_clear_screen()), cursor(cmd_home()));
+    let input: Stdin = stdin();
+    var raw_enabled: i32 = 0;
+    if stdin_is_tty() == 1 {
+        if stdin_enable_raw() == 0 {
+            raw_enabled = 1;
+        }
+    }
+
+    while gen < generations_total {
+        let keycode: i32 = read_keycode_nonblocking(input);
+        if keycode == std::ascii::AsciiKey::LowerQ || keycode == std::ascii::AsciiKey::UpperQ {
+            break;
+        }
+
+        let now_term = stdout_size();
+        let now_cols: i64 = now_term.cols;
+        let now_rows: i64 = now_term.rows;
+        let new_w: i64 = clamp_i64(now_cols - 8, 10, 110);
+        let new_h: i64 = clamp_i64(now_rows - 13, 4, 34);
+        if new_w != w || new_h != h {
+            xs = project_lons_to_x(lons_e4, new_w);
+            ys = project_lats_to_y(lats_e4, new_h);
+            w = new_w;
+            h = new_h;
+            cols = now_cols;
+            rows = now_rows;
+        }
+
+        for _step in 0..gens_per_frame {
+            if gen >= generations_total {
+                break;
+            }
+            let mut_drop: i64 = ((mutation_permille_hi - mutation_permille_lo) * gen) / generations_total;
+            var mutation_permille: i64 = clamp_i64(mutation_permille_hi - mut_drop, mutation_permille_lo, mutation_permille_hi);
+            if gen - last_improve_gen > 90 {
+                mutation_permille = mutation_permille_hi;
+            }
+            var fitness: list<i64> = [];
+            for p in 0..pop_size {
+                var route: list<i64> = get_genome(population, p, city_count);
+                var c: i64 = route_cost(route, xs, ys, lats_e4, lons_e4);
+                // Periodic local refinement on a subset of candidates.
+                if p < 8 {
+                    let improved_r: list<i64> = two_opt_improve(route, xs, ys, lats_e4, lons_e4);
+                    let improved_c: i64 = route_cost(improved_r, xs, ys, lats_e4, lons_e4);
+                    if improved_c < c {
+                        route = improved_r;
+                        c = improved_c;
+                        population = with_genome(population, p, city_count, route);
+                    }
+                }
+                if c < best_cost {
+                    let improved_copy: list<i64> = clone_i64_list(route);
+                    best_cost = c;
+                    best_route = route;
+                    pending_route = improved_copy;
+                    has_pending_route = 1;
+                    last_improve_gen = gen;
+                }
+                let fit: i64 = fitness_bias - c;
+                fitness.push(fit > 1 ? fit : 1);
+            }
+
+            let next_flat: list<i64> = reproduce_next_population_i64(
+                population, pop_size, city_count, fitness, mutation_permille, 0, city_count - 1, tournament_size
+            );
+            let repaired: list<i64> = repair_population(next_flat, pop_size, city_count);
+            population = inject_elite_front(repaired, pop_size, city_count, best_route);
+            gen += 1;
+        }
+
+        if has_pending_route == 1 {
+            let points_render_now: list<i64> = route_to_points(w, h, render_route, xs, ys);
+            let prn: i64 = points_render_now.len();
+            if prn <= 0 || (walker_step % prn) == 0 {
+                render_route = pending_route;
+                has_pending_route = 0;
+                walker_step = 0;
+            }
+        }
+
+        let points_initial: list<i64> = route_to_points(w, h, initial_route, xs, ys);
+        let points_best: list<i64> = route_to_points(w, h, render_route, xs, ys);
+        let points_best_n: i64 = points_best.len();
+        let walker_idx: i64 = points_best_n > 0 ? walker_step % points_best_n : -1;
+        let walker_cell: i64 = points_best_n > 0 ? points_best[walker_idx] : -1;
+        let route_n: i64 = render_route.len();
+        let salesman_from: i64 = route_n > 0 ? render_route[walker_step % route_n] : -1;
+        let salesman_to: i64 = route_n > 0 ? render_route[(walker_step + 1) % route_n] : -1;
+        walker_step += 1;
+
+        let elapsed_ms: i64 = now_ms() - start_ms;
+        let route_preview_n: i64 = cols >= 130 ? 8 : (cols >= 110 ? 6 : (cols >= 90 ? 5 : 4));
+
+        let builder: i64 = builder_new(65536);
+        bput(builder, cursor(cmd_clear_screen()));
+        bput(builder, cursor(cmd_home()));
+        let l0: str8 = format!("TSP+GA ESC  q=quit  gen={}/{}  t={}ms", gen, generations_total, elapsed_ms);
+        bput_line_fit(builder, l0, cols - 2);
+        free(l0);
+        let l1: str8 = format!(
+            "cost best={} random={}  gps {}({},{}) -> {}({},{})",
+            best_cost, random_cost,
+            city_names[salesman_from], lats_e4[salesman_from], lons_e4[salesman_from],
+            city_names[salesman_to], lats_e4[salesman_to], lons_e4[salesman_to]
+        );
+        bput_line_fit(builder, l1, cols - 2);
+        free(l1);
+        let path_builder: i64 = builder_new(1024);
+        bput(path_builder, "path: ");
+        let top_route_n: i64 = render_route.len();
+        for i in 0..top_route_n {
+            if i > 0 {
+                bput(path_builder, " ─ ");
+            }
+            let cname: str8 = city_names[render_route[i]];
+            let tag: str8 = sub(cname, 0, 3);
+            let p: str8 = format!("{}:{}", render_route[i], tag);
+            bput(path_builder, p);
+            free(p);
+            free(tag);
+            if i >= route_preview_n && top_route_n > (route_preview_n + 1) {
+                bput(path_builder, " ...");
+                break;
+            }
+        }
+        let path_line: str8 = builder_take_string(path_builder);
+        bput_line_fit(builder, path_line, cols - 2);
+        free(path_line);
+        builder_free(path_builder);
+        let l3: str8 = "legend: magenta=random  green=best  yellow=city  cyan=salesman";
+        bput_line_fit(builder, l3, cols - 2);
+
+        let hline_g: str8 = acs_hline();
+        for _i in 0..(w + 2) { bput(builder, hline_g); }
+        bput(builder, "\r\n");
+
+        let v: str8 = acs_vline();
+        for y in 0..h {
+            bput(builder, v);
+            for x in 0..w {
+                let i: i64 = idx_2d(x, y, w);
+                var city_here: i32 = 0;
+                var city_idx: i64 = -1;
+                for c in 0..city_count {
+                    if xs[c] == x && ys[c] == y {
+                        city_here = 1;
+                        city_idx = c;
+                        break;
+                    }
+                }
+                var label_here: i32 = 0;
+                var label_char: str8 = "";
+                for c in 0..city_count {
+                    let lname: str8 = city_names[c];
+                    let ln: i64 = len(lname);
+                    let ly_raw: i64 = ys[c] - 1;
+                    let ly: i64 = ly_raw < 0 ? 0 : ly_raw;
+                    var lx: i64 = xs[c] - (ln / 2);
+                    if lx < 0 {
+                        lx = 0;
+                    }
+                    if lx + ln >= w {
+                        lx = w - ln - 1;
+                        if lx < 0 {
+                            lx = 0;
+                        }
+                    }
+                    if y == ly && x >= lx && x < (lx + ln) {
+                        let ci: i64 = x - lx;
+                        let ch: str8 = sub(lname, ci, 1);
+                        label_here = 1;
+                        label_char = ch;
+                        break;
+                    }
+                }
+                let p0: bool = has_value(points_initial, i);
+                let p1: bool = has_value(points_best, i);
+                let moving_here: bool = i == walker_cell;
+
+                if label_here == 1 {
+                    let ch: str8 = format!(
+                        "{}{}{}{}{}",
+                        bold_on(),
+                        fg(color_black()),
+                        bg(color_bright_white()),
+                        label_char,
+                        reset()
+                    );
+                    bput(builder, ch);
+                    free(ch);
+                    free(label_char);
+                } else if moving_here {
+                    let gmv: str8 = route_cell_glyph(points_best, x, y, w, h);
+                    let ch: str8 = format!(
+                        "{}{}{}{}{}{}{}",
+                        bold_on(),
+                        fg(color_black()),
+                        bg(color_bright_blue()),
+                        fg(color_bright_white()),
+                        gmv,
+                        reset(),
+                        bold_off()
+                    );
+                    bput(builder, ch);
+                    free(ch);
+                } else if city_here == 1 {
+                    let cname: str8 = city_names[city_idx];
+                    let initial: str8 = sub(cname, 0, 1);
+                    let ch: str8 = format!("{}{}{}{}", bold_on(), fg(color_bright_yellow()), initial, reset());
+                    bput(builder, ch);
+                    free(ch);
+                    free(initial);
+                } else if p0 && p1 {
+                    let g: str8 = route_cell_glyph(points_best, x, y, w, h);
+                    let ch: str8 = format!("{}{}{}", fg(color_bright_white()), g, reset());
+                    bput(builder, ch);
+                    free(ch);
+                } else if p1 {
+                    let g: str8 = route_cell_glyph(points_best, x, y, w, h);
+                    let ch: str8 = format!("{}{}{}", fg(color_bright_green()), g, reset());
+                    bput(builder, ch);
+                    free(ch);
+                } else if p0 {
+                    let ch: str8 = format!("{}·{}", fg(color_bright_magenta()), reset());
+                    bput(builder, ch);
+                    free(ch);
+                } else {
+                    bput(builder, " ");
+                }
+            }
+            bput(builder, v); bput(builder, "\r\n");
+        }
+
+        for _i in 0..(w + 2) { bput(builder, hline_g); }
+        // Avoid trailing newline at bottom line to prevent terminal scroll.
+
+        let frame: str8 = builder_take_string(builder);
+        print!("{}", frame);
+        free(frame);
+        builder_free(builder);
+        sleep_ms(100);
+    }
+
+    var fitness: list<i64> = [];
+    for p in 0..pop_size {
+        let r: list<i64> = get_genome(population, p, city_count);
+        let c: i64 = route_cost(r, xs, ys, lats_e4, lons_e4);
+        let f: i64 = fitness_bias - c;
+        fitness.push(f > 1 ? f : 1);
+    }
+    let bi: i64 = argmax_i64(fitness);
+    if bi >= 0 {
+        let r: list<i64> = get_genome(population, bi, city_count);
+        let c: i64 = route_cost(r, xs, ys, lats_e4, lons_e4);
+        if c < best_cost {
+            best_cost = c;
+            best_route = r;
+        }
+    }
+
+    println!("final best cost={}", best_cost);
+    print!("best path: ");
+    let best_n: i64 = best_route.len();
+    for i in 0..best_n {
+        if i > 0 {
+            print!(" -> ");
+        }
+        print!("{}", best_route[i]);
+    }
+    println!("");
+    println!("{}done{}", fg(color_bright_black()), reset());
+    sleep_ms(600);
+
+    if raw_enabled == 1 {
+        let _ = stdin_restore();
+    }
+    print!("{}{}{}{}{}\n", reset(), wrap_on, cursor(cmd_show()), cursor(cmd_home()), alt_screen_off());
+    return 0;
+}

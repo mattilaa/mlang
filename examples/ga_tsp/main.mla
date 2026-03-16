@@ -1,0 +1,167 @@
+mod std::algorithm::genetic;
+mod std::algorithm::rand;
+
+use std::algorithm::genetic::argmax_i64;
+use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::reproduce_next_population_i64;
+use std::algorithm::rand::seed;
+
+fn iabs(v: i64) -> i64 {
+    return v < 0 ? -v : v;
+}
+
+fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> i64 {
+    let n: i64 = route.len();
+    if n <= 1 {
+        return 0;
+    }
+    var total: i64 = 0;
+    for i in 0..n {
+        let a: i64 = route[i];
+        let next_i: i64 = (i + 1) % n;
+        let b: i64 = route[next_i];
+        let dx: i64 = iabs(xs[a] - xs[b]);
+        let dy: i64 = iabs(ys[a] - ys[b]);
+        total += dx + dy;
+    }
+    return total;
+}
+
+fn has_value(values: &list<i64>, needle: i64) -> bool {
+    let n: i64 = values.len();
+    for i in 0..n {
+        if values[i] == needle {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn repair_permutation(raw: &list<i64>, city_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let raw_n: i64 = raw.len();
+    for i in 0..raw_n {
+        var v: i64 = raw[i];
+        if city_count > 0 {
+            v = v % city_count;
+            if v < 0 {
+                v += city_count;
+            }
+        }
+        if !has_value(out, v) {
+            out.push(v);
+        }
+    }
+
+    for c in 0..city_count {
+        if !has_value(out, c) {
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+fn get_genome(flat: &list<i64>, index: i64, gene_count: i64) -> list<i64> {
+    let start: i64 = index * gene_count;
+    var out: list<i64> = [];
+    for i in 0..gene_count {
+        let idx: i64 = start + i;
+        out.push(flat[idx]);
+    }
+    return out;
+}
+
+fn repair_population(flat: &list<i64>, pop_size: i64, city_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for p in 0..pop_size {
+        let g: list<i64> = get_genome(flat, p, city_count);
+        let fixed: list<i64> = repair_permutation(g, city_count);
+        for i in 0..city_count {
+            out.push(fixed[i]);
+        }
+    }
+    return out;
+}
+
+fn main() -> i32 {
+    let xs: list<i64> = [2, 5, 9, 13, 16, 20, 22, 18, 12, 7];
+    let ys: list<i64> = [3, 11, 4, 15, 6, 13, 2, 19, 9, 17];
+    let city_count: i64 = xs.len();
+
+    let pop_size: i64 = 96;
+    let generations: i64 = 300;
+    let mutation_permille: i64 = 90;
+    let tournament_size: i64 = 5;
+    let fitness_bias: i64 = 1000000;
+
+    seed(20260315);
+
+    var population: list<i64> = random_population_i64(pop_size, city_count, 0, city_count - 1);
+    population = repair_population(population, pop_size, city_count);
+
+    var best_cost: i64 = 9999999999;
+    var best_route: list<i64> = [];
+
+    for gen in 0..generations {
+        var fitness: list<i64> = [];
+        for p in 0..pop_size {
+            let route: list<i64> = get_genome(population, p, city_count);
+            let c: i64 = route_cost(route, xs, ys);
+            if c < best_cost {
+                best_cost = c;
+                best_route = route;
+            }
+            let fit: i64 = fitness_bias - c;
+            fitness.push(fit > 1 ? fit : 1);
+        }
+
+        if gen % 25 == 0 {
+            println!("gen={} best_cost={}", gen, best_cost);
+        }
+
+        let next_flat: list<i64> = reproduce_next_population_i64(
+            population,
+            pop_size,
+            city_count,
+            fitness,
+            mutation_permille,
+            0,
+            city_count - 1,
+            tournament_size
+        );
+        population = repair_population(next_flat, pop_size, city_count);
+    }
+
+    var final_fitness: list<i64> = [];
+    for p in 0..pop_size {
+        let route: list<i64> = get_genome(population, p, city_count);
+        let c: i64 = route_cost(route, xs, ys);
+        final_fitness.push(fitness_bias - c);
+    }
+    let best_idx: i64 = argmax_i64(final_fitness);
+    if best_idx >= 0 {
+        let route: list<i64> = get_genome(population, best_idx, city_count);
+        let c: i64 = route_cost(route, xs, ys);
+        if c < best_cost {
+            best_cost = c;
+            best_route = route;
+        }
+    }
+
+    println!("best route cost={}", best_cost);
+    print!("route: ");
+    let route_n: i64 = best_route.len();
+    for i in 0..route_n {
+        if i > 0 {
+            print!(" -> ");
+        }
+        print!("{}", best_route[i]);
+    }
+    if route_n > 0 {
+        println!(" -> {}", best_route[0]);
+    } else {
+        println!("");
+    }
+
+    return 0;
+}
