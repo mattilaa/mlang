@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <inttypes.h>
 #include <jack/jack.h>
 #include <math.h>
 #include <stdint.h>
@@ -523,6 +524,11 @@ int64_t jack2_fftviz_sample_rate(void)
     return (int64_t)g_sr;
 }
 
+int64_t jack2_fftviz_wav_sample_rate(void)
+{
+    return (int64_t)g_wav.sample_rate;
+}
+
 int64_t jack2_fftviz_total_frames(void)
 {
     return (int64_t)g_wav.frames;
@@ -546,6 +552,79 @@ int64_t jack2_fftviz_seek_rel_frames(int64_t delta)
 
     g_pos = p;
     // Resume playback on seek so scrubbing near the tail keeps rendering/audio.
+    g_running = 1;
+    return (int64_t)g_pos;
+}
+
+static int parse_timecode_seconds(const char* s, int64_t* out_sec)
+{
+    if(!s || !s[0] || !out_sec)
+        return -1;
+
+    char tmp[64];
+    size_t n = strlen(s);
+    if(n >= sizeof(tmp))
+        n = sizeof(tmp) - 1;
+    memcpy(tmp, s, n);
+    tmp[n] = '\0';
+
+    // Normalize "hh::mm::ss" to "hh:mm:ss".
+    char norm[64];
+    size_t j = 0;
+    for(size_t i = 0; i < n && j + 1 < sizeof(norm); ++i)
+    {
+        if(tmp[i] == ':' && (i + 1 < n) && tmp[i + 1] == ':')
+        {
+            norm[j++] = ':';
+            ++i;
+        }
+        else
+        {
+            norm[j++] = tmp[i];
+        }
+    }
+    norm[j] = '\0';
+
+    int64_t a = 0, b = 0, c = 0;
+    int parts = sscanf(norm, "%" SCNd64 ":%" SCNd64 ":%" SCNd64, &a, &b, &c);
+    if(parts == 3)
+    {
+        if(a < 0 || b < 0 || c < 0 || b > 59 || c > 59)
+            return -2;
+        *out_sec = a * 3600 + b * 60 + c;
+        return 0;
+    }
+    parts = sscanf(norm, "%" SCNd64 ":%" SCNd64, &a, &b);
+    if(parts == 2)
+    {
+        if(a < 0 || b < 0 || b > 59)
+            return -3;
+        *out_sec = a * 60 + b;
+        return 0;
+    }
+    parts = sscanf(norm, "%" SCNd64, &a);
+    if(parts == 1 && a >= 0)
+    {
+        *out_sec = a;
+        return 0;
+    }
+    return -4;
+}
+
+int64_t jack2_fftviz_seek_timecode(mlang_string time_spec)
+{
+    if(g_wav.frames <= 0 || g_wav.sample_rate <= 0)
+        return -1;
+    int64_t sec = 0;
+    if(parse_timecode_seconds(time_spec, &sec) != 0)
+        return -2;
+
+    int64_t frame = sec * (int64_t)g_wav.sample_rate;
+    if(frame < 0)
+        frame = 0;
+    if(frame >= (int64_t)g_wav.frames)
+        frame = (int64_t)g_wav.frames - 1;
+    g_pos = (double)frame;
     g_running = 1;
     return (int64_t)g_pos;
 }
