@@ -911,12 +911,8 @@ for_statement
     ;
 
 while_statement
-    : WHILE condition_expression COLON block_statement
-        { $$ = mla_ast_while_statement($2, $4, yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
-    | WHILE condition_expression COLON statement
+    : WHILE condition_expression COLON statement
         { $$ = mla_ast_while_statement($2, mla_ast_statement_list_create($4), yylineno, 1); static_cast<WhileNode*>($$)->col = yycolumn_token; }
-    | WHILE condition_expression COLON expression block_statement
-        { $$ = mla_ast_while_statement(mla_ast_binary_op(AMP_AMP, $2, $4), $5, yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression COLON expression statement
         { $$ = mla_ast_while_statement(mla_ast_binary_op(AMP_AMP, $2, $4), mla_ast_statement_list_create($5), yylineno, 0); static_cast<WhileNode*>($$)->col = yycolumn_token; }
     | WHILE condition_expression block_statement
@@ -1041,29 +1037,17 @@ else_if_list
     ;
 
 else_if
-    : ELSE IF condition_expression COLON block_statement { $$ = mla_ast_else_if($3, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF condition_expression COLON statement { $$ = mla_ast_else_if($3, mla_ast_statement_list_create($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF condition_expression COLON expression block_statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), $6); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    : ELSE IF condition_expression COLON statement { $$ = mla_ast_else_if($3, mla_ast_statement_list_create($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF condition_expression COLON expression statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), mla_ast_statement_list_create($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF condition_expression block_statement { $$ = mla_ast_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
-    | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement
-        { ASTNode* __init = mla_ast_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, $12); }
     | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = mla_ast_let_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, mla_ast_statement_list_create($12)); }
-    | ELSE IF LET IDENTIFIER ASSIGN expression COLON condition_expression COLON block_statement
-        { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $10); }
     | ELSE IF LET IDENTIFIER ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, mla_ast_statement_list_create($10)); }
-    | ELSE IF LET IDENTIFIER EQ expression COLON condition_expression block_statement
-        { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $9); }
     | ELSE IF LET IDENTIFIER EQ expression COLON condition_expression statement
         { ASTNode* __init = mla_ast_let_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, mla_ast_statement_list_create($9)); }
-    | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON block_statement
-        { ASTNode* __init = mla_ast_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, $12); }
     | ELSE IF VAR IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = mla_ast_var_declaration($6, $4, $8); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $10, mla_ast_statement_list_create($12)); }
-    | ELSE IF VAR IDENTIFIER ASSIGN expression COLON condition_expression COLON block_statement
-        { ASTNode* __init = mla_ast_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, $10); }
     | ELSE IF VAR IDENTIFIER ASSIGN expression COLON condition_expression COLON statement
         { ASTNode* __init = mla_ast_var_declaration(NULL, $4, $6); __init->line = @3.first_line; $$ = mla_ast_else_if_with_init(__init, $8, mla_ast_statement_list_create($10)); }
     ;
@@ -1208,7 +1192,6 @@ condition_primary
 
 optional_else
     : /* empty */ { $$ = NULL; }
-    | ELSE COLON block_statement { $$ = $3; }
     | ELSE COLON statement { $$ = mla_ast_statement_list_create($3); }
     | ELSE block_statement { $$ = $2; }
     ;
