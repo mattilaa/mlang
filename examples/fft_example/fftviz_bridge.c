@@ -533,6 +533,23 @@ int64_t jack2_fftviz_current_frame(void)
     return (int64_t)g_pos;
 }
 
+int64_t jack2_fftviz_seek_rel_frames(int64_t delta)
+{
+    if(g_wav.frames <= 0)
+        return 0;
+
+    double p = g_pos + (double)delta;
+    if(p < 0.0)
+        p = 0.0;
+    if(p >= (double)g_wav.frames)
+        p = (double)(g_wav.frames - 1);
+
+    g_pos = p;
+    // Resume playback on seek so scrubbing near the tail keeps rendering/audio.
+    g_running = 1;
+    return (int64_t)g_pos;
+}
+
 mlang_list_t jack2_fftviz_snapshot_i64(int32_t channel, int32_t window)
 {
     if(window <= 0)

@@ -44,6 +44,7 @@ extern fn jack2_fftviz_running() -> i32;
 extern fn jack2_fftviz_sample_rate() -> i64;
 extern fn jack2_fftviz_total_frames() -> i64;
 extern fn jack2_fftviz_current_frame() -> i64;
+extern fn jack2_fftviz_seek_rel_frames(delta: i64) -> i64;
 extern fn jack2_fftviz_snapshot_i64(channel: i32, window: i32) -> list<i64>;
 extern fn jack2_fftviz_block_ansi_i64(color_idx: i64) -> str8;
 extern fn jack2_fftviz_bg_ansi_i64(bg_idx: i64) -> str8;
@@ -428,11 +429,77 @@ fn begin_white_bar_line(width: i64) -> void {
     print!("{}{}", fg(color_black()), bg(color_white()));
 }
 
+fn fmt2(v: i64) -> str8 {
+    return v < 10 ? format!("0{}", v) : format!("{}", v);
+}
+
+fn format_timecode(seconds_in: i64) -> str8 {
+    let sec: i64 = seconds_in < 0 ? 0 : seconds_in;
+    let hh: i64 = sec / 3600;
+    let mm: i64 = (sec / 60) % 60;
+    let ss: i64 = sec % 60;
+    if hh > 0 {
+        return format!("{}:{}:{}", fmt2(hh), fmt2(mm), fmt2(ss));
+    }
+    return format!("{}:{}", fmt2(mm), fmt2(ss));
+}
+
+fn draw_progress_row(width: i64, cur_frame: i64, total_frames: i64, sr: i64) -> void {
+    print!("{}", cursor_force(cmd_clear_line()));
+    print!("{}{}", fg(color_black()), bg(color_white()));
+
+    let cur_sec: i64 = sr > 0 ? (cur_frame / sr) : 0;
+    let tot_sec: i64 = sr > 0 ? (total_frames / sr) : 0;
+    let t_now: str8 = format_timecode(cur_sec);
+    let t_end: str8 = format_timecode(tot_sec);
+    let head: str8 = format!(" {} / {} ", t_now, t_end);
+    print!("{}", head);
+
+    var used: i64 = len(head);
+    var bar_w: i64 = width - used - 2;
+    if bar_w < 8 {
+        bar_w = 8;
+    }
+    if bar_w > (width - used) {
+        bar_w = width - used;
+    }
+    if bar_w < 0 {
+        bar_w = 0;
+    }
+
+    var filled: i64 = 0;
+    if total_frames > 0 && bar_w > 0 {
+        filled = clamp_i64((cur_frame * bar_w) / total_frames, 0, bar_w);
+    }
+
+    if bar_w > 0 {
+        print!("[");
+        var i: i64 = 0;
+        while i < bar_w {
+            if i < filled {
+                print!("█");
+            } else {
+                print!("·");
+            }
+            i = i + 1;
+        }
+        print!("]");
+        used = used + bar_w + 2;
+    }
+
+    if used < width {
+        for _i in used..width {
+            print!(" ");
+        }
+    }
+    print!("{}", reset());
+}
+
 fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 cur_frame: i64, total_frames: i64, sr: i64, mode: i32, fft_window: i32,
                 dot_mode: i32, dark_bg: i32) -> void {
-    // 1 header row + 1 bottom frequency row.
-    let graph_h: i64 = height - 2;
+    // 1 header + 1 frequency axis + 1 progress row.
+    let graph_h: i64 = height - 3;
     let bins_full: i64 = (freq_l.len() / 2);
     // FFT on real-valued audio is mirrored; render only positive frequencies.
     let bins: i64 = bins_full / 2;
@@ -442,9 +509,12 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
 
     print!("{}{}", cursor_force(cmd_home()), reset());
     begin_white_bar_line(width);
+    let cur_sec: i64 = sr > 0 ? (cur_frame / sr) : 0;
+    let pos_time: str8 = format_timecode(cur_sec);
     print!(
-        "FFT {}x{} sr={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} [f/m/x/b/q] win={} frame={}/{}\r\n",
+        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} [h/l seek f/m/x/b/q] win={} frame={}/{}\r\n",
         width, height, sr,
+        pos_time,
         mode == 1 ? "music" : "flat",
         dot_mode == 1 ? "dot" : "block",
         dark_bg == 1 ? "blue" : "black",
@@ -616,6 +686,8 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         print!("{}\r\n", reset());
     }
     draw_freq_axis(width, bins, fft_window, sr);
+    print!("\r\n");
+    draw_progress_row(width, cur_frame, total_frames, sr);
     let out: Stdout = stdout();
     let _ = flush(out);
 }
@@ -676,6 +748,16 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             }
             if find(key_buf, "b") >= 0 || find(key_buf, "B") >= 0 {
                 dark_bg = dark_bg == 0 ? 1 : 0;
+            }
+            if find(key_buf, "h") >= 0 || find(key_buf, "H") >= 0 {
+                let delta: i64 = 0 - (sr * 5);
+                let _ = jack2_fftviz_seek_rel_frames(delta);
+                tail_ticks = 10;
+            }
+            if find(key_buf, "l") >= 0 || find(key_buf, "L") >= 0 {
+                let delta: i64 = sr * 5;
+                let _ = jack2_fftviz_seek_rel_frames(delta);
+                tail_ticks = 10;
             }
         }
 
