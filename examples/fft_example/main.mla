@@ -53,6 +53,7 @@ extern fn jack2_fftviz_snapshot_i64(channel: i32, window: i32) -> list<i64>;
 extern fn jack2_fftviz_block_ansi_i64(color_idx: i64) -> str8;
 extern fn jack2_fftviz_bg_ansi_i64(bg_idx: i64) -> str8;
 extern fn __mlang_std_esc_cursor_code(code: i32) -> str8;
+extern fn atoi(s: str8) -> i32;
 
 fn abs_i64(x: i64) -> i64 {
     return x < 0 ? 0 - x : x;
@@ -501,7 +502,7 @@ fn draw_progress_row(width: i64, cur_frame: i64, total_frames: i64, sr: i64) -> 
 
 fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 cur_frame: i64, total_frames: i64, fft_sr: i64, time_sr: i64, mode: i32, fft_window: i32,
-                dot_mode: i32, dark_bg: i32) -> void {
+                dot_mode: i32, dark_bg: i32, log_scale: i32) -> void {
     // 1 header + 1 frequency axis + 1 progress row.
     let graph_h: i64 = height - 3;
     let bins_full: i64 = (freq_l.len() / 2);
@@ -516,12 +517,13 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     let cur_sec: i64 = time_sr > 0 ? (cur_frame / time_sr) : 0;
     let pos_time: str8 = format_timecode(cur_sec);
     print!(
-        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} [h/l seek f/m/x/b/q] win={} frame={}/{}\r\n",
+        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} log={} [h/l seek f/m/x/b/q] win={} frame={}/{}\r\n",
         width, height, fft_sr,
         pos_time,
         mode == 1 ? "music" : "flat",
         dot_mode == 1 ? "dot" : "block",
         dark_bg == 1 ? "blue" : "black",
+        log_scale,
         fft_window, cur_frame, total_frames
     );
     print!("{}", reset());
@@ -599,8 +601,11 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         let hr: i64 = scale_height_log(mr, floor_mag, max_vis, graph_h);
         let hl_shrunk: i64 = (hl * 3) / 4;
         let hr_shrunk: i64 = (hr * 3) / 4;
-        let hlf: i64 = hl_shrunk < 2 ? 0 : hl_shrunk;
-        let hrf: i64 = hr_shrunk < 2 ? 0 : hr_shrunk;
+        let hs: i64 = log_scale <= 0 ? 100 : log_scale;
+        let hl_scaled: i64 = clamp_i64((hl_shrunk * 100) / hs, 0, graph_h);
+        let hr_scaled: i64 = clamp_i64((hr_shrunk * 100) / hs, 0, graph_h);
+        let hlf: i64 = hl_scaled < 2 ? 0 : hl_scaled;
+        let hrf: i64 = hr_scaled < 2 ? 0 : hr_scaled;
 
         col_hl.push(hlf);
         col_hr.push(hrf);
@@ -702,15 +707,18 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var dot_mode: i32 = 0; // 1=dot, 0=block
     var dark_bg: i32 = 1; // 1=dark blue, 0=black
     var start_time: str8 = "";
+    var log_scale: i32 = 100; // 100=default, >100 compress, <100 expand
     var i: i32 = 1;
     while i < argc {
         let a: str8 = args[i];
         if eq(a, "--help") == 1 || eq(a, "-h") == 1 {
-            println!("Usage: fft_analyzer_demo [WAV_PATH] [--flat|--music] [--time=hh::mm::ss]");
+            println!("Usage: fft_analyzer_demo [WAV_PATH] [--flat|--music] [--time=hh::mm::ss] [--log=x]");
             println!("Keys: q quit, f flat, m music, x glyph(block/dot), b bg(blue/black), h/l seek -/+5s");
             println!("Examples:");
             println!("  ./examples/fft_example/run_demo.sh --music --time=00::01::30");
             println!("  ./examples/fft_example/run_demo.sh /path/to/file.wav --flat --time=01::02::03");
+            println!("  ./examples/fft_example/run_demo.sh --log=120   # compress bars");
+            println!("  ./examples/fft_example/run_demo.sh --log=80    # expand bars");
             return 0;
         } else if eq(a, "--flat") == 1 {
             mode = 0;
@@ -718,6 +726,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             mode = 1;
         } else if starts_with(a, "--time=") == 1 {
             start_time = sub(a, 7, len(a) - 7);
+        } else if starts_with(a, "--log=") == 1 {
+            let ls: str8 = sub(a, 6, len(a) - 6);
+            let parsed: i32 = atoi(ls);
+            if parsed >= 25 && parsed <= 400 {
+                log_scale = parsed;
+            }
         } else {
             wav_path = a;
         }
@@ -789,7 +803,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let freq_l: list<i64> = forward(snap_l);
         let freq_r: list<i64> = forward(snap_r);
         let cur_frame: i64 = jack2_fftviz_current_frame();
-        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, fft_sr, time_sr, mode, fft_window, dot_mode, dark_bg);
+        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, fft_sr, time_sr, mode, fft_window, dot_mode, dark_bg, log_scale);
         sleep_ms(16);
         if jack2_fftviz_running() == 0 {
             tail_ticks = tail_ticks - 1;

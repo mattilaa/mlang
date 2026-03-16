@@ -18,7 +18,7 @@ EXTRA_ARGS=()
 WAV_SET=0
 for arg in "$@"; do
   case "$arg" in
-    --flat|--music|--time=*|-h|--help)
+    --flat|--music|--time=*|--log=*|-h|--help)
       EXTRA_ARGS+=("$arg")
       ;;
     *)

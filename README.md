@@ -516,6 +516,7 @@ Build + run:
 CLI options:
 - `--flat` / `--music` render mode
 - `--time=hh::mm::ss` (also accepts `mm::ss`) start playback at given position
+- `--log=x` FFT bar-height scale (`100` default, `>100` compress, `<100` expand)
 - `-h` / `--help` show demo help
 
 If JACK playback ports differ on your system, use explicit output ports:
@@ -534,6 +535,13 @@ Start at a specific time:
 
 ```sh
 ./examples/fft_example/run_demo.sh /path/to/stereo.wav --music --time=00::01::30
+```
+
+Adjust FFT bar-height scale:
+
+```sh
+./examples/fft_example/run_demo.sh --log=120   # more compressed bars
+./examples/fft_example/run_demo.sh --log=80    # taller bars
 ```
 
 ## Rust-like Attributes
