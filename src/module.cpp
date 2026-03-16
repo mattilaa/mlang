@@ -114,6 +114,9 @@ static std::string type_mangle(TypeNode* typeNode)
 
 static std::string function_signature_key(FunctionDefNode* node)
 {
+    if(!node)
+        return "<null_fn>()";
+
     std::string key = node->name + "(";
     if(node->parameters)
     {
@@ -121,7 +124,13 @@ static std::string function_signature_key(FunctionDefNode* node)
         {
             if(i > 0)
                 key += ",";
-            key += type_mangle(node->parameters->parameters[i]->type);
+            auto* param = node->parameters->parameters[i];
+            if(!param)
+            {
+                key += "unknown";
+                continue;
+            }
+            key += type_mangle(param->type);
         }
         if(node->parameters->isVarArg)
         {
@@ -432,6 +441,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             }
             for(auto* func : module->functionList->functions)
             {
+                if(!func)
+                    continue;
                 // Preserve already-tagged origin module (e.g. std::x::detail)
                 // and only set when not yet known.
                 if(func->sourceModule.empty())
@@ -443,6 +454,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 for(size_t i = 0; i < program->functionList->functions.size(); ++i)
                 {
                     auto* existing = program->functionList->functions[i];
+                    if(!existing)
+                        continue;
                     if(function_signature_key(existing) == sigKey)
                     {
                         // Prefer the more visible symbol when signatures collide
@@ -612,6 +625,8 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             {
                 for(auto* func : module->functionList->functions)
                 {
+                    if(!func)
+                        continue;
                     if(func->name == useDecl->itemName)
                     {
                         hasFunction = true;

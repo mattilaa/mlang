@@ -890,25 +890,25 @@ while_statement
     ;
 
 range_expression
-    : primary_expression DOTDOT primary_expression
+    : postfix_expression DOTDOT postfix_expression
         { $$ = mla_ast_range_expression($1, $3, 0); }
-    | primary_expression DOTDOTEQ primary_expression
+    | postfix_expression DOTDOTEQ postfix_expression
         { $$ = mla_ast_range_expression($1, $3, 1); }
-    | primary_expression DOTDOT primary_expression PLUS primary_expression
+    | postfix_expression DOTDOT postfix_expression PLUS postfix_expression
         { $$ = mla_ast_range_expression($1, mla_ast_binary_op(PLUS, $3, $5), 0); }
-    | primary_expression DOTDOT primary_expression MINUS primary_expression
+    | postfix_expression DOTDOT postfix_expression MINUS postfix_expression
         { $$ = mla_ast_range_expression($1, mla_ast_binary_op(MINUS, $3, $5), 0); }
-    | primary_expression DOTDOTEQ primary_expression PLUS primary_expression
+    | postfix_expression DOTDOTEQ postfix_expression PLUS postfix_expression
         { $$ = mla_ast_range_expression($1, mla_ast_binary_op(PLUS, $3, $5), 1); }
-    | primary_expression DOTDOTEQ primary_expression MINUS primary_expression
+    | postfix_expression DOTDOTEQ postfix_expression MINUS postfix_expression
         { $$ = mla_ast_range_expression($1, mla_ast_binary_op(MINUS, $3, $5), 1); }
-    | primary_expression PLUS primary_expression DOTDOT primary_expression
+    | postfix_expression PLUS postfix_expression DOTDOT postfix_expression
         { $$ = mla_ast_range_expression(mla_ast_binary_op(PLUS, $1, $3), $5, 0); }
-    | primary_expression MINUS primary_expression DOTDOT primary_expression
+    | postfix_expression MINUS postfix_expression DOTDOT postfix_expression
         { $$ = mla_ast_range_expression(mla_ast_binary_op(MINUS, $1, $3), $5, 0); }
-    | primary_expression PLUS primary_expression DOTDOTEQ primary_expression
+    | postfix_expression PLUS postfix_expression DOTDOTEQ postfix_expression
         { $$ = mla_ast_range_expression(mla_ast_binary_op(PLUS, $1, $3), $5, 1); }
-    | primary_expression MINUS primary_expression DOTDOTEQ primary_expression
+    | postfix_expression MINUS postfix_expression DOTDOTEQ postfix_expression
         { $$ = mla_ast_range_expression(mla_ast_binary_op(MINUS, $1, $3), $5, 1); }
     ;
 

@@ -18,6 +18,7 @@ int yycolumn_token = 1; // column at start of the current token
 
 static int yyinput(void);
 static void yyunput(int, char*);
+static int generic_depth = 0;
 
 static int is_generic_struct_literal_start()
 {
@@ -205,8 +206,29 @@ static int is_try_question_context()
 ".iter().enumerate()"      { return ITER_ENUMERATE_METHOD; }
 ".into_iter().enumerate()" { return INTO_ITER_ENUMERATE_METHOD; }
 ".enumerate()"  { return ENUMERATE_METHOD; }
-"<"             { return is_generic_struct_literal_start() ? GENERIC_LT : LT; }
-">"             { return GT; }
+"<"             {
+                  if(is_generic_struct_literal_start()) {
+                      generic_depth++;
+                      return GENERIC_LT;
+                  }
+                  return LT;
+                }
+"<<"            { return SHL; }
+">>="           { return SHR_ASSIGN; }
+">>"            {
+                  if(generic_depth > 0) {
+                      generic_depth--;
+                      yyless(1); /* return '>' now; second '>' stays for next token */
+                      return GT;
+                  }
+                  return SHR;
+                }
+">"             {
+                  if(generic_depth > 0) {
+                      generic_depth--;
+                  }
+                  return GT;
+                }
 "<=>"           { return SPACESHIP; }
 "<="            { return LE; }
 ">="            { return GE; }
@@ -238,9 +260,6 @@ static int is_try_question_context()
 "|="            { return PIPE_ASSIGN; }
 "^="            { return CARET_ASSIGN; }
 "<<="           { return SHL_ASSIGN; }
-">>="           { return SHR_ASSIGN; }
-"<<"            { return SHL; }
-">>"            { return SHR; }
 "+"             { return PLUS; }
 "-"             { return MINUS; }
 "*"             { return MULTIPLY; }
