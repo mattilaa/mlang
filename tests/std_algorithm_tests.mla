@@ -6,6 +6,7 @@ mod std::algorithm::order;
 mod std::algorithm::ranges;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
+mod std::algorithm::genetic;
 mod std::strbuf;
 
 use std::algorithm::fuzzy::best_index;
@@ -38,6 +39,13 @@ use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
 use std::algorithm::regex::Regex;
+use std::algorithm::genetic::argmax_i64;
+use std::algorithm::genetic::crossover_one_point_i64;
+use std::algorithm::genetic::mutate_genome_i64;
+use std::algorithm::genetic::random_genome_i64;
+use std::algorithm::genetic::random_population_i64;
+use std::algorithm::genetic::reproduce_next_population_i64;
+use std::algorithm::genetic::tournament_select_index_i64;
 use std::strbuf::eq;
 use std::strbuf::free;
 use std::strbuf::sub;
@@ -214,4 +222,82 @@ fn test_algorithm_regex_namespace_basic() {
     free(m);
     re.close();
     verify(ok == 1);
+}
+
+#[test]
+fn test_algorithm_genetic_random_genome_reproducible() {
+    seed(123456);
+    let g1: list<i64> = random_genome_i64(8, -3, 3);
+    seed(123456);
+    let g2: list<i64> = random_genome_i64(8, -3, 3);
+    verify(g1.len() == 8);
+    verify(g2.len() == 8);
+    for i in 0..8 {
+        verify(g1[i] == g2[i]);
+        verify(g1[i] >= -3 && g1[i] <= 3);
+    }
+}
+
+#[test]
+fn test_algorithm_genetic_crossover_and_mutation_edges() {
+    let a: list<i64> = [1, 2, 3, 4];
+    let b: list<i64> = [9, 8, 7, 6];
+    let c0: list<i64> = crossover_one_point_i64(a, b, 0);
+    let c2: list<i64> = crossover_one_point_i64(a, b, 2);
+    let c9: list<i64> = crossover_one_point_i64(a, b, 9);
+    verify(c0[0] == 9 && c0[1] == 8 && c0[2] == 7 && c0[3] == 6);
+    verify(c2[0] == 1 && c2[1] == 2 && c2[2] == 7 && c2[3] == 6);
+    verify(c9[0] == 1 && c9[1] == 2 && c9[2] == 3 && c9[3] == 4);
+
+    seed(99);
+    let m0: list<i64> = mutate_genome_i64(a, 0, 0, 10);
+    let an: i64 = a.len();
+    for i in 0..an {
+        verify(m0[i] == a[i]);
+    }
+    seed(99);
+    let m1: list<i64> = mutate_genome_i64(a, 1000, 0, 10);
+    verify(m1.len() == a.len());
+    let m1n: i64 = m1.len();
+    for i in 0..m1n {
+        verify(m1[i] >= 0 && m1[i] <= 10);
+    }
+}
+
+#[test]
+fn test_algorithm_genetic_selection() {
+    let fit: list<i64> = [10, 30, 20, 5];
+    verify(argmax_i64(fit) == 1);
+
+    seed(7);
+    for _i in 0..64 {
+        let idx: i64 = tournament_select_index_i64(fit, 3);
+        verify(idx >= 0 && idx < fit.len());
+    }
+}
+
+#[test]
+fn test_algorithm_genetic_population_reproduction() {
+    seed(4242);
+    let pop_size: i64 = 6;
+    let gene_count: i64 = 5;
+    let pop: list<i64> = random_population_i64(pop_size, gene_count, 0, 9);
+    verify(pop.len() == pop_size * gene_count);
+    for i in 0..6 {
+        for j in 0..5 {
+            let idx: i64 = i * gene_count + j;
+            verify(pop[idx] >= 0 && pop[idx] <= 9);
+        }
+    }
+
+    let fit: list<i64> = [10, 30, 20, 5, 1, 12];
+    let next: list<i64> =
+        reproduce_next_population_i64(pop, pop_size, gene_count, fit, 150, 0, 9, 3);
+    verify(next.len() == pop_size * gene_count);
+    for i in 0..6 {
+        for j in 0..5 {
+            let idx: i64 = i * gene_count + j;
+            verify(next[idx] >= 0 && next[idx] <= 9);
+        }
+    }
 }

@@ -1,0 +1,202 @@
+/// \file genetic.mla
+/// \brief Genetic algorithm helpers under std::algorithm.
+///
+/// A small, deterministic-friendly GA subset for integer genomes.
+///
+/// @defgroup algorithm_genetic std::algorithm::genetic
+/// @ingroup algorithm
+/// @brief Genetic algorithm helpers for `list<i64>` genomes.
+/// @{
+
+/// \cond INTERNAL_IMPORTS
+mod std::algorithm::rand;
+use std::algorithm::rand::range_i64;
+/// \endcond
+
+fn clamp_i64(value: i64, lo: i64, hi: i64) -> i64 {
+    if value < lo {
+        return lo;
+    }
+    if value > hi {
+        return hi;
+    }
+    return value;
+}
+
+fn norm_lo(min_gene: i64, max_gene: i64) -> i64 {
+    return min_gene <= max_gene ? min_gene : max_gene;
+}
+
+fn norm_hi(min_gene: i64, max_gene: i64) -> i64 {
+    return min_gene <= max_gene ? max_gene : min_gene;
+}
+
+/// @brief Build a random integer genome.
+/// @param gene_count Number of genes.
+/// @param min_gene Inclusive lower bound for a gene.
+/// @param max_gene Inclusive upper bound for a gene.
+/// @ingroup algorithm_genetic
+pub fn random_genome_i64(gene_count: i64, min_gene: i64, max_gene: i64) -> list<i64> {
+    if gene_count <= 0 {
+        return [];
+    }
+    let lo: i64 = norm_lo(min_gene, max_gene);
+    let hi: i64 = norm_hi(min_gene, max_gene);
+    var out: list<i64> = [];
+    for _i in 0..gene_count {
+        out.push(range_i64(lo, hi));
+    }
+    return out;
+}
+
+/// @brief One-point crossover.
+/// Creates one child from prefix of `a` and suffix of `b`.
+/// @param cut Prefix length taken from `a`.
+/// @ingroup algorithm_genetic
+pub fn crossover_one_point_i64(a: &list<i64>, b: &list<i64>, cut: i64) -> list<i64> {
+    let na: i64 = a.len();
+    let nb: i64 = b.len();
+    let n: i64 = na < nb ? na : nb;
+    if n <= 0 {
+        return [];
+    }
+    let c: i64 = clamp_i64(cut, 0, n);
+    var child: list<i64> = [];
+    for i in 0..n {
+        if i < c {
+            child.push(a[i]);
+        } else {
+            child.push(b[i]);
+        }
+    }
+    return child;
+}
+
+/// @brief Mutate genes with probability `mutation_permille / 1000`.
+/// @ingroup algorithm_genetic
+pub fn mutate_genome_i64(parent: &list<i64>, mutation_permille: i64, min_gene: i64, max_gene: i64) -> list<i64> {
+    let n: i64 = parent.len();
+    if n == 0 {
+        return [];
+    }
+
+    let lo: i64 = norm_lo(min_gene, max_gene);
+    let hi: i64 = norm_hi(min_gene, max_gene);
+    let rate: i64 = clamp_i64(mutation_permille, 0, 1000);
+    var out: list<i64> = [];
+    for i in 0..n {
+        if range_i64(0, 999) < rate {
+            out.push(range_i64(lo, hi));
+        } else {
+            out.push(parent[i]);
+        }
+    }
+    return out;
+}
+
+/// @brief Index of max fitness value, or -1 when empty.
+/// @ingroup algorithm_genetic
+pub fn argmax_i64(fitness: &list<i64>) -> i64 {
+    let n: i64 = fitness.len();
+    if n == 0 {
+        return -1;
+    }
+    var best_i: i64 = 0;
+    var best_v: i64 = fitness[0];
+    for i in 1..n {
+        if fitness[i] > best_v {
+            best_v = fitness[i];
+            best_i = i;
+        }
+    }
+    return best_i;
+}
+
+/// @brief Tournament selection over fitness array.
+/// Returns selected parent index, or -1 when empty.
+/// @ingroup algorithm_genetic
+pub fn tournament_select_index_i64(fitness: &list<i64>, tournament_size: i64) -> i64 {
+    let n: i64 = fitness.len();
+    if n == 0 {
+        return -1;
+    }
+    let k: i64 = clamp_i64(tournament_size, 1, n);
+    var best_i: i64 = range_i64(0, n - 1);
+    var best_v: i64 = fitness[best_i];
+    for _j in 1..k {
+        let cand_i: i64 = range_i64(0, n - 1);
+        let cand_v: i64 = fitness[cand_i];
+        if cand_v > best_v {
+            best_v = cand_v;
+            best_i = cand_i;
+        }
+    }
+    return best_i;
+}
+
+/// @brief Build an initial random population.
+/// @ingroup algorithm_genetic
+pub fn random_population_i64(pop_size: i64, gene_count: i64, min_gene: i64, max_gene: i64) -> list<i64> {
+    if pop_size <= 0 {
+        return [];
+    }
+    if gene_count <= 0 {
+        return [];
+    }
+    var out: list<i64> = [];
+    for _i in 0..pop_size {
+        let g: list<i64> = random_genome_i64(gene_count, min_gene, max_gene);
+        for j in 0..gene_count {
+            out.push(g[j]);
+        }
+    }
+    return out;
+}
+
+/// @brief Produce next population by selection + crossover + mutation.
+/// Population must be flat `[g00,g01.., g10,g11..]` and fit `pop_size * gene_count`.
+/// @ingroup algorithm_genetic
+pub fn reproduce_next_population_i64(
+    population: &list<i64>,
+    pop_size: i64,
+    gene_count: i64,
+    fitness: &list<i64>,
+    mutation_permille: i64,
+    min_gene: i64,
+    max_gene: i64,
+    tournament_size: i64
+) -> list<i64> {
+    if pop_size <= 0 || gene_count <= 0 {
+        return [];
+    }
+    let total: i64 = pop_size * gene_count;
+    if population.len() != total || fitness.len() != pop_size {
+        return [];
+    }
+
+    var out: list<i64> = [];
+    for _i in 0..pop_size {
+        let p1: i64 = tournament_select_index_i64(fitness, tournament_size);
+        let p2: i64 = tournament_select_index_i64(fitness, tournament_size);
+        if p1 < 0 || p2 < 0 {
+            return [];
+        }
+        let s1: i64 = p1 * gene_count;
+        let s2: i64 = p2 * gene_count;
+        var g1: list<i64> = [];
+        var g2: list<i64> = [];
+        for j in 0..gene_count {
+            g1.push(population[s1 + j]);
+            g2.push(population[s2 + j]);
+        }
+        let cut: i64 = gene_count <= 1 ? gene_count : range_i64(1, gene_count - 1);
+        let child0: list<i64> = crossover_one_point_i64(g1, g2, cut);
+        let child: list<i64> = mutate_genome_i64(child0, mutation_permille, min_gene, max_gene);
+        for j in 0..gene_count {
+            out.push(child[j]);
+        }
+    }
+    return out;
+}
+
+/// @}

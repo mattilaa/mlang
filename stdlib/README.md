@@ -66,6 +66,7 @@ Currently provided:
   - `std::algorithm::rand`: random helpers mirroring `std::rand`
   - `std::algorithm::regex`: regex helpers mirroring `std::regex`
   - `std::algorithm::fft`: FFT helpers for forward/inverse transforms
+  - `std::algorithm::genetic`: GA helpers for genome/population evolution
 - `std/esc.mla`: ANSI terminal escape helpers with named color/cursor values
   cursor control (`fg/bg/reset`, `bold_on/off`, `underline_on/off`,
   `cursor`, `cursor_move`), auto-disabled when `std::term::supports_ansi()`

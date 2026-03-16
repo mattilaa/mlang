@@ -9,6 +9,7 @@
 /// - `std::algorithm::rand`
 /// - `std::algorithm::regex`
 /// - `std::algorithm::fft`
+/// - `std::algorithm::genetic`
 ///
 /// @defgroup algorithm std::algorithm
 /// @brief Algorithm namespace and submodules.
@@ -24,6 +25,7 @@ mod std::algorithm::ranges;
 mod std::algorithm::rand;
 mod std::algorithm::regex;
 mod std::algorithm::fft;
+mod std::algorithm::genetic;
 /// \endcond
 
 /// @}
