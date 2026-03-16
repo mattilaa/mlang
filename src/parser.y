@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 #include "ast.h"
 #include "ast_handle_helpers.h"
 
@@ -42,6 +43,24 @@ static ASTNode* create_enum_or_ident_from_path(char* path, int line)
         return create_identifier_at(path, line, 0);
 
     return mla_ast_enum_literal(enumName, variant, line);
+}
+
+static std::vector<ASTNode*> g_hoistedNestedFunctions;
+
+static ASTNode* append_hoisted_nested_functions(ASTNode* topLevelList)
+{
+    ASTNode* list = topLevelList;
+    for(ASTNode* fn : g_hoistedNestedFunctions)
+    {
+        list = mla_ast_add_to_top_level_list(list, fn);
+    }
+    g_hoistedNestedFunctions.clear();
+    return list;
+}
+
+static ASTNode* make_nested_fn_noop_statement()
+{
+    return mla_ast_expression_statement(mla_ast_literal_int(0));
 }
 
 extern int yylex();
@@ -159,6 +178,7 @@ ASTNode* mla_ast_format_expr(char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* mla_ast_assert(ASTNode* condition, int line);
 ASTNode* mla_ast_static_assert(ASTNode* condition, int line);
+ASTNode* mla_ast_expression_statement(ASTNode* expr);
 ASTNode* mla_ast_unsafe_block(ASTNode* block, int line);
 ASTNode* mla_ast_break_stmt(int line);
 ASTNode* mla_ast_continue_stmt(int line);
@@ -332,7 +352,7 @@ enum UpdatePosition
 %type <ast> if_statement else_if_list else_if optional_else
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
-%type <ast> let_statement var_statement assignment_statement expression_statement
+%type <ast> let_statement var_statement assignment_statement expression_statement nested_function_statement
 %type <ast> return_statement block_statement for_statement while_statement range_expression
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
@@ -363,7 +383,7 @@ enum UpdatePosition
 
 program
     : top_level_list {
-        $$ = mla_ast_program($1);
+        $$ = mla_ast_program(append_hoisted_nested_functions($1));
         programRoot = $$;  /* Store the result in the global variable */
     }
     ;
@@ -732,6 +752,20 @@ statement
     | static_assert_statement
     | break_statement
     | continue_statement
+    | nested_function_statement
+    ;
+
+nested_function_statement
+    : function_def
+        {
+            g_hoistedNestedFunctions.push_back($1);
+            $$ = make_nested_fn_noop_statement();
+        }
+    | inline_function_def
+        {
+            g_hoistedNestedFunctions.push_back($1);
+            $$ = make_nested_fn_noop_statement();
+        }
     ;
 
 let_statement
