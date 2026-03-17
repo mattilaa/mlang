@@ -186,7 +186,7 @@ fn clamp_i32(x: i32, lo: i32, hi: i32) -> i32 {
 }
 
 fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, dark_bg: i32,
-                  shade_mode: i32, dist_from_top: i64) -> void {
+                  shade_mode: i32, dist_from_top: i64, half_cap: i32) -> void {
     var rr: i32 = r;
     var gg: i32 = g;
     var bb: i32 = b;
@@ -204,7 +204,9 @@ fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, d
     if dot_mode == 1 {
         print!("{}{}{}", fg_rgb(rr, gg, bb), bg_s, unicode_box_glyph(UnicodeBoxGlyph::Dot));
     } else {
-        if shade_mode == 1 {
+        if half_cap == 1 {
+            print!("{}{}{}", fg_rgb(rr, gg, bb), bg_s, unicode_box_glyph(UnicodeBoxGlyph::LowerHalfBlock));
+        } else if shade_mode == 1 {
             var gch: str8 = unicode_box_glyph(UnicodeBoxGlyph::FullBlock);
             if dist_from_top <= 0 {
                 gch = unicode_box_glyph(UnicodeBoxGlyph::LightShade);
@@ -551,6 +553,8 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
 
     var col_hl: Vec<i64> = Vec::new();
     var col_hr: Vec<i64> = Vec::new();
+    var col_half_l: Vec<i64> = Vec::new();
+    var col_half_r: Vec<i64> = Vec::new();
 
     var max_l: i64 = 0;
     var max_r: i64 = 0;
@@ -630,18 +634,30 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         }
         col_density.push(density);
         let floor_mag: i64 = mode == 1 ? noise_floor : (noise_floor / 8);
-        let hl: i64 = scale_height_log(ml, floor_mag, max_vis, graph_h);
-        let hr: i64 = scale_height_log(mr, floor_mag, max_vis, graph_h);
-        let hl_shrunk: i64 = (hl * 3) / 4;
-        let hr_shrunk: i64 = (hr * 3) / 4;
+        let hl2: i64 = scale_height_log(ml, floor_mag, max_vis, graph_h * 2);
+        let hr2: i64 = scale_height_log(mr, floor_mag, max_vis, graph_h * 2);
+        let hl2_shrunk: i64 = (hl2 * 3) / 4;
+        let hr2_shrunk: i64 = (hr2 * 3) / 4;
         let hs: i64 = log_scale <= 0 ? 100 : log_scale;
-        let hl_scaled: i64 = clamp_i64((hl_shrunk * 100) / hs, 0, graph_h);
-        let hr_scaled: i64 = clamp_i64((hr_shrunk * 100) / hs, 0, graph_h);
-        let hlf: i64 = hl_scaled < 2 ? 0 : hl_scaled;
-        let hrf: i64 = hr_scaled < 2 ? 0 : hr_scaled;
+        let hl2_scaled: i64 = clamp_i64((hl2_shrunk * 100) / hs, 0, graph_h * 2);
+        let hr2_scaled: i64 = clamp_i64((hr2_shrunk * 100) / hs, 0, graph_h * 2);
+        var hlf: i64 = hl2_scaled / 2;
+        var hrf: i64 = hr2_scaled / 2;
+        var hhalf_l: i64 = hl2_scaled % 2;
+        var hhalf_r: i64 = hr2_scaled % 2;
+        if hl2_scaled < 2 {
+            hlf = 0;
+            hhalf_l = 0;
+        }
+        if hr2_scaled < 2 {
+            hrf = 0;
+            hhalf_r = 0;
+        }
 
         col_hl.push(hlf);
         col_hr.push(hrf);
+        col_half_l.push(hhalf_l);
+        col_half_r.push(hhalf_r);
         col_ml.push(ml);
         col_mr.push(mr);
 
@@ -672,9 +688,13 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     // Fill isolated horizontal holes so columns look continuous across x.
     var fix_l: Vec<i64> = Vec::new();
     var fix_r: Vec<i64> = Vec::new();
+    var fix_half_l: Vec<i64> = Vec::new();
+    var fix_half_r: Vec<i64> = Vec::new();
     for x in 0..width {
         var hl: i64 = col_hl[x];
         var hr: i64 = col_hr[x];
+        var hh_l: i64 = col_half_l[x];
+        var hh_r: i64 = col_half_r[x];
         if x > 0 && x < (width - 1) {
             let ll: i64 = col_hl[x - 1];
             let rl: i64 = col_hl[x + 1];
@@ -683,16 +703,22 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
             let allow_fill: i32 = detail_mode == 1 && x < (width / 2) ? 0 : 1;
             if allow_fill == 1 && hl == 0 && ll > 0 && rl > 0 {
                 hl = (ll + rl) / 2;
+                hh_l = 0;
             }
             if allow_fill == 1 && hr == 0 && lr > 0 && rr > 0 {
                 hr = (lr + rr) / 2;
+                hh_r = 0;
             }
         }
         fix_l.push(hl);
         fix_r.push(hr);
+        fix_half_l.push(hh_l);
+        fix_half_r.push(hh_r);
     }
     col_hl = fix_l;
     col_hr = fix_r;
+    col_half_l = fix_half_l;
+    col_half_r = fix_half_r;
 
     var row: i64 = graph_h;
     while row > 0 {
@@ -717,8 +743,14 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
             let mr: i64 = col_mr[x];
             let hl: i64 = col_hl[x];
             let hr: i64 = col_hr[x];
-            let on_l: i32 = hl > row ? 1 : 0;
-            let on_r: i32 = hr > row ? 1 : 0;
+            let hh_l: i64 = col_half_l[x];
+            let hh_r: i64 = col_half_r[x];
+            let full_l: i32 = hl > row ? 1 : 0;
+            let full_r: i32 = hr > row ? 1 : 0;
+            let half_l: i32 = hh_l == 1 && hl == row ? 1 : 0;
+            let half_r: i32 = hh_r == 1 && hr == row ? 1 : 0;
+            let on_l: i32 = (full_l == 1 || half_l == 1) ? 1 : 0;
+            let on_r: i32 = (full_r == 1 || half_r == 1) ? 1 : 0;
             if on_l == 1 || on_r == 1 {
                 let lum: i64 = col_lum[x];
                 let rr: i64 = (col_r[x] * lum) / 255;
@@ -726,7 +758,8 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 let bb: i64 = (col_b[x] * lum) / 255;
                 let hpk: i64 = hl > hr ? hl : hr;
                 let top_dist: i64 = hpk - (row + 1);
-                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg, shade_mode, top_dist);
+                let half_cap: i32 = (full_l == 0 && full_r == 0 && (half_l == 1 || half_r == 1)) ? 1 : 0;
+                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg, shade_mode, top_dist, half_cap);
             } else {
                 print!(" ");
             }
