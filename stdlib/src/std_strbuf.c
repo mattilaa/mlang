@@ -151,6 +151,43 @@ int64_t __mlang_std_strbuf_compare(const char* a, const char* b)
     return (int64_t)strcmp(a, b);
 }
 
+int __mlang_std_strbuf_eq16(const uint16_t* a, const uint16_t* b)
+{
+    if(!a || !b)
+        return a == b ? 1 : 0;
+    size_t i = 0;
+    while(a[i] != 0 && b[i] != 0)
+    {
+        if(a[i] != b[i])
+            return 0;
+        ++i;
+    }
+    return a[i] == b[i] ? 1 : 0;
+}
+
+int64_t __mlang_std_strbuf_compare16(const uint16_t* a, const uint16_t* b)
+{
+    if(!a && !b)
+        return 0;
+    if(!a)
+        return -1;
+    if(!b)
+        return 1;
+
+    size_t i = 0;
+    while(a[i] != 0 && b[i] != 0)
+    {
+        if(a[i] < b[i])
+            return -1;
+        if(a[i] > b[i])
+            return 1;
+        ++i;
+    }
+    if(a[i] == b[i])
+        return 0;
+    return a[i] == 0 ? -1 : 1;
+}
+
 int __mlang_std_strbuf_starts_with(const char* s, const char* prefix)
 {
     if(!s || !prefix)
@@ -269,6 +306,30 @@ char* __mlang_std_strbuf_concat(const char* a, const char* b)
         return NULL;
     memcpy(out, a, an);
     memcpy(out + an, b, bn + 1);
+    return out;
+}
+
+uint16_t* __mlang_std_strbuf_concat16(const uint16_t* a, const uint16_t* b)
+{
+    static const uint16_t empty16[] = {0};
+    if(!a)
+        a = empty16;
+    if(!b)
+        b = empty16;
+
+    size_t an = 0;
+    while(a[an] != 0)
+        ++an;
+    size_t bn = 0;
+    while(b[bn] != 0)
+        ++bn;
+
+    uint16_t* out = (uint16_t*)malloc((an + bn + 1u) * sizeof(uint16_t));
+    if(!out)
+        return NULL;
+    memcpy(out, a, an * sizeof(uint16_t));
+    memcpy(out + an, b, bn * sizeof(uint16_t));
+    out[an + bn] = 0;
     return out;
 }
 

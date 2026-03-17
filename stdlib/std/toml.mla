@@ -1,0 +1,40 @@
+/// \file toml.mla
+/// \brief Runtime-bound TOML helpers used by package-manager tooling (std::toml).
+///
+/// This is a compact facade over host/runtime TOML functions.
+
+extern pub fn __toml_parse(text: str8) -> i64;
+extern pub fn __toml_get_string(obj: i64, key: str8, fallback: str8) -> str8;
+extern pub fn __toml_set_inline_table(obj: i64, key: str8, field: str8, value: str8) -> void;
+extern pub fn __toml_stringify(obj: i64) -> str8;
+
+/// @brief Opaque TOML document handle.
+pub struct TomlDoc {
+    var handle: i64;
+};
+
+/// @brief Parse TOML text into an opaque handle.
+pub fn parse(text: str8) -> TomlDoc {
+    return TomlDoc { handle: __toml_parse(text) };
+}
+
+/// @brief Read string value by dotted key path with fallback.
+pub fn get_string(doc: &TomlDoc, key: str8, fallback: str8) -> str8 {
+    return __toml_get_string(doc.handle, key, fallback);
+}
+
+/// @brief Set `key.field = "value"` style inline table entry.
+pub fn set_inline_table(doc: &TomlDoc, key: str8, field: str8, value: str8) -> void {
+    __toml_set_inline_table(doc.handle, key, field, value);
+}
+
+/// @brief Serialize document back to TOML text.
+pub fn stringify(doc: &TomlDoc) -> str8 {
+    return __toml_stringify(doc.handle);
+}
+
+// Compatibility names used by imported mlangpkg prototype.
+pub fn toml_parse(text: str8) -> TomlDoc { return parse(text); }
+pub fn toml_get_string(doc: &TomlDoc, key: str8, fallback: str8) -> str8 { return get_string(doc, key, fallback); }
+pub fn toml_set_inline_table(doc: &TomlDoc, key: str8, field: str8, value: str8) -> void { set_inline_table(doc, key, field, value); }
+pub fn toml_stringify(doc: &TomlDoc) -> str8 { return stringify(doc); }

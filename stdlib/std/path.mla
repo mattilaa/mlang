@@ -1,0 +1,104 @@
+/// \file path.mla
+/// \brief Lightweight path helpers used by package-manager style tools (std::path).
+
+mod std::strbuf;
+
+use std::strbuf::ends_with;
+use std::strbuf::find;
+use std::strbuf::len;
+use std::strbuf::rfind;
+use std::strbuf::starts_with;
+use std::strbuf::sub;
+
+fn has_drive_prefix(p: str8) -> i32 {
+    if len(p) < 2 {
+        return 0;
+    }
+    let c0: str8 = sub(p, 0, 1);
+    let c1: str8 = sub(p, 1, 1);
+    if c1 != ":" {
+        return 0;
+    }
+    return len(c0) == 1 ? 1 : 0;
+}
+
+/// @brief Join two path segments with a single `/`.
+pub fn join(a: str8, b: str8) -> str8 {
+    if len(a) == 0 {
+        return b;
+    }
+    if len(b) == 0 {
+        return a;
+    }
+    if starts_with(b, "/") == 1 || has_drive_prefix(b) == 1 {
+        return b;
+    }
+    if ends_with(a, "/") == 1 {
+        return format!("{}{}", a, b);
+    }
+    return format!("{}/{}", a, b);
+}
+
+/// @brief Return final path component.
+pub fn basename(p: str8) -> str8 {
+    if len(p) == 0 {
+        return "";
+    }
+    let i: i64 = rfind(p, "/");
+    if i < 0 {
+        return p;
+    }
+    return sub(p, i + 1, len(p) - (i + 1));
+}
+
+/// @brief Return directory component of `p`.
+pub fn dirname(p: str8) -> str8 {
+    if len(p) == 0 {
+        return ".";
+    }
+    let i: i64 = rfind(p, "/");
+    if i < 0 {
+        return ".";
+    }
+    if i == 0 {
+        return "/";
+    }
+    return sub(p, 0, i);
+}
+
+/// @brief Normalize common separators and collapse duplicate `/`.
+pub fn normalize(p: str8) -> str8 {
+    if len(p) == 0 {
+        return ".";
+    }
+    var out: str8 = "";
+    var i: i64 = 0;
+    var prev_slash: i32 = 0;
+    while i < len(p) {
+        let ch: str8 = sub(p, i, 1);
+        var slash: i32 = 0;
+        if ch == "/" {
+            slash = 1;
+        }
+        if slash == 1 {
+            if prev_slash == 0 {
+                out = format!("{}/", out);
+            }
+            prev_slash = 1;
+        } else {
+            out = format!("{}{}", out, ch);
+            prev_slash = 0;
+        }
+        i = i + 1;
+    }
+    if len(out) > 1 && ends_with(out, "/") == 1 {
+        return sub(out, 0, len(out) - 1);
+    }
+    return out;
+}
+
+// Compatibility names used by imported mlangpkg prototype.
+pub fn path_join(a: str8, b: str8) -> str8 { return join(a, b); }
+pub fn path_normalize(p: str8) -> str8 { return normalize(p); }
+pub fn path_basename(p: str8) -> str8 { return basename(p); }
+pub fn path_dirname(p: str8) -> str8 { return dirname(p); }

@@ -1,0 +1,91 @@
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#endif
+
+typedef struct
+{
+    int64_t size;
+    void* data;
+} mlang_list_t;
+
+static char* mlang_strdup(const char* s)
+{
+    if(!s)
+        return NULL;
+    size_t n = strlen(s);
+    char* out = (char*)malloc(n + 1);
+    if(!out)
+        return NULL;
+    memcpy(out, s, n);
+    out[n] = '\0';
+    return out;
+}
+
+static void load_process_args(int* out_argc, char*** out_argv)
+{
+    if(out_argc)
+        *out_argc = 0;
+    if(out_argv)
+        *out_argv = NULL;
+
+#if defined(__APPLE__)
+    if(out_argc)
+        *out_argc = _NSGetArgc() ? *_NSGetArgc() : 0;
+    if(out_argv)
+        *out_argv = _NSGetArgv() ? *_NSGetArgv() : NULL;
+#endif
+}
+
+mlang_list_t __env_args(void)
+{
+    int argc = 0;
+    char** argv = NULL;
+    load_process_args(&argc, &argv);
+    mlang_list_t out;
+    out.size = (int64_t)argc;
+    out.data = argv;
+    return out;
+}
+
+int64_t __env_len(mlang_list_t values)
+{
+    return values.size;
+}
+
+char* __env_get(mlang_list_t values, int64_t index)
+{
+    if(index < 0 || index >= values.size || !values.data)
+        return mlang_strdup("");
+    char** argv = (char**)values.data;
+    const char* s = argv[index] ? argv[index] : "";
+    return mlang_strdup(s);
+}
+
+char* __env_cwd(void)
+{
+    char* p = getcwd(NULL, 0);
+    if(!p)
+        return mlang_strdup("");
+    return p;
+}
+
+void __env_println(const char* msg)
+{
+    fputs(msg ? msg : "", stdout);
+    fputc('\n', stdout);
+    fflush(stdout);
+}
+
+void __env_stderrln(const char* msg)
+{
+    fputs(msg ? msg : "", stderr);
+    fputc('\n', stderr);
+    fflush(stderr);
+}
+

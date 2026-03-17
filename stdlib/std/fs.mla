@@ -61,6 +61,9 @@ extern pub fn __mlang_std_fs_parent_dir(path: str8) -> str8;
 extern pub fn __mlang_std_fs_cwd() -> str8;
 extern pub fn __mlang_std_fs_read_all_text(path: str8) -> str8;
 extern pub fn __mlang_std_fs_write_all_text(path: str8, text: str8) -> i32;
+extern pub fn __mlang_std_fs_mkdir_p(path: str8) -> i32;
+extern pub fn __mlang_std_fs_remove_tree(path: str8) -> i32;
+extern pub fn __mlang_std_fs_glob_recursive(root: str8, pattern: str8) -> list<str8>;
 extern pub fn __mlang_std_strbuf_len(s: str8) -> i64;
 extern pub fn __mlang_std_fs_seek(handle: i64, offset: i64, whence: i32) -> i64;
 extern pub fn __mlang_std_fs_tell(handle: i64) -> i64;
@@ -693,4 +696,49 @@ pub fn write_all_text(path: str8, text: str8) -> Result<i32, str8> {
         return Err<i32, str8>("std::fs::write_all_text failed");
     }
     return Ok<i32, str8>(0);
+}
+
+/// @brief Recursively create directories (`mkdir -p` behavior).
+pub fn mkdir_p(path: str8) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_fs_mkdir_p(path);
+    if rc != 0 {
+        return Err<i32, str8>("std::fs::mkdir_p failed");
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Recursively remove directory tree or file at `path`.
+pub fn remove_tree(path: str8) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_fs_remove_tree(path);
+    if rc != 0 {
+        return Err<i32, str8>("std::fs::remove_tree failed");
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Recursively collect matching paths from `root` using simple glob pattern.
+pub fn glob_recursive(root: str8, pattern: str8) -> list<str8> {
+    return __mlang_std_fs_glob_recursive(root, pattern);
+}
+
+// Compatibility aliases used by imported mlangpkg prototype.
+pub fn fs_exists(path: str8) -> i32 { return file_exists(path); }
+pub fn fs_mkdir_p(path: str8) -> void {
+    let _ = mkdir_p(path);
+}
+pub fn fs_read_text(path: str8) -> str8 {
+    let r: Result<str8, str8> = read_all_text(path);
+    if r.is_err() {
+        return "";
+    }
+    return r.unwrap();
+}
+pub fn fs_write_text(path: str8, content: str8) -> void {
+    let _ = write_all_text(path, content);
+}
+pub fn fs_remove_tree(path: str8) -> void {
+    let _ = remove_tree(path);
+}
+pub fn fs_glob_recursive(root: str8, pattern: str8) -> list<str8> {
+    return glob_recursive(root, pattern);
 }

@@ -229,6 +229,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_compiler_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_io.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_fs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_env.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_time.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_rand.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
@@ -238,6 +239,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_term.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_json.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_toml.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_argparser.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_regex.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_unordered.c

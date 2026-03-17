@@ -1,0 +1,36 @@
+mod std::testing;
+mod std::strbuf;
+
+use std::strbuf::eq;
+use std::strbuf::free;
+use std::strbuf::free_utf16;
+use std::strbuf::from_utf16;
+use std::strbuf::to_utf16;
+use std::testing::verify_true;
+
+#[test]
+fn test_string_plus_operator_str8() {
+    let a: str8 = "mlang";
+    let sep: str8 = "-";
+    let b: str8 = "pkg";
+    let p: str8 = a + sep;
+    let c: str8 = p + b;
+    verify_true(eq(c, "mlang-pkg") == 1);
+    free(p);
+    free(c);
+}
+
+#[test]
+fn test_string_plus_operator_str16() {
+    let a16: str16 = to_utf16("hello");
+    let b16: str16 = to_utf16(" world");
+    let c16: str16 = a16 + b16;
+
+    let c8: str8 = from_utf16(c16);
+    verify_true(eq(c8, "hello world") == 1);
+
+    free(c8);
+    free_utf16(a16);
+    free_utf16(b16);
+    free_utf16(c16);
+}

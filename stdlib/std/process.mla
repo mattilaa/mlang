@@ -199,3 +199,51 @@ impl ChildStderr {
         return __mlang_std_process_pipe_close(self.handle);
     }
 }
+
+/// @brief Compatibility helper: run argv vector inheriting stdio.
+///
+/// `argv[0]` is treated as program path and the rest as args.
+/// Returns process exit code or `-1` on spawn/wait failure.
+pub fn process_run(argv: list<str8>) -> i32 {
+    if argv.len() <= 0 {
+        return -1;
+    }
+    let program: str8 = argv[0];
+    var args: list<str8> = [];
+    for i in 1..argv.len() {
+        args.push(argv[i]);
+    }
+    let sr: Result<Child, str8> = spawn_inherit(program, args);
+    if sr.is_err() {
+        return -1;
+    }
+    let child: Child = sr.unwrap();
+    let wr: Result<ExitStatus, str8> = child.wait();
+    if wr.is_err() {
+        child.close();
+        return -1;
+    }
+    let st: ExitStatus = wr.unwrap();
+    let code: i32 = st.code();
+    child.close();
+    return code;
+}
+
+/// @brief Compatibility helper: build an app from `src_dir/main.mla` to `out`.
+///
+/// Uses `./build/mlang` and sets optimization by `release_mode`.
+/// Returns builder exit code (0 on success).
+pub fn process_run_build(cwd: str8, src_dir: str8, out: str8, release_mode: i32) -> i32 {
+    let _ = cwd;
+    var argv: list<str8> = [];
+    argv.push("./build/mlang");
+    argv.push(format!("{}/main.mla", src_dir));
+    argv.push("-o");
+    argv.push(out);
+    if release_mode == 1 {
+        argv.push("-O2");
+    } else {
+        argv.push("-O0");
+    }
+    return process_run(argv);
+}

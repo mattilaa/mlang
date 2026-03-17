@@ -1,0 +1,58 @@
+mod std::testing;
+mod std::strbuf;
+
+use std::strbuf::free;
+use std::strbuf::free_utf16;
+use std::strbuf::from_utf16;
+use std::strbuf::to_utf16;
+use std::testing::verify_false;
+use std::testing::verify_true;
+
+#[test]
+fn test_string_eq_ne_operators() {
+    let a: str8 = "alpha";
+    let b: str8 = "alpha";
+    let c: str8 = "beta";
+    verify_true(a == b);
+    verify_false(a != b);
+    verify_true(a != c);
+}
+
+#[test]
+fn test_string_ordering_operators() {
+    let a: str8 = "alpha";
+    let b: str8 = "beta";
+    verify_true(a < b);
+    verify_true(a <= b);
+    verify_true(b > a);
+    verify_true(b >= a);
+    verify_true(a <= a);
+    verify_true(a >= a);
+}
+
+#[test]
+fn test_string_ordering_operators_str16() {
+    let a16: str16 = to_utf16("alpha");
+    let b16: str16 = to_utf16("beta");
+    let c16: str16 = to_utf16("alpha");
+
+    verify_true(a16 == c16);
+    verify_false(a16 != c16);
+    verify_true(a16 != b16);
+    verify_true(a16 < b16);
+    verify_true(a16 <= b16);
+    verify_true(b16 > a16);
+    verify_true(b16 >= a16);
+    verify_true(a16 <= c16);
+    verify_true(a16 >= c16);
+
+    let a8: str8 = from_utf16(a16);
+    let b8: str8 = from_utf16(b16);
+    let c8: str8 = from_utf16(c16);
+    free(a8);
+    free(b8);
+    free(c8);
+    free_utf16(a16);
+    free_utf16(b16);
+    free_utf16(c16);
+}

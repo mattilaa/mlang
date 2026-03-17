@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <errno.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -468,4 +470,207 @@ int64_t __mlang_std_fs_open_read_write(const char* path)
     /* r+b: read+write, file must exist */
     FILE* fp = fopen(path, "r+b");
     return (int64_t)(intptr_t)fp;
+}
+
+static int mkdir_p_impl(const char* path)
+{
+    if(!path || path[0] == '\0')
+        return -1;
+    size_t n = strlen(path);
+    if(n >= PATH_MAX)
+        return -1;
+
+    char tmp[PATH_MAX];
+    (void)memcpy(tmp, path, n + 1);
+
+    for(size_t i = 1; i < n; ++i)
+    {
+        if(tmp[i] == '/')
+        {
+            tmp[i] = '\0';
+            if(tmp[0] != '\0')
+            {
+                if(mkdir(tmp, 0755) != 0 && errno != EEXIST)
+                    return -1;
+            }
+            tmp[i] = '/';
+        }
+    }
+    if(mkdir(tmp, 0755) != 0 && errno != EEXIST)
+        return -1;
+    return 0;
+}
+
+int32_t __mlang_std_fs_mkdir_p(const char* path)
+{
+    return mkdir_p_impl(path) == 0 ? 0 : -1;
+}
+
+static int remove_tree_impl(const char* path)
+{
+    if(!path || path[0] == '\0')
+        return -1;
+    struct stat st;
+    if(lstat(path, &st) != 0)
+        return -1;
+
+    if(S_ISDIR(st.st_mode))
+    {
+        DIR* d = opendir(path);
+        if(!d)
+            return -1;
+        struct dirent* e = NULL;
+        while((e = readdir(d)) != NULL)
+        {
+            const char* name = e->d_name;
+            if(!name)
+                continue;
+            if((name[0] == '.' && name[1] == '\0') ||
+               (name[0] == '.' && name[1] == '.' && name[2] == '\0'))
+                continue;
+
+            char child[PATH_MAX];
+            int w = snprintf(child, sizeof(child), "%s/%s", path, name);
+            if(w <= 0 || (size_t)w >= sizeof(child))
+            {
+                closedir(d);
+                return -1;
+            }
+            if(remove_tree_impl(child) != 0)
+            {
+                closedir(d);
+                return -1;
+            }
+        }
+        closedir(d);
+        return rmdir(path) == 0 ? 0 : -1;
+    }
+    return unlink(path) == 0 ? 0 : -1;
+}
+
+int32_t __mlang_std_fs_remove_tree(const char* path)
+{
+    return remove_tree_impl(path) == 0 ? 0 : -1;
+}
+
+static int glob_match(const char* pat, const char* s)
+{
+    if(!pat || !s)
+        return 0;
+    if(*pat == '\0')
+        return *s == '\0' ? 1 : 0;
+    if(*pat == '*')
+    {
+        while(*pat == '*')
+            ++pat;
+        if(*pat == '\0')
+            return 1;
+        while(*s)
+        {
+            if(glob_match(pat, s))
+                return 1;
+            ++s;
+        }
+        return glob_match(pat, s);
+    }
+    if(*pat == '?')
+    {
+        return *s ? glob_match(pat + 1, s + 1) : 0;
+    }
+    if(*pat == *s)
+        return glob_match(pat + 1, s + 1);
+    return 0;
+}
+
+typedef struct
+{
+    char** items;
+    size_t len;
+    size_t cap;
+} str_list_t;
+
+static int push_item(str_list_t* out, const char* s)
+{
+    if(!out || !s)
+        return -1;
+    if(out->len == out->cap)
+    {
+        size_t next = out->cap == 0 ? 32 : out->cap * 2;
+        char** grown = (char**)realloc(out->items, sizeof(char*) * next);
+        if(!grown)
+            return -1;
+        out->items = grown;
+        out->cap = next;
+    }
+    char* dup = mlang_strdup(s);
+    if(!dup)
+        return -1;
+    out->items[out->len++] = dup;
+    return 0;
+}
+
+static int glob_walk(const char* root, const char* pattern, str_list_t* out)
+{
+    DIR* d = opendir(root);
+    if(!d)
+        return -1;
+    struct dirent* e = NULL;
+    while((e = readdir(d)) != NULL)
+    {
+        const char* name = e->d_name;
+        if(!name)
+            continue;
+        if((name[0] == '.' && name[1] == '\0') ||
+           (name[0] == '.' && name[1] == '.' && name[2] == '\0'))
+            continue;
+
+        char full[PATH_MAX];
+        int w = snprintf(full, sizeof(full), "%s/%s", root, name);
+        if(w <= 0 || (size_t)w >= sizeof(full))
+            continue;
+
+        struct stat st;
+        if(lstat(full, &st) != 0)
+            continue;
+        if(S_ISDIR(st.st_mode))
+        {
+            (void)glob_walk(full, pattern, out);
+        }
+        else if(glob_match(pattern, name))
+        {
+            if(push_item(out, full) != 0)
+            {
+                closedir(d);
+                return -1;
+            }
+        }
+    }
+    closedir(d);
+    return 0;
+}
+
+mlang_list_t __mlang_std_fs_glob_recursive(const char* root, const char* pattern)
+{
+    mlang_list_t out;
+    out.size = 0;
+    out.data = NULL;
+    const char* base = (root && root[0]) ? root : ".";
+    const char* pat = (pattern && pattern[0]) ? pattern : "*";
+    str_list_t acc = {0};
+    if(glob_walk(base, pat, &acc) != 0)
+    {
+        for(size_t i = 0; i < acc.len; ++i)
+            free(acc.items[i]);
+        free(acc.items);
+        return out;
+    }
+    if(acc.len == 0)
+    {
+        free(acc.items);
+        return out;
+    }
+    qsort(acc.items, acc.len, sizeof(char*), cmp_cstr_ptr);
+    out.size = (int64_t)acc.len;
+    out.data = (void*)acc.items;
+    return out;
 }
