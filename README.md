@@ -517,6 +517,7 @@ CLI options:
 - `--flat` / `--music` render mode
 - `--time=hh::mm::ss` (also accepts `mm::ss`) start playback at given position
 - `--log=x` FFT bar-height scale (`100` default, `>100` compress, `<100` expand)
+- `--buffer=n` request JACK buffer size in frames (for example `32`, `64`, `128`)
 - `-h` / `--help` show demo help
 
 If JACK playback ports differ on your system, use explicit output ports:
@@ -542,6 +543,12 @@ Adjust FFT bar-height scale:
 ```sh
 ./examples/fft_example/run_demo.sh --log=120   # more compressed bars
 ./examples/fft_example/run_demo.sh --log=80    # taller bars
+```
+
+Request low-latency JACK buffer:
+
+```sh
+./examples/fft_example/run_demo.sh --buffer=32
 ```
 
 ## Rust-like Attributes

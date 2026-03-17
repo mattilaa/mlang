@@ -42,6 +42,7 @@ use std::time::sleep_ms;
 
 extern fn jack2_fftviz_start(wav_path: str8, client_name: str8) -> i32;
 extern fn jack2_fftviz_stop() -> i32;
+extern fn jack2_fftviz_set_buffer_size(frames: i32) -> i32;
 extern fn jack2_fftviz_running() -> i32;
 extern fn jack2_fftviz_sample_rate() -> i64;
 extern fn jack2_fftviz_wav_sample_rate() -> i64;
@@ -708,17 +709,19 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var dark_bg: i32 = 1; // 1=dark blue, 0=black
     var start_time: str8 = "";
     var log_scale: i32 = 100; // 100=default, >100 compress, <100 expand
+    var jack_buffer: i32 = 0; // 0=unchanged
     var i: i32 = 1;
     while i < argc {
         let a: str8 = args[i];
         if eq(a, "--help") == 1 || eq(a, "-h") == 1 {
-            println!("Usage: fft_analyzer_demo [WAV_PATH] [--flat|--music] [--time=hh::mm::ss] [--log=x]");
+            println!("Usage: fft_analyzer_demo [WAV_PATH] [--flat|--music] [--time=hh::mm::ss] [--log=x] [--buffer=n]");
             println!("Keys: q quit, f flat, m music, x glyph(block/dot), b bg(blue/black), h/l seek -/+5s");
             println!("Examples:");
             println!("  ./examples/fft_example/run_demo.sh --music --time=00::01::30");
             println!("  ./examples/fft_example/run_demo.sh /path/to/file.wav --flat --time=01::02::03");
             println!("  ./examples/fft_example/run_demo.sh --log=120   # compress bars");
             println!("  ./examples/fft_example/run_demo.sh --log=80    # expand bars");
+            println!("  ./examples/fft_example/run_demo.sh --buffer=32 # JACK buffer frames");
             return 0;
         } else if eq(a, "--flat") == 1 {
             mode = 0;
@@ -732,10 +735,20 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             if parsed >= 25 && parsed <= 400 {
                 log_scale = parsed;
             }
+        } else if starts_with(a, "--buffer=") == 1 {
+            let bs: str8 = sub(a, 9, len(a) - 9);
+            let parsed_b: i32 = atoi(bs);
+            if parsed_b > 0 && parsed_b <= 8192 {
+                jack_buffer = parsed_b;
+            }
         } else {
             wav_path = a;
         }
         i = i + 1;
+    }
+
+    if jack_buffer > 0 {
+        let _ = jack2_fftviz_set_buffer_size(jack_buffer);
     }
 
     let rc: i32 = jack2_fftviz_start(wav_path, "mlang_fft_analyzer");

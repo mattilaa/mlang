@@ -39,6 +39,7 @@ static double g_pos = 0.0;
 static double g_step = 1.0;
 static int g_running = 0;
 static int g_sr = 48000;
+static int g_requested_buffer = 0;
 
 #define RING_CAP 16384
 static float g_ring_l[RING_CAP];
@@ -483,6 +484,12 @@ int32_t jack2_fftviz_start(mlang_string wav_path, mlang_string client_name)
         return -5;
     }
 
+    if(g_requested_buffer > 0)
+    {
+        int brc = jack_set_buffer_size(g_client, (jack_nframes_t)g_requested_buffer);
+        fprintf(stderr, "[fftviz] request buffer=%d rc=%d\n", g_requested_buffer, brc);
+    }
+
     if(jack_activate(g_client) != 0)
     {
         jack_client_close(g_client);
@@ -511,6 +518,17 @@ int32_t jack2_fftviz_stop(void)
     g_out_l = NULL;
     g_out_r = NULL;
     clear_wav();
+    return 0;
+}
+
+int32_t jack2_fftviz_set_buffer_size(int32_t frames)
+{
+    if(frames <= 0)
+    {
+        g_requested_buffer = 0;
+        return 0;
+    }
+    g_requested_buffer = frames;
     return 0;
 }
 
