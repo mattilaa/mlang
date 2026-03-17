@@ -534,7 +534,7 @@ fn draw_progress_row(width: i64, cur_frame: i64, total_frames: i64, sr: i64) -> 
 
 fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 cur_frame: i64, total_frames: i64, fft_sr: i64, time_sr: i64, mode: i32, fft_window: i32,
-                dot_mode: i32, dark_bg: i32, log_scale: i32, detail_mode: i32, shade_mode: i32,
+                dot_mode: i32, dark_bg: i32, log_scale: i64, detail_mode: i32, shade_mode: i32,
                 flash_threshold: i32, flash_mode: i32) -> void {
     // 1 header + 1 frequency axis + 1 progress row.
     let graph_h: i64 = height - 3;
@@ -647,6 +647,14 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
             ml = (ml * eq_num) / eq_den;
             mr = (mr * eq_num) / eq_den;
         }
+        // Low-end lift for better bass visibility in the first third.
+        let low_zone: i64 = width / 3;
+        if x < low_zone && low_zone > 0 {
+            let boost_num: i64 = low_zone + (low_zone - x);
+            let boost_den: i64 = low_zone;
+            ml = (ml * boost_num) / boost_den;
+            mr = (mr * boost_num) / boost_den;
+        }
         let density: i64 = b2 - b0 + 1;
         if density > max_density {
             max_density = density;
@@ -692,28 +700,37 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     // Use a non-linear (square) energy curve for a stronger visual response.
     var col_lum: Vec<i64> = Vec::new();
     for x in 0..width {
-        let ml: i64 = col_ml[x];
-        let mr: i64 = col_mr[x];
-        let peak: i64 = ml > mr ? ml : mr;
-        let amp: i64 = max_vis > 0 ? clamp_i64((peak * 255) / max_vis, 0, 255) : 0;
-        let gate: i64 = flash_mode == 1 ? clamp_i64(flash_threshold, 0, 240) : 0;
-        var amp_eff: i64 = amp - gate;
-        if amp_eff < 0 {
-            amp_eff = 0;
-        }
-        var gate_span: i64 = 255 - gate;
-        if gate_span < 1 {
-            gate_span = 1;
-        }
-        let amp_norm: i64 = clamp_i64((amp_eff * 255) / gate_span, 0, 255);
-        let amp_nl: i64 = (amp_norm * amp_norm) / 255;
         let dens: i64 = col_density[x];
-        var dens_boost: i64 = 82 + (dens * 173) / max_density;
-        if detail_mode == 1 && x < (width / 2) {
-            dens_boost = 54 + (dens * 120) / max_density;
+        if flash_mode == 0 {
+            // No-flash mode keeps brightness stable across frames.
+            var steady: i64 = 88 + (dens * 96) / max_density;
+            if detail_mode == 1 && x < (width / 2) {
+                steady = steady - 18;
+            }
+            col_lum.push(clamp_i64(steady, 48, 208));
+        } else {
+            let ml: i64 = col_ml[x];
+            let mr: i64 = col_mr[x];
+            let peak: i64 = ml > mr ? ml : mr;
+            let amp: i64 = max_vis > 0 ? clamp_i64((peak * 255) / max_vis, 0, 255) : 0;
+            let gate: i64 = clamp_i64(flash_threshold, 0, 240);
+            var amp_eff: i64 = amp - gate;
+            if amp_eff < 0 {
+                amp_eff = 0;
+            }
+            var gate_span: i64 = 255 - gate;
+            if gate_span < 1 {
+                gate_span = 1;
+            }
+            let amp_norm: i64 = clamp_i64((amp_eff * 255) / gate_span, 0, 255);
+            let amp_nl: i64 = (amp_norm * amp_norm) / 255;
+            var dens_boost: i64 = 82 + (dens * 173) / max_density;
+            if detail_mode == 1 && x < (width / 2) {
+                dens_boost = 54 + (dens * 120) / max_density;
+            }
+            let lum: i64 = clamp_i64((amp_nl * 3 + dens_boost * 2) / 5, 18, 255);
+            col_lum.push(lum);
         }
-        let lum: i64 = clamp_i64((amp_nl * 3 + dens_boost * 2) / 5, 18, 255);
-        col_lum.push(lum);
     }
 
     // Fill isolated horizontal holes so columns look continuous across x.
@@ -814,7 +831,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var flash_threshold: i32 = 64; // higher = less flashing, lower = more flashing
     var flash_mode: i32 = 1; // 1=flash/brightness accent, 0=steady spectrum
     var start_time: str8 = "";
-    var log_scale: i32 = 100; // stable range in runtime is clamped to [50, 200]
+    var log_scale: i64 = 100; // stable range in runtime is clamped to [50, 200]
     var jack_buffer: i32 = 0; // 0=unchanged
     var i: i32 = 1;
     while i < argc {
