@@ -6076,6 +6076,12 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     bool rhsIsString = rhsKind == TypeNode::TYPE_STRING ||
                        rhsKind == TypeNode::TYPE_STR8 ||
                        rhsKind == TypeNode::TYPE_STR16;
+    bool lhsIsStr8Family =
+        lhsKind == TypeNode::TYPE_STRING || lhsKind == TypeNode::TYPE_STR8;
+    bool rhsIsStr8Family =
+        rhsKind == TypeNode::TYPE_STRING || rhsKind == TypeNode::TYPE_STR8;
+    bool sameStringRuntimeKind =
+        lhsKind == rhsKind || (lhsIsStr8Family && rhsIsStr8Family);
 
     if(node->op == BinaryOpNode::OP_PLUS && (lhsIsString || rhsIsString))
     {
@@ -6086,7 +6092,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         "string types");
             return nullptr;
         }
-        if(lhsKind != rhsKind)
+        if(!sameStringRuntimeKind)
         {
             reportError(node->line,
                         "string concatenation requires matching operand types "
@@ -6095,13 +6101,6 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                             typeKindName(rhsKind) + "')");
             return nullptr;
         }
-        if(lhsKind == TypeNode::TYPE_STR16)
-        {
-            reportError(node->line,
-                        "string concatenation for 'str16' is not supported yet");
-            return nullptr;
-        }
-
         initializeStdlibFunctions();
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
@@ -6124,15 +6123,105 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
         llvm::FunctionType* concatFnType =
             llvm::FunctionType::get(ptrType, {ptrType, ptrType}, false);
-        llvm::FunctionCallee concatFn = module->getOrInsertFunction(
-            "__mlang_std_strbuf_concat", concatFnType);
+        const char* concatName = lhsKind == TypeNode::TYPE_STR16
+                                     ? "__mlang_std_strbuf_concat16"
+                                     : "__mlang_std_strbuf_concat";
+        llvm::FunctionCallee concatFn =
+            module->getOrInsertFunction(concatName, concatFnType);
         return builder.CreateCall(concatFn, {lhsPtr, rhsPtr}, "strcat");
     }
-    if((lhsIsString || rhsIsString) && node->op != BinaryOpNode::OP_PLUS)
+    if(lhsIsString || rhsIsString)
     {
-        reportError(node->line,
-                    "only '+' is supported for string operands");
-        return nullptr;
+        if(!lhsIsString || !rhsIsString)
+        {
+            reportError(node->line,
+                        "string operations require both operands to be string "
+                        "types");
+            return nullptr;
+        }
+        if(!sameStringRuntimeKind)
+        {
+            reportError(node->line,
+                        "string operations require matching operand types (got '" +
+                            typeKindName(lhsKind) + "' and '" +
+                            typeKindName(rhsKind) + "')");
+            return nullptr;
+        }
+        bool isStringCompareOp = node->op == BinaryOpNode::OP_EQ ||
+                                 node->op == BinaryOpNode::OP_NE ||
+                                 node->op == BinaryOpNode::OP_LT ||
+                                 node->op == BinaryOpNode::OP_LE ||
+                                 node->op == BinaryOpNode::OP_GT ||
+                                 node->op == BinaryOpNode::OP_GE;
+        if(!isStringCompareOp)
+        {
+            reportError(node->line,
+                        "only '+', '==', '!=', '<', '<=', '>', '>=' are "
+                        "supported for string operands");
+            return nullptr;
+        }
+
+        initializeStdlibFunctions();
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* lhsPtr = L;
+        llvm::Value* rhsPtr = R;
+        if(lhsPtr->getType() != ptrType && lhsPtr->getType()->isPointerTy())
+            lhsPtr = builder.CreateBitCast(lhsPtr, ptrType, "strcmp.lhs.cast");
+        if(rhsPtr->getType() != ptrType && rhsPtr->getType()->isPointerTy())
+            rhsPtr = builder.CreateBitCast(rhsPtr, ptrType, "strcmp.rhs.cast");
+        if(!lhsPtr->getType()->isPointerTy() || !rhsPtr->getType()->isPointerTy())
+        {
+            reportError(node->line, "invalid string operands for comparison");
+            return nullptr;
+        }
+
+        if(node->op == BinaryOpNode::OP_EQ || node->op == BinaryOpNode::OP_NE)
+        {
+            llvm::FunctionType* eqFnType = llvm::FunctionType::get(
+                llvm::Type::getInt32Ty(context), {ptrType, ptrType}, false);
+            const char* eqName = lhsKind == TypeNode::TYPE_STR16
+                                     ? "__mlang_std_strbuf_eq16"
+                                     : "__mlang_std_strbuf_eq";
+            llvm::FunctionCallee eqFn =
+                module->getOrInsertFunction(eqName, eqFnType);
+            llvm::Value* eqVal = builder.CreateCall(eqFn, {lhsPtr, rhsPtr}, "streq");
+            llvm::Value* eqBool = builder.CreateICmpNE(
+                eqVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+                "streq.bool");
+            if(node->op == BinaryOpNode::OP_EQ)
+                return eqBool;
+            return builder.CreateNot(eqBool, "strne.bool");
+        }
+
+        llvm::FunctionType* cmpFnType = llvm::FunctionType::get(
+            llvm::Type::getInt64Ty(context), {ptrType, ptrType}, false);
+        const char* cmpName = lhsKind == TypeNode::TYPE_STR16
+                                  ? "__mlang_std_strbuf_compare16"
+                                  : "__mlang_std_strbuf_compare";
+        llvm::FunctionCallee cmpFn =
+            module->getOrInsertFunction(cmpName, cmpFnType);
+        llvm::Value* cmpVal = builder.CreateCall(cmpFn, {lhsPtr, rhsPtr}, "strcmp");
+        llvm::Value* zero =
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0);
+        switch(node->op)
+        {
+        case BinaryOpNode::OP_LT:
+            return builder.CreateICmpSLT(cmpVal, zero, "strlt");
+        case BinaryOpNode::OP_LE:
+            return builder.CreateICmpSLE(cmpVal, zero, "strle");
+        case BinaryOpNode::OP_GT:
+            return builder.CreateICmpSGT(cmpVal, zero, "strgt");
+        case BinaryOpNode::OP_GE:
+            return builder.CreateICmpSGE(cmpVal, zero, "strge");
+        default:
+            reportError(node->line, "unsupported string comparison");
+            return nullptr;
+        }
     }
 
     // Check if we're dealing with floating point or integer types
