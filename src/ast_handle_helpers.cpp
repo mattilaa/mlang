@@ -415,6 +415,20 @@ ASTNode* mla_ast_use_declaration(char* module_name, char* item_name, int line)
     return create_use_declaration_impl(module_name, item_name, line);
 }
 
+ASTNode* mla_ast_use_declaration_alias(char* module_name, char* item_name,
+                                       char* alias_name, int line)
+{
+    return create_use_declaration_alias_impl(module_name, item_name, alias_name,
+                                             line);
+}
+
+ASTNode* mla_ast_use_module_alias_declaration(char* module_name,
+                                              char* alias_name, int line)
+{
+    return create_use_module_alias_declaration_impl(module_name, alias_name,
+                                                    line);
+}
+
 ASTNode* mla_ast_use_all_declaration(char* module_name, int line)
 {
     return create_use_all_declaration_impl(module_name, line);

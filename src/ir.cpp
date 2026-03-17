@@ -10356,6 +10356,14 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
     {
         if(info.signatureKey == signatureKey)
         {
+            // Module import merging can surface the same declaration multiple
+            // times. Treat identical signatures from the same source/symbol as
+            // duplicates to skip, not hard errors.
+            if(info.sourceModule == node->sourceModule ||
+               info.symbolName == function->getName().str())
+            {
+                return;
+            }
             reportError(node->line,
                         "duplicate function overload: '" + signatureKey + "'");
             return;

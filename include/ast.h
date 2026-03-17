@@ -1213,10 +1213,14 @@ class UseDeclNode : public ASTNode
 public:
     std::string moduleName;
     std::string itemName;
+    std::string aliasName;
     bool importAll;
+    bool moduleAlias;
 
-    UseDeclNode(const std::string& m, const std::string& i, bool all)
-        : moduleName(m), itemName(i), importAll(all)
+    UseDeclNode(const std::string& m, const std::string& i, bool all,
+                const std::string& alias = "", bool isModuleAlias = false)
+        : moduleName(m), itemName(i), aliasName(alias), importAll(all),
+          moduleAlias(isModuleAlias)
     {
     }
     std::string toString() const override;
@@ -1354,6 +1358,10 @@ ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);
+ASTNode* create_use_declaration_alias(char* module_name, char* item_name,
+                                      char* alias_name, int line);
+ASTNode* create_use_module_alias_declaration(char* module_name,
+                                             char* alias_name, int line);
 ASTNode* create_use_all_declaration(char* module_name, int line);
 ASTNode* create_type_alias(char* name, ASTNode* type_params,
                            ASTNode* aliased_type);

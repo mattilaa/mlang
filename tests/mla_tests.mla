@@ -2,6 +2,8 @@ mod std::strbuf;
 mod std::algorithm::fft;
 mod std::testing;
 use std::strbuf::eq;
+use std::strbuf::len as str_len;
+use std::strbuf as sb;
 use std::testing::verify_eq;
 use std::testing::verify_eq_i32;
 use std::testing::verify_false;
@@ -84,6 +86,16 @@ fn test_struct_state_with_string_list_field_push_pattern() {
 fn test_condition_allows_indexed_or_chain() {
     let out: list<i64> = [1, 0, 2, 0, 3, 0, 4, 0];
     verify_true(out[0] == 1 && out[2] == 2 && out[4] == 3 && out[6] == 4);
+}
+
+#[test]
+fn test_use_item_alias_resolves() {
+    verify_eq(3, str_len("abc"));
+}
+
+#[test]
+fn test_use_module_alias_resolves() {
+    verify_eq(4, sb::len("abcd"));
 }
 
 #[test]

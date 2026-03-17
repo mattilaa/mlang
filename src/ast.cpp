@@ -1947,6 +1947,25 @@ ASTNode* create_use_declaration_impl(char* module_name, char* item_name, int lin
     return node;
 }
 
+ASTNode* create_use_declaration_alias_impl(char* module_name, char* item_name,
+                                           char* alias_name, int line)
+{
+    auto* node = new UseDeclNode(std::string(module_name),
+                                 std::string(item_name), false,
+                                 std::string(alias_name));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_use_module_alias_declaration_impl(char* module_name,
+                                                  char* alias_name, int line)
+{
+    auto* node = new UseDeclNode(std::string(module_name), "", false,
+                                 std::string(alias_name), true);
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_use_all_declaration_impl(char* module_name, int line)
 {
     auto* node = new UseDeclNode(std::string(module_name), "*", true);
@@ -1974,9 +1993,17 @@ std::string ModDeclNode::toString() const
 
 std::string UseDeclNode::toString() const
 {
+    if(moduleAlias)
+    {
+        return "use " + moduleName + " as " + aliasName + ";";
+    }
     if(importAll)
     {
         return "use " + moduleName + "::*;";
+    }
+    if(!aliasName.empty())
+    {
+        return "use " + moduleName + "::" + itemName + " as " + aliasName + ";";
     }
     return "use " + moduleName + "::" + itemName + ";";
 }

@@ -1,0 +1,24 @@
+mod std::env;
+mod std::testing;
+
+use std::env::arg_or;
+use std::env::wants_help;
+use std::testing::verify_eq;
+
+#[test]
+fn test_env_wants_help_and_arg_or() {
+    var args_help: list<str8> = [];
+    args_help.push("demo");
+    args_help.push("--help");
+    verify_eq(1, wants_help(args_help));
+
+    var args0: list<str8> = [];
+    args0.push("demo");
+    args0.push("--help");
+    verify_eq("demo", arg_or(args0, 0, "fallback"));
+
+    var args9: list<str8> = [];
+    args9.push("demo");
+    args9.push("--help");
+    verify_eq("fallback", arg_or(args9, 9, "fallback"));
+}

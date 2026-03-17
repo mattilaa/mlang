@@ -418,14 +418,98 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                                           std::string& errorMsg,
                                           const std::string& currentModuleName)
 {
+    std::unordered_map<std::string, std::string> moduleAliases;
+    auto resolveModuleAlias = [&](const std::string& rawModule) -> std::string
+    {
+        size_t sep = rawModule.find("::");
+        std::string head =
+            (sep == std::string::npos) ? rawModule : rawModule.substr(0, sep);
+        auto it = moduleAliases.find(head);
+        if(it == moduleAliases.end())
+            return rawModule;
+        if(sep == std::string::npos)
+            return it->second;
+        return it->second + rawModule.substr(sep);
+    };
+
     for(auto* useDecl : program->imports)
     {
+        std::string resolvedModuleName = resolveModuleAlias(useDecl->moduleName);
+        bool skipSpecificImportCheck = false;
+
+        auto bindModuleAlias = [&](const std::string& targetModuleName) -> bool
+        {
+            ProgramNode* aliasedModule = getModule(targetModuleName);
+            if(!aliasedModule)
+            {
+                errorMsg = "Module '" + targetModuleName +
+                           "' not loaded. Add 'mod " + targetModuleName +
+                           ";' before using it.";
+                return false;
+            }
+            moduleAliases[useDecl->aliasName] = targetModuleName;
+
+            // Register alias-qualified functions so calls like alias::fn(...)
+            // resolve directly without additional parser/runtime rewrites.
+            if(aliasedModule->functionList)
+            {
+                if(!program->functionList)
+                    program->functionList = new FunctionListNode();
+                for(auto* func : aliasedModule->functionList->functions)
+                {
+                    if(!func || func->name.empty())
+                        continue;
+                    auto* aliasFn = new FunctionDefNode(*func);
+                    aliasFn->name = useDecl->aliasName + "::" + func->name;
+                    if(aliasFn->sourceModule.empty())
+                        aliasFn->sourceModule = targetModuleName;
+
+                    std::string sigKey = function_signature_key(aliasFn);
+                    bool alreadyAdded = false;
+                    for(auto* existing : program->functionList->functions)
+                    {
+                        if(existing && function_signature_key(existing) == sigKey)
+                        {
+                            alreadyAdded = true;
+                            break;
+                        }
+                    }
+                    if(!alreadyAdded)
+                        program->functionList->functions.push_back(aliasFn);
+                }
+            }
+            return true;
+        };
+
+        if(useDecl->moduleAlias)
+        {
+            if(!bindModuleAlias(resolvedModuleName))
+                return false;
+            skipSpecificImportCheck = true;
+        }
+
+        // Ambiguous parse fallback:
+        // `use a::b as x;` may be parsed as item alias from module `a`.
+        // If `a` is not a loaded module but `a::b` is, treat it as module alias.
+        if(!useDecl->importAll && !useDecl->aliasName.empty())
+        {
+            std::string combinedModuleName =
+                resolveModuleAlias(useDecl->moduleName + "::" + useDecl->itemName);
+            if(!getModule(resolvedModuleName) && getModule(combinedModuleName))
+            {
+                if(!bindModuleAlias(combinedModuleName))
+                    return false;
+                resolvedModuleName = combinedModuleName;
+                skipSpecificImportCheck = true;
+            }
+        }
+
         // Check if the module is loaded
-        ProgramNode* module = getModule(useDecl->moduleName);
+        ProgramNode* module = getModule(resolvedModuleName);
         if(!module)
         {
-            errorMsg = "Module '" + useDecl->moduleName +
-                       "' not loaded. Add 'mod " + useDecl->moduleName +
+            errorMsg = "Module '" + resolvedModuleName +
+                       "' not loaded. Add 'mod " + resolvedModuleName +
                        ";' before using it.";
             return false;
         }
@@ -446,7 +530,7 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 // Preserve already-tagged origin module (e.g. std::x::detail)
                 // and only set when not yet known.
                 if(func->sourceModule.empty())
-                    func->sourceModule = useDecl->moduleName;
+                    func->sourceModule = resolvedModuleName;
 
                 // Check if function already added (avoid duplicates)
                 std::string sigKey = function_signature_key(func);
@@ -486,7 +570,7 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             for(auto* structDef : module->structList->structs)
             {
                 // Set source module for all structs
-                structDef->sourceModule = useDecl->moduleName;
+                structDef->sourceModule = resolvedModuleName;
 
                 // Check if struct already added (avoid duplicates)
                 bool alreadyAdded = false;
@@ -553,7 +637,7 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 if(!enumDef)
                     continue;
                 if(enumDef->sourceModule.empty())
-                    enumDef->sourceModule = useDecl->moduleName;
+                    enumDef->sourceModule = resolvedModuleName;
 
                 bool alreadyAdded = false;
                 for(auto* existing : program->enumList->enums)
@@ -614,7 +698,7 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
         }
 
         // For specific imports (not import all), verify the item is public
-        if(!useDecl->importAll)
+        if(!useDecl->importAll && !skipSpecificImportCheck)
         {
             bool found = false;
 
@@ -640,11 +724,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                 if(!hasPublicFunction)
                 {
                     if(!is_same_module_family(currentModuleName,
-                                              useDecl->moduleName))
+                                              resolvedModuleName))
                     {
                         errorMsg = "function '" + useDecl->itemName +
                                    "' is private in module '" +
-                                   useDecl->moduleName + "'";
+                                   resolvedModuleName + "'";
                         return false;
                     }
                 }
@@ -662,11 +746,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         if(!structDef->isPublic)
                         {
                             if(!is_same_module_family(currentModuleName,
-                                                      useDecl->moduleName))
+                                                      resolvedModuleName))
                             {
                                 errorMsg = "struct '" + useDecl->itemName +
                                            "' is private in module '" +
-                                           useDecl->moduleName + "'";
+                                           resolvedModuleName + "'";
                                 return false;
                             }
                         }
@@ -699,11 +783,11 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
                         if(!enumDef->isPublic)
                         {
                             if(!is_same_module_family(currentModuleName,
-                                                      useDecl->moduleName))
+                                                      resolvedModuleName))
                             {
                                 errorMsg = "enum '" + useDecl->itemName +
                                            "' is private in module '" +
-                                           useDecl->moduleName + "'";
+                                           resolvedModuleName + "'";
                                 return false;
                             }
                         }
@@ -729,8 +813,109 @@ bool ModuleLoader::processUseDeclarations(ProgramNode* program,
             if(!found)
             {
                 errorMsg = "'" + useDecl->itemName + "' not found in module '" +
-                           useDecl->moduleName + "'";
+                           resolvedModuleName + "'";
                 return false;
+            }
+
+            if(!useDecl->aliasName.empty())
+            {
+                bool aliasBound = false;
+
+                if(module->functionList)
+                {
+                    if(!program->functionList)
+                        program->functionList = new FunctionListNode();
+                    for(auto* func : module->functionList->functions)
+                    {
+                        if(!func || func->name != useDecl->itemName)
+                            continue;
+                        auto* aliasFn = new FunctionDefNode(*func);
+                        aliasFn->name = useDecl->aliasName;
+                        if(aliasFn->sourceModule.empty())
+                            aliasFn->sourceModule = resolvedModuleName;
+
+                        std::string sigKey = function_signature_key(aliasFn);
+                        bool alreadyAdded = false;
+                        for(size_t i = 0; i < program->functionList->functions.size();
+                            ++i)
+                        {
+                            auto* existing = program->functionList->functions[i];
+                            if(!existing)
+                                continue;
+                            if(function_signature_key(existing) == sigKey)
+                            {
+                                alreadyAdded = true;
+                                break;
+                            }
+                        }
+                        if(!alreadyAdded)
+                            program->functionList->functions.push_back(aliasFn);
+                        aliasBound = true;
+                    }
+                }
+
+                if(!aliasBound && module->structList)
+                {
+                    for(auto* structDef : module->structList->structs)
+                    {
+                        if(!structDef || structDef->name != useDecl->itemName)
+                            continue;
+                        bool exists = false;
+                        for(auto* existing : program->typeAliases)
+                        {
+                            if(existing && existing->name == useDecl->aliasName)
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+                        if(!exists)
+                        {
+                            auto* aliasType =
+                                new TypeAliasNode(useDecl->aliasName,
+                                                  new StructTypeRefNode(
+                                                      useDecl->itemName));
+                            program->typeAliases.push_back(aliasType);
+                        }
+                        aliasBound = true;
+                        break;
+                    }
+                }
+
+                if(!aliasBound && module->enumList && !module->enumList->enums.empty())
+                {
+                    for(auto* enumDef : module->enumList->enums)
+                    {
+                        if(!enumDef || enumDef->name != useDecl->itemName)
+                            continue;
+                        bool exists = false;
+                        for(auto* existing : program->typeAliases)
+                        {
+                            if(existing && existing->name == useDecl->aliasName)
+                            {
+                                exists = true;
+                                break;
+                            }
+                        }
+                        if(!exists)
+                        {
+                            auto* aliasType =
+                                new TypeAliasNode(useDecl->aliasName,
+                                                  new StructTypeRefNode(
+                                                      useDecl->itemName));
+                            program->typeAliases.push_back(aliasType);
+                        }
+                        aliasBound = true;
+                        break;
+                    }
+                }
+
+                if(!aliasBound)
+                {
+                    errorMsg = "cannot alias '" + useDecl->itemName +
+                               "' from module '" + resolvedModuleName + "'";
+                    return false;
+                }
             }
         }
         else

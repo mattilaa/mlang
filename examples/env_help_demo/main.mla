@@ -1,0 +1,40 @@
+mod std::env;
+
+use std::env::HelpOption;
+use std::env::arg_or;
+use std::env::env_args;
+use std::env::env_println;
+use std::env::render_help;
+use std::env::wants_help;
+
+fn build_help() -> str8 {
+    var opts: list<HelpOption> = [];
+    opts.push(HelpOption::new("help", "h", "Show this help and exit."));
+    opts.push(HelpOption::with_default(
+        "config",
+        "c",
+        "./app.toml",
+        "Path to configuration file used by the application runtime."
+    ));
+    opts.push(HelpOption::with_default(
+        "mode",
+        "m",
+        "dev",
+        "Execution mode. Allowed values: dev, test, prod."
+    ));
+    return render_help("env_help_demo", "Demo for std::env aligned help rendering.", &opts, 88);
+}
+
+fn main() -> i32 {
+    let args: list<str8> = env_args();
+    if wants_help(&args) == 1 {
+        let help: str8 = build_help();
+        env_println(help);
+        return 0;
+    }
+
+    let first: str8 = arg_or(&args, 1, "(no-arg)");
+    env_println(format!("first argument: {}", first));
+    env_println("Use -h or --help to show generated help.");
+    return 0;
+}

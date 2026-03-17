@@ -148,6 +148,7 @@ static int is_try_question_context()
 "continue"      { return CONTINUE; }
 "mod"           { return MOD; }
 "use"           { return USE; }
+"as"            { return AS; }
 "type"          { return TYPE_KW; }
 "let"           { return LET; }
 "var"           { return VAR; }

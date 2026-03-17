@@ -76,6 +76,10 @@ ASTNode* create_while_statement_impl(ASTNode* condition, ASTNode* body, int line
 ASTNode* create_range_expression_impl(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration_impl(char* name, int line);
 ASTNode* create_use_declaration_impl(char* module_name, char* item_name, int line);
+ASTNode* create_use_declaration_alias_impl(char* module_name, char* item_name,
+                                           char* alias_name, int line);
+ASTNode* create_use_module_alias_declaration_impl(char* module_name,
+                                                  char* alias_name, int line);
 ASTNode* create_use_all_declaration_impl(char* module_name, int line);
 ASTNode* create_type_alias_impl(char* name, ASTNode* type_params, ASTNode* aliased_type);
 ASTNode* create_print_stmt_impl(int kind, char* format_str, ASTNode* args, int line);

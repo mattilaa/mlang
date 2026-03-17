@@ -97,6 +97,10 @@ ASTNode* mla_ast_expression_statement(ASTNode* expr);
 ASTNode* mla_ast_deref_assignment(ASTNode* pointer_expr, ASTNode* expr, int line);
 ASTNode* mla_ast_mod_declaration(char* name, int line);
 ASTNode* mla_ast_use_declaration(char* module_name, char* item_name, int line);
+ASTNode* mla_ast_use_declaration_alias(char* module_name, char* item_name,
+                                       char* alias_name, int line);
+ASTNode* mla_ast_use_module_alias_declaration(char* module_name,
+                                              char* alias_name, int line);
 ASTNode* mla_ast_use_all_declaration(char* module_name, int line);
     ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int is_public, int derive_debug);
     ASTNode* mla_ast_generic_struct_def(char* name, char* base_name, ASTNode* type_params, ASTNode* members, int is_public, int derive_debug);

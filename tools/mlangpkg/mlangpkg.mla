@@ -1,17 +1,11 @@
 // mlangpkg: Cargo-like package manager implemented in Mlang.
 // This version is a scaffold wired to stdlib API surfaces.
 
-mod std::env;
 mod std::fs;
 mod std::path;
 mod std::process;
 mod std::toml;
 
-use std::env::env_args;
-use std::env::env_cwd;
-use std::env::env_get;
-use std::env::env_len;
-use std::env::env_println;
 use std::fs::fs_exists;
 use std::fs::fs_mkdir_p;
 use std::fs::fs_read_text;
@@ -22,9 +16,35 @@ use std::path::path_normalize;
 use std::process::process_run_build;
 use std::toml::toml_parse;
 
+extern fn __env_args() -> list<str8>;
+extern fn __env_len(values: list<str8>) -> i64;
+extern fn __env_get(values: list<str8>, index: i64) -> str8;
+extern fn __env_cwd() -> str8;
+extern fn __env_println(msg: str8) -> void;
+
 extern fn __toml_get_string(obj: i64, key: str8, fallback: str8) -> str8;
 extern fn __toml_set_inline_table(obj: i64, key: str8, field: str8, value: str8) -> void;
 extern fn __toml_stringify(obj: i64) -> str8;
+
+fn env_args() -> list<str8> {
+    return __env_args();
+}
+
+fn env_len(values: &list<str8>) -> i64 {
+    return __env_len(values);
+}
+
+fn env_get(values: &list<str8>, index: i64) -> str8 {
+    return __env_get(values, index);
+}
+
+fn env_cwd() -> str8 {
+    return __env_cwd();
+}
+
+fn env_println(msg: str8) -> void {
+    __env_println(msg);
+}
 
 fn print_usage() {
     env_println("mlangpkg <command> [args]");

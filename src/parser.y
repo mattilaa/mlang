@@ -159,6 +159,8 @@ ASTNode* mla_ast_while_statement(ASTNode* condition, ASTNode* body, int line,
 ASTNode* mla_ast_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* mla_ast_mod_declaration(char* name, int line);
 ASTNode* mla_ast_use_declaration(char* module_name, char* item_name, int line);
+ASTNode* mla_ast_use_declaration_alias(char* module_name, char* item_name, char* alias_name, int line);
+ASTNode* mla_ast_use_module_alias_declaration(char* module_name, char* alias_name, int line);
 ASTNode* mla_ast_use_all_declaration(char* module_name, int line);
 ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params,
                            ASTNode* aliased_type);
@@ -319,7 +321,7 @@ enum UpdatePosition
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
-%token MOD USE TYPE_KW COLONCOLON
+%token MOD USE AS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE CARET NOT TILDE SHL SHR
@@ -422,6 +424,10 @@ mod_declaration
 use_declaration
     : USE module_path COLONCOLON IDENTIFIER SEMICOLON
         { $$ = mla_ast_use_declaration($2, $4, yylineno); }
+    | USE module_path AS IDENTIFIER SEMICOLON
+        { $$ = mla_ast_use_module_alias_declaration($2, $4, yylineno); }
+    | USE module_path COLONCOLON IDENTIFIER AS IDENTIFIER SEMICOLON
+        { $$ = mla_ast_use_declaration_alias($2, $4, $6, yylineno); }
     | USE module_path COLONCOLON MULTIPLY SEMICOLON
         { $$ = mla_ast_use_all_declaration($2, yylineno); }
     ;
