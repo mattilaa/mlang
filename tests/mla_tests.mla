@@ -69,6 +69,11 @@ struct ParseStateLike {
     var backend: str8;
 };
 
+struct LoopRow {
+    var tag: str8;
+    var value: i32;
+};
+
 #[test]
 fn test_struct_state_with_string_list_field_push_pattern() {
     var st: ParseStateLike = ParseStateLike {
@@ -107,6 +112,26 @@ fn test_qualified_module_function_call_in_expression() {
         std::algorithm::fft::forward([1, 0, 0, 0, 0, 0, 0, 0])
     );
     verify_true(out.len() > 0);
+}
+
+#[test]
+fn test_for_in_list_of_struct_with_str8_traversal() {
+    var rows: list<LoopRow> = [];
+    rows.push(LoopRow { tag: "a", value: 10 });
+    rows.push(LoopRow { tag: "b", value: 20 });
+    rows.push(LoopRow { tag: "c", value: 30 });
+
+    var seen: i32 = 0;
+    var sum: i32 = 0;
+    for row in rows {
+        if eq(row.tag, "a") == 1 || eq(row.tag, "b") == 1 || eq(row.tag, "c") == 1 {
+            seen = seen + 1;
+        }
+        sum = sum + row.value;
+    }
+
+    verify_eq_i32(3, seen);
+    verify_eq_i32(60, sum);
 }
 
 #[test]
