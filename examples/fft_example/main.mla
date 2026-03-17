@@ -197,16 +197,18 @@ fn max3_i64(a: i64, b: i64, c: i64) -> i64 {
 }
 
 fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, dark_bg: i32,
-                  shade_mode: i32, dist_from_top: i64, half_cap: i32) -> void {
+                  shade_mode: i32, dist_from_top: i64, half_cap: i32, flash_mode: i32) -> void {
     var rr: i32 = r;
     var gg: i32 = g;
     var bb: i32 = b;
-    if on_l == 1 && on_r == 0 {
-        gg = gg + 18;
-        bb = bb + 28;
-    } else if on_l == 0 && on_r == 1 {
-        rr = rr + 28;
-        bb = bb + 18;
+    if flash_mode == 1 {
+        if on_l == 1 && on_r == 0 {
+            gg = gg + 18;
+            bb = bb + 28;
+        } else if on_l == 0 && on_r == 1 {
+            rr = rr + 28;
+            bb = bb + 18;
+        }
     }
     rr = clamp_i32(rr, 0, 255);
     gg = clamp_i32(gg, 0, 255);
@@ -894,7 +896,7 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 let hpk: i64 = hl > hr ? hl : hr;
                 let top_dist: i64 = hpk - (row + 1);
                 let half_cap: i32 = (full_l == 0 && full_r == 0 && (half_l == 1 || half_r == 1)) ? 1 : 0;
-                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg, shade_mode, top_dist, half_cap);
+                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg, shade_mode, top_dist, half_cap, flash_mode);
             } else {
                 print!(" ");
             }
