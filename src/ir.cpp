@@ -16052,10 +16052,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
                 // Determine element type for overload selection
                 TypeNode::TypeKind elemKind2 = TypeNode::TYPE_I32;
+                TypeNode* elemTypeNode2 = nullptr;
                 {
                     auto elit = listElementTypes.find(objId->name);
                     if(elit != listElementTypes.end() && elit->second)
+                    {
                         elemKind2 = elit->second->kind;
+                        elemTypeNode2 = elit->second;
+                    }
                 }
                 bool elemIsI64 = (elemKind2 == TypeNode::TYPE_I64 ||
                                   elemKind2 == TypeNode::TYPE_U64);
@@ -16118,12 +16122,51 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         if(val2->getType() != i64Type2)
                             val2 = builder.CreateSExt(val2, i64Type2);
                     }
-                    else
+                    else if(elemKind2 == TypeNode::TYPE_I32 ||
+                            elemKind2 == TypeNode::TYPE_U32 ||
+                            elemKind2 == TypeNode::TYPE_I16 ||
+                            elemKind2 == TypeNode::TYPE_U16 ||
+                            elemKind2 == TypeNode::TYPE_I8 ||
+                            elemKind2 == TypeNode::TYPE_U8 ||
+                            elemKind2 == TypeNode::TYPE_BOOL)
                     {
                         fnName2 = "__mlang_std_vec_push_i32";
                         valType2 = i32Type2;
                         if(val2->getType() != i32Type2)
                             val2 = builder.CreateTrunc(val2, i32Type2);
+                    }
+                    else
+                    {
+                        llvm::Type* elemLlvmType =
+                            elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                          : val2->getType();
+                        if(!elemLlvmType)
+                        {
+                            reportError(node->line,
+                                        "unsupported list element type for push()");
+                            return nullptr;
+                        }
+                        llvm::AllocaInst* tmpElem =
+                            builder.CreateAlloca(elemLlvmType, nullptr, "vec.push.tmp");
+                        if(val2->getType() != elemLlvmType)
+                        {
+                            reportError(node->line,
+                                        "push() argument type mismatch for list element");
+                            return nullptr;
+                        }
+                        builder.CreateStore(val2, tmpElem);
+                        llvm::Value* elemPtrAsOpaque =
+                            builder.CreateBitCast(tmpElem, opaquePtrType, "vec.push.ptr");
+                        uint64_t elemSizeU =
+                            module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                        llvm::Value* elemSize =
+                            llvm::ConstantInt::get(i64Type2, (uint64_t)elemSizeU);
+                        llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                            voidType2, {opaquePtrType, opaquePtrType, i64Type2}, false);
+                        llvm::FunctionCallee fnRaw =
+                            module->getOrInsertFunction("__mlang_std_vec_push_raw", ftRaw);
+                        builder.CreateCall(fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                        return llvm::Constant::getNullValue(voidType2);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
                         voidType2, {opaquePtrType, valType2}, false);

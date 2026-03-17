@@ -45,6 +45,20 @@ void __mlang_std_vec_push_str(void* vec_ptr, const char* val) {
     v->count++;
 }
 
+/** Append a raw-bytes element of size elem_size (for non-primitive list<T>). */
+void __mlang_std_vec_push_raw(void* vec_ptr, const void* val_ptr, int64_t elem_size) {
+    mlang_vec_t* v = (mlang_vec_t*)vec_ptr;
+    if (!val_ptr || elem_size <= 0) return;
+    size_t next_count = (size_t)(v->count + 1);
+    size_t bytes = next_count * (size_t)elem_size;
+    void* new_data = realloc(v->data, bytes);
+    if (!new_data) return;
+    v->data = new_data;
+    char* dst = (char*)v->data + ((size_t)v->count * (size_t)elem_size);
+    memcpy(dst, val_ptr, (size_t)elem_size);
+    v->count++;
+}
+
 /* ------------------------------------------------------------------ */
 /* pop                                                                  */
 /* ------------------------------------------------------------------ */
