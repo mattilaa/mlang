@@ -185,6 +185,17 @@ fn clamp_i32(x: i32, lo: i32, hi: i32) -> i32 {
     return x;
 }
 
+fn max3_i64(a: i64, b: i64, c: i64) -> i64 {
+    var m: i64 = a;
+    if b > m {
+        m = b;
+    }
+    if c > m {
+        m = c;
+    }
+    return m;
+}
+
 fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, dark_bg: i32,
                   shade_mode: i32, dist_from_top: i64, half_cap: i32) -> void {
     var rr: i32 = r;
@@ -614,8 +625,8 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         let r0: i64 = abs_i64(freq_r[base0]) + abs_i64(freq_r[base0 + 1]);
         let r1: i64 = abs_i64(freq_r[base1]) + abs_i64(freq_r[base1 + 1]);
         let r2: i64 = abs_i64(freq_r[base2]) + abs_i64(freq_r[base2 + 1]);
-        let m_l0: i64 = l0 > l1 ? (l0 > l2 ? l0 : l2) : (l1 > l2 ? l1 : l2);
-        let m_r0: i64 = r0 > r1 ? (r0 > r2 ? r0 : r2) : (r1 > r2 ? r1 : r2);
+        let m_l0: i64 = max3_i64(l0, l1, l2);
+        let m_r0: i64 = max3_i64(r0, r1, r2);
         let weight: i64 = mode == 1 ? (b + 1) : 1;
         let raw_l: i64 = m_l0 * weight;
         let raw_r: i64 = m_r0 * weight;
