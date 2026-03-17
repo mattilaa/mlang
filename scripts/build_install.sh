@@ -55,7 +55,7 @@ Notes:
   The install step also installs the stdlib docs (including builtin types)
   to: <prefix>/share/mlang/stdlib
   and stdlib libraries to: <prefix>/lib
-  and tool binaries: mlangd-mla, mlang-format, mlang-frontend-mla, mlang-frontend
+  and tool binaries: mlangd-mla, mlang-format, mlang-frontend-mla, mlang-frontend, mlangpkg
   - Install runs by default unless --no-install is set.
   - --tests/--unit-tests/--lsp-tests/--robot-tests/--all-tests imply --install-if-tests-pass.
   - --install-if-tests-pass requires tests to be selected.
@@ -587,6 +587,9 @@ log_info "building tool: mlang-format"
 # Build mlang-frontend-mla (feature-rich Mlang CLI frontend).
 log_info "building tool: mlang-frontend-mla"
 "$build_dir/mlang" "tools/mlang-frontend-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-frontend-mla"
+# Build mlangpkg (Cargo-like package manager prototype).
+log_info "building tool: mlangpkg"
+"$build_dir/mlang" "tools/mlangpkg/mlangpkg.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangpkg"
 
 if $run_unit_tests; then
   log_info "running unit tests"
@@ -682,6 +685,8 @@ EOF
     sudo chmod +x "$bin_dir/mlang-frontend-mla"
     sudo cp -f "$frontend_launcher_tmp" "$bin_dir/mlang-frontend"
     sudo chmod +x "$bin_dir/mlang-frontend"
+    sudo cp -f "$build_dir/mlangpkg" "$bin_dir/mlangpkg"
+    sudo chmod +x "$bin_dir/mlangpkg"
   else
     mkdir -p "$bin_dir"
     cp -f "$build_dir/mlangd-mla" "$bin_dir/mlangd-mla"
@@ -692,12 +697,15 @@ EOF
     chmod +x "$bin_dir/mlang-frontend-mla"
     cp -f "$frontend_launcher_tmp" "$bin_dir/mlang-frontend"
     chmod +x "$bin_dir/mlang-frontend"
+    cp -f "$build_dir/mlangpkg" "$bin_dir/mlangpkg"
+    chmod +x "$bin_dir/mlangpkg"
   fi
   rm -f "$frontend_launcher_tmp"
   log_info "installed mlangd-mla: $bin_dir/mlangd-mla"
   log_info "installed mlang-format: $bin_dir/mlang-format"
   log_info "installed mlang-frontend-mla: $bin_dir/mlang-frontend-mla"
   log_info "installed mlang-frontend: $bin_dir/mlang-frontend"
+  log_info "installed mlangpkg: $bin_dir/mlangpkg"
 
   stdlib_dir="$prefix/share/mlang/stdlib"
   stdlib_lib_dir="$prefix/lib"
