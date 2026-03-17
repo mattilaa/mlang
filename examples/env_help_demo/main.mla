@@ -22,18 +22,19 @@ fn build_help() -> str8 {
         "dev",
         "Execution mode. Allowed values: dev, test, prod."
     ));
-    return render_help("env_help_demo", "Demo for std::env aligned help rendering.", &opts, 88);
+    return render_help("env_help_demo", "Demo for std::env aligned help rendering.", opts, 88);
 }
 
 fn main() -> i32 {
-    let args: list<str8> = env_args();
-    if wants_help(&args) == 1 {
+    let args_help: list<str8> = env_args();
+    if wants_help(args_help) == 1 {
         let help: str8 = build_help();
         env_println(help);
         return 0;
     }
 
-    let first: str8 = arg_or(&args, 1, "(no-arg)");
+    let args_first: list<str8> = env_args();
+    let first: str8 = arg_or(args_first, 1, "(no-arg)");
     env_println(format!("first argument: {}", first));
     env_println("Use -h or --help to show generated help.");
     return 0;

@@ -87,6 +87,17 @@ const char* __mlang_std_vec_pop_str(void* vec_ptr) {
     return ((const char**)v->data)[v->count];
 }
 
+/** Remove and copy last raw element into out_ptr. Returns 1 on success, 0 if empty. */
+int32_t __mlang_std_vec_pop_raw(void* vec_ptr, void* out_ptr, int64_t elem_size) {
+    mlang_vec_t* v = (mlang_vec_t*)vec_ptr;
+    if (!out_ptr || elem_size <= 0) return 0;
+    if (v->count <= 0 || !v->data) return 0;
+    v->count--;
+    const char* src = (const char*)v->data + ((size_t)v->count * (size_t)elem_size);
+    memcpy(out_ptr, src, (size_t)elem_size);
+    return 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* clear                                                               */
 /* ------------------------------------------------------------------ */

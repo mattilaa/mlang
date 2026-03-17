@@ -16183,29 +16183,63 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "pop() takes no arguments");
                         return nullptr;
                     }
-                    std::string fnName3;
-                    llvm::Type* retType3;
-                    if(elemIsStr)
+                    if(elemIsStr || elemIsI64 ||
+                       elemKind2 == TypeNode::TYPE_I32 ||
+                       elemKind2 == TypeNode::TYPE_U32 ||
+                       elemKind2 == TypeNode::TYPE_I16 ||
+                       elemKind2 == TypeNode::TYPE_U16 ||
+                       elemKind2 == TypeNode::TYPE_I8 ||
+                       elemKind2 == TypeNode::TYPE_U8 ||
+                       elemKind2 == TypeNode::TYPE_BOOL)
                     {
-                        fnName3  = "__mlang_std_vec_pop_str";
-                        retType3 = opaquePtrType;
+                        std::string fnName3;
+                        llvm::Type* retType3;
+                        if(elemIsStr)
+                        {
+                            fnName3  = "__mlang_std_vec_pop_str";
+                            retType3 = opaquePtrType;
+                        }
+                        else if(elemIsI64)
+                        {
+                            fnName3  = "__mlang_std_vec_pop_i64";
+                            retType3 = i64Type2;
+                        }
+                        else
+                        {
+                            fnName3  = "__mlang_std_vec_pop_i32";
+                            retType3 = i32Type2;
+                        }
+                        llvm::FunctionType* ft3 =
+                            llvm::FunctionType::get(retType3, {opaquePtrType}, false);
+                        llvm::FunctionCallee fn3 =
+                            module->getOrInsertFunction(fnName3, ft3);
+                        return builder.CreateCall(fn3, {allocaPtr2},
+                                                  objId->name + ".pop");
                     }
-                    else if(elemIsI64)
+                    llvm::Type* elemLlvmType =
+                        elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
+                                      : nullptr;
+                    if(!elemLlvmType)
                     {
-                        fnName3  = "__mlang_std_vec_pop_i64";
-                        retType3 = i64Type2;
+                        reportError(node->line,
+                                    "unsupported list element type for pop()");
+                        return nullptr;
                     }
-                    else
-                    {
-                        fnName3  = "__mlang_std_vec_pop_i32";
-                        retType3 = i32Type2;
-                    }
-                    llvm::FunctionType* ft3 =
-                        llvm::FunctionType::get(retType3, {opaquePtrType}, false);
-                    llvm::FunctionCallee fn3 =
-                        module->getOrInsertFunction(fnName3, ft3);
-                    return builder.CreateCall(fn3, {allocaPtr2},
-                                             objId->name + ".pop");
+                    llvm::AllocaInst* tmpElem =
+                        builder.CreateAlloca(elemLlvmType, nullptr, "vec.pop.tmp");
+                    llvm::Value* tmpElemPtr =
+                        builder.CreateBitCast(tmpElem, opaquePtrType, "vec.pop.ptr");
+                    uint64_t elemSizeU =
+                        module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                    llvm::Value* elemSize =
+                        llvm::ConstantInt::get(i64Type2, (uint64_t)elemSizeU);
+                    llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                        i32Type2, {opaquePtrType, opaquePtrType, i64Type2}, false);
+                    llvm::FunctionCallee fnRaw =
+                        module->getOrInsertFunction("__mlang_std_vec_pop_raw", ftRaw);
+                    builder.CreateCall(fnRaw, {allocaPtr2, tmpElemPtr, elemSize});
+                    return builder.CreateLoad(elemLlvmType, tmpElem,
+                                              objId->name + ".pop");
                 }
                 // --- clear() ---
                 if(node->methodName == "clear")
@@ -16590,6 +16624,11 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 (elemKind == TypeNode::TYPE_I64 || elemKind == TypeNode::TYPE_U64);
             bool elemIsStr =
                 (elemKind == TypeNode::TYPE_STRING || elemKind == TypeNode::TYPE_STR8);
+            bool elemIsI32Like =
+                (elemKind == TypeNode::TYPE_I32 || elemKind == TypeNode::TYPE_U32 ||
+                 elemKind == TypeNode::TYPE_I16 || elemKind == TypeNode::TYPE_U16 ||
+                 elemKind == TypeNode::TYPE_I8 || elemKind == TypeNode::TYPE_U8 ||
+                 elemKind == TypeNode::TYPE_BOOL);
 
             if(node->methodName == "len")
             {
@@ -16649,6 +16688,39 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 else
                 {
+                    if(!elemIsI32Like)
+                    {
+                        TypeNode* recvElemType = nullptr;
+                        if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
+                            recvElemType = gl->elementType;
+                        llvm::Type* elemLlvmType =
+                            recvElemType ? getLLVMTypeFromNode(recvElemType) : nullptr;
+                        if(!elemLlvmType)
+                        {
+                            reportError(node->line,
+                                        "unsupported list element type for push()");
+                            return nullptr;
+                        }
+                        if(val->getType() == elemLlvmType &&
+                           !elemLlvmType->isIntegerTy(32))
+                        {
+                            llvm::AllocaInst* tmpElem =
+                                builder.CreateAlloca(elemLlvmType, nullptr, "fieldlist.push.tmp");
+                            builder.CreateStore(val, tmpElem);
+                            llvm::Value* elemPtrAsOpaque =
+                                builder.CreateBitCast(tmpElem, opaquePtrType, "fieldlist.push.ptr");
+                            uint64_t elemSizeU =
+                                module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                            llvm::Value* elemSize =
+                                llvm::ConstantInt::get(i64Type, (uint64_t)elemSizeU);
+                            llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                                voidType, {opaquePtrType, opaquePtrType, i64Type}, false);
+                            llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                                "__mlang_std_vec_push_raw", ftRaw);
+                            builder.CreateCall(fnRaw, {recvPtr, elemPtrAsOpaque, elemSize});
+                            return llvm::Constant::getNullValue(voidType);
+                        }
+                    }
                     fnName = "__mlang_std_vec_push_i32";
                     valType = i32Type;
                     if(val->getType() != i32Type)
@@ -16668,27 +16740,54 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     reportError(node->line, "pop() takes no arguments");
                     return nullptr;
                 }
-                std::string fnName;
-                llvm::Type* retType = nullptr;
-                if(elemIsStr)
+                if(elemIsStr || elemIsI64 || elemIsI32Like)
                 {
-                    fnName = "__mlang_std_vec_pop_str";
-                    retType = opaquePtrType;
+                    std::string fnName;
+                    llvm::Type* retType = nullptr;
+                    if(elemIsStr)
+                    {
+                        fnName = "__mlang_std_vec_pop_str";
+                        retType = opaquePtrType;
+                    }
+                    else if(elemIsI64)
+                    {
+                        fnName = "__mlang_std_vec_pop_i64";
+                        retType = i64Type;
+                    }
+                    else
+                    {
+                        fnName = "__mlang_std_vec_pop_i32";
+                        retType = i32Type;
+                    }
+                    llvm::FunctionType* ft =
+                        llvm::FunctionType::get(retType, {opaquePtrType}, false);
+                    llvm::FunctionCallee fn = module->getOrInsertFunction(fnName, ft);
+                    return builder.CreateCall(fn, {recvPtr}, "fieldlist.pop");
                 }
-                else if(elemIsI64)
+                TypeNode* recvElemType = nullptr;
+                if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
+                    recvElemType = gl->elementType;
+                llvm::Type* elemLlvmType =
+                    recvElemType ? getLLVMTypeFromNode(recvElemType) : nullptr;
+                if(!elemLlvmType)
                 {
-                    fnName = "__mlang_std_vec_pop_i64";
-                    retType = i64Type;
+                    reportError(node->line, "unsupported list element type for pop()");
+                    return nullptr;
                 }
-                else
-                {
-                    fnName = "__mlang_std_vec_pop_i32";
-                    retType = i32Type;
-                }
-                llvm::FunctionType* ft =
-                    llvm::FunctionType::get(retType, {opaquePtrType}, false);
-                llvm::FunctionCallee fn = module->getOrInsertFunction(fnName, ft);
-                return builder.CreateCall(fn, {recvPtr}, "fieldlist.pop");
+                llvm::AllocaInst* tmpElem =
+                    builder.CreateAlloca(elemLlvmType, nullptr, "fieldlist.pop.tmp");
+                llvm::Value* tmpElemPtr =
+                    builder.CreateBitCast(tmpElem, opaquePtrType, "fieldlist.pop.ptr");
+                uint64_t elemSizeU =
+                    module->getDataLayout().getTypeAllocSize(elemLlvmType);
+                llvm::Value* elemSize =
+                    llvm::ConstantInt::get(i64Type, (uint64_t)elemSizeU);
+                llvm::FunctionType* ftRaw = llvm::FunctionType::get(
+                    i32Type, {opaquePtrType, opaquePtrType, i64Type}, false);
+                llvm::FunctionCallee fnRaw =
+                    module->getOrInsertFunction("__mlang_std_vec_pop_raw", ftRaw);
+                builder.CreateCall(fnRaw, {recvPtr, tmpElemPtr, elemSize});
+                return builder.CreateLoad(elemLlvmType, tmpElem, "fieldlist.pop");
             }
             if(node->methodName == "clear")
             {
