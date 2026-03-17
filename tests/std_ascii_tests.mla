@@ -4,7 +4,9 @@ mod std::strbuf;
 use std::ascii::AsciiKey;
 use std::ascii::UnicodeBoxGlyph;
 use std::ascii::ascii_box_fallback;
+use std::ascii::ascii_density_glyph;
 use std::ascii::unicode_box_glyph;
+use std::ascii::unicode_density_glyph;
 use std::strbuf::eq;
 use std::testing::verify;
 
@@ -54,4 +56,15 @@ fn test_ascii_fallback_mapping() {
     verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::FullBlock), "#") != 1));
     verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::LeftArrow), "<") != 1));
     verify(!(eq(ascii_box_fallback(UnicodeBoxGlyph::CheckMark), "v") != 1));
+    }
+
+#[test]
+fn test_density_glyph_mapping() {
+    verify(!(eq(unicode_density_glyph(0, 100), " ") != 1));
+    verify(!(eq(unicode_density_glyph(10, 100), "▁") != 1));
+    verify(!(eq(unicode_density_glyph(50, 100), "▅") != 1));
+    verify(!(eq(unicode_density_glyph(100, 100), "█") != 1));
+    verify(!(eq(ascii_density_glyph(0, 100), " ") != 1));
+    verify(!(eq(ascii_density_glyph(20, 100), ":") != 1));
+    verify(!(eq(ascii_density_glyph(100, 100), "#") != 1));
     }

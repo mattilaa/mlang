@@ -1,4 +1,5 @@
 mod std::esc;
+mod std::ascii;
 mod std::algorithm::fft;
 mod std::io;
 mod std::strbuf;
@@ -19,6 +20,9 @@ use std::esc::fg;
 use std::esc::fg_rgb;
 use std::esc::bg_rgb;
 use std::esc::reset;
+use std::ascii::unicode_box_glyph;
+use std::ascii::unicode_density_glyph;
+use std::ascii::UnicodeBoxGlyph;
 use std::algorithm::fft::forward;
 use std::io::Stdin;
 use std::io::Stdout;
@@ -181,7 +185,8 @@ fn clamp_i32(x: i32, lo: i32, hi: i32) -> i32 {
     return x;
 }
 
-fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, dark_bg: i32) -> void {
+fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, dark_bg: i32,
+                  shade_mode: i32, dist_from_top: i64) -> void {
     var rr: i32 = r;
     var gg: i32 = g;
     var bb: i32 = b;
@@ -197,9 +202,22 @@ fn draw_rgb_block(on_l: i32, on_r: i32, r: i64, g: i64, b: i64, dot_mode: i32, d
     bb = clamp_i32(bb, 0, 255);
     let bg_s: str8 = dark_bg == 1 ? bg_rgb(12, 18, 38) : bg_rgb(0, 0, 0);
     if dot_mode == 1 {
-        print!("{}{}.", fg_rgb(rr, gg, bb), bg_s);
+        print!("{}{}{}", fg_rgb(rr, gg, bb), bg_s, unicode_box_glyph(UnicodeBoxGlyph::Dot));
     } else {
-        print!("{}{}█", fg_rgb(rr, gg, bb), bg_s);
+        if shade_mode == 1 {
+            var gch: str8 = unicode_box_glyph(UnicodeBoxGlyph::FullBlock);
+            if dist_from_top <= 0 {
+                gch = unicode_box_glyph(UnicodeBoxGlyph::LightShade);
+            } else if dist_from_top == 1 {
+                gch = unicode_box_glyph(UnicodeBoxGlyph::MediumShade);
+            } else if dist_from_top == 2 {
+                gch = unicode_box_glyph(UnicodeBoxGlyph::DarkShade);
+            }
+            print!("{}{}{}", fg_rgb(rr, gg, bb), bg_s, gch);
+        } else {
+            let level: i64 = (rr + gg + bb) / 3;
+            print!("{}{}{}", fg_rgb(rr, gg, bb), bg_s, unicode_density_glyph(level, 255));
+        }
     }
 }
 
@@ -503,7 +521,7 @@ fn draw_progress_row(width: i64, cur_frame: i64, total_frames: i64, sr: i64) -> 
 
 fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 cur_frame: i64, total_frames: i64, fft_sr: i64, time_sr: i64, mode: i32, fft_window: i32,
-                dot_mode: i32, dark_bg: i32, log_scale: i32) -> void {
+                dot_mode: i32, dark_bg: i32, log_scale: i32, detail_mode: i32, shade_mode: i32) -> void {
     // 1 header + 1 frequency axis + 1 progress row.
     let graph_h: i64 = height - 3;
     let bins_full: i64 = (freq_l.len() / 2);
@@ -518,13 +536,15 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     let cur_sec: i64 = time_sr > 0 ? (cur_frame / time_sr) : 0;
     let pos_time: str8 = format_timecode(cur_sec);
     print!(
-        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} log={} [h/l seek f/m/x/b/q] win={} frame={}/{}\r\n",
+        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} log={} detail={} shade={} [h/l seek f/m/x/b/d/D/q] win={} frame={}/{}\r\n",
         width, height, fft_sr,
         pos_time,
         mode == 1 ? "music" : "flat",
         dot_mode == 1 ? "dot" : "block",
         dark_bg == 1 ? "blue" : "black",
         log_scale,
+        detail_mode == 1 ? "on" : "off",
+        shade_mode == 1 ? "on" : "off",
         fft_window, cur_frame, total_frames
     );
     print!("{}", reset());
@@ -566,9 +586,21 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     for x in 0..width {
         // True logarithmic horizontal frequency mapping.
         let b: i64 = bin_for_x_calibrated(x, width, fft_window, fft_sr, bins);
-        let b0: i64 = b > 2 ? (b - 1) : 2;
+        var spread: i64 = 1;
+        if detail_mode == 1 {
+            // In detailed mode keep low bins sharper (narrower neighborhood).
+            let p: i64 = width > 1 ? (x * 1000) / (width - 1) : 0;
+            if p < 520 {
+                spread = 0;
+            } else if p < 820 {
+                spread = 1;
+            } else {
+                spread = 2;
+            }
+        }
+        let b0: i64 = b > (2 + spread) ? (b - spread) : 2;
         let b1: i64 = b;
-        let b2: i64 = b < (bins - 2) ? (b + 1) : (bins - 2);
+        let b2: i64 = b < ((bins - 2) - spread) ? (b + spread) : (bins - 2);
         let base0: i64 = b0 * 2;
         let base1: i64 = b1 * 2;
         let base2: i64 = b2 * 2;
@@ -629,7 +661,10 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         let amp: i64 = max_vis > 0 ? clamp_i64((peak * 255) / max_vis, 0, 255) : 0;
         let amp_nl: i64 = (amp * amp) / 255;
         let dens: i64 = col_density[x];
-        let dens_boost: i64 = 82 + (dens * 173) / max_density;
+        var dens_boost: i64 = 82 + (dens * 173) / max_density;
+        if detail_mode == 1 && x < (width / 2) {
+            dens_boost = 54 + (dens * 120) / max_density;
+        }
         let lum: i64 = clamp_i64((amp_nl * 3 + dens_boost * 2) / 5, 18, 255);
         col_lum.push(lum);
     }
@@ -645,10 +680,11 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
             let rl: i64 = col_hl[x + 1];
             let lr: i64 = col_hr[x - 1];
             let rr: i64 = col_hr[x + 1];
-            if hl == 0 && ll > 0 && rl > 0 {
+            let allow_fill: i32 = detail_mode == 1 && x < (width / 2) ? 0 : 1;
+            if allow_fill == 1 && hl == 0 && ll > 0 && rl > 0 {
                 hl = (ll + rl) / 2;
             }
-            if hr == 0 && lr > 0 && rr > 0 {
+            if allow_fill == 1 && hr == 0 && lr > 0 && rr > 0 {
                 hr = (lr + rr) / 2;
             }
         }
@@ -688,7 +724,9 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 let rr: i64 = (col_r[x] * lum) / 255;
                 let gg: i64 = (col_g[x] * lum) / 255;
                 let bb: i64 = (col_b[x] * lum) / 255;
-                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg);
+                let hpk: i64 = hl > hr ? hl : hr;
+                let top_dist: i64 = hpk - (row + 1);
+                draw_rgb_block(on_l, on_r, rr, gg, bb, dot_mode, dark_bg, shade_mode, top_dist);
             } else {
                 print!(" ");
             }
@@ -707,6 +745,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var mode: i32 = 0; // 1=music, 0=flat
     var dot_mode: i32 = 0; // 1=dot, 0=block
     var dark_bg: i32 = 1; // 1=dark blue, 0=black
+    var detail_mode: i32 = 0; // 1=more low-bin detail
+    var shade_mode: i32 = 0; // 1=full-cell shades on bar tops
     var start_time: str8 = "";
     var log_scale: i32 = 100; // 100=default, >100 compress, <100 expand
     var jack_buffer: i32 = 0; // 0=unchanged
@@ -715,7 +755,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let a: str8 = args[i];
         if eq(a, "--help") == 1 || eq(a, "-h") == 1 {
             println!("Usage: fft_analyzer_demo [WAV_PATH] [--flat|--music] [--time=hh::mm::ss] [--log=x] [--buffer=n]");
-            println!("Keys: q quit, f flat, m music, x glyph(block/dot), b bg(blue/black), h/l seek -/+5s");
+            println!("Keys: q quit, f flat, m music, x glyph(block/dot), b bg(blue/black), d detail low-bins, D top-shade, h/l seek -/+5s");
             println!("Examples:");
             println!("  ./examples/fft_example/run_demo.sh --music --time=00::01::30");
             println!("  ./examples/fft_example/run_demo.sh /path/to/file.wav --flat --time=01::02::03");
@@ -794,6 +834,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             if find(key_buf, "b") >= 0 || find(key_buf, "B") >= 0 {
                 dark_bg = dark_bg == 0 ? 1 : 0;
             }
+            if find(key_buf, "D") >= 0 {
+                shade_mode = shade_mode == 0 ? 1 : 0;
+            } else if find(key_buf, "d") >= 0 {
+                detail_mode = detail_mode == 0 ? 1 : 0;
+            }
             if find(key_buf, "h") >= 0 || find(key_buf, "H") >= 0 {
                 let delta: i64 = 0 - (time_sr * 5);
                 let _ = jack2_fftviz_seek_rel_frames(delta);
@@ -816,7 +861,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let freq_l: list<i64> = forward(snap_l);
         let freq_r: list<i64> = forward(snap_r);
         let cur_frame: i64 = jack2_fftviz_current_frame();
-        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, fft_sr, time_sr, mode, fft_window, dot_mode, dark_bg, log_scale);
+        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, fft_sr, time_sr, mode, fft_window, dot_mode, dark_bg, log_scale, detail_mode, shade_mode);
         sleep_ms(16);
         if jack2_fftviz_running() == 0 {
             tail_ticks = tail_ticks - 1;

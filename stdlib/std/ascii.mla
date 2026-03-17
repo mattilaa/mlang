@@ -251,3 +251,41 @@ pub fn ascii_box_fallback(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::CrossMark: { return "x"; }
     return "?";
 }
+
+/// \brief Density glyph ramp selector (space -> light -> full block).
+///
+/// Maps `value` in range `[0, max_value]` to a visually denser Unicode glyph.
+/// Useful for spectrum bars and heat/level views.
+pub fn unicode_density_glyph(value: i64, max_value: i64) -> str8 {
+    if max_value <= 0 || value <= 0 {
+        return " ";
+    }
+    if value >= max_value {
+        return "█";
+    }
+    let idx: i64 = (value * 8) / max_value;
+    if idx <= 0 { return "▁"; }
+    if idx == 1 { return "▂"; }
+    if idx == 2 { return "▃"; }
+    if idx == 3 { return "▄"; }
+    if idx == 4 { return "▅"; }
+    if idx == 5 { return "▆"; }
+    if idx == 6 { return "▇"; }
+    return "█";
+}
+
+/// \brief ASCII-safe density fallback ramp.
+pub fn ascii_density_glyph(value: i64, max_value: i64) -> str8 {
+    if max_value <= 0 || value <= 0 {
+        return " ";
+    }
+    if value >= max_value {
+        return "#";
+    }
+    let idx: i64 = (value * 8) / max_value;
+    if idx <= 1 { return "."; }
+    if idx <= 3 { return ":"; }
+    if idx <= 5 { return "*"; }
+    if idx <= 6 { return "O"; }
+    return "#";
+}
