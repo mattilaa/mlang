@@ -532,10 +532,103 @@ fn draw_progress_row(width: i64, cur_frame: i64, total_frames: i64, sr: i64) -> 
     print!("{}", reset());
 }
 
+fn draw_help_popup(width: i64, graph_h: i64, dark_bg: i32) -> void {
+    let title: str8 = " FFT Analyzer Help ";
+    let l0: str8 = "q        quit";
+    let l1: str8 = "?        close help";
+    let l2: str8 = "h / l    seek -/+ 5s";
+    let l3: str8 = "f / m    flat/music mode";
+    let l4: str8 = "x        block/dot glyph";
+    let l5: str8 = "b        blue/black bg";
+    let l6: str8 = "d        detail mode";
+    let l7: str8 = "D        top shading";
+    let l8: str8 = "v        flash on/off";
+    let l9: str8 = "+ / -    flash threshold";
+    let l10: str8 = "Press ? to return to spectrum";
+    let pop_w: i64 = 34;
+    let pop_h: i64 = 15;
+    let x0: i64 = width > pop_w ? ((width - pop_w) / 2) : 0;
+    let y0: i64 = graph_h > pop_h ? ((graph_h - pop_h) / 2) : 0;
+    var y: i64 = 0;
+    while y < graph_h {
+        print!("{}", cursor_force(cmd_clear_line()));
+        if dark_bg == 1 {
+            print!("{}", bg_rgb(12, 18, 38));
+        } else {
+            print!("{}", bg_rgb(0, 0, 0));
+        }
+        if y >= y0 && y < (y0 + pop_h) {
+            let in_row: i64 = y - y0;
+            var x: i64 = 0;
+            while x < width {
+                let in_col: i32 = x >= x0 && x < (x0 + pop_w) ? 1 : 0;
+                if in_col == 0 {
+                    print!(" ");
+                } else {
+                    let row_top: i32 = in_row == 0 ? 1 : 0;
+                    let row_bot: i32 = in_row == (pop_h - 1) ? 1 : 0;
+                    let col_l: i32 = x == x0 ? 1 : 0;
+                    let col_r: i32 = x == (x0 + pop_w - 1) ? 1 : 0;
+                    if row_top == 1 && col_l == 1 {
+                        print!("{}{}", fg(color_white()), unicode_box_glyph(UnicodeBoxGlyph::LightDownRight));
+                    } else if row_top == 1 && col_r == 1 {
+                        print!("{}{}", fg(color_white()), unicode_box_glyph(UnicodeBoxGlyph::LightDownLeft));
+                    } else if row_bot == 1 && col_l == 1 {
+                        print!("{}{}", fg(color_white()), unicode_box_glyph(UnicodeBoxGlyph::LightUpRight));
+                    } else if row_bot == 1 && col_r == 1 {
+                        print!("{}{}", fg(color_white()), unicode_box_glyph(UnicodeBoxGlyph::LightUpLeft));
+                    } else if row_top == 1 || row_bot == 1 {
+                        print!("{}{}", fg(color_white()), unicode_box_glyph(UnicodeBoxGlyph::LightHorizontal));
+                    } else if col_l == 1 || col_r == 1 {
+                        print!("{}{}", fg(color_white()), unicode_box_glyph(UnicodeBoxGlyph::LightVertical));
+                    } else {
+                        print!("{}{}", fg(color_white()), bg_rgb(18, 28, 54));
+                        let tx: i64 = x - x0 - 2;
+                        if in_row == 1 && tx >= 0 && tx < len(title) {
+                            print!("{}", sub(title, tx, 1));
+                        } else if in_row == 3 && tx >= 0 && tx < len(l0) {
+                            print!("{}", sub(l0, tx, 1));
+                        } else if in_row == 4 && tx >= 0 && tx < len(l1) {
+                            print!("{}", sub(l1, tx, 1));
+                        } else if in_row == 5 && tx >= 0 && tx < len(l2) {
+                            print!("{}", sub(l2, tx, 1));
+                        } else if in_row == 6 && tx >= 0 && tx < len(l3) {
+                            print!("{}", sub(l3, tx, 1));
+                        } else if in_row == 7 && tx >= 0 && tx < len(l4) {
+                            print!("{}", sub(l4, tx, 1));
+                        } else if in_row == 8 && tx >= 0 && tx < len(l5) {
+                            print!("{}", sub(l5, tx, 1));
+                        } else if in_row == 9 && tx >= 0 && tx < len(l6) {
+                            print!("{}", sub(l6, tx, 1));
+                        } else if in_row == 10 && tx >= 0 && tx < len(l7) {
+                            print!("{}", sub(l7, tx, 1));
+                        } else if in_row == 11 && tx >= 0 && tx < len(l8) {
+                            print!("{}", sub(l8, tx, 1));
+                        } else if in_row == 12 && tx >= 0 && tx < len(l9) {
+                            print!("{}", sub(l9, tx, 1));
+                        } else if in_row == 13 && tx >= 0 && tx < len(l10) {
+                            print!("{}", sub(l10, tx, 1));
+                        } else {
+                            print!(" ");
+                        }
+                    }
+                }
+                x = x + 1;
+            }
+        } else {
+            for _i in 0..width {
+                print!(" ");
+            }
+        }
+        print!("{}\r\n", reset());
+        y = y + 1;
+    }
+}
+
 fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
                 cur_frame: i64, total_frames: i64, fft_sr: i64, time_sr: i64, mode: i32, fft_window: i32,
                 dot_mode: i32, dark_bg: i32, log_scale: i64, detail_mode: i32, shade_mode: i32,
-                flash_threshold: i32, flash_mode: i32) -> void {
+                flash_threshold: i32, flash_mode: i32, help_popup: i32) -> void {
     // 1 header + 1 frequency axis + 1 progress row.
     let graph_h: i64 = height - 3;
     let bins_full: i64 = (freq_l.len() / 2);
@@ -550,25 +643,19 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     let cur_sec: i64 = time_sr > 0 ? (cur_frame / time_sr) : 0;
     let pos_time: str8 = format_timecode(cur_sec);
     print!(
-        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white ",
-        width, height, fft_sr, pos_time
-    );
-    print!(
-        "mode={} glyph={} bg={} log={} flash={}({}) detail={} shade={} ",
-        mode == 1 ? "music" : "flat",
-        dot_mode == 1 ? "dot" : "block",
-        dark_bg == 1 ? "blue" : "black",
-        log_scale,
-        flash_threshold,
-        flash_mode == 1 ? "on" : "off",
-        detail_mode == 1 ? "on" : "off",
-        shade_mode == 1 ? "on" : "off"
-    );
-    print!(
-        "[h/l seek f/m/x/b/d/D v flash +/- flash h/l seek q] win={} frame={}/{}\r\n",
-        fft_window, cur_frame, total_frames
+        "FFT {}x{} sr={} pos={}  q=quit  ?=help  h/l=seek -/+5s  frame={}/{}\r\n",
+        width, height, fft_sr, pos_time, cur_frame, total_frames
     );
     print!("{}", reset());
+    if help_popup == 1 {
+        draw_help_popup(width, graph_h, dark_bg);
+        draw_freq_axis(width, bins, fft_window, fft_sr);
+        print!("\r\n");
+        draw_progress_row(width, cur_frame, total_frames, time_sr);
+        let out: Stdout = stdout();
+        let _ = flush(out);
+        return;
+    }
 
     var col_hl: Vec<i64> = Vec::new();
     var col_hr: Vec<i64> = Vec::new();
@@ -827,18 +914,19 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var dot_mode: i32 = 0; // 1=dot, 0=block
     var dark_bg: i32 = 1; // 1=dark blue, 0=black
     var detail_mode: i32 = 0; // 1=more low-bin detail
-    var shade_mode: i32 = 0; // 1=full-cell shades on bar tops
+    var shade_mode: i32 = 1; // 1=full-cell shades on bar tops (same as pressing D once)
     var flash_threshold: i32 = 64; // higher = less flashing, lower = more flashing
     var flash_mode: i32 = 1; // 1=flash/brightness accent, 0=steady spectrum
     var start_time: str8 = "";
     var log_scale: i64 = 100; // stable range in runtime is clamped to [50, 200]
     var jack_buffer: i32 = 0; // 0=unchanged
+    var help_popup: i32 = 0; // 1=show in-app controls popup
     var i: i32 = 1;
     while i < argc {
         let a: str8 = args[i];
         if eq(a, "--help") == 1 || eq(a, "-h") == 1 {
             println!("Usage: fft_analyzer_demo [WAV_PATH] [--flat|--music] [--time=hh::mm::ss] [--log=x] [--buffer=n] [--flash=x] [--no-flash|--flash-on]");
-            println!("Keys: q quit, f flat, m music, x glyph(block/dot), b bg(blue/black), d detail, D top-shade, v flash on/off, +/- flash threshold, h/l seek -/+5s");
+            println!("Keys: q quit, ? help popup, f flat, m music, x glyph(block/dot), b bg(blue/black), d detail, D top-shade, v flash on/off, +/- flash threshold, h/l seek -/+5s");
             println!("Examples:");
             println!("  ./examples/fft_example/run_demo.sh --music --time=00::01::30");
             println!("  ./examples/fft_example/run_demo.sh /path/to/file.wav --flat --time=01::02::03");
@@ -921,6 +1009,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             if find(key_buf, "q") >= 0 || find(key_buf, "Q") >= 0 {
                 break;
             }
+            if find(key_buf, "?") >= 0 {
+                help_popup = help_popup == 0 ? 1 : 0;
+            }
             if find(key_buf, "f") >= 0 || find(key_buf, "F") >= 0 {
                 mode = 0;
             }
@@ -975,7 +1066,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let freq_l: list<i64> = forward(snap_l);
         let freq_r: list<i64> = forward(snap_r);
         let cur_frame: i64 = jack2_fftviz_current_frame();
-        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, fft_sr, time_sr, mode, fft_window, dot_mode, dark_bg, log_scale, detail_mode, shade_mode, flash_threshold, flash_mode);
+        render_frame(freq_l, freq_r, width, height, cur_frame, total_frames, fft_sr, time_sr, mode, fft_window, dot_mode, dark_bg, log_scale, detail_mode, shade_mode, flash_threshold, flash_mode, help_popup);
         sleep_ms(16);
         if jack2_fftviz_running() == 0 {
             tail_ticks = tail_ticks - 1;
