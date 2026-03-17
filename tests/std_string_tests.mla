@@ -137,6 +137,19 @@ fn test_string_pad_helpers() {
     verify(test_string_pad_helpers_impl() == 0);
 }
 
+fn test_string_wrap_words_impl() -> i32 {
+    let lines: list<str8> = wrap_words("alpha beta gamma", 10);
+    if lines.len() != 2 { return 1; }
+    if eq(lines[0], "alpha beta") != 1 { return 1; }
+    if eq(lines[1], "gamma") != 1 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_string_wrap_words() {
+    verify(test_string_wrap_words_impl() == 0);
+}
+
 fn test_string_builder_dynamic_growth_and_take_impl() -> i32 {
     var b: StringBuilder = builder_with_page(2, 4);
     if builder_is_valid(b) != 1 { return 1; }

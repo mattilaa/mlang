@@ -187,6 +187,53 @@ pub fn repeat(s: str8, count: i64) -> str8 {
     return __mlang_std_strbuf_repeat(s, count);
 }
 
+/// @brief Wrap text into lines of at most `width` by splitting on spaces.
+///
+/// Returns at least one line. Leading spaces are skipped between words.
+/// Wrapped lines are newly allocated strings.
+pub fn wrap_words(text: str8, width: i64) -> list<str8> {
+    var out: list<str8> = [];
+    if width <= 0 {
+        out.push(text);
+        return out;
+    }
+    let n: i64 = len(text);
+    var i: i64 = 0;
+    var line: str8 = "";
+    while i < n {
+        while i < n && eq(sub(text, i, 1), " ") == 1 {
+            i = i + 1;
+        }
+        if i >= n {
+            break;
+        }
+
+        var j: i64 = i;
+        while j < n && eq(sub(text, j, 1), " ") != 1 {
+            j = j + 1;
+        }
+        let word: str8 = sub(text, i, j - i);
+        if len(line) == 0 {
+            line = word;
+        } else {
+            if len(line) + 1 + len(word) <= width {
+                line = concat(concat(line, " "), word);
+            } else {
+                out.push(line);
+                line = word;
+            }
+        }
+        i = j + 1;
+    }
+    if len(line) > 0 {
+        out.push(line);
+    }
+    if out.len() == 0 {
+        out.push("");
+    }
+    return out;
+}
+
 /// @brief Left-pad `s` to at least `width` bytes using repeated `pad`.
 /// Returns a newly allocated string; caller frees with `free`.
 pub fn pad_left(s: str8, width: i64, pad: str8) -> str8 {
