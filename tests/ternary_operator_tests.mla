@@ -53,3 +53,29 @@ fn test_ternary_object_instantiation_branches() {
     let o: TernaryObj = choose_true() ? make_obj_a() : make_obj_b();
     verify_eq_i32(1, o.id);
 }
+
+#[test]
+fn test_ternary_condition_with_logical_or_parenthesized() {
+    let full_l: i32 = 0;
+    let half_l: i32 = 1;
+    let on_l: i32 = (full_l == 1 || half_l == 1) ? 1 : 0;
+    verify_eq_i32(1, on_l);
+}
+
+#[test]
+fn test_ternary_condition_with_logical_and_parenthesized() {
+    let a: i32 = 2;
+    let b: i32 = 3;
+    let x: i32 = (a > 1 && b > 1) ? 10 : 20;
+    verify_eq_i32(10, x);
+}
+
+#[test]
+fn test_ternary_condition_nested_logical_parenthesized() {
+    let full_r: i32 = 0;
+    let half_r: i32 = 1;
+    let someCondition: i32 = 0;
+    let someOtherCondition: i32 = 1;
+    let on_r: i32 = ((full_r == 1 || half_r == 1) || someCondition == 1) && someOtherCondition == 1 ? 1 : 0;
+    verify_eq_i32(1, on_r);
+}

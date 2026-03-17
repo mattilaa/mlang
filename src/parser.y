@@ -1184,8 +1184,6 @@ condition_primary
         { $$ = mla_ast_fold_expression(PLUS, $2, 1); }
     | LPAREN ELLIPSIS MULTIPLY expression RPAREN
         { $$ = mla_ast_fold_expression(MULTIPLY, $4, 0); }
-    | LPAREN postfix_expression MULTIPLY ELLIPSIS RPAREN
-        { $$ = mla_ast_fold_expression(MULTIPLY, $2, 1); }
     | LPAREN ELLIPSIS AMP_AMP expression RPAREN
         { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
     | LPAREN postfix_expression AMP_AMP ELLIPSIS RPAREN
@@ -1209,8 +1207,14 @@ expression
 ternary_expression
     : binary_expression QUESTION ternary_expression COLON ternary_expression
         { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
+    | LPAREN condition_expression RPAREN QUESTION ternary_expression COLON ternary_expression
+        { $$ = mla_ast_ternary_expression($2, $5, $7, yylineno); }
+    | LPAREN condition_expression RPAREN
+        { $$ = $2; }
     | function_call QUESTION ternary_expression COLON ternary_expression
         { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
+    | struct_literal
+        { $$ = $1; }
     | binary_expression
     | unary_expression
     ;
@@ -1349,8 +1353,6 @@ primary_expression
         { $$ = mla_ast_fold_expression(PLUS, $2, 1); }
     | LPAREN ELLIPSIS MULTIPLY expression RPAREN
         { $$ = mla_ast_fold_expression(MULTIPLY, $4, 0); }
-    | LPAREN expression MULTIPLY ELLIPSIS RPAREN
-        { $$ = mla_ast_fold_expression(MULTIPLY, $2, 1); }
     | LPAREN ELLIPSIS AMP_AMP expression RPAREN
         { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
     | LPAREN expression AMP_AMP ELLIPSIS RPAREN
@@ -1519,14 +1521,14 @@ void yyerror(const char* s) {
         if(yytext && strcmp(yytext, ")") == 0)
         {
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error: unexpected ')' (possible extra closing ')' )\n",
+                    "%s:%d:%d: error: syntax error (parse phase): unexpected ')'\n",
                     g_sourceFile, yylineno, col);
             return;
         }
         if(yytext && strcmp(yytext, "]") == 0)
         {
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error: unexpected ']' (possible extra closing ']' )\n",
+                    "%s:%d:%d: error: syntax error (parse phase): unexpected ']'\n",
                     g_sourceFile, yylineno, col);
             return;
         }
