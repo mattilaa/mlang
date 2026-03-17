@@ -1,0 +1,174 @@
+// mlangpkg: Cargo-like package manager implemented in Mlang.
+// This version is a scaffold wired to stdlib API surfaces.
+
+mod std::env;
+mod std::fs;
+mod std::path;
+mod std::process;
+mod std::toml;
+
+use std::env::env_args;
+use std::env::env_cwd;
+use std::env::env_get;
+use std::env::env_len;
+use std::env::env_println;
+use std::fs::fs_exists;
+use std::fs::fs_mkdir_p;
+use std::fs::fs_read_text;
+use std::fs::fs_remove_tree;
+use std::fs::fs_write_text;
+use std::path::path_join;
+use std::path::path_normalize;
+use std::process::process_run_build;
+use std::toml::toml_parse;
+
+extern fn __toml_get_string(obj: i64, key: str8, fallback: str8) -> str8;
+extern fn __toml_set_inline_table(obj: i64, key: str8, field: str8, value: str8) -> void;
+extern fn __toml_stringify(obj: i64) -> str8;
+
+fn print_usage() {
+    env_println("mlangpkg <command> [args]");
+    env_println("");
+    env_println("commands:");
+    env_println("  init <name>");
+    env_println("  build [--release]");
+    env_println("  run [--release] [-- ...]");
+    env_println("  add <name> --path <dir>");
+    env_println("  clean");
+}
+
+fn cmd_init(project_name: str8) -> void {
+    let root = path_normalize(project_name);
+    fs_mkdir_p(root);
+    fs_mkdir_p(path_join(root, "src"));
+
+    let manifest = path_join(root, "mlangpkg.toml");
+    let manifest_text: str8 = format!(
+        "[package]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[build]\nsrc_dir = \"src\"\nbin = \"{}\"\n\n[dependencies]\n",
+        project_name,
+        project_name
+    );
+
+    fs_write_text(manifest, manifest_text);
+    fs_write_text(
+        path_join(root, "src/main.mla"),
+        "fn main() {\n" +
+        "    env_println(\"hello from mlangpkg\");\n" +
+        "}\n"
+    );
+
+    env_println(format!("initialized {}", root));
+}
+
+fn cmd_build(release_mode: bool) -> void {
+    let cwd = env_cwd();
+    let manifest_path = path_join(cwd, "mlangpkg.toml");
+    if fs_exists(manifest_path) == 0 {
+        env_println("mlangpkg: missing mlangpkg.toml");
+        return;
+    }
+
+    let manifest_text = fs_read_text(manifest_path);
+    let manifest = toml_parse(manifest_text);
+    let src_dir = __toml_get_string(manifest.handle, "build.src_dir", "src");
+    let bin_name = __toml_get_string(manifest.handle, "build.bin", "app");
+    let target_dir = path_join(cwd, ".mlangpkg/target");
+    fs_mkdir_p(target_dir);
+
+    let out = path_join(target_dir, bin_name);
+    var release_mode_i32: i32 = 0;
+    if release_mode {
+        release_mode_i32 = 1;
+    }
+    let status = process_run_build(cwd, src_dir, out, release_mode_i32);
+    if (status != 0) {
+        env_println("mlangpkg: build failed");
+        return;
+    }
+    env_println(format!("built {}", out));
+}
+
+fn cmd_run(release_mode: bool) -> void {
+    cmd_build(release_mode);
+    // TODO: execute built artifact with forwarded args.
+    env_println("run: TODO execute target binary");
+}
+
+fn cmd_add(dep_name: str8, dep_path: str8) -> void {
+    let cwd = env_cwd();
+    let manifest_path = path_join(cwd, "mlangpkg.toml");
+    let manifest_text = fs_read_text(manifest_path);
+    let manifest = toml_parse(manifest_text);
+
+    __toml_set_inline_table(
+        manifest.handle,
+        format!("dependencies.{}", dep_name),
+        "path",
+        dep_path
+    );
+
+    fs_write_text(manifest_path, __toml_stringify(manifest.handle));
+    env_println(format!("added dependency {} -> {}", dep_name, dep_path));
+}
+
+fn cmd_clean() -> void {
+    let cwd = env_cwd();
+    let build_dir = path_join(cwd, ".mlangpkg");
+    fs_remove_tree(build_dir);
+    env_println(format!("cleaned {}", build_dir));
+}
+
+fn parse_release_flag(args: &list<str8>) -> bool {
+    var i: i64 = 0;
+    while i < env_len(args) {
+        let v: str8 = env_get(args, i);
+        if (v == "--release") {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn main() -> i32 {
+    let args: list<str8> = env_args();
+    if env_len(args) < 2 {
+        print_usage();
+        return 0;
+    }
+
+    let cmd: str8 = env_get(args, 1);
+    if (cmd == "init") {
+        if env_len(args) < 3 {
+            env_println("mlangpkg init: missing project name");
+            return 1;
+        }
+        cmd_init(env_get(args, 2));
+        return 0;
+    }
+    if (cmd == "build") {
+        cmd_build(parse_release_flag(args));
+        return 0;
+    }
+    if (cmd == "run") {
+        cmd_run(parse_release_flag(args));
+        return 0;
+    }
+    if (cmd == "add") {
+        if env_len(args) < 5 {
+            env_println("mlangpkg add: usage add <name> --path <dir>");
+            return 1;
+        }
+        let dep_name: str8 = env_get(args, 2);
+        let dep_path: str8 = env_get(args, 4);
+        cmd_add(dep_name, dep_path);
+        return 0;
+    }
+    if (cmd == "clean") {
+        cmd_clean();
+        return 0;
+    }
+
+    print_usage();
+    return 1;
+}
