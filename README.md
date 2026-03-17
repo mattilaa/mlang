@@ -500,6 +500,7 @@ jack_connect mlang_drum_machine:out_r system:playback_2
 ### JACK2 Stereo FFT Analyzer Demo
 Plays a stereo WAV via JACK2 and renders a real-time 100x25 ASCII spectrum
 analyzer with colorized stereo differences (left/right/overlap) using `std::algorithm::fft`.
+`run_demo.sh` also accepts non-WAV input (for example `.m4a`) via `ffmpeg` decode.
 
 Demo directory:
 - `examples/fft_example/main.mla`
@@ -530,6 +531,12 @@ Custom WAV:
 
 ```sh
 ./examples/fft_example/run_demo.sh /path/to/stereo.wav
+```
+
+Custom non-WAV (example: m4a, requires `ffmpeg` in PATH):
+
+```sh
+./examples/fft_example/run_demo.sh /path/to/file.m4a
 ```
 
 Start at a specific time:
