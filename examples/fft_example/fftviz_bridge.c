@@ -70,11 +70,38 @@ static uint16_t read_u16_le(const uint8_t* p)
     return (uint16_t)(((uint16_t)p[0]) | ((uint16_t)p[1] << 8));
 }
 
-static int load_wav_pcm16(const char* path, stereo_wav_t* out)
+static int16_t read_i16_le(const uint8_t* p)
+{
+    return (int16_t)read_u16_le(p);
+}
+
+static int32_t read_i24_le(const uint8_t* p)
+{
+    int32_t v = ((int32_t)p[0]) | ((int32_t)p[1] << 8) | ((int32_t)p[2] << 16);
+    if(v & 0x00800000)
+        v |= (int32_t)0xFF000000;
+    return v;
+}
+
+static int32_t read_i32_le(const uint8_t* p)
+{
+    return (int32_t)read_u32_le(p);
+}
+
+static float clamp_unit(float x)
+{
+    if(x > 1.0f) return 1.0f;
+    if(x < -1.0f) return -1.0f;
+    return x;
+}
+
+static int load_wav_audio(const char* path, stereo_wav_t* out)
 {
     uint8_t header[12];
+    uint16_t audio_format = 0;
     uint16_t channels = 0;
     uint32_t sample_rate = 0;
+    uint16_t block_align = 0;
     uint16_t bits_per_sample = 0;
     uint32_t data_size = 0;
     long data_offset = 0;
@@ -126,16 +153,17 @@ static int load_wav_pcm16(const char* path, stereo_wav_t* out)
                 fclose(f);
                 return -6;
             }
-            uint16_t format = read_u16_le(fmt + 0);
+            audio_format = read_u16_le(fmt + 0);
             channels = read_u16_le(fmt + 2);
             sample_rate = read_u32_le(fmt + 4);
+            block_align = read_u16_le(fmt + 12);
             bits_per_sample = read_u16_le(fmt + 14);
-            free(fmt);
-            if(format != 1)
+            if(audio_format == 0xFFFE && chunk_size >= 26)
             {
-                fclose(f);
-                return -7;
+                /* WAVE_FORMAT_EXTENSIBLE: real format is subformat GUID first WORD. */
+                audio_format = read_u16_le(fmt + 24);
             }
+            free(fmt);
             has_fmt = 1;
         }
         else if(memcmp(chunk_hdr, "data", 4) == 0)
@@ -162,8 +190,22 @@ static int load_wav_pcm16(const char* path, stereo_wav_t* out)
             (void)fseek(f, 1, SEEK_CUR);
     }
 
-    if(!has_fmt || !has_data || bits_per_sample != 16 || channels == 0 ||
-       channels > 2 || sample_rate == 0)
+    int is_pcm = (audio_format == 1);
+    int is_float = (audio_format == 3);
+    int supported_bits = (bits_per_sample == 16 || bits_per_sample == 24 ||
+                          bits_per_sample == 32 || bits_per_sample == 64);
+    if(!has_fmt || !has_data || channels == 0 || channels > 2 || sample_rate == 0 ||
+       (!is_pcm && !is_float) || !supported_bits)
+    {
+        fclose(f);
+        return -10;
+    }
+    if(is_float && !(bits_per_sample == 32 || bits_per_sample == 64))
+    {
+        fclose(f);
+        return -10;
+    }
+    if(block_align == 0)
     {
         fclose(f);
         return -10;
@@ -175,29 +217,34 @@ static int load_wav_pcm16(const char* path, stereo_wav_t* out)
         return -11;
     }
 
-    int total_samples = (int)(data_size / 2u);
-    int frames = total_samples / (int)channels;
+    int bytes_per_frame = (int)block_align;
+    if(bytes_per_frame <= 0)
+    {
+        fclose(f);
+        return -12;
+    }
+    int frames = (int)(data_size / (uint32_t)bytes_per_frame);
     if(frames <= 0)
     {
         fclose(f);
         return -12;
     }
 
-    int16_t* pcm = (int16_t*)malloc((size_t)data_size);
+    uint8_t* raw = (uint8_t*)malloc((size_t)data_size);
     float* left = (float*)calloc((size_t)frames, sizeof(float));
     float* right = (float*)calloc((size_t)frames, sizeof(float));
-    if(!pcm || !left || !right)
+    if(!raw || !left || !right)
     {
-        free(pcm);
+        free(raw);
         free(left);
         free(right);
         fclose(f);
         return -13;
     }
 
-    if(fread(pcm, 1, data_size, f) != data_size)
+    if(fread(raw, 1, data_size, f) != data_size)
     {
-        free(pcm);
+        free(raw);
         free(left);
         free(right);
         fclose(f);
@@ -205,22 +252,89 @@ static int load_wav_pcm16(const char* path, stereo_wav_t* out)
     }
     fclose(f);
 
+    int bytes_per_sample = (int)bits_per_sample / 8;
+    if(bytes_per_sample <= 0)
+    {
+        free(raw);
+        free(left);
+        free(right);
+        return -10;
+    }
+
     for(int i = 0; i < frames; ++i)
     {
-        if(channels == 1)
+        const uint8_t* frame = raw + (size_t)i * (size_t)bytes_per_frame;
+        float s0 = 0.0f;
+        float s1 = 0.0f;
+        if(is_pcm)
         {
-            float s = (float)pcm[i] / 32768.0f;
-            left[i] = s;
-            right[i] = s;
+            if(bits_per_sample == 16)
+            {
+                s0 = (float)read_i16_le(frame + 0 * bytes_per_sample) / 32768.0f;
+                if(channels > 1)
+                    s1 = (float)read_i16_le(frame + 1 * bytes_per_sample) / 32768.0f;
+            }
+            else if(bits_per_sample == 24)
+            {
+                s0 = (float)read_i24_le(frame + 0 * bytes_per_sample) / 8388608.0f;
+                if(channels > 1)
+                    s1 = (float)read_i24_le(frame + 1 * bytes_per_sample) / 8388608.0f;
+            }
+            else if(bits_per_sample == 32)
+            {
+                s0 = (float)read_i32_le(frame + 0 * bytes_per_sample) / 2147483648.0f;
+                if(channels > 1)
+                    s1 = (float)read_i32_le(frame + 1 * bytes_per_sample) / 2147483648.0f;
+            }
+            else
+            {
+                /* 64-bit integer PCM not supported for now. */
+                free(raw);
+                free(left);
+                free(right);
+                return -10;
+            }
         }
         else
         {
-            left[i] = (float)pcm[2 * i] / 32768.0f;
-            right[i] = (float)pcm[2 * i + 1] / 32768.0f;
+            if(bits_per_sample == 32)
+            {
+                float f0 = 0.0f;
+                memcpy(&f0, frame + 0 * bytes_per_sample, sizeof(float));
+                s0 = f0;
+                if(channels > 1)
+                {
+                    float f1 = 0.0f;
+                    memcpy(&f1, frame + 1 * bytes_per_sample, sizeof(float));
+                    s1 = f1;
+                }
+            }
+            else if(bits_per_sample == 64)
+            {
+                double d0 = 0.0;
+                memcpy(&d0, frame + 0 * bytes_per_sample, sizeof(double));
+                s0 = (float)d0;
+                if(channels > 1)
+                {
+                    double d1 = 0.0;
+                    memcpy(&d1, frame + 1 * bytes_per_sample, sizeof(double));
+                    s1 = (float)d1;
+                }
+            }
+            else
+            {
+                free(raw);
+                free(left);
+                free(right);
+                return -10;
+            }
         }
+        if(channels == 1) s1 = s0;
+        left[i] = clamp_unit(s0);
+        right[i] = clamp_unit(s1);
     }
 
-    free(pcm);
+    free(raw);
     out->left = left;
     out->right = right;
     out->frames = frames;
@@ -439,7 +553,7 @@ int32_t jack2_fftviz_start(mlang_string wav_path, mlang_string client_name)
         return -2;
 
     clear_wav();
-    int rc = load_wav_pcm16(wav_path, &g_wav);
+    int rc = load_wav_audio(wav_path, &g_wav);
     if(rc != 0)
         return -10 + rc;
 
