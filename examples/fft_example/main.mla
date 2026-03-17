@@ -550,9 +550,11 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
     let cur_sec: i64 = time_sr > 0 ? (cur_frame / time_sr) : 0;
     let pos_time: str8 = format_timecode(cur_sec);
     print!(
-        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white mode={} glyph={} bg={} log={} flash={}({}) detail={} shade={} [h/l seek f/m/x/b/d/D v flash +/- flash h/l seek q] win={} frame={}/{}\r\n",
-        width, height, fft_sr,
-        pos_time,
+        "FFT {}x{} sr={} pos={} L=cyan R=magenta B=yellow/white ",
+        width, height, fft_sr, pos_time
+    );
+    print!(
+        "mode={} glyph={} bg={} log={} flash={}({}) detail={} shade={} ",
         mode == 1 ? "music" : "flat",
         dot_mode == 1 ? "dot" : "block",
         dark_bg == 1 ? "blue" : "black",
@@ -560,7 +562,10 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         flash_threshold,
         flash_mode == 1 ? "on" : "off",
         detail_mode == 1 ? "on" : "off",
-        shade_mode == 1 ? "on" : "off",
+        shade_mode == 1 ? "on" : "off"
+    );
+    print!(
+        "[h/l seek f/m/x/b/d/D v flash +/- flash h/l seek q] win={} frame={}/{}\r\n",
         fft_window, cur_frame, total_frames
     );
     print!("{}", reset());
@@ -652,7 +657,9 @@ fn render_frame(freq_l: list<i64>, freq_r: list<i64>, width: i64, height: i64,
         let hr2: i64 = scale_height_log(mr, floor_mag, max_vis, graph_h * 2);
         let hl2_shrunk: i64 = (hl2 * 3) / 4;
         let hr2_shrunk: i64 = (hr2 * 3) / 4;
-        let hs: i64 = log_scale <= 0 ? 100 : log_scale;
+        // Keep log scaling in a conservative stable range to avoid extreme
+        // magnification/compression behavior in live rendering.
+        let hs: i64 = clamp_i64(log_scale, 50, 200);
         let hl2_scaled: i64 = clamp_i64((hl2_shrunk * 100) / hs, 0, graph_h * 2);
         let hr2_scaled: i64 = clamp_i64((hr2_shrunk * 100) / hs, 0, graph_h * 2);
         var hlf: i64 = hl2_scaled / 2;
@@ -807,7 +814,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var flash_threshold: i32 = 64; // higher = less flashing, lower = more flashing
     var flash_mode: i32 = 1; // 1=flash/brightness accent, 0=steady spectrum
     var start_time: str8 = "";
-    var log_scale: i32 = 100; // 100=default, >100 compress, <100 expand
+    var log_scale: i32 = 100; // stable range in runtime is clamped to [50, 200]
     var jack_buffer: i32 = 0; // 0=unchanged
     var i: i32 = 1;
     while i < argc {
@@ -833,7 +840,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         } else if starts_with(a, "--log=") == 1 {
             let ls: str8 = sub(a, 6, len(a) - 6);
             let parsed: i32 = atoi(ls);
-            if parsed >= 25 && parsed <= 400 {
+            if parsed < 50 {
+                log_scale = 50;
+            } else if parsed > 200 {
+                log_scale = 200;
+            } else {
                 log_scale = parsed;
             }
         } else if starts_with(a, "--buffer=") == 1 {
