@@ -1,14 +1,18 @@
 mod std::testing;
 mod std::process;
 mod std::strbuf;
+mod std::time;
 
 use std::process::Child;
+use std::process::PipeRead;
 use std::process::ChildStderr;
 use std::process::ChildStdin;
 use std::process::ChildStdout;
 use std::process::ExitStatus;
+use std::process::WaitPoll;
 use std::process::spawn;
 use std::strbuf::contains;
+use std::time::sleep_ms;
 use std::testing::verify;
 use std::testing::verify_eq;
 
@@ -97,4 +101,51 @@ fn test_stdin_stdout_pipe_roundtrip() {
     child.close();
     verify(!(ok != 1));
     verify_eq(st.success() , 1);
+}
+
+#[test]
+fn test_nonblocking_process_poll_and_pipe_read() {
+    let child_r: Result<Child, str8> = spawn("/bin/sh", ["-c", "sleep 0.2; printf ready"]);
+    verify(!(child_r.is_err()));
+    let child: Child = child_r.unwrap();
+
+    let out_r: Result<ChildStdout, str8> = child.stdout();
+    verify(!(out_r.is_err()));
+    let out: ChildStdout = out_r.unwrap();
+
+    let poll1_r: Result<WaitPoll, str8> = child.try_wait();
+    verify(!(poll1_r.is_err()));
+    let poll1: WaitPoll = poll1_r.unwrap();
+    verify_eq(poll1.ready , 0);
+
+    var buf = String::with_capacity(256);
+    let read1_r: Result<PipeRead, str8> = out.read_nonblocking(buf, 256);
+    verify(!(read1_r.is_err()));
+    let read1: PipeRead = read1_r.unwrap();
+    verify_eq(read1.ready , 0);
+
+    sleep_ms(260);
+
+    let read2_r: Result<PipeRead, str8> = out.read_nonblocking(buf, 256);
+    verify(!(read2_r.is_err()));
+    let read2: PipeRead = read2_r.unwrap();
+    verify_eq(read2.ready , 1);
+    verify(!(read2.len <= 0));
+    verify(!(contains(buf, "ready") != 1));
+
+    let poll2_r: Result<WaitPoll, str8> = child.try_wait();
+    verify(!(poll2_r.is_err()));
+    let poll2: WaitPoll = poll2_r.unwrap();
+    if poll2.ready == 0: {
+        sleep_ms(20);
+    }
+    let poll3_r: Result<WaitPoll, str8> = child.try_wait();
+    verify(!(poll3_r.is_err()));
+    let poll3: WaitPoll = poll3_r.unwrap();
+    verify_eq(poll3.ready , 1);
+    verify_eq(poll3.status.success() , 1);
+
+    String::free(buf);
+    out.close();
+    child.close();
 }

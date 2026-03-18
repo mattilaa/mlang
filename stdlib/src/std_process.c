@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 typedef struct
@@ -372,6 +373,49 @@ int64_t __mlang_std_process_pipe_read(int64_t pipe_handle, char* buf, int64_t ca
     }
 }
 
+int64_t __mlang_std_process_pipe_read_nonblocking(int64_t pipe_handle, char* buf, int64_t capacity)
+{
+    mlang_process_pipe_t* p = as_pipe(pipe_handle);
+    if(!p || p->fd < 0 || !buf || capacity <= 1)
+    {
+        set_error("std::process pipe_read_nonblocking: invalid arguments");
+        return -2;
+    }
+
+    int flags = fcntl(p->fd, F_GETFL, 0);
+    if(flags < 0)
+    {
+        set_errno_error("std::process pipe_read_nonblocking getfl failed");
+        return -2;
+    }
+    if((flags & O_NONBLOCK) == 0 && fcntl(p->fd, F_SETFL, flags | O_NONBLOCK) != 0)
+    {
+        set_errno_error("std::process pipe_read_nonblocking setfl failed");
+        return -2;
+    }
+
+    for(;;)
+    {
+        ssize_t n = read(p->fd, buf, (size_t)(capacity - 1));
+        if(n < 0)
+        {
+            if(errno == EINTR)
+                continue;
+            if(errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                buf[0] = '\0';
+                clear_error();
+                return -1;
+            }
+            set_errno_error("std::process pipe_read_nonblocking failed");
+            return -2;
+        }
+        buf[n] = '\0';
+        clear_error();
+        return (int64_t)n;
+    }
+}
+
 int __mlang_std_process_pipe_close(int64_t pipe_handle)
 {
     mlang_process_pipe_t* p = as_pipe(pipe_handle);
@@ -405,6 +449,40 @@ int __mlang_std_process_wait_raw(int64_t child_handle)
     if(rc < 0)
     {
         set_errno_error("std::process wait failed");
+        return -1;
+    }
+
+    child->waited = 1;
+    child->status = status;
+    clear_error();
+    return status;
+}
+
+int __mlang_std_process_try_wait_raw(int64_t child_handle)
+{
+    mlang_process_child_t* child = as_child(child_handle);
+    if(!child)
+    {
+        set_error("std::process try_wait: invalid child handle");
+        return -2;
+    }
+
+    if(child->waited)
+    {
+        clear_error();
+        return child->status;
+    }
+
+    int status = 0;
+    pid_t rc = waitpid(child->pid, &status, WNOHANG);
+    if(rc < 0)
+    {
+        set_errno_error("std::process try_wait failed");
+        return -2;
+    }
+    if(rc == 0)
+    {
+        clear_error();
         return -1;
     }
 

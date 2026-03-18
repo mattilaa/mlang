@@ -13,14 +13,22 @@ extern pub fn __mlang_std_process_take_stdout(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_take_stderr(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_pipe_write(pipe_handle: i64, s: str8) -> i64;
 extern pub fn __mlang_std_process_pipe_read(pipe_handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_process_pipe_read_nonblocking(pipe_handle: i64, buf: str8, capacity: i64) -> i64;
 extern pub fn __mlang_std_process_pipe_close(pipe_handle: i64) -> i32;
 extern pub fn __mlang_std_process_wait_raw(child_handle: i64) -> i32;
+extern pub fn __mlang_std_process_try_wait_raw(child_handle: i64) -> i32;
 extern pub fn __mlang_std_process_status_exited(raw_status: i32) -> i32;
 extern pub fn __mlang_std_process_status_code(raw_status: i32) -> i32;
 extern pub fn __mlang_std_process_status_signaled(raw_status: i32) -> i32;
 extern pub fn __mlang_std_process_status_signal(raw_status: i32) -> i32;
 extern pub fn __mlang_std_process_kill(child_handle: i64, sig: i32) -> i32;
 extern pub fn __mlang_std_process_child_close(child_handle: i64) -> i32;
+
+/// @brief Nonblocking pipe read result.
+pub struct PipeRead {
+    var ready: i32;
+    var len: i64;
+};
 
 /// @brief Child process handle.
 pub struct Child {
@@ -45,6 +53,12 @@ pub struct ChildStderr {
 /// @brief Process exit status wrapper.
 pub struct ExitStatus {
     var raw: i32;
+};
+
+/// @brief Nonblocking child wait poll result.
+pub struct WaitPoll {
+    var ready: i32;
+    var status: ExitStatus;
 };
 
 /// @brief Return last backend process error.
@@ -105,6 +119,26 @@ impl Child {
             return Err<ExitStatus, str8>(last_error());
         }
         return Ok<ExitStatus, str8>(ExitStatus { raw: raw });
+    }
+
+    /// @brief Poll child status without blocking.
+    ///
+    /// Returns `WaitPoll { ready: 0, ... }` while the child is still running.
+    /// When `ready == 1`, `status` contains the same decoded raw status values
+    /// as `wait()`.
+    pub fn try_wait(self: Child) -> Result<WaitPoll, str8> {
+        let raw: i32 = __mlang_std_process_try_wait_raw(self.handle);
+        if raw < -1 {
+            return Err<WaitPoll, str8>(last_error());
+        }
+        if raw == -1 {
+            let status: ExitStatus = ExitStatus { raw: 0 };
+            let out: WaitPoll = WaitPoll { ready: 0, status: status };
+            return Ok<WaitPoll, str8>(out);
+        }
+        let status: ExitStatus = ExitStatus { raw: raw };
+        let out: WaitPoll = WaitPoll { ready: 1, status: status };
+        return Ok<WaitPoll, str8>(out);
     }
 
     /// @brief Send signal `sig` to child process.
@@ -178,6 +212,24 @@ impl ChildStdout {
         return Ok<i64, str8>(n);
     }
 
+    /// @brief Read available bytes from child stdout without blocking.
+    ///
+    /// Returns `PipeRead { ready: 0, len: 0 }` when no bytes are currently
+    /// available. When `ready == 1`, `len == 0` means EOF and `len > 0`
+    /// means bytes were read into `buf`.
+    pub fn read_nonblocking(self: ChildStdout, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+        let n: i64 = __mlang_std_process_pipe_read_nonblocking(self.handle, buf, capacity);
+        if n < -1 {
+            return Err<PipeRead, str8>(last_error());
+        }
+        if n == -1 {
+            let out: PipeRead = PipeRead { ready: 0, len: 0 };
+            return Ok<PipeRead, str8>(out);
+        }
+        let out: PipeRead = PipeRead { ready: 1, len: n };
+        return Ok<PipeRead, str8>(out);
+    }
+
     /// @brief Close child stdout pipe.
     pub fn close(self: ChildStdout) -> i32 {
         return __mlang_std_process_pipe_close(self.handle);
@@ -192,6 +244,24 @@ impl ChildStderr {
             return Err<i64, str8>(last_error());
         }
         return Ok<i64, str8>(n);
+    }
+
+    /// @brief Read available bytes from child stderr without blocking.
+    ///
+    /// Returns `PipeRead { ready: 0, len: 0 }` when no bytes are currently
+    /// available. When `ready == 1`, `len == 0` means EOF and `len > 0`
+    /// means bytes were read into `buf`.
+    pub fn read_nonblocking(self: ChildStderr, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+        let n: i64 = __mlang_std_process_pipe_read_nonblocking(self.handle, buf, capacity);
+        if n < -1 {
+            return Err<PipeRead, str8>(last_error());
+        }
+        if n == -1 {
+            let out: PipeRead = PipeRead { ready: 0, len: 0 };
+            return Ok<PipeRead, str8>(out);
+        }
+        let out: PipeRead = PipeRead { ready: 1, len: n };
+        return Ok<PipeRead, str8>(out);
     }
 
     /// @brief Close child stderr pipe.

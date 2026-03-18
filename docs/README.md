@@ -58,7 +58,8 @@ For POSIX regular expressions, see:
 For child process integration, see:
 - `stdlib/std/process.mla`
   (`spawn`, `spawn_inherit`, child stdin/stdout/stderr pipes,
-   `wait`, `ExitStatus::success/code/signaled`).
+   `wait`, `try_wait`, `read_nonblocking`,
+   `ExitStatus::success/code/signaled`).
 
 For timing helpers, see:
 - `stdlib/std/time.mla`
