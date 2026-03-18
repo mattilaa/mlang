@@ -194,6 +194,8 @@ int64_t __mlang_std_process_spawn(const char* program, mlang_list_t args, int pi
         close_if_open(&err_pipe[1]);
 
         execvp(program, argv);
+        fprintf(stderr, "%s: %s\n", program, strerror(errno));
+        fflush(stderr);
         _exit(127);
     }
 
