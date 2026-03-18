@@ -87,6 +87,20 @@ char* __env_get_var(const char* name)
     }
 }
 
+int32_t __env_set_var(const char* name, const char* value)
+{
+    if(!name || name[0] == '\0' || !value)
+        return -1;
+    return setenv(name, value, 1) == 0 ? 0 : -1;
+}
+
+int32_t __env_unset_var(const char* name)
+{
+    if(!name || name[0] == '\0')
+        return -1;
+    return unsetenv(name) == 0 ? 0 : -1;
+}
+
 void __env_println(const char* msg)
 {
     fputs(msg ? msg : "", stdout);

@@ -4,6 +4,8 @@ mod std::testing;
 
 use std::env::arg_or;
 use std::env::get;
+use std::env::set;
+use std::env::unset;
 use std::env::wants_help;
 use std::strbuf::len;
 use std::testing::verify_eq;
@@ -30,4 +32,12 @@ fn test_env_wants_help_and_arg_or() {
 #[test]
 fn test_env_get_path() {
     verify(len(get("PATH")) > 0);
+}
+
+#[test]
+fn test_env_set_and_unset_var() {
+    verify_eq(0, set("MLANG_STD_ENV_TEST_VAR", "robot-shell"));
+    verify_eq("robot-shell", get("MLANG_STD_ENV_TEST_VAR"));
+    verify_eq(0, unset("MLANG_STD_ENV_TEST_VAR"));
+    verify_eq("", get("MLANG_STD_ENV_TEST_VAR"));
 }
