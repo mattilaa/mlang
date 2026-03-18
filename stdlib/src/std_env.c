@@ -75,6 +75,18 @@ char* __env_cwd(void)
     return p;
 }
 
+char* __env_get_var(const char* name)
+{
+    if(!name || name[0] == '\0')
+        return mlang_strdup("");
+    {
+        const char* value = getenv(name);
+        if(!value)
+            return mlang_strdup("");
+        return mlang_strdup(value);
+    }
+}
+
 void __env_println(const char* msg)
 {
     fputs(msg ? msg : "", stdout);
@@ -88,4 +100,3 @@ void __env_stderrln(const char* msg)
     fputc('\n', stderr);
     fflush(stderr);
 }
-

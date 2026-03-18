@@ -324,6 +324,13 @@ char* __mlang_std_fs_cwd()
     return cwd;
 }
 
+int32_t __mlang_std_fs_chdir(const char* path)
+{
+    if(!path || path[0] == '\0')
+        return -1;
+    return chdir(path) == 0 ? 0 : -1;
+}
+
 char* __mlang_std_fs_read_all_text(const char* path)
 {
     if(!path)

@@ -59,6 +59,7 @@ extern pub fn __mlang_std_fs_file_exists(path: str8) -> i32;
 extern pub fn __mlang_std_fs_is_dir(path: str8) -> i32;
 extern pub fn __mlang_std_fs_parent_dir(path: str8) -> str8;
 extern pub fn __mlang_std_fs_cwd() -> str8;
+extern pub fn __mlang_std_fs_chdir(path: str8) -> i32;
 extern pub fn __mlang_std_fs_read_all_text(path: str8) -> str8;
 extern pub fn __mlang_std_fs_write_all_text(path: str8, text: str8) -> i32;
 extern pub fn __mlang_std_fs_mkdir_p(path: str8) -> i32;
@@ -650,6 +651,12 @@ pub fn parent_dir(path: str8) -> str8 {
 /// @return Heap-allocated string with the absolute CWD path.
 pub fn cwd() -> str8 {
     return __mlang_std_fs_cwd();
+}
+
+/// @brief Change the current working directory of the running process.
+/// @return `0` on success, `-1` on failure.
+pub fn chdir(path: str8) -> i32 {
+    return __mlang_std_fs_chdir(path);
 }
 
 /// @brief Read the entire contents of a file into a single string.

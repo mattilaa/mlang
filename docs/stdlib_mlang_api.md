@@ -218,6 +218,37 @@ Module file: `stdlib/std/date.mla`
 - `format_date(dt: DateTime) -> str8`
 - `format_time(dt: DateTime) -> str8`
 
+## std::env
+
+Module file: `stdlib/std/env.mla`
+
+### API
+- `args() -> list<str8>`
+- `len(values: &list<str8>) -> i64`
+- `get(values: &list<str8>, index: i64) -> str8`
+- `cwd() -> str8`
+- `get(name: str8) -> str8`
+- `println(msg: str8) -> void`
+- `eprintln(msg: str8) -> void`
+- `wants_help(values: list<str8>) -> i32`
+- `arg_or(values: list<str8>, index: i64, fallback: str8) -> str8`
+- `render_help(app: str8, overview: str8, options: list<HelpOption>, total_width: i64) -> str8`
+
+## std::fs
+
+Module file: `stdlib/std/fs.mla`
+
+### Directory helpers
+- `file_exists(path: str8) -> i32`
+- `is_dir(path: str8) -> i32`
+- `parent_dir(path: str8) -> str8`
+- `cwd() -> str8`
+- `chdir(path: str8) -> i32`
+- `mkdir_p(path: str8) -> i32`
+- `remove_tree(path: str8) -> i32`
+- `list_dir(path: str8) -> list<str8>`
+- `glob_recursive(root: str8, pattern: str8) -> list<str8>`
+
 ## std::event_loop
 
 Module file: `stdlib/std/event_loop.mla`

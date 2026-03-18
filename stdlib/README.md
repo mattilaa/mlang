@@ -75,7 +75,13 @@ Currently provided:
   is false.
 - `std/term.mla`: terminal capability + termios helpers
   (`stdin/stdout/stderr` tty detection, size, color level/truecolor, and
-   stdin raw mode enable/restore, plus `supports_ansi()` convenience check).
+  stdin raw mode enable/restore, plus `supports_ansi()` convenience check).
+- `std/fs.mla`: filesystem helpers including current directory inspection and
+  mutation (`cwd`, `parent_dir`, `mkdir_p`, `remove_tree`, `chdir`), file I/O,
+  buffered line reading, recursive globbing, and whole-file text helpers.
+- `std/env.mla`: runtime environment helpers including argv access, help text
+  rendering, process cwd, stdout/stderr printing, and environment variable
+  lookup via `get(name)`.
 - `std/unordered.mla`: hash-backed unordered containers
   (`HashMapI64I64`, `QuickMapI64I64`, `QuickMapVecI64I64`, `HashSetI64`) plus C++-style wrappers
   (`UnorderedMap<K,V>`, `UnorderedSet<T>`, `Vector<T>`).
