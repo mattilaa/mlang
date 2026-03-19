@@ -7,7 +7,14 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <util.h>
+#elif !defined(_WIN32)
+#include <pty.h>
+#endif
 
 typedef struct
 {
@@ -21,8 +28,11 @@ typedef struct
     int stdin_fd;
     int stdout_fd;
     int stderr_fd;
+    int pty_fd;
     int waited;
     int status;
+    int foreground_handoff;
+    pid_t parent_pgrp;
 } mlang_process_child_t;
 
 typedef struct
@@ -96,6 +106,69 @@ static void close_if_open(int* fd)
     (void)close(*fd);
     *fd = -1;
 }
+
+#if !defined(_WIN32)
+static void set_ignored_job_signals_in_parent(void (*saved[3])(int));
+static void restore_job_signals_in_parent(void (*saved[3])(int));
+#endif
+
+static void restore_foreground_terminal(mlang_process_child_t* child)
+{
+    if(!child || !child->foreground_handoff)
+        return;
+#if !defined(_WIN32)
+    if(isatty(STDIN_FILENO) && child->parent_pgrp > 0)
+    {
+        void (*saved[3])(int);
+        set_ignored_job_signals_in_parent(saved);
+        (void)tcsetpgrp(STDIN_FILENO, child->parent_pgrp);
+        restore_job_signals_in_parent(saved);
+    }
+#endif
+    child->foreground_handoff = 0;
+}
+
+#if !defined(_WIN32)
+static void restore_default_job_signals_in_child(void)
+{
+    (void)signal(SIGINT, SIG_DFL);
+    (void)signal(SIGQUIT, SIG_DFL);
+    (void)signal(SIGTSTP, SIG_DFL);
+    (void)signal(SIGTTIN, SIG_DFL);
+    (void)signal(SIGTTOU, SIG_DFL);
+}
+
+static void set_ignored_job_signals_in_parent(void (*saved[3])(int))
+{
+    saved[0] = signal(SIGTTOU, SIG_IGN);
+    saved[1] = signal(SIGTTIN, SIG_IGN);
+    saved[2] = signal(SIGTSTP, SIG_IGN);
+}
+
+static void restore_job_signals_in_parent(void (*saved[3])(int))
+{
+    (void)signal(SIGTTOU, saved[0]);
+    (void)signal(SIGTTIN, saved[1]);
+    (void)signal(SIGTSTP, saved[2]);
+}
+
+static void foreground_terminal_to_pgrp(pid_t pgrp)
+{
+    if(pgrp <= 0 || !isatty(STDIN_FILENO))
+        return;
+
+    void (*saved[3])(int);
+    set_ignored_job_signals_in_parent(saved);
+    for(int tries = 0; tries < 50; ++tries)
+    {
+        if(tcsetpgrp(STDIN_FILENO, pgrp) == 0)
+            break;
+        if(errno != EINTR)
+            break;
+    }
+    restore_job_signals_in_parent(saved);
+}
+#endif
 
 char* __mlang_std_process_last_error(void)
 {
@@ -218,8 +291,11 @@ int64_t __mlang_std_process_spawn(const char* program, mlang_list_t args, int pi
     child->stdin_fd = -1;
     child->stdout_fd = -1;
     child->stderr_fd = -1;
+    child->pty_fd = -1;
     child->waited = 0;
     child->status = 0;
+    child->foreground_handoff = 0;
+    child->parent_pgrp = -1;
 
     if(pipe_stdin)
     {
@@ -240,6 +316,180 @@ int64_t __mlang_std_process_spawn(const char* program, mlang_list_t args, int pi
     clear_error();
     free(argv);
     return (int64_t)(intptr_t)child;
+}
+
+int64_t __mlang_std_process_spawn_foreground_inherit(const char* program, mlang_list_t args)
+{
+    if(!program || program[0] == '\0')
+    {
+        set_error("std::process spawn_foreground_inherit: empty program");
+        return 0;
+    }
+
+    int argc = (args.size > 0 && args.data) ? (int)args.size : 0;
+    char** argv = (char**)calloc((size_t)argc + 2, sizeof(char*));
+    if(!argv)
+    {
+        set_error("std::process spawn_foreground_inherit: out of memory");
+        return 0;
+    }
+
+    argv[0] = (char*)program;
+    if(argc > 0)
+    {
+        char** in = (char**)args.data;
+        for(int i = 0; i < argc; ++i)
+            argv[i + 1] = in[i] ? in[i] : (char*)"";
+    }
+    argv[argc + 1] = NULL;
+
+    pid_t parent_pgrp = -1;
+#if !defined(_WIN32)
+    if(isatty(STDIN_FILENO))
+        parent_pgrp = tcgetpgrp(STDIN_FILENO);
+#endif
+
+    pid_t pid = fork();
+    if(pid < 0)
+    {
+        set_errno_error("std::process spawn_foreground_inherit fork failed");
+        free(argv);
+        return 0;
+    }
+
+    if(pid == 0)
+    {
+#if !defined(_WIN32)
+        (void)setpgid(0, 0);
+        restore_default_job_signals_in_child();
+#endif
+        execvp(program, argv);
+        fprintf(stderr, "%s: %s\n", program, strerror(errno));
+        fflush(stderr);
+        _exit(127);
+    }
+
+#if !defined(_WIN32)
+    for(int tries = 0; tries < 50; ++tries)
+    {
+        if(setpgid(pid, pid) == 0)
+            break;
+        if(errno == EACCES)
+            break;
+        if(errno != EINTR)
+            break;
+    }
+    foreground_terminal_to_pgrp(pid);
+#endif
+
+    mlang_process_child_t* child = (mlang_process_child_t*)malloc(sizeof(mlang_process_child_t));
+    if(!child)
+    {
+        set_error("std::process spawn_foreground_inherit: out of memory");
+#if !defined(_WIN32)
+        foreground_terminal_to_pgrp(parent_pgrp);
+#endif
+        free(argv);
+        return 0;
+    }
+
+    child->pid = pid;
+    child->stdin_fd = -1;
+    child->stdout_fd = -1;
+    child->stderr_fd = -1;
+    child->pty_fd = -1;
+    child->waited = 0;
+    child->status = 0;
+    child->foreground_handoff = 1;
+    child->parent_pgrp = parent_pgrp;
+
+    clear_error();
+    free(argv);
+    return (int64_t)(intptr_t)child;
+}
+
+int64_t __mlang_std_process_spawn_pty(const char* program, mlang_list_t args)
+{
+#if defined(_WIN32)
+    (void)program;
+    (void)args;
+    set_error("std::process spawn_pty: unsupported on this platform");
+    return 0;
+#else
+    if(!program || program[0] == '\0')
+    {
+        set_error("std::process spawn_pty: empty program");
+        return 0;
+    }
+
+    int argc = (args.size > 0 && args.data) ? (int)args.size : 0;
+    char** argv = (char**)calloc((size_t)argc + 2, sizeof(char*));
+    if(!argv)
+    {
+        set_error("std::process spawn_pty: out of memory");
+        return 0;
+    }
+
+    argv[0] = (char*)program;
+    if(argc > 0)
+    {
+        char** in = (char**)args.data;
+        for(int i = 0; i < argc; ++i)
+            argv[i + 1] = in[i] ? in[i] : (char*)"";
+    }
+    argv[argc + 1] = NULL;
+
+    int master_fd = -1;
+    struct termios child_termios;
+    struct termios* child_termios_ptr = NULL;
+    if(tcgetattr(STDIN_FILENO, &child_termios) == 0)
+        child_termios_ptr = &child_termios;
+
+    struct winsize child_winsize;
+    struct winsize* child_winsize_ptr = NULL;
+    if(ioctl(STDIN_FILENO, TIOCGWINSZ, &child_winsize) == 0 && child_winsize.ws_row > 0 && child_winsize.ws_col > 0)
+        child_winsize_ptr = &child_winsize;
+
+    pid_t pid = forkpty(&master_fd, NULL, child_termios_ptr, child_winsize_ptr);
+    if(pid < 0)
+    {
+        set_errno_error("std::process spawn_pty forkpty failed");
+        free(argv);
+        return 0;
+    }
+
+    if(pid == 0)
+    {
+        restore_default_job_signals_in_child();
+        execvp(program, argv);
+        fprintf(stderr, "%s: %s\n", program, strerror(errno));
+        fflush(stderr);
+        _exit(127);
+    }
+
+    mlang_process_child_t* child = (mlang_process_child_t*)malloc(sizeof(mlang_process_child_t));
+    if(!child)
+    {
+        set_error("std::process spawn_pty: out of memory");
+        close_if_open(&master_fd);
+        free(argv);
+        return 0;
+    }
+
+    child->pid = pid;
+    child->stdin_fd = -1;
+    child->stdout_fd = -1;
+    child->stderr_fd = -1;
+    child->pty_fd = master_fd;
+    child->waited = 0;
+    child->status = 0;
+    child->foreground_handoff = 0;
+    child->parent_pgrp = -1;
+
+    clear_error();
+    free(argv);
+    return (int64_t)(intptr_t)child;
+#endif
 }
 
 int64_t __mlang_std_process_take_stdin(int64_t child_handle)
@@ -314,6 +564,32 @@ int64_t __mlang_std_process_take_stderr(int64_t child_handle)
     if(out == 0)
     {
         set_error("std::process stderr: failed to create pipe handle");
+        return 0;
+    }
+    clear_error();
+    return out;
+}
+
+int64_t __mlang_std_process_take_pty(int64_t child_handle)
+{
+    mlang_process_child_t* child = as_child(child_handle);
+    if(!child)
+    {
+        set_error("std::process pty: invalid child handle");
+        return 0;
+    }
+    if(child->pty_fd < 0)
+    {
+        set_error("std::process pty: PTY not available");
+        return 0;
+    }
+
+    int fd = child->pty_fd;
+    child->pty_fd = -1;
+    int64_t out = make_pipe_handle(fd);
+    if(out == 0)
+    {
+        set_error("std::process pty: failed to create PTY handle");
         return 0;
     }
     clear_error();
@@ -416,6 +692,51 @@ int64_t __mlang_std_process_pipe_read_nonblocking(int64_t pipe_handle, char* buf
     }
 }
 
+int __mlang_std_process_wait_pty_events(int64_t pipe_handle, int timeout_ms)
+{
+    mlang_process_pipe_t* p = as_pipe(pipe_handle);
+    if(!p || p->fd < 0)
+    {
+        set_error("std::process wait_pty_events: invalid pipe handle");
+        return -1;
+    }
+
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(STDIN_FILENO, &rfds);
+    FD_SET(p->fd, &rfds);
+
+    int maxfd = STDIN_FILENO > p->fd ? STDIN_FILENO : p->fd;
+    struct timeval tv;
+    struct timeval* tv_ptr = NULL;
+    if(timeout_ms >= 0)
+    {
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        tv_ptr = &tv;
+    }
+
+    int rc = select(maxfd + 1, &rfds, NULL, NULL, tv_ptr);
+    if(rc < 0)
+    {
+        if(errno == EINTR)
+        {
+            clear_error();
+            return 0;
+        }
+        set_errno_error("std::process wait_pty_events failed");
+        return -1;
+    }
+
+    int out = 0;
+    if(FD_ISSET(STDIN_FILENO, &rfds))
+        out |= 1;
+    if(FD_ISSET(p->fd, &rfds))
+        out |= 2;
+    clear_error();
+    return out;
+}
+
 int __mlang_std_process_pipe_close(int64_t pipe_handle)
 {
     mlang_process_pipe_t* p = as_pipe(pipe_handle);
@@ -454,6 +775,7 @@ int __mlang_std_process_wait_raw(int64_t child_handle)
 
     child->waited = 1;
     child->status = status;
+    restore_foreground_terminal(child);
     clear_error();
     return status;
 }
@@ -488,6 +810,7 @@ int __mlang_std_process_try_wait_raw(int64_t child_handle)
 
     child->waited = 1;
     child->status = status;
+    restore_foreground_terminal(child);
     clear_error();
     return status;
 }
@@ -542,6 +865,7 @@ int __mlang_std_process_child_close(int64_t child_handle)
     close_if_open(&child->stdin_fd);
     close_if_open(&child->stdout_fd);
     close_if_open(&child->stderr_fd);
+    close_if_open(&child->pty_fd);
 
     if(!child->waited)
     {
@@ -554,6 +878,7 @@ int __mlang_std_process_child_close(int64_t child_handle)
         }
     }
 
+    restore_foreground_terminal(child);
     free(child);
     return 0;
 }

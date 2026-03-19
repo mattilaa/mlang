@@ -21,7 +21,10 @@ extern pub fn __mlang_std_term_stdout_truecolor() -> i32;
 extern pub fn __mlang_std_term_stderr_truecolor() -> i32;
 extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
 extern pub fn __mlang_std_term_stdin_enable_raw() -> i32;
+extern pub fn __mlang_std_term_stdin_enable_cbreak() -> i32;
 extern pub fn __mlang_std_term_stdin_restore() -> i32;
+extern pub fn __mlang_std_term_stdin_make_sane() -> i32;
+extern pub fn __mlang_std_term_stdin_flush_input() -> i32;
 
 use type ColorLevel = i32;
 
@@ -131,8 +134,33 @@ pub fn stdin_enable_raw() -> i32 {
     return __mlang_std_term_stdin_enable_raw();
 }
 
+/// @brief Enable cbreak/no-echo mode for stdin while preserving output processing.
+///
+/// This disables canonical input, echo, and job-control signals for byte-wise
+/// input handling, but keeps normal terminal output translation enabled.
+pub fn stdin_enable_cbreak() -> i32 {
+    return __mlang_std_term_stdin_enable_cbreak();
+}
+
 /// @brief Restore stdin termios state saved by `stdin_enable_raw`.
 /// @return `0` on success, non-zero on failure.
 pub fn stdin_restore() -> i32 {
     return __mlang_std_term_stdin_restore();
+}
+
+/// @brief Force stdin terminal into a sane cooked mode.
+///
+/// This is useful before handing control to fullscreen terminal programs when
+/// the caller wants a known-good tty state even if no saved raw snapshot is
+/// currently available.
+pub fn stdin_make_sane() -> i32 {
+    return __mlang_std_term_stdin_make_sane();
+}
+
+/// @brief Discard any unread pending input bytes queued on stdin.
+///
+/// This is useful before handing control to another interactive terminal
+/// program so buffered editor keystrokes do not leak into the child process.
+pub fn stdin_flush_input() -> i32 {
+    return __mlang_std_term_stdin_flush_input();
 }

@@ -238,6 +238,30 @@ int __mlang_std_term_stdin_enable_raw(void)
 #endif
 }
 
+int __mlang_std_term_stdin_enable_cbreak(void)
+{
+#if defined(_WIN32)
+    return -1;
+#else
+    struct termios t;
+    if(tcgetattr(STDIN_FILENO, &t) != 0)
+        return -1;
+
+    if(!g_saved_stdin_termios_valid)
+    {
+        g_saved_stdin_termios = t;
+        g_saved_stdin_termios_valid = 1;
+    }
+
+    struct termios mode = t;
+    mode.c_iflag &= ~(ICRNL | IXON);
+    mode.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    mode.c_cc[VMIN] = 1;
+    mode.c_cc[VTIME] = 0;
+    return tcsetattr(STDIN_FILENO, TCSANOW, &mode);
+#endif
+}
+
 int __mlang_std_term_stdin_restore(void)
 {
 #if defined(_WIN32)
@@ -249,5 +273,40 @@ int __mlang_std_term_stdin_restore(void)
     if(rc == 0)
         g_saved_stdin_termios_valid = 0;
     return rc;
+#endif
+}
+
+int __mlang_std_term_stdin_make_sane(void)
+{
+#if defined(_WIN32)
+    return -1;
+#else
+    struct termios t;
+    if(tcgetattr(STDIN_FILENO, &t) != 0)
+        return -1;
+
+    t.c_iflag |= (BRKINT | ICRNL | IXON);
+#if defined(IUTF8)
+    t.c_iflag |= (IUTF8);
+#endif
+    t.c_oflag |= (OPOST);
+#if defined(ONLCR)
+    t.c_oflag |= (ONLCR);
+#endif
+    t.c_cflag |= (CS8);
+    t.c_lflag |= (ECHO | ICANON | IEXTEN | ISIG);
+    t.c_cc[VMIN] = 1;
+    t.c_cc[VTIME] = 0;
+
+    return tcsetattr(STDIN_FILENO, TCSANOW, &t);
+#endif
+}
+
+int __mlang_std_term_stdin_flush_input(void)
+{
+#if defined(_WIN32)
+    return -1;
+#else
+    return tcflush(STDIN_FILENO, TCIFLUSH);
 #endif
 }

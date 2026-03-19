@@ -1,0 +1,35 @@
+mod std::env;
+mod std::process;
+
+use std::env::args;
+use std::process::Child;
+use std::process::ExitStatus;
+use std::process::spawn_foreground_inherit;
+
+fn main() -> i32 {
+    let argv: list<str8> = args();
+    let program: str8 = argv.len() >= 2 ? argv[1] : "top";
+
+    var child_args: list<str8> = [];
+    for i in 2..argv.len() {
+        child_args.push(argv[i]);
+    }
+
+    let child_r: Result<Child, str8> = spawn_foreground_inherit(program, child_args);
+    if child_r.is_err(): {
+        eprintln(format!("spawn_foreground_inherit failed: {}", child_r.unwrap_err()));
+        return 1;
+    }
+
+    let child: Child = child_r.unwrap();
+    let wait_r: Result<ExitStatus, str8> = child.wait();
+    if wait_r.is_err(): {
+        eprintln(format!("wait failed: {}", wait_r.unwrap_err()));
+        child.close();
+        return 1;
+    }
+
+    let status: ExitStatus = wait_r.unwrap();
+    child.close();
+    return status.exited() == 1 ? status.code() : 128 + status.signal();
+}

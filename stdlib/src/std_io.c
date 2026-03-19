@@ -138,6 +138,23 @@ int __mlang_std_io_set_stderr_buffering(int mode, int64_t size)
     return set_stream_buffering(stderr, mode, size);
 }
 
+int __mlang_std_io_set_stdin_blocking(int blocking)
+{
+    int fd = fileno(stdin);
+    if(fd < 0)
+        return -1;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if(flags < 0)
+        return -1;
+
+    int next = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+    if(fcntl(fd, F_SETFL, next) != 0)
+        return -1;
+
+    return 0;
+}
+
 // Returns:
 //  >0 bytes read (newline stripped)
 //   0 no data currently available (would block)
@@ -225,6 +242,62 @@ int32_t __mlang_std_io_stdin_read_byte_nonblocking(void)
     if(errno == EAGAIN || errno == EWOULDBLOCK)
         return -2;
     return -1;
+}
+
+// Returns:
+//  >0 bytes read
+//   0 no data currently available (would block)
+//  -1 EOF/error
+int64_t __mlang_std_io_stdin_read_raw_nonblocking(char* buf, int64_t capacity)
+{
+    if(!buf || capacity <= 1)
+        return -1;
+
+    int fd = fileno(stdin);
+    if(fd < 0)
+        return -1;
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if(flags < 0)
+        return -1;
+    if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0)
+        return -1;
+
+    int64_t out_n = 0;
+    while(out_n < (capacity - 1))
+    {
+        ssize_t n = read(fd, buf + out_n, (size_t)(capacity - 1 - out_n));
+        if(n > 0)
+        {
+            out_n += (int64_t)n;
+            continue;
+        }
+        if(n == 0)
+        {
+            (void)fcntl(fd, F_SETFL, flags);
+            if(out_n == 0)
+                return -1;
+            break;
+        }
+        if(errno == EINTR)
+            continue;
+        if(errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            (void)fcntl(fd, F_SETFL, flags);
+            if(out_n == 0)
+            {
+                buf[0] = '\0';
+                return 0;
+            }
+            break;
+        }
+        (void)fcntl(fd, F_SETFL, flags);
+        return -1;
+    }
+
+    (void)fcntl(fd, F_SETFL, flags);
+    buf[out_n] = '\0';
+    return out_n;
 }
 
 typedef int64_t (*mlang_fn0_i64_t)(void);

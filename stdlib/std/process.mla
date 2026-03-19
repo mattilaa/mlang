@@ -8,9 +8,13 @@
 
 extern pub fn __mlang_std_process_last_error() -> str8;
 extern pub fn __mlang_std_process_spawn(program: str8, args: list<str8>, pipe_stdin: i32, pipe_stdout: i32, pipe_stderr: i32) -> i64;
+extern pub fn __mlang_std_process_spawn_foreground_inherit(program: str8, args: list<str8>) -> i64;
+extern pub fn __mlang_std_process_spawn_pty(program: str8, args: list<str8>) -> i64;
 extern pub fn __mlang_std_process_take_stdin(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_take_stdout(child_handle: i64) -> i64;
 extern pub fn __mlang_std_process_take_stderr(child_handle: i64) -> i64;
+extern pub fn __mlang_std_process_take_pty(child_handle: i64) -> i64;
+extern pub fn __mlang_std_process_wait_pty_events(pipe_handle: i64, timeout_ms: i32) -> i32;
 extern pub fn __mlang_std_process_pipe_write(pipe_handle: i64, s: str8) -> i64;
 extern pub fn __mlang_std_process_pipe_read(pipe_handle: i64, buf: str8, capacity: i64) -> i64;
 extern pub fn __mlang_std_process_pipe_read_nonblocking(pipe_handle: i64, buf: str8, capacity: i64) -> i64;
@@ -50,6 +54,11 @@ pub struct ChildStderr {
     var handle: i64;
 };
 
+/// @brief Read/write child PTY master.
+pub struct ChildPty {
+    var handle: i64;
+};
+
 /// @brief Process exit status wrapper.
 pub struct ExitStatus {
     var raw: i32;
@@ -84,6 +93,27 @@ pub fn spawn_inherit(program: str8, args: list<str8>) -> Result<Child, str8> {
     return Ok<Child, str8>(Child { handle: h });
 }
 
+/// @brief Spawn a foreground child process inheriting parent stdio.
+///
+/// This is intended for terminal-oriented full-screen programs that should
+/// temporarily own the controlling terminal while they run.
+pub fn spawn_foreground_inherit(program: str8, args: list<str8>) -> Result<Child, str8> {
+    let h: i64 = __mlang_std_process_spawn_foreground_inherit(program, args);
+    if h == 0 {
+        return Err<Child, str8>(last_error());
+    }
+    return Ok<Child, str8>(Child { handle: h });
+}
+
+/// @brief Spawn a child process attached to a PTY.
+pub fn spawn_pty(program: str8, args: list<str8>) -> Result<Child, str8> {
+    let h: i64 = __mlang_std_process_spawn_pty(program, args);
+    if h == 0 {
+        return Err<Child, str8>(last_error());
+    }
+    return Ok<Child, str8>(Child { handle: h });
+}
+
 impl Child {
     /// @brief Take writable child stdin pipe.
     pub fn stdin(self: Child) -> Result<ChildStdin, str8> {
@@ -110,6 +140,15 @@ impl Child {
             return Err<ChildStderr, str8>(last_error());
         }
         return Ok<ChildStderr, str8>(ChildStderr { handle: h });
+    }
+
+    /// @brief Take PTY master handle.
+    pub fn pty(self: Child) -> Result<ChildPty, str8> {
+        let h: i64 = __mlang_std_process_take_pty(self.handle);
+        if h == 0 {
+            return Err<ChildPty, str8>(last_error());
+        }
+        return Ok<ChildPty, str8>(ChildPty { handle: h });
     }
 
     /// @brief Wait for child completion and return exit status.
@@ -266,6 +305,43 @@ impl ChildStderr {
 
     /// @brief Close child stderr pipe.
     pub fn close(self: ChildStderr) -> i32 {
+        return __mlang_std_process_pipe_close(self.handle);
+    }
+}
+
+impl ChildPty {
+    /// @brief Wait for stdin and/or PTY readability.
+    ///
+    /// Returns a bitmask:
+    /// - `1` => parent stdin readable
+    /// - `2` => PTY master readable
+    pub fn wait_events(self: ChildPty, timeout_ms: i32) -> i32 {
+        return __mlang_std_process_wait_pty_events(self.handle, timeout_ms);
+    }
+
+    /// @brief Write bytes to PTY master.
+    pub fn write(self: ChildPty, s: str8) -> Result<i64, str8> {
+        let n: i64 = __mlang_std_process_pipe_write(self.handle, s);
+        if n < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(n);
+    }
+
+    /// @brief Read available bytes from PTY master without blocking.
+    pub fn read_nonblocking(self: ChildPty, buf: str8, capacity: i64) -> Result<PipeRead, str8> {
+        let n: i64 = __mlang_std_process_pipe_read_nonblocking(self.handle, buf, capacity);
+        if n < -1 {
+            return Err<PipeRead, str8>(last_error());
+        }
+        if n == -1 {
+            return Ok<PipeRead, str8>(PipeRead { ready: 0, len: 0 });
+        }
+        return Ok<PipeRead, str8>(PipeRead { ready: 1, len: n });
+    }
+
+    /// @brief Close PTY master.
+    pub fn close(self: ChildPty) -> i32 {
         return __mlang_std_process_pipe_close(self.handle);
     }
 }

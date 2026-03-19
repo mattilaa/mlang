@@ -111,6 +111,12 @@ pub fn read_keycode_nonblocking(input: Stdin) -> i32 {
     return __mlang_std_io_stdin_read_byte_nonblocking();
 }
 
+/// @brief Non-blocking raw byte read from stdin into caller buffer.
+/// @return >0 bytes read, 0 when no data available, -1 on EOF/error.
+pub fn read_raw_nonblocking(input: Stdin, buf: str8, capacity: i64) -> i64 {
+    return __mlang_std_io_stdin_read_raw_nonblocking(buf, capacity);
+}
+
 /// @brief Non-blocking read into a newly allocated string.
 /// @return Newly allocated text when available, otherwise empty string.
 pub fn read_keys_nonblocking(input: Stdin, capacity: i64) -> str8 {
@@ -324,6 +330,13 @@ pub fn flush(err: Stderr) -> i32 {
 /// @brief Set stdin buffering mode and size (bytes for full/line modes).
 pub fn set_stdin_buffering(mode: i32, size: i64) -> i32 {
     return __mlang_std_io_set_stdin_buffering(mode, size);
+}
+
+/// @brief Set stdin file descriptor blocking mode.
+/// @param blocking `1` for blocking mode, `0` for nonblocking mode.
+/// @return `0` on success, non-zero on failure.
+pub fn set_stdin_blocking(blocking: i32) -> i32 {
+    return __mlang_std_io_set_stdin_blocking(blocking);
 }
 
 /// @brief Set stdout buffering mode and size.
