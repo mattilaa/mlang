@@ -27,6 +27,7 @@ extern pub fn __mlang_std_process_status_signaled(raw_status: i32) -> i32;
 extern pub fn __mlang_std_process_status_signal(raw_status: i32) -> i32;
 extern pub fn __mlang_std_process_kill(child_handle: i64, sig: i32) -> i32;
 extern pub fn __mlang_std_process_child_close(child_handle: i64) -> i32;
+extern pub fn __mlang_std_process_pty_resize(pipe_handle: i64, rows: i32, cols: i32) -> i32;
 
 /// @brief Nonblocking pipe read result.
 pub struct PipeRead {
@@ -338,6 +339,11 @@ impl ChildPty {
             return Ok<PipeRead, str8>(PipeRead { ready: 0, len: 0 });
         }
         return Ok<PipeRead, str8>(PipeRead { ready: 1, len: n });
+    }
+
+    /// @brief Resize the PTY window.
+    pub fn resize(self: ChildPty, rows: i32, cols: i32) -> i32 {
+        return __mlang_std_process_pty_resize(self.handle, rows, cols);
     }
 
     /// @brief Close PTY master.

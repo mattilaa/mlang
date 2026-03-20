@@ -750,6 +750,33 @@ int __mlang_std_process_pipe_close(int64_t pipe_handle)
     return rc;
 }
 
+int __mlang_std_process_pty_resize(int64_t pipe_handle, int rows, int cols)
+{
+#if defined(_WIN32)
+    (void)pipe_handle;
+    (void)rows;
+    (void)cols;
+    return -1;
+#else
+    mlang_process_pipe_t* p = as_pipe(pipe_handle);
+    if(!p || p->fd < 0)
+    {
+        set_error("std::process pty_resize: invalid handle");
+        return -1;
+    }
+    struct winsize ws;
+    memset(&ws, 0, sizeof(ws));
+    ws.ws_row = (unsigned short)rows;
+    ws.ws_col = (unsigned short)cols;
+    if(ioctl(p->fd, TIOCSWINSZ, &ws) < 0)
+    {
+        set_errno_error("std::process pty_resize ioctl failed");
+        return -1;
+    }
+    return 0;
+#endif
+}
+
 int __mlang_std_process_wait_raw(int64_t child_handle)
 {
     mlang_process_child_t* child = as_child(child_handle);
