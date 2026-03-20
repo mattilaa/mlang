@@ -325,9 +325,10 @@ enum UpdatePosition
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE CARET NOT TILDE SHL SHR
+%token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
 %token LT GT LE GE EQ NE SPACESHIP
-%token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT
+%token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT COLON_BLOCK
 %token FAT_ARROW
 %token GENERIC_LT
 %token KEYS_METHOD VALUES_METHOD ENTRIES_METHOD
@@ -356,9 +357,9 @@ enum UpdatePosition
 %type <ast> struct_member_list struct_member struct_method struct_init
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement nested_function_statement
-%type <ast> return_statement block_statement for_statement while_statement range_expression
+%type <ast> return_statement block_statement colon_block_statement for_statement while_statement range_expression
 %type <ast> break_statement continue_statement
-%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call
+%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
 %type <ast> print_statement argument_list assert_eq_statement assert_statement static_assert_statement
@@ -887,6 +888,11 @@ block_statement
         { $$ = mla_ast_unsafe_block($2, yylineno); }
     ;
 
+colon_block_statement
+    : COLON_BLOCK statement_list RBRACE { $$ = mla_ast_block_statement($2); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    | COLON_BLOCK RBRACE { $$ = mla_ast_block_statement(create_empty_statement_list()); static_cast<BlockStatementNode*>($$)->line = yylineno; static_cast<BlockStatementNode*>($$)->col = yycolumn_token; }
+    ;
+
 for_statement
     : FOR IDENTIFIER IN range_expression block_statement
         { $$ = mla_ast_for_range($2, $4, $5, yylineno); }
@@ -1006,7 +1012,9 @@ argument_list
     ;
 
 if_statement
-    : IF condition_expression COLON block_statement else_if_list optional_else
+    : IF block_condition_expression colon_block_statement else_if_list optional_else
+        { $$ = mla_ast_if_statement($2, $3, $4, $5); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | IF condition_expression COLON block_statement else_if_list optional_else
         { $$ = mla_ast_if_statement($2, $4, $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | IF condition_expression COLON statement else_if_list optional_else
         { $$ = mla_ast_if_statement($2, mla_ast_statement_list_create($4), $5, $6); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
@@ -1044,7 +1052,8 @@ else_if_list
     ;
 
 else_if
-    : ELSE IF condition_expression COLON statement { $$ = mla_ast_else_if($3, mla_ast_statement_list_create($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    : ELSE IF block_condition_expression colon_block_statement { $$ = mla_ast_else_if($3, $4); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
+    | ELSE IF condition_expression COLON statement { $$ = mla_ast_else_if($3, mla_ast_statement_list_create($5)); static_cast<IfNode*>($$)->usesColonWithoutGuard = true; static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF condition_expression COLON expression statement { $$ = mla_ast_else_if(mla_ast_binary_op(AMP_AMP, $3, $5), mla_ast_statement_list_create($6)); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF block_condition_expression block_statement { $$ = mla_ast_else_if($3, $4); static_cast<IfNode*>($$)->line = yylineno; static_cast<IfNode*>($$)->col = yycolumn_token; }
     | ELSE IF LET IDENTIFIER COLON type ASSIGN expression COLON condition_expression COLON statement
@@ -1201,19 +1210,25 @@ condition_primary
         { $$ = create_closure_with_params($2, NULL); }
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
-    | LPAREN ELLIPSIS PLUS expression RPAREN
+    | fold_expression { $$ = $1; }
+    ;
+
+fold_expression
+    : LPAREN ELLIPSIS PLUS expression RPAREN
         { $$ = mla_ast_fold_expression(PLUS, $4, 0); }
-    | LPAREN postfix_expression PLUS ELLIPSIS RPAREN
+    | LPAREN postfix_expression PLUS_ELLIPSIS RPAREN
         { $$ = mla_ast_fold_expression(PLUS, $2, 1); }
     | LPAREN ELLIPSIS MULTIPLY expression RPAREN
         { $$ = mla_ast_fold_expression(MULTIPLY, $4, 0); }
+    | LPAREN postfix_expression MULTIPLY_ELLIPSIS RPAREN
+        { $$ = mla_ast_fold_expression(MULTIPLY, $2, 1); }
     | LPAREN ELLIPSIS AMP_AMP expression RPAREN
         { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
-    | LPAREN postfix_expression AMP_AMP ELLIPSIS RPAREN
+    | LPAREN postfix_expression AMP_AMP_ELLIPSIS RPAREN
         { $$ = mla_ast_fold_expression(AMP_AMP, $2, 1); }
     | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN
         { $$ = mla_ast_fold_expression(PIPE_PIPE, $4, 0); }
-    | LPAREN postfix_expression PIPE_PIPE ELLIPSIS RPAREN
+    | LPAREN postfix_expression PIPE_PIPE_ELLIPSIS RPAREN
         { $$ = mla_ast_fold_expression(PIPE_PIPE, $2, 1); }
     ;
 
@@ -1370,20 +1385,7 @@ primary_expression
         { $$ = create_closure_with_params($2, NULL); }
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
-    | LPAREN ELLIPSIS PLUS expression RPAREN
-        { $$ = mla_ast_fold_expression(PLUS, $4, 0); }
-    | LPAREN expression PLUS ELLIPSIS RPAREN
-        { $$ = mla_ast_fold_expression(PLUS, $2, 1); }
-    | LPAREN ELLIPSIS MULTIPLY expression RPAREN
-        { $$ = mla_ast_fold_expression(MULTIPLY, $4, 0); }
-    | LPAREN ELLIPSIS AMP_AMP expression RPAREN
-        { $$ = mla_ast_fold_expression(AMP_AMP, $4, 0); }
-    | LPAREN expression AMP_AMP ELLIPSIS RPAREN
-        { $$ = mla_ast_fold_expression(AMP_AMP, $2, 1); }
-    | LPAREN ELLIPSIS PIPE_PIPE expression RPAREN
-        { $$ = mla_ast_fold_expression(PIPE_PIPE, $4, 0); }
-    | LPAREN expression PIPE_PIPE ELLIPSIS RPAREN
-        { $$ = mla_ast_fold_expression(PIPE_PIPE, $2, 1); }
+    | fold_expression { $$ = $1; }
     ;
 
 /* Struct literal: StructName { field: value, ... } */

@@ -55,3 +55,18 @@ fn test_fold_empty_identities() {
     if a != true: { verify(false); }
     verify(n == false);
 }
+
+#[test]
+fn test_right_fold_ops_parse_and_evaluate() {
+    let nums: list<i32> = [2, 3, 4];
+    let prod: i32 = (nums * ...);
+    let sum: i32 = (nums + ...);
+    verify(prod == 24);
+    verify(sum == 9);
+
+    let flags: list<bool> = [true, true, false];
+    let all_true: bool = (flags && ...);
+    let any_true: bool = (flags || ...);
+    verify(all_true == false);
+    verify(any_true == true);
+}
