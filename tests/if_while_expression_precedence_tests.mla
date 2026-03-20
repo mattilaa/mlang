@@ -40,3 +40,28 @@ fn if_let_eq_with_complex_guard_expression() {
         verify(false);
     }
 }
+
+#[test]
+fn if_bitwise_and_logical_guard_without_parens() {
+    let x: i32 = 5;
+    let y: i32 = 10;
+    var matched: bool = false;
+    if x & 1 && y == 10 {
+        matched = true;
+    }
+    verify(matched);
+}
+
+#[test]
+fn while_bitwise_and_logical_guard_without_parens() {
+    var x: i32 = 5;
+    var y: i32 = 10;
+    var loops: i32 = 0;
+
+    while x & 1 && y == 10 {
+        loops = loops + 1;
+        x = x + 1;
+    }
+
+    verify(loops == 1);
+}
