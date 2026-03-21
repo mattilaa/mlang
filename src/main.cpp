@@ -879,6 +879,9 @@ static std::string log_date_prefix()
 {
     auto now = std::chrono::system_clock::now();
     std::time_t t = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  now.time_since_epoch()) %
+              1000;
     std::tm tmNow{};
 #if defined(_WIN32)
     localtime_s(&tmNow, &t);
@@ -888,19 +891,40 @@ static std::string log_date_prefix()
     std::ostringstream os;
     os << std::setfill('0') << std::setw(2) << (tmNow.tm_mon + 1) << "/"
        << std::setw(2) << tmNow.tm_mday << "/" << (tmNow.tm_year + 1900)
-       << ": ";
+       << " " << std::setw(2) << tmNow.tm_hour << ":" << std::setw(2)
+       << tmNow.tm_min << ":" << std::setw(2) << tmNow.tm_sec << ":"
+       << std::setw(3) << ms.count() << " ";
     return os.str();
 }
 
 static bool has_log_date_prefix(const std::string& line)
 {
-    if(line.size() < 12)
-        return false;
     auto is_digit = [](char c) { return c >= '0' && c <= '9'; };
-    return is_digit(line[0]) && is_digit(line[1]) && line[2] == '/' &&
-           is_digit(line[3]) && is_digit(line[4]) && line[5] == '/' &&
-           is_digit(line[6]) && is_digit(line[7]) && is_digit(line[8]) &&
-           is_digit(line[9]) && line[10] == ':' && line[11] == ' ';
+    size_t i = 0;
+    if(!line.empty() && line[0] == '[')
+    {
+        size_t close = line.find(']');
+        if(close == std::string::npos || close + 2 >= line.size() ||
+           line[close + 1] != ' ')
+        {
+            return false;
+        }
+        i = close + 2;
+    }
+    if(i + 24 > line.size())
+        return false;
+    return is_digit(line[i + 0]) && is_digit(line[i + 1]) &&
+           line[i + 2] == '/' && is_digit(line[i + 3]) &&
+           is_digit(line[i + 4]) && line[i + 5] == '/' &&
+           is_digit(line[i + 6]) && is_digit(line[i + 7]) &&
+           is_digit(line[i + 8]) && is_digit(line[i + 9]) &&
+           line[i + 10] == ' ' && is_digit(line[i + 11]) &&
+           is_digit(line[i + 12]) && line[i + 13] == ':' &&
+           is_digit(line[i + 14]) && is_digit(line[i + 15]) &&
+           line[i + 16] == ':' && is_digit(line[i + 17]) &&
+           is_digit(line[i + 18]) && line[i + 19] == ':' &&
+           is_digit(line[i + 20]) && is_digit(line[i + 21]) &&
+           is_digit(line[i + 22]) && line[i + 23] == ' ';
 }
 
 static int run_command_with_dated_output(const std::string& cmd)

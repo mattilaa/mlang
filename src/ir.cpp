@@ -703,6 +703,18 @@ static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
     return normalizeTestSuiteName(stem);
 }
 
+static std::string humanizeTestCaseName(std::string name)
+{
+    if(name.rfind("test_", 0) == 0)
+        name.erase(0, 5);
+    for(char& c : name)
+    {
+        if(c == '_')
+            c = ' ';
+    }
+    return name.empty() ? "unnamed test" : name;
+}
+
 static TypeNode::TypeKind normalizeInferredKind(TypeNode::TypeKind kind)
 {
     if(kind == TypeNode::TYPE_INT)
@@ -4274,6 +4286,7 @@ void CodeGenerator::generateTestMain(
     initializeStdioFunctions();
 
     llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
+    llvm::Type* i8PtrType = llvm::PointerType::get(context, 0);
     llvm::FunctionType* mainType =
         llvm::FunctionType::get(i32Type, {}, false);
     llvm::Function* mainFn =
@@ -4299,11 +4312,21 @@ void CodeGenerator::generateTestMain(
         return builder.CreateGlobalStringPtr(s, name);
 #endif
     };
-
-    llvm::Value* passFmt = make_cstr("[PASS] %s\n", "test.pass.fmt");
-    llvm::Value* failFmt = make_cstr("[FAIL] %s (rc=%d)\n", "test.fail.fmt");
-    llvm::Value* summaryFmt =
-        make_cstr("[SUMMARY] total=%d pass=%d fail=%d\n", "test.summary.fmt");
+    llvm::FunctionType* reportTestType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context),
+        {i32Type, i32Type, i8PtrType, i8PtrType, i32Type}, false);
+    llvm::FunctionType* reportSummaryType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context), {i32Type, i32Type, i32Type}, false);
+    llvm::FunctionType* setCurrentTestType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context), {i32Type, i32Type, i8PtrType}, false);
+    llvm::FunctionCallee reportTestFunc = module->getOrInsertFunction(
+        "__mlang_std_testing_report_test", reportTestType);
+    llvm::FunctionCallee reportSummaryFunc = module->getOrInsertFunction(
+        "__mlang_std_testing_report_summary", reportSummaryType);
+    llvm::FunctionCallee setCurrentTestFunc = module->getOrInsertFunction(
+        "__mlang_std_testing_set_current_test", setCurrentTestType);
+    llvm::Value* passStatus = make_cstr("PASS", "test.status.pass");
+    llvm::Value* failStatus = make_cstr("FAIL", "test.status.fail");
     const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
 
     for(auto* testFn : tests)
@@ -4325,12 +4348,17 @@ void CodeGenerator::generateTestMain(
         std::string suiteName = !testFn->sourceModule.empty()
                                     ? normalizeTestSuiteName(testFn->sourceModule)
                                     : defaultSuite;
-        std::string displayName = suiteName + "." + testFn->name;
+        std::string displayName =
+            suiteName + "." + humanizeTestCaseName(testFn->name);
         llvm::Value* testName = make_cstr(displayName, "test.name");
+        llvm::Value* testIndex = totalNext;
+        builder.CreateCall(setCurrentTestFunc, {testIndex, totalNext, testName});
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
         {
-            builder.CreateCall(printfFunc, {passFmt, testName});
+            builder.CreateCall(reportTestFunc,
+                               {testIndex, totalNext, passStatus, testName,
+                                llvm::ConstantInt::get(i32Type, 0)});
             continue;
         }
 
@@ -4366,12 +4394,16 @@ void CodeGenerator::generateTestMain(
         builder.CreateCondBr(isFail, failBB, passBB);
 
         builder.SetInsertPoint(passBB);
-        builder.CreateCall(printfFunc, {passFmt, testName});
+        builder.CreateCall(reportTestFunc,
+                           {testIndex, totalNext, passStatus, testName,
+                            llvm::ConstantInt::get(i32Type, 0)});
         builder.CreateBr(contBB);
 
         failBB->insertInto(mainFn);
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(printfFunc, {failFmt, testName, resultI32});
+        builder.CreateCall(reportTestFunc,
+                           {testIndex, totalNext, failStatus, testName,
+                            resultI32});
         builder.CreateBr(contBB);
 
         contBB->insertInto(mainFn);
@@ -4384,7 +4416,7 @@ void CodeGenerator::generateTestMain(
         builder.CreateLoad(i32Type, totalTests, "tests.total");
     llvm::Value* passCount =
         builder.CreateSub(totalCount, total, "tests.pass");
-    builder.CreateCall(printfFunc, {summaryFmt, totalCount, passCount, total});
+    builder.CreateCall(reportSummaryFunc, {totalCount, passCount, total});
 
     builder.CreateRet(total);
 }
