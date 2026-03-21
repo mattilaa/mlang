@@ -861,23 +861,48 @@ assignment_statement
             else
                 $$ = mla_ast_chained_field_assignment($1, $3, yylineno);
         }
+    | condition_postfix ASSIGN expression SEMICOLON
+        {
+            if(auto* id = dynamic_cast<IdentifierNode*>($1))
+                $$ = mla_ast_assignment(const_cast<char*>(id->name.c_str()), $3, yylineno);
+            else
+                $$ = mla_ast_chained_field_assignment($1, $3, yylineno);
+        }
     | postfix_expression PLUS_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, PLUS, $3, yylineno); }
+    | condition_postfix PLUS_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, PLUS, $3, yylineno); }
     | postfix_expression MINUS_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, MINUS, $3, yylineno); }
+    | condition_postfix MINUS_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MINUS, $3, yylineno); }
     | postfix_expression MULTIPLY_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MULTIPLY, $3, yylineno); }
+    | condition_postfix MULTIPLY_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, MULTIPLY, $3, yylineno); }
     | postfix_expression DIVIDE_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, DIVIDE, $3, yylineno); }
+    | condition_postfix DIVIDE_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, DIVIDE, $3, yylineno); }
     | postfix_expression MODULO_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
+    | condition_postfix MODULO_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, MODULO, $3, yylineno); }
     | postfix_expression PIPE_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, PIPE, $3, yylineno); }
+    | condition_postfix PIPE_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, PIPE, $3, yylineno); }
     | postfix_expression CARET_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, CARET, $3, yylineno); }
+    | condition_postfix CARET_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, CARET, $3, yylineno); }
     | postfix_expression SHL_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, SHL, $3, yylineno); }
+    | condition_postfix SHL_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, SHL, $3, yylineno); }
     | postfix_expression SHR_ASSIGN expression SEMICOLON
+        { $$ = make_compound_assign($1, SHR, $3, yylineno); }
+    | condition_postfix SHR_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, SHR, $3, yylineno); }
     | MULTIPLY unary_expression ASSIGN expression SEMICOLON
         { $$ = mla_ast_deref_assignment($2, $4, yylineno); }
@@ -1218,7 +1243,11 @@ condition_multiplicative
     ;
 
 condition_unary
-    : MINUS condition_unary
+    : PLUS_PLUS condition_unary
+        { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_PREFIX, $2, yylineno); }
+    | MINUS_MINUS condition_unary
+        { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_PREFIX, $2, yylineno); }
+    | MINUS condition_unary
         { $$ = create_unary_op(MINUS, $2); if($$) $$->line = yylineno; }
     | NOT condition_unary
         { $$ = create_unary_op(NOT, $2); if($$) $$->line = yylineno; }
@@ -1254,6 +1283,10 @@ condition_postfix
     | condition_postfix DOT INT_LITERAL { $$ = mla_ast_tuple_access($1, $3, yylineno); }
     | condition_postfix LBRACKET expression RBRACKET
         { $$ = mla_ast_index_expression($1, $3, yylineno); }
+    | condition_postfix PLUS_PLUS
+        { $$ = mla_ast_update_expression(UPDATE_INCREMENT, UPDATE_POSTFIX, $1, yylineno); }
+    | condition_postfix MINUS_MINUS
+        { $$ = mla_ast_update_expression(UPDATE_DECREMENT, UPDATE_POSTFIX, $1, yylineno); }
     ;
 
 condition_primary
@@ -1315,18 +1348,11 @@ expression
     ;
 
 ternary_expression
-    : binary_expression QUESTION ternary_expression COLON ternary_expression
-        { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
-    | LPAREN block_condition_expression RPAREN QUESTION ternary_expression COLON ternary_expression
-        { $$ = mla_ast_ternary_expression($2, $5, $7, yylineno); }
-    | LPAREN block_condition_expression RPAREN
-        { $$ = $2; }
-    | function_call QUESTION ternary_expression COLON ternary_expression
+    : block_condition_expression QUESTION ternary_expression COLON ternary_expression
         { $$ = mla_ast_ternary_expression($1, $3, $5, yylineno); }
     | struct_literal
         { $$ = $1; }
-    | binary_expression
-    | unary_expression
+    | block_condition_expression
     ;
 
 unary_expression
@@ -1470,8 +1496,16 @@ struct_literal
 
 struct_field_init_list
     : /* empty */ { $$ = NULL; }
+    | IDENTIFIER COLON_BLOCK map_entries RBRACE
+        { $$ = mla_ast_struct_field_init_list($1, mla_ast_map_literal($3)); }
+    | IDENTIFIER COLON_BLOCK RBRACE
+        { $$ = mla_ast_struct_field_init_list($1, mla_ast_map_literal(NULL)); }
     | IDENTIFIER COLON expression
         { $$ = mla_ast_struct_field_init_list($1, $3); }
+    | struct_field_init_list COMMA IDENTIFIER COLON_BLOCK map_entries RBRACE
+        { $$ = mla_ast_struct_field_init_list_add($1, $3, mla_ast_map_literal($5)); }
+    | struct_field_init_list COMMA IDENTIFIER COLON_BLOCK RBRACE
+        { $$ = mla_ast_struct_field_init_list_add($1, $3, mla_ast_map_literal(NULL)); }
     | struct_field_init_list COMMA IDENTIFIER COLON expression
         { $$ = mla_ast_struct_field_init_list_add($1, $3, $5); }
     ;

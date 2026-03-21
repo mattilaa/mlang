@@ -283,7 +283,7 @@ pub fn ascii_density_glyph(value: i64, max_value: i64) -> str8 {
         return "#";
     }
     let idx: i64 = (value * 8) / max_value;
-    if idx <= 1 { return "."; }
+    if idx <= 0 { return "."; }
     if idx <= 3 { return ":"; }
     if idx <= 5 { return "*"; }
     if idx <= 6 { return "O"; }
