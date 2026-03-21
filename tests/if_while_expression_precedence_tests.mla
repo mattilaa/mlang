@@ -1,6 +1,8 @@
 mod std::testing;
+mod std::fs;
 
 use std::testing::verify;
+use std::fs::write_all_text;
 #[test]
 fn if_additive_relational_without_parens() {
     let i: i32 = 2;
@@ -39,4 +41,14 @@ fn if_let_eq_with_complex_guard_expression() {
     } else {
         verify(false);
     }
+}
+
+#[test]
+fn if_condition_allows_method_chain_on_function_call_result() {
+    let src_path: str8 = "/tmp/mlang_if_condition_method_chain_plain.mla";
+    let src: str8 = "ok";
+    if write_all_text(src_path, src).is_err() {
+        verify(false);
+    }
+    verify(true);
 }

@@ -1129,10 +1129,7 @@ condition_unary
         { $$ = create_unary_op(MULTIPLY, $2); if($$) $$->line = yylineno; }
     | condition_postfix TRY_QUESTION
         { $$ = mla_ast_try_expression($1, yylineno); }
-    | function_call TRY_QUESTION
-        { $$ = mla_ast_try_expression($1, yylineno); }
     | condition_postfix
-    | function_call
     | cast_expression
     | list_literal
     | map_literal
@@ -1164,6 +1161,7 @@ condition_primary
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
+    | function_call { $$ = $1; }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }
     | LPAREN condition_expression RPAREN { $$ = $2; }

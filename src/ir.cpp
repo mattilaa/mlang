@@ -2772,6 +2772,22 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         return new TypeNode(kind);
     }
 
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        auto overloadIt = functionOverloads.find(call->name);
+        if(overloadIt != functionOverloads.end())
+        {
+            for(const auto& info : overloadIt->second)
+            {
+                if(!info.node || !info.node->returnType)
+                    continue;
+                if(!isOverloadVisible(info))
+                    continue;
+                return info.node->returnType;
+            }
+        }
+    }
+
     if(auto* fieldAccess = dynamic_cast<FieldAccessNode*>(expr))
     {
         if(fieldAccess->fieldName == "name")
@@ -12632,6 +12648,40 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
                                                    genRef->typeArgs);
                 return {ptrVal, mangled};
             }
+        }
+    }
+
+    // Case 4: Temporary expression producing a struct value
+    if(TypeNode* exprType = getLValueType(expr, line))
+    {
+        if(exprType->kind == TypeNode::TYPE_STRUCT)
+        {
+            llvm::Value* value = generateExpression(expr);
+            if(!value)
+                return {nullptr, ""};
+
+            std::string structTypeName;
+            if(auto* structRef = dynamic_cast<StructTypeRefNode*>(exprType))
+            {
+                structTypeName = structRef->structName;
+            }
+            else if(auto* genRef =
+                        dynamic_cast<GenericStructTypeRefNode*>(exprType))
+            {
+                structTypeName = getOrCreateMonomorphizedStruct(
+                    genRef->structName, genRef->typeArgs);
+            }
+            if(structTypeName.empty())
+            {
+                reportError(line,
+                            "internal error: expected struct type reference");
+                return {nullptr, ""};
+            }
+
+            llvm::AllocaInst* tmp =
+                builder.CreateAlloca(value->getType(), nullptr, "field.tmp");
+            builder.CreateStore(value, tmp);
+            return {tmp, structTypeName};
         }
     }
 
