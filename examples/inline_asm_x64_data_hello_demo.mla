@@ -1,0 +1,14 @@
+extern fn puts(s: str8) -> i32;
+
+fn main() -> i32 {
+    let seed: str8 = "seed";
+
+    let msg: str8 = asm x64(
+        str8,
+        "jmp 2f\n1:\n.asciz \"Hello world from x64 data asm\"\n2:\nleaq 1b(%rip), $0",
+        seed
+    );
+
+    puts(msg);
+    return 0;
+}

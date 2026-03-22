@@ -142,9 +142,49 @@ fn test_inline_asm_multiline_x64_emits_llvm() -> i32 {
 }
 
 #[test]
+fn test_inline_asm_embedded_string_aarch64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_embedded_string_aarch64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_embedded_string_aarch64_emit.ll";
+    let src: str8 = "extern fn puts(s: str8) -> i32;\n\nfn main() -> i32 {\n    let seed: str8 = \"seed\";\n    let msg: str8 = asm aarch64(\n        str8,\n        \".p2align 2\\nadr $0, 1f\\nb 2f\\n1:\\n.asciz \\\"Hello world from AArch64 data asm\\\"\\n.p2align 2\\n2:\",\n        seed\n    );\n    puts(msg);\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "aarch64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, ".asciz \\22Hello world from AArch64 data asm\\22") == 0 { return 1; }
+    if contains(text, "adr $0, 1f") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_embedded_string_x64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_embedded_string_x64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_embedded_string_x64_emit.ll";
+    let src: str8 = "extern fn puts(s: str8) -> i32;\n\nfn main() -> i32 {\n    let seed: str8 = \"seed\";\n    let msg: str8 = asm x64(\n        str8,\n        \"jmp 2f\\n1:\\n.asciz \\\"Hello world from x64 data asm\\\"\\n2:\\nleaq 1b(%rip), $0\",\n        seed\n    );\n    puts(msg);\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "x64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, ".asciz \\22Hello world from x64 data asm\\22") == 0 { return 1; }
+    if contains(text, "leaq 1b(%rip), $0") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
 fn test_inline_asm_target_arch_tests() {
     verify(test_inline_asm_aarch64_target_override_emits_llvm() == 0);
     verify(test_inline_asm_reports_arch_mismatch() == 0);
     verify(test_inline_asm_multiline_aarch64_emits_llvm() == 0);
     verify(test_inline_asm_multiline_x64_emits_llvm() == 0);
+    verify(test_inline_asm_embedded_string_aarch64_emits_llvm() == 0);
+    verify(test_inline_asm_embedded_string_x64_emits_llvm() == 0);
 }

@@ -688,14 +688,19 @@ let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
 asm volatile aarch64(void, "yield");
 ```
 
+For embedded string/data examples, LLVM inline asm uses directives such as
+`.asciz` and `.p2align` rather than NASM-style `db`.
+
 Supported architecture names are `x86`, `x64`, and `aarch64`. The compiler
 target can be selected with `--target-arch`:
 
 ```bash
 ./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo
 ./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_hello_demo
+./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_data_hello_demo
 ./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_demo.ll
 ./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_hello_demo.ll
+./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_data_hello_demo.ll
 ./build/mlang tools/mlang-frontend-mla/main.mla -L build -lmlang_std -o /tmp/mlang-frontend-mla
 /tmp/mlang-frontend-mla --backend ./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo_frontend
 ```

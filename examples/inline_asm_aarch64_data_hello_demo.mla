@@ -1,0 +1,14 @@
+extern fn puts(s: str8) -> i32;
+
+fn main() -> i32 {
+    let seed: str8 = "seed";
+
+    let msg: str8 = asm aarch64(
+        str8,
+        ".p2align 2\nadr $0, 1f\nb 2f\n1:\n.asciz \"Hello world from AArch64 data asm\"\n.p2align 2\n2:",
+        seed
+    );
+
+    puts(msg);
+    return 0;
+}
