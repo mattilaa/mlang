@@ -972,6 +972,30 @@ fn sanitize_dir_suite_args(args: list<str8>, benchmark_mode: i32) -> list<str8> 
     return out;
 }
 
+fn resolve_default_backend(program: str8) -> str8 {
+    let trimmed: str8 = trim(program);
+    if len(trimmed) > 0 {
+        let dir: str8 = parent_dir(trimmed);
+        if len(dir) > 0 {
+            let sibling: str8 = concat(dir, "/mlang");
+            if file_exists(sibling) == 1 {
+                return sibling;
+            }
+            let parent: str8 = parent_dir(dir);
+            if len(parent) > 0 {
+                let parent_sibling: str8 = concat(parent, "/mlang");
+                if file_exists(parent_sibling) == 1 {
+                    return parent_sibling;
+                }
+            }
+        }
+    }
+    if file_exists("build/mlang") == 1 {
+        return "build/mlang";
+    }
+    return "mlang";
+}
+
 fn parse_options(argv: list<str8>) -> FrontendState {
     var out: FrontendState = FrontendState {
         backend: "mlang",
@@ -1033,7 +1057,10 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         program = argv[0];
     }
 
-    let st: FrontendState = parse_options(argv);
+    var st: FrontendState = parse_options(argv);
+    if eq(st.backend, "mlang") == 1 {
+        st.backend = resolve_default_backend(program);
+    }
     if (eq(st.parse_error, "") == 0) {
         eprintln!("{}: {}", program, st.parse_error);
         print_usage(program);
