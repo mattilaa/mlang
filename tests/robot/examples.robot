@@ -4264,6 +4264,34 @@ MLang Frontend Bench Flag Parsing Works
     ...    msg=frontend bench parse failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
     Should Contain    ${run.stdout}    [BENCH]
 
+MLang Frontend Supports Inline Asm Emit LLVM
+    [Documentation]    Verify frontend forwards inline asm sources to the backend compiler and preserves volatile vs non-volatile LLVM IR lowering.
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_inline_asm_emit
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_inline_asm_emit.mla
+    ${ll}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_inline_asm_emit.ll
+    ${code}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let value: i64 = 9;
+    ...        let copy: i64 = asm(i64, "", value);
+    ...        asm volatile(void, "", value);
+    ...        if copy != 9 {
+    ...            return 1;
+    ...        }
+    ...        return 0;
+    ...    }
+    Create File    ${src}    ${code}
+    ${run}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    -emit-llvm    ${src}    -o    ${ll}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run.rc}    0
+    ...    msg=frontend inline asm emit-llvm failed (rc=${run.rc})\nSTDOUT:\n${run.stdout}\nSTDERR:\n${run.stderr}
+    ${ll_text}=    Get File    ${ll}
+    Should Contain    ${ll_text}    call i64 asm
+    Should Contain    ${ll_text}    call void asm sideeffect
+
 MLang Frontend Bench Flag Validation
     [Documentation]    Verify frontend bench mode reports invalid numeric values for bench flags.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_validate
