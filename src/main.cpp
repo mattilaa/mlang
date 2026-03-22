@@ -793,8 +793,37 @@ find_mlang_frontend_source(const char* argv0)
     return std::nullopt;
 }
 
+static std::filesystem::path resolve_backend_compiler_path(const char* argv0)
+{
+    namespace fs = std::filesystem;
+    fs::path exePath(argv0 ? argv0 : "mlang");
+    std::error_code ec;
+    if(fs::exists(exePath, ec))
+        exePath = fs::weakly_canonical(exePath, ec);
+    fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
+                                                : fs::current_path();
+    const std::string exeName = exePath.filename().string();
+    if(exeName == "mlang")
+        return exePath;
+
+    std::vector<fs::path> candidates;
+    candidates.push_back(exeDir / "mlang");
+    candidates.push_back(exeDir / ".." / "mlang");
+    candidates.push_back(fs::current_path() / "build" / "mlang");
+    candidates.push_back(fs::current_path() / "mlang");
+
+    for(const auto& c : candidates)
+    {
+        std::error_code candidateEc;
+        if(fs::exists(c, candidateEc))
+            return fs::weakly_canonical(c, candidateEc);
+    }
+    return exePath;
+}
+
 static bool ensure_compiled_mla_tool(const char* argv0,
                                      const std::filesystem::path& src,
+                                     const std::filesystem::path& compilerBin,
                                      std::string_view toolTag,
                                      std::filesystem::path& outBin,
                                      bool forceCppFrontendEnv)
@@ -818,7 +847,9 @@ static bool ensure_compiled_mla_tool(const char* argv0,
         }
     }
 
-    fs::path exePath(argv0 ? argv0 : "mlang");
+    fs::path exePath = compilerBin.empty()
+                           ? fs::path(argv0 ? argv0 : "mlang")
+                           : compilerBin;
     fs::path exeDir = exePath.has_parent_path() ? exePath.parent_path()
                                                 : fs::current_path();
     fs::path stdlibLibDir = exeDir;
@@ -826,7 +857,7 @@ static bool ensure_compiled_mla_tool(const char* argv0,
     std::string compileCmd;
     if(forceCppFrontendEnv)
         compileCmd += "MLANG_FRONTEND_IMPL=cpp ";
-    compileCmd += shell_quote(argv0) + " " + shell_quote(src.string()) +
+    compileCmd += shell_quote(exePath.string()) + " " + shell_quote(src.string()) +
                   " -Wno-colon-if -Wno-colon-while -L " +
                   shell_quote(stdlibLibDir.string()) + " -lmlang_std -o " +
                   shell_quote(outBin.string());
@@ -848,12 +879,13 @@ static std::optional<int> run_mlang_frontend(int argc, char** argv)
 
     fs::path src = *srcOpt;
     fs::path toolBin;
-    if(!ensure_compiled_mla_tool(argv[0], src, "mlang-frontend-mla", toolBin,
+    fs::path backendBin = resolve_backend_compiler_path(argv[0]);
+    if(!ensure_compiled_mla_tool(argv[0], src, backendBin, "mlang-frontend-mla", toolBin,
                                  /*forceCppFrontendEnv=*/true))
         return std::nullopt;
 
     std::string runCmd = "MLANG_FRONTEND_IMPL=cpp " + shell_quote(toolBin.string()) +
-                         " --backend " + shell_quote(argv[0]);
+                         " --backend " + shell_quote(backendBin.string());
     for(int i = 1; i < argc; ++i)
         runCmd += " " + shell_quote(argv[i]);
 
@@ -878,12 +910,13 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
 
     fs::path src = *srcOpt;
     fs::path toolBin;
-    if(!ensure_compiled_mla_tool(argv[0], src, "mlang-pkg-mla", toolBin,
+    fs::path backendBin = resolve_backend_compiler_path(argv[0]);
+    if(!ensure_compiled_mla_tool(argv[0], src, backendBin, "mlang-pkg-mla", toolBin,
                                  /*forceCppFrontendEnv=*/true))
         return std::nullopt;
 
     std::string runCmd = "MLANG_FRONTEND_IMPL=cpp " + shell_quote(toolBin.string()) + " --backend " +
-                         shell_quote(argv[0]);
+                         shell_quote(backendBin.string());
     for(int i = 1; i < argc; ++i)
         runCmd += " " + shell_quote(argv[i]);
 
