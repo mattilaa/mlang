@@ -455,8 +455,8 @@ private:
 class Backend
 {
 public:
-    Backend(std::unique_ptr<llvm::Module>& m);
-
+    Backend(std::unique_ptr<llvm::Module>& m,
+            const std::string& archOverride = "");
     bool emitObjectFile(const std::string& filename);
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);
@@ -473,6 +473,7 @@ private:
     std::unique_ptr<llvm::Module>& module;
     llvm::TargetMachine* targetMachine;
     std::string targetTriple;
+    std::string targetArchOverride;
 
     bool initializeTarget();
     bool linkExecutable(const std::string& objectFile,

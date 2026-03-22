@@ -4292,6 +4292,48 @@ MLang Frontend Supports Inline Asm Emit LLVM
     Should Contain    ${ll_text}    call i64 asm
     Should Contain    ${ll_text}    call void asm sideeffect
 
+MLang Frontend Supports Target Arch For Inline Asm
+    [Documentation]    Verify frontend forwards --target-arch and surfaces inline asm arch mismatch errors.
+    ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_inline_asm_target_arch
+    ${build_front}=    Run Process    ${MLANG}    tools/mlang-frontend-mla/main.mla    -L    ./build    -lmlang_std    -o    ${frontend}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${build_front.rc}    0
+    ${src_ok}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_inline_asm_aarch64_emit.mla
+    ${ll_ok}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_inline_asm_aarch64_emit.ll
+    ${code_ok}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let base: i64 = 4;
+    ...        let delta: i64 = 5;
+    ...        let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
+    ...        if sum != 9 {
+    ...            return 1;
+    ...        }
+    ...        return 0;
+    ...    }
+    Create File    ${src_ok}    ${code_ok}
+    ${run_ok}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    --target-arch    aarch64    -emit-llvm    ${src_ok}    -o    ${ll_ok}
+    ...    stdout=PIPE    stderr=PIPE
+    Should Be Equal As Integers    ${run_ok.rc}    0
+    ${ll_ok_text}=    Get File    ${ll_ok}
+    Should Contain    ${ll_ok_text}    target triple = "aarch64
+    ${src_bad}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/frontend_inline_asm_arch_mismatch.mla
+    ${code_bad}=    Catenate    SEPARATOR=\n
+    ...    fn main() -> i32 {
+    ...        let value: i64 = 9;
+    ...        let copy: i64 = asm aarch64(i64, "", value);
+    ...        if copy != 9 {
+    ...            return 1;
+    ...        }
+    ...        return 0;
+    ...    }
+    Create File    ${src_bad}    ${code_bad}
+    ${run_bad}=    Run Process    ${frontend}    --backend    ${EXECDIR}/build/mlang
+    ...    --target-arch    x64    -emit-llvm    ${src_bad}    -o    ${ARTIFACT DIR}/frontend_inline_asm_arch_mismatch.ll
+    ...    stdout=PIPE    stderr=PIPE
+    Should Not Be Equal As Integers    ${run_bad.rc}    0
+    Should Contain    ${run_bad.stderr}    inline asm target arch 'aarch64' does not match compilation target arch 'x64'
+
 MLang Frontend Bench Flag Validation
     [Documentation]    Verify frontend bench mode reports invalid numeric values for bench flags.
     ${frontend}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/mlang_frontend_mla_bin_bench_validate

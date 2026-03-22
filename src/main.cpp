@@ -16,6 +16,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
+#include <llvm/TargetParser/Host.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
@@ -26,6 +27,7 @@
 #include <functional>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <llvm/TargetParser/Triple.h>
 
 // Declare functions and globals from parser/lexer
 extern int yyparse();
@@ -47,6 +49,7 @@ void printUsage(const char* programName)
               << "  -S            Emit assembly file\n"
               << "  -emit-llvm    Emit LLVM IR file (.ll)\n"
               << "  -emit-bc      Emit LLVM bitcode file (.bc)\n"
+              << "  --target-arch <arch>  Set target arch: x86, x64, aarch64\n"
               << "  -O0           No optimization\n"
               << "  -O1           Basic optimization\n"
               << "  -O2           Standard optimization (default)\n"
@@ -124,6 +127,33 @@ static std::string escape_json_string(std::string_view s)
         }
     }
     return out;
+}
+
+static std::string normalize_target_arch_name(const std::string& arch)
+{
+    if(arch == "x86" || arch == "i386" || arch == "i686")
+        return "x86";
+    if(arch == "x64" || arch == "x86_64" || arch == "amd64")
+        return "x64";
+    if(arch == "aarch64" || arch == "arm64")
+        return "aarch64";
+    return "";
+}
+
+static std::string target_triple_for_arch_override(const std::string& arch)
+{
+    const std::string normalized = normalize_target_arch_name(arch);
+    if(normalized.empty())
+        return "";
+
+    llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
+    if(normalized == "x86")
+        triple.setArchName("i386");
+    else if(normalized == "x64")
+        triple.setArchName("x86_64");
+    else if(normalized == "aarch64")
+        triple.setArchName("aarch64");
+    return triple.str();
 }
 
 static void write_mlang_commands_json(
@@ -966,7 +996,8 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
                         bool benchmarkMode, bool runTests, int benchIterations,
                         int benchWarmup, bool warnPlainColonIf,
                         bool warnPlainColonWhile,
-                        const std::vector<std::string>& linkArgs)
+                        const std::vector<std::string>& linkArgs,
+                        const std::string& targetArch)
 {
     std::error_code tec;
     std::vector<std::filesystem::path> files;
@@ -1042,6 +1073,8 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
         }
         for(const auto& la : linkArgs)
             cmd += " " + shell_quote(la);
+        if(!targetArch.empty())
+            cmd += " --target-arch " + shell_quote(targetArch);
 
         int rc = benchmarkMode ? decode_system_exit_code(std::system(cmd.c_str()))
                                : run_command_with_dated_output(cmd);
@@ -1151,6 +1184,7 @@ int main(int argc, char** argv)
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
+    std::string targetArch;
     std::vector<std::string> linkArgs;
 
     for(int i = argStart; i < argc; ++i)
@@ -1187,6 +1221,16 @@ int main(int argc, char** argv)
         else if(arg == "-emit-bc")
         {
             emitBitcode = true;
+        }
+        else if(arg == "--target-arch" && i + 1 < argc)
+        {
+            targetArch = normalize_target_arch_name(argv[++i]);
+            if(targetArch.empty())
+            {
+                std::cerr << "Invalid value for --target-arch: " << argv[i]
+                          << " (expected x86, x64, or aarch64)" << std::endl;
+                return 1;
+            }
         }
         else if(arg == "-L" && i + 1 < argc)
         {
@@ -1344,7 +1388,8 @@ int main(int argc, char** argv)
             auto rc = run_test_directory_mode(argv[0], inPath, benchmarkMode,
                                               runTests, benchIterations,
                                               benchWarmup, warnPlainColonIf,
-                                              warnPlainColonWhile, linkArgs);
+                                              warnPlainColonWhile, linkArgs,
+                                              targetArch);
             if(rc.has_value())
                 return *rc;
             return 1;
@@ -1379,6 +1424,16 @@ int main(int argc, char** argv)
     llvm::IRBuilder<> builder(context);
     std::unique_ptr<llvm::Module> module =
         std::make_unique<llvm::Module>("MLang", context);
+    if(!targetArch.empty())
+    {
+        const std::string targetTriple =
+            target_triple_for_arch_override(targetArch);
+#if LLVM_VERSION_MAJOR >= 21
+        module->setTargetTriple(llvm::Triple(targetTriple));
+#else
+        module->setTargetTriple(targetTriple);
+#endif
+    }
 
     std::vector<std::string> modulePaths;
     std::vector<std::string> moduleSearchPaths;
@@ -1536,7 +1591,7 @@ int main(int argc, char** argv)
             }
 
             // Initialize backend
-            Backend backend(module);
+            Backend backend(module, targetArch);
 
             if(verbose)
             {

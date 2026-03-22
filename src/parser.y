@@ -107,8 +107,8 @@ ASTNode* mla_ast_literal_bool(int value);
 ASTNode* mla_ast_literal_float(float value);
 ASTNode* mla_ast_literal_double(float value);
 ASTNode* mla_ast_literal_string(char* value);
-ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, ASTNode* args,
-                            int is_volatile, int line);
+ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
+                            ASTNode* args, int is_volatile, int line);
 ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_identifier_at(char* name, int line, int col);
@@ -1393,13 +1393,21 @@ unary_expression
 
 asm_expression
     : ASM LPAREN type COMMA STRING_LITERAL RPAREN
-        { $$ = mla_ast_inline_asm($3, $5, NULL, 0, yylineno); }
+        { $$ = mla_ast_inline_asm($3, $5, NULL, NULL, 0, yylineno); }
     | ASM LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = mla_ast_inline_asm($3, $5, $7, 0, yylineno); }
+        { $$ = mla_ast_inline_asm($3, $5, NULL, $7, 0, yylineno); }
+    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, $2, NULL, 0, yylineno); }
+    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, $2, $8, 0, yylineno); }
     | ASM VOLATILE LPAREN type COMMA STRING_LITERAL RPAREN
-        { $$ = mla_ast_inline_asm($4, $6, NULL, 1, yylineno); }
+        { $$ = mla_ast_inline_asm($4, $6, NULL, NULL, 1, yylineno); }
     | ASM VOLATILE LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
-        { $$ = mla_ast_inline_asm($4, $6, $8, 1, yylineno); }
+        { $$ = mla_ast_inline_asm($4, $6, NULL, $8, 1, yylineno); }
+    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL RPAREN
+        { $$ = mla_ast_inline_asm($5, $7, $3, NULL, 1, yylineno); }
+    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = mla_ast_inline_asm($5, $7, $3, $9, 1, yylineno); }
     ;
 
 match_expression

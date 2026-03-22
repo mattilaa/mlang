@@ -679,3 +679,28 @@ entry = "src/main.mla"
 [c-dependencies]
 curl = { pkg_config = "libcurl" }
 ```
+### Inline asm target architecture
+
+Inline asm can be pinned to a target architecture directly in source:
+
+```mla
+let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
+asm volatile aarch64(void, "yield");
+```
+
+Supported architecture names are `x86`, `x64`, and `aarch64`. The compiler
+target can be selected with `--target-arch`:
+
+```bash
+./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo
+./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_demo.ll
+./build/mlang tools/mlang-frontend-mla/main.mla -L build -lmlang_std -o /tmp/mlang-frontend-mla
+/tmp/mlang-frontend-mla --backend ./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo_frontend
+```
+
+If an asm block is tagged for the wrong architecture, compilation fails with an
+explicit error before code generation continues.
+
+On an Apple Silicon Mac, prefer the `aarch64` example above for local compile
+and run. For non-host architectures such as `x64`, use `-emit-llvm` or `-S`
+locally unless you also have the matching toolchain and runtime available.

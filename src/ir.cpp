@@ -8,6 +8,39 @@
 #include <iostream>
 #include <limits>
 #include <unordered_map>
+#include <llvm/TargetParser/Triple.h>
+#include <llvm/TargetParser/Host.h>
+
+static std::string normalize_target_arch_name(const std::string& arch)
+{
+    if(arch == "x86" || arch == "i386" || arch == "i686")
+        return "x86";
+    if(arch == "x64" || arch == "x86_64" || arch == "amd64")
+        return "x64";
+    if(arch == "aarch64" || arch == "arm64")
+        return "aarch64";
+    return "";
+}
+
+static std::string llvm_arch_name_for_target(const std::string& arch)
+{
+    if(arch == "x86")
+        return "i386";
+    if(arch == "x64")
+        return "x86_64";
+    if(arch == "aarch64")
+        return "aarch64";
+    return "";
+}
+
+static std::string module_target_triple_string(llvm::Module* module)
+{
+#if LLVM_VERSION_MAJOR >= 21
+    return module ? module->getTargetTriple().str() : std::string();
+#else
+    return module ? module->getTargetTriple() : std::string();
+#endif
+}
 
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
@@ -5489,6 +5522,43 @@ llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
     {
         reportError(node ? node->line : 0, "invalid inline asm expression");
         return nullptr;
+    }
+
+    if(!node->requiredArch.empty())
+    {
+        const std::string requiredArch =
+            normalize_target_arch_name(node->requiredArch);
+        if(requiredArch.empty())
+        {
+            reportError(node->line,
+                        "unsupported inline asm target arch '" +
+                            node->requiredArch +
+                            "'; expected x86, x64, or aarch64");
+            return nullptr;
+        }
+
+        std::string effectiveTriple = module_target_triple_string(module.get());
+        if(effectiveTriple.empty())
+            effectiveTriple = llvm::sys::getDefaultTargetTriple();
+        llvm::Triple triple(effectiveTriple);
+        const std::string actualArch =
+            normalize_target_arch_name(triple.getArchName().str());
+        if(actualArch.empty())
+        {
+            reportError(node->line,
+                        "unsupported compilation target arch '" +
+                            triple.getArchName().str() +
+                            "' for inline asm; expected x86, x64, or aarch64");
+            return nullptr;
+        }
+        if(actualArch != requiredArch)
+        {
+            reportError(node->line,
+                        "inline asm target arch '" + requiredArch +
+                            "' does not match compilation target arch '" +
+                            actualArch + "'");
+            return nullptr;
+        }
     }
 
     llvm::Type* resultType = getLLVMTypeFromNode(node->resultType);
@@ -19424,8 +19494,9 @@ std::string CodeGenerator::getOrCreateMonomorphizedStruct(
 }
 
 // Backend implementation
-Backend::Backend(std::unique_ptr<llvm::Module>& m)
-    : module(m), targetMachine(nullptr)
+Backend::Backend(std::unique_ptr<llvm::Module>& m,
+                 const std::string& archOverride)
+    : module(m), targetMachine(nullptr), targetArchOverride(archOverride)
 {
     initializeTarget();
 }
@@ -19438,7 +19509,25 @@ bool Backend::initializeTarget()
     llvm::InitializeAllAsmParsers();
     llvm::InitializeAllAsmPrinters();
 
-    targetTriple = llvm::sys::getDefaultTargetTriple();
+    targetTriple = module_target_triple_string(module.get());
+    if(targetTriple.empty())
+        targetTriple = llvm::sys::getDefaultTargetTriple();
+    if(!targetArchOverride.empty())
+    {
+        const std::string normalizedArch =
+            normalize_target_arch_name(targetArchOverride);
+        const std::string llvmArch = llvm_arch_name_for_target(normalizedArch);
+        if(normalizedArch.empty() || llvmArch.empty())
+        {
+            std::cerr << "Error: Unsupported target arch '" << targetArchOverride
+                      << "'" << std::endl;
+            return false;
+        }
+
+        llvm::Triple triple(targetTriple);
+        triple.setArchName(llvmArch);
+        targetTriple = triple.str();
+    }
 
     // Normalize macOS version in triple to avoid linker warnings
     // The default triple may contain a newer macOS version than the linker

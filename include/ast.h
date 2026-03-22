@@ -376,6 +376,8 @@ public:
 /// Supported first-version source forms are:
 /// - `asm(T, "template", args...)`
 /// - `asm volatile(T, "template", args...)`
+/// - `asm aarch64(T, "template", args...)`
+/// - `asm volatile x64(T, "template", args...)`
 ///
 /// The result type is explicit in source so the frontend can preserve type
 /// information through parsing and IR lowering. Non-`void` forms currently use
@@ -387,13 +389,17 @@ public:
     TypeNode* resultType;
     /// \brief Raw assembler template string forwarded to LLVM.
     std::string asmTemplate;
+    /// \brief Optional required target architecture (`x86`, `x64`, `aarch64`).
+    std::string requiredArch;
     /// \brief Positional operands supplied by the user.
     std::vector<ExpressionNode*> arguments;
     /// \brief Whether LLVM should treat the asm block as side-effecting.
     bool isVolatile;
 
-    InlineAsmNode(TypeNode* type, const std::string& text, bool isVolatileAsm)
-        : resultType(type), asmTemplate(text), isVolatile(isVolatileAsm)
+    InlineAsmNode(TypeNode* type, const std::string& text,
+                  const std::string& arch, bool isVolatileAsm)
+        : resultType(type), asmTemplate(text), requiredArch(arch),
+          isVolatile(isVolatileAsm)
     {
     }
     std::string toString() const override;
