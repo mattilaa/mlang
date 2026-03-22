@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -18,13 +20,16 @@ _COLORS = {
     "FAIL": "\033[31m",
     "SKIP": "\033[33m",
 }
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _START_TIMES = {}
 _ACTIVE_TEST_STACK = []
 _DOT_COUNT = {}
+_MAX_DOTS = {}
 _TEST_IDX = 0
 _TOTAL_TESTS = 0
 _STATUS_WIDTH = 4
 _TIME_FORMAT = os.getenv("ROBOT_TIME_FORMAT", "full").lower()
+_TRUNCATE_NAMES = os.getenv("ROBOT_TRUNCATE_NAMES", "0").lower() in {"1", "true", "yes", "on"}
 if _TIME_FORMAT not in {"full", "hms", "off"}:
     _TIME_FORMAT = "full"
 
@@ -58,6 +63,7 @@ def _kw(word: str) -> str:
         return word
     return f"{color}{word}{_RESET}"
 
+
 def _progress_token(idx: int, total: int) -> str:
     digits = len(str(total)) if total > 0 else 1
     token = f"[{idx:>{digits}}/{total}]" if total > 0 else f"[{idx:>{digits}}]"
@@ -65,11 +71,13 @@ def _progress_token(idx: int, total: int) -> str:
         return f"{_COLORS['PROGRESS']}{token}{_RESET}"
     return token
 
+
 def _status_tag(word: str) -> str:
     rendered = f"{word:<{_STATUS_WIDTH}}"
     if _USE_COLOR and word in _COLORS:
         rendered = f"{_COLORS[word]}{rendered}{_RESET}"
     return f"[{rendered}]"
+
 
 def _timestamp_now() -> str:
     if _TIME_FORMAT == "off":
@@ -80,6 +88,38 @@ def _timestamp_now() -> str:
     return dt.strftime("%m/%d/%Y %H:%M:%S.") + f"{int(dt.microsecond / 1000):03d}"
 
 
+def _terminal_width() -> int:
+    try:
+        width = shutil.get_terminal_size(fallback=(100, 24)).columns
+    except Exception:
+        width = 100
+    return max(40, width)
+
+
+def _truncate_name(prefix: str, name: str, reserve: int = 24) -> str:
+    rendered, _ = _format_name(prefix, name, reserve)
+    return rendered
+
+
+def _format_name(prefix: str, name: str, reserve: int = 24) -> tuple[str, int]:
+    if not _TRUNCATE_NAMES:
+        return name, len(name)
+    width = _terminal_width()
+    available = width - _visible_len(prefix) - reserve
+    if available < 12:
+        available = 12
+    if len(name) > available:
+        if available <= 3:
+            name = name[:available]
+        else:
+            name = name[: available - 3] + "..."
+    return name.ljust(available), available
+
+
+def _visible_len(text: str) -> int:
+    return len(_ANSI_RE.sub("", text))
+
+
 def _fmt_seconds(ms) -> str:
     try:
         if ms is not None:
@@ -88,11 +128,32 @@ def _fmt_seconds(ms) -> str:
         pass
     return "0.000s"
 
+
 def start_suite(data, result):
     global _TOTAL_TESTS
-    count = getattr(result, "test_count", None)
+    count = None
+    for obj in (data, result):
+        if obj is None:
+            continue
+        count = getattr(obj, "test_count", None)
+        if count is None:
+            count = getattr(obj, "testcount", None)
+        if count is None:
+            stat = getattr(obj, "stat", None)
+            count = getattr(stat, "test_count", None) if stat is not None else None
+        if count is None:
+            tests = getattr(obj, "tests", None)
+            if tests is not None:
+                try:
+                    count = len(list(tests))
+                except Exception:
+                    count = None
+        if count is not None:
+            break
     if count is None:
-        count = getattr(result, "testcount", None)
+        stats = getattr(result, "statistics", None) or getattr(result, "stats", None)
+        total = getattr(stats, "total", None) if stats is not None else None
+        count = total
     try:
         if count is not None and int(count) > 0:
             _TOTAL_TESTS = int(count)
@@ -109,26 +170,26 @@ def start_test(data, result):
     _DOT_COUNT[tid] = 0
     ts = _timestamp_now()
     ts_prefix = f"{ts} " if ts else ""
+    progress = _progress_token(_TEST_IDX, _TOTAL_TESTS)
+    status = _status_tag("RUN")
+    text_prefix = f"{progress} {ts_prefix}[RUN ] "
+    test_name = _truncate_name(text_prefix, result.full_name)
     sys.stdout.write(
-        f"{_progress_token(_TEST_IDX, _TOTAL_TESTS)} {ts_prefix}{_status_tag('RUN')} {result.full_name} "
+        f"{progress} {ts_prefix}{status} {test_name} "
     )
     sys.stdout.flush()
 
 
 def start_keyword(data, result):
-    if not _ACTIVE_TEST_STACK:
-        return
-    tid = _ACTIVE_TEST_STACK[-1]
-    _DOT_COUNT[tid] = _DOT_COUNT.get(tid, 0) + 1
-    sys.stdout.write(".")
-    sys.stdout.flush()
+    return
 
 
 def end_test(data, result):
     tid = id(data)
     if _ACTIVE_TEST_STACK and _ACTIVE_TEST_STACK[-1] == tid:
         _ACTIVE_TEST_STACK.pop()
-    dot_count = _DOT_COUNT.pop(tid, 0)
+    _DOT_COUNT.pop(tid, 0)
+    _MAX_DOTS.pop(tid, 0)
     elapsed = None
     started = _START_TIMES.pop(tid, None)
     if started is not None:
@@ -141,5 +202,4 @@ def end_test(data, result):
     status = (getattr(result, "status", "") or "UNKNOWN").upper()
     status_kw = _status_tag(status) if status in _COLORS else f"[{status}]"
     sys.stdout.write(f"{status_kw} ({elapsed})\n")
-    sys.stdout.write("\n")
     sys.stdout.flush()

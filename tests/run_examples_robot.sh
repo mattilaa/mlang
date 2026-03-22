@@ -6,10 +6,12 @@ MLANG_BIN="${MLANG_BIN:-$ROOT_DIR/build/mlang}"
 ROBOT_RESULTS_DIR="${ROBOT_RESULTS_DIR:-$ROOT_DIR/artifacts/robot}"
 LOG_LEVEL="${ROBOT_LOG_LEVEL:-info}"
 COLOR_LOGS="${ROBOT_COLOR_LOGS:-auto}"
-ROBOT_JOBS="${ROBOT_JOBS:-}"
+ROBOT_JOBS="${ROBOT_JOBS:-1}"
 ROBOT_TIME_FORMAT="${ROBOT_TIME_FORMAT:-full}"
 ROBOT_ALLOW_FLAKY_PASS="${ROBOT_ALLOW_FLAKY_PASS:-1}"
 ROBOT_SHOW_RUN="${ROBOT_SHOW_RUN:-0}"
+ROBOT_CUSTOM_PROGRESS="${ROBOT_CUSTOM_PROGRESS:-0}"
+ROBOT_TRUNCATE_NAMES="${ROBOT_TRUNCATE_NAMES:-0}"
 PROGRESS_LISTENER="$ROOT_DIR/tests/robot_progress_listener.py"
 PABOT_FILTER="$ROOT_DIR/tests/pabot_progress_filter.py"
 PABOT_ROBOT_WRAPPER="$ROOT_DIR/tests/pabot_robot_wrapper.py"
@@ -21,12 +23,13 @@ fi
 
 usage() {
   cat <<'USAGE'
-Usage: run_examples_robot.sh [-j <n>] [--jobs <n>] [--time-format <full|hms|off>] [--show-run] [--log-level <error|info|verbose|debug>] [--color-logs] [--no-color-logs] [--help]
+Usage: run_examples_robot.sh [-j <n>] [--jobs <n>] [--time-format <full|hms|off>] [--show-run] [--truncate-names] [--log-level <error|info|verbose|debug>] [--color-logs] [--no-color-logs] [--help]
 
 Options:
-  -j, --jobs <n>     Number of parallel jobs for robot tests (default: CPU cores)
-  --time-format <f>  Timestamp format in progress lines: full, hms, off (default: full)
-  --show-run         Show [RUN ] progress rows (default: hidden)
+  -j, --jobs <n>     Number of parallel jobs for robot tests (default: 1)
+  --time-format <f>  Timestamp format used by custom progress mode: full, hms, off (default: full)
+  --show-run         Show [RUN ] rows in custom progress mode (default: hidden)
+  --truncate-names   Truncate long test names in custom progress mode to fit one line
   --log-level <lvl>  Log verbosity: error, info, verbose, debug (default: info)
   --color-logs       Force colored log output
   --no-color-logs    Disable colored log output
@@ -257,10 +260,14 @@ while [[ $# -gt 0 ]]; do
       ROBOT_TIME_FORMAT="${1#*=}"
       shift
       ;;
-    --show-run)
-      ROBOT_SHOW_RUN=1
-      shift
-      ;;
+      --show-run)
+        ROBOT_SHOW_RUN=1
+        shift
+        ;;
+      --truncate-names)
+        ROBOT_TRUNCATE_NAMES=1
+        shift
+        ;;
     --color-logs)
       COLOR_LOGS="always"
       shift
@@ -291,7 +298,7 @@ if ! [[ "$ROBOT_JOBS" =~ ^[0-9]+$ ]] || [[ "$ROBOT_JOBS" -lt 1 ]]; then
 fi
 
 init_log_colors
-log_debug "shell=${SHELL:-<unset>} bash_version=${BASH_VERSION:-<unset>} term=${TERM:-<unset>} colorterm=${COLORTERM:-<unset>} color_mode=${COLOR_LOGS} color_enabled=${COLOR_ENABLED} jobs=${ROBOT_JOBS} time_format=${ROBOT_TIME_FORMAT}"
+log_debug "shell=${SHELL:-<unset>} bash_version=${BASH_VERSION:-<unset>} term=${TERM:-<unset>} colorterm=${COLORTERM:-<unset>} color_mode=${COLOR_LOGS} color_enabled=${COLOR_ENABLED} jobs=${ROBOT_JOBS} time_format=${ROBOT_TIME_FORMAT} custom_progress=${ROBOT_CUSTOM_PROGRESS}"
 
 if [[ ! -x "$MLANG_BIN" ]]; then
   log_error "mlang binary not found at $MLANG_BIN"
@@ -362,6 +369,9 @@ CONSOLE_MODE_EXPLICIT=0
 if [[ -n "${ROBOT_CONSOLE_MODE:-}" ]]; then
   CONSOLE_MODE_EXPLICIT=1
 fi
+if [[ "$ROBOT_CUSTOM_PROGRESS" == "1" && "$CONSOLE_MODE_EXPLICIT" -eq 0 ]]; then
+  CONSOLE_MODE="none"
+fi
 if [[ -n "${ROBOT_CONSOLE_COLORS:-}" ]]; then
   CONSOLE_COLORS="${ROBOT_CONSOLE_COLORS}"
 else
@@ -411,7 +421,7 @@ if [[ "$ROBOT_JOBS" -gt 1 ]]; then
 fi
 
 log_info "running robot tests with jobs=$ROBOT_JOBS"
-if [[ -f "$PROGRESS_LISTENER" ]]; then
+if [[ "$ROBOT_CUSTOM_PROGRESS" == "1" && -f "$PROGRESS_LISTENER" ]]; then
   log_info "robot progress listener enabled"
 fi
 
@@ -436,7 +446,7 @@ if [[ "$ROBOT_JOBS" -gt 1 ]]; then
     rc=$?
   else
     total_tests="$(detect_robot_total_tests)"
-    if [[ -f "$PABOT_FILTER" ]]; then
+    if [[ "$ROBOT_CUSTOM_PROGRESS" == "1" && -f "$PABOT_FILTER" ]]; then
       ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
       MLANG_PABOT_ARTIFACT_ROOT="$ROBOT_RESULTS_DIR/worker_artifacts" \
       PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
@@ -462,16 +472,24 @@ if [[ "$ROBOT_JOBS" -gt 1 ]]; then
     fi
   fi
 else
-  ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
-  PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
-    --console "$CONSOLE_MODE" \
-    --consolecolors "$CONSOLE_COLORS" \
-    --consolewidth "$CONSOLE_WIDTH" \
-    --listener "$PROGRESS_LISTENER" \
-    --variable MLANG:"$MLANG_BIN" \
-    --outputdir "$ROBOT_RESULTS_DIR" \
-    "$ROOT_DIR/tests/robot/examples.robot"
-  rc=$?
+  if [[ "$ROBOT_CUSTOM_PROGRESS" == "1" && -f "$PROGRESS_LISTENER" ]]; then
+    ROBOT_TIME_FORMAT="$ROBOT_TIME_FORMAT" \
+    PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
+      --console "$CONSOLE_MODE" \
+      --consolecolors "$CONSOLE_COLORS" \
+      --consolewidth "$CONSOLE_WIDTH" \
+      --listener "$PROGRESS_LISTENER" \
+      --variable MLANG:"$MLANG_BIN" \
+      --outputdir "$ROBOT_RESULTS_DIR" \
+      "$ROOT_DIR/tests/robot/examples.robot"
+    rc=$?
+  else
+    PYTHONUNBUFFERED=1 "${RUN_CMD[@]}" \
+      --outputdir "$ROBOT_RESULTS_DIR" \
+      --variable MLANG:"$MLANG_BIN" \
+      "$ROOT_DIR/tests/robot/examples.robot"
+    rc=$?
+  fi
 fi
 set -e
 end_ts="$(date +%s)"

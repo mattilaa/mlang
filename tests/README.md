@@ -56,6 +56,22 @@ python -m pip install -r tests/requirements.txt
 ./tests/run_examples_robot.sh
 ```
 
+Default output uses the standard Robot Framework console format, matching
+`../mlangsh`.
+
+If you want the compact/timestamped progress output instead:
+
+```bash
+ROBOT_CUSTOM_PROGRESS=1 ./tests/run_examples_robot.sh
+```
+
+That compact mode prints one line per test with `[n/total]` first. Name truncation is
+off by default; enable it only when you want terminal-width-aware shortening:
+
+```bash
+ROBOT_CUSTOM_PROGRESS=1 ROBOT_TRUNCATE_NAMES=1 ./tests/run_examples_robot.sh
+```
+
 ### Option 1c: LSP End-to-End Transcript Test
 
 This runs a JSON-RPC integration script against `mlangd --stdio` and checks:

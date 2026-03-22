@@ -7,6 +7,7 @@ import argparse
 from datetime import datetime
 import os
 import re
+import shutil
 import sys
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -31,6 +32,7 @@ COLORS = {
     "SKIP": "\033[33m",
 }
 RESET = "\033[0m"
+TRUNCATE_NAMES = os.getenv("ROBOT_TRUNCATE_NAMES", "0").lower() in {"1", "true", "yes", "on"}
 
 
 def color_enabled(mode: str) -> bool:
@@ -46,6 +48,37 @@ def color_enabled(mode: str) -> bool:
     if os.getenv("CLICOLOR_FORCE", "0") != "0":
         return True
     return sys.stdout.isatty()
+
+
+def terminal_width() -> int:
+    try:
+        width = shutil.get_terminal_size(fallback=(100, 24)).columns
+    except Exception:
+        width = 100
+    return max(40, width)
+
+
+def visible_len(text: str) -> int:
+    return len(ANSI_RE.sub("", text))
+
+
+def truncate_name(prefix: str, name: str, reserve: int) -> str:
+    shown_name, _ = format_name(prefix, name, reserve)
+    return shown_name
+
+
+def format_name(prefix: str, name: str, reserve: int) -> tuple[str, int]:
+    if not TRUNCATE_NAMES:
+        return name, len(name)
+    available = terminal_width() - visible_len(prefix) - reserve
+    if available < 12:
+        available = 12
+    if len(name) > available:
+        if available <= 3:
+            name = name[:available]
+        else:
+            name = name[: available - 3] + "..."
+    return name.ljust(available), available
 
 
 def main() -> int:
@@ -90,8 +123,10 @@ def main() -> int:
         suffix = f" ({elapsed_ms}ms)" if elapsed_ms is not None else ""
         reason_txt = f" - {reason}" if reason else ""
         ts_prefix = f"{ts_fmt} " if ts_fmt else ""
+        prefix = f"{progress} {ts_prefix}{status_tag('FAIL')} "
+        shown_name = truncate_name(prefix, test_name, len(suffix) + len(reason_txt) + 1)
         sys.stdout.write(
-            f"{progress} {ts_prefix}{status_tag('FAIL')} {test_name}{suffix}{reason_txt}\n"
+            f"{prefix}{shown_name}{suffix}{reason_txt}\n"
         )
         sys.stdout.flush()
         pending_fail = None
@@ -125,7 +160,9 @@ def main() -> int:
             if use_color:
                 progress = f"{COLORS['PROGRESS']}{progress}{RESET}"
             ts_prefix = f"{ts_fmt} " if ts_fmt else ""
-            sys.stdout.write(f"{progress} {ts_prefix}{status_tag('RUN')} {test_name}\n")
+            prefix = f"{progress} {ts_prefix}{status_tag('RUN')} "
+            shown_name = truncate_name(prefix, test_name, 0)
+            sys.stdout.write(f"{prefix}{shown_name}\n")
             sys.stdout.flush()
             continue
 
@@ -163,8 +200,10 @@ def main() -> int:
                 pending_fail = (progress, ts_fmt, test_name, elapsed_ms)
             else:
                 suffix = f" ({elapsed_ms}ms)" if elapsed_ms is not None else ""
+                prefix = f"{progress} {f'{ts_fmt} ' if ts_fmt else ''}{status_tag(status)} "
+                shown_name = truncate_name(prefix, test_name, len(suffix))
                 sys.stdout.write(
-                    f"{progress} {f'{ts_fmt} ' if ts_fmt else ''}{status_tag(status)} {test_name}{suffix}\n"
+                    f"{prefix}{shown_name}{suffix}\n"
                 )
                 sys.stdout.flush()
             continue

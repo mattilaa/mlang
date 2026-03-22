@@ -373,6 +373,31 @@ Run the Robot Framework example suite (includes the multithreaded net case):
 ./tests/run_examples_robot.sh
 ```
 
+Default output uses the standard Robot Framework console format, matching
+`../mlangsh`, for example:
+
+```text
+==============================================================================
+Suite
+==============================================================================
+Test Name                                                          | PASS |
+------------------------------------------------------------------------------
+```
+
+If you want the older compact/timestamped progress output instead, opt in with:
+
+```sh
+ROBOT_CUSTOM_PROGRESS=1 ./tests/run_examples_robot.sh
+```
+
+That compact mode prints one line per test with `[n/total]` first. By default it does
+not truncate test names. If you want long names shortened to keep each line within the
+terminal width, enable it explicitly:
+
+```sh
+ROBOT_CUSTOM_PROGRESS=1 ROBOT_TRUNCATE_NAMES=1 ./tests/run_examples_robot.sh
+```
+
 `tests/run_examples_robot.sh` writes logs and machine-readable output into `results/`
 (and any temporary binaries under `*bin`), but those directories/files are ignored by
 `.gitignore`, so the working tree stays clean after the suite finishes.

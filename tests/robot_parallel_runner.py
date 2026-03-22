@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -12,6 +13,8 @@ import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
+
+_TRUNCATE_NAMES = os.getenv("ROBOT_TRUNCATE_NAMES", "0").lower() in {"1", "true", "yes", "on"}
 
 
 def _ts(fmt: str) -> str:
@@ -30,6 +33,33 @@ def _color_enabled(mode: str) -> bool:
     if mode == "never":
         return False
     return sys.stdout.isatty() and os.getenv("TERM", "") != "dumb"
+
+
+def _terminal_width() -> int:
+    try:
+        width = shutil.get_terminal_size(fallback=(100, 24)).columns
+    except Exception:
+        width = 100
+    return max(40, width)
+
+
+def _truncate_name(prefix: str, name: str, reserve: int = 0) -> str:
+    shown_name, _ = _format_name(prefix, name, reserve)
+    return shown_name
+
+
+def _format_name(prefix: str, name: str, reserve: int = 0) -> tuple[str, int]:
+    if not _TRUNCATE_NAMES:
+        return name, len(name)
+    available = _terminal_width() - len(prefix) - reserve
+    if available < 12:
+        available = 12
+    if len(name) > available:
+        if available <= 3:
+            name = name[:available]
+        else:
+            name = name[: available - 3] + "..."
+    return name.ljust(available), available
 
 
 def _status_tag(status: str, use_color: bool) -> str:
@@ -211,17 +241,20 @@ def main() -> int:
         prefix = f"[{cur:3d}/{total}]"
         ts = _ts(args.time_format)
         st = _status_tag(status, use_color)
+        text_prefix = f"{prefix} {ts} {st} " if ts else f"{prefix} {st} "
         if elapsed is None:
+            shown_name = _truncate_name(text_prefix, name)
             if ts:
-                print(f"{prefix} {ts} {st} {name}", flush=True)
+                print(f"{prefix} {ts} {st} {shown_name}", flush=True)
             else:
-                print(f"{prefix} {st} {name}", flush=True)
+                print(f"{prefix} {st} {shown_name}", flush=True)
             return
         dur = f"{elapsed:.3f}s"
+        shown_name = _truncate_name(text_prefix, name, len(f" ({dur})"))
         if ts:
-            print(f"{prefix} {ts} {st} {name} ({dur})", flush=True)
+            print(f"{prefix} {ts} {st} {shown_name} ({dur})", flush=True)
         else:
-            print(f"{prefix} {st} {name} ({dur})", flush=True)
+            print(f"{prefix} {st} {shown_name} ({dur})", flush=True)
 
     jobs = max(1, args.jobs)
     pending: set = set()
