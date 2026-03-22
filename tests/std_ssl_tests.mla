@@ -1,0 +1,98 @@
+mod std::ssl;
+mod std::strbuf;
+mod std::testing;
+mod std::thread;
+mod std::time;
+
+use std::ssl::TlsListener;
+use std::ssl::TlsStream;
+use std::strbuf::eq;
+use std::testing::verify;
+use std::thread::join;
+use std::time::sleep_ms;
+
+fn worker_tls_ping_pong(listener_handle: i64) -> i32 {
+    let listener: TlsListener = TlsListener::from_handle(listener_handle);
+    let stream_r: Result<TlsStream, str8> = listener.accept();
+    if stream_r.is_err(): {
+        listener.close();
+        return 1;
+    }
+    let stream: TlsStream = stream_r.unwrap();
+
+    var buf = String::with_capacity(64);
+    let read_r: Result<i64, str8> = stream.read(buf, 64);
+    if read_r.is_err(): {
+        String::free(buf);
+        stream.close();
+        listener.close();
+        return 1;
+    }
+    let ok_read: i32 = eq(buf, "ping");
+    String::free(buf);
+    if ok_read != 1: {
+        stream.close();
+        listener.close();
+        return 1;
+    }
+
+    let write_r: Result<i64, str8> = stream.write("pong");
+    stream.close();
+    listener.close();
+    if write_r.is_err(): {
+        return 1;
+    }
+    return 0;
+}
+
+#[test]
+fn test_tls_loopback_ping_pong() {
+    let listener_r: Result<TlsListener, str8> = TlsListener::bind(
+        "127.0.0.1",
+        0,
+        "tests/data/ssl/localhost-cert.pem",
+        "tests/data/ssl/localhost-key.pem"
+    );
+    verify(!(listener_r.is_err()));
+    let listener: TlsListener = listener_r.unwrap();
+
+    let port_r: Result<i64, str8> = listener.local_port();
+    verify(!(port_r.is_err()));
+    let port: i64 = port_r.unwrap();
+
+    let h: Handle<Thread> = thread_spawn(worker_tls_ping_pong, listener.raw_handle());
+    sleep_ms(40);
+
+    let client_r: Result<TlsStream, str8> = TlsStream::connect_with_options(
+        "127.0.0.1",
+        port,
+        "localhost",
+        "tests/data/ssl/localhost-cert.pem",
+        1
+    );
+    verify(!(client_r.is_err()));
+    let client: TlsStream = client_r.unwrap();
+
+    let write_r: Result<i64, str8> = client.write("ping");
+    verify(!(write_r.is_err()));
+
+    var buf = String::with_capacity(64);
+    let read_r: Result<i64, str8> = client.read(buf, 64);
+    verify(!(read_r.is_err()));
+    verify(eq(buf, "pong") == 1);
+    String::free(buf);
+
+    client.close();
+    verify(join(h) == 0);
+}
+
+#[test]
+fn test_tls_listener_rejects_missing_certificate() {
+    let listener_r: Result<TlsListener, str8> = TlsListener::bind(
+        "127.0.0.1",
+        0,
+        "tests/data/ssl/missing-cert.pem",
+        "tests/data/ssl/localhost-key.pem"
+    );
+    verify(listener_r.is_err());
+}

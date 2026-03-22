@@ -385,6 +385,19 @@ static bool stdlib_lib_exists(const std::string& dir)
     return false;
 }
 
+static void append_unique_link_arg(std::vector<std::string>& linkArgs,
+                                   const std::string& arg)
+{
+    if(arg.empty())
+        return;
+    for(const auto& existing : linkArgs)
+    {
+        if(existing == arg)
+            return;
+    }
+    linkArgs.push_back(arg);
+}
+
 static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
                                     std::string_view exePath)
 {
@@ -397,11 +410,9 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
             break;
         }
     }
-    if(hasStdlib)
-        return;
 
     std::string foundDir;
-    if(!exePath.empty())
+    if(!hasStdlib && !exePath.empty())
     {
         std::error_code ec;
         std::filesystem::path exe = std::filesystem::absolute(
@@ -416,6 +427,8 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
 
     for(const auto& dir : default_stdlib_lib_paths())
     {
+        if(hasStdlib)
+            break;
         if(!foundDir.empty())
             break;
         if(!dir.empty() && stdlib_lib_exists(dir))
@@ -424,7 +437,7 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
             break;
         }
     }
-    if(foundDir.empty())
+    if(!hasStdlib && foundDir.empty())
         return;
 
     bool hasDir = false;
@@ -436,9 +449,10 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
             break;
         }
     }
-    if(!hasDir)
+    if(!hasStdlib && !hasDir)
         linkArgs.push_back(std::string("-L") + foundDir);
-    linkArgs.push_back("-lmlang_std");
+    if(!hasStdlib)
+        linkArgs.push_back("-lmlang_std");
 
     bool hasLibm = false;
     for(const auto& arg : linkArgs)
@@ -451,6 +465,25 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     }
     if(!hasLibm)
         linkArgs.push_back("-lm");
+
+#ifdef MLANG_OPENSSL_SSL_DIR
+    append_unique_link_arg(linkArgs,
+                           std::string("-L") + MLANG_OPENSSL_SSL_DIR);
+#endif
+#ifdef MLANG_OPENSSL_CRYPTO_DIR
+    append_unique_link_arg(linkArgs,
+                           std::string("-L") + MLANG_OPENSSL_CRYPTO_DIR);
+#endif
+#ifdef MLANG_OPENSSL_SSL_LIBRARY
+    append_unique_link_arg(linkArgs, MLANG_OPENSSL_SSL_LIBRARY);
+#else
+    append_unique_link_arg(linkArgs, "-lssl");
+#endif
+#ifdef MLANG_OPENSSL_CRYPTO_LIBRARY
+    append_unique_link_arg(linkArgs, MLANG_OPENSSL_CRYPTO_LIBRARY);
+#else
+    append_unique_link_arg(linkArgs, "-lcrypto");
+#endif
 }
 
 static std::vector<std::tuple<std::string, std::string, int>>

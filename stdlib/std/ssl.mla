@@ -1,0 +1,100 @@
+/// \file ssl.mla
+/// \brief TLS client/server helpers for MLang (std::ssl).
+
+extern pub fn __mlang_std_ssl_last_error() -> str8;
+extern pub fn __mlang_std_ssl_client_connect(host: str8, port: i64, server_name: str8, ca_file: str8, verify_peer: i32) -> i64;
+extern pub fn __mlang_std_ssl_listener_bind(addr: str8, port: i64, cert_file: str8, key_file: str8) -> i64;
+extern pub fn __mlang_std_ssl_listener_local_port(handle: i64) -> i64;
+extern pub fn __mlang_std_ssl_listener_accept(handle: i64) -> i64;
+extern pub fn __mlang_std_ssl_listener_close(handle: i64) -> i32;
+extern pub fn __mlang_std_ssl_stream_read(handle: i64, buf: str8, capacity: i64) -> i64;
+extern pub fn __mlang_std_ssl_stream_write(handle: i64, s: str8) -> i64;
+extern pub fn __mlang_std_ssl_stream_close(handle: i64) -> i32;
+
+pub struct TlsListener {
+    var handle: i64;
+};
+
+pub struct TlsStream {
+    var handle: i64;
+};
+
+pub fn last_error() -> str8 {
+    return __mlang_std_ssl_last_error();
+}
+
+impl TlsListener {
+    /// Bind a TLS listener using PEM certificate and private key files.
+    pub fn bind(addr: str8, port: i64, cert_file: str8, key_file: str8) -> Result<TlsListener, str8> {
+        let h: i64 = __mlang_std_ssl_listener_bind(addr, port, cert_file, key_file);
+        if h == 0 {
+            return Err<TlsListener, str8>(last_error());
+        }
+        return Ok<TlsListener, str8>(TlsListener { handle: h });
+    }
+
+    pub fn local_port(self: TlsListener) -> Result<i64, str8> {
+        let p: i64 = __mlang_std_ssl_listener_local_port(self.handle);
+        if p < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(p);
+    }
+
+    pub fn accept(self: TlsListener) -> Result<TlsStream, str8> {
+        let h: i64 = __mlang_std_ssl_listener_accept(self.handle);
+        if h == 0 {
+            return Err<TlsStream, str8>(last_error());
+        }
+        return Ok<TlsStream, str8>(TlsStream { handle: h });
+    }
+
+    pub fn close(self: TlsListener) -> i32 {
+        return __mlang_std_ssl_listener_close(self.handle);
+    }
+
+    pub fn from_handle(handle: i64) -> TlsListener {
+        return TlsListener { handle: handle };
+    }
+
+    pub fn raw_handle(self: TlsListener) -> i64 {
+        return self.handle;
+    }
+}
+
+impl TlsStream {
+    /// Connect using system trust roots and hostname verification.
+    pub fn connect(host: str8, port: i64) -> Result<TlsStream, str8> {
+        return TlsStream::connect_with_options(host, port, host, "", 1);
+    }
+
+    /// Connect with explicit server-name verification and CA bundle override.
+    /// When `verify_peer == 0`, certificate verification is disabled.
+    pub fn connect_with_options(host: str8, port: i64, server_name: str8, ca_file: str8, verify_peer: i32) -> Result<TlsStream, str8> {
+        let h: i64 = __mlang_std_ssl_client_connect(host, port, server_name, ca_file, verify_peer);
+        if h == 0 {
+            return Err<TlsStream, str8>(last_error());
+        }
+        return Ok<TlsStream, str8>(TlsStream { handle: h });
+    }
+
+    pub fn read(self: TlsStream, buf: str8, capacity: i64) -> Result<i64, str8> {
+        let n: i64 = __mlang_std_ssl_stream_read(self.handle, buf, capacity);
+        if n < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(n);
+    }
+
+    pub fn write(self: TlsStream, s: str8) -> Result<i64, str8> {
+        let n: i64 = __mlang_std_ssl_stream_write(self.handle, s);
+        if n < 0 {
+            return Err<i64, str8>(last_error());
+        }
+        return Ok<i64, str8>(n);
+    }
+
+    pub fn close(self: TlsStream) -> i32 {
+        return __mlang_std_ssl_stream_close(self.handle);
+    }
+}
