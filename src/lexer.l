@@ -126,6 +126,8 @@ static int is_try_question_context()
                   strcat(yylval.sval, "\\"); }
     \\0         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\0"); }
+    \n          { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\n"); }
     [^\\\n\"]+  { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + strlen(yytext) + 1);
                   strcat(yylval.sval, yytext); }
 }

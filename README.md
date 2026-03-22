@@ -688,6 +688,12 @@ let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
 asm volatile aarch64(void, "yield");
 ```
 
+Plain quoted strings can also span source lines directly. Newlines inside the
+literal become `\n` in the resulting value, so asm templates can be written as
+real multiline blocks instead of `\n`-escaped single lines. `mlang-format`
+preserves the rows inside these multiline string literals so asm examples stay
+aligned.
+
 For embedded string/data examples, LLVM inline asm uses directives such as
 `.asciz` and `.p2align` rather than NASM-style `db`.
 
