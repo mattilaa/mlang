@@ -102,6 +102,28 @@
 // @builtin None
 // Option constructor for absent values: None<T>().
 
+// @builtin asm
+/// Inline assembly expression keyword.
+/// Use `asm(type, "...", operands...)` for non-volatile inline assembly and
+/// `asm volatile(type, "...", operands...)` when side effects must be preserved.
+/// Arch-qualified forms such as `asm aarch64(...)`, `asm x64(...)`, and
+/// `asm x86(...)` require the matching `--target-arch` compilation target.
+
+// @builtin x86
+/// Inline assembly architecture qualifier for 32-bit x86 targets.
+/// Use with `asm x86(...)` or `asm volatile x86(...)`.
+/// Requires `--target-arch x86` at compile time.
+
+// @builtin x64
+/// Inline assembly architecture qualifier for 64-bit x86_64 targets.
+/// Use with `asm x64(...)` or `asm volatile x64(...)`.
+/// Requires `--target-arch x64` at compile time.
+
+// @builtin aarch64
+/// Inline assembly architecture qualifier for 64-bit Arm targets.
+/// Use with `asm aarch64(...)` or `asm volatile aarch64(...)`.
+/// Requires `--target-arch aarch64` at compile time.
+
 // Language keyword reference:
 // - `match` performs pattern matching for Result/Option and literal values.
 // Example:
