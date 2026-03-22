@@ -371,12 +371,25 @@ public:
     std::string toString() const override;
 };
 
+/// \brief Inline assembly expression lowered directly to LLVM inline asm.
+///
+/// Supported first-version source forms are:
+/// - `asm(T, "template", args...)`
+/// - `asm volatile(T, "template", args...)`
+///
+/// The result type is explicit in source so the frontend can preserve type
+/// information through parsing and IR lowering. Non-`void` forms currently use
+/// the first operand as the tied input/output register in code generation.
 class InlineAsmNode : public ExpressionNode
 {
 public:
+    /// \brief Declared result type for the asm expression, or `void`.
     TypeNode* resultType;
+    /// \brief Raw assembler template string forwarded to LLVM.
     std::string asmTemplate;
+    /// \brief Positional operands supplied by the user.
     std::vector<ExpressionNode*> arguments;
+    /// \brief Whether LLVM should treat the asm block as side-effecting.
     bool isVolatile;
 
     InlineAsmNode(TypeNode* type, const std::string& text, bool isVolatileAsm)

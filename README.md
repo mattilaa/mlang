@@ -105,6 +105,25 @@ search paths in `mlang.toml`:
 module_paths = ["modules", "vendor/mlang"]
 ```
 
+## Inline Assembly
+MLang supports direct inline assembly through the `asm` keyword. The compiler
+lowers it straight to LLVM inline asm, so there is no extra C wrapper boundary.
+
+Supported forms:
+
+```mla
+let value: i64 = 9;
+let copy: i64 = asm(i64, "", value);
+asm volatile(void, "", value);
+```
+
+Current first-version constraints:
+- operands must be integer or pointer values
+- result type must be integer, pointer, or `void`
+- non-`void` asm uses the first operand as the tied input/output operand
+- `asm volatile(...)` lowers with LLVM `sideeffect`
+- plain `asm(...)` lowers without `sideeffect`
+
 ## Package Manager (MLang Backend Default)
 `mlang pkg ...` now prefers the MLang implementation in
 `tools/mlang-pkg-mla/main.mla` by default, with automatic fallback to the C++

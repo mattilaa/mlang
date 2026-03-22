@@ -336,6 +336,16 @@ private:
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
+    /// \brief Lower an inline asm expression to LLVM inline asm.
+    ///
+    /// Current constraints are intentionally narrow so optimization behavior
+    /// stays predictable:
+    /// - operands must be integer or pointer values
+    /// - result type must be integer, pointer, or `void`
+    /// - non-`void` asm ties the first operand to the output register
+    ///
+    /// `asm volatile(...)` is emitted with LLVM `sideeffect`; plain `asm(...)`
+    /// is emitted without it.
     llvm::Value* generateInlineAsm(InlineAsmNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateFoldExpression(FoldExpressionNode* node);
