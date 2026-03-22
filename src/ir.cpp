@@ -4488,12 +4488,29 @@ void CodeGenerator::generateBenchmarkMain(
 #endif
     };
 
+    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
+    size_t benchNameWidth = std::string("warmup(iters)").size();
+    benchNameWidth = std::max(benchNameWidth, std::string("name").size());
+    for(auto* testFn : tests)
+    {
+        if(!testFn || testFn->isExtern)
+            continue;
+        std::string suiteName = !testFn->sourceModule.empty()
+                                    ? normalizeTestSuiteName(testFn->sourceModule)
+                                    : defaultSuite;
+        std::string displayName = suiteName + "." + testFn->name;
+        benchNameWidth = std::max(benchNameWidth, displayName.size());
+    }
+    benchNameWidth += 2;
+    llvm::Value* benchNameWidthVal =
+        llvm::ConstantInt::get(i32Type, static_cast<int>(benchNameWidth));
+
     llvm::Value* headerFmt = make_cstr(
-        "[BENCH] %-30s %12s %12s %10s\n", "bench.header.fmt");
+        "[BENCH] %-*s %12s %12s %10s\n", "bench.header.fmt");
     llvm::Value* lineFmt = make_cstr(
-        "[BENCH] %-30s %12lld %12lld %10d\n", "bench.line.fmt");
+        "[BENCH] %-*s %12lld %12lld %10d\n", "bench.line.fmt");
     llvm::Value* failFmt = make_cstr(
-        "[BENCH-FAIL] %-25s failures=%d\n", "bench.fail.fmt");
+        "[BENCH-FAIL] %-*s failures=%d\n", "bench.fail.fmt");
 
     llvm::Value* nsTotalHdr = make_cstr("total_ns", "bench.hdr.total");
     llvm::Value* nsPerOpHdr = make_cstr("ns/op", "bench.hdr.nsop");
@@ -4501,14 +4518,14 @@ void CodeGenerator::generateBenchmarkMain(
     llvm::Value* warmupLabel =
         make_cstr("warmup(iters)", "bench.warmup.label");
     llvm::Value* warmupFmt =
-        make_cstr("[BENCH] %-30s %12d\n", "bench.warmup.fmt");
+        make_cstr("[BENCH] %-*s %12d\n", "bench.warmup.fmt");
     builder.CreateCall(printfFunc,
-                       {warmupFmt, warmupLabel,
+                       {warmupFmt, benchNameWidthVal, warmupLabel,
                         llvm::ConstantInt::get(i32Type, benchmarkWarmupIterations)});
     builder.CreateCall(printfFunc,
-                       {headerFmt, make_cstr("name", "bench.hdr.name"),
+                       {headerFmt, benchNameWidthVal,
+                        make_cstr("name", "bench.hdr.name"),
                         nsTotalHdr, nsPerOpHdr, itersHdr});
-    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
 
     for(auto* testFn : tests)
     {
@@ -4579,7 +4596,8 @@ void CodeGenerator::generateBenchmarkMain(
         llvm::Value* iterI64 = llvm::ConstantInt::get(i64Type, benchmarkIterations);
         llvm::Value* nsPerOp = builder.CreateSDiv(elapsedNs, iterI64, "bench.nsop");
 
-        builder.CreateCall(printfFunc, {lineFmt, testName, elapsedNs, nsPerOp,
+        builder.CreateCall(printfFunc, {lineFmt, benchNameWidthVal, testName,
+                                        elapsedNs, nsPerOp,
                                         llvm::ConstantInt::get(i32Type, benchmarkIterations)});
 
         llvm::Value* lf = builder.CreateLoad(i32Type, localFails, "bench.localfails");
@@ -4594,7 +4612,7 @@ void CodeGenerator::generateBenchmarkMain(
         builder.CreateCondBr(hasFails, failBB, okBB);
 
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(printfFunc, {failFmt, testName, lf});
+        builder.CreateCall(printfFunc, {failFmt, benchNameWidthVal, testName, lf});
         llvm::Value* totalFailCur =
             builder.CreateLoad(i32Type, failures, "bench.totalfail.cur");
         builder.CreateStore(builder.CreateAdd(totalFailCur, lf), failures);
