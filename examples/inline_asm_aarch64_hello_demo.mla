@@ -1,0 +1,25 @@
+fn main() -> i32 {
+    let counter: i64 = 41;
+    let increment: i64 = 1;
+
+    println!("Hello from inline asm on AArch64");
+    println!("counter before asm: {}", counter);
+
+    let updated: i64 = asm aarch64(
+        i64,
+        "mov $0, $1\nadd $0, $0, $2",
+        counter,
+        increment
+    );
+
+    asm volatile aarch64(
+        void,
+        "nop\nyield"
+    );
+
+    println!("counter after asm: {}", updated);
+    if updated != 42 {
+        return 1;
+    }
+    return 0;
+}
