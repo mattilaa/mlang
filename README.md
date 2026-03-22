@@ -717,3 +717,11 @@ explicit error before code generation continues.
 On an Apple Silicon Mac, prefer the `aarch64` example above for local compile
 and run. For non-host architectures such as `x64`, use `-emit-llvm` or `-S`
 locally unless you also have the matching toolchain and runtime available.
+
+Benchmark commands:
+
+```bash
+./build/mlang bench tests/inline_asm_bench_tests.mla --bench-iters 200000 --bench-warmup 20000 -L build -lmlang_std
+./build/mlang --tests tests/inline_asm_target_arch_tests.mla -L build -lmlang_std
+./build/mlang --tests tests/multiline_string_tests.mla -L build -lmlang_std -o /tmp/multiline_string_tests_bin && /tmp/multiline_string_tests_bin
+```
