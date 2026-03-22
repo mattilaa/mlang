@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "module.h"
+#include <llvm/IR/InlineAsm.h>
 #include <cctype>
 #include <cstring>
 #include <filesystem>
@@ -5410,6 +5411,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateTryExpression(tryExpr);
     }
+    else if(auto* inlineAsm = dynamic_cast<InlineAsmNode*>(node))
+    {
+        return generateInlineAsm(inlineAsm);
+    }
     else if(auto id = dynamic_cast<IdentifierNode*>(node))
     {
         return generateIdentifier(id);
@@ -5476,6 +5481,98 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
         return generateArrayFill(arrFill);
     }
     return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
+{
+    if(!node || !node->resultType)
+    {
+        reportError(node ? node->line : 0, "invalid inline asm expression");
+        return nullptr;
+    }
+
+    llvm::Type* resultType = getLLVMTypeFromNode(node->resultType);
+    if(!resultType)
+    {
+        reportError(node->line, "inline asm result type could not be resolved");
+        return nullptr;
+    }
+
+    auto supportsRegisterConstraint = [](llvm::Type* ty) {
+        return ty && (ty->isIntegerTy() || ty->isPointerTy());
+    };
+
+    std::vector<llvm::Value*> argValues;
+    std::vector<llvm::Type*> argTypes;
+    argValues.reserve(node->arguments.size());
+    argTypes.reserve(node->arguments.size());
+    for(auto* arg : node->arguments)
+    {
+        llvm::Value* value = generateExpression(arg);
+        if(!value)
+            return nullptr;
+        if(!supportsRegisterConstraint(value->getType()))
+        {
+            reportError(node->line,
+                        "inline asm currently supports only integer and pointer operands");
+            return nullptr;
+        }
+        argValues.push_back(value);
+        argTypes.push_back(value->getType());
+    }
+
+    const bool returnsVoid = resultType->isVoidTy();
+    if(!returnsVoid && !supportsRegisterConstraint(resultType))
+    {
+        reportError(node->line,
+                    "inline asm currently supports only integer, pointer, or void result types");
+        return nullptr;
+    }
+    if(!returnsVoid)
+    {
+        if(argValues.empty())
+        {
+            reportError(node->line,
+                        "non-void inline asm requires at least one operand");
+            return nullptr;
+        }
+        if(argTypes.front() != resultType)
+        {
+            reportError(node->line,
+                        "non-void inline asm requires its first operand to match the result type");
+            return nullptr;
+        }
+    }
+
+    std::string constraints;
+    if(!returnsVoid)
+    {
+        constraints = "=r";
+        for(size_t i = 0; i < argValues.size(); ++i)
+        {
+            constraints += ",";
+            constraints += (i == 0) ? "0" : "r";
+        }
+    }
+    else
+    {
+        for(size_t i = 0; i < argValues.size(); ++i)
+        {
+            if(i > 0)
+                constraints += ",";
+            constraints += "r";
+        }
+    }
+
+    llvm::FunctionType* asmType =
+        llvm::FunctionType::get(resultType, argTypes, false);
+    llvm::InlineAsm* asmFn =
+        llvm::InlineAsm::get(asmType, node->asmTemplate, constraints,
+                             node->isVolatile);
+
+    if(returnsVoid)
+        return builder.CreateCall(asmFn, argValues);
+    return builder.CreateCall(asmFn, argValues, "asmtmp");
 }
 
 llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)

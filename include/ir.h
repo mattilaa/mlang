@@ -336,6 +336,7 @@ private:
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
+    llvm::Value* generateInlineAsm(InlineAsmNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateFoldExpression(FoldExpressionNode* node);
     llvm::Value* generateUnaryOp(UnaryOpNode* node);

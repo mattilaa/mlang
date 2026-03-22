@@ -1,0 +1,30 @@
+mod std::bench;
+mod std::testing;
+
+use std::bench::clobber_memory;
+use std::bench::do_not_optimize_i64;
+use std::testing::verify;
+
+#[test]
+fn inline_asm_nonvolatile_identity() {
+    var acc: i64 = 1;
+    for i in 0..2048 {
+        acc = asm(i64, "", acc);
+        acc = acc + i;
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    verify(acc > 0);
+}
+
+#[test]
+fn inline_asm_volatile_barrier() {
+    var acc: i64 = 1;
+    for i in 0..2048 {
+        asm volatile(void, "", acc);
+        acc = acc + i;
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    verify(acc > 0);
+}

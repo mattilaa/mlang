@@ -371,6 +371,21 @@ public:
     std::string toString() const override;
 };
 
+class InlineAsmNode : public ExpressionNode
+{
+public:
+    TypeNode* resultType;
+    std::string asmTemplate;
+    std::vector<ExpressionNode*> arguments;
+    bool isVolatile;
+
+    InlineAsmNode(TypeNode* type, const std::string& text, bool isVolatileAsm)
+        : resultType(type), asmTemplate(text), isVolatile(isVolatileAsm)
+    {
+    }
+    std::string toString() const override;
+};
+
 class FunctionCallNode : public ExpressionNode
 {
 public:

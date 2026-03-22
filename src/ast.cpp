@@ -407,6 +407,22 @@ ASTNode* create_try_expression_impl(ASTNode* expr, int line)
     return node;
 }
 
+ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, ASTNode* args,
+                                int is_volatile, int line)
+{
+    auto* node = new InlineAsmNode(static_cast<TypeNode*>(type),
+                                   asm_text ? std::string(asm_text)
+                                            : std::string(),
+                                   is_volatile != 0);
+    node->line = line;
+    if(args)
+    {
+        auto* argList = static_cast<ArgumentListNode*>(args);
+        node->arguments = argList->args;
+    }
+    return node;
+}
+
 ASTNode* create_function_call_impl(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line)
 {
@@ -1463,6 +1479,24 @@ std::string TernaryNode::toString() const
 std::string TryExpressionNode::toString() const
 {
     return expression->toString() + "?";
+}
+
+std::string InlineAsmNode::toString() const
+{
+    std::string result = "asm";
+    if(isVolatile)
+        result += " volatile";
+    result += "(";
+    result += resultType ? resultType->toString() : "void";
+    result += ", ";
+    result += "\"" + asmTemplate + "\"";
+    for(size_t i = 0; i < arguments.size(); ++i)
+    {
+        result += ", ";
+        result += arguments[i]->toString();
+    }
+    result += ")";
+    return result;
 }
 
 std::string FunctionCallNode::toString() const

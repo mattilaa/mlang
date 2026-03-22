@@ -11,6 +11,7 @@ use std::compiler::ReferenceLocation;
 use std::compiler::ResolvedSymbol;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
+use std::fs::read_all_text;
 use std::fs::write_all_text;
 use std::process::spawn;
 use std::process::Child;
@@ -760,6 +761,17 @@ fn read_child_stderr_all(err: ChildStderr) -> str8 {
     return buf;
 }
 
+fn run_compiler_capture(args: list<str8>) -> i32 {
+    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    if cr.is_err(): { return -1; }
+    let child: Child = cr.unwrap();
+    let status_r: Result<ExitStatus, str8> = child.wait();
+    let _ = child.close();
+    if status_r.is_err(): { return -1; }
+    let status: ExitStatus = status_r.unwrap();
+    return status.code();
+}
+
 #[test]
 fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_format_case.mla";
@@ -824,5 +836,42 @@ fn test_compiler_test_output_preserves_failing_keyword_details() -> i32 {
     if contains(stdout_text, "[1/1]") == 0: { return 1; }
     if contains(stdout_text, "[FAIL] mlang_test_output_failure_case.failure shows keyword details") == 0: { return 1; }
     if contains(stderr_text, "verify_eq(i32): expected=1 actual=2") == 0: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_compiler_inline_asm_emit_llvm_nonvolatile_has_no_sideeffect() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_nonvolatile_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_nonvolatile_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let value: i64 = 9;\n    let copy: i64 = asm(i64, \"\", value);\n    if copy != 9 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "call i64 asm") == 0 { return 1; }
+    if contains(text, "sideeffect") == 1 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_compiler_inline_asm_emit_llvm_volatile_uses_sideeffect() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_volatile_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_volatile_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let value: i64 = 9;\n    asm volatile(void, \"\", value);\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "call void asm sideeffect") == 0 { return 1; }
     return 0;
 }

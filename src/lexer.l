@@ -143,6 +143,8 @@ static int is_try_question_context()
 "for"           { return FOR; }
 "while"         { return WHILE; }
 "unsafe"        { return UNSAFE; }
+"asm"           { return ASM; }
+"volatile"      { return VOLATILE; }
 "in"            { return IN; }
 "break"         { return BREAK; }
 "continue"      { return CONTINUE; }
