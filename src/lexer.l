@@ -193,6 +193,11 @@ static int is_try_question_context()
 "f64("          { return CAST_DOUBLE; }
 "->"            { return ARROW; }
 "=>"            { return FAT_ARROW; }
+":"[[:space:]]*"{"     { return COLON_BLOCK; }
+"+"[[:space:]]*"..."   { return PLUS_ELLIPSIS; }
+"*"[[:space:]]*"..."   { return MULTIPLY_ELLIPSIS; }
+"&&"[[:space:]]*"..."  { return AMP_AMP_ELLIPSIS; }
+"||"[[:space:]]*"..."  { return PIPE_PIPE_ELLIPSIS; }
 "..."           { return ELLIPSIS; }
 "?"             { return is_try_question_context() ? TRY_QUESTION : QUESTION; }
 "..="           { return DOTDOTEQ; }
@@ -250,6 +255,7 @@ static int is_try_question_context()
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.sval = strdup(yytext); return IDENTIFIER; }
 [0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
+0[bB][01]+      { yylval.ival = strtoll(yytext + 2, NULL, 2); return INT_LITERAL; }
 [0-9]+          { yylval.ival = strtoll(yytext, NULL, 10); return INT_LITERAL; }
 "++"            { return PLUS_PLUS; }
 "--"            { return MINUS_MINUS; }

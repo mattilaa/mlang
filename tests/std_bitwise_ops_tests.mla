@@ -47,3 +47,42 @@ fn test_bitwise_expression_ops_i64_and_mask_compare() {
     y >>= 9;
     verify_eq(6, y);
 }
+
+#[test]
+fn test_bitwise_mask_bool_declaration_and_if_checks() {
+    let value: u8 = 0b0110;
+    let flag_write: u8 = 0b0010;
+    let flag_exec: u8 = 0b0100;
+    let is_enabled: bool = (value & flag_write) != 0;
+    verify(is_enabled);
+
+    var saw_write: bool = false;
+    if (value & 0b0010) != 0 {
+        saw_write = true;
+    }
+    verify(saw_write);
+
+    var saw_or: bool = false;
+    if (value | 0b0001) == 0b0111 {
+        saw_or = true;
+    }
+    verify(saw_or);
+
+    var saw_xor: bool = false;
+    if (value ^ flag_exec) == 0b0010 {
+        saw_xor = true;
+    }
+    verify(saw_xor);
+
+    var saw_shl: bool = false;
+    if (flag_write << 1) == flag_exec {
+        saw_shl = true;
+    }
+    verify(saw_shl);
+
+    var saw_shr: bool = false;
+    if (flag_exec >> 1) == flag_write {
+        saw_shr = true;
+    }
+    verify(saw_shr);
+}
