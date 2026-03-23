@@ -6166,6 +6166,161 @@ Multithreaded Net Server Client Roundtrip
     Should Contain    ${server_stdout}    SERVER_CLIENT_OK id=2
     Should Contain    ${server_stdout}    SERVER_DONE handled=2
 
+Tls Client Server Handshake With Generated Certificate
+    [Documentation]    Generate a self-signed certificate with openssl, build
+    ...                temporary std::ssl server/client programs, and verify a
+    ...                localhost TLS handshake plus ping/pong exchange.
+    ${openssl_check}=    Run Process    openssl    version
+    Pass Execution If    ${openssl_check.rc} != 0    Skipping TLS robot test: openssl command is not available.
+
+    ${server_src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_robot_server.mla
+    ${client_src}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_robot_client.mla
+    ${server_bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_robot_server_bin
+    ${client_bin}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_robot_client_bin
+    ${server_out}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_robot_server.out
+    ${server_err}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_robot_server.err
+    ${cert}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_cert.pem
+    ${key}=    Catenate    SEPARATOR=    ${ARTIFACT DIR}/tls_key.pem
+    ${PORT}=    Set Variable    18889
+
+    ${cert_cmd}=    Catenate    SEPARATOR=\n
+    ...    set -e
+    ...    rm -f '${cert}' '${key}'
+    ...    openssl req -x509 -newkey rsa:2048 -keyout '${key}' -out '${cert}' -days 30 -nodes -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost'
+    ${cert_r}=    Run Process    /bin/sh    -lc    ${cert_cmd}    cwd=${ARTIFACT DIR}
+    Should Be Equal As Integers    ${cert_r.rc}    0
+    ...    msg=Failed generating TLS certificate (rc=${cert_r.rc})\nSTDOUT:\n${cert_r.stdout}\nSTDERR:\n${cert_r.stderr}
+    File Should Exist    ${cert}
+    File Should Exist    ${key}
+
+    ${server_code}=    Catenate    SEPARATOR=\n
+    ...    mod std::io;
+    ...    mod std::ssl;
+    ...    mod std::strbuf;
+    ...    use std::ssl::TlsListener;
+    ...    use std::ssl::TlsStream;
+    ...    use std::ssl::last_error;
+    ...    use std::strbuf::eq;
+    ...    fn main() -> i32 {
+    ...        let listener_r: Result<TlsListener, str8> = TlsListener::bind("127.0.0.1", ${PORT}, "tls_cert.pem", "tls_key.pem");
+    ...        if listener_r.is_err() {
+    ...            eprintln!("TLS_SERVER_BIND_ERR {}", last_error());
+    ...            return 2;
+    ...        }
+    ...        let listener: TlsListener = listener_r.unwrap();
+    ...        println!("TLS_SERVER_READY");
+    ...        let stream_r: Result<TlsStream, str8> = listener.accept();
+    ...        if stream_r.is_err() {
+    ...            eprintln!("TLS_SERVER_ACCEPT_ERR {}", last_error());
+    ...            listener.close();
+    ...            return 3;
+    ...        }
+    ...        let stream: TlsStream = stream_r.unwrap();
+    ...        var buf = String::with_capacity(64);
+    ...        let read_r: Result<i64, str8> = stream.read(buf, 64);
+    ...        if read_r.is_err() {
+    ...            eprintln!("TLS_SERVER_READ_ERR {}", last_error());
+    ...            String::free(buf);
+    ...            stream.close();
+    ...            listener.close();
+    ...            return 4;
+    ...        }
+    ...        if eq(buf, "ping") != 1 {
+    ...            eprintln!("TLS_SERVER_BAD_PAYLOAD {}", buf);
+    ...            String::free(buf);
+    ...            stream.close();
+    ...            listener.close();
+    ...            return 5;
+    ...        }
+    ...        String::free(buf);
+    ...        let write_r: Result<i64, str8> = stream.write("pong");
+    ...        if write_r.is_err() {
+    ...            eprintln!("TLS_SERVER_WRITE_ERR {}", last_error());
+    ...            stream.close();
+    ...            listener.close();
+    ...            return 6;
+    ...        }
+    ...        println!("TLS_SERVER_OK");
+    ...        stream.close();
+    ...        listener.close();
+    ...        return 0;
+    ...    }
+    Create File    ${server_src}    ${server_code}
+
+    ${client_code}=    Catenate    SEPARATOR=\n
+    ...    mod std::io;
+    ...    mod std::ssl;
+    ...    mod std::strbuf;
+    ...    use std::ssl::TlsStream;
+    ...    use std::ssl::last_error;
+    ...    use std::strbuf::eq;
+    ...    fn main() -> i32 {
+    ...        let client_r: Result<TlsStream, str8> = TlsStream::connect_with_options("127.0.0.1", ${PORT}, "localhost", "tls_cert.pem", 1);
+    ...        if client_r.is_err() {
+    ...            eprintln!("TLS_CLIENT_CONNECT_ERR {}", last_error());
+    ...            return 2;
+    ...        }
+    ...        let client: TlsStream = client_r.unwrap();
+    ...        let write_r: Result<i64, str8> = client.write("ping");
+    ...        if write_r.is_err() {
+    ...            eprintln!("TLS_CLIENT_WRITE_ERR {}", last_error());
+    ...            client.close();
+    ...            return 3;
+    ...        }
+    ...        var buf = String::with_capacity(64);
+    ...        let read_r: Result<i64, str8> = client.read(buf, 64);
+    ...        if read_r.is_err() {
+    ...            eprintln!("TLS_CLIENT_READ_ERR {}", last_error());
+    ...            String::free(buf);
+    ...            client.close();
+    ...            return 4;
+    ...        }
+    ...        if eq(buf, "pong") != 1 {
+    ...            eprintln!("TLS_CLIENT_BAD_PAYLOAD {}", buf);
+    ...            String::free(buf);
+    ...            client.close();
+    ...            return 5;
+    ...        }
+    ...        String::free(buf);
+    ...        println!("TLS_CLIENT_OK");
+    ...        client.close();
+    ...        return 0;
+    ...    }
+    Create File    ${client_src}    ${client_code}
+
+    ${build_server}=    Run Process    ${MLANG}    ${server_src}    -o    ${server_bin}
+    ...    cwd=${ARTIFACT DIR}
+    Should Be Equal As Integers    ${build_server.rc}    0
+    ...    msg=Failed building TLS server (rc=${build_server.rc})\nSTDOUT:\n${build_server.stdout}\nSTDERR:\n${build_server.stderr}
+
+    ${build_client}=    Run Process    ${MLANG}    ${client_src}    -o    ${client_bin}
+    ...    cwd=${ARTIFACT DIR}
+    Should Be Equal As Integers    ${build_client.rc}    0
+    ...    msg=Failed building TLS client (rc=${build_client.rc})\nSTDOUT:\n${build_client.stdout}\nSTDERR:\n${build_client.stderr}
+
+    Start Process    ${server_bin}
+    ...    alias=tls_server    stdout=${server_out}    stderr=${server_err}    cwd=${ARTIFACT DIR}
+    Sleep    1s
+    ${server_out_text}=    Get File    ${server_out}
+    ${server_err_text}=    Get File    ${server_err}
+    ${bind_denied_out}=    Evaluate    "Operation not permitted" in """${server_out_text}"""
+    ${bind_denied_err}=    Evaluate    "Operation not permitted" in """${server_err_text}"""
+    ${bind_denied}=    Evaluate    ${bind_denied_out} or ${bind_denied_err}
+    Pass Execution If    ${bind_denied}    Skipping TLS robot test: socket bind is not permitted in this environment.
+
+    ${client_run}=    Run Process    ${client_bin}    cwd=${ARTIFACT DIR}
+    Should Be Equal As Integers    ${client_run.rc}    0
+    ...    msg=TLS client failed (rc=${client_run.rc})\nSTDOUT:\n${client_run.stdout}\nSTDERR:\n${client_run.stderr}
+    Should Contain    ${client_run.stdout}    TLS_CLIENT_OK
+
+    ${server_res}=    Wait For Process    tls_server    timeout=10s
+    Should Be Equal As Integers    ${server_res.rc}    0
+    ...    msg=TLS server failed (rc=${server_res.rc})\nSTDOUT:\n${server_res.stdout}\nSTDERR:\n${server_res.stderr}
+
+    ${server_stdout}=    Get File    ${server_out}
+    Should Contain    ${server_stdout}    TLS_SERVER_READY
+    Should Contain    ${server_stdout}    TLS_SERVER_OK
+
 Pkg Fetch Build Parity (CPP vs MLA)
     [Documentation]    Create a local git C dependency and verify both
     ...                package-manager backends (MLANG_PKG_IMPL=cpp|mla)

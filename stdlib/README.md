@@ -50,6 +50,10 @@ Currently provided:
    `set_nonblocking`, `set_read_timeout_ms`, `set_write_timeout_ms`,
    `try_clone`, `from_handle`/`raw_handle` for multithread handoff, and
    listener backlog tuning via `set_backlog`).
+- `std/ssl.mla`: TLS client/server streams over OpenSSL
+  (`TlsStream::connect/connect_with_options/read/write/close`,
+   `TlsListener::bind/accept/local_port`, and raw-handle handoff helpers for
+   multithreaded local TLS servers).
 - `std/regex.mla`: POSIX regular expression helpers
   (`Regex::compile/is_match/find_start/find_end/match_start/match_end/close`)
   with error retrieval via `std::regex::last_error()`.

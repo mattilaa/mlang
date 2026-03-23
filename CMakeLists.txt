@@ -103,6 +103,14 @@ add_definitions(${LLVM_DEFINITIONS_LIST})
 # ============================================================================
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
+find_package(OpenSSL REQUIRED)
+
+get_filename_component(MLANG_OPENSSL_SSL_DIR "${OPENSSL_SSL_LIBRARY}" DIRECTORY)
+get_filename_component(MLANG_OPENSSL_CRYPTO_DIR "${OPENSSL_CRYPTO_LIBRARY}" DIRECTORY)
+add_compile_definitions(MLANG_OPENSSL_SSL_LIBRARY="${OPENSSL_SSL_LIBRARY}")
+add_compile_definitions(MLANG_OPENSSL_CRYPTO_LIBRARY="${OPENSSL_CRYPTO_LIBRARY}")
+add_compile_definitions(MLANG_OPENSSL_SSL_DIR="${MLANG_OPENSSL_SSL_DIR}")
+add_compile_definitions(MLANG_OPENSSL_CRYPTO_DIR="${MLANG_OPENSSL_CRYPTO_DIR}")
 
 set(HEADER_FILES
     ${CMAKE_SOURCE_DIR}/include/ast.h
@@ -235,6 +243,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_esc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_term.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_jsonrpc.c
@@ -252,6 +261,7 @@ target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
 target_compile_definitions(mlang_std PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
+target_link_libraries(mlang_std PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 
 # RapidJSON for std::json backend (header-only).
 include(FetchContent)
