@@ -29,10 +29,9 @@ extern "C"
     extern bool parseHadError;
 }
 
-typedef size_t yy_size_t;
 struct yy_buffer_state;
 typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, int len);
 extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 namespace mlang::compiler_api {
@@ -656,7 +655,7 @@ static ProgramNode* parseProgramFromText(std::string_view text,
     parseHadError = false;
 
     YY_BUFFER_STATE buffer =
-        yy_scan_bytes(text.data(), static_cast<yy_size_t>(text.size()));
+        yy_scan_bytes(text.data(), static_cast<int>(text.size()));
     const int result = yyparse();
     yy_delete_buffer(buffer);
 

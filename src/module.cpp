@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <unordered_map>
 
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {

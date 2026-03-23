@@ -7,6 +7,7 @@
 #include <iostream>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
