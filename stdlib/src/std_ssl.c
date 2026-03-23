@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -235,6 +236,30 @@ static int64_t local_port_for_fd(int fd, const char* op)
     errno = EAFNOSUPPORT;
     set_error_from_errno("local_port");
     return -1;
+}
+
+static int set_socket_timeout_ms(int fd, int optname, int64_t timeout_ms,
+                                 const char* opname)
+{
+    if(fd < 0 || timeout_ms < 0)
+    {
+        errno = EINVAL;
+        set_error_from_errno(opname);
+        return -1;
+    }
+
+    struct timeval tv;
+    tv.tv_sec = (time_t)(timeout_ms / 1000);
+    tv.tv_usec = (suseconds_t)((timeout_ms % 1000) * 1000);
+
+    if(setsockopt(fd, SOL_SOCKET, optname, &tv, (socklen_t)sizeof(tv)) != 0)
+    {
+        set_error_from_errno(opname);
+        return -1;
+    }
+
+    clear_error();
+    return 0;
 }
 
 char* __mlang_std_ssl_last_error(void)
@@ -561,6 +586,18 @@ int64_t __mlang_std_ssl_stream_read(int64_t handle, char* buf, int64_t capacity)
             clear_error();
             return 0;
         }
+        if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE)
+        {
+            errno = EAGAIN;
+            set_error_from_errno("SSL_read");
+            return -1;
+        }
+        if(err == SSL_ERROR_SYSCALL &&
+           (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT))
+        {
+            set_error_from_errno("SSL_read");
+            return -1;
+        }
         set_error_from_openssl("SSL_read");
         return -1;
     }
@@ -595,6 +632,34 @@ int64_t __mlang_std_ssl_stream_write(int64_t handle, const char* s)
 
     clear_error();
     return (int64_t)total;
+}
+
+int __mlang_std_ssl_stream_set_read_timeout_ms(int64_t handle, int64_t timeout_ms)
+{
+    mlang_tls_stream_t* stream = (mlang_tls_stream_t*)(intptr_t)handle;
+    if(!stream || !stream->ssl)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_read_timeout_ms");
+        return -1;
+    }
+
+    return set_socket_timeout_ms(SSL_get_fd(stream->ssl), SO_RCVTIMEO,
+                                 timeout_ms, "set_read_timeout_ms");
+}
+
+int __mlang_std_ssl_stream_set_write_timeout_ms(int64_t handle, int64_t timeout_ms)
+{
+    mlang_tls_stream_t* stream = (mlang_tls_stream_t*)(intptr_t)handle;
+    if(!stream || !stream->ssl)
+    {
+        errno = EINVAL;
+        set_error_from_errno("set_write_timeout_ms");
+        return -1;
+    }
+
+    return set_socket_timeout_ms(SSL_get_fd(stream->ssl), SO_SNDTIMEO,
+                                 timeout_ms, "set_write_timeout_ms");
 }
 
 int __mlang_std_ssl_stream_close(int64_t handle)

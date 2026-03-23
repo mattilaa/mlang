@@ -9,6 +9,8 @@ extern pub fn __mlang_std_ssl_listener_accept(handle: i64) -> i64;
 extern pub fn __mlang_std_ssl_listener_close(handle: i64) -> i32;
 extern pub fn __mlang_std_ssl_stream_read(handle: i64, buf: str8, capacity: i64) -> i64;
 extern pub fn __mlang_std_ssl_stream_write(handle: i64, s: str8) -> i64;
+extern pub fn __mlang_std_ssl_stream_set_read_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
+extern pub fn __mlang_std_ssl_stream_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
 extern pub fn __mlang_std_ssl_stream_close(handle: i64) -> i32;
 
 pub struct TlsListener {
@@ -92,6 +94,33 @@ impl TlsStream {
             return Err<i64, str8>(last_error());
         }
         return Ok<i64, str8>(n);
+    }
+
+    pub fn set_read_timeout_ms(self: TlsStream, timeout_ms: i64) -> Result<i32, str8> {
+        let rc: i32 = __mlang_std_ssl_stream_set_read_timeout_ms(self.handle, timeout_ms);
+        if rc != 0 {
+            return Err<i32, str8>(last_error());
+        }
+        return Ok<i32, str8>(0);
+    }
+
+    pub fn set_write_timeout_ms(self: TlsStream, timeout_ms: i64) -> Result<i32, str8> {
+        let rc: i32 = __mlang_std_ssl_stream_set_write_timeout_ms(self.handle, timeout_ms);
+        if rc != 0 {
+            return Err<i32, str8>(last_error());
+        }
+        return Ok<i32, str8>(0);
+    }
+
+    /// Construct a TLS stream wrapper from an owned raw handle.
+    /// Caller must ensure the handle is valid and closed exactly once.
+    pub fn from_handle(handle: i64) -> TlsStream {
+        return TlsStream { handle: handle };
+    }
+
+    /// Expose underlying TLS stream handle for handoff patterns.
+    pub fn raw_handle(self: TlsStream) -> i64 {
+        return self.handle;
     }
 
     pub fn close(self: TlsStream) -> i32 {
