@@ -1,0 +1,97 @@
+mod std::ascii;
+mod std::chat;
+mod std::esc;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use std::ascii::AsciiKey;
+use std::chat::ChatUi;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
+use std::esc::cmd_hide;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::reset;
+use std::io::Stdin;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::strbuf::eq;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::sleep_ms;
+
+fn main() -> i32 {
+    if stdin_is_tty() == 0 {
+        println!("chat_tui_demo requires a TTY");
+        return 1;
+    }
+
+    let ui_r: Result<ChatUi, str8> = ChatUi::new(400);
+    if ui_r.is_err() {
+        println!("ChatUi::new failed: {}", ui_r.unwrap_err());
+        return 1;
+    }
+    let ui: ChatUi = ui_r.unwrap();
+    let input: Stdin = stdin();
+
+    let _ = ui.set_title("mlang std::chat demo");
+    let _ = ui.set_server("irc.example.test");
+    let _ = ui.set_channel("#mlang");
+    let _ = ui.set_nick("matti");
+    let _ = ui.set_status("Type text and press Enter. /quit exits. Arrows scroll or move.");
+    let _ = ui.push_system("opaque std::chat state keeps the mutable UI out of app structs");
+    let _ = ui.push_line("<anna>", "this is close to the mlirc layout you asked for");
+    let _ = ui.push_line("<teemu>", "bottom prompt stays on the last row");
+    let _ = ui.push_self("<matti>", "line editor supports Ctrl-A/E/B/F/U/K and arrows");
+
+    let _ = stdin_enable_raw();
+    let _ = write(stdout(), alt_screen_on());
+    let _ = write(stdout(), cursor(cmd_hide()));
+
+    var running: i32 = 1;
+    while running == 1 {
+        let size = stdout_size();
+        let frame: str8 = ui.render(size.rows, size.cols);
+        let _ = write(stdout(), frame);
+        free(frame);
+
+        let key: i32 = read_keycode_nonblocking(input);
+        if key >= 0 {
+            if key == AsciiKey::Etx {
+                running = 0;
+            } else {
+                let _ = ui.feed_keycode(key);
+                let submitted: str8 = ui.take_submitted();
+                if len(submitted) > 0 {
+                    if eq(submitted, "/quit") == 1 {
+                        free(submitted);
+                        running = 0;
+                    } else {
+                        let _ = ui.push_self("<matti>", submitted);
+                        let _ = ui.push_system("demo echo: hook this to your IRC send path");
+                        free(submitted);
+                    }
+                } else {
+                    free(submitted);
+                }
+            }
+        }
+
+        sleep_ms(16);
+    }
+
+    let _ = write(stdout(), reset());
+    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), alt_screen_off());
+    let _ = stdin_restore();
+    ui.close();
+    return 0;
+}

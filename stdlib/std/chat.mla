@@ -1,0 +1,141 @@
+/// \file chat.mla
+/// \brief Full-screen chat-style terminal UI state and renderer (std::chat).
+///
+/// This module provides an opaque, handle-backed chat UI model designed for
+/// line-oriented terminal apps such as IRC clients. It keeps the mutable state
+/// in the runtime so MLang apps can avoid large owned UI structs while still
+/// getting a reusable fullscreen renderer with a bottom-line prompt.
+
+extern pub fn __mlang_std_chat_last_error() -> str8;
+extern pub fn __mlang_std_chat_new(max_lines: i64) -> i64;
+extern pub fn __mlang_std_chat_free(handle: i64) -> i32;
+extern pub fn __mlang_std_chat_set_title(handle: i64, title: str8) -> i32;
+extern pub fn __mlang_std_chat_set_server(handle: i64, server: str8) -> i32;
+extern pub fn __mlang_std_chat_set_channel(handle: i64, channel: str8) -> i32;
+extern pub fn __mlang_std_chat_set_nick(handle: i64, nick: str8) -> i32;
+extern pub fn __mlang_std_chat_set_status(handle: i64, status: str8) -> i32;
+extern pub fn __mlang_std_chat_set_prompt(handle: i64, prompt: str8) -> i32;
+extern pub fn __mlang_std_chat_set_input(handle: i64, input: str8) -> i32;
+extern pub fn __mlang_std_chat_input(handle: i64) -> str8;
+extern pub fn __mlang_std_chat_push_line(handle: i64, prefix: str8, text: str8, kind: i32) -> i32;
+extern pub fn __mlang_std_chat_feed_keycode(handle: i64, keycode: i32) -> i32;
+extern pub fn __mlang_std_chat_scroll(handle: i64, delta: i64) -> i32;
+extern pub fn __mlang_std_chat_take_submitted(handle: i64) -> str8;
+extern pub fn __mlang_std_chat_render(handle: i64, rows: i32, cols: i32) -> str8;
+
+pub struct ChatUi {
+    var handle: i64;
+};
+
+pub fn line_normal() -> i32 { return 0; }
+pub fn line_system() -> i32 { return 1; }
+pub fn line_self() -> i32 { return 2; }
+
+pub fn last_error() -> str8 {
+    return __mlang_std_chat_last_error();
+}
+
+impl ChatUi {
+    /// @brief Create a chat UI state with bounded scrollback.
+    pub fn new(max_lines: i64) -> Result<ChatUi, str8> {
+        let h: i64 = __mlang_std_chat_new(max_lines);
+        if h == 0 {
+            return Err<ChatUi, str8>(last_error());
+        }
+        return Ok<ChatUi, str8>(ChatUi { handle: h });
+    }
+
+    /// @brief Free chat UI resources.
+    pub fn close(self: ChatUi) -> i32 {
+        return __mlang_std_chat_free(self.handle);
+    }
+
+    /// @brief Set title shown in the top bar.
+    pub fn set_title(self: ChatUi, title: str8) -> i32 {
+        return __mlang_std_chat_set_title(self.handle, title);
+    }
+
+    /// @brief Set server label shown in the header.
+    pub fn set_server(self: ChatUi, server: str8) -> i32 {
+        return __mlang_std_chat_set_server(self.handle, server);
+    }
+
+    /// @brief Set channel label shown in the header.
+    pub fn set_channel(self: ChatUi, channel: str8) -> i32 {
+        return __mlang_std_chat_set_channel(self.handle, channel);
+    }
+
+    /// @brief Set nick label shown in the header.
+    pub fn set_nick(self: ChatUi, nick: str8) -> i32 {
+        return __mlang_std_chat_set_nick(self.handle, nick);
+    }
+
+    /// @brief Set secondary status text shown under the title bar.
+    pub fn set_status(self: ChatUi, status: str8) -> i32 {
+        return __mlang_std_chat_set_status(self.handle, status);
+    }
+
+    /// @brief Set prompt label shown before the editable input line.
+    pub fn set_prompt(self: ChatUi, prompt: str8) -> i32 {
+        return __mlang_std_chat_set_prompt(self.handle, prompt);
+    }
+
+    /// @brief Replace current editable input contents.
+    pub fn set_input(self: ChatUi, input: str8) -> i32 {
+        return __mlang_std_chat_set_input(self.handle, input);
+    }
+
+    /// @brief Return a copy of current input contents.
+    pub fn input(self: ChatUi) -> str8 {
+        return __mlang_std_chat_input(self.handle);
+    }
+
+    /// @brief Append a chat line to scrollback.
+    pub fn push_line(self: ChatUi, prefix: str8, text: str8) -> i32 {
+        return __mlang_std_chat_push_line(self.handle, prefix, text, line_normal());
+    }
+
+    /// @brief Append a system/status line to scrollback.
+    pub fn push_system(self: ChatUi, text: str8) -> i32 {
+        return __mlang_std_chat_push_line(self.handle, "-!-", text, line_system());
+    }
+
+    /// @brief Append a self-authored line to scrollback.
+    pub fn push_self(self: ChatUi, prefix: str8, text: str8) -> i32 {
+        return __mlang_std_chat_push_line(self.handle, prefix, text, line_self());
+    }
+
+    /// @brief Feed one raw stdin byte/keycode into the line editor.
+    ///
+    /// Supported editing keys:
+    /// - printable ASCII inserts at cursor
+    /// - Backspace/DEL delete left
+    /// - Enter submits current input
+    /// - Ctrl-A / Ctrl-E move to start/end
+    /// - Ctrl-B / Ctrl-F move left/right
+    /// - Ctrl-U clears input
+    /// - Ctrl-K deletes to end-of-line
+    /// - Up/Down arrows or Ctrl-P/Ctrl-N scroll scrollback
+    /// - Left/Right arrows move cursor
+    pub fn feed_keycode(self: ChatUi, keycode: i32) -> i32 {
+        return __mlang_std_chat_feed_keycode(self.handle, keycode);
+    }
+
+    /// @brief Scroll scrollback by delta rows. Negative values scroll toward newest.
+    pub fn scroll(self: ChatUi, delta: i64) -> i32 {
+        return __mlang_std_chat_scroll(self.handle, delta);
+    }
+
+    /// @brief Take last submitted line and clear the submit slot.
+    pub fn take_submitted(self: ChatUi) -> str8 {
+        return __mlang_std_chat_take_submitted(self.handle);
+    }
+
+    /// @brief Render full frame as an ANSI string.
+    ///
+    /// The returned frame clears the terminal, paints the chat layout, and
+    /// leaves the cursor on the prompt line at the current edit position.
+    pub fn render(self: ChatUi, rows: i32, cols: i32) -> str8 {
+        return __mlang_std_chat_render(self.handle, rows, cols);
+    }
+}

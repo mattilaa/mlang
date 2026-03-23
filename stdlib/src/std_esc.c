@@ -109,3 +109,18 @@ const char* __mlang_std_esc_cursor_move(int dir, int amount)
     snprintf(buf, 32, "\x1b[%d%c", amount, cmd);
     return buf;
 }
+
+const char* __mlang_std_esc_cursor_pos(int row1, int col1)
+{
+    if(row1 < 1)
+    {
+        row1 = 1;
+    }
+    if(col1 < 1)
+    {
+        col1 = 1;
+    }
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b[%d;%dH", row1, col1);
+    return buf;
+}

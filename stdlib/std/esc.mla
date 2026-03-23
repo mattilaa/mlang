@@ -14,6 +14,7 @@ extern pub fn __mlang_std_esc_sgr_palette(is_bg: i32, idx: i32) -> str8;
 extern pub fn __mlang_std_esc_sgr_rgb(is_bg: i32, r: i32, g: i32, b: i32) -> str8;
 extern pub fn __mlang_std_esc_cursor_code(code: i32) -> str8;
 extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> str8;
+extern pub fn __mlang_std_esc_cursor_pos(row1: i32, col1: i32) -> str8;
 extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
 
 use type Color = i32;
@@ -186,6 +187,12 @@ pub fn cursor(cmd: CursorCommand) -> str8 {
 pub fn cursor_move(dir: CursorDirection, amount: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_move(dir, amount);
+}
+
+///  Move cursor to 1-based absolute terminal position.
+pub fn cursor_pos(row1: i32, col1: i32) -> str8 {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_cursor_pos(row1, col1);
 }
 
 /// @brief Enter alternate screen buffer (ncurses-like full-screen mode).
