@@ -20,6 +20,9 @@ extern pub fn __mlang_std_chat_input(handle: i64) -> str8;
 extern pub fn __mlang_std_chat_push_line(handle: i64, prefix: str8, text: str8, kind: i32) -> i32;
 extern pub fn __mlang_std_chat_feed_keycode(handle: i64, keycode: i32) -> i32;
 extern pub fn __mlang_std_chat_scroll(handle: i64, delta: i64) -> i32;
+extern pub fn __mlang_std_chat_scroll_pos(handle: i64) -> i64;
+extern pub fn __mlang_std_chat_scroll_max(handle: i64) -> i64;
+extern pub fn __mlang_std_chat_scroll_to_bottom(handle: i64) -> i32;
 extern pub fn __mlang_std_chat_take_submitted(handle: i64) -> str8;
 extern pub fn __mlang_std_chat_render(handle: i64, rows: i32, cols: i32) -> str8;
 
@@ -124,6 +127,21 @@ impl ChatUi {
     /// @brief Scroll scrollback by delta rows. Negative values scroll toward newest.
     pub fn scroll(self: ChatUi, delta: i64) -> i32 {
         return __mlang_std_chat_scroll(self.handle, delta);
+    }
+
+    /// @brief Return current scrollback offset in rows.
+    pub fn scroll_pos(self: ChatUi) -> i64 {
+        return __mlang_std_chat_scroll_pos(self.handle);
+    }
+
+    /// @brief Return maximum valid scrollback offset for the current viewport.
+    pub fn scroll_max(self: ChatUi) -> i64 {
+        return __mlang_std_chat_scroll_max(self.handle);
+    }
+
+    /// @brief Jump back to the newest visible lines.
+    pub fn scroll_to_bottom(self: ChatUi) -> i32 {
+        return __mlang_std_chat_scroll_to_bottom(self.handle);
     }
 
     /// @brief Take last submitted line and clear the submit slot.

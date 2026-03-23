@@ -31,6 +31,7 @@ typedef struct
     size_t cap;
     size_t max_lines;
     size_t scroll_rows;
+    size_t viewport_body_rows;
     int esc_state;
 } chat_ui_t;
 
@@ -202,6 +203,15 @@ static int ensure_line_capacity(chat_ui_t* ui, size_t need)
     return 0;
 }
 
+static size_t max_scroll_rows(const chat_ui_t* ui, size_t body_rows)
+{
+    if(ui->len == 0u || body_rows == 0u)
+    {
+        return 0u;
+    }
+    return ui->len > body_rows ? (ui->len - body_rows) : 0u;
+}
+
 static void trim_oldest(chat_ui_t* ui)
 {
     if(ui->max_lines == 0u)
@@ -238,6 +248,7 @@ static int push_owned_line(chat_ui_t* ui, char* line, int kind)
     ui->lines[ui->len].kind = kind;
     ui->len += 1u;
     trim_oldest(ui);
+    ui->scroll_rows = 0u;
     return 0;
 }
 
@@ -262,12 +273,29 @@ static int push_line(chat_ui_t* ui, const char* prefix, const char* text, int ki
 
 static size_t clamp_scroll(const chat_ui_t* ui, size_t body_rows)
 {
-    if(ui->len == 0u || body_rows == 0u)
-    {
-        return 0u;
-    }
-    size_t max_scroll = ui->len > body_rows ? (ui->len - body_rows) : 0u;
+    size_t max_scroll = max_scroll_rows(ui, body_rows);
     return ui->scroll_rows > max_scroll ? max_scroll : ui->scroll_rows;
+}
+
+static size_t normalize_scroll(chat_ui_t* ui)
+{
+    size_t scroll = clamp_scroll(ui, ui->viewport_body_rows);
+    ui->scroll_rows = scroll;
+    return scroll;
+}
+
+static void scroll_up_clamped(chat_ui_t* ui, size_t amount)
+{
+    size_t max_scroll = max_scroll_rows(ui, ui->viewport_body_rows);
+    if(amount > max_scroll)
+    {
+        amount = max_scroll;
+    }
+    ui->scroll_rows += amount;
+    if(ui->scroll_rows > max_scroll)
+    {
+        ui->scroll_rows = max_scroll;
+    }
 }
 
 static void clear_submitted(chat_ui_t* ui)
@@ -356,10 +384,7 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
         ui->esc_state = 0;
         if(keycode == 'A')
         {
-            if(ui->scroll_rows < ui->len)
-            {
-                ui->scroll_rows += 1u;
-            }
+            scroll_up_clamped(ui, 1u);
             return 0;
         }
         if(keycode == 'B')
@@ -441,10 +466,7 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
     }
     if(keycode == 16)
     {
-        if(ui->scroll_rows < ui->len)
-        {
-            ui->scroll_rows += 1u;
-        }
+        scroll_up_clamped(ui, 1u);
         return 0;
     }
     if(keycode == 14)
@@ -631,15 +653,51 @@ int32_t __mlang_std_chat_feed_keycode(int64_t handle, int32_t keycode)
 int32_t __mlang_std_chat_scroll(int64_t handle, int64_t delta)
 {
     chat_ui_t* ui = as_ui(handle);
+    if(ui == NULL)
+    {
+        return -1;
+    }
     if(delta > 0)
     {
-        ui->scroll_rows += (size_t)delta;
+        scroll_up_clamped(ui, (size_t)delta);
     }
     else
     {
         size_t down = (size_t)(-delta);
         ui->scroll_rows = ui->scroll_rows > down ? (ui->scroll_rows - down) : 0u;
     }
+    return 0;
+}
+
+int64_t __mlang_std_chat_scroll_pos(int64_t handle)
+{
+    chat_ui_t* ui = as_ui(handle);
+    if(ui == NULL)
+    {
+        return 0;
+    }
+    return (int64_t)normalize_scroll(ui);
+}
+
+int64_t __mlang_std_chat_scroll_max(int64_t handle)
+{
+    chat_ui_t* ui = as_ui(handle);
+    if(ui == NULL)
+    {
+        return 0;
+    }
+    normalize_scroll(ui);
+    return (int64_t)max_scroll_rows(ui, ui->viewport_body_rows);
+}
+
+int32_t __mlang_std_chat_scroll_to_bottom(int64_t handle)
+{
+    chat_ui_t* ui = as_ui(handle);
+    if(ui == NULL)
+    {
+        return -1;
+    }
+    ui->scroll_rows = 0u;
     return 0;
 }
 
@@ -666,7 +724,8 @@ char* __mlang_std_chat_render(int64_t handle, int32_t rows, int32_t cols)
     size_t width = cols <= 8 ? 8u : (size_t)cols;
     size_t total_rows = rows <= 4 ? 4u : (size_t)rows;
     size_t body_rows = total_rows > 4u ? (total_rows - 4u) : 0u;
-    size_t scroll = clamp_scroll(ui, body_rows);
+    ui->viewport_body_rows = body_rows;
+    size_t scroll = normalize_scroll(ui);
     size_t visible_count = ui->len > body_rows ? body_rows : ui->len;
     size_t start = ui->len > visible_count + scroll ? (ui->len - visible_count - scroll) : 0u;
     size_t end = start + visible_count;
