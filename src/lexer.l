@@ -2,6 +2,7 @@
 #include "parser.hpp"
 #include <string.h>
 #include <cctype>
+#include <limits>
 #include <string>
 
 extern bool parseHadError;
@@ -280,3 +281,13 @@ static int is_try_question_context()
 "|"             { return PIPE; }
 .               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
 %%
+extern "C" YY_BUFFER_STATE mlang_yy_scan_bytes(const char* bytes, std::size_t len)
+{
+    if(len > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    {
+        fprintf(stderr, "mlang lexer input too large for yy_scan_bytes\n");
+        abort();
+    }
+
+    return yy_scan_bytes(bytes, static_cast<int>(len));
+}

@@ -197,17 +197,16 @@ llvm_map_components_to_libnames(llvm_libs
     irreader
     bitwriter
     passes
-    # Native target support
-    native
-    nativecodegen
     # All targets (for cross-compilation support)
     AllTargetsAsmParsers
     AllTargetsCodeGens
-    AllTargetsDescs
-    AllTargetsInfos
 )
+list(REMOVE_DUPLICATES llvm_libs)
 
-target_link_libraries(mlang ${llvm_libs})
+target_link_libraries(mlang PRIVATE ${llvm_libs})
+if(APPLE)
+    target_link_options(mlang PRIVATE -Wl,-no_warn_duplicate_libraries)
+endif()
 
 add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ast.cpp

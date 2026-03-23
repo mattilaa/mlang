@@ -16,7 +16,8 @@ extern "C"
 
 struct yy_buffer_state;
 typedef yy_buffer_state* YY_BUFFER_STATE;
-extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, int len);
+extern "C" YY_BUFFER_STATE mlang_yy_scan_bytes(const char* bytes,
+                                               std::size_t len);
 extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 namespace
@@ -317,7 +318,7 @@ ProgramNode* IncrementalCompiler::parseText(std::string_view text)
     parseHadError = false;
 
     YY_BUFFER_STATE buffer =
-        yy_scan_bytes(text.data(), static_cast<int>(text.size()));
+        mlang_yy_scan_bytes(text.data(), text.size());
     int result = yyparse();
     yy_delete_buffer(buffer);
 
