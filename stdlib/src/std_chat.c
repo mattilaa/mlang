@@ -826,7 +826,7 @@ char* __mlang_std_chat_render(int64_t handle, int32_t rows, int32_t cols)
         return NULL;
     }
 
-    size_t cursor_col = prompt_len + (ui->cursor > view_start ? (ui->cursor - view_start) : 0u) + 1u;
+    size_t cursor_col = prompt_len + (ui->cursor > view_start ? (ui->cursor - view_start) : 0u) + 2u;
     if(cursor_col < 1u)
     {
         cursor_col = 1u;
