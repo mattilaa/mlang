@@ -15,6 +15,9 @@ extern pub fn __mlang_std_esc_sgr_rgb(is_bg: i32, r: i32, g: i32, b: i32) -> str
 extern pub fn __mlang_std_esc_cursor_code(code: i32) -> str8;
 extern pub fn __mlang_std_esc_cursor_move(dir: i32, amount: i32) -> str8;
 extern pub fn __mlang_std_esc_cursor_pos(row1: i32, col1: i32) -> str8;
+extern pub fn __mlang_std_esc_cursor_style(style: i32) -> str8;
+extern pub fn __mlang_std_esc_cursor_color_rgb(r: i32, g: i32, b: i32) -> str8;
+extern pub fn __mlang_std_esc_cursor_color_reset() -> str8;
 extern pub fn __mlang_std_term_stdout_supports_ansi() -> i32;
 
 use type Color = i32;
@@ -195,6 +198,44 @@ pub fn cursor_pos(row1: i32, col1: i32) -> str8 {
     return __mlang_std_esc_cursor_pos(row1, col1);
 }
 
+/// @brief Set terminal cursor shape. Common values: 1/2 block, 3/4 underline, 5/6 bar.
+pub fn cursor_style(style: i32) -> str8 {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_cursor_style(style);
+}
+
+/// @brief Blinking thin bar cursor.
+pub fn cursor_blink_bar() -> str8 {
+    return cursor_style(5);
+}
+
+/// @brief Blinking underline cursor.
+pub fn cursor_blink_underline() -> str8 {
+    return cursor_style(3);
+}
+
+/// @brief Steady underline cursor.
+pub fn cursor_steady_underline() -> str8 {
+    return cursor_style(4);
+}
+
+/// @brief Steady thin bar cursor.
+pub fn cursor_steady_bar() -> str8 {
+    return cursor_style(6);
+}
+
+/// @brief Set terminal cursor color using RGB channels.
+pub fn cursor_color_rgb(r: i32, g: i32, b: i32) -> str8 {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_cursor_color_rgb(r, g, b);
+}
+
+/// @brief Reset terminal cursor color to the terminal default.
+pub fn cursor_color_reset() -> str8 {
+    if ansi_enabled() == 0 { return ""; }
+    return __mlang_std_esc_cursor_color_reset();
+}
+
 /// @brief Enter alternate screen buffer (ncurses-like full-screen mode).
 pub fn alt_screen_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
@@ -218,6 +259,18 @@ pub fn standout_on() -> str8 { return inverse_on(); }
 pub fn standout_off() -> str8 { return inverse_off(); }
 
 /// @brief ncurses-style ACS line-drawing (ASCII-safe).
+
+/// @brief Cursor shape (DECSCUSR). Returns static literals; do not free.
+pub fn cursor_blink_bar() -> str8 {
+    if ansi_enabled() == 0 { return ""; }
+    return "\x1b[5 q";
+}
+
+pub fn cursor_reset_shape() -> str8 {
+    if ansi_enabled() == 0 { return ""; }
+    return "\x1b[0 q";
+}
+
 pub fn acs_hline() -> str8 { return format!("{}", "─"); }
 pub fn acs_vline() -> str8 { return format!("{}", "│"); }
 pub fn acs_ulcorner() -> str8 { return format!("{}", "┌"); }

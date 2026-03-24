@@ -124,3 +124,32 @@ const char* __mlang_std_esc_cursor_pos(int row1, int col1)
     snprintf(buf, 32, "\x1b[%d;%dH", row1, col1);
     return buf;
 }
+
+const char* __mlang_std_esc_cursor_style(int style)
+{
+    if(style < 0)
+    {
+        style = 0;
+    }
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b[%d q", style);
+    return buf;
+}
+
+const char* __mlang_std_esc_cursor_color_rgb(int r, int g, int b)
+{
+    if(r < 0) r = 0;
+    if(g < 0) g = 0;
+    if(b < 0) b = 0;
+    if(r > 255) r = 255;
+    if(g > 255) g = 255;
+    if(b > 255) b = 255;
+    char* buf = next_esc_buf();
+    snprintf(buf, 32, "\x1b]12;#%02x%02x%02x\x07", r, g, b);
+    return buf;
+}
+
+const char* __mlang_std_esc_cursor_color_reset(void)
+{
+    return "\x1b]112\x07";
+}
