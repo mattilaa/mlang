@@ -6,6 +6,11 @@
 /// in the runtime so MLang apps can avoid large owned UI structs while still
 /// getting a reusable fullscreen renderer with a bottom-line prompt.
 
+mod std::strbuf;
+
+use std::strbuf::from_utf16;
+use std::strbuf::to_utf16;
+
 extern pub fn __mlang_std_chat_last_error() -> str8;
 extern pub fn __mlang_std_chat_new(max_lines: i64) -> i64;
 extern pub fn __mlang_std_chat_free(handle: i64) -> i32;
@@ -58,9 +63,25 @@ impl ChatUi {
         return __mlang_std_chat_set_title(self.handle, title);
     }
 
+    /// @brief Set title shown in the top bar from UTF-16 text.
+    pub fn set_title_utf16(self: ChatUi, title: str16) -> i32 {
+        let utf8: str8 = from_utf16(title);
+        let rc: i32 = __mlang_std_chat_set_title(self.handle, utf8);
+        String::free(utf8);
+        return rc;
+    }
+
     /// @brief Set server label shown in the header.
     pub fn set_server(self: ChatUi, server: str8) -> i32 {
         return __mlang_std_chat_set_server(self.handle, server);
+    }
+
+    /// @brief Set server label shown in the header from UTF-16 text.
+    pub fn set_server_utf16(self: ChatUi, server: str16) -> i32 {
+        let utf8: str8 = from_utf16(server);
+        let rc: i32 = __mlang_std_chat_set_server(self.handle, utf8);
+        String::free(utf8);
+        return rc;
     }
 
     /// @brief Set channel label shown in the header.
@@ -68,9 +89,25 @@ impl ChatUi {
         return __mlang_std_chat_set_channel(self.handle, channel);
     }
 
+    /// @brief Set channel label shown in the header from UTF-16 text.
+    pub fn set_channel_utf16(self: ChatUi, channel: str16) -> i32 {
+        let utf8: str8 = from_utf16(channel);
+        let rc: i32 = __mlang_std_chat_set_channel(self.handle, utf8);
+        String::free(utf8);
+        return rc;
+    }
+
     /// @brief Set nick label shown in the header.
     pub fn set_nick(self: ChatUi, nick: str8) -> i32 {
         return __mlang_std_chat_set_nick(self.handle, nick);
+    }
+
+    /// @brief Set nick label shown in the header from UTF-16 text.
+    pub fn set_nick_utf16(self: ChatUi, nick: str16) -> i32 {
+        let utf8: str8 = from_utf16(nick);
+        let rc: i32 = __mlang_std_chat_set_nick(self.handle, utf8);
+        String::free(utf8);
+        return rc;
     }
 
     /// @brief Set secondary status text shown under the title bar.
@@ -78,9 +115,25 @@ impl ChatUi {
         return __mlang_std_chat_set_status(self.handle, status);
     }
 
+    /// @brief Set secondary status text shown under the title bar from UTF-16 text.
+    pub fn set_status_utf16(self: ChatUi, status: str16) -> i32 {
+        let utf8: str8 = from_utf16(status);
+        let rc: i32 = __mlang_std_chat_set_status(self.handle, utf8);
+        String::free(utf8);
+        return rc;
+    }
+
     /// @brief Set prompt label shown before the editable input line.
     pub fn set_prompt(self: ChatUi, prompt: str8) -> i32 {
         return __mlang_std_chat_set_prompt(self.handle, prompt);
+    }
+
+    /// @brief Set prompt label shown before the editable input line from UTF-16 text.
+    pub fn set_prompt_utf16(self: ChatUi, prompt: str16) -> i32 {
+        let utf8: str8 = from_utf16(prompt);
+        let rc: i32 = __mlang_std_chat_set_prompt(self.handle, utf8);
+        String::free(utf8);
+        return rc;
     }
 
     /// @brief Replace current editable input contents.
@@ -88,9 +141,25 @@ impl ChatUi {
         return __mlang_std_chat_set_input(self.handle, input);
     }
 
+    /// @brief Replace current editable input contents from UTF-16 text.
+    pub fn set_input_utf16(self: ChatUi, input: str16) -> i32 {
+        let utf8: str8 = from_utf16(input);
+        let rc: i32 = __mlang_std_chat_set_input(self.handle, utf8);
+        String::free(utf8);
+        return rc;
+    }
+
     /// @brief Return a copy of current input contents.
     pub fn input(self: ChatUi) -> str8 {
         return __mlang_std_chat_input(self.handle);
+    }
+
+    /// @brief Return current input contents as UTF-16.
+    pub fn input_utf16(self: ChatUi) -> str16 {
+        let utf8: str8 = __mlang_std_chat_input(self.handle);
+        let utf16: str16 = to_utf16(utf8);
+        String::free(utf8);
+        return utf16;
     }
 
     /// @brief Append a chat line to scrollback.
@@ -98,14 +167,42 @@ impl ChatUi {
         return __mlang_std_chat_push_line(self.handle, prefix, text, line_normal());
     }
 
+    /// @brief Append a chat line to scrollback from UTF-16 text.
+    pub fn push_line_utf16(self: ChatUi, prefix: str16, text: str16) -> i32 {
+        let prefix8: str8 = from_utf16(prefix);
+        let text8: str8 = from_utf16(text);
+        let rc: i32 = __mlang_std_chat_push_line(self.handle, prefix8, text8, line_normal());
+        String::free(prefix8);
+        String::free(text8);
+        return rc;
+    }
+
     /// @brief Append a system/status line to scrollback.
     pub fn push_system(self: ChatUi, text: str8) -> i32 {
         return __mlang_std_chat_push_line(self.handle, "-!-", text, line_system());
     }
 
+    /// @brief Append a system/status line to scrollback from UTF-16 text.
+    pub fn push_system_utf16(self: ChatUi, text: str16) -> i32 {
+        let text8: str8 = from_utf16(text);
+        let rc: i32 = __mlang_std_chat_push_line(self.handle, "-!-", text8, line_system());
+        String::free(text8);
+        return rc;
+    }
+
     /// @brief Append a self-authored line to scrollback.
     pub fn push_self(self: ChatUi, prefix: str8, text: str8) -> i32 {
         return __mlang_std_chat_push_line(self.handle, prefix, text, line_self());
+    }
+
+    /// @brief Append a self-authored line to scrollback from UTF-16 text.
+    pub fn push_self_utf16(self: ChatUi, prefix: str16, text: str16) -> i32 {
+        let prefix8: str8 = from_utf16(prefix);
+        let text8: str8 = from_utf16(text);
+        let rc: i32 = __mlang_std_chat_push_line(self.handle, prefix8, text8, line_self());
+        String::free(prefix8);
+        String::free(text8);
+        return rc;
     }
 
     /// @brief Feed one raw stdin byte/keycode into the line editor.
@@ -147,6 +244,14 @@ impl ChatUi {
     /// @brief Take last submitted line and clear the submit slot.
     pub fn take_submitted(self: ChatUi) -> str8 {
         return __mlang_std_chat_take_submitted(self.handle);
+    }
+
+    /// @brief Take last submitted line as UTF-16 and clear the submit slot.
+    pub fn take_submitted_utf16(self: ChatUi) -> str16 {
+        let utf8: str8 = __mlang_std_chat_take_submitted(self.handle);
+        let utf16: str16 = to_utf16(utf8);
+        String::free(utf8);
+        return utf16;
     }
 
     /// @brief Render full frame as an ANSI string.

@@ -304,10 +304,70 @@ static void clear_submitted(chat_ui_t* ui)
     ui->submitted = dup_cstr("");
 }
 
-static int insert_char(chat_ui_t* ui, char ch)
+static int is_utf8_continuation(unsigned char ch)
+{
+    return (ch & 0xC0u) == 0x80u;
+}
+
+static size_t utf8_prev_boundary(const char* s, size_t pos)
+{
+    if(pos == 0u)
+    {
+        return 0u;
+    }
+    pos -= 1u;
+    while(pos > 0u && is_utf8_continuation((unsigned char)s[pos]))
+    {
+        pos -= 1u;
+    }
+    return pos;
+}
+
+static size_t utf8_next_boundary(const char* s, size_t len, size_t pos)
+{
+    if(pos >= len)
+    {
+        return len;
+    }
+    pos += 1u;
+    while(pos < len && is_utf8_continuation((unsigned char)s[pos]))
+    {
+        pos += 1u;
+    }
+    return pos;
+}
+
+static size_t utf8_codepoint_count_n(const char* s, size_t start, size_t end)
+{
+    size_t count = 0u;
+    if(end < start)
+    {
+        return 0u;
+    }
+    size_t i = start;
+    while(i < end)
+    {
+        i = utf8_next_boundary(s, end, i);
+        count += 1u;
+    }
+    return count;
+}
+
+static size_t utf8_advance_codepoints(const char* s, size_t len, size_t start, size_t count)
+{
+    size_t i = start;
+    while(i < len && count > 0u)
+    {
+        i = utf8_next_boundary(s, len, i);
+        count -= 1u;
+    }
+    return i;
+}
+
+static int insert_bytes(chat_ui_t* ui, const char* bytes, size_t bytes_len)
 {
     size_t len = strlen(ui->input);
-    char* next = (char*)malloc(len + 2u);
+    char* next = (char*)malloc(len + bytes_len + 1u);
     if(next == NULL)
     {
         set_last_error("std::chat out of memory");
@@ -318,11 +378,11 @@ static int insert_char(chat_ui_t* ui, char ch)
         ui->cursor = len;
     }
     memcpy(next, ui->input, ui->cursor);
-    next[ui->cursor] = ch;
-    memcpy(next + ui->cursor + 1u, ui->input + ui->cursor, len - ui->cursor + 1u);
+    memcpy(next + ui->cursor, bytes, bytes_len);
+    memcpy(next + ui->cursor + bytes_len, ui->input + ui->cursor, len - ui->cursor + 1u);
     free(ui->input);
     ui->input = next;
-    ui->cursor += 1u;
+    ui->cursor += bytes_len;
     return 0;
 }
 
@@ -333,17 +393,18 @@ static int backspace_char(chat_ui_t* ui)
     {
         return 0;
     }
+    size_t prev = utf8_prev_boundary(ui->input, ui->cursor);
     char* next = (char*)malloc(len);
     if(next == NULL)
     {
         set_last_error("std::chat out of memory");
         return -1;
     }
-    memcpy(next, ui->input, ui->cursor - 1u);
-    memcpy(next + ui->cursor - 1u, ui->input + ui->cursor, len - ui->cursor + 1u);
+    memcpy(next, ui->input, prev);
+    memcpy(next + prev, ui->input + ui->cursor, len - ui->cursor + 1u);
     free(ui->input);
     ui->input = next;
-    ui->cursor -= 1u;
+    ui->cursor = prev;
     return 0;
 }
 
@@ -400,7 +461,7 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
             size_t len = strlen(ui->input);
             if(ui->cursor < len)
             {
-                ui->cursor += 1u;
+                ui->cursor = utf8_next_boundary(ui->input, len, ui->cursor);
             }
             return 0;
         }
@@ -408,7 +469,7 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
         {
             if(ui->cursor > 0u)
             {
-                ui->cursor -= 1u;
+                ui->cursor = utf8_prev_boundary(ui->input, ui->cursor);
             }
             return 0;
         }
@@ -441,7 +502,7 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
     {
         if(ui->cursor > 0u)
         {
-            ui->cursor -= 1u;
+            ui->cursor = utf8_prev_boundary(ui->input, ui->cursor);
         }
         return 0;
     }
@@ -450,7 +511,7 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
         size_t len = strlen(ui->input);
         if(ui->cursor < len)
         {
-            ui->cursor += 1u;
+            ui->cursor = utf8_next_boundary(ui->input, len, ui->cursor);
         }
         return 0;
     }
@@ -477,9 +538,12 @@ static int feed_key(chat_ui_t* ui, int32_t keycode)
         }
         return 0;
     }
-    if(keycode >= 32 && keycode <= 126)
+    if((keycode >= 32 && keycode <= 126) || (keycode >= 128 && keycode <= 255))
     {
-        return insert_char(ui, (char)keycode);
+        unsigned char ch = (unsigned char)keycode;
+        char bytes[1];
+        bytes[0] = (char)ch;
+        return insert_bytes(ui, bytes, 1u);
     }
     return 0;
 }
@@ -785,19 +849,18 @@ char* __mlang_std_chat_render(int64_t handle, int32_t rows, int32_t cols)
     size_t input_len = strlen(ui->input);
     size_t avail = width > prompt_len ? (width - prompt_len) : 0u;
     size_t view_start = 0u;
-    if(ui->cursor > avail && avail > 0u)
+    size_t cursor_cells = utf8_codepoint_count_n(ui->input, 0u, ui->cursor);
+    if(cursor_cells > avail && avail > 0u)
     {
-        view_start = ui->cursor - avail;
+        view_start = utf8_advance_codepoints(ui->input, input_len, 0u, cursor_cells - avail);
     }
     if(view_start > input_len)
     {
         view_start = input_len;
     }
-    size_t visible_input = input_len > view_start ? (input_len - view_start) : 0u;
-    if(visible_input > avail)
-    {
-        visible_input = avail;
-    }
+    size_t view_end = utf8_advance_codepoints(ui->input, input_len, view_start, avail);
+    size_t visible_input = view_end > view_start ? (view_end - view_start) : 0u;
+    size_t visible_cells = utf8_codepoint_count_n(ui->input, view_start, view_end);
 
     if(sb_append(&out, "\x1b[30;47m") != 0)
     {
@@ -814,7 +877,7 @@ char* __mlang_std_chat_render(int64_t handle, int32_t rows, int32_t cols)
         free(out.buf);
         return NULL;
     }
-    size_t used = prompt_len + visible_input;
+    size_t used = prompt_len + visible_cells;
     if(used < width && sb_append_repeat(&out, ' ', width - used) != 0)
     {
         free(out.buf);
@@ -826,7 +889,7 @@ char* __mlang_std_chat_render(int64_t handle, int32_t rows, int32_t cols)
         return NULL;
     }
 
-    size_t cursor_col = prompt_len + (ui->cursor > view_start ? (ui->cursor - view_start) : 0u) + 2u;
+    size_t cursor_col = prompt_len + utf8_codepoint_count_n(ui->input, view_start, ui->cursor) + 2u;
     if(cursor_col < 1u)
     {
         cursor_col = 1u;
