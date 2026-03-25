@@ -2,7 +2,8 @@
 
 enum Status : u8 {
     Invalid = 1,
-    Success = 2
+    Busy = 2,
+    Success = 3
 };
 
 fn main() -> i32 {
@@ -10,6 +11,11 @@ fn main() -> i32 {
 
     let s: Status = Status::Success;
     println!("variable: {}", s);
+
+    println!("iterate:");
+    for (i, item) in Status.enumerate() {
+        println!("  [{}] {}", i, item);
+    }
 
     // Raw integer value that does not map to a declared variant.
     let raw: i32 = 77;

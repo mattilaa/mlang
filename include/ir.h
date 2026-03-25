@@ -122,6 +122,9 @@ private:
     std::map<std::string, std::string> globalStructVariableTypes;
     // Track enum variants: enum name -> variant name -> value
     std::map<std::string, std::map<std::string, int64_t>> enumValues;
+    // Track enum variants in declaration order for iteration/printing.
+    std::map<std::string, std::vector<std::pair<std::string, int64_t>>>
+        enumVariantOrder;
     // Track enum backing integer kind per enum name.
     std::map<std::string, TypeNode::TypeKind> enumBaseTypes;
     std::set<std::string> debugStructs;
@@ -425,6 +428,7 @@ private:
                                          ListLiteralNode* listLit);
     void generateForListVariableIteration(ForNode* node,
                                           IdentifierNode* listId);
+    void generateForEnumIteration(ForNode* node, const std::string& enumName);
     void generateForMapIteration(ForNode* node, MapIteratorNode* mapIter);
 
     // Collection type helpers

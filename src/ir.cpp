@@ -2547,7 +2547,7 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
         return builder.CreateGlobalStringPtr("<enum>");
 #endif
     }
-    auto enumIt = enumValues.find(resolvedEnumName);
+    auto orderedIt = enumVariantOrder.find(resolvedEnumName);
 
     TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
     auto bkIt = enumBaseTypes.find(resolvedEnumName);
@@ -2569,6 +2569,31 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
 #else
     llvm::Value* out = builder.CreateGlobalStringPtr(unknownText);
 #endif
+
+    if(orderedIt != enumVariantOrder.end())
+    {
+        for(auto it = orderedIt->second.rbegin(); it != orderedIt->second.rend();
+            ++it)
+        {
+            llvm::Value* variantConst = llvm::ConstantInt::get(
+                enumTy, it->second, !enumIsUnsigned(baseKind));
+            llvm::Value* isMatch =
+                builder.CreateICmpEQ(enumValNorm, variantConst, "enum.str.eq");
+            std::string text = resolvedEnumName + "::" + it->first;
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* variantStr = builder.CreateGlobalString(text);
+#else
+            llvm::Value* variantStr = builder.CreateGlobalStringPtr(text);
+#endif
+            out = builder.CreateSelect(isMatch, variantStr, out,
+                                       "enum.str.sel");
+        }
+        return out;
+    }
+
+    auto enumIt = enumValues.find(resolvedEnumName);
+    if(enumIt == enumValues.end())
+        return out;
 
     for(const auto& kv : enumIt->second)
     {
@@ -8291,6 +8316,11 @@ void CodeGenerator::generateForStatement(ForNode* node)
             generateForMapIteration(node, entriesIter);
             delete entriesIter;
         }
+        else if(!resolveVisibleEnumName(identifier->name).empty())
+        {
+            generateForEnumIteration(
+                node, resolveVisibleEnumName(identifier->name));
+        }
         else
         {
             // Iterating over a list variable: for x in myList { ... }
@@ -8307,7 +8337,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         reportError(
             node->line,
             "for loops support range expressions (start..end), list "
-            "iteration, and map iteration (.keys(), .values(), .entries())");
+            "iteration, enum iteration, and map iteration "
+            "(.keys(), .values(), .entries())");
     }
 }
 
@@ -8661,6 +8692,160 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldMoved)
+        movedVariables.insert(node->varName);
+    else
+        clearMovedVariable(node->varName);
+}
+
+void CodeGenerator::generateForEnumIteration(ForNode* node,
+                                             const std::string& enumName)
+{
+    auto orderIt = enumVariantOrder.find(enumName);
+    if(orderIt == enumVariantOrder.end() || orderIt->second.empty())
+        return;
+
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::Type* indexType = llvm::Type::getInt64Ty(context);
+
+    TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+    auto baseIt = enumBaseTypes.find(enumName);
+    if(baseIt != enumBaseTypes.end())
+        baseKind = baseIt->second;
+    llvm::Type* enumTy = getLLVMType(baseKind);
+
+    llvm::AllocaInst* indexVar =
+        builder.CreateAlloca(indexType, nullptr, "enum.idx");
+    builder.CreateStore(llvm::ConstantInt::get(indexType, 0), indexVar);
+
+    llvm::AllocaInst* loopVar =
+        builder.CreateAlloca(enumTy, nullptr, node->varName);
+
+    llvm::Value* oldVal = namedValues[node->varName];
+    TypeNode::TypeKind oldType = TypeNode::TYPE_VOID;
+    bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
+    if(hadOldType)
+        oldType = variableTypes[node->varName];
+    bool hadOldMoved = isVariableMoved(node->varName);
+    auto oldEnumTypeIt = enumVariableTypes.find(node->varName);
+    bool hadOldEnumType = oldEnumTypeIt != enumVariableTypes.end();
+    std::string oldEnumType = hadOldEnumType ? oldEnumTypeIt->second : "";
+
+    namedValues[node->varName] = loopVar;
+    variableTypes[node->varName] = baseKind;
+    enumVariableTypes[node->varName] = enumName;
+    clearMovedVariable(node->varName);
+
+    bool hasIdxVar = !node->indexVarName.empty();
+    llvm::Value* oldIdxVal = nullptr;
+    TypeNode::TypeKind oldIdxType = TypeNode::TYPE_VOID;
+    bool hadOldIdxType = false;
+    if(hasIdxVar)
+    {
+        oldIdxVal = namedValues.count(node->indexVarName)
+                        ? namedValues[node->indexVarName]
+                        : nullptr;
+        hadOldIdxType =
+            variableTypes.find(node->indexVarName) != variableTypes.end();
+        if(hadOldIdxType)
+            oldIdxType = variableTypes[node->indexVarName];
+        namedValues[node->indexVarName] = indexVar;
+        variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
+    }
+
+    const int64_t variantCount = static_cast<int64_t>(orderIt->second.size());
+
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "for.cond", function);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(context, "for.body");
+    llvm::BasicBlock* incBB = llvm::BasicBlock::Create(context, "for.inc");
+    llvm::BasicBlock* endBB = llvm::BasicBlock::Create(context, "for.end");
+
+    loopBreakBlocks.push_back(endBB);
+    loopContinueBlocks.push_back(incBB);
+
+    builder.CreateBr(condBB);
+
+    builder.SetInsertPoint(condBB);
+    llvm::Value* currentIdx = builder.CreateLoad(indexType, indexVar, "idx");
+    llvm::Value* cond = builder.CreateICmpSLT(
+        currentIdx, llvm::ConstantInt::get(indexType, variantCount),
+        "loopcond");
+    builder.CreateCondBr(cond, bodyBB, endBB);
+
+    bodyBB->insertInto(function);
+    builder.SetInsertPoint(bodyBB);
+
+    llvm::Value* enumVal = llvm::ConstantInt::get(
+        enumTy, orderIt->second.front().second, !enumIsUnsigned(baseKind));
+    for(size_t i = 0; i < orderIt->second.size(); ++i)
+    {
+        llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
+        llvm::Value* isThis =
+            builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
+        llvm::Value* variantConst = llvm::ConstantInt::get(
+            enumTy, orderIt->second[i].second, !enumIsUnsigned(baseKind));
+        enumVal = builder.CreateSelect(isThis, variantConst, enumVal,
+                                       "selectenum");
+    }
+    builder.CreateStore(enumVal, loopVar);
+
+    if(node->body)
+    {
+        enterCleanupScope();
+        for(auto stmt : node->body->statements)
+        {
+            generateStatement(stmt);
+            if(builder.GetInsertBlock()->getTerminator())
+                break;
+        }
+        exitCleanupScope();
+    }
+
+    if(!builder.GetInsertBlock()->getTerminator())
+        builder.CreateBr(incBB);
+
+    incBB->insertInto(function);
+    builder.SetInsertPoint(incBB);
+    llvm::Value* nextIdx =
+        builder.CreateAdd(builder.CreateLoad(indexType, indexVar, ""),
+                          llvm::ConstantInt::get(indexType, 1), "nextidx");
+    builder.CreateStore(nextIdx, indexVar);
+    builder.CreateBr(condBB);
+
+    endBB->insertInto(function);
+    builder.SetInsertPoint(endBB);
+
+    loopBreakBlocks.pop_back();
+    loopContinueBlocks.pop_back();
+
+    if(hasIdxVar)
+    {
+        if(oldIdxVal)
+            namedValues[node->indexVarName] = oldIdxVal;
+        else
+            namedValues.erase(node->indexVarName);
+        if(hadOldIdxType)
+            variableTypes[node->indexVarName] = oldIdxType;
+        else
+            variableTypes.erase(node->indexVarName);
+    }
+
+    if(oldVal)
+        namedValues[node->varName] = oldVal;
+    else
+        namedValues.erase(node->varName);
+
+    if(hadOldType)
+        variableTypes[node->varName] = oldType;
+    else
+        variableTypes.erase(node->varName);
+
+    if(hadOldEnumType)
+        enumVariableTypes[node->varName] = oldEnumType;
+    else
+        enumVariableTypes.erase(node->varName);
 
     if(hadOldMoved)
         movedVariables.insert(node->varName);
@@ -9192,6 +9377,7 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
     }
 
     std::map<std::string, int64_t> variants;
+    std::vector<std::pair<std::string, int64_t>> orderedVariants;
     int64_t nextValue = 0;
     bool nextImplicitValid = true;
     if(node->variants)
@@ -9298,6 +9484,7 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
             }
 
             variants[variant->name] = value;
+            orderedVariants.push_back({variant->name, value});
             if(value == std::numeric_limits<int64_t>::max())
             {
                 nextImplicitValid = false;
@@ -9311,6 +9498,7 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
     }
 
     enumValues[node->name] = variants;
+    enumVariantOrder[node->name] = orderedVariants;
     enumBaseTypes[node->name] = baseKind;
 }
 
