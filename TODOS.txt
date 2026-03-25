@@ -1,0 +1,3 @@
+ning errors are straightforward semantic ones: mlang won’t let those helper functions mutate  reference parameters directly. I’m removing those mutating helpers and inlining the actual list  updates at the tab switch/create sites. That’s noisier, but it will compile cleanly instead of  relying on unsupported ref assignment semantics.
+
+

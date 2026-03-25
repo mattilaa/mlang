@@ -407,6 +407,11 @@ ANSI escape helpers for terminal color/style and cursor control. API is
 value-set-driven so call sites avoid raw numeric SGR/control codes.
 Sequences auto-disable to `""` when `std::term::supports_ansi()` is false.
 
+Ownership note:
+- most `std::esc` helpers return borrowed/static escape strings
+- treat those returned `str8` values as read-only and do not call `String::free()` on them
+- ACS box-drawing helpers (`acs_hline`, `acs_vline`, corners, tees, plus) are the exception here: they return owned formatted strings
+
 ### Value-set Types
 - `Color` (alias of `i32`)
 - `CursorCommand` (alias of `i32`)

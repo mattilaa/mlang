@@ -1,0 +1,7 @@
+fn main() {
+    let x: i32 = 10;
+    let y: i32 = 13;
+    if(x & 1) && y != 0 {
+        println!("Hello");
+    }
+}

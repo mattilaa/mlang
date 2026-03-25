@@ -6,6 +6,10 @@
 /// - text styles (bold, underline, inverse)
 /// - cursor controls (home, clear, show/hide, move)
 ///
+/// Ownership: `std::esc` helpers mostly return borrowed/static escape strings.
+/// Treat returned `str8` values as read-only and do not pass them to `String::free()`.
+/// ACS box-drawing helpers are the exception: they return owned formatted strings.
+///
 /// Escape sequences auto-disable when `std::term::supports_ansi()` is false.
 
 extern pub fn __mlang_std_esc_reset() -> str8;
@@ -102,153 +106,153 @@ fn bg_code(c: Color) -> i32 {
     return 49;
 }
 
-/// @brief Reset all SGR styles/colors.
+/// @brief Reset all SGR styles/colors. Returns a borrowed/static string; do not free.
 pub fn reset() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_reset();
 }
 
-/// @brief Set foreground color.
+/// @brief Set foreground color. Returns a borrowed/static string; do not free.
 pub fn fg(color: Color) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(fg_code(color));
 }
 
-/// @brief Set background color.
+/// @brief Set background color. Returns a borrowed/static string; do not free.
 pub fn bg(color: Color) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(bg_code(color));
 }
 
-/// @brief Set 256-color foreground (0..255).
+/// @brief Set 256-color foreground (0..255). Returns a borrowed/static string; do not free.
 pub fn fg_256(index: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_palette(0, index);
 }
 
-/// @brief Set 256-color background (0..255).
+/// @brief Set 256-color background (0..255). Returns a borrowed/static string; do not free.
 pub fn bg_256(index: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_palette(1, index);
 }
 
-/// @brief Set truecolor foreground using RGB channels (0..255 each).
+/// @brief Set truecolor foreground using RGB channels (0..255 each). Returns a borrowed/static string; do not free.
 pub fn fg_rgb(r: i32, g: i32, b: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_rgb(0, r, g, b);
 }
 
-/// @brief Set truecolor background using RGB channels (0..255 each).
+/// @brief Set truecolor background using RGB channels (0..255 each). Returns a borrowed/static string; do not free.
 pub fn bg_rgb(r: i32, g: i32, b: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_rgb(1, r, g, b);
 }
 
-/// @brief Enable bold text.
+/// @brief Enable bold text. Returns a borrowed/static string; do not free.
 pub fn bold_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(1);
 }
 
-/// @brief Disable bold/dim text.
+/// @brief Disable bold/dim text. Returns a borrowed/static string; do not free.
 pub fn bold_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(22);
 }
 
-/// @brief Enable underline.
+/// @brief Enable underline. Returns a borrowed/static string; do not free.
 pub fn underline_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(4);
 }
 
-/// @brief Disable underline.
+/// @brief Disable underline. Returns a borrowed/static string; do not free.
 pub fn underline_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(24);
 }
 
-/// @brief Enable inverse video.
+/// @brief Enable inverse video. Returns a borrowed/static string; do not free.
 pub fn inverse_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(7);
 }
 
-/// @brief Disable inverse video.
+/// @brief Disable inverse video. Returns a borrowed/static string; do not free.
 pub fn inverse_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_sgr_code(27);
 }
 
-/// @brief Return a cursor control escape sequence.
+/// @brief Return a cursor control escape sequence. Returns a borrowed/static string; do not free.
 pub fn cursor(cmd: CursorCommand) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_code(cmd);
 }
 
-/// @brief Move cursor by `amount` in given direction.
+/// @brief Move cursor by `amount` in given direction. Returns a borrowed/static string; do not free.
 pub fn cursor_move(dir: CursorDirection, amount: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_move(dir, amount);
 }
 
-///  Move cursor to 1-based absolute terminal position.
+/// @brief Move cursor to 1-based absolute terminal position. Returns a borrowed/static string; do not free.
 pub fn cursor_pos(row1: i32, col1: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_pos(row1, col1);
 }
 
-/// @brief Set terminal cursor shape. Common values: 1/2 block, 3/4 underline, 5/6 bar.
+/// @brief Set terminal cursor shape. Common values: 1/2 block, 3/4 underline, 5/6 bar. Returns a borrowed/static string; do not free.
 pub fn cursor_style(style: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_style(style);
 }
 
-/// @brief Blinking thin bar cursor.
+/// @brief Blinking thin bar cursor. Returns a borrowed/static string; do not free.
 pub fn cursor_blink_bar() -> str8 {
     return cursor_style(5);
 }
 
-/// @brief Blinking underline cursor.
+/// @brief Blinking underline cursor. Returns a borrowed/static string; do not free.
 pub fn cursor_blink_underline() -> str8 {
     return cursor_style(3);
 }
 
-/// @brief Steady underline cursor.
+/// @brief Steady underline cursor. Returns a borrowed/static string; do not free.
 pub fn cursor_steady_underline() -> str8 {
     return cursor_style(4);
 }
 
-/// @brief Steady thin bar cursor.
+/// @brief Steady thin bar cursor. Returns a borrowed/static string; do not free.
 pub fn cursor_steady_bar() -> str8 {
     return cursor_style(6);
 }
 
-/// @brief Set terminal cursor color using RGB channels.
+/// @brief Set terminal cursor color using RGB channels. Returns a borrowed/static string; do not free.
 pub fn cursor_color_rgb(r: i32, g: i32, b: i32) -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_color_rgb(r, g, b);
 }
 
-/// @brief Reset terminal cursor color to the terminal default.
+/// @brief Reset terminal cursor color to the terminal default. Returns a borrowed/static string; do not free.
 pub fn cursor_color_reset() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return __mlang_std_esc_cursor_color_reset();
 }
 
-/// @brief Enter alternate screen buffer (ncurses-like full-screen mode).
+/// @brief Enter alternate screen buffer (ncurses-like full-screen mode). Returns a borrowed/static string; do not free.
 pub fn alt_screen_on() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[?1049h";
 }
 
-/// @brief Leave alternate screen buffer.
+/// @brief Leave alternate screen buffer. Returns a borrowed/static string; do not free.
 pub fn alt_screen_off() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[?1049l";
 }
 
-/// @brief Clear from cursor to end-of-line.
+/// @brief Clear from cursor to end-of-line. Returns a borrowed/static string; do not free.
 pub fn clear_eol() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[K";
@@ -260,7 +264,7 @@ pub fn standout_off() -> str8 { return inverse_off(); }
 
 /// @brief ncurses-style ACS line-drawing (ASCII-safe).
 
-/// @brief Cursor shape (DECSCUSR). Returns static literals; do not free.
+/// @brief Cursor shape (DECSCUSR). Returns a borrowed/static string; do not free.
 pub fn cursor_blink_bar() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[5 q";
@@ -271,14 +275,25 @@ pub fn cursor_reset_shape() -> str8 {
     return "\x1b[0 q";
 }
 
+/// @brief Box-drawing horizontal line glyph. Returns an owned formatted string.
 pub fn acs_hline() -> str8 { return format!("{}", "─"); }
+/// @brief Box-drawing vertical line glyph. Returns an owned formatted string.
 pub fn acs_vline() -> str8 { return format!("{}", "│"); }
+/// @brief Box-drawing upper-left corner glyph. Returns an owned formatted string.
 pub fn acs_ulcorner() -> str8 { return format!("{}", "┌"); }
+/// @brief Box-drawing upper-right corner glyph. Returns an owned formatted string.
 pub fn acs_urcorner() -> str8 { return format!("{}", "┐"); }
+/// @brief Box-drawing lower-left corner glyph. Returns an owned formatted string.
 pub fn acs_llcorner() -> str8 { return format!("{}", "└"); }
+/// @brief Box-drawing lower-right corner glyph. Returns an owned formatted string.
 pub fn acs_lrcorner() -> str8 { return format!("{}", "┘"); }
+/// @brief Box-drawing left tee glyph. Returns an owned formatted string.
 pub fn acs_ltee() -> str8 { return format!("{}", "├"); }
+/// @brief Box-drawing right tee glyph. Returns an owned formatted string.
 pub fn acs_rtee() -> str8 { return format!("{}", "┤"); }
+/// @brief Box-drawing top tee glyph. Returns an owned formatted string.
 pub fn acs_ttee() -> str8 { return format!("{}", "┬"); }
+/// @brief Box-drawing bottom tee glyph. Returns an owned formatted string.
 pub fn acs_btee() -> str8 { return format!("{}", "┴"); }
+/// @brief Box-drawing cross glyph. Returns an owned formatted string.
 pub fn acs_plus() -> str8 { return format!("{}", "┼"); }
