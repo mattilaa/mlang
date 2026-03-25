@@ -2808,6 +2808,26 @@ TEST_F(MLATest, EnumPrintUnknownValueFallback)
     EXPECT_EQ(compileAndRun(code), "<Status:unknown>\n");
 }
 
+TEST_F(MLATest, EnumForLoopIteratesInDeclarationOrder)
+{
+    std::string code = R"(
+        enum Status : u8 {
+            Idle = 1,
+            Busy = 2,
+            Done = 3
+        };
+
+        fn main() -> i32 {
+            for (i, s) in Status.enumerate() {
+                println!("{}:{}", i, s);
+            }
+            return 0;
+        }
+    )";
+    EXPECT_EQ(compileAndRun(code),
+              "0:Status::Idle\n1:Status::Busy\n2:Status::Done\n");
+}
+
 TEST_F(MLATest, EnumBackingValidExampleCompilesAndRuns)
 {
     fs::path repoRoot = fs::path(__FILE__).parent_path().parent_path();
@@ -2837,6 +2857,24 @@ TEST_F(MLATest, EnumBackingImplicitOverflowExampleFails)
     EXPECT_NE(rc, 0);
     EXPECT_NE(out.find("implicit value overflows backing type 'u8'"),
               std::string::npos);
+}
+
+TEST_F(MLATest, EnumPrintExampleCompilesAndRuns)
+{
+    fs::path repoRoot = fs::path(__FILE__).parent_path().parent_path();
+    fs::path src = repoRoot / "examples" / "enum_print_demo.mla";
+    int rc = 0;
+    std::string out = compilePathCapture(src, rc);
+    EXPECT_EQ(rc, 0) << out;
+    EXPECT_EQ(
+        run(),
+        "literal: Status::Invalid\n"
+        "variable: Status::Success\n"
+        "iterate:\n"
+        "  [0] Status::Invalid\n"
+        "  [1] Status::Busy\n"
+        "  [2] Status::Success\n"
+        "unknown: <Status:unknown>\n");
 }
 
 // ============================================================================

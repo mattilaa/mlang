@@ -79,6 +79,34 @@ The source-of-truth implementation files are:
 These methods are language/compiler intrinsics and are available directly on
 collection/str8 values (including values typed through `use type` aliases).
 
+## Built-in Enum Behavior
+
+Enum declarations define named integral values and may specify an explicit
+backing type such as `u8` or `i64`.
+
+- Enum values format/print as `EnumName::Variant`.
+- `for value in Status { ... }` iterates the enum in declaration order.
+- `for (i, value) in Status.enumerate() { ... }` iterates in declaration order
+  and exposes a zero-based `i64` index.
+
+Example:
+
+```mla
+enum Status : u8 {
+    Invalid = 1,
+    Busy = 2,
+    Success = 3
+};
+
+for value in Status {
+    println!("{}", value);
+}
+
+for (i, value) in Status.enumerate() {
+    println!("[{}] {}", i, value);
+}
+```
+
 ### `str8`
 `String` in `String::new/with_capacity/free` is a compiler wrapper namespace
 for this builtin type, not a distinct type declaration.

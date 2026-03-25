@@ -81,3 +81,24 @@ fn test_nested_enum_struct_member() {
     let o: Outer = Outer { level: Outer::Inner::High };
     verify(inner_score(o.level) == 200);
 }
+
+#[test]
+fn test_enum_iteration_runs_in_declaration_order() {
+    var acc: i32 = 0;
+    for s in Status {
+        acc = acc * 10 + (status_score(s) / 10);
+    }
+    verify(acc == 123);
+}
+
+#[test]
+fn test_enum_enumerate_exposes_index_and_value() {
+    var idx_acc: i64 = 0;
+    var value_acc: i32 = 0;
+    for (i, s) in Status.enumerate() {
+        idx_acc = idx_acc * 10 + i;
+        value_acc = value_acc * 10 + (status_score(s) / 10);
+    }
+    verify(idx_acc == 12);
+    verify(value_acc == 123);
+}

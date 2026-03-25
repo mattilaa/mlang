@@ -96,6 +96,15 @@
 // Option<T> represents Some(value) or None.
 // Construct with Some<T>(value) or None<T>().
 
+// @builtin enum
+// Enum declarations define named integral values, optionally with an explicit
+// backing type such as `u8` or `i64`.
+// Enum values print as `EnumName::Variant`.
+// Enums are iterable in declaration order:
+//   for value in Status { ... }
+//   for (i, value) in Status.enumerate() { ... }
+// The enumerate form exposes a zero-based `i64` index plus the enum value.
+
 // @builtin Some
 // Option constructor for present values: Some<T>(value).
 
