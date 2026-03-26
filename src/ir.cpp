@@ -65,6 +65,39 @@ static std::vector<std::string> split_top_level_commas(const std::string& s)
     return out;
 }
 
+static void ensure_artifact_parent_directory(const std::string& filename)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path path(filename);
+    if(path.has_parent_path())
+        fs::create_directories(path.parent_path(), ec);
+}
+
+static std::string build_intermediate_object_path(const std::string& outputFile)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path buildDir = fs::current_path(ec) / "build" / ".mlang";
+    if(ec)
+        buildDir = fs::path("build") / ".mlang";
+    fs::create_directories(buildDir, ec);
+
+    fs::path outPath(outputFile);
+    std::string base = outPath.filename().string();
+    if(base.empty())
+        base = "a.out";
+
+    std::hash<std::string> hasher;
+    fs::path absOut = fs::absolute(outPath, ec);
+    const std::string key = ec ? outputFile : absOut.lexically_normal().string();
+    const auto hashValue =
+        static_cast<unsigned long long>(hasher(key));
+    return (buildDir /
+            (base + "-" + std::to_string(hashValue) + ".o"))
+        .string();
+}
+
 static TypeNode* type_from_text(std::string t)
 {
     t = trim_copy(t);
@@ -19595,6 +19628,7 @@ bool Backend::emitObjectFile(const std::string& filename)
         return false;
     }
 
+    ensure_artifact_parent_directory(filename);
     std::error_code ec;
     llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
 
@@ -19632,6 +19666,7 @@ bool Backend::emitAssemblyFile(const std::string& filename)
         return false;
     }
 
+    ensure_artifact_parent_directory(filename);
     std::error_code ec;
     llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
 
@@ -19663,6 +19698,7 @@ bool Backend::emitAssemblyFile(const std::string& filename)
 
 bool Backend::emitLLVMIR(const std::string& filename)
 {
+    ensure_artifact_parent_directory(filename);
     std::error_code ec;
     llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
 
@@ -19681,6 +19717,7 @@ bool Backend::emitLLVMIR(const std::string& filename)
 
 bool Backend::emitBitcode(const std::string& filename)
 {
+    ensure_artifact_parent_directory(filename);
     std::error_code ec;
     llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
 
@@ -19701,6 +19738,7 @@ bool Backend::linkExecutable(const std::string& objectFile,
                              const std::string& outputFile,
                              const std::vector<std::string>& linkArgs)
 {
+    ensure_artifact_parent_directory(outputFile);
     // Use C++ driver so C++ stdlib symbols from native stdlib objects resolve.
     std::string command = "c++ -o " + outputFile + " " + objectFile;
     for(const auto& arg : linkArgs)
@@ -19724,7 +19762,7 @@ bool Backend::linkExecutable(const std::string& objectFile,
 bool Backend::compileToExecutable(const std::string& outputFile,
                                   const std::vector<std::string>& linkArgs)
 {
-    std::string objectFile = outputFile + ".o";
+    std::string objectFile = build_intermediate_object_path(outputFile);
 
     if(!emitObjectFile(objectFile))
     {

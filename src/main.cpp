@@ -842,6 +842,23 @@ static bool ensure_compiled_mla_tool(const char* argv0,
     return true;
 }
 
+static std::filesystem::path default_build_artifact_path(
+    const std::string& inputFile, std::string_view ext)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path buildDir = fs::current_path(ec) / "build";
+    if(ec)
+        buildDir = fs::path("build");
+    fs::create_directories(buildDir, ec);
+
+    fs::path inputPath(inputFile);
+    std::string stem = inputPath.stem().string();
+    if(stem.empty())
+        stem = "a.out";
+    return buildDir / (stem + std::string(ext));
+}
+
 static std::optional<int> run_mlang_frontend(int argc, char** argv)
 {
     namespace fs = std::filesystem;
@@ -1597,8 +1614,8 @@ int main(int argc, char** argv)
                 std::string llFile = outputFile;
                 if(llFile == "a.out")
                 {
-                    llFile = inputFile.substr(0, inputFile.find_last_of('.')) +
-                             ".ll";
+                    llFile =
+                        default_build_artifact_path(inputFile, ".ll").string();
                 }
                 success = backend.emitLLVMIR(llFile);
 
@@ -1615,8 +1632,8 @@ int main(int argc, char** argv)
                 std::string bcFile = outputFile;
                 if(bcFile == "a.out")
                 {
-                    bcFile = inputFile.substr(0, inputFile.find_last_of('.')) +
-                             ".bc";
+                    bcFile =
+                        default_build_artifact_path(inputFile, ".bc").string();
                 }
                 success = backend.emitBitcode(bcFile);
             }
@@ -1627,7 +1644,7 @@ int main(int argc, char** argv)
                 if(asmFile == "a.out")
                 {
                     asmFile =
-                        inputFile.substr(0, inputFile.find_last_of('.')) + ".s";
+                        default_build_artifact_path(inputFile, ".s").string();
                 }
                 success = backend.emitAssemblyFile(asmFile);
             }
@@ -1638,7 +1655,7 @@ int main(int argc, char** argv)
                 if(objFile == "a.out")
                 {
                     objFile =
-                        inputFile.substr(0, inputFile.find_last_of('.')) + ".o";
+                        default_build_artifact_path(inputFile, ".o").string();
                 }
                 success = backend.emitObjectFile(objFile);
             }
