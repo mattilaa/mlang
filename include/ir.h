@@ -111,6 +111,9 @@ private:
     // Track element types for generic lists and maps
     std::map<std::string, TypeNode*> listElementTypes;
     std::map<std::string, std::pair<TypeNode*, TypeNode*>> mapKeyValueTypes;
+    // Conservative compile-time lengths for bounds diagnostics.
+    std::map<std::string, int64_t> knownListLengths;
+    std::map<std::string, int64_t> knownStringLengths;
     // Track element types for pointers
     std::map<std::string, TypeNode*> pointerElementTypes;
     // Track tuple element types
@@ -277,6 +280,15 @@ private:
     bool validatePointerDereference(ExpressionNode* pointerExpr, int line);
     bool evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out);
     bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
+    bool tryGetKnownListLength(ExpressionNode* expr, int64_t& outLength);
+    bool tryGetKnownStringLength(ExpressionNode* expr, int64_t& outLength);
+    void clearKnownStaticLengths(const std::string& varName);
+    void recordKnownStaticLength(const std::string& varName,
+                                 ExpressionNode* expr);
+    llvm::Value* normalizeIndexToI64(ExpressionNode* indexExpr,
+                                     llvm::Value* indexVal, int line);
+    void emitBoundsTrap(llvm::Value* indexVal, llvm::Value* sizeVal, int line,
+                        const std::string& containerKind);
     bool convertValueToRuntimeBool(llvm::Value* value, int line,
                                    const std::string& context,
                                    llvm::Value*& outBool);

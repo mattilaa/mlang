@@ -161,6 +161,11 @@ static std::string type_name_for_error(TypeNode* typeNode)
     return typeNode ? typeNode->toString() : "<unknown>";
 }
 
+static TypeNode::TypeKind
+getExpressionTypeKind(ExpressionNode* expr,
+                      const std::map<std::string, TypeNode::TypeKind>&
+                          variableTypes);
+
 // Recursively collect all IdentifierNode names referenced in an AST subtree.
 // Used for Non-Lexical Lifetime (NLL) borrow expiration.
 static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
@@ -1712,6 +1717,204 @@ bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
                                       out);
     }
     return false;
+}
+
+bool CodeGenerator::tryGetKnownListLength(ExpressionNode* expr,
+                                          int64_t& outLength)
+{
+    if(!expr)
+        return false;
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = knownListLengths.find(id->name);
+        if(it == knownListLengths.end())
+            return false;
+        outLength = it->second;
+        return true;
+    }
+
+    if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+    {
+        outLength = listLit->elements
+            ? static_cast<int64_t>(listLit->elements->elements.size())
+            : 0;
+        return true;
+    }
+
+    if(auto* arrFill = dynamic_cast<ArrayFillNode*>(expr))
+    {
+        int64_t count = 0;
+        if(!evaluateCompileTimeInt(arrFill->count, count) || count < 0)
+            return false;
+        outLength = count;
+        return true;
+    }
+
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        if(call->name == "Vec::new" && call->arguments.empty())
+        {
+            outLength = 0;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool CodeGenerator::tryGetKnownStringLength(ExpressionNode* expr,
+                                            int64_t& outLength)
+{
+    if(!expr)
+        return false;
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = knownStringLengths.find(id->name);
+        if(it == knownStringLengths.end())
+            return false;
+        outLength = it->second;
+        return true;
+    }
+
+    if(auto* lit = dynamic_cast<StringLiteralNode*>(expr))
+    {
+        outLength = static_cast<int64_t>(lit->value.size());
+        return true;
+    }
+
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        if((call->name == "String::new" || call->name == "String::with_capacity") &&
+           call->arguments.empty())
+        {
+            outLength = 0;
+            return true;
+        }
+        if((call->name == "String::from" || call->name == "String::to_utf8") &&
+           call->arguments.size() == 1)
+        {
+            return tryGetKnownStringLength(call->arguments[0], outLength);
+        }
+    }
+
+    if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(mc->methodName == "clone" && mc->arguments.empty())
+            return tryGetKnownStringLength(mc->object, outLength);
+    }
+
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(bin->op == BinaryOpNode::OP_PLUS)
+        {
+            int64_t lhs = 0;
+            int64_t rhs = 0;
+            if(tryGetKnownStringLength(bin->left, lhs) &&
+               tryGetKnownStringLength(bin->right, rhs))
+            {
+                outLength = lhs + rhs;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void CodeGenerator::clearKnownStaticLengths(const std::string& varName)
+{
+    knownListLengths.erase(varName);
+    knownStringLengths.erase(varName);
+}
+
+void CodeGenerator::recordKnownStaticLength(const std::string& varName,
+                                            ExpressionNode* expr)
+{
+    clearKnownStaticLengths(varName);
+
+    auto typeIt = variableTypes.find(varName);
+    if(typeIt == variableTypes.end())
+        return;
+
+    int64_t knownLength = 0;
+    switch(typeIt->second)
+    {
+    case TypeNode::TYPE_LIST:
+        if(tryGetKnownListLength(expr, knownLength))
+            knownListLengths[varName] = knownLength;
+        break;
+    case TypeNode::TYPE_STRING:
+    case TypeNode::TYPE_STR8:
+    case TypeNode::TYPE_STR16:
+        if(tryGetKnownStringLength(expr, knownLength))
+            knownStringLengths[varName] = knownLength;
+        break;
+    default:
+        break;
+    }
+}
+
+llvm::Value* CodeGenerator::normalizeIndexToI64(ExpressionNode* indexExpr,
+                                                llvm::Value* indexVal,
+                                                int line)
+{
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+    if(!indexVal->getType()->isIntegerTy())
+    {
+        reportError(line, "index expression requires an integer index");
+        return nullptr;
+    }
+    if(indexVal->getType() == i64Type)
+        return indexVal;
+
+    TypeNode::TypeKind indexKind = getExpressionTypeKind(indexExpr, variableTypes);
+    if(isUnsignedType(indexKind))
+        return builder.CreateZExtOrTrunc(indexVal, i64Type, "idx64");
+    return builder.CreateSExtOrTrunc(indexVal, i64Type, "idx64");
+}
+
+void CodeGenerator::emitBoundsTrap(llvm::Value* indexVal, llvm::Value* sizeVal,
+                                   int line,
+                                   const std::string& containerKind)
+{
+    initializeFormatFunctions();
+
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* stderrVal = builder.CreateLoad(ptrType, stderrPtr, "stderr");
+
+#ifndef NDEBUG
+    std::string cFormat = containerKind +
+        " index out of bounds at line %lld: index=%lld len=%lld\n";
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr =
+        builder.CreateGlobalString(cFormat, "bounds.debug.msg");
+#else
+    llvm::Value* formatStr =
+        builder.CreateGlobalStringPtr(cFormat, "bounds.debug.msg");
+#endif
+    llvm::Value* lineVal = llvm::ConstantInt::get(i64Type, line);
+    builder.CreateCall(fprintfFunc, {stderrVal, formatStr, lineVal, indexVal, sizeVal});
+#else
+    std::string cFormat = containerKind + " index out of bounds\n";
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr =
+        builder.CreateGlobalString(cFormat, "bounds.msg");
+#else
+    llvm::Value* formatStr =
+        builder.CreateGlobalStringPtr(cFormat, "bounds.msg");
+#endif
+    builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+#endif
+    builder.CreateCall(abortFunc, {});
+    builder.CreateUnreachable();
 }
 
 bool CodeGenerator::evaluateCompileTimeBool(ExpressionNode* expr, bool& out)
@@ -10698,6 +10901,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 {
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
+    clearKnownStaticLengths(node->name);
 
     // Inline closure: let inc = || { ... }
     if(auto* closureInit = dynamic_cast<ClosureNode*>(node->expression))
@@ -10989,6 +11193,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                                   _is_mut_borrow);
         }
 
+        recordKnownStaticLength(node->name, node->expression);
         constantVariables.insert(node->name);
         return;
     }
@@ -11042,6 +11247,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_LIST;
+        recordKnownStaticLength(node->name, node->expression);
         constantVariables.insert(node->name);
         return;
     }
@@ -11328,6 +11534,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     builder.CreateStore(initValue, alloca);
     namedValues[node->name] = alloca;
     variableTypes[node->name] = node->type->kind;
+    recordKnownStaticLength(node->name, node->expression);
 
     // Mark this variable as constant (declared with 'let')
     constantVariables.insert(node->name);
@@ -11337,6 +11544,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 {
     recordScopedPointerVariable(node->name);
     enumVariableTypes.erase(node->name);
+    clearKnownStaticLengths(node->name);
     clearPointerBorrow(node->name);
     // `var` is always mutable, including when shadowing a previous `let`.
     constantVariables.erase(node->name);
@@ -11776,6 +11984,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                                   _is_mut_borrow);
         }
 
+        recordKnownStaticLength(node->name, node->initExpr);
         return;
     }
 
@@ -11852,6 +12061,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_LIST;
+        recordKnownStaticLength(node->name, node->initExpr);
         return;
     }
 
@@ -12176,6 +12386,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
     namedValues[node->name] = alloca;
     variableTypes[node->name] = node->type->kind;
+    recordKnownStaticLength(node->name, node->initExpr);
 }
 
 void CodeGenerator::generateAssignment(AssignmentNode* node)
@@ -12276,6 +12487,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
 
     builder.CreateStore(value, variable);
     clearMovedVariable(node->name);
+    recordKnownStaticLength(node->name, node->expression);
     if(targetType->isPointerTy())
     {
         if(targetGlobal &&
@@ -16194,6 +16406,15 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Value* newStr = builder.CreateCall(
                         concatFn, {currentStr, suffix}, "push_str.result");
                     builder.CreateStore(newStr, allocaPtr);
+                    auto knownIt = knownStringLengths.find(objId->name);
+                    if(knownIt != knownStringLengths.end())
+                    {
+                        int64_t suffixLen = 0;
+                        if(tryGetKnownStringLength(node->arguments[0], suffixLen))
+                            knownIt->second += suffixLen;
+                        else
+                            knownStringLengths.erase(knownIt);
+                    }
                     return llvm::Constant::getNullValue(ptrType);
                 }
                 // --- clone() ---
@@ -16469,6 +16690,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::FunctionCallee fnRaw =
                             module->getOrInsertFunction("__mlang_std_vec_push_raw", ftRaw);
                         builder.CreateCall(fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                        auto knownLenIt = knownListLengths.find(objId->name);
+                        if(knownLenIt != knownListLengths.end())
+                            ++knownLenIt->second;
                         return llvm::Constant::getNullValue(voidType2);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
@@ -16476,6 +16700,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn2 =
                         module->getOrInsertFunction(fnName2, ft2);
                     builder.CreateCall(fn2, {allocaPtr2, val2});
+                    auto knownLenIt = knownListLengths.find(objId->name);
+                    if(knownLenIt != knownListLengths.end())
+                        ++knownLenIt->second;
                     return llvm::Constant::getNullValue(voidType2);
                 }
                 // --- pop() ---
@@ -16516,8 +16743,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                             llvm::FunctionType::get(retType3, {opaquePtrType}, false);
                         llvm::FunctionCallee fn3 =
                             module->getOrInsertFunction(fnName3, ft3);
-                        return builder.CreateCall(fn3, {allocaPtr2},
-                                                  objId->name + ".pop");
+                        llvm::Value* popResult =
+                            builder.CreateCall(fn3, {allocaPtr2},
+                                               objId->name + ".pop");
+                        auto knownLenIt = knownListLengths.find(objId->name);
+                        if(knownLenIt != knownListLengths.end() &&
+                           knownLenIt->second > 0)
+                            --knownLenIt->second;
+                        return popResult;
                     }
                     llvm::Type* elemLlvmType =
                         elemTypeNode2 ? getLLVMTypeFromNode(elemTypeNode2)
@@ -16541,6 +16774,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fnRaw =
                         module->getOrInsertFunction("__mlang_std_vec_pop_raw", ftRaw);
                     builder.CreateCall(fnRaw, {allocaPtr2, tmpElemPtr, elemSize});
+                    auto knownLenIt = knownListLengths.find(objId->name);
+                    if(knownLenIt != knownListLengths.end() &&
+                       knownLenIt->second > 0)
+                        --knownLenIt->second;
                     return builder.CreateLoad(elemLlvmType, tmpElem,
                                               objId->name + ".pop");
                 }
@@ -16553,6 +16790,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "clear() takes no arguments");
                         return nullptr;
                     }
+                    knownListLengths[objId->name] = 0;
                     return callVecVoidFn("__mlang_std_vec_clear");
                 }
                 // --- contains(val) ---
@@ -16676,6 +16914,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "dedup() takes no arguments");
                         return nullptr;
                     }
+                    knownListLengths.erase(objId->name);
                     return callVecVoidFn("__mlang_std_vec_dedup_i32");
                 }
                 // --- first() ---
@@ -17660,10 +17899,100 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     if(!indexVal)
         return nullptr;
 
+    llvm::Value* indexI64 = normalizeIndexToI64(node->index, indexVal, node->line);
+    if(!indexI64)
+        return nullptr;
+
+    TypeNode::TypeKind indexKind = getExpressionTypeKind(node->index, variableTypes);
+    bool indexIsUnsigned = isUnsignedType(indexKind);
+
+    auto emitBoundsCheck = [&](llvm::Value* sizeVal,
+                               const std::string& containerKind) -> bool {
+        llvm::Function* function = builder.GetInsertBlock()->getParent();
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, containerKind + ".idx.ok", function);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, containerKind + ".idx.fail");
+
+        llvm::Value* lowOob = indexIsUnsigned
+            ? llvm::ConstantInt::getFalse(context)
+            : builder.CreateICmpSLT(
+                  indexI64, llvm::ConstantInt::get(indexI64->getType(), 0),
+                  containerKind + ".idx.neg");
+        llvm::Value* highOob = indexIsUnsigned
+            ? builder.CreateICmpUGE(indexI64, sizeVal, containerKind + ".idx.high")
+            : builder.CreateICmpSGE(indexI64, sizeVal, containerKind + ".idx.high");
+        llvm::Value* oob = builder.CreateOr(lowOob, highOob, containerKind + ".idx.oob");
+        builder.CreateCondBr(oob, failBB, okBB);
+
+        failBB->insertInto(function);
+        builder.SetInsertPoint(failBB);
+        emitBoundsTrap(indexI64, sizeVal, node->line, containerKind);
+
+        builder.SetInsertPoint(okBB);
+        return true;
+    };
+
+    auto baseTypeIt = variableTypes.find(baseId->name);
+    if(baseTypeIt != variableTypes.end() &&
+       (baseTypeIt->second == TypeNode::TYPE_STRING ||
+        baseTypeIt->second == TypeNode::TYPE_STR8 ||
+        baseTypeIt->second == TypeNode::TYPE_STR16))
+    {
+        int64_t knownLength = 0;
+        int64_t knownIndex = 0;
+        if(tryGetKnownStringLength(node->base, knownLength) &&
+           evaluateCompileTimeInt(node->index, knownIndex) &&
+           (knownIndex < 0 || knownIndex >= knownLength))
+        {
+            reportError(node->line,
+                        "string index " + std::to_string(knownIndex) +
+                            " is out of bounds for length " +
+                            std::to_string(knownLength));
+            return nullptr;
+        }
+
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Type* i8Type = llvm::Type::getInt8Ty(context);
+        llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+        llvm::Value* stringPtr =
+            builder.CreateLoad(ptrType, basePtr, baseId->name + ".str");
+        llvm::FunctionType* lenFnType =
+            llvm::FunctionType::get(i64Type, {ptrType}, false);
+        llvm::FunctionCallee lenFn =
+            module->getOrInsertFunction("__mlang_std_strbuf_len", lenFnType);
+        llvm::Value* stringLen =
+            builder.CreateCall(lenFn, {stringPtr}, baseId->name + ".strlen");
+
+        emitBoundsCheck(stringLen, "string");
+
+        llvm::Value* charPtr =
+            builder.CreateGEP(i8Type, stringPtr, indexI64, "str.char.ptr");
+        return builder.CreateLoad(i8Type, charPtr, "str.char");
+    }
+
     // Check if it's a list
     auto listIt = listElementTypes.find(baseId->name);
     if(listIt != listElementTypes.end())
     {
+        int64_t knownLength = 0;
+        int64_t knownIndex = 0;
+        if(tryGetKnownListLength(node->base, knownLength) &&
+           evaluateCompileTimeInt(node->index, knownIndex) &&
+           (knownIndex < 0 || knownIndex >= knownLength))
+        {
+            reportError(node->line,
+                        "list index " + std::to_string(knownIndex) +
+                            " is out of bounds for length " +
+                            std::to_string(knownLength));
+            return nullptr;
+        }
+
         // List indexing
         TypeNode* elemTypeNode = listIt->second;
         llvm::Type* elementType = getLLVMType(elemTypeNode->kind);
@@ -17682,18 +18011,16 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         // Load list struct
         llvm::Value* listStruct =
             builder.CreateLoad(listStructType, basePtr, "list");
+        llvm::Value* listSize =
+            builder.CreateExtractValue(listStruct, 0, "listsize");
         llvm::Value* dataPtr =
             builder.CreateExtractValue(listStruct, 1, "data");
 
-        // Ensure index is i64
-        if(indexVal->getType() != i64Type)
-        {
-            indexVal = builder.CreateSExtOrTrunc(indexVal, i64Type, "idx64");
-        }
+        emitBoundsCheck(listSize, "list");
 
         // Get element pointer and load
         llvm::Value* elemPtr =
-            builder.CreateGEP(elementType, dataPtr, indexVal, "elemptr");
+            builder.CreateGEP(elementType, dataPtr, indexI64, "elemptr");
         return builder.CreateLoad(elementType, elemPtr, "elem");
     }
 
@@ -17802,7 +18129,8 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     }
 
     reportError(node->line,
-                "cannot index non-list/non-map variable: " + baseId->name);
+                "cannot index non-list/non-string/non-map variable: " +
+                    baseId->name);
     return nullptr;
 }
 

@@ -761,6 +761,93 @@ fn read_child_stderr_all(err: ChildStderr) -> str8 {
 }
 
 #[test]
+fn test_compiler_rejects_compile_time_list_bounds_violation() -> i32 {
+    let src_path: str8 = "/tmp/mlang_bounds_compile_fail_case.mla";
+    let src: str8 =
+        "fn main() -> i32 {\n    let xs: list<i32> = [7; 2];\n    let bad: i32 = xs[2];\n    return bad;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+
+    let args: list<str8> = [src_path, "-L", "build", "-lmlang_std"];
+    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    if cr.is_err(): { return 1; }
+    let child: Child = cr.unwrap();
+
+    let out_r: Result<ChildStdout, str8> = child.stdout();
+    if out_r.is_err(): { return 1; }
+    let out: ChildStdout = out_r.unwrap();
+    let err_r: Result<ChildStderr, str8> = child.stderr();
+    if err_r.is_err(): { return 1; }
+    let err: ChildStderr = err_r.unwrap();
+
+    let status_r: Result<ExitStatus, str8> = child.wait();
+    if status_r.is_err(): { return 1; }
+    let status: ExitStatus = status_r.unwrap();
+    let _ = read_child_stdout_all(out);
+    let stderr_text: str8 = read_child_stderr_all(err);
+    let _ = child.close();
+
+    if status.code() == 0: { return 1; }
+    if contains(stderr_text, "list index 2 is out of bounds for length 2") == 0: { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_compiler_runtime_string_bounds_trap_reports_reason() -> i32 {
+    let src_path: str8 = "/tmp/mlang_bounds_runtime_case.mla";
+    let bin_path: str8 = "/tmp/mlang_bounds_runtime_case";
+    let src: str8 =
+        "fn main() -> i32 {\n    let s: str8 = \"hi\";\n    let idx: i64 = 5;\n    println!(\"{}\", s[idx]);\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err(): { return 1; }
+
+    let compile_args: list<str8> = [src_path, "-L", "build", "-lmlang_std", "-o", bin_path];
+    let compile_r: Result<Child, str8> = spawn("./build/mlang", compile_args);
+    if compile_r.is_err(): { return 1; }
+    let compile_child: Child = compile_r.unwrap();
+
+    let compile_out_r: Result<ChildStdout, str8> = compile_child.stdout();
+    if compile_out_r.is_err(): { return 1; }
+    let compile_out: ChildStdout = compile_out_r.unwrap();
+    let compile_err_r: Result<ChildStderr, str8> = compile_child.stderr();
+    if compile_err_r.is_err(): { return 1; }
+    let compile_err: ChildStderr = compile_err_r.unwrap();
+
+    let compile_status_r: Result<ExitStatus, str8> = compile_child.wait();
+    if compile_status_r.is_err(): { return 1; }
+    let compile_status: ExitStatus = compile_status_r.unwrap();
+    let _ = read_child_stdout_all(compile_out);
+    let compile_stderr: str8 = read_child_stderr_all(compile_err);
+    let _ = compile_child.close();
+
+    if compile_status.code() != 0: { return 1; }
+    if contains(compile_stderr, "error:") == 1: { return 1; }
+
+    let run_args: list<str8> = [];
+    let run_r: Result<Child, str8> = spawn(bin_path, run_args);
+    if run_r.is_err(): { return 1; }
+    let run_child: Child = run_r.unwrap();
+
+    let run_out_r: Result<ChildStdout, str8> = run_child.stdout();
+    if run_out_r.is_err(): { return 1; }
+    let run_out: ChildStdout = run_out_r.unwrap();
+    let run_err_r: Result<ChildStderr, str8> = run_child.stderr();
+    if run_err_r.is_err(): { return 1; }
+    let run_err: ChildStderr = run_err_r.unwrap();
+
+    let run_status_r: Result<ExitStatus, str8> = run_child.wait();
+    if run_status_r.is_err(): { return 1; }
+    let run_status: ExitStatus = run_status_r.unwrap();
+    let _ = read_child_stdout_all(run_out);
+    let run_stderr: str8 = read_child_stderr_all(run_err);
+    let _ = run_child.close();
+
+    if run_status.code() == 0: { return 1; }
+    if contains(run_stderr, "string index out of bounds") == 0: { return 1; }
+    return 0;
+}
+
+#[test]
 fn test_compiler_test_output_uses_robot_style_progress_format() -> i32 {
     let src_path: str8 = "/tmp/mlang_test_output_format_case.mla";
     let src: str8 = "mod std::testing;\nuse std::testing::verify_true;\n\n#[test]\nfn test_output_format_uses_progress_and_timestamp() {\n    verify_true(true);\n}\n";
