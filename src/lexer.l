@@ -195,6 +195,19 @@ static int is_try_question_context()
 "=>"            { return FAT_ARROW; }
 ":"[[:space:]]*"{"     { return COLON_BLOCK; }
 "+"[[:space:]]*"..."   { return PLUS_ELLIPSIS; }
+"*"[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*"=" {
+                  const char* p = yytext + 1;
+                  while(*p && isspace(static_cast<unsigned char>(*p)))
+                      ++p;
+                  const char* start = p;
+                  while(*p && (isalnum(static_cast<unsigned char>(*p)) || *p == '_'))
+                      ++p;
+                  size_t len = static_cast<size_t>(p - start);
+                  yylval.sval = (char*)malloc(len + 1);
+                  memcpy(yylval.sval, start, len);
+                  yylval.sval[len] = '\0';
+                  return DEREF_ASSIGN_IDENT;
+                }
 "*"[[:space:]]*"..."   { return MULTIPLY_ELLIPSIS; }
 "&&"[[:space:]]*"..."  { return AMP_AMP_ELLIPSIS; }
 "||"[[:space:]]*"..."  { return PIPE_PIPE_ELLIPSIS; }

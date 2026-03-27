@@ -3,11 +3,11 @@ fn main() -> i32 {
     let b: i32 = 3;
 
     // Ternary expression chooses the greater value.
-    let max: i32 = a > b ? a : b;
+    let max: i32 = a > b ? a: b;
     println!("max({}, {}) = {}", a, b, max);
 
     // Nested ternary for simple classification.
-    let label: str8 = max > 10 ? "large" : (max > 5 ? "medium" : "small");
+    let label: str8 = max > 10 ? "large": max > 5 ? "medium": "small";
     println!("label: {}", label);
 
     return 0;

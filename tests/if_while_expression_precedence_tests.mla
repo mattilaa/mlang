@@ -113,7 +113,7 @@ fn if_full_bitwise_precedence_in_brace_condition() {
     let permissions: u8 = 0b0110;
     var matched: bool = false;
 
-    if(permissions & 0b0010) != 0 &&((permissions ^ 0b0100) == 0b0010) &&((permissions | 0b0001) == 0b0111) &&((permissions > > 1) == 0b0011) &&((0b0011 < < 1) == permissions) {
+    if(permissions & 0b0010) != 0 &&((permissions ^ 0b0100) == 0b0010) &&((permissions | 0b0001) == 0b0111) &&((permissions >> 1) == 0b0011) &&((0b0011 << 1) == permissions) {
         matched = true;
     }
 

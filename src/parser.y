@@ -327,6 +327,7 @@ enum UpdatePosition
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE CARET NOT TILDE SHL SHR
 %token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
+%token <sval> DEREF_ASSIGN_IDENT
 %token LT GT LE GE EQ NE SPACESHIP
 %token LBRACE RBRACE LPAREN RPAREN LBRACKET RBRACKET SEMICOLON COMMA ARROW COLON DOT COLON_BLOCK
 %token FAT_ARROW
@@ -904,8 +905,11 @@ assignment_statement
         { $$ = make_compound_assign($1, SHR, $3, yylineno); }
     | condition_postfix SHR_ASSIGN expression SEMICOLON
         { $$ = make_compound_assign($1, SHR, $3, yylineno); }
-    | MULTIPLY unary_expression ASSIGN expression SEMICOLON
-        { $$ = mla_ast_deref_assignment($2, $4, yylineno); }
+    | DEREF_ASSIGN_IDENT expression SEMICOLON
+        {
+            ASTNode* ptr = create_identifier_at($1, yylineno, yycolumn_token);
+            $$ = mla_ast_deref_assignment(ptr, $2, yylineno);
+        }
     ;
 
 expression_statement
