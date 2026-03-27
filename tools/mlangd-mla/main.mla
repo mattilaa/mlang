@@ -1643,6 +1643,7 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "impl") == 1 { return 14; }
     if eq(label, "extern") == 1 { return 14; }
     if eq(label, "pub") == 1 { return 14; }
+    if eq(label, "int") == 1 { return 22; }
     if eq(label, "i32") == 1 { return 22; }
     if eq(label, "i32") == 1 { return 22; }
     if eq(label, "i64") == 1 { return 22; }
@@ -1674,6 +1675,7 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "impl") == 1 { return "keyword: implementation block"; }
     if eq(label, "extern") == 1 { return "keyword: external symbol declaration"; }
     if eq(label, "pub") == 1 { return "keyword: public visibility"; }
+    if eq(label, "int") == 1 { return "builtin type alias (int32_t)"; }
     if eq(label, "i32") == 1 { return "builtin type alias (int32_t)"; }
     if eq(label, "i32") == 1 { return "builtin 32-bit signed integer"; }
     if eq(label, "i64") == 1 { return "builtin 64-bit signed integer"; }
@@ -1693,6 +1695,9 @@ fn completion_detail(label: str8) -> str8 {
 }
 
 fn completion_documentation(label: str8) -> str8 {
+    if eq(label, "int") == 1 {
+        return "Alias for a 32-bit signed integer. Maps to C int32_t in the runtime ABI.";
+    }
     if eq(label, "i32") == 1 {
         return "Alias for a 32-bit signed integer. Maps to C int32_t in the runtime ABI.";
     }
@@ -1931,30 +1936,12 @@ fn completion_symbol_doc_in_uri(target_uri: str8, label: str8) -> str8 {
 fn completion_symbol_detail(current_uri: str8, label: str8) -> str8 {
     let d0: str8 = completion_symbol_detail_in_uri(current_uri, label);
     if len(d0) > 0 { return d0; }
-    if ensure_uri_store() != 0 { return String::new(); }
-    let n: i64 = uri_store_count(g_uri_store_handle);
-    for i in 0..n {
-        let u: str8 = uri_store_get(g_uri_store_handle, i);
-        if len(u) == 0 { continue; }
-        if eq(u, current_uri) == 1 { continue; }
-        let d: str8 = completion_symbol_detail_in_uri(u, label);
-        if len(d) > 0 { return d; }
-    }
     return String::new();
 }
 
 fn completion_symbol_doc(current_uri: str8, label: str8) -> str8 {
     let d0: str8 = completion_symbol_doc_in_uri(current_uri, label);
     if len(d0) > 0 { return d0; }
-    if ensure_uri_store() != 0 { return String::new(); }
-    let n: i64 = uri_store_count(g_uri_store_handle);
-    for i in 0..n {
-        let u: str8 = uri_store_get(g_uri_store_handle, i);
-        if len(u) == 0 { continue; }
-        if eq(u, current_uri) == 1 { continue; }
-        let d: str8 = completion_symbol_doc_in_uri(u, label);
-        if len(d) > 0 { return d; }
-    }
     return String::new();
 }
 
@@ -2492,6 +2479,14 @@ fn handle_completion(payload: str8) -> str8 {
         Ok(v) => v,
         Err(_e) => 0
     };
+    var current_symbol_count: i32 = 0;
+    let dsr: Result<i32, str8> = s.document_symbol_count(uri);
+    if dsr.is_ok() {
+        current_symbol_count = match dsr {
+            Ok(v) => v,
+            Err(_e) => 0
+        };
+    }
 
     var out: str8 = String::new();
     let p0: str8 = concat(out, "[");
@@ -2509,10 +2504,10 @@ fn handle_completion(payload: str8) -> str8 {
         let kind: i32 = completion_kind_lsp(label_raw);
         var detail_raw: str8 = completion_detail(label_raw);
         var doc_raw: str8 = completion_documentation(label_raw);
-        if len(detail_raw) == 0 {
+        if len(detail_raw) == 0 && current_symbol_count > 0 {
             detail_raw = completion_symbol_detail(uri, label_raw);
         }
-        if len(doc_raw) == 0 {
+        if len(doc_raw) == 0 && current_symbol_count > 0 {
             doc_raw = completion_symbol_doc(uri, label_raw);
         }
         let detail: str8 = json_escape(detail_raw);
