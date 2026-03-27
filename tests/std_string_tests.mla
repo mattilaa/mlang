@@ -63,6 +63,43 @@ fn test_string_utils_and_utf() {
     verify(test_string_utils_and_utf_impl() == 0);
 }
 
+fn test_str16_len_and_index_impl() -> i32 {
+    let utf16_buf: str16 = to_utf16("hello");
+    if len16(utf16_buf) != 5: { free_utf16(utf16_buf); return 1; }
+    if utf16_buf.len() != 5: { free_utf16(utf16_buf); return 1; }
+    if utf16_buf.is_empty() != 0: { free_utf16(utf16_buf); return 1; }
+    let ch: u16 = utf16_buf[1];
+    if ch != 101: { free_utf16(utf16_buf); return 1; }
+    let cloned: str16 = utf16_buf.clone();
+    if cloned[4] != 111: { free_utf16(cloned); free_utf16(utf16_buf); return 1; }
+    free_utf16(cloned);
+    free_utf16(utf16_buf);
+    return 0;
+}
+
+#[test]
+fn test_str16_len_and_index() {
+    verify(test_str16_len_and_index_impl() == 0);
+}
+
+fn test_str16_constructor_clone_and_move_impl() -> i32 {
+    let owned16: str16 = String16::from("hello");
+    let cloned16: str16 = owned16.clone();
+    let moved16: str16 = owned16;
+    let back: str8 = to_utf8(moved16);
+    if eq(back, "hello") != 1: { free(back); String16::free(moved16); String16::free(cloned16); return 1; }
+    if cloned16[0] != 104: { free(back); String16::free(moved16); String16::free(cloned16); return 1; }
+    free(back);
+    String16::free(moved16);
+    String16::free(cloned16);
+    return 0;
+}
+
+#[test]
+fn test_str16_constructor_clone_and_move() {
+    verify(test_str16_constructor_clone_and_move_impl() == 0);
+}
+
 fn test_string_sub_bounds_impl() -> i32 {
     let s = clone("abcdef");
     let mid = sub(s, 2, 3);

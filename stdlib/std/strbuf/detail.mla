@@ -9,6 +9,8 @@ extern fn __mlang_std_strbuf_is_empty(s: str8) -> i32;
 extern fn __mlang_std_strbuf_clone(s: str8) -> str8;
 extern fn __mlang_std_strbuf_eq(a: str8, b: str8) -> i32;
 extern fn __mlang_std_strbuf_compare(a: str8, b: str8) -> i64;
+extern fn __mlang_std_strbuf_len16(s: str16) -> i64;
+extern fn __mlang_std_strbuf_clone16(s: str16) -> str16;
 extern fn __mlang_std_strbuf_starts_with(s: str8, prefix: str8) -> i32;
 extern fn __mlang_std_strbuf_ends_with(s: str8, suffix: str8) -> i32;
 extern fn __mlang_std_strbuf_contains(s: str8, needle: str8) -> i32;

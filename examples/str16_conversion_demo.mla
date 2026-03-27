@@ -1,0 +1,19 @@
+mod std::strbuf;
+
+use std::strbuf::to_utf8;
+
+fn main() -> i32 {
+    let utf16_a: str16 = String16::from("hello");
+    let utf16_b: str16 = utf16_a.clone();
+    let utf16_moved: str16 = utf16_a;
+
+    println!("len={} first={}", utf16_moved.len(), utf16_moved[0]);
+
+    let roundtrip: str8 = to_utf8(utf16_b);
+    println!("roundtrip={}", roundtrip);
+
+    String::free(roundtrip);
+    String16::free(utf16_moved);
+    String16::free(utf16_b);
+    return 0;
+}

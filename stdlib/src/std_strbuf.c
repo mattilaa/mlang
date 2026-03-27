@@ -188,6 +188,30 @@ int64_t __mlang_std_strbuf_compare16(const uint16_t* a, const uint16_t* b)
     return a[i] == 0 ? -1 : 1;
 }
 
+int64_t __mlang_std_strbuf_len16(const uint16_t* s)
+{
+    if(!s)
+        return 0;
+    size_t n = 0;
+    while(s[n] != 0)
+        ++n;
+    return (int64_t)n;
+}
+
+uint16_t* __mlang_std_strbuf_clone16(const uint16_t* s)
+{
+    if(!s)
+        return NULL;
+    size_t n = 0;
+    while(s[n] != 0)
+        ++n;
+    uint16_t* out = (uint16_t*)malloc((n + 1u) * sizeof(uint16_t));
+    if(!out)
+        return NULL;
+    memcpy(out, s, (n + 1u) * sizeof(uint16_t));
+    return out;
+}
+
 int __mlang_std_strbuf_starts_with(const char* s, const char* prefix)
 {
     if(!s || !prefix)

@@ -113,6 +113,11 @@ pub fn len(s: str8) -> i64 {
     return __mlang_std_strbuf_len(s);
 }
 
+/// @brief Return UTF-16 string length in 16-bit code units.
+pub fn len16(s: str16) -> i64 {
+    return __mlang_std_strbuf_len16(s);
+}
+
 /// @brief Return `1` when empty, `0` otherwise.
 pub fn is_empty(s: str8) -> i32 {
     return __mlang_std_strbuf_is_empty(s);
@@ -121,6 +126,11 @@ pub fn is_empty(s: str8) -> i32 {
 /// @brief Clone a string into newly allocated memory.
 pub fn clone(s: str8) -> str8 {
     return __mlang_std_strbuf_clone(s);
+}
+
+/// @brief Clone a UTF-16 string into newly allocated memory.
+pub fn clone16(s: str16) -> str16 {
+    return __mlang_std_strbuf_clone16(s);
 }
 
 /// @brief Construct a new string from an existing UTF-8 string.

@@ -114,6 +114,7 @@ private:
     // Conservative compile-time lengths for bounds diagnostics.
     std::map<std::string, int64_t> knownListLengths;
     std::map<std::string, int64_t> knownStringLengths;
+    std::map<std::string, int64_t> knownString16Lengths;
     // Track element types for pointers
     std::map<std::string, TypeNode*> pointerElementTypes;
     // Track tuple element types
@@ -282,6 +283,7 @@ private:
     bool evaluateCompileTimeBool(ExpressionNode* expr, bool& out);
     bool tryGetKnownListLength(ExpressionNode* expr, int64_t& outLength);
     bool tryGetKnownStringLength(ExpressionNode* expr, int64_t& outLength);
+    bool tryGetKnownString16Length(ExpressionNode* expr, int64_t& outLength);
     void clearKnownStaticLengths(const std::string& varName);
     void recordKnownStaticLength(const std::string& varName,
                                  ExpressionNode* expr);

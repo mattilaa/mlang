@@ -161,6 +161,51 @@ static std::string type_name_for_error(TypeNode* typeNode)
     return typeNode ? typeNode->toString() : "<unknown>";
 }
 
+static bool utf8_codepoint_and_utf16_length(const std::string& s, int64_t& units)
+{
+    units = 0;
+    for(size_t i = 0; i < s.size();)
+    {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        uint32_t cp = 0;
+        size_t width = 0;
+        if(c < 0x80)
+        {
+            cp = c;
+            width = 1;
+        }
+        else if((c & 0xE0) == 0xC0 && i + 1 < s.size())
+        {
+            cp = ((uint32_t)(c & 0x1F) << 6) |
+                 (uint32_t)(static_cast<unsigned char>(s[i + 1]) & 0x3F);
+            width = 2;
+        }
+        else if((c & 0xF0) == 0xE0 && i + 2 < s.size())
+        {
+            cp = ((uint32_t)(c & 0x0F) << 12) |
+                 ((uint32_t)(static_cast<unsigned char>(s[i + 1]) & 0x3F) << 6) |
+                 (uint32_t)(static_cast<unsigned char>(s[i + 2]) & 0x3F);
+            width = 3;
+        }
+        else if((c & 0xF8) == 0xF0 && i + 3 < s.size())
+        {
+            cp = ((uint32_t)(c & 0x07) << 18) |
+                 ((uint32_t)(static_cast<unsigned char>(s[i + 1]) & 0x3F) << 12) |
+                 ((uint32_t)(static_cast<unsigned char>(s[i + 2]) & 0x3F) << 6) |
+                 (uint32_t)(static_cast<unsigned char>(s[i + 3]) & 0x3F);
+            width = 4;
+        }
+        else
+        {
+            return false;
+        }
+
+        units += (cp <= 0xFFFFu) ? 1 : 2;
+        i += width;
+    }
+    return true;
+}
+
 static TypeNode::TypeKind
 getExpressionTypeKind(ExpressionNode* expr,
                       const std::map<std::string, TypeNode::TypeKind>&
@@ -883,6 +928,11 @@ static bool inferExprKindForReturn(
            call->name == "String::from" || call->name == "String::to_utf8")
         {
             outKind = TypeNode::TYPE_STRING;
+            return true;
+        }
+        if(call->name == "String16::from")
+        {
+            outKind = TypeNode::TYPE_STR16;
             return true;
         }
         auto fit = fnReturnKinds.find(call->name);
@@ -1823,10 +1873,61 @@ bool CodeGenerator::tryGetKnownStringLength(ExpressionNode* expr,
     return false;
 }
 
+bool CodeGenerator::tryGetKnownString16Length(ExpressionNode* expr,
+                                              int64_t& outLength)
+{
+    if(!expr)
+        return false;
+
+    if(auto* id = dynamic_cast<IdentifierNode*>(expr))
+    {
+        auto it = knownString16Lengths.find(id->name);
+        if(it == knownString16Lengths.end())
+            return false;
+        outLength = it->second;
+        return true;
+    }
+
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        if((call->name == "to_utf16" || call->name == "String16::from") &&
+           call->arguments.size() == 1)
+        {
+            if(auto* lit = dynamic_cast<StringLiteralNode*>(call->arguments[0]))
+                return utf8_codepoint_and_utf16_length(lit->value, outLength);
+            return false;
+        }
+    }
+
+    if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(mc->methodName == "clone" && mc->arguments.empty())
+            return tryGetKnownString16Length(mc->object, outLength);
+    }
+
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(bin->op == BinaryOpNode::OP_PLUS)
+        {
+            int64_t lhs = 0;
+            int64_t rhs = 0;
+            if(tryGetKnownString16Length(bin->left, lhs) &&
+               tryGetKnownString16Length(bin->right, rhs))
+            {
+                outLength = lhs + rhs;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void CodeGenerator::clearKnownStaticLengths(const std::string& varName)
 {
     knownListLengths.erase(varName);
     knownStringLengths.erase(varName);
+    knownString16Lengths.erase(varName);
 }
 
 void CodeGenerator::recordKnownStaticLength(const std::string& varName,
@@ -1847,9 +1948,12 @@ void CodeGenerator::recordKnownStaticLength(const std::string& varName,
         break;
     case TypeNode::TYPE_STRING:
     case TypeNode::TYPE_STR8:
-    case TypeNode::TYPE_STR16:
         if(tryGetKnownStringLength(expr, knownLength))
             knownStringLengths[varName] = knownLength;
+        break;
+    case TypeNode::TYPE_STR16:
+        if(tryGetKnownString16Length(expr, knownLength))
+            knownString16Lengths[varName] = knownLength;
         break;
     default:
         break;
@@ -2485,6 +2589,8 @@ TypeNode::TypeKind getExpressionTypeKind(
         if(fn->name == "String::new" || fn->name == "String::with_capacity" ||
            fn->name == "String::from" || fn->name == "String::to_utf8")
             return TypeNode::TYPE_STRING;
+        if(fn->name == "String16::from")
+            return TypeNode::TYPE_STR16;
     }
     if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
     {
@@ -11013,6 +11119,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                    call->name == "String::from" ||
                    call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
+                if(call->name == "String16::from")
+                    return TypeNode::TYPE_STR16;
                 if(call->name == "Vec::new")
                     return TypeNode::TYPE_LIST;
             }
@@ -11037,7 +11145,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
             {
                 if(mc->methodName == "clone")
-                    return TypeNode::TYPE_STRING;
+                    return getExpressionTypeKind(mc->object, variableTypes);
             }
             if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
             {
@@ -11112,6 +11220,10 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
+            if(call->name == "String16::from")
+            {
+                variableTypes[node->name] = TypeNode::TYPE_STR16;
+            }
             if(call->name == "Vec::new")
             {
                 variableTypes[node->name] = TypeNode::TYPE_LIST;
@@ -11120,7 +11232,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         if(auto* mc2 = dynamic_cast<MethodCallNode*>(node->expression))
         {
             if(mc2->methodName == "clone")
-                variableTypes[node->name] = TypeNode::TYPE_STRING;
+                variableTypes[node->name] =
+                    getExpressionTypeKind(mc2->object, variableTypes);
         }
         if(auto* enumLit = dynamic_cast<EnumLiteralNode*>(node->expression))
         {
@@ -11804,6 +11917,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                    call->name == "String::from" ||
                    call->name == "String::to_utf8")
                     return TypeNode::TYPE_STRING;
+                if(call->name == "String16::from")
+                    return TypeNode::TYPE_STR16;
                 if(call->name == "Vec::new")
                     return TypeNode::TYPE_LIST;
             }
@@ -11828,7 +11943,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             if(auto* mc = dynamic_cast<MethodCallNode*>(expr))
             {
                 if(mc->methodName == "clone")
-                    return TypeNode::TYPE_STRING;
+                    return getExpressionTypeKind(mc->object, variableTypes);
             }
             if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
             {
@@ -11903,6 +12018,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
+            if(call->name == "String16::from")
+            {
+                variableTypes[node->name] = TypeNode::TYPE_STR16;
+            }
             if(call->name == "Vec::new")
             {
                 variableTypes[node->name] = TypeNode::TYPE_LIST;
@@ -11911,7 +12030,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* mc2 = dynamic_cast<MethodCallNode*>(node->initExpr))
         {
             if(mc2->methodName == "clone")
-                variableTypes[node->name] = TypeNode::TYPE_STRING;
+                variableTypes[node->name] =
+                    getExpressionTypeKind(mc2->object, variableTypes);
         }
         if(auto* enumLit = dynamic_cast<EnumLiteralNode*>(node->initExpr))
         {
@@ -13809,7 +13929,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     };
     auto isFreeLikeFunctionName = [&](const std::string& fnName) -> bool
     {
-        if(fnName == "String::free" || fnName == "free")
+        if(fnName == "String::free" || fnName == "String16::free" ||
+           fnName == "free")
             return true;
         return fnName.size() > 5 &&
                fnName.compare(fnName.size() - 5, 5, "_free") == 0;
@@ -13819,7 +13940,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     {
         if(!argExpr)
             return true;
-        if((fnName == "String::free" || fnName == "free") &&
+        if((fnName == "String::free" || fnName == "String16::free" ||
+            fnName == "free") &&
            dynamic_cast<StringLiteralNode*>(argExpr))
         {
             reportError(node->line,
@@ -13915,11 +14037,11 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         builder.CreateStore(llvm::ConstantInt::get(int8Type, 0), ptr);
         return ptr;
     }
-    if(node->name == "String::free")
+    if(node->name == "String::free" || node->name == "String16::free")
     {
         if(node->arguments.size() != 1)
         {
-            reportError(node->line, "String::free expects one argument");
+            reportError(node->line, node->name + " expects one argument");
             return nullptr;
         }
         ExpressionNode* argExpr = node->arguments[0];
@@ -13930,7 +14052,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(!ptr)
             return nullptr;
         consumeMoveFromExpression(argExpr, node->line,
-                                  "passing argument to String::free");
+                                  "passing argument to " + node->name);
         markFreeLikeConsumed(argExpr);
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
@@ -13942,12 +14064,22 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             ptr = builder.CreateBitCast(ptr, ptrType, "string_free_cast");
         if(!ptr->getType()->isPointerTy())
         {
-            reportError(node->line, "String::free expects a string/pointer");
+            reportError(node->line, node->name + " expects a string/pointer");
             return nullptr;
+        }
+        if(node->name == "String16::free")
+        {
+            llvm::FunctionType* free16FnType =
+                llvm::FunctionType::get(llvm::Type::getVoidTy(context), {ptrType},
+                                        false);
+            llvm::FunctionCallee free16Fn = module->getOrInsertFunction(
+                "__mlang_std_strbuf_free_str16", free16FnType);
+            return builder.CreateCall(free16Fn, {ptr});
         }
         return builder.CreateCall(freeFunc, {ptr});
     }
-    if(node->name == "String::from" || node->name == "String::to_utf8")
+    if(node->name == "String::from" || node->name == "String::to_utf8" ||
+       node->name == "String16::from")
     {
         if(node->arguments.size() != 1)
         {
@@ -13964,11 +14096,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         llvm::Type* ptrType =
             llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-        llvm::FunctionType* cloneFnType =
+        llvm::FunctionType* convFnType =
             llvm::FunctionType::get(ptrType, {ptrType}, false);
-        llvm::FunctionCallee cloneFn =
-            module->getOrInsertFunction("__mlang_std_strbuf_clone", cloneFnType);
-        return builder.CreateCall(cloneFn, {arg}, "string_from");
+        llvm::FunctionCallee convFn = module->getOrInsertFunction(
+            node->name == "String16::from" ? "__mlang_std_strbuf_utf8_to_utf16"
+                                           : "__mlang_std_strbuf_clone",
+            convFnType);
+        return builder.CreateCall(convFn, {arg},
+                                  node->name == "String16::from"
+                                      ? "string16_from"
+                                      : "string_from");
     }
 
     if(node->name == "thread_spawn" || node->name == "thread::spawn")
@@ -16342,10 +16479,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         {
             auto strTypeIt = variableTypes.find(objId->name);
             if(strTypeIt != variableTypes.end() &&
-               strTypeIt->second == TypeNode::TYPE_STRING)
+               (strTypeIt->second == TypeNode::TYPE_STRING ||
+                strTypeIt->second == TypeNode::TYPE_STR8 ||
+                strTypeIt->second == TypeNode::TYPE_STR16))
             {
+                bool isStr16 = strTypeIt->second == TypeNode::TYPE_STR16;
                 if(node->methodName == "push_str")
                 {
+                    if(isStr16)
+                    {
+                        reportError(node->line,
+                                    "str16 has no method named 'push_str'");
+                        return nullptr;
+                    }
                     if(node->arguments.size() != 1)
                     {
                         reportError(node->line,
@@ -16443,7 +16589,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionType* cloneFnType =
                         llvm::FunctionType::get(ptrType, {ptrType}, false);
                     llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
-                        "__mlang_std_strbuf_clone", cloneFnType);
+                        isStr16 ? "__mlang_std_strbuf_clone16"
+                                : "__mlang_std_strbuf_clone",
+                        cloneFnType);
                     return builder.CreateCall(cloneFn, {currentStr},
                                              objId->name + ".clone");
                 }
@@ -16474,7 +16622,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionType* lenFnType =
                         llvm::FunctionType::get(i64Type, {ptrType}, false);
                     llvm::FunctionCallee lenFn = module->getOrInsertFunction(
-                        "__mlang_std_strbuf_len", lenFnType);
+                        isStr16 ? "__mlang_std_strbuf_len16"
+                                : "__mlang_std_strbuf_len",
+                        lenFnType);
                     return builder.CreateCall(lenFn, {currentStr},
                                              objId->name + ".len");
                 }
@@ -16502,6 +16652,20 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 #endif
                     llvm::Value* currentStr = builder.CreateLoad(
                         ptrType, allocaPtr, objId->name + ".load");
+                    if(isStr16)
+                    {
+                        llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+                        llvm::FunctionType* lenFnType =
+                            llvm::FunctionType::get(i64Type, {ptrType}, false);
+                        llvm::FunctionCallee lenFn = module->getOrInsertFunction(
+                            "__mlang_std_strbuf_len16", lenFnType);
+                        llvm::Value* lenVal =
+                            builder.CreateCall(lenFn, {currentStr},
+                                               objId->name + ".len");
+                        return builder.CreateICmpEQ(
+                            lenVal, llvm::ConstantInt::get(i64Type, 0),
+                            objId->name + ".is_empty");
+                    }
                     llvm::Type* intType = llvm::Type::getInt32Ty(context);
                     llvm::FunctionType* emptyFnType =
                         llvm::FunctionType::get(intType, {ptrType}, false);
@@ -17057,11 +17221,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         // struct fields (e.g. state.items.push(...), state.buf.push_str(...)).
         TypeNode* recvType = getLValueType(node->object, node->line);
         if(recvType && (recvType->kind == TypeNode::TYPE_STRING ||
-                        recvType->kind == TypeNode::TYPE_STR8))
+                        recvType->kind == TypeNode::TYPE_STR8 ||
+                        recvType->kind == TypeNode::TYPE_STR16))
         {
             llvm::Value* recvPtr = getLValuePointer(node->object, node->line);
             if(!recvPtr)
                 return nullptr;
+            bool isStr16 = recvType->kind == TypeNode::TYPE_STR16;
 #if LLVM_VERSION_MAJOR >= 15
             llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
@@ -17070,6 +17236,12 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 #endif
             if(node->methodName == "push_str")
             {
+                if(isStr16)
+                {
+                    reportError(node->line, "str16 has no method named '" +
+                                                node->methodName + "'");
+                    return nullptr;
+                }
                 if(node->arguments.size() != 1)
                 {
                     reportError(node->line, "push_str expects one argument");
@@ -17102,7 +17274,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* cloneFnType =
                     llvm::FunctionType::get(ptrType, {ptrType}, false);
                 llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
-                    "__mlang_std_strbuf_clone", cloneFnType);
+                    isStr16 ? "__mlang_std_strbuf_clone16"
+                            : "__mlang_std_strbuf_clone",
+                    cloneFnType);
                 return builder.CreateCall(cloneFn, {currentStr}, "field.clone");
             }
             if(node->methodName == "len")
@@ -17118,7 +17292,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionType* lenFnType =
                     llvm::FunctionType::get(i64Type, {ptrType}, false);
                 llvm::FunctionCallee lenFn = module->getOrInsertFunction(
-                    "__mlang_std_strbuf_len", lenFnType);
+                    isStr16 ? "__mlang_std_strbuf_len16"
+                            : "__mlang_std_strbuf_len",
+                    lenFnType);
                 return builder.CreateCall(lenFn, {currentStr}, "field.len");
             }
             if(node->methodName == "is_empty")
@@ -17130,6 +17306,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 llvm::Value* currentStr =
                     builder.CreateLoad(ptrType, recvPtr, "fieldstr.load");
+                if(isStr16)
+                {
+                    llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
+                    llvm::FunctionType* lenFnType =
+                        llvm::FunctionType::get(i64Type, {ptrType}, false);
+                    llvm::FunctionCallee lenFn = module->getOrInsertFunction(
+                        "__mlang_std_strbuf_len16", lenFnType);
+                    llvm::Value* lenVal =
+                        builder.CreateCall(lenFn, {currentStr}, "field.len");
+                    return builder.CreateICmpEQ(
+                        lenVal, llvm::ConstantInt::get(i64Type, 0),
+                        "field.is_empty");
+                }
                 llvm::Type* intType = llvm::Type::getInt32Ty(context);
                 llvm::FunctionType* emptyFnType =
                     llvm::FunctionType::get(intType, {ptrType}, false);
@@ -17939,14 +18128,19 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         baseTypeIt->second == TypeNode::TYPE_STR8 ||
         baseTypeIt->second == TypeNode::TYPE_STR16))
     {
+        bool isStr16 = baseTypeIt->second == TypeNode::TYPE_STR16;
         int64_t knownLength = 0;
         int64_t knownIndex = 0;
-        if(tryGetKnownStringLength(node->base, knownLength) &&
+        bool hasKnownLength = isStr16
+            ? tryGetKnownString16Length(node->base, knownLength)
+            : tryGetKnownStringLength(node->base, knownLength);
+        if(hasKnownLength &&
            evaluateCompileTimeInt(node->index, knownIndex) &&
            (knownIndex < 0 || knownIndex >= knownLength))
         {
             reportError(node->line,
-                        "string index " + std::to_string(knownIndex) +
+                        std::string(isStr16 ? "str16" : "string") +
+                            " index " + std::to_string(knownIndex) +
                             " is out of bounds for length " +
                             std::to_string(knownLength));
             return nullptr;
@@ -17958,22 +18152,27 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         llvm::Type* ptrType =
             llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-        llvm::Type* i8Type = llvm::Type::getInt8Ty(context);
+        llvm::Type* elementType = isStr16 ? llvm::Type::getInt16Ty(context)
+                                          : llvm::Type::getInt8Ty(context);
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
         llvm::Value* stringPtr =
             builder.CreateLoad(ptrType, basePtr, baseId->name + ".str");
         llvm::FunctionType* lenFnType =
             llvm::FunctionType::get(i64Type, {ptrType}, false);
         llvm::FunctionCallee lenFn =
-            module->getOrInsertFunction("__mlang_std_strbuf_len", lenFnType);
+            module->getOrInsertFunction(isStr16 ? "__mlang_std_strbuf_len16"
+                                                : "__mlang_std_strbuf_len",
+                                        lenFnType);
         llvm::Value* stringLen =
             builder.CreateCall(lenFn, {stringPtr}, baseId->name + ".strlen");
 
-        emitBoundsCheck(stringLen, "string");
+        emitBoundsCheck(stringLen, isStr16 ? "str16" : "string");
 
         llvm::Value* charPtr =
-            builder.CreateGEP(i8Type, stringPtr, indexI64, "str.char.ptr");
-        return builder.CreateLoad(i8Type, charPtr, "str.char");
+            builder.CreateGEP(elementType, stringPtr, indexI64,
+                              isStr16 ? "str16.char.ptr" : "str.char.ptr");
+        return builder.CreateLoad(elementType, charPtr,
+                                  isStr16 ? "str16.char" : "str.char");
     }
 
     // Check if it's a list
