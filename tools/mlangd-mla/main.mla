@@ -70,6 +70,7 @@ use std::strbuf::starts_with;
 use std::strbuf::sub;
 use std::fs::cwd;
 use std::fs::file_exists;
+use std::fs::glob_recursive;
 use std::fs::read_all_text;
 
 extern fn strcmp(a: str8, b: str8) -> i32;
@@ -1460,6 +1461,59 @@ fn c_internals_location(word: str8) -> str8 {
     return String::new();
 }
 
+fn workspace_c_location(symbol: str8) -> str8 {
+    if len(symbol) == 0 { return String::new(); }
+    let root: str8 = root_path_from_store();
+    if len(root) > 0 {
+        let c_files: list<str8> = glob_recursive(root, "*.c");
+        for p in c_files {
+            let loc0: str8 = symbol_location_in_c_file(p, format!("{}(", symbol));
+            if len(loc0) > 0 { return loc0; }
+        }
+        let cpp_files: list<str8> = glob_recursive(root, "*.cpp");
+        for p in cpp_files {
+            let loc1: str8 = symbol_location_in_c_file(p, format!("{}(", symbol));
+            if len(loc1) > 0 { return loc1; }
+        }
+        let h_files: list<str8> = glob_recursive(root, "*.h");
+        for p in h_files {
+            let loc2: str8 = symbol_location_in_c_file(p, format!("{}(", symbol));
+            if len(loc2) > 0 { return loc2; }
+        }
+        let hh_files: list<str8> = glob_recursive(root, "*.hpp");
+        for p in hh_files {
+            let loc3: str8 = symbol_location_in_c_file(p, format!("{}(", symbol));
+            if len(loc3) > 0 { return loc3; }
+        }
+    }
+    if ensure_text_store() != 0 { return String::new(); }
+    let root_uri: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+    if len(root_uri) == 0 { return String::new(); }
+    return workspace_c_definition_search(root_uri, symbol);
+}
+
+fn is_extern_decl_line_for_symbol(line_text: str8, symbol: str8) -> i32 {
+    if len(symbol) == 0 { return 0; }
+    let line_trim: str8 = trim_ascii_ws(line_text);
+    if starts_with(line_trim, "extern fn ") == 0 { return 0; }
+    if contains(line_trim, format!("extern fn {}(", symbol)) == 1 { return 1; }
+    return 0;
+}
+
+fn text_for_uri(uri: str8) -> str8 {
+    if len(uri) == 0 { return String::new(); }
+    if ensure_text_store() == 0 {
+        let cached: str8 = text_store_get(g_text_store_handle, uri);
+        if len(cached) > 0 { return cached; }
+    }
+    let p: str8 = file_uri_to_path(uri);
+    if len(p) == 0 { return String::new(); }
+    if file_exists(p) != 1 { return String::new(); }
+    let tr: Result<str8, str8> = read_all_text(p);
+    if tr.is_err() { return String::new(); }
+    return tr.unwrap();
+}
+
 fn extract_word_and_prefix(line_text: str8, col0: i64) -> str8 {
     let n: i64 = len(line_text);
     if n <= 0 { return "::"; }
@@ -2171,6 +2225,11 @@ fn handle_definition(payload: str8) -> str8 {
                 }
                 return "[]";
             }
+            let word_decl: str8 = word_at_col(line_text, col);
+            if is_extern_decl_line_for_symbol(line_text, word_decl) == 1 {
+                let c_loc_decl: str8 = workspace_c_location(word_decl);
+                if len(c_loc_decl) > 0 { return format!("[{}]", c_loc_decl); }
+            }
             if contains(line_text, "TcpListener::bind(") == 1 {
                 let nloc0: str8 = std_net_method_location("bind");
                 if len(nloc0) > 0 { return format!("[{}]", nloc0); }
@@ -2304,11 +2363,8 @@ fn handle_definition(payload: str8) -> str8 {
                     word2 = word_at_col(line_text2, col);
                 }
                 if len(word2) > 0 {
-                    let root_uri2: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
-                    if len(root_uri2) > 0 {
-                        let c_loc_ws: str8 = workspace_c_definition_search(root_uri2, word2);
-                        if len(c_loc_ws) > 0 { return format!("[{}]", c_loc_ws); }
-                    }
+                    let c_loc_ws: str8 = workspace_c_location(word2);
+                    if len(c_loc_ws) > 0 { return format!("[{}]", c_loc_ws); }
                 }
             }
         }
@@ -2319,6 +2375,17 @@ fn handle_definition(payload: str8) -> str8 {
         Ok(v) => v,
         Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
     };
+    if len(d.name) > 0 {
+        let def_text: str8 = text_for_uri(d.uri);
+        if len(def_text) > 0 {
+            let def_line0: i64 = d.line - 1;
+            let def_line_text: str8 = line_text_at(def_text, def_line0);
+            if is_extern_decl_line_for_symbol(def_line_text, d.name) == 1 {
+                let c_loc_def: str8 = workspace_c_location(d.name);
+                if len(c_loc_def) > 0 { return format!("[{}]", c_loc_def); }
+            }
+        }
+    }
     if len(query_text) > 0 {
             let line_text2: str8 = line_text_at(query_text, line);
             let sc_pair2: str8 = first_static_call_pair(line_text2);

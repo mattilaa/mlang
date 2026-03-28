@@ -35,6 +35,8 @@ def main() -> int:
         root = Path(td)
         doc = root / "extern_def.mla"
         c_src = root / "native.c"
+        printf_doc = root / "c_lib_usage.mla"
+        printf_c_src = root / "c_wrapper.c"
         text = (
             "extern fn c_add(a: i32, b: i32) -> i32;\n"
             "\n"
@@ -49,8 +51,24 @@ def main() -> int:
             "  return a + b;\n"
             "}\n"
         )
+        printf_text = (
+            "extern fn printf(format: str8, value: i32) -> i32;\n"
+            "\n"
+            "fn main() -> i32 {\n"
+            "  return printf(\"n=%d\\n\", 7);\n"
+            "}\n"
+        )
+        printf_c_text = (
+            "#include <stdio.h>\n"
+            "\n"
+            "int printf(const char* format, int value) {\n"
+            "  return fprintf(stdout, format, value);\n"
+            "}\n"
+        )
         doc.write_text(text)
         c_src.write_text(c_text)
+        printf_doc.write_text(printf_text)
+        printf_c_src.write_text(printf_c_text)
 
         client = JsonRpcClient([str(mlangd), "--stdio"])
         try:
@@ -89,6 +107,48 @@ def main() -> int:
             assert call_target.get("uri") == to_uri(c_src), f"expected call-site jump to native.c: {call_res!r}"
             call_start = call_target.get("range", {}).get("start", {})
             assert call_start.get("line") == 2, f"expected call-site c_add on line 3 in C source: {call_res!r}"
+
+            open_doc(client, printf_doc, printf_text)
+
+            printf_decl_line, printf_decl_char = position_of(printf_text, "printf(format:")
+            printf_decl_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(printf_doc)},
+                    "position": {"line": printf_decl_line, "character": printf_decl_char},
+                },
+            )
+            assert isinstance(printf_decl_res, list) and printf_decl_res, (
+                f"expected printf C definition from declaration: {printf_decl_res!r}"
+            )
+            printf_decl_target = printf_decl_res[0]
+            assert printf_decl_target.get("uri") == to_uri(printf_c_src), (
+                f"expected printf declaration jump to c_wrapper.c: {printf_decl_res!r}"
+            )
+            printf_decl_start = printf_decl_target.get("range", {}).get("start", {})
+            assert printf_decl_start.get("line") == 2, (
+                f"expected printf wrapper on line 3 in C source: {printf_decl_res!r}"
+            )
+
+            printf_call_line, printf_call_char = position_of(printf_text, "printf(\"n=%d\\n\", 7)")
+            printf_call_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(printf_doc)},
+                    "position": {"line": printf_call_line, "character": printf_call_char},
+                },
+            )
+            assert isinstance(printf_call_res, list) and printf_call_res, (
+                f"expected printf C definition from call site: {printf_call_res!r}"
+            )
+            printf_call_target = printf_call_res[0]
+            assert printf_call_target.get("uri") == to_uri(printf_c_src), (
+                f"expected printf call-site jump to c_wrapper.c: {printf_call_res!r}"
+            )
+            printf_call_start = printf_call_target.get("range", {}).get("start", {})
+            assert printf_call_start.get("line") == 2, (
+                f"expected printf call-site wrapper on line 3 in C source: {printf_call_res!r}"
+            )
         finally:
             client.close()
 
