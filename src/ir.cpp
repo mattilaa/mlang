@@ -3254,6 +3254,8 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
     }
 
     TypeNode::TypeKind typeKind = getExpressionTypeKind(expr, variableTypes);
+    if(TypeNode* exprType = getLValueType(expr, line))
+        typeKind = exprType->kind;
     bool isUnsigned = isUnsignedType(typeKind);
 
     if(argType->isIntegerTy(1))
@@ -5974,6 +5976,12 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                                          llvm::Value* rhs) -> llvm::Value* {
             bool isFloat = lhs->getType()->isFloatingPointTy() ||
                            rhs->getType()->isFloatingPointTy();
+            TypeNode::TypeKind lhsCmpKind =
+                getExpressionTypeKind(node->left, variableTypes);
+            TypeNode::TypeKind rhsCmpKind =
+                getExpressionTypeKind(node->right, variableTypes);
+            bool useUnsignedIntCmp =
+                isUnsignedType(lhsCmpKind) || isUnsignedType(rhsCmpKind);
 
             bool lhsIsNumeric = lhs->getType()->isIntegerTy() ||
                                 lhs->getType()->isFloatingPointTy();
@@ -5990,11 +5998,17 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 if(lhsBits != rhsBits)
                 {
                     if(lhsBits > rhsBits)
-                        rhs = builder.CreateSExt(rhs, lhs->getType(),
-                                                 "spaceship.sext");
+                        rhs = builder.CreateIntCast(rhs, lhs->getType(),
+                                                    !useUnsignedIntCmp,
+                                                    useUnsignedIntCmp
+                                                        ? "spaceship.zext"
+                                                        : "spaceship.sext");
                     else
-                        lhs = builder.CreateSExt(lhs, rhs->getType(),
-                                                 "spaceship.sext");
+                        lhs = builder.CreateIntCast(lhs, rhs->getType(),
+                                                    !useUnsignedIntCmp,
+                                                    useUnsignedIntCmp
+                                                        ? "spaceship.zext"
+                                                        : "spaceship.sext");
                 }
             }
 
@@ -6007,8 +6021,12 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             }
             else
             {
-                isLt = builder.CreateICmpSLT(lhs, rhs, "spaceship.lt");
-                isGt = builder.CreateICmpSGT(lhs, rhs, "spaceship.gt");
+                isLt = useUnsignedIntCmp
+                           ? builder.CreateICmpULT(lhs, rhs, "spaceship.lt")
+                           : builder.CreateICmpSLT(lhs, rhs, "spaceship.lt");
+                isGt = useUnsignedIntCmp
+                           ? builder.CreateICmpUGT(lhs, rhs, "spaceship.gt")
+                           : builder.CreateICmpSGT(lhs, rhs, "spaceship.gt");
             }
 
             llvm::Type* i32Ty = llvm::Type::getInt32Ty(context);
@@ -6301,6 +6319,17 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                    : builder.CreateOr(Lb, Rb, "ortmp");
     }
 
+    auto resolveExprKind = [&](ExpressionNode* expr) -> TypeNode::TypeKind {
+        if(TypeNode* exprType = getLValueType(expr, node->line))
+            return exprType->kind;
+        return getExpressionTypeKind(expr, variableTypes);
+    };
+
+    TypeNode::TypeKind lhsKind = resolveExprKind(node->left);
+    TypeNode::TypeKind rhsKind = resolveExprKind(node->right);
+    bool useUnsignedIntOps =
+        isUnsignedType(lhsKind) || isUnsignedType(rhsKind);
+
     if(node->op == BinaryOpNode::OP_BITAND || node->op == BinaryOpNode::OP_BITOR ||
        node->op == BinaryOpNode::OP_BITXOR || node->op == BinaryOpNode::OP_SHL ||
        node->op == BinaryOpNode::OP_SHR)
@@ -6321,9 +6350,13 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         else if(LBits != RBits)
         {
             if(LBits > RBits)
-                R = builder.CreateSExt(R, L->getType(), "bitand.sext");
+                R = builder.CreateIntCast(R, L->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "bitand.zext"
+                                                            : "bitand.sext");
             else
-                L = builder.CreateSExt(L, R->getType(), "bitand.sext");
+                L = builder.CreateIntCast(L, R->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "bitand.zext"
+                                                            : "bitand.sext");
         }
         switch(node->op)
         {
@@ -6336,7 +6369,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         case BinaryOpNode::OP_SHL:
             return builder.CreateShl(L, R, "shltmp");
         case BinaryOpNode::OP_SHR:
-            return builder.CreateAShr(L, R, "shrtmp");
+            return useUnsignedIntOps ? builder.CreateLShr(L, R, "shrtmp")
+                                     : builder.CreateAShr(L, R, "shrtmp");
         default:
             return nullptr;
         }
@@ -6380,9 +6414,6 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
     };
 
-    TypeNode::TypeKind lhsKind = getExpressionTypeKind(node->left, variableTypes);
-    TypeNode::TypeKind rhsKind =
-        getExpressionTypeKind(node->right, variableTypes);
     bool lhsIsString = lhsKind == TypeNode::TYPE_STRING ||
                        lhsKind == TypeNode::TYPE_STR8 ||
                        lhsKind == TypeNode::TYPE_STR16;
@@ -6566,11 +6597,13 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             // Extend the smaller type to match the larger type
             if(LBits > RBits)
             {
-                R = builder.CreateSExt(R, L->getType(), "sext");
+                R = builder.CreateIntCast(R, L->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "zext" : "sext");
             }
             else
             {
-                L = builder.CreateSExt(L, R->getType(), "sext");
+                L = builder.CreateIntCast(L, R->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "zext" : "sext");
             }
         }
     }
@@ -6606,7 +6639,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             }
         }
         return isFloat ? builder.CreateFDiv(L, R, "divtmp")
-                       : builder.CreateSDiv(L, R, "divtmp");
+                       : (useUnsignedIntOps ? builder.CreateUDiv(L, R, "divtmp")
+                                            : builder.CreateSDiv(L, R, "divtmp"));
     }
     case BinaryOpNode::OP_MODULO:
     {
@@ -6631,20 +6665,25 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         {
             return builder.CreateFRem(L, R, "modtmp");
         }
-        return builder.CreateSRem(L, R, "modtmp");
+        return useUnsignedIntOps ? builder.CreateURem(L, R, "modtmp")
+                                 : builder.CreateSRem(L, R, "modtmp");
     }
     case BinaryOpNode::OP_LT:
         return isFloat ? builder.CreateFCmpOLT(L, R, "cmptmp")
-                       : builder.CreateICmpSLT(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpULT(L, R, "cmptmp")
+                                            : builder.CreateICmpSLT(L, R, "cmptmp"));
     case BinaryOpNode::OP_GT:
         return isFloat ? builder.CreateFCmpOGT(L, R, "cmptmp")
-                       : builder.CreateICmpSGT(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpUGT(L, R, "cmptmp")
+                                            : builder.CreateICmpSGT(L, R, "cmptmp"));
     case BinaryOpNode::OP_LE:
         return isFloat ? builder.CreateFCmpOLE(L, R, "cmptmp")
-                       : builder.CreateICmpSLE(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpULE(L, R, "cmptmp")
+                                            : builder.CreateICmpSLE(L, R, "cmptmp"));
     case BinaryOpNode::OP_GE:
         return isFloat ? builder.CreateFCmpOGE(L, R, "cmptmp")
-                       : builder.CreateICmpSGE(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpUGE(L, R, "cmptmp")
+                                            : builder.CreateICmpSGE(L, R, "cmptmp"));
     case BinaryOpNode::OP_EQ:
         return isFloat ? builder.CreateFCmpOEQ(L, R, "cmptmp")
                        : builder.CreateICmpEQ(L, R, "cmptmp");
@@ -8640,6 +8679,14 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    auto oldStructIt = structVariableTypes.find(node->varName);
+    bool hadOldStructType = oldStructIt != structVariableTypes.end();
+    std::string oldStructType =
+        hadOldStructType ? oldStructIt->second : std::string();
+    auto oldEnumIt = enumVariableTypes.find(node->varName);
+    bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
+    std::string oldEnumType =
+        hadOldEnumType ? oldEnumIt->second : std::string();
     bool hadOldMoved = isVariableMoved(node->varName);
     auto oldDepthIt = variableScopeDepth.find(node->varName);
     bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
@@ -8851,6 +8898,14 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    auto oldStructIt = structVariableTypes.find(node->varName);
+    bool hadOldStructType = oldStructIt != structVariableTypes.end();
+    std::string oldStructType =
+        hadOldStructType ? oldStructIt->second : std::string();
+    auto oldEnumIt = enumVariableTypes.find(node->varName);
+    bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
+    std::string oldEnumType =
+        hadOldEnumType ? oldEnumIt->second : std::string();
     bool hadOldMoved = isVariableMoved(node->varName);
     auto oldDepthIt = variableScopeDepth.find(node->varName);
     bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
@@ -8858,6 +8913,35 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
 
     namedValues[node->varName] = loopVar;
     variableTypes[node->varName] = elemTypeNode->kind;
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
+    {
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_INT;
+            enumVariableTypes[node->varName] = resolvedEnumName;
+            structVariableTypes.erase(node->varName);
+        }
+        else
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+            structVariableTypes[node->varName] = structRef->structName;
+            enumVariableTypes.erase(node->varName);
+        }
+    }
+    else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
+            genRef->structName, genRef->typeArgs);
+        enumVariableTypes.erase(node->varName);
+    }
+    else
+    {
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
     clearMovedVariable(node->varName);
     recordVariableScopeDepth(node->varName);
 
@@ -8974,6 +9058,16 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldStructType)
+        structVariableTypes[node->varName] = oldStructType;
+    else
+        structVariableTypes.erase(node->varName);
+
+    if(hadOldEnumType)
+        enumVariableTypes[node->varName] = oldEnumType;
+    else
+        enumVariableTypes.erase(node->varName);
 
     if(hadOldDepth)
         variableScopeDepth[node->varName] = oldDepth;
@@ -11780,6 +11874,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = gv;
         variableTypes[node->name] = kind;
+        recordVariableScopeDepth(node->name);
         if(!structTypeName.empty())
             structVariableTypes[node->name] = structTypeName;
         if(node->isGlobalStorage)

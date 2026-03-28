@@ -456,6 +456,36 @@ fn file_uri_to_path(uri: str8) -> str8 {
     return uri;
 }
 
+fn text_for_uri(uri: str8) -> str8 {
+    if len(uri) == 0 { return String::new(); }
+    if ensure_text_store() == 0 {
+        let cached: str8 = text_store_get(g_text_store_handle, uri);
+        if len(cached) > 0 { return cached; }
+    }
+    let path: str8 = file_uri_to_path(uri);
+    if len(path) == 0 { return String::new(); }
+    let text_r: Result<str8, str8> = read_all_text(path);
+    if text_r.is_err() { return String::new(); }
+    return text_r.unwrap();
+}
+
+fn extern_fn_name_from_line(line_text: str8) -> str8 {
+    let line_trim: str8 = trim_ascii_ws(line_text);
+    if starts_with(line_trim, "extern fn ") == 0 { return String::new(); }
+    let rest: str8 = sub(line_trim, 10, len(line_trim) - 10);
+    let lp: i64 = find(rest, "(");
+    if lp <= 0 { return String::new(); }
+    return trim_ascii_ws(sub(rest, 0, lp));
+}
+
+fn extern_fn_name_at_uri_line(uri: str8, line1: i32) -> str8 {
+    if line1 <= 0 { return String::new(); }
+    let text: str8 = text_for_uri(uri);
+    if len(text) == 0 { return String::new(); }
+    let line_text: str8 = line_text_at(text, line1 - 1);
+    return extern_fn_name_from_line(line_text);
+}
+
 fn first_match_location(path: str8, text: str8, pattern: str8) -> str8 {
     let off: i64 = find(text, pattern);
     if off < 0 { return String::new(); }
@@ -2319,8 +2349,23 @@ fn handle_definition(payload: str8) -> str8 {
         Ok(v) => v,
         Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
     };
+    let root_uri3: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+    if len(root_uri3) > 0 {
+        let extern_symbol: str8 = extern_fn_name_at_uri_line(d.uri, d.line);
+        if len(extern_symbol) > 0 {
+            let c_loc_ws2: str8 = workspace_c_definition_search(root_uri3, extern_symbol);
+            if len(c_loc_ws2) > 0 { return format!("[{}]", c_loc_ws2); }
+        }
+    }
     if len(query_text) > 0 {
             let line_text2: str8 = line_text_at(query_text, line);
+            let extern_here: str8 = extern_fn_name_from_line(line_text2);
+            if len(extern_here) > 0 {
+                if len(root_uri3) > 0 {
+                    let c_loc_ws3: str8 = workspace_c_definition_search(root_uri3, extern_here);
+                    if len(c_loc_ws3) > 0 { return format!("[{}]", c_loc_ws3); }
+                }
+            }
             let sc_pair2: str8 = first_static_call_pair(line_text2);
             let sc_sep2: i64 = find(sc_pair2, "::");
             if sc_sep2 > 0 {

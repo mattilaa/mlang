@@ -246,13 +246,13 @@ pub fn as_seek(c: Cursor) -> Seek {
 
 /// @brief Write text while holding stdout lock.
 /// @param lockToken stdout lock token.
-pub fn write_locked(lockToken: StdoutLock, s: str8) -> i64 {
+pub fn write_locked(lockToken: &StdoutLock, s: str8) -> i64 {
     return __mlang_std_io_stdout_write(s);
 }
 
 /// @brief Write text + newline while holding stdout lock.
 /// @param lockToken stdout lock token.
-pub fn writeln_locked(lockToken: StdoutLock, s: str8) -> i64 {
+pub fn writeln_locked(lockToken: &StdoutLock, s: str8) -> i64 {
     return __mlang_std_io_stdout_writeln(s);
 }
 
