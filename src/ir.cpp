@@ -18596,6 +18596,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             builder.CreateAlloca(llvmType, nullptr, name);
         builder.CreateStore(value, alloca);
         namedValues[name] = alloca;
+        recordVariableScopeDepth(name);
 
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
         {
@@ -18670,6 +18671,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedActiveBorrowers = activeBorrowers;
         auto savedActiveMutBorrower = activeMutBorrower;
         auto savedCleanupScopes = cleanupScopes;
+        auto savedVariableScopeDepth = variableScopeDepth;
+        auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
 
         std::string binding =
             arm && arm->pattern ? arm->pattern->binding : "";
@@ -18702,6 +18705,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = savedActiveBorrowers;
         activeMutBorrower = savedActiveMutBorrower;
         cleanupScopes = savedCleanupScopes;
+        variableScopeDepth = savedVariableScopeDepth;
+        variableScopeDepthScopes = savedVariableScopeDepthScopes;
 
         return armValue;
     };
