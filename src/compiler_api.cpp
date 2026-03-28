@@ -597,6 +597,116 @@ static int findIdentifierColumn(std::string_view line, std::string_view name) {
     }
 }
 
+static bool isExternFnDeclarationLine(std::string_view line, std::string_view symbol) {
+    if (symbol.empty()) {
+        return false;
+    }
+    const std::string trimmed = trimWs(line);
+    if (trimmed.rfind("extern fn ", 0) != 0) {
+        return false;
+    }
+    const std::string needle = "extern fn " + std::string(symbol) + "(";
+    return trimmed.find(needle) != std::string::npos;
+}
+
+struct CDefinitionLocation {
+    std::string uri;
+    int line = 0;
+    int column = 0;
+};
+
+static std::optional<CDefinitionLocation> findCDefinitionInFile(
+    const std::filesystem::path& path,
+    std::string_view symbol) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return std::nullopt;
+    }
+
+    const std::string target = std::string(symbol) + "(";
+    std::string line;
+    int line_no = 0;
+    while (std::getline(in, line)) {
+        ++line_no;
+        const size_t pos = line.find(target);
+        if (pos == std::string::npos) {
+            continue;
+        }
+        const bool left_ok = pos == 0 || !isIdentContinue(line[pos - 1]);
+        if (!left_ok) {
+            continue;
+        }
+        return CDefinitionLocation{
+            "file://" + path.lexically_normal().string(),
+            line_no,
+            static_cast<int>(pos) + 1,
+        };
+    }
+    return std::nullopt;
+}
+
+static bool isExcludedWorkspaceDir(std::string_view name) {
+    return name == ".git" || name == "build" || name == "artifacts" ||
+           name == ".cache" || name == ".venv";
+}
+
+static std::optional<CDefinitionLocation> findWorkspaceCDefinition(
+    std::string_view requester_uri,
+    std::string_view symbol) {
+    namespace fs = std::filesystem;
+
+    if (symbol.empty()) {
+        return std::nullopt;
+    }
+
+    std::error_code ec;
+    fs::path base = fs::path(uriToPath(requester_uri)).parent_path();
+    if (base.empty()) {
+        base = ".";
+    }
+    fs::path root = base;
+    if (const auto manifest = findManifestPath(base); manifest.has_value()) {
+        root = manifest->parent_path();
+    }
+    root = fs::absolute(root, ec);
+    if (ec) {
+        root = base;
+    }
+
+    fs::recursive_directory_iterator it(root, ec), end;
+    if (ec) {
+        return std::nullopt;
+    }
+
+    while (it != end) {
+        const fs::directory_entry& entry = *it;
+        const fs::path path = entry.path();
+        std::error_code status_ec;
+        if (entry.is_directory(status_ec)) {
+            const std::string name = path.filename().string();
+            if (isExcludedWorkspaceDir(name)) {
+                it.disable_recursion_pending();
+            }
+            ++it;
+            continue;
+        }
+        if (status_ec) {
+            ++it;
+            continue;
+        }
+        const std::string ext = path.extension().string();
+        if (ext == ".c" || ext == ".cc" || ext == ".cpp" || ext == ".h" ||
+            ext == ".hpp") {
+            if (const auto loc = findCDefinitionInFile(path, symbol); loc.has_value()) {
+                return loc;
+            }
+        }
+        ++it;
+    }
+
+    return std::nullopt;
+}
+
 static std::string typeToString(TypeNode* type) {
     if (!type) {
         return {};
@@ -3626,6 +3736,43 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
         return prep;
     }
 
+    const auto maybe_c_definition = [&](std::string_view symbol_name)
+        -> std::optional<mlang::compiler_api::CDefinitionLocation> {
+        return mlang::compiler_api::findWorkspaceCDefinition(uri, symbol_name);
+    };
+
+    const auto apply_c_definition = [&](const mlang::compiler_api::CDefinitionLocation& loc)
+        -> int {
+        *out_line = loc.line;
+        *out_column = loc.column;
+        *out_name_length = 0;
+        out_name[0] = '\0';
+        *out_uri_length = static_cast<int>(loc.uri.size());
+        const size_t uri_copy_len =
+            std::min(static_cast<size_t>(out_uri_capacity - 1), loc.uri.size());
+        if (uri_copy_len > 0) {
+            std::memcpy(out_uri, loc.uri.data(), uri_copy_len);
+        }
+        out_uri[uri_copy_len] = '\0';
+        return static_cast<int>(mlang::compiler_api::Status::Ok);
+    };
+
+    if (const auto offset = mlang::compiler_api::offsetFromLineColumn(current->text, line, column);
+        offset.has_value()) {
+        if (const auto span = mlang::compiler_api::tokenSpanAtOffset(current->text, *offset);
+            span.has_value()) {
+            const std::vector<std::string_view> lines = mlang::compiler_api::splitLines(current->text);
+            if (line > 0 && static_cast<size_t>(line - 1) < lines.size()) {
+                if (mlang::compiler_api::isExternFnDeclarationLine(
+                        lines[static_cast<size_t>(line - 1)], span->token)) {
+                    if (const auto loc = maybe_c_definition(span->token); loc.has_value()) {
+                        return apply_c_definition(*loc);
+                    }
+                }
+            }
+        }
+    }
+
     const std::optional<mlang::compiler_api::ResolvedQuerySymbol> def =
         mlang::compiler_api::resolveSymbolAtPosition(*current, sem_docs, line, column);
     if (!def.has_value()) {
@@ -3690,6 +3837,25 @@ int __mlang_compiler_document_definition_ex(mlang_compiler_session* session,
         std::memcpy(out_uri, def->symbol.uri.data(), uri_copy_len);
     }
     out_uri[uri_copy_len] = '\0';
+
+    const std::string def_path = mlang::compiler_api::uriToPath(def->symbol.uri);
+    if (!def_path.empty()) {
+        std::ifstream def_in(def_path, std::ios::binary);
+        if (def_in) {
+            std::string def_line_text;
+            int current_line = 0;
+            while (current_line < def->symbol.line && std::getline(def_in, def_line_text)) {
+                ++current_line;
+            }
+            if (current_line == def->symbol.line &&
+                mlang::compiler_api::isExternFnDeclarationLine(def_line_text,
+                                                               def->symbol.name)) {
+                if (const auto loc = maybe_c_definition(def->symbol.name); loc.has_value()) {
+                    return apply_c_definition(*loc);
+                }
+            }
+        }
+    }
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 
