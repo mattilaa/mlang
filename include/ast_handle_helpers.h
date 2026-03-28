@@ -114,7 +114,7 @@ ASTNode* mla_ast_use_all_declaration(char* module_name, int line);
     ASTNode* mla_ast_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
     ASTNode* mla_ast_chained_field_assignment(ASTNode* target, ASTNode* expr, int line);
 ASTNode* mla_ast_return_stmt(ASTNode* expr);
-ASTNode* mla_ast_literal_int(int value);
+ASTNode* mla_ast_literal_int(int64_t value);
 ASTNode* mla_ast_literal_bool(int value);
 ASTNode* mla_ast_literal_float(float value);
 ASTNode* mla_ast_literal_double(float value);

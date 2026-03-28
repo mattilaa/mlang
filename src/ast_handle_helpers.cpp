@@ -589,7 +589,7 @@ ASTNode* mla_ast_return_stmt(ASTNode* expr)
     return create_return_stmt(expr);
 }
 
-ASTNode* mla_ast_literal_int(int value)
+ASTNode* mla_ast_literal_int(int64_t value)
 {
     return create_int_literal(value);
 }
