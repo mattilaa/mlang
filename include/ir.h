@@ -197,9 +197,15 @@ private:
     std::vector<llvm::BasicBlock*> loopContinueBlocks;
     struct ScopeCleanup
     {
+        enum class CallKind
+        {
+            ByValueFunction,
+            ByPointerMethod
+        };
         std::string varName;
         std::string structTypeName;
-        llvm::Function* dropFunction = nullptr;
+        llvm::Function* function = nullptr;
+        CallKind callKind = CallKind::ByValueFunction;
     };
     std::vector<std::vector<ScopeCleanup>> cleanupScopes;
     struct PointerBorrowScopeEntry
@@ -263,6 +269,9 @@ private:
     std::string ownershipClassName(TypeNode* typeNode);
     bool isMoveOnlyVariable(const std::string& name);
     bool isVariableMoved(const std::string& name) const;
+    bool isVariableCurrentlyVisible(const std::string& name) const;
+    bool validateVariableAccessible(const std::string& name, int line,
+                                    int col = 0);
     void clearMovedVariable(const std::string& name);
     void clearPointerBorrow(const std::string& pointerVar);
     void registerPointerBorrow(const std::string& pointerVar,
@@ -340,7 +349,7 @@ private:
     void enterCleanupScope();
     void exitCleanupScope();
     void emitAllActiveCleanups();
-    llvm::Function* resolveDropFunctionForStruct(const std::string& structTypeName);
+    ScopeCleanup resolveDropFunctionForStruct(const std::string& structTypeName);
     void registerStructCleanupIfNeeded(const std::string& varName,
                                        const std::string& structTypeName);
 

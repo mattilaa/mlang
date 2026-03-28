@@ -102,7 +102,7 @@ ASTNode* create_field_access(char* struct_name, char* field_name, int line);
 ASTNode* mla_ast_field_assignment(char* struct_name, char* field_name, ASTNode* expr, int line);
 ASTNode* mla_ast_chained_field_assignment(ASTNode* target, ASTNode* expr, int line);
 ASTNode* mla_ast_return_stmt(ASTNode* expr);
-ASTNode* mla_ast_literal_int(int value);
+ASTNode* mla_ast_literal_int(int64_t value);
 ASTNode* mla_ast_literal_bool(int value);
 ASTNode* mla_ast_literal_float(float value);
 ASTNode* mla_ast_literal_double(float value);
@@ -1647,6 +1647,7 @@ static bool is_reserved_type_keyword(const char* s)
     return strcmp(s, "void") == 0 || strcmp(s, "bool") == 0 ||
            strcmp(s, "f32") == 0 ||
            strcmp(s, "f64") == 0 ||
+           strcmp(s, "string") == 0 ||
            strcmp(s, "str8") == 0 || strcmp(s, "str16") == 0 ||
            strcmp(s, "list") == 0 || strcmp(s, "map") == 0 ||
            strcmp(s, "tuple") == 0 || strcmp(s, "i8") == 0 ||

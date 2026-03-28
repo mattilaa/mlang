@@ -25,6 +25,7 @@ class MLATest : public ::testing::Test
 {
 public:
     static std::string compilerPath;
+    static std::string stdlibLibDir;
 
 protected:
     std::string testDir;
@@ -43,6 +44,18 @@ protected:
         else
         {
             compilerPath = DEFAULT_COMPILER_PATH;
+        }
+#endif
+
+        const char* envLibDir = std::getenv("MLANG_STDLIB_LIB_PATH");
+        if(envLibDir && std::strlen(envLibDir) > 0)
+        {
+            stdlibLibDir = envLibDir;
+        }
+#ifdef DEFAULT_MLANG_LIB_DIR
+        else
+        {
+            stdlibLibDir = DEFAULT_MLANG_LIB_DIR;
         }
 #endif
     }
@@ -77,8 +90,10 @@ protected:
     // Returns true if compilation succeeded
     bool compile(bool expectSuccess = true)
     {
-        std::string cmd =
-            compilerPath + " -o " + outputExe + " " + sourceFile + " 2>&1";
+        std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile;
+        if(!stdlibLibDir.empty())
+            cmd += " -L " + stdlibLibDir + " -lmlang_std";
+        cmd += " 2>&1";
         int result = system(cmd.c_str());
         if(expectSuccess)
         {
@@ -89,8 +104,10 @@ protected:
 
     std::string compileCapture(int& exitCode)
     {
-        std::string cmd =
-            compilerPath + " -o " + outputExe + " " + sourceFile + " 2>&1";
+        std::string cmd = compilerPath + " -o " + outputExe + " " + sourceFile;
+        if(!stdlibLibDir.empty())
+            cmd += " -L " + stdlibLibDir + " -lmlang_std";
+        cmd += " 2>&1";
         FILE* pipe = popen(cmd.c_str(), "r");
         if(!pipe)
         {
@@ -113,8 +130,11 @@ protected:
 
     std::string compilePathCapture(const fs::path& srcPath, int& exitCode)
     {
-        std::string cmd = compilerPath + " -o " + outputExe + " " +
-                          srcPath.string() + " 2>&1";
+        std::string cmd =
+            compilerPath + " -o " + outputExe + " " + srcPath.string();
+        if(!stdlibLibDir.empty())
+            cmd += " -L " + stdlibLibDir + " -lmlang_std";
+        cmd += " 2>&1";
         FILE* pipe = popen(cmd.c_str(), "r");
         if(!pipe)
         {
@@ -203,6 +223,7 @@ protected:
 };
 
 std::string MLATest::compilerPath = "./mlang";
+std::string MLATest::stdlibLibDir = "";
 
 // ============================================================================
 // Basic Program Tests
@@ -388,7 +409,7 @@ TEST_F(MLATest, StringLiteral)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let s: string = "Hello, World!";
+            let s: str8 = "Hello, World!";
             println!("{}", s);
             return 0;
         }
@@ -422,8 +443,8 @@ TEST_F(MLATest, StringConcatenationPlus)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let a: string = "Hello, ";
-            let b: string = "MLA!";
+            let a: str8 = "Hello, ";
+            let b: str8 = "MLA!";
             let c = a + b;
             println!("{}", c);
             return 0;
@@ -436,7 +457,7 @@ TEST_F(MLATest, StringConcatenationRejectsMixedNumeric)
 {
     std::string code = R"(
         fn main() -> i32 {
-            let a: string = "x=";
+            let a: str8 = "x=";
             let b: i32 = 42;
             let c = a + b;
             println!("{}", c);
@@ -454,9 +475,12 @@ TEST_F(MLATest, StringConcatenationRejectsMixedNumeric)
 TEST_F(MLATest, StringConcatenationRejectsMismatchedStringKinds)
 {
     std::string code = R"(
+        mod std::strbuf;
+        use std::strbuf::to_utf16;
+
         fn main() -> i32 {
-            let a: string = "left";
-            let b: str8 = "right";
+            let a: str8 = "left";
+            let b: str16 = to_utf16("right");
             let c = a + b;
             println!("{}", c);
             return 0;
@@ -1753,6 +1777,53 @@ TEST_F(MLATest, OwnershipFreeAliasDoubleFreeReportsError)
     EXPECT_NE(out.find("double free or use-after-free"), std::string::npos);
 }
 
+TEST_F(MLATest, OwnershipScopeExitFreeMethodConsumesValue)
+{
+    std::string code = R"(
+        struct OwnedText {
+            var raw: str8;
+        };
+
+        impl OwnedText {
+            pub fn free(self: OwnedText) -> i32 {
+                String::free(self.raw);
+                return 0;
+            }
+        }
+
+        fn main() -> i32 {
+            let s: OwnedText = OwnedText { raw: String::from("hello") };
+            s.free();
+            println!("{}", s.raw);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("use of moved value"), std::string::npos);
+}
+
+TEST_F(MLATest, OwnershipUseOutsideBlockReportsUnknownVariable)
+{
+    std::string code = R"(
+        fn main() -> i32 {
+            {
+                let s: string = String::from("hello");
+                println!("{}", s);
+            }
+            println!("{}", s);
+            return 0;
+        }
+    )";
+    writeSource(code);
+    int rc = 0;
+    std::string out = compileCapture(rc);
+    EXPECT_NE(rc, 0);
+    EXPECT_NE(out.find("unknown variable"), std::string::npos);
+}
+
 TEST_F(MLATest, OwnershipHandleFreeDoubleFreeReportsError)
 {
     std::string code = R"(
@@ -2050,7 +2121,9 @@ TEST_F(MLATest, OwnershipCanReturnPointerBorrowingGlobal)
 
         fn main() -> i32 {
             let p: ptr<i32> = get_g();
-            return *p;
+            unsafe {
+                return *p;
+            }
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 7);
@@ -2113,7 +2186,9 @@ TEST_F(MLATest, OwnershipCanBorrowIntoPointerWhenLifetimesMatch)
         fn main() -> i32 {
             let x: i32 = 7;
             var p: ptr<i32> = &x;
-            return *p;
+            unsafe {
+                return *p;
+            }
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 7);
@@ -2175,7 +2250,9 @@ TEST_F(MLATest, OwnershipCanBorrowDisjointFieldsInSingleCall)
         };
 
         fn add2(a: ptr<i32>, b: ptr<i32>) -> i32 {
-            return *a + *b;
+            unsafe {
+                return *a + *b;
+            }
         }
 
         fn main() -> i32 {
@@ -2249,7 +2326,9 @@ TEST_F(MLATest, OwnershipCanBorrowNestedDisjointFieldsInSingleCall)
         };
 
         fn add2(a: ptr<i32>, b: ptr<i32>) -> i32 {
-            return *a + *b;
+            unsafe {
+                return *a + *b;
+            }
         }
 
         fn main() -> i32 {
@@ -2309,7 +2388,9 @@ TEST_F(MLATest, OwnershipCannotBorrowMethodReceiverAndFieldArgSameObject)
 
         impl Pair {
             fn add_with(&self, x: ptr<i32>) -> i32 {
-                return self.left + *x;
+                unsafe {
+                    return self.left + *x;
+                }
             }
         }
 
@@ -2335,7 +2416,9 @@ TEST_F(MLATest, OwnershipCanBorrowMethodReceiverAndArgFromDifferentObject)
 
         impl Pair {
             fn add_with(&self, x: ptr<i32>) -> i32 {
-                return self.left + *x;
+                unsafe {
+                    return self.left + *x;
+                }
             }
         }
 
@@ -3051,7 +3134,11 @@ TEST_F(MLATest, RawPointerDereferenceOutsideUnsafeFails)
 TEST_F(MLATest, RawPointerDereferenceInsideUnsafeCompiles)
 {
     std::string code = R"(
-        extern fn raw_i32_ptr() -> ptr<i32>;
+        var G: i32 = 7;
+
+        fn raw_i32_ptr() -> ptr<i32> {
+            return &G;
+        }
 
         fn main() -> i32 {
             let p: ptr<i32> = raw_i32_ptr();
@@ -3060,8 +3147,7 @@ TEST_F(MLATest, RawPointerDereferenceInsideUnsafeCompiles)
             }
         }
     )";
-    writeSource(code);
-    EXPECT_TRUE(compile(true));
+    EXPECT_EQ(compileAndRunExitCode(code), 7);
 }
 
 TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)
@@ -3070,7 +3156,9 @@ TEST_F(MLATest, BorrowedPointerDereferenceOutsideUnsafeStillAllowed)
         fn main() -> i32 {
             let x: i32 = 7;
             let p: ptr<i32> = &x;
-            return *p;
+            unsafe {
+                return *p;
+            }
         }
     )";
     EXPECT_EQ(compileAndRunExitCode(code), 7);

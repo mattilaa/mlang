@@ -1250,6 +1250,42 @@ bool CodeGenerator::isVariableMoved(const std::string& name) const
     return movedVariables.find(name) != movedVariables.end();
 }
 
+bool CodeGenerator::isVariableCurrentlyVisible(const std::string& name) const
+{
+    if(globalNamedValues.find(name) != globalNamedValues.end())
+        return true;
+
+    auto depthIt = variableScopeDepth.find(name);
+    if(depthIt == variableScopeDepth.end())
+        return false;
+    return depthIt->second <= currentScopeDepth();
+}
+
+bool CodeGenerator::validateVariableAccessible(const std::string& name,
+                                               int line, int col)
+{
+    if(globalNamedValues.find(name) == globalNamedValues.end() &&
+       isVariableMoved(name))
+    {
+        reportError(line, col, "use of moved value: '" + name + "'");
+        return false;
+    }
+
+    if(!isVariableCurrentlyVisible(name))
+    {
+        reportError(line, col, "unknown variable: '" + name + "'");
+        return false;
+    }
+
+    auto valueIt = namedValues.find(name);
+    if(valueIt == namedValues.end() || !valueIt->second)
+    {
+        reportError(line, col, "unknown variable: '" + name + "'");
+        return false;
+    }
+    return true;
+}
+
 void CodeGenerator::clearMovedVariable(const std::string& name)
 {
     movedVariables.erase(name);
@@ -2816,12 +2852,9 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
 {
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
-        auto it = namedValues.find(id->name);
-        if(it == namedValues.end())
-        {
-            reportError(line, id->col, "unknown variable: '" + id->name + "'");
+        if(!validateVariableAccessible(id->name, line, id->col))
             return nullptr;
-        }
+        auto it = namedValues.find(id->name);
         return it->second;
     }
 
@@ -2841,6 +2874,9 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
         }
         else
         {
+            if(!validateVariableAccessible(fieldAccess->structName, line,
+                                           fieldAccess->col))
+                return nullptr;
             structPtr = namedValues[fieldAccess->structName];
             if(!structPtr)
             {
@@ -2931,6 +2967,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 {
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
+        if(!validateVariableAccessible(id->name, line, id->col))
+            return nullptr;
         auto typeIt = variableTypes.find(id->name);
         if(typeIt == variableTypes.end())
         {
@@ -3101,6 +3139,9 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         }
         else
         {
+            if(!validateVariableAccessible(fieldAccess->structName, line,
+                                           fieldAccess->col))
+                return nullptr;
             auto typeIt = structVariableTypes.find(fieldAccess->structName);
             if(typeIt == structVariableTypes.end())
             {
@@ -3213,6 +3254,8 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
     }
 
     TypeNode::TypeKind typeKind = getExpressionTypeKind(expr, variableTypes);
+    if(TypeNode* exprType = getLValueType(expr, line))
+        typeKind = exprType->kind;
     bool isUnsigned = isUnsignedType(typeKind);
 
     if(argType->isIntegerTy(1))
@@ -5933,6 +5976,12 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                                          llvm::Value* rhs) -> llvm::Value* {
             bool isFloat = lhs->getType()->isFloatingPointTy() ||
                            rhs->getType()->isFloatingPointTy();
+            TypeNode::TypeKind lhsCmpKind =
+                getExpressionTypeKind(node->left, variableTypes);
+            TypeNode::TypeKind rhsCmpKind =
+                getExpressionTypeKind(node->right, variableTypes);
+            bool useUnsignedIntCmp =
+                isUnsignedType(lhsCmpKind) || isUnsignedType(rhsCmpKind);
 
             bool lhsIsNumeric = lhs->getType()->isIntegerTy() ||
                                 lhs->getType()->isFloatingPointTy();
@@ -5949,11 +5998,17 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 if(lhsBits != rhsBits)
                 {
                     if(lhsBits > rhsBits)
-                        rhs = builder.CreateSExt(rhs, lhs->getType(),
-                                                 "spaceship.sext");
+                        rhs = builder.CreateIntCast(rhs, lhs->getType(),
+                                                    !useUnsignedIntCmp,
+                                                    useUnsignedIntCmp
+                                                        ? "spaceship.zext"
+                                                        : "spaceship.sext");
                     else
-                        lhs = builder.CreateSExt(lhs, rhs->getType(),
-                                                 "spaceship.sext");
+                        lhs = builder.CreateIntCast(lhs, rhs->getType(),
+                                                    !useUnsignedIntCmp,
+                                                    useUnsignedIntCmp
+                                                        ? "spaceship.zext"
+                                                        : "spaceship.sext");
                 }
             }
 
@@ -5966,8 +6021,12 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             }
             else
             {
-                isLt = builder.CreateICmpSLT(lhs, rhs, "spaceship.lt");
-                isGt = builder.CreateICmpSGT(lhs, rhs, "spaceship.gt");
+                isLt = useUnsignedIntCmp
+                           ? builder.CreateICmpULT(lhs, rhs, "spaceship.lt")
+                           : builder.CreateICmpSLT(lhs, rhs, "spaceship.lt");
+                isGt = useUnsignedIntCmp
+                           ? builder.CreateICmpUGT(lhs, rhs, "spaceship.gt")
+                           : builder.CreateICmpSGT(lhs, rhs, "spaceship.gt");
             }
 
             llvm::Type* i32Ty = llvm::Type::getInt32Ty(context);
@@ -6260,6 +6319,17 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                    : builder.CreateOr(Lb, Rb, "ortmp");
     }
 
+    auto resolveExprKind = [&](ExpressionNode* expr) -> TypeNode::TypeKind {
+        if(TypeNode* exprType = getLValueType(expr, node->line))
+            return exprType->kind;
+        return getExpressionTypeKind(expr, variableTypes);
+    };
+
+    TypeNode::TypeKind lhsKind = resolveExprKind(node->left);
+    TypeNode::TypeKind rhsKind = resolveExprKind(node->right);
+    bool useUnsignedIntOps =
+        isUnsignedType(lhsKind) || isUnsignedType(rhsKind);
+
     if(node->op == BinaryOpNode::OP_BITAND || node->op == BinaryOpNode::OP_BITOR ||
        node->op == BinaryOpNode::OP_BITXOR || node->op == BinaryOpNode::OP_SHL ||
        node->op == BinaryOpNode::OP_SHR)
@@ -6280,9 +6350,13 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         else if(LBits != RBits)
         {
             if(LBits > RBits)
-                R = builder.CreateSExt(R, L->getType(), "bitand.sext");
+                R = builder.CreateIntCast(R, L->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "bitand.zext"
+                                                            : "bitand.sext");
             else
-                L = builder.CreateSExt(L, R->getType(), "bitand.sext");
+                L = builder.CreateIntCast(L, R->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "bitand.zext"
+                                                            : "bitand.sext");
         }
         switch(node->op)
         {
@@ -6295,7 +6369,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         case BinaryOpNode::OP_SHL:
             return builder.CreateShl(L, R, "shltmp");
         case BinaryOpNode::OP_SHR:
-            return builder.CreateAShr(L, R, "shrtmp");
+            return useUnsignedIntOps ? builder.CreateLShr(L, R, "shrtmp")
+                                     : builder.CreateAShr(L, R, "shrtmp");
         default:
             return nullptr;
         }
@@ -6339,9 +6414,6 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
     };
 
-    TypeNode::TypeKind lhsKind = getExpressionTypeKind(node->left, variableTypes);
-    TypeNode::TypeKind rhsKind =
-        getExpressionTypeKind(node->right, variableTypes);
     bool lhsIsString = lhsKind == TypeNode::TYPE_STRING ||
                        lhsKind == TypeNode::TYPE_STR8 ||
                        lhsKind == TypeNode::TYPE_STR16;
@@ -6525,11 +6597,13 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             // Extend the smaller type to match the larger type
             if(LBits > RBits)
             {
-                R = builder.CreateSExt(R, L->getType(), "sext");
+                R = builder.CreateIntCast(R, L->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "zext" : "sext");
             }
             else
             {
-                L = builder.CreateSExt(L, R->getType(), "sext");
+                L = builder.CreateIntCast(L, R->getType(), !useUnsignedIntOps,
+                                          useUnsignedIntOps ? "zext" : "sext");
             }
         }
     }
@@ -6565,7 +6639,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             }
         }
         return isFloat ? builder.CreateFDiv(L, R, "divtmp")
-                       : builder.CreateSDiv(L, R, "divtmp");
+                       : (useUnsignedIntOps ? builder.CreateUDiv(L, R, "divtmp")
+                                            : builder.CreateSDiv(L, R, "divtmp"));
     }
     case BinaryOpNode::OP_MODULO:
     {
@@ -6590,20 +6665,25 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         {
             return builder.CreateFRem(L, R, "modtmp");
         }
-        return builder.CreateSRem(L, R, "modtmp");
+        return useUnsignedIntOps ? builder.CreateURem(L, R, "modtmp")
+                                 : builder.CreateSRem(L, R, "modtmp");
     }
     case BinaryOpNode::OP_LT:
         return isFloat ? builder.CreateFCmpOLT(L, R, "cmptmp")
-                       : builder.CreateICmpSLT(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpULT(L, R, "cmptmp")
+                                            : builder.CreateICmpSLT(L, R, "cmptmp"));
     case BinaryOpNode::OP_GT:
         return isFloat ? builder.CreateFCmpOGT(L, R, "cmptmp")
-                       : builder.CreateICmpSGT(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpUGT(L, R, "cmptmp")
+                                            : builder.CreateICmpSGT(L, R, "cmptmp"));
     case BinaryOpNode::OP_LE:
         return isFloat ? builder.CreateFCmpOLE(L, R, "cmptmp")
-                       : builder.CreateICmpSLE(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpULE(L, R, "cmptmp")
+                                            : builder.CreateICmpSLE(L, R, "cmptmp"));
     case BinaryOpNode::OP_GE:
         return isFloat ? builder.CreateFCmpOGE(L, R, "cmptmp")
-                       : builder.CreateICmpSGE(L, R, "cmptmp");
+                       : (useUnsignedIntOps ? builder.CreateICmpUGE(L, R, "cmptmp")
+                                            : builder.CreateICmpSGE(L, R, "cmptmp"));
     case BinaryOpNode::OP_EQ:
         return isFloat ? builder.CreateFCmpOEQ(L, R, "cmptmp")
                        : builder.CreateICmpEQ(L, R, "cmptmp");
@@ -8340,6 +8420,9 @@ void CodeGenerator::generateForStatement(ForNode* node)
             hadOldType = true;
         }
         bool hadOldMoved = isVariableMoved(node->varName);
+        auto oldDepthIt = variableScopeDepth.find(node->varName);
+        bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
+        int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
         auto stateBeforeLoopMoved = movedVariables;
         auto stateBeforeLoopPointerBorrowTarget = pointerBorrowTarget;
         auto stateBeforeLoopActiveBorrowers = activeBorrowers;
@@ -8347,6 +8430,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = TypeNode::TYPE_I64;
         clearMovedVariable(node->varName);
+        recordVariableScopeDepth(node->varName);
 
         bool rangeNeverExecutes = false;
         if(auto* startConst = llvm::dyn_cast<llvm::ConstantInt>(startVal))
@@ -8441,6 +8525,11 @@ void CodeGenerator::generateForStatement(ForNode* node)
             variableTypes[node->varName] = oldType;
         else
             variableTypes.erase(node->varName);
+
+        if(hadOldDepth)
+            variableScopeDepth[node->varName] = oldDepth;
+        else
+            variableScopeDepth.erase(node->varName);
 
         if(hadOldMoved)
             movedVariables.insert(node->varName);
@@ -8590,17 +8679,31 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    auto oldStructIt = structVariableTypes.find(node->varName);
+    bool hadOldStructType = oldStructIt != structVariableTypes.end();
+    std::string oldStructType =
+        hadOldStructType ? oldStructIt->second : std::string();
+    auto oldEnumIt = enumVariableTypes.find(node->varName);
+    bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
+    std::string oldEnumType =
+        hadOldEnumType ? oldEnumIt->second : std::string();
     bool hadOldMoved = isVariableMoved(node->varName);
+    auto oldDepthIt = variableScopeDepth.find(node->varName);
+    bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
+    int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     namedValues[node->varName] = loopVar;
     variableTypes[node->varName] = TypeNode::TYPE_I64; // Placeholder
     clearMovedVariable(node->varName);
+    recordVariableScopeDepth(node->varName);
 
     // Enumerate support: expose index alloca under indexVarName
     bool hasIdxVar = !node->indexVarName.empty();
     llvm::Value* oldIdxVal = nullptr;
     TypeNode::TypeKind oldIdxType = TypeNode::TYPE_VOID;
     bool hadOldIdxType = false;
+    bool hadOldIdxDepth = false;
+    int oldIdxDepth = 0;
     if(hasIdxVar)
     {
         oldIdxVal = namedValues.count(node->indexVarName)
@@ -8610,8 +8713,12 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
             variableTypes.find(node->indexVarName) != variableTypes.end();
         if(hadOldIdxType)
             oldIdxType = variableTypes[node->indexVarName];
+        auto oldIdxDepthIt = variableScopeDepth.find(node->indexVarName);
+        hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
+        oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
+        recordVariableScopeDepth(node->indexVarName);
     }
 
     // Create basic blocks
@@ -8694,6 +8801,10 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
             variableTypes[node->indexVarName] = oldIdxType;
         else
             variableTypes.erase(node->indexVarName);
+        if(hadOldIdxDepth)
+            variableScopeDepth[node->indexVarName] = oldIdxDepth;
+        else
+            variableScopeDepth.erase(node->indexVarName);
     }
 
     // Restore value var
@@ -8706,6 +8817,11 @@ void CodeGenerator::generateForListLiteralIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldDepth)
+        variableScopeDepth[node->varName] = oldDepth;
+    else
+        variableScopeDepth.erase(node->varName);
 
     if(hadOldMoved)
         movedVariables.insert(node->varName);
@@ -8782,11 +8898,52 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     bool hadOldType = variableTypes.find(node->varName) != variableTypes.end();
     if(hadOldType)
         oldType = variableTypes[node->varName];
+    auto oldStructIt = structVariableTypes.find(node->varName);
+    bool hadOldStructType = oldStructIt != structVariableTypes.end();
+    std::string oldStructType =
+        hadOldStructType ? oldStructIt->second : std::string();
+    auto oldEnumIt = enumVariableTypes.find(node->varName);
+    bool hadOldEnumType = oldEnumIt != enumVariableTypes.end();
+    std::string oldEnumType =
+        hadOldEnumType ? oldEnumIt->second : std::string();
     bool hadOldMoved = isVariableMoved(node->varName);
+    auto oldDepthIt = variableScopeDepth.find(node->varName);
+    bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
+    int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     namedValues[node->varName] = loopVar;
     variableTypes[node->varName] = elemTypeNode->kind;
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(elemTypeNode))
+    {
+        std::string resolvedEnumName =
+            resolveVisibleEnumName(structRef->structName);
+        if(!resolvedEnumName.empty())
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_INT;
+            enumVariableTypes[node->varName] = resolvedEnumName;
+            structVariableTypes.erase(node->varName);
+        }
+        else
+        {
+            variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+            structVariableTypes[node->varName] = structRef->structName;
+            enumVariableTypes.erase(node->varName);
+        }
+    }
+    else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    {
+        variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
+        structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
+            genRef->structName, genRef->typeArgs);
+        enumVariableTypes.erase(node->varName);
+    }
+    else
+    {
+        structVariableTypes.erase(node->varName);
+        enumVariableTypes.erase(node->varName);
+    }
     clearMovedVariable(node->varName);
+    recordVariableScopeDepth(node->varName);
 
     // If this is an enumerate loop (for (i, x) in ...), expose the index alloca
     // under indexVarName so body code can read it.
@@ -8794,6 +8951,8 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
     llvm::Value* oldIdxVal = nullptr;
     TypeNode::TypeKind oldIdxType = TypeNode::TYPE_VOID;
     bool hadOldIdxType = false;
+    bool hadOldIdxDepth = false;
+    int oldIdxDepth = 0;
     if(hasIdxVar)
     {
         oldIdxVal = namedValues.count(node->indexVarName)
@@ -8803,8 +8962,12 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
             variableTypes.find(node->indexVarName) != variableTypes.end();
         if(hadOldIdxType)
             oldIdxType = variableTypes[node->indexVarName];
+        auto oldIdxDepthIt = variableScopeDepth.find(node->indexVarName);
+        hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
+        oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
+        recordVariableScopeDepth(node->indexVarName);
     }
 
     // Create blocks
@@ -8879,6 +9042,10 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
             variableTypes[node->indexVarName] = oldIdxType;
         else
             variableTypes.erase(node->indexVarName);
+        if(hadOldIdxDepth)
+            variableScopeDepth[node->indexVarName] = oldIdxDepth;
+        else
+            variableScopeDepth.erase(node->indexVarName);
     }
 
     // Restore value var
@@ -8891,6 +9058,21 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldStructType)
+        structVariableTypes[node->varName] = oldStructType;
+    else
+        structVariableTypes.erase(node->varName);
+
+    if(hadOldEnumType)
+        enumVariableTypes[node->varName] = oldEnumType;
+    else
+        enumVariableTypes.erase(node->varName);
+
+    if(hadOldDepth)
+        variableScopeDepth[node->varName] = oldDepth;
+    else
+        variableScopeDepth.erase(node->varName);
 
     if(hadOldMoved)
         movedVariables.insert(node->varName);
@@ -8927,6 +9109,9 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     if(hadOldType)
         oldType = variableTypes[node->varName];
     bool hadOldMoved = isVariableMoved(node->varName);
+    auto oldDepthIt = variableScopeDepth.find(node->varName);
+    bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
+    int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
     auto oldEnumTypeIt = enumVariableTypes.find(node->varName);
     bool hadOldEnumType = oldEnumTypeIt != enumVariableTypes.end();
     std::string oldEnumType = hadOldEnumType ? oldEnumTypeIt->second : "";
@@ -8935,11 +9120,14 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     variableTypes[node->varName] = baseKind;
     enumVariableTypes[node->varName] = enumName;
     clearMovedVariable(node->varName);
+    recordVariableScopeDepth(node->varName);
 
     bool hasIdxVar = !node->indexVarName.empty();
     llvm::Value* oldIdxVal = nullptr;
     TypeNode::TypeKind oldIdxType = TypeNode::TYPE_VOID;
     bool hadOldIdxType = false;
+    bool hadOldIdxDepth = false;
+    int oldIdxDepth = 0;
     if(hasIdxVar)
     {
         oldIdxVal = namedValues.count(node->indexVarName)
@@ -8949,8 +9137,12 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
             variableTypes.find(node->indexVarName) != variableTypes.end();
         if(hadOldIdxType)
             oldIdxType = variableTypes[node->indexVarName];
+        auto oldIdxDepthIt = variableScopeDepth.find(node->indexVarName);
+        hadOldIdxDepth = oldIdxDepthIt != variableScopeDepth.end();
+        oldIdxDepth = hadOldIdxDepth ? oldIdxDepthIt->second : 0;
         namedValues[node->indexVarName] = indexVar;
         variableTypes[node->indexVarName] = TypeNode::TYPE_I64;
+        recordVariableScopeDepth(node->indexVarName);
     }
 
     const int64_t variantCount = static_cast<int64_t>(orderIt->second.size());
@@ -9029,6 +9221,10 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
             variableTypes[node->indexVarName] = oldIdxType;
         else
             variableTypes.erase(node->indexVarName);
+        if(hadOldIdxDepth)
+            variableScopeDepth[node->indexVarName] = oldIdxDepth;
+        else
+            variableScopeDepth.erase(node->indexVarName);
     }
 
     if(oldVal)
@@ -9040,6 +9236,11 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldDepth)
+        variableScopeDepth[node->varName] = oldDepth;
+    else
+        variableScopeDepth.erase(node->varName);
 
     if(hadOldEnumType)
         enumVariableTypes[node->varName] = oldEnumType;
@@ -9120,6 +9321,9 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
     if(hadOldType)
         oldType = variableTypes[node->varName];
     bool hadOldMoved = isVariableMoved(node->varName);
+    auto oldDepthIt = variableScopeDepth.find(node->varName);
+    bool hadOldDepth = oldDepthIt != variableScopeDepth.end();
+    int oldDepth = hadOldDepth ? oldDepthIt->second : 0;
 
     switch(mapIter->kind)
     {
@@ -9129,6 +9333,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = keyTypeNode->kind;
         clearMovedVariable(node->varName);
+        recordVariableScopeDepth(node->varName);
         break;
 
     case MapIteratorNode::ITER_VALUES:
@@ -9137,6 +9342,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         namedValues[node->varName] = loopVar;
         variableTypes[node->varName] = valTypeNode->kind;
         clearMovedVariable(node->varName);
+        recordVariableScopeDepth(node->varName);
         break;
 
     case MapIteratorNode::ITER_ENTRIES:
@@ -9150,6 +9356,7 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
             namedValues[node->varName] = loopVar;
             variableTypes[node->varName] = TypeNode::TYPE_TUPLE;
             clearMovedVariable(node->varName);
+            recordVariableScopeDepth(node->varName);
 
             // Store element types for tuple access
             std::vector<TypeNode*> elemTypes = {keyTypeNode, valTypeNode};
@@ -9267,6 +9474,11 @@ void CodeGenerator::generateForMapIteration(ForNode* node,
         variableTypes[node->varName] = oldType;
     else
         variableTypes.erase(node->varName);
+
+    if(hadOldDepth)
+        variableScopeDepth[node->varName] = oldDepth;
+    else
+        variableScopeDepth.erase(node->varName);
 
     if(hadOldMoved)
         movedVariables.insert(node->varName);
@@ -9482,19 +9694,10 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
 
 llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
 {
-    if(globalNamedValues.find(node->name) == globalNamedValues.end() &&
-       isVariableMoved(node->name))
-    {
-        reportError(node->line, node->col, "use of moved value: '" + node->name + "'");
+    if(!validateVariableAccessible(node->name, node->line, node->col))
         return nullptr;
-    }
 
     llvm::Value* value = namedValues[node->name];
-    if(!value)
-    {
-        reportError(node->line, node->col, "unknown variable: '" + node->name + "'");
-        return nullptr;
-    }
 
     // If it's an alloca, load the value
     if(llvm::AllocaInst* alloca = llvm::dyn_cast<llvm::AllocaInst>(value))
@@ -11671,6 +11874,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         namedValues[node->name] = gv;
         variableTypes[node->name] = kind;
+        recordVariableScopeDepth(node->name);
         if(!structTypeName.empty())
             structVariableTypes[node->name] = structTypeName;
         if(node->isGlobalStorage)
@@ -12874,12 +13078,8 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
     // Case 1: Simple identifier (e.g., "myStruct")
     if(auto* id = dynamic_cast<IdentifierNode*>(expr))
     {
-        if(globalNamedValues.find(id->name) == globalNamedValues.end() &&
-           isVariableMoved(id->name))
-        {
-            reportError(line, "use of moved value: '" + id->name + "'");
+        if(!validateVariableAccessible(id->name, line, id->col))
             return {nullptr, ""};
-        }
 
         llvm::Value* ptr = namedValues[id->name];
         if(!ptr)
@@ -12945,6 +13145,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
         else
         {
             // Simple: get pointer from structName
+            if(!validateVariableAccessible(fieldAccess->structName, line,
+                                           fieldAccess->col))
+                return {nullptr, ""};
             objPtr = namedValues[fieldAccess->structName];
             if(!objPtr)
             {
@@ -13179,6 +13382,9 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
     else
     {
         // Simple access: get from structName
+        if(!validateVariableAccessible(node->structName, node->line,
+                                       node->col))
+            return nullptr;
         structPtr = namedValues[node->structName];
         if(!structPtr)
         {
@@ -13342,7 +13548,9 @@ void CodeGenerator::exitCleanupScope()
 
     for(auto it = actions.rbegin(); it != actions.rend(); ++it)
     {
-        if(!it->dropFunction)
+        if(movedVariables.count(it->varName))
+            continue;
+        if(!it->function)
             continue;
         auto nv = namedValues.find(it->varName);
         if(nv == namedValues.end() || !nv->second)
@@ -13358,9 +13566,15 @@ void CodeGenerator::exitCleanupScope()
         if(!allocaType || !allocaType->isStructTy())
             continue;
 
+        if(it->callKind == ScopeCleanup::CallKind::ByPointerMethod)
+        {
+            builder.CreateCall(it->function, {alloca});
+            continue;
+        }
+
         llvm::Value* value = builder.CreateLoad(allocaType, alloca,
                                                 it->varName + ".dropval");
-        builder.CreateCall(it->dropFunction, {value});
+        builder.CreateCall(it->function, {value});
     }
 }
 
@@ -13375,7 +13589,9 @@ void CodeGenerator::emitAllActiveCleanups()
         auto& actions = *scopeIt;
         for(auto it = actions.rbegin(); it != actions.rend(); ++it)
         {
-            if(!it->dropFunction)
+            if(movedVariables.count(it->varName))
+                continue;
+            if(!it->function)
                 continue;
             auto nv = namedValues.find(it->varName);
             if(nv == namedValues.end() || !nv->second)
@@ -13392,19 +13608,28 @@ void CodeGenerator::emitAllActiveCleanups()
             if(!allocaType || !allocaType->isStructTy())
                 continue;
 
+            if(it->callKind == ScopeCleanup::CallKind::ByPointerMethod)
+            {
+                builder.CreateCall(it->function, {alloca});
+                continue;
+            }
+
             llvm::Value* value = builder.CreateLoad(
                 allocaType, alloca, it->varName + ".dropval.ret");
-            builder.CreateCall(it->dropFunction, {value});
+            builder.CreateCall(it->function, {value});
         }
     }
 }
 
-llvm::Function*
+CodeGenerator::ScopeCleanup
 CodeGenerator::resolveDropFunctionForStruct(const std::string& structTypeName)
 {
+    ScopeCleanup cleanup;
+    cleanup.structTypeName = structTypeName;
+
     auto* structType = getStructType(structTypeName);
     if(!structType)
-        return nullptr;
+        return cleanup;
 
     auto find_drop = [&](const std::string& fnName) -> llvm::Function* {
         auto it = functionOverloads.find(fnName);
@@ -13422,9 +13647,55 @@ CodeGenerator::resolveDropFunctionForStruct(const std::string& structTypeName)
         return nullptr;
     };
 
-    if(auto* f = find_drop("__drop"))
-        return f;
-    return find_drop("drop");
+    for(const std::string& fnName : {"__drop", "drop", "free", "destroy"})
+    {
+        if(auto* f = find_drop(fnName))
+        {
+            cleanup.function = f;
+            cleanup.callKind = ScopeCleanup::CallKind::ByValueFunction;
+            return cleanup;
+        }
+    }
+
+    auto methodsIt = structMethods.find(structTypeName);
+    if(methodsIt == structMethods.end())
+        return cleanup;
+
+    for(const std::string& methodName : {"__drop", "drop", "free", "destroy"})
+    {
+        auto methodIt = methodsIt->second.find(methodName);
+        if(methodIt == methodsIt->second.end() || !methodIt->second.second)
+            continue;
+
+        StructMethodNode* method = methodIt->second.second;
+        if(method->isStatic)
+            continue;
+
+        size_t nonSelfParams = 0;
+        if(method->parameters)
+        {
+            for(auto* param : method->parameters->parameters)
+            {
+                if(param && param->name != "self")
+                    nonSelfParams++;
+            }
+        }
+        if(nonSelfParams != 0)
+            continue;
+
+        llvm::Function* fn =
+            module->getFunction(structTypeName + "_" + methodName);
+        if(!fn)
+            fn = generateMethodDeclaration(structTypeName, method);
+        if(!fn)
+            continue;
+
+        cleanup.function = fn;
+        cleanup.callKind = ScopeCleanup::CallKind::ByPointerMethod;
+        return cleanup;
+    }
+
+    return cleanup;
 }
 
 void CodeGenerator::registerStructCleanupIfNeeded(
@@ -13432,10 +13703,11 @@ void CodeGenerator::registerStructCleanupIfNeeded(
 {
     if(varName.empty() || structTypeName.empty() || cleanupScopes.empty())
         return;
-    if(auto* dropFn = resolveDropFunctionForStruct(structTypeName))
+    ScopeCleanup cleanup = resolveDropFunctionForStruct(structTypeName);
+    if(cleanup.function)
     {
-        cleanupScopes.back().push_back(
-            ScopeCleanup{varName, structTypeName, dropFn});
+        cleanup.varName = varName;
+        cleanupScopes.back().push_back(std::move(cleanup));
     }
 }
 
@@ -16288,13 +16560,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
     auto* objId = dynamic_cast<IdentifierNode*>(node->object);
     if(objId)
     {
-        if(globalNamedValues.find(objId->name) == globalNamedValues.end() &&
-           isVariableMoved(objId->name))
-        {
-            reportError(node->line,
-                        "use of moved value: '" + objId->name + "'");
+        if(!validateVariableAccessible(objId->name, node->line, objId->col))
             return nullptr;
-        }
 
         // Handle built-in string methods (push_str, etc.)
         {
@@ -17497,6 +17764,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         args.push_back(argVal);
     }
 
+    const bool consumesReceiver =
+        receiverOwner.size() > 0 &&
+        (node->methodName == "__drop" || node->methodName == "drop" ||
+         node->methodName == "free" || node->methodName == "destroy") &&
+        globalNamedValues.find(receiverOwner) == globalNamedValues.end();
+    if(consumesReceiver)
+        movedVariables.insert(receiverOwner);
+
     if(callee->getReturnType()->isVoidTy())
     {
         return builder.CreateCall(callee, args);
@@ -18416,6 +18691,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             builder.CreateAlloca(llvmType, nullptr, name);
         builder.CreateStore(value, alloca);
         namedValues[name] = alloca;
+        recordVariableScopeDepth(name);
 
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
         {
@@ -18490,6 +18766,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedActiveBorrowers = activeBorrowers;
         auto savedActiveMutBorrower = activeMutBorrower;
         auto savedCleanupScopes = cleanupScopes;
+        auto savedVariableScopeDepth = variableScopeDepth;
+        auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
 
         std::string binding =
             arm && arm->pattern ? arm->pattern->binding : "";
@@ -18522,6 +18800,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         activeBorrowers = savedActiveBorrowers;
         activeMutBorrower = savedActiveMutBorrower;
         cleanupScopes = savedCleanupScopes;
+        variableScopeDepth = savedVariableScopeDepth;
+        variableScopeDepthScopes = savedVariableScopeDepthScopes;
 
         return armValue;
     };

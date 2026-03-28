@@ -158,6 +158,7 @@ static int is_try_question_context()
 "false"         { return FALSE_LIT; }
 "f32"           { return FLOAT; }
 "f64"           { return DOUBLE; }
+"string"        { return STR8; }
 "str8"          { return STR8; }
 "str16"         { return STR16; }
 "list"          { return LIST; }

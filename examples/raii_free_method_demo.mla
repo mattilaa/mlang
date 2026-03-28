@@ -1,0 +1,37 @@
+mod std::strbuf;
+
+use std::strbuf::*;
+
+struct OwnedText {
+    var raw: str8;
+    var tag: i32;
+};
+
+impl OwnedText {
+    pub fn free(self: OwnedText) -> i32 {
+        println!("free(OwnedText tag={})", self.tag);
+        String::free(self.raw);
+        return 0;
+    }
+}
+
+fn make_owned(tag: i32, text: str8) -> OwnedText {
+    return OwnedText { raw: String::from(text), tag: tag };
+}
+
+fn inner_scope_demo() -> void {
+    let text: OwnedText = make_owned(1, "scoped object");
+    println!("inside scope: {}", text.raw);
+}
+
+fn main() -> i32 {
+    {
+        let a: OwnedText = make_owned(0, "hello RAII");
+        println!("inner block: {}", a.raw);
+    }
+
+    println!("after first block");
+    inner_scope_demo();
+    println!("done");
+    return 0;
+}

@@ -1,0 +1,55 @@
+mod std::testing;
+
+use std::testing::verify;
+
+var g_raii_free_count: i32 = 0;
+
+struct OwnedText {
+    var raw: str8;
+};
+
+impl OwnedText {
+    pub fn free(self: OwnedText) -> i32 {
+        g_raii_free_count = g_raii_free_count + 1;
+        String::free(self.raw);
+        return 0;
+    }
+}
+
+fn make_owned_text(s: str8) -> OwnedText {
+    return OwnedText { raw: String::from(s) };
+}
+
+fn make_and_return_zero() -> i32 {
+    let inner: OwnedText = make_owned_text("inner");
+    verify(inner.raw.len() == 5);
+    return 0;
+}
+
+#[test]
+fn test_scope_exit_calls_free_method() {
+    g_raii_free_count = 0;
+    {
+        let inner: OwnedText = make_owned_text("scoped");
+        verify(inner.raw.len() == 6);
+        verify(g_raii_free_count == 0);
+    }
+    verify(g_raii_free_count == 1);
+}
+
+#[test]
+fn test_early_return_calls_free_method() {
+    g_raii_free_count = 0;
+    verify(make_and_return_zero() == 0);
+    verify(g_raii_free_count == 1);
+}
+
+#[test]
+fn test_manual_free_skips_scope_exit_cleanup() {
+    g_raii_free_count = 0;
+    {
+        let inner: OwnedText = make_owned_text("manual");
+        verify(inner.free() == 0);
+    }
+    verify(g_raii_free_count == 1);
+}

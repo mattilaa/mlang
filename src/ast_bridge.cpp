@@ -559,12 +559,13 @@ ASTNode* create_match_expression(ASTNode* target, ASTNode* arms, int line)
 
 ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public, int backing_type)
 {
-    return create_enum_def_impl(name, variants, is_public, TypeNode::TYPE_I32);
+    return create_enum_def_impl(
+        name, variants, is_public, static_cast<TypeNode::TypeKind>(backing_type));
 }
 
 ASTNode* create_enum_variant(char* name, int has_explicit_value, long long explicit_value)
 {
-    return create_enum_variant_impl(name, 0, 0);
+    return create_enum_variant_impl(name, has_explicit_value, explicit_value);
 }
 
 ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name)
