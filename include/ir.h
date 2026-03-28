@@ -175,6 +175,7 @@ private:
     llvm::FunctionCallee printfFunc;
     llvm::FunctionCallee fprintfFunc;
     llvm::FunctionCallee snprintfFunc;
+    llvm::FunctionCallee strbufAlignFunc;
     llvm::Value* stderrPtr;
     // Stdlib support
     bool stdlibInitialized;
@@ -301,7 +302,15 @@ private:
     void initializePthreadFunctions();
     std::string convertFormatString(const std::string& mlaFormat,
                                     const std::vector<ExpressionNode*>& args,
+                                    const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
                                     std::vector<llvm::Value*>& argValues,
+                                    int line);
+    std::string convertFormatString(const std::string& mlaFormat,
+                                    const std::vector<ExpressionNode*>& args,
+                                    std::vector<llvm::Value*>& argValues,
+                                    int line);
+    llvm::Value* buildAlignedString(llvm::Value* value,
+                                    llvm::Value* widthValue, char align,
                                     int line);
 
     // Code generation for different node types

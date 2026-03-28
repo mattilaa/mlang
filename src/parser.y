@@ -168,6 +168,9 @@ ASTNode* mla_ast_print_stmt(int kind, char* format_str, ASTNode* args, int line)
 ASTNode* mla_ast_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* mla_ast_print_expr_stmt(int kind, ASTNode* expr, int line);
 ASTNode* mla_ast_argument_list(ASTNode* arg);
+ASTNode* mla_ast_format_argument(char* name, ASTNode* value);
+ASTNode* mla_ast_format_argument_list_create(ASTNode* arg);
+ASTNode* mla_ast_format_argument_list_add(ASTNode* list, ASTNode* arg);
 
 ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long explicit_value);
 ASTNode* mla_ast_enum_variant_list(ASTNode* variant);
@@ -365,7 +368,7 @@ enum UpdatePosition
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
-%type <ast> print_statement argument_list assert_eq_statement assert_statement static_assert_statement
+%type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
 %type <ast> global_var_statement static_var_statement
 %type <ast> map_literal map_entries map_entry index_expression
 %type <ast> tuple_type type_list tuple_literal tuple_elements
@@ -1013,31 +1016,31 @@ struct_init
 print_statement
     : PRINTLN LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(1, $3, NULL, yylineno); }
-    | PRINTLN LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+    | PRINTLN LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(1, $3, $5, yylineno); }
     | PRINTLN LPAREN expression RPAREN SEMICOLON
         { $$ = mla_ast_print_expr_stmt(1, $3, yylineno); }
     | PRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(0, $3, NULL, yylineno); }
-    | PRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+    | PRINT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(0, $3, $5, yylineno); }
     | PRINT LPAREN expression RPAREN SEMICOLON
         { $$ = mla_ast_print_expr_stmt(0, $3, yylineno); }
     | EPRINTLN LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(3, $3, NULL, yylineno); }
-    | EPRINTLN LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+    | EPRINTLN LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(3, $3, $5, yylineno); }
     | EPRINTLN LPAREN expression RPAREN SEMICOLON
         { $$ = mla_ast_print_expr_stmt(3, $3, yylineno); }
     | EPRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(2, $3, NULL, yylineno); }
-    | EPRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+    | EPRINT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_print_stmt(2, $3, $5, yylineno); }
     | EPRINT LPAREN expression RPAREN SEMICOLON
         { $$ = mla_ast_print_expr_stmt(2, $3, yylineno); }
     | DEBUGPRINT LPAREN STRING_LITERAL RPAREN SEMICOLON
         { $$ = mla_ast_debug_print_stmt($3, NULL, yylineno); }
-    | DEBUGPRINT LPAREN STRING_LITERAL COMMA argument_list RPAREN SEMICOLON
+    | DEBUGPRINT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_debug_print_stmt($3, $5, yylineno); }
     ;
 
@@ -1059,6 +1062,20 @@ static_assert_statement
 argument_list
     : expression { $$ = mla_ast_argument_list_create($1); }
     | argument_list COMMA expression { $$ = mla_ast_argument_list_add($1, $3); }
+    ;
+
+format_argument
+    : expression
+        { $$ = mla_ast_format_argument(NULL, $1); }
+    | IDENTIFIER ASSIGN expression
+        { $$ = mla_ast_format_argument($1, $3); }
+    ;
+
+format_argument_list
+    : format_argument
+        { $$ = mla_ast_format_argument_list_create($1); }
+    | format_argument_list COMMA format_argument
+        { $$ = mla_ast_format_argument_list_add($1, $3); }
     ;
 
 if_statement
@@ -1299,7 +1316,7 @@ condition_primary
     | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
-    | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
+    | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
     | function_call { $$ = $1; }
     | module_path
@@ -1469,7 +1486,7 @@ primary_expression
     | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
-    | FORMAT LPAREN STRING_LITERAL COMMA argument_list RPAREN
+    | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
         { $$ = mla_ast_format_expr($3, $5, yylineno); }
     | module_path
         { $$ = create_enum_or_ident_from_path($1, yylineno); }

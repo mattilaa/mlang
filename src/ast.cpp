@@ -439,6 +439,36 @@ ASTNode* add_argument_impl(ASTNode* list, ASTNode* arg)
     return argList;
 }
 
+ASTNode* create_format_argument_impl(char* name, ASTNode* value)
+{
+    if(name && *name)
+    {
+        return new FormatArgumentNode(std::string(name),
+                                      static_cast<ExpressionNode*>(value));
+    }
+    return new FormatArgumentNode(static_cast<ExpressionNode*>(value));
+}
+
+ASTNode* create_format_argument_list_impl(ASTNode* arg)
+{
+    auto* list = new FormatArgumentListNode();
+    if(arg)
+    {
+        list->args.push_back(static_cast<FormatArgumentNode*>(arg));
+    }
+    return list;
+}
+
+ASTNode* add_format_argument_impl(ASTNode* list, ASTNode* arg)
+{
+    auto* argList = static_cast<FormatArgumentListNode*>(list);
+    if(arg)
+    {
+        argList->args.push_back(static_cast<FormatArgumentNode*>(arg));
+    }
+    return argList;
+}
+
 ASTNode* create_function_call_multi_impl(char* name, ASTNode* args, int line)
 {
     auto call = new FunctionCallNode(std::string(name));
@@ -985,10 +1015,13 @@ ASTNode* create_print_stmt_impl(int kind, char* format_str, ASTNode* args, int l
 
     if(args)
     {
-        auto* argList = static_cast<ArgumentListNode*>(args);
+        auto* argList = static_cast<FormatArgumentListNode*>(args);
         for(auto* arg : argList->args)
         {
-            node->addArgument(arg);
+            if(arg->isNamed())
+                node->addNamedArgument(arg->name, arg->value);
+            else
+                node->addArgument(arg->value);
         }
     }
 
@@ -1003,10 +1036,13 @@ ASTNode* create_debug_print_stmt_impl(char* format_str, ASTNode* args, int line)
 
     if(args)
     {
-        auto* argList = static_cast<ArgumentListNode*>(args);
+        auto* argList = static_cast<FormatArgumentListNode*>(args);
         for(auto* arg : argList->args)
         {
-            node->addArgument(arg);
+            if(arg->isNamed())
+                node->addNamedArgument(arg->name, arg->value);
+            else
+                node->addArgument(arg->value);
         }
     }
 
@@ -1029,10 +1065,13 @@ ASTNode* create_format_expr_impl(char* format_str, ASTNode* args, int line)
 
     if(args)
     {
-        auto* argList = static_cast<ArgumentListNode*>(args);
+        auto* argList = static_cast<FormatArgumentListNode*>(args);
         for(auto* arg : argList->args)
         {
-            node->addArgument(arg);
+            if(arg->isNamed())
+                node->addNamedArgument(arg->name, arg->value);
+            else
+                node->addArgument(arg->value);
         }
     }
 
@@ -2079,6 +2118,10 @@ std::string PrintNode::toString() const
     {
         result += ", " + arg->toString();
     }
+    for(const auto& namedArg : namedArguments)
+    {
+        result += ", " + namedArg.first + "=" + namedArg.second->toString();
+    }
     result += ");";
     return result;
 }
@@ -2091,8 +2134,19 @@ std::string FormatNode::toString() const
     {
         result += ", " + arguments[i]->toString();
     }
+    for(const auto& namedArg : namedArguments)
+    {
+        result += ", " + namedArg.first + "=" + namedArg.second->toString();
+    }
     result += ")";
     return result;
+}
+
+std::string FormatArgumentNode::toString() const
+{
+    if(isNamed())
+        return name + "=" + (value ? value->toString() : "");
+    return value ? value->toString() : "";
 }
 
 std::string AssertEqNode::toString() const

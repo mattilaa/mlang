@@ -87,6 +87,9 @@ ASTNode* create_debug_print_stmt_impl(char* format_str, ASTNode* args, int line)
 ASTNode* create_print_expr_stmt_impl(int kind, ASTNode* expr, int line);
 ASTNode* create_argument_list_impl(ASTNode* arg);
 ASTNode* add_argument_impl(ASTNode* list, ASTNode* arg);
+ASTNode* create_format_argument_impl(char* name, ASTNode* value);
+ASTNode* create_format_argument_list_impl(ASTNode* arg);
+ASTNode* add_format_argument_impl(ASTNode* list, ASTNode* arg);
 ASTNode* create_format_expr_impl(char* format_str, ASTNode* args, int line);
 ASTNode* create_assert_eq_impl(ASTNode* left, ASTNode* right, int line);
 ASTNode* create_assert_impl(ASTNode* condition, int line);

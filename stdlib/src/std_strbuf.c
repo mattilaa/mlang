@@ -363,6 +363,49 @@ char* __mlang_std_strbuf_repeat(const char* s, int64_t count)
     return out;
 }
 
+char* __mlang_std_strbuf_align(const char* s, int64_t width, int32_t align)
+{
+    if(width <= 0)
+        return __mlang_std_strbuf_clone("");
+
+    if(!s)
+        s = "";
+
+    size_t n = strlen(s);
+    size_t out_len = (size_t)width;
+    char* out = (char*)malloc(out_len + 1);
+    if(!out)
+        return NULL;
+
+    if(n >= out_len)
+    {
+        memcpy(out, s, out_len);
+        out[out_len] = '\0';
+        return out;
+    }
+
+    size_t total_pad = out_len - n;
+    size_t left_pad = 0;
+    size_t right_pad = total_pad;
+
+    if(align == 2)
+    {
+        left_pad = total_pad;
+        right_pad = 0;
+    }
+    else if(align == 1)
+    {
+        left_pad = total_pad / 2;
+        right_pad = total_pad - left_pad;
+    }
+
+    memset(out, ' ', left_pad);
+    memcpy(out + left_pad, s, n);
+    memset(out + left_pad + n, ' ', right_pad);
+    out[out_len] = '\0';
+    return out;
+}
+
 static int is_ascii_space(char c)
 {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' ||

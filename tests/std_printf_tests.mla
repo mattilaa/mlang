@@ -124,6 +124,15 @@ fn test_format_starts_and_ends() {
     printf("\n");
     }
 
+#[test]
+fn test_format_center_named_width() {
+    let inner_width: i64 = 6;
+    let s: str8 = format!("|{:^width$}|", "xy", width=inner_width);
+    verify(!(eq(s, "|  xy  |") != 1));
+    printf(s);
+    printf("\n");
+    }
+
 // -- eprintf --------------------------------------------------------------
 
 #[test]

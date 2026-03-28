@@ -12,6 +12,9 @@ int64_t mla_function_call_add_arg(int64_t call, int64_t expr);
 
 ASTNode* mla_ast_argument_list_create(ASTNode* arg);
 ASTNode* mla_ast_argument_list_add(ASTNode* list, ASTNode* arg);
+ASTNode* mla_ast_format_argument(char* name, ASTNode* value);
+ASTNode* mla_ast_format_argument_list_create(ASTNode* arg);
+ASTNode* mla_ast_format_argument_list_add(ASTNode* list, ASTNode* arg);
 ASTNode* mla_ast_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* mla_ast_function_call_from_list(char* name, ASTNode* args, int line);
 ASTNode* mla_ast_struct_init(char* type_name, char* var_name);

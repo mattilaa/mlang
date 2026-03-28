@@ -269,6 +269,8 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
     {
         for(auto* arg : print->arguments)
             collectUsedIdents(arg, out);
+        for(const auto& namedArg : print->namedArguments)
+            collectUsedIdents(namedArg.second, out);
         return;
     }
     if(auto* aeq = dynamic_cast<AssertEqNode*>(node))
@@ -364,6 +366,11 @@ static bool containsUpdateExpression(ASTNode* node)
         for(auto* arg : fmt->arguments)
         {
             if(containsUpdateExpression(arg))
+                return true;
+        }
+        for(const auto& namedArg : fmt->namedArguments)
+        {
+            if(containsUpdateExpression(namedArg.second))
                 return true;
         }
         return false;
@@ -2252,6 +2259,64 @@ void CodeGenerator::initializeFormatFunctions()
     initializeStdlibFunctions();
 }
 
+llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
+                                               llvm::Value* widthValue,
+                                               char align, int line)
+{
+    initializeFormatFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int32Type = llvm::Type::getInt32Ty(context);
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    if(!value->getType()->isPointerTy())
+    {
+        reportError(line,
+                    "alignment format specifiers currently require a string");
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString("<format-error>");
+#else
+        return builder.CreateGlobalStringPtr("<format-error>");
+#endif
+    }
+
+    if(!widthValue->getType()->isIntegerTy())
+    {
+        reportError(line, "format width must be an integer");
+        widthValue = llvm::ConstantInt::get(int64Type, 0);
+    }
+    else if(widthValue->getType() != int64Type)
+    {
+        widthValue =
+            builder.CreateSExtOrTrunc(widthValue, int64Type, "fmt.width");
+    }
+
+    if(!strbufAlignFunc)
+    {
+        llvm::FunctionType* alignType =
+            llvm::FunctionType::get(ptrType, {ptrType, int64Type, int32Type},
+                                    false);
+        strbufAlignFunc =
+            module->getOrInsertFunction("__mlang_std_strbuf_align", alignType);
+    }
+
+    int32_t alignCode = 2;
+    if(align == '<')
+        alignCode = 0;
+    else if(align == '^')
+        alignCode = 1;
+
+    return builder.CreateCall(
+        strbufAlignFunc,
+        {value, widthValue, llvm::ConstantInt::get(int32Type, alignCode)},
+        "fmt.align");
+}
+
 // Helper to get the TypeKind from an expression (for identifiers)
 TypeNode::TypeKind getExpressionTypeKind(
     ExpressionNode* expr,
@@ -2329,10 +2394,10 @@ TypeNode::TypeKind getExpressionTypeKind(
 }
 
 std::string
-CodeGenerator::convertFormatString(const std::string& mlaFormat,
-                                   const std::vector<ExpressionNode*>& args,
-                                   std::vector<llvm::Value*>& argValues,
-                                   int line)
+CodeGenerator::convertFormatString(
+    const std::string& mlaFormat, const std::vector<ExpressionNode*>& args,
+    const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
+    std::vector<llvm::Value*>& argValues, int line)
 {
     std::string cFormat;
     size_t argIndex = 0;
@@ -2347,6 +2412,15 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
               std::isspace(static_cast<unsigned char>(s[end - 1])))
             --end;
         return s.substr(start, end - start);
+    };
+
+    auto findNamedArgument = [&](const std::string& name) -> ExpressionNode* {
+        for(const auto& namedArg : namedArgs)
+        {
+            if(namedArg.first == name)
+                return namedArg.second;
+        }
+        return nullptr;
     };
 
     for(size_t i = 0; i < mlaFormat.size(); ++i)
@@ -2399,6 +2473,8 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
 
             bool debug = false;
             bool pretty = false;
+            char align = '\0';
+            ExpressionNode* widthExpr = nullptr;
             if(!spec.empty())
             {
                 if(spec == "?")
@@ -2410,15 +2486,75 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
                 }
                 else
                 {
-                    reportError(line, "unsupported format specifier: {" + spec +
-                                          "}");
+                    std::string widthSpec = spec;
+                    if(widthSpec[0] == '<' || widthSpec[0] == '>' ||
+                       widthSpec[0] == '^')
+                    {
+                        align = widthSpec[0];
+                        widthSpec = trim(widthSpec.substr(1));
+                        if(widthSpec.empty())
+                        {
+                            reportError(line,
+                                        "alignment specifier requires a width");
+                        }
+                        else if(widthSpec.back() == '$')
+                        {
+                            widthSpec.pop_back();
+                            widthSpec = trim(widthSpec);
+                            if(widthSpec.empty())
+                            {
+                                reportError(
+                                    line,
+                                    "dynamic alignment width name is empty");
+                            }
+                            else if(std::all_of(
+                                        widthSpec.begin(), widthSpec.end(),
+                                        [](unsigned char ch) {
+                                            return std::isalnum(ch) || ch == '_';
+                                        }))
+                            {
+                                widthExpr = findNamedArgument(widthSpec);
+                                if(!widthExpr)
+                                    widthExpr = new IdentifierNode(widthSpec);
+                            }
+                            else
+                            {
+                                reportError(
+                                    line,
+                                    "unsupported dynamic width specifier: {" +
+                                        spec + "}");
+                            }
+                        }
+                        else if(std::all_of(widthSpec.begin(), widthSpec.end(),
+                                            [](unsigned char ch) {
+                                                return std::isdigit(ch);
+                                            }))
+                        {
+                            widthExpr = new IntLiteralNode(
+                                std::stoll(widthSpec));
+                        }
+                        else
+                        {
+                            reportError(line,
+                                        "unsupported format specifier: {" +
+                                            spec + "}");
+                        }
+                    }
+                    else
+                    {
+                        reportError(line,
+                                    "unsupported format specifier: {" + spec +
+                                        "}");
+                    }
                 }
             }
 
             ExpressionNode* argExpr = nullptr;
             if(!name.empty())
             {
-                argExpr = new IdentifierNode(name);
+                argExpr = findNamedArgument(name);
+                if(!argExpr)
+                    argExpr = new IdentifierNode(name);
             }
             else if(argIndex < args.size())
             {
@@ -2433,8 +2569,29 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
 
             llvm::Value* argVal = generateExpression(argExpr);
             if(argVal)
-                appendFormatValue(argExpr, argVal, debug, pretty, cFormat,
-                                  argValues, line);
+            {
+                if(align != '\0')
+                {
+                    if(!widthExpr)
+                    {
+                        reportError(line,
+                                    "alignment format specifier requires a width");
+                    }
+                    else
+                    {
+                        llvm::Value* widthVal = generateExpression(widthExpr);
+                        llvm::Value* aligned =
+                            buildAlignedString(argVal, widthVal, align, line);
+                        cFormat += "%s";
+                        argValues.push_back(aligned);
+                    }
+                }
+                else
+                {
+                    appendFormatValue(argExpr, argVal, debug, pretty, cFormat,
+                                      argValues, line);
+                }
+            }
 
             i = close;
             continue;
@@ -2444,6 +2601,15 @@ CodeGenerator::convertFormatString(const std::string& mlaFormat,
     }
 
     return cFormat;
+}
+
+std::string CodeGenerator::convertFormatString(
+    const std::string& mlaFormat, const std::vector<ExpressionNode*>& args,
+    std::vector<llvm::Value*>& argValues, int line)
+{
+    static const std::vector<std::pair<std::string, ExpressionNode*>>
+        kNoNamedArgs;
+    return convertFormatString(mlaFormat, args, kNoNamedArgs, argValues, line);
 }
 
 bool CodeGenerator::isStringExpression(ExpressionNode* expr) const
@@ -3150,8 +3316,8 @@ void CodeGenerator::generatePrintStatement(PrintNode* node)
     // Convert MLA format string to C format string and collect argument values
     std::vector<llvm::Value*> argValues;
     std::string cFormat =
-        convertFormatString(node->formatString, node->arguments, argValues,
-                            node->line);
+        convertFormatString(node->formatString, node->arguments,
+                            node->namedArguments, argValues, node->line);
 
     // Add newline for println!/eprintln!
     if(node->kind == PrintNode::PRINTLN_STDOUT ||
@@ -3205,8 +3371,8 @@ llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
 
     std::vector<llvm::Value*> argValues;
     std::string cFormat =
-        convertFormatString(node->formatString, node->arguments, argValues,
-                            node->line);
+        convertFormatString(node->formatString, node->arguments,
+                            node->namedArguments, argValues, node->line);
 
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "formatstr");
@@ -10229,6 +10395,8 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         {
             for(auto*& arg : fmt->arguments)
                 resolve_expr(arg, scope);
+            for(auto& namedArg : fmt->namedArguments)
+                resolve_expr(namedArg.second, scope);
             return;
         }
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(e))
@@ -10390,6 +10558,8 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         {
             for(auto*& arg : printNode->arguments)
                 resolve_expr(arg, scope);
+            for(auto& namedArg : printNode->namedArguments)
+                resolve_expr(namedArg.second, scope);
             return;
         }
         if(auto* assertStmt = dynamic_cast<AssertNode*>(s))

@@ -88,6 +88,21 @@ ASTNode* mla_ast_argument_list_add(ASTNode* list, ASTNode* arg)
     return add_argument_impl(list, arg);
 }
 
+ASTNode* mla_ast_format_argument(char* name, ASTNode* value)
+{
+    return create_format_argument_impl(name, value);
+}
+
+ASTNode* mla_ast_format_argument_list_create(ASTNode* arg)
+{
+    return create_format_argument_list_impl(arg);
+}
+
+ASTNode* mla_ast_format_argument_list_add(ASTNode* list, ASTNode* arg)
+{
+    return add_format_argument_impl(list, arg);
+}
+
 ASTNode* mla_ast_function_call_simple(char* name, ASTNode* arg1, ASTNode* arg2, int line)
 {
     return create_function_call_impl(name, arg1, arg2, line);

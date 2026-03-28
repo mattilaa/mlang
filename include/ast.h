@@ -205,6 +205,37 @@ public:
     }
 };
 
+class FormatArgumentNode : public ASTNode
+{
+public:
+    std::string name;
+    ExpressionNode* value;
+
+    FormatArgumentNode(ExpressionNode* v) : value(v) {}
+    FormatArgumentNode(const std::string& n, ExpressionNode* v)
+        : name(n), value(v)
+    {
+    }
+
+    bool isNamed() const
+    {
+        return !name.empty();
+    }
+
+    std::string toString() const override;
+};
+
+class FormatArgumentListNode : public ASTNode
+{
+public:
+    std::vector<FormatArgumentNode*> args;
+
+    std::string toString() const override
+    {
+        return "FormatArgumentList";
+    }
+};
+
 class IntLiteralNode : public ExpressionNode
 {
 public:
@@ -844,6 +875,7 @@ public:
     PrintKind kind;
     std::string formatString;
     std::vector<ExpressionNode*> arguments;
+    std::vector<std::pair<std::string, ExpressionNode*>> namedArguments;
     bool debugOnly = false;
 
     PrintNode(PrintKind k, const std::string& fmt, bool debug = false)
@@ -854,6 +886,10 @@ public:
     {
         arguments.push_back(arg);
     }
+    void addNamedArgument(const std::string& name, ExpressionNode* arg)
+    {
+        namedArguments.push_back({name, arg});
+    }
     std::string toString() const override;
 };
 
@@ -862,11 +898,16 @@ class FormatNode : public ExpressionNode
 public:
     std::string formatString;
     std::vector<ExpressionNode*> arguments;
+    std::vector<std::pair<std::string, ExpressionNode*>> namedArguments;
 
     FormatNode(const std::string& fmt) : formatString(fmt) {}
     void addArgument(ExpressionNode* arg)
     {
         arguments.push_back(arg);
+    }
+    void addNamedArgument(const std::string& name, ExpressionNode* arg)
+    {
+        namedArguments.push_back({name, arg});
     }
     std::string toString() const override;
 };
@@ -1370,6 +1411,9 @@ ASTNode* create_debug_print_stmt(char* format_str, ASTNode* args, int line);
 ASTNode* create_print_expr_stmt(int kind, ASTNode* expr, int line);
 ASTNode* create_argument_list(ASTNode* arg);
 ASTNode* add_argument(ASTNode* list, ASTNode* arg);
+ASTNode* create_format_argument(char* name, ASTNode* value);
+ASTNode* create_format_argument_list(ASTNode* arg);
+ASTNode* add_format_argument(ASTNode* list, ASTNode* arg);
 ASTNode* create_format_expr(char* format_str, ASTNode* args, int line);
 ASTNode* create_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* create_generic_list_type(ASTNode* element_type);
