@@ -2968,61 +2968,91 @@ fn handle_workspace_symbol(payload: str8) -> str8 {
     return out;
 }
 
-fn semantic_token_type(sig: str8) -> i32 {
-    let kind_lsp: i32 = symbol_kind_lsp(sig);
-    if kind_lsp == 12 {
-        return 2; // function
-    }
-    if kind_lsp == 23 {
-        return 5; // type
-    }
-    if kind_lsp == 10 {
-        return 5; // type
-    }
-    if kind_lsp == 2 {
-        return 0; // keyword/module
-    }
-    if contains(sig, "fn ") == 1 {
-        return 2; // function
-    }
-    if contains(sig, "struct ") == 1 {
-        return 5; // type
-    }
-    if contains(sig, "enum ") == 1 {
-        return 5; // type
-    }
-    if contains(sig, "mod ") == 1 {
-        return 0; // keyword
-    }
-    return 4; // variable
+fn semantic_is_keyword(word: str8) -> i32 {
+    if eq(word, "break") == 1 { return 1; }
+    if eq(word, "continue") == 1 { return 1; }
+    if eq(word, "else") == 1 { return 1; }
+    if eq(word, "enum") == 1 { return 1; }
+    if eq(word, "extern") == 1 { return 1; }
+    if eq(word, "fn") == 1 { return 1; }
+    if eq(word, "for") == 1 { return 1; }
+    if eq(word, "if") == 1 { return 1; }
+    if eq(word, "impl") == 1 { return 1; }
+    if eq(word, "in") == 1 { return 1; }
+    if eq(word, "let") == 1 { return 1; }
+    if eq(word, "match") == 1 { return 1; }
+    if eq(word, "mod") == 1 { return 1; }
+    if eq(word, "pub") == 1 { return 1; }
+    if eq(word, "return") == 1 { return 1; }
+    if eq(word, "struct") == 1 { return 1; }
+    if eq(word, "trait") == 1 { return 1; }
+    if eq(word, "type") == 1 { return 1; }
+    if eq(word, "use") == 1 { return 1; }
+    if eq(word, "var") == 1 { return 1; }
+    if eq(word, "while") == 1 { return 1; }
+    return 0;
 }
 
-fn semantic_token_modifiers(sig: str8) -> i32 {
-    // bit 0: declaration
-    // bit 1: static
-    // bit 2: readonly
-    var mods: i32 = 1;
-    if contains(sig, "static ") == 1 {
-        mods = mods + 2;
+fn semantic_is_builtin_type(word: str8) -> i32 {
+    if eq(word, "bool") == 1 { return 1; }
+    if eq(word, "f32") == 1 { return 1; }
+    if eq(word, "f64") == 1 { return 1; }
+    if eq(word, "i16") == 1 { return 1; }
+    if eq(word, "i32") == 1 { return 1; }
+    if eq(word, "i64") == 1 { return 1; }
+    if eq(word, "i8") == 1 { return 1; }
+    if eq(word, "int") == 1 { return 1; }
+    if eq(word, "list") == 1 { return 1; }
+    if eq(word, "map") == 1 { return 1; }
+    if eq(word, "ptr") == 1 { return 1; }
+    if eq(word, "str16") == 1 { return 1; }
+    if eq(word, "str8") == 1 { return 1; }
+    if eq(word, "string") == 1 { return 1; }
+    if eq(word, "tuple") == 1 { return 1; }
+    if eq(word, "u16") == 1 { return 1; }
+    if eq(word, "u32") == 1 { return 1; }
+    if eq(word, "u64") == 1 { return 1; }
+    if eq(word, "u8") == 1 { return 1; }
+    if eq(word, "void") == 1 { return 1; }
+    if eq(word, "Result") == 1 { return 1; }
+    if eq(word, "Option") == 1 { return 1; }
+    return 0;
+}
+
+fn semantic_is_builtin_macro(word: str8) -> i32 {
+    if eq(word, "println") == 1 { return 1; }
+    if eq(word, "print") == 1 { return 1; }
+    if eq(word, "eprintln") == 1 { return 1; }
+    if eq(word, "eprint") == 1 { return 1; }
+    if eq(word, "debug") == 1 { return 1; }
+    if eq(word, "format") == 1 { return 1; }
+    if eq(word, "assert") == 1 { return 1; }
+    if eq(word, "static_assert") == 1 { return 1; }
+    if eq(word, "assert_eq") == 1 { return 1; }
+    return 0;
+}
+
+fn semantic_append_chunk(data: str8, j: i32, line0: i32, col0: i32,
+                         tlen: i32, ttype: i32, tmods: i32,
+                         prev_line: i32, prev_col: i32) -> str8 {
+    let dl: i32 = line0 - prev_line;
+    var ds: i32 = col0;
+    if dl == 0 {
+        ds = col0 - prev_col;
     }
-    if contains(sig, "let ") == 1 {
-        mods = mods + 4;
+    let chunk: str8 = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
+    if j > 0 {
+        return format!("{},{}", data, chunk);
     }
-    return mods;
+    return format!("{}{}", data, chunk);
 }
 
 fn handle_semantic_tokens_full(payload: str8) -> str8 {
-    if ensure_session() != 0 { return "{\"data\":[]}"; }
+    if ensure_text_store() != 0 { return "{\"data\":[]}"; }
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"data\":[]}"; }
-    let s: Session = current_session();
-    let cr: Result<i32, str8> = s.document_symbol_count(uri);
-    if cr.is_err() { return "{\"data\":[]}"; }
-    let n: i32 = match cr {
-        Ok(v) => v,
-        Err(_e) => 0
-    };
-    if n <= 0 { return "{\"data\":[]}"; }
+    let text: str8 = text_store_get(g_text_store_handle, uri);
+    if len(text) == 0 { return "{\"data\":[]}"; }
 
     var data: str8 = String::new();
     data = concat(data, "[");
@@ -3030,43 +3060,122 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
     var prev_line: i32 = 0;
     var prev_col: i32 = 0;
 
-    for i in 0..n {
-        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(uri, i);
-        if sr.is_err() { continue; }
-        let sym: DocumentSymbol = match sr {
-            Ok(v) => v,
-            Err(_e) => DocumentSymbol {
-                id: String::new(),
-                name: String::new(),
-                type_info: String::new(),
-                signature: String::new(),
-                kind: 0,
-                line: 0,
-                column: 0
+    let lines_n: i32 = line_count(text);
+    for line0 in 0..lines_n {
+        let raw: str8 = line_text_at(text, line0);
+        let raw_len: i32 = len(raw);
+        var pos: i32 = 0;
+        for _step in 0..raw_len {
+            if pos >= raw_len { break; }
+            let ch: str8 = sub(raw, pos, 1);
+            if eq(ch, "/") == 1 && pos + 1 < raw_len {
+                if eq(sub(raw, pos + 1, 1), "/") == 1 {
+                    break;
+                }
             }
-        };
-        if len(sym.name) <= 0 { continue; }
-        let line0: i32 = lsp_line(sym.line);
-        let col0: i32 = lsp_col(sym.column);
-        if line0 < 0 { continue; }
-        if col0 < 0 { continue; }
-        let dl: i32 = line0 - prev_line;
-        var ds: i32 = col0;
-        if dl == 0 {
-            ds = col0 - prev_col;
+            if eq(ch, "\"") == 1 || eq(ch, "'") == 1 {
+                let quote: str8 = ch;
+                pos = pos + 1;
+                for _q in pos..raw_len {
+                    if pos >= raw_len { break; }
+                    let qch: str8 = sub(raw, pos, 1);
+                    if eq(qch, "\\") == 1 && pos + 1 < raw_len {
+                        pos = pos + 2;
+                        continue;
+                    }
+                    pos = pos + 1;
+                    if eq(qch, quote) == 1 { break; }
+                }
+                continue;
+            }
+            if is_ident_char(ch) == 1 && contains("0123456789", ch) == 0 {
+                var end: i32 = pos + 1;
+                for _i in end..raw_len {
+                    if end >= raw_len { break; }
+                    let ech: str8 = sub(raw, end, 1);
+                    if is_ident_char(ech) == 0 { break; }
+                    end = end + 1;
+                }
+                let word: str8 = sub(raw, pos, end - pos);
+                if semantic_is_keyword(word) == 1 {
+                    data = semantic_append_chunk(
+                        data, j, line0, pos, end - pos, 0, 0, prev_line, prev_col
+                    );
+                    prev_line = line0;
+                    prev_col = pos;
+                    j = j + 1;
+
+                    var decl_start: i32 = end;
+                    for _ws in decl_start..raw_len {
+                        if decl_start >= raw_len { break; }
+                        let wch: str8 = sub(raw, decl_start, 1);
+                        if eq(wch, " ") == 1 || eq(wch, "\t") == 1 {
+                            decl_start = decl_start + 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    if decl_start < raw_len {
+                        let dch: str8 = sub(raw, decl_start, 1);
+                        if is_ident_char(dch) == 1 &&
+                           contains("0123456789", dch) == 0 {
+                            var decl_end: i32 = decl_start + 1;
+                            for _di in decl_end..raw_len {
+                                if decl_end >= raw_len { break; }
+                                let dech: str8 = sub(raw, decl_end, 1);
+                                if is_ident_char(dech) == 0 { break; }
+                                decl_end = decl_end + 1;
+                            }
+                            var decl_type: i32 = -1;
+                            var decl_mods: i32 = 1;
+                            if eq(word, "fn") == 1 {
+                                decl_type = 2;
+                            }
+                            if eq(word, "struct") == 1 || eq(word, "enum") == 1 ||
+                               eq(word, "trait") == 1 || eq(word, "type") == 1 {
+                                decl_type = 5;
+                            }
+                            if eq(word, "let") == 1 {
+                                decl_type = 4;
+                                decl_mods = 5;
+                            }
+                            if eq(word, "var") == 1 || eq(word, "for") == 1 {
+                                decl_type = 4;
+                            }
+                            if decl_type >= 0 {
+                                data = semantic_append_chunk(
+                                    data, j, line0, decl_start, decl_end - decl_start,
+                                    decl_type, decl_mods, prev_line, prev_col
+                                );
+                                prev_line = line0;
+                                prev_col = decl_start;
+                                j = j + 1;
+                            }
+                        }
+                    }
+                } else if semantic_is_builtin_type(word) == 1 {
+                    data = semantic_append_chunk(
+                        data, j, line0, pos, end - pos, 5, 0, prev_line, prev_col
+                    );
+                    prev_line = line0;
+                    prev_col = pos;
+                    j = j + 1;
+                } else if semantic_is_builtin_macro(word) == 1 &&
+                          end < raw_len && eq(sub(raw, end, 1), "!") == 1 {
+                    data = semantic_append_chunk(
+                        data, j, line0, pos, end - pos + 1, 1, 0, prev_line, prev_col
+                    );
+                    prev_line = line0;
+                    prev_col = pos;
+                    j = j + 1;
+                    pos = end + 1;
+                    continue;
+                }
+                pos = end;
+                continue;
+            }
+            pos = pos + 1;
         }
-        let tlen: i32 = len(sym.name);
-        let ttype: i32 = semantic_token_type(sym.signature);
-        let tmods: i32 = semantic_token_modifiers(sym.signature);
-        let chunk: str8 = format!("{},{},{},{},{}", dl, ds, tlen, ttype, tmods);
-        if j > 0 {
-            data = format!("{},{}", data, chunk);
-        } else {
-            data = format!("{}{}", data, chunk);
-        }
-        prev_line = line0;
-        prev_col = col0;
-        j = j + 1;
     }
 
     data = concat(data, "]");
