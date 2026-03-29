@@ -1,0 +1,96 @@
+mod std::strbuf;
+
+use std::strbuf::free;
+use std::strbuf::free_utf16;
+use std::strbuf::from_utf16;
+use std::strbuf::to_utf16;
+
+enum Mode {
+    Idle,
+    Busy,
+    Done
+};
+
+fn main() -> i32 {
+    var i32_text: str8 = "unknown";
+    switch 42 {
+        case 7: {
+            i32_text = "seven";
+        }
+        case 42: {
+            i32_text = "forty-two";
+        }
+        default: {
+            i32_text = "other";
+        }
+    }
+
+    var bool_text: str8 = "unset";
+    switch false {
+        case true: {
+            bool_text = "true";
+        }
+        case false: {
+            bool_text = "false";
+        }
+        default: {
+            bool_text = "other";
+        }
+    }
+
+    var str8_text: str8 = "unset";
+    switch "beta" {
+        case "alpha": {
+            str8_text = "saw alpha";
+        }
+        case "beta": {
+            str8_text = "saw beta";
+        }
+        default: {
+            str8_text = "other";
+        }
+    }
+
+    let state: Mode = Mode::Busy;
+    var enum_text: str8 = "unset";
+    switch state {
+        case Mode::Idle: {
+            enum_text = "idle";
+        }
+        case Mode::Busy: {
+            enum_text = "busy";
+        }
+        default: {
+            enum_text = "done";
+        }
+    }
+
+    let word16: str16 = to_utf16("bye");
+    let hi16: str16 = to_utf16("hi");
+    let bye16: str16 = to_utf16("bye");
+    var str16_out: str8 = "unset";
+    switch word16 {
+        case hi16: {
+            str16_out = "greeting";
+        }
+        case bye16: {
+            str16_out = "farewell";
+        }
+        default: {
+            str16_out = "other";
+        }
+    }
+
+    let roundtrip16: str8 = from_utf16(word16);
+    println!("i32 switch: {}", i32_text);
+    println!("bool switch: {}", bool_text);
+    println!("str8 switch: {}", str8_text);
+    println!("enum switch: {}", enum_text);
+    println!("str16 switch: {} -> {}", roundtrip16, str16_out);
+
+    free(roundtrip16);
+    free_utf16(bye16);
+    free_utf16(hi16);
+    free_utf16(word16);
+    return 0;
+}

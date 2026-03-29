@@ -19,6 +19,7 @@ int yycolumn_token = 1; // column at start of the current token
 static int yyinput(void);
 static void yyunput(int, char*);
 static int generic_depth = 0;
+static int switch_case_header_depth = 0;
 
 static int is_generic_struct_literal_start()
 {
@@ -144,6 +145,9 @@ static int is_try_question_context()
 "catch"         { return CATCH; }
 "throw"         { return THROW; }
 "match"         { return MATCH; }
+"switch"        { return SWITCH; }
+"case"          { switch_case_header_depth = 1; return CASE; }
+"default"       { switch_case_header_depth = 1; return DEFAULT; }
 "enum"          { return ENUM; }
 "for"           { return FOR; }
 "while"         { return WHILE; }
@@ -201,7 +205,14 @@ static int is_try_question_context()
 "f64("          { return CAST_DOUBLE; }
 "->"            { return ARROW; }
 "=>"            { return FAT_ARROW; }
-":"[[:space:]]*"{"     { return COLON_BLOCK; }
+":"[[:space:]]*"{"     {
+                  if(switch_case_header_depth > 0) {
+                      switch_case_header_depth = 0;
+                      yyless(1);
+                      return COLON;
+                  }
+                  return COLON_BLOCK;
+                }
 "+"[[:space:]]*"..."   { return PLUS_ELLIPSIS; }
 "*"[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*"=" {
                   const char* p = yytext + 1;
@@ -263,7 +274,11 @@ static int is_try_question_context()
 "!="            { return NE; }
 "!"             { return NOT; }
 "~"             { return TILDE; }
-":"             { return COLON; }
+":"             {
+                  if(switch_case_header_depth > 0)
+                      switch_case_header_depth = 0;
+                  return COLON;
+                }
 ";"             { return SEMICOLON; }
 "{"             { return LBRACE; }
 "}"             { return RBRACE; }
