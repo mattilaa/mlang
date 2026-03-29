@@ -1,0 +1,26 @@
+mod std::sed;
+mod std::strbuf;
+
+use std::sed::replace_all;
+use std::strbuf::free;
+use std::strbuf::free_utf16;
+use std::strbuf::from_utf16;
+use std::strbuf::to_utf16;
+
+fn main() -> i32 {
+    let original16: str16 = to_utf16("hello utf16 world");
+    let original8: str8 = from_utf16(original16);
+    let edited8: str8 = replace_all(original8, "world", "mlang");
+    let edited16: str16 = to_utf16(edited8);
+    let roundtrip8: str8 = from_utf16(edited16);
+
+    println!("before: {}", original8);
+    println!("after: {}", roundtrip8);
+
+    free(roundtrip8);
+    free_utf16(edited16);
+    free(edited8);
+    free(original8);
+    free_utf16(original16);
+    return 0;
+}
