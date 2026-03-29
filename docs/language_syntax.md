@@ -164,6 +164,47 @@ Compatibility and diagnostics:
   the target enum backing type.
 - Nested enum declarations (`Outer::Inner`) are supported.
 
+## Exceptions: `throw` and `try/catch`
+
+MLang supports stack-unwinding exceptions with an explicit payload type from
+`std::exceptions`.
+
+Example:
+
+```mla
+mod std::exceptions;
+use std::exceptions::*;
+
+#[inline(never)]
+fn parse_number(text: str8) -> i32 {
+    if text == "42" {
+        return 42;
+    }
+    throw with_line("ParseError", "expected 42", 12);
+}
+
+fn main() -> i32 {
+    try {
+        let value: i32 = parse_number("x");
+        println!("value={}", value);
+    } catch e: Exception {
+        println!("caught {} at {}: {}", e.type_name, e.source_line, e.message);
+    }
+    return 0;
+}
+```
+
+Notes:
+- `throw expr;` transfers control to the nearest enclosing `catch`.
+- `catch e: Exception { ... }` binds the thrown exception payload for the
+  handler body.
+- Exceptions propagate across nested function calls until a matching `catch`
+  is found.
+- Scope-owned values are cleaned up during exception unwinding before control
+  enters the handler.
+- Uncaught exceptions terminate the program after printing the exception type,
+  message, and source line when available.
+
 ## `main` Return Type Defaulting
 
 Both forms are supported:

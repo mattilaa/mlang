@@ -7,6 +7,11 @@ It also includes language-level builtins such as `Option`, `Result`,
 constructors (`Some`, `None`, `Ok`, `Err`), `match`, builtin macros, and
 Rust-like attributes.
 
+For language-level exceptions and the stdlib payload type, see:
+- `stdlib/std/exceptions.mla`
+  (`Exception`, `new`, `with_line`, `free`, plus `throw` and `try/catch`
+   syntax documented in `docs/language_syntax.md`).
+
 String allocation intrinsics are also available:
 - `String::new()`
 - `String::with_capacity(cap)`
@@ -128,6 +133,7 @@ Includes:
 - empty-block warnings
 - `fn main() {}` defaulting to `fn main() -> i32 {}`
 - function return type inference for non-extern functions that omit `-> Type`
+- `throw` and `try/catch` exception handling with cleanup-aware unwinding
 - typed lambdas and fold expressions (`|x: T| { ... }`, `(... + xs)`, `(xs * ...)`)
 
 ## Branch Feature Additions
@@ -140,6 +146,7 @@ Recent branch-level additions reflected in these docs:
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
 - `f32`/`f64` primitive names
 - Lambda and fold expressions with example coverage
+- Exception handling with `throw`, `try/catch`, and `std::exceptions::Exception`
 - Enum backing types (`: i64`, `: u8`), range checks, and compatibility checks
 - Terminal helpers (`std::term`, `std::esc`) including ANSI auto-disable on non-TTY
 - Regex module (`std::regex`)
@@ -170,6 +177,7 @@ See also:
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::bench`, `std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
   `std::process`, `std::rand`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
+  `std::exceptions`,
   `std::testing`,
   `std::thread`, `std::time`, `std::unordered`, `std::vec`).
 - `docs/language_syntax.md` for up-to-date language syntax and diagnostics.
