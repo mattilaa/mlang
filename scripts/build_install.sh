@@ -619,6 +619,16 @@ if $asan_enabled; then
   )
 fi
 
+run_mlang_build() {
+  local src="$1"
+  local out="$2"
+  if [[ ${#asan_runtime_env[@]} -gt 0 ]]; then
+    env "${asan_runtime_env[@]}" "$build_dir/mlang" "$src" -L "$build_dir" -lmlang_std -o "$out"
+  else
+    "$build_dir/mlang" "$src" -L "$build_dir" -lmlang_std -o "$out"
+  fi
+}
+
 cmake "${cmake_args[@]}"
 if $build_all; then
   log_info "building targets: mlang mlang_std"
@@ -628,19 +638,19 @@ fi
 if $install_after_build || $run_lsp_tests; then
   # Build mlangd-mla with the freshly built compiler/runtime.
   log_info "building tool: mlangd-mla"
-  "$build_dir/mlang" "tools/mlangd-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd-mla"
+  run_mlang_build "tools/mlangd-mla/main.mla" "$build_dir/mlangd-mla"
   # Build mlang-format (Mlang implementation, port-in-progress).
   log_info "building tool: mlang-format"
-  "$build_dir/mlang" "tools/mlang-format-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-format"
+  run_mlang_build "tools/mlang-format-mla/main.mla" "$build_dir/mlang-format"
 fi
 
 if $install_after_build; then
   # Build mlang-frontend-mla (feature-rich Mlang CLI frontend).
   log_info "building tool: mlang-frontend-mla"
-  "$build_dir/mlang" "tools/mlang-frontend-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-frontend-mla"
+  run_mlang_build "tools/mlang-frontend-mla/main.mla" "$build_dir/mlang-frontend-mla"
   # Build mlangpkg (Cargo-like package manager prototype).
   log_info "building tool: mlangpkg"
-  "$build_dir/mlang" "tools/mlangpkg/mlangpkg.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangpkg"
+  run_mlang_build "tools/mlangpkg/mlangpkg.mla" "$build_dir/mlangpkg"
 fi
 
 if $run_unit_tests; then

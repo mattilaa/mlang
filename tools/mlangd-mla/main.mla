@@ -8,8 +8,11 @@ use std::compiler::DocumentSymbol;
 use std::compiler::ReferenceLocation;
 use std::compiler::ResolvedSymbol;
 use std::compiler::Session;
+use std::compiler::SessionRef;
 use std::compiler::SyntaxDiagnostic;
 use std::compiler::session_create;
+use std::compiler::session_create_handle;
+use std::compiler::session_ref;
 use std::compiler::version;
 use std::jsonrpc::extract_first_change_text;
 use std::jsonrpc::extract_first_diagnostic_end_character;
@@ -272,23 +275,23 @@ fn setup_logging(args: list<str8>) -> i32 {
     return 0;
 }
 
-fn current_session() -> Session {
-    return Session { handle: g_session_handle };
+fn current_session() -> SessionRef {
+    return session_ref(g_session_handle);
 }
 
 fn ensure_session() -> i32 {
     if g_session_ready == 1 {
         return 0;
     }
-    let sr: Result<Session, str8> = session_create();
+    let sr: Result<i64, str8> = session_create_handle();
     if sr.is_err() {
         return 1;
     }
-    let s: Session = match sr {
+    let h: i64 = match sr {
         Ok(v) => v,
-        Err(_e) => Session { handle: 0 }
+        Err(_e) => 0
     };
-    g_session_handle = s.handle;
+    g_session_handle = h;
     g_session_ready = 1;
     return 0;
 }
@@ -569,7 +572,13 @@ fn builtin_type_location(word: str8) -> str8 {
     if len(word) == 0 { return String::new(); }
     var lookup: str8 = word;
     if eq(lookup, "String") == 1 {
-        lookup = "string";
+        lookup = "str8";
+    }
+    if eq(lookup, "string") == 1 {
+        lookup = "str8";
+    }
+    if eq(lookup, "int") == 1 {
+        lookup = "i32";
     }
     let root: str8 = root_path_from_store();
     let here: str8 = cwd();
@@ -1842,7 +1851,6 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "extern") == 1 { return 14; }
     if eq(label, "pub") == 1 { return 14; }
     if eq(label, "i32") == 1 { return 22; }
-    if eq(label, "i32") == 1 { return 22; }
     if eq(label, "i64") == 1 { return 22; }
     if eq(label, "u32") == 1 { return 22; }
     if eq(label, "u64") == 1 { return 22; }
@@ -1874,7 +1882,6 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "impl") == 1 { return "keyword: implementation block"; }
     if eq(label, "extern") == 1 { return "keyword: external symbol declaration"; }
     if eq(label, "pub") == 1 { return "keyword: public visibility"; }
-    if eq(label, "i32") == 1 { return "builtin type alias (int32_t)"; }
     if eq(label, "i32") == 1 { return "builtin 32-bit signed integer"; }
     if eq(label, "i64") == 1 { return "builtin 64-bit signed integer"; }
     if eq(label, "u32") == 1 { return "builtin 32-bit unsigned integer"; }
@@ -1893,9 +1900,6 @@ fn completion_detail(label: str8) -> str8 {
 }
 
 fn completion_documentation(label: str8) -> str8 {
-    if eq(label, "i32") == 1 {
-        return "Alias for a 32-bit signed integer. Maps to C int32_t in the runtime ABI.";
-    }
     if eq(label, "i32") == 1 {
         return "Signed 32-bit integer type for arithmetic and integer APIs.";
     }
@@ -1980,7 +1984,7 @@ fn completion_documentation(label: str8) -> str8 {
 fn completion_symbol_detail_in_uri(target_uri: str8, label: str8) -> str8 {
     if len(target_uri) == 0 { return String::new(); }
     if len(label) == 0 { return String::new(); }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
     if cr.is_err() { return String::new(); }
     let n: i32 = match cr {
@@ -2086,7 +2090,7 @@ fn declaration_doc_in_text(text: str8, label: str8) -> str8 {
 fn completion_symbol_doc_in_uri(target_uri: str8, label: str8) -> str8 {
     if len(target_uri) == 0 { return String::new(); }
     if len(label) == 0 { return String::new(); }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
     if cr.is_err() { return String::new(); }
     let n: i32 = match cr {
@@ -2180,7 +2184,7 @@ fn handle_did_open(payload: str8) -> i32 {
     let version: i64 = extract_text_document_version(payload);
     if len(uri) == 0 { return 1; }
     if len(lang) == 0 { return 1; }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let r: Result<i32, str8> = s.open_document(uri, lang, text, version);
     if r.is_err() {
         return 1;
@@ -2206,7 +2210,7 @@ fn handle_did_change(payload: str8) -> i32 {
     let text: str8 = extract_first_change_text(payload);
     let version: i64 = extract_text_document_version(payload);
     if len(uri) == 0 { return 1; }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let r: Result<i32, str8> = s.change_document(uri, text, version);
     if r.is_err() {
         return 1;
@@ -2224,7 +2228,7 @@ fn handle_did_close(payload: str8) -> i32 {
     }
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return 1; }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let r: Result<i32, str8> = s.close_document(uri);
     if r.is_err() {
         return 1;
@@ -2509,7 +2513,7 @@ fn handle_definition(payload: str8) -> str8 {
             }
     }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let dr: Result<DefinitionLocation, str8> =
         s.definition(uri, line + 1, col + 1);
     if dr.is_err() {
@@ -2624,7 +2628,7 @@ fn handle_references(payload: str8) -> str8 {
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let include_decl: i32 = extract_include_declaration(payload);
@@ -2692,7 +2696,7 @@ fn handle_hover(payload: str8) -> str8 {
     if line < 0 { return "null"; }
     if col < 0 { return "null"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let hr: Result<str8, str8> = s.hover(uri, line + 1, col + 1);
     if hr.is_err() { return "null"; }
     let h: str8 = match hr {
@@ -2716,7 +2720,7 @@ fn handle_completion(payload: str8) -> str8 {
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.completion_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
@@ -2777,7 +2781,7 @@ fn handle_document_symbol(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "[]"; }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
@@ -2829,7 +2833,7 @@ fn handle_document_highlight(payload: str8) -> str8 {
     if line < 0 { return "[]"; }
     if col < 0 { return "[]"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.references_count(uri, line + 1, col + 1);
     if cr.is_err() { return "[]"; }
     let n: i32 = match cr {
@@ -2875,7 +2879,7 @@ fn handle_signature_help(payload: str8) -> str8 {
     if line < 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
     if col < 0 { return "{\"signatures\":[],\"activeSignature\":0,\"activeParameter\":0}"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     var sig: str8 = String::new();
     if rr.is_ok() {
@@ -2966,7 +2970,7 @@ fn handle_prepare_rename(payload: str8) -> str8 {
     if len(uri) == 0 { return "null"; }
     if line < 0 { return "null"; }
     if col < 0 { return "null"; }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let rr: Result<ResolvedSymbol, str8> = s.resolve_symbol(uri, line + 1, col + 1);
     if rr.is_err() { return "null"; }
     let sym: ResolvedSymbol = match rr {
@@ -3005,7 +3009,7 @@ fn handle_rename(payload: str8) -> str8 {
     if col < 0 { return "null"; }
     if len(new_name) == 0 { return "null"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let safe_r: Result<i32, str8> = s.rename_is_safe(uri, line + 1, col + 1, new_name);
     if safe_r.is_err() { return "null"; }
     let safe: i32 = match safe_r {
@@ -3081,7 +3085,7 @@ fn handle_diagnostic(payload: str8) -> str8 {
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"kind\":\"full\",\"items\":[]}"; }
     let previous_result_id: str8 = extract_previous_result_id(payload);
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.syntax_diagnostic_count(uri);
     if cr.is_err() { return "{\"kind\":\"full\",\"items\":[]}"; }
     let n: i32 = match cr {
@@ -3138,7 +3142,7 @@ fn handle_workspace_symbol(payload: str8) -> str8 {
     let uri_count: i64 = uri_store_count(g_uri_store_handle);
     if uri_count <= 0 { return "[]"; }
 
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     var out: str8 = String::new();
     out = concat(out, "[");
     var j: i32 = 0;
@@ -3246,7 +3250,7 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
     if ensure_session() != 0 { return "{\"data\":[]}"; }
     let uri: str8 = extract_text_document_uri(payload);
     if len(uri) == 0 { return "{\"data\":[]}"; }
-    let s: Session = current_session();
+    let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.document_symbol_count(uri);
     if cr.is_err() { return "{\"data\":[]}"; }
     let n: i32 = match cr {

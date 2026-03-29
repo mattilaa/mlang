@@ -43,9 +43,9 @@ def main() -> int:
         root = Path(td)
         doc = root / "completion_docs.mla"
         text = (
-            "fn main() -> int {\n"
+            "fn main() -> i32 {\n"
             "  if\n"
-            "  int\n"
+            "  i32\n"
             "  return 0;\n"
             "}\n"
         )
@@ -61,8 +61,8 @@ def main() -> int:
             client.notify("initialized", {})
             open_doc(client, doc, text)
 
-            int_line, int_char = position_of(text, "  int")
-            int_char += len("  int")
+            int_line, int_char = position_of(text, "  i32")
+            int_char += len("  i32")
             res_int = client.request(
                 "textDocument/completion",
                 {
@@ -70,16 +70,16 @@ def main() -> int:
                     "position": {"line": int_line, "character": int_char},
                 },
             )
-            int_item = find_item(res_int, "int")
+            int_item = find_item(res_int, "i32")
             assert isinstance(int_item.get("detail"), str) and int_item.get("detail"), (
-                f"int completion should include detail: {int_item!r}"
+                f"i32 completion should include detail: {int_item!r}"
             )
             int_doc = int_item.get("documentation", {})
             assert isinstance(int_doc, dict) and isinstance(int_doc.get("value"), str), (
-                f"int completion should include documentation: {int_item!r}"
+                f"i32 completion should include documentation: {int_item!r}"
             )
-            assert "int32_t" in int_doc.get("value", ""), (
-                f"int documentation should mention mapping: {int_item!r}"
+            assert "32-bit" in int_doc.get("value", ""), (
+                f"i32 documentation should describe the type: {int_item!r}"
             )
 
             if_line, if_char = position_of(text, "if\n")
