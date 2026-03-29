@@ -1,0 +1,16 @@
+extern fn sscanf(text: str8, format: str8, ...) -> i32;
+
+fn main() -> i32 {
+    let input: str8 = "count=17 ratio=3.50";
+    var count: i32 = 0;
+    var ratio: f64 = 0.0;
+
+    let parsed: i32 = sscanf(input, "count=%d ratio=%lf", &count, &ratio);
+    if parsed != 2 {
+        println!("sscanf parsed only {} fields", parsed);
+        return 1;
+    }
+
+    println!("parsed count={} ratio={}", count, ratio);
+    return 0;
+}

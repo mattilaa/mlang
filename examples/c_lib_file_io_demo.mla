@@ -1,0 +1,31 @@
+mod std::fs;
+mod std::strbuf;
+
+use std::fs::*;
+use std::strbuf::*;
+
+extern fn fopen(path: str8, mode: str8) -> ptr<void>;
+extern fn fgets(buf: str8, size: i32, stream: ptr<void>) -> str8;
+extern fn fclose(stream: ptr<void>) -> i32;
+
+fn main() -> i32 {
+    let path: str8 = "/tmp/mlang_c_file_io_demo.txt";
+    let write_r: Result<i32, str8> =
+        write_all_text(path, "first line from libc\nsecond line\n");
+    if write_r.is_err() {
+        println!("write failed");
+        return 1;
+    }
+
+    var line = String::with_capacity(128);
+    let file: ptr<void> = fopen(path, "rb");
+    fgets(line, 128, file);
+    fclose(file);
+
+    let trimmed = trim(line);
+    println!("c fgets read: {}", trimmed);
+
+    free(trimmed);
+    String::free(line);
+    return 0;
+}
