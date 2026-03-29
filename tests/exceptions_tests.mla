@@ -23,6 +23,21 @@ fn make_guard() -> Guard {
     return Guard { marker: 1 };
 }
 
+struct MarkedGuard {
+    var marker: i32;
+};
+
+impl MarkedGuard {
+    pub fn free(self: MarkedGuard) -> i32 {
+        g_exception_drop_count = g_exception_drop_count + 1;
+        return 0;
+    }
+}
+
+fn make_marked_guard(marker: i32) -> MarkedGuard {
+    return MarkedGuard { marker: marker };
+}
+
 #[inline(never)]
 fn raise_direct() -> void {
     throw with_line("DirectError", "direct failure", 17);
@@ -33,6 +48,55 @@ fn raise_nested() -> void {
     let guard: Guard = make_guard();
     verify(guard.marker == 1);
     throw with_line("NestedError", "nested failure", 29);
+}
+
+#[inline(never)]
+fn raise_deep_leaf() -> void {
+    let leaf_guard: MarkedGuard = make_marked_guard(100);
+    verify(leaf_guard.marker == 100);
+    throw with_line("DeepError", "deep frame failure", 41);
+}
+
+#[inline(never)]
+fn raise_deep_mid() -> void {
+    let mid_guard: MarkedGuard = make_marked_guard(10);
+    verify(mid_guard.marker == 10);
+    raise_deep_leaf();
+}
+
+#[inline(never)]
+fn raise_deep_root() -> void {
+    let root_guard: MarkedGuard = make_marked_guard(1);
+    verify(root_guard.marker == 1);
+    raise_deep_mid();
+}
+
+#[inline(never)]
+fn raise_wrapped_leaf() -> void {
+    let leaf_guard: MarkedGuard = make_marked_guard(1000);
+    verify(leaf_guard.marker == 1000);
+    throw with_line("LeafError", "leaf exploded", 57);
+}
+
+#[inline(never)]
+fn raise_wrapped_mid() -> void {
+    let mid_guard: MarkedGuard = make_marked_guard(100);
+    verify(mid_guard.marker == 100);
+    try {
+        raise_wrapped_leaf();
+    } catch e: Exception {
+        verify(eq(e.type_name, "LeafError") == 1);
+        verify(eq(e.message, "leaf exploded") == 1);
+        verify(e.source_line == 57);
+        throw with_line("WrappedError", "mid translated exception", 63);
+    }
+}
+
+#[inline(never)]
+fn raise_wrapped_root() -> void {
+    let root_guard: MarkedGuard = make_marked_guard(10);
+    verify(root_guard.marker == 10);
+    raise_wrapped_mid();
 }
 
 #[test]
@@ -63,4 +127,36 @@ fn test_try_catch_unwinds_raii_across_calls() {
     }
     verify(handled);
     verify(g_exception_drop_count == 1);
+}
+
+#[test]
+fn test_try_catch_unwinds_multiple_nested_frames() {
+    g_exception_drop_count = 0;
+    var handled: bool = false;
+    try {
+        raise_deep_root();
+    } catch e: Exception {
+        handled = true;
+        verify(eq(e.type_name, "DeepError") == 1);
+        verify(eq(e.message, "deep frame failure") == 1);
+        verify(e.source_line == 41);
+    }
+    verify(handled);
+    verify(g_exception_drop_count == 3);
+}
+
+#[test]
+fn test_try_catch_rethrow_preserves_outer_exception() {
+    g_exception_drop_count = 0;
+    var handled: bool = false;
+    try {
+        raise_wrapped_root();
+    } catch e: Exception {
+        handled = true;
+        verify(eq(e.type_name, "WrappedError") == 1);
+        verify(eq(e.message, "mid translated exception") == 1);
+        verify(e.source_line == 63);
+    }
+    verify(handled);
+    verify(g_exception_drop_count == 3);
 }
