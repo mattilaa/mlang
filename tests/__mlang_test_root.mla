@@ -86,3 +86,5 @@ mod std_sed_tests;
 use std_sed_tests::*;
 mod switch_statement_tests;
 use switch_statement_tests::*;
+mod pipe_operator_tests;
+use pipe_operator_tests::*;

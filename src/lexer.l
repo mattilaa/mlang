@@ -313,6 +313,7 @@ static int is_try_question_context()
 "&"             { return AMP; }
 "^"             { return CARET; }
 "||"            { return PIPE_PIPE; }
+"|>"            { return PIPE_GT; }
 "|"             { return PIPE; }
 .               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
 %%

@@ -219,6 +219,88 @@ Notes:
 MLang supports stack-unwinding exceptions with an explicit payload type from
 `std::exceptions`.
 
+## Functional Programming Subset
+
+MLang already supports a practical Haskell/OCaml-style subset inside normal
+MLang code:
+
+- immutable `let` bindings for pure intermediate values
+- pipe operator `|>` for left-to-right function composition
+- closures, including typed parameter closures such as `|x: i32| { ... }`
+- algebraic-data-type style `Option<T>` and `Result<T, E>`
+- `match` expressions over enums, `Option`, `Result`, and literals
+- tuple types and tuple literals
+- fold expressions over lists
+
+### Pipe Operator: `|>`
+
+MLang supports a functional pipe operator that forwards the value on the left
+as the first argument of the function on the right.
+
+Examples:
+
+```mla
+fn add1(x: i32) -> i32 { return x + 1; }
+fn mul2(x: i32) -> i32 { return x * 2; }
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+
+fn main() -> i32 {
+    let value: i32 = 5 |> add1() |> mul2() |> add(3);
+    println!("{}", value); // 15
+    return 0;
+}
+```
+
+Current supported target forms:
+- `value |> f`
+- `value |> f()`
+- `value |> mod::f(a, b)`
+
+Lowering rules:
+- `x |> f` becomes `f(x)`
+- `x |> f()` becomes `f(x)`
+- `x |> f(a, b)` becomes `f(x, a, b)`
+
+The operator is left-associative, so chained pipelines evaluate left to right.
+
+Example:
+
+```mla
+fn choose(flag: bool) -> Option<i32> {
+    if flag {
+        return Some<i32>(42);
+    }
+    return None<i32>();
+}
+
+fn main() -> i32 {
+    let values: list<i32> = [1, 2, 3, 4];
+    let total: i32 = (... + values);
+
+    let maybe_value: Option<i32> = choose(true);
+    let answer: i32 = match maybe_value {
+        Some(v) => v,
+        None => 0
+    };
+
+    var boosted: i32 = total;
+    let add_answer = |x: i32| {
+        boosted += x;
+    };
+    add_answer(answer);
+
+    println!("answer={} boosted={}", answer, boosted);
+    return 0;
+}
+```
+
+See also:
+- `examples/pipe_operator_demo.mla`
+- `examples/functional_option_result_demo.mla`
+- `examples/functional_closure_fold_demo.mla`
+- `examples/lambda_fold_patterns.mla`
+- `examples/lambda_fold_advanced.mla`
+
 Example:
 
 ```mla

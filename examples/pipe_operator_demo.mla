@@ -1,0 +1,34 @@
+fn trim_score(x: i32) -> i32 {
+    if x < 0 {
+        return 0;
+    }
+    return x;
+}
+
+fn add_bonus(x: i32, bonus: i32) -> i32 {
+    return x + bonus;
+}
+
+fn scale(x: i32, factor: i32) -> i32 {
+    return x * factor;
+}
+
+fn to_passed_text(x: bool) -> str8 {
+    if x {
+        return "passed";
+    }
+    return "failed";
+}
+
+fn at_least(x: i32, limit: i32) -> bool {
+    return x >= limit;
+}
+
+fn main() -> i32 {
+    let final_score: i32 = -4 |> trim_score() |> add_bonus(7) |> scale(3);
+    let verdict: str8 = final_score |> at_least(20) |> to_passed_text();
+
+    println!("final_score={}", final_score);
+    println!("verdict={}", verdict);
+    return 0;
+}

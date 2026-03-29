@@ -1,0 +1,75 @@
+mod std::exceptions;
+
+use std::exceptions::*;
+
+enum Status {
+    Draft,
+    Published,
+    Archived
+};
+
+fn parse_port(text: str8) -> Result<i32, str8> {
+    if text == "8080" {
+        return Ok<i32, str8>(8080);
+    }
+    if text == "443" {
+        return Ok<i32, str8>(443);
+    }
+    return Err<i32, str8>("unsupported port");
+}
+
+fn choose_status(port: i32) -> Option<Status> {
+    if port == 8080 {
+        return Some<Status>(Status::Published);
+    }
+    if port == 443 {
+        return Some<Status>(Status::Draft);
+    }
+    return None<Status>();
+}
+
+fn describe_status(status: Status) -> str8 {
+    return match status {
+        Status::Draft => "draft",
+        Status::Published => "published",
+        Status::Archived => "archived",
+        _ => "unknown"
+    };
+}
+
+fn require_status(flag: bool) -> void {
+    if !flag {
+        throw new("MissingStatus", "status was not available");
+    }
+}
+
+fn main() -> i32 {
+    let port_r: Result<i32, str8> = parse_port("8080");
+    let port: i32 = match port_r {
+        Ok(v) => v,
+        Err(_) => 0
+    };
+
+    let maybe_status: Option<Status> = choose_status(port);
+    let label: str8 = match maybe_status {
+        Some(s) => describe_status(s),
+        None => "none"
+    };
+    println!("port={} status={}", port, label);
+
+    let bad_port_r: Result<i32, str8> = parse_port("21");
+    let bad_label: str8 = match bad_port_r {
+        Ok(_) => "ok",
+        Err(e) => e
+    };
+    println!("bad_port={}", bad_label);
+
+    try {
+        require_status(label != "none");
+        println!("status is available");
+    } catch e: Exception {
+        println!("caught {}: {}", e.type_name, e.message);
+    }
+
+    return 0;
+}

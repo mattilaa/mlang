@@ -45,6 +45,31 @@ static ASTNode* create_enum_or_ident_from_path(char* path, int line)
     return mla_ast_enum_literal(enumName, variant, line);
 }
 
+static ASTNode* prepend_argument(ASTNode* value, ASTNode* args)
+{
+    ASTNode* list = mla_ast_argument_list_create(value);
+    if(!args)
+        return list;
+
+    auto* argList = dynamic_cast<ArgumentListNode*>(args);
+    if(!argList)
+        return list;
+
+    for(auto* arg : argList->args)
+        list = mla_ast_argument_list_add(list, arg);
+    return list;
+}
+
+static ASTNode* create_pipe_call(ASTNode* value, char* callee, ASTNode* args,
+                                 int line)
+{
+    ASTNode* fullArgs = prepend_argument(value, args);
+    ASTNode* call = mla_ast_function_call_from_list(callee, fullArgs, line);
+    if(call)
+        call->line = line;
+    return call;
+}
+
 static std::vector<ASTNode*> g_hoistedNestedFunctions;
 
 static ASTNode* append_hoisted_nested_functions(ASTNode* topLevelList)
@@ -481,7 +506,7 @@ enum UpdatePosition
 %token MOD USE AS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token PLUS_PLUS MINUS_MINUS
-%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE CARET NOT TILDE SHL SHR
+%token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE PIPE_GT CARET NOT TILDE SHL SHR
 %token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS
 %token PLUS_ASSIGN MINUS_ASSIGN MULTIPLY_ASSIGN DIVIDE_ASSIGN MODULO_ASSIGN PIPE_ASSIGN CARET_ASSIGN SHL_ASSIGN SHR_ASSIGN
 %token <sval> DEREF_ASSIGN_IDENT
@@ -521,7 +546,7 @@ enum UpdatePosition
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
 %type <ast> throw_statement try_catch_statement switch_statement switch_case_list switch_case switch_default_case
 %type <ast> break_statement continue_statement
-%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression
+%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression pipe_expression
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
@@ -534,6 +559,7 @@ enum UpdatePosition
 %type <ival> enum_base_type_opt enum_int_type
 
 %left PIPE_PIPE
+%left PIPE_GT
 %left AMP_AMP
 %left PIPE
 %left CARET
@@ -1567,7 +1593,17 @@ optional_else
     ;
 
 expression
+    : pipe_expression
+    ;
+
+pipe_expression
     : ternary_expression
+    | pipe_expression PIPE_GT module_path
+        { $$ = create_pipe_call($1, $3, NULL, yylineno); }
+    | pipe_expression PIPE_GT module_path LPAREN RPAREN
+        { $$ = create_pipe_call($1, $3, NULL, yylineno); }
+    | pipe_expression PIPE_GT module_path LPAREN argument_list RPAREN
+        { $$ = create_pipe_call($1, $3, $5, yylineno); }
     ;
 
 ternary_expression
