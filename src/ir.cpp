@@ -236,6 +236,11 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
         collectUsedIdents(ret->expression, out);
         return;
     }
+    if(auto* throwNode = dynamic_cast<ThrowNode*>(node))
+    {
+        collectUsedIdents(throwNode->expression, out);
+        return;
+    }
     if(auto* letD = dynamic_cast<LetDeclNode*>(node))
     {
         collectUsedIdents(letD->expression, out);
@@ -315,6 +320,12 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
                 collectUsedIdents(s, out);
         return;
     }
+    if(auto* tc = dynamic_cast<TryCatchNode*>(node))
+    {
+        collectUsedIdents(tc->tryBlock, out);
+        collectUsedIdents(tc->catchBlock, out);
+        return;
+    }
 }
 
 static bool containsUpdateExpression(ASTNode* node)
@@ -375,6 +386,111 @@ static bool containsUpdateExpression(ASTNode* node)
         }
         return false;
     }
+    return false;
+}
+
+static bool containsUnsupportedTryControlFlow(StatementNode* node)
+{
+    if(!node)
+        return false;
+    if(dynamic_cast<ReturnNode*>(node) || dynamic_cast<BreakNode*>(node) ||
+       dynamic_cast<ContinueNode*>(node))
+        return true;
+    if(auto* block = dynamic_cast<BlockStatementNode*>(node))
+    {
+        if(!block->statements)
+            return false;
+        for(auto* stmt : block->statements->statements)
+        {
+            if(containsUnsupportedTryControlFlow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* ifNode = dynamic_cast<IfNode*>(node))
+    {
+        if(containsUnsupportedTryControlFlow(ifNode->conditionInit))
+            return true;
+        if(ifNode->thenBranch)
+        {
+            for(auto* stmt : ifNode->thenBranch->statements)
+            {
+                if(containsUnsupportedTryControlFlow(stmt))
+                    return true;
+            }
+        }
+        if(containsUnsupportedTryControlFlow(ifNode->elseIfBranch))
+            return true;
+        if(ifNode->elseBranch)
+        {
+            for(auto* stmt : ifNode->elseBranch->statements)
+            {
+                if(containsUnsupportedTryControlFlow(stmt))
+                    return true;
+            }
+        }
+        return false;
+    }
+    if(auto* forNode = dynamic_cast<ForNode*>(node))
+    {
+        if(!forNode->body)
+            return false;
+        for(auto* stmt : forNode->body->statements)
+        {
+            if(containsUnsupportedTryControlFlow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* whileNode = dynamic_cast<WhileNode*>(node))
+    {
+        if(!whileNode->body)
+            return false;
+        for(auto* stmt : whileNode->body->statements)
+        {
+            if(containsUnsupportedTryControlFlow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* tc = dynamic_cast<TryCatchNode*>(node))
+    {
+        return containsUnsupportedTryControlFlow(tc->tryBlock) ||
+               containsUnsupportedTryControlFlow(tc->catchBlock);
+    }
+    return false;
+}
+
+static bool containsExceptionControlFlow(ASTNode* node)
+{
+    if(!node)
+        return false;
+    if(dynamic_cast<ThrowNode*>(node) || dynamic_cast<TryCatchNode*>(node))
+        return true;
+    if(auto* stmtList = dynamic_cast<StatementListNode*>(node))
+    {
+        for(auto* stmt : stmtList->statements)
+        {
+            if(containsExceptionControlFlow(stmt))
+                return true;
+        }
+        return false;
+    }
+    if(auto* block = dynamic_cast<BlockStatementNode*>(node))
+        return containsExceptionControlFlow(block->statements);
+    if(auto* ifNode = dynamic_cast<IfNode*>(node))
+    {
+        return containsExceptionControlFlow(ifNode->conditionInit) ||
+               containsExceptionControlFlow(ifNode->thenBranch) ||
+               containsExceptionControlFlow(ifNode->elseIfBranch) ||
+               containsExceptionControlFlow(ifNode->elseBranch);
+    }
+    if(auto* forNode = dynamic_cast<ForNode*>(node))
+        return containsExceptionControlFlow(forNode->body);
+    if(auto* whileNode = dynamic_cast<WhileNode*>(node))
+        return containsExceptionControlFlow(whileNode->body);
+    if(auto* closure = dynamic_cast<ClosureNode*>(node))
+        return containsExceptionControlFlow(closure->body);
     return false;
 }
 
@@ -2286,6 +2402,61 @@ void CodeGenerator::initializeStdlibFunctions()
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
     abortFunc = module->getOrInsertFunction("abort", abortType);
 
+    llvm::FunctionType* pushFrameType =
+        llvm::FunctionType::get(int64Type, {}, false);
+    exceptionsPushFrameFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_push_frame",
+                                    pushFrameType);
+
+    llvm::FunctionType* frameEnvType =
+        llvm::FunctionType::get(ptrType, {int64Type}, false);
+    exceptionsFrameEnvFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_frame_env",
+                                    frameEnvType);
+
+    llvm::FunctionType* setjmpType =
+        llvm::FunctionType::get(intType, {ptrType}, false);
+    exceptionsSetjmpFunc = module->getOrInsertFunction("_setjmp", setjmpType);
+    if(auto* setjmpFn =
+           llvm::dyn_cast<llvm::Function>(exceptionsSetjmpFunc.getCallee()))
+    {
+        setjmpFn->addFnAttr(llvm::Attribute::ReturnsTwice);
+    }
+
+    llvm::FunctionType* popFrameType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {int64Type},
+                                false);
+    exceptionsPopFrameFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_pop_frame",
+                                    popFrameType);
+
+    llvm::FunctionType* throwType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context),
+                                {ptrType, ptrType, intType}, false);
+    exceptionsThrowFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_throw", throwType);
+
+    llvm::FunctionType* rethrowType =
+        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
+    exceptionsRethrowFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_rethrow_current",
+                                    rethrowType);
+
+    llvm::FunctionType* takeStringType =
+        llvm::FunctionType::get(ptrType, {}, false);
+    exceptionsTakeTypeNameFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_take_type_name",
+                                    takeStringType);
+    exceptionsTakeMessageFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_take_message",
+                                    takeStringType);
+
+    llvm::FunctionType* takeLineType =
+        llvm::FunctionType::get(intType, {}, false);
+    exceptionsTakeSourceLineFunc =
+        module->getOrInsertFunction("__mlang_std_exceptions_take_source_line",
+                                    takeLineType);
+
     stdlibInitialized = true;
 }
 
@@ -2351,6 +2522,15 @@ llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
         strbufAlignFunc,
         {value, widthValue, llvm::ConstantInt::get(int32Type, alignCode)},
         "fmt.align");
+}
+
+llvm::AllocaInst* CodeGenerator::createEntryBlockAlloca(llvm::Function* function,
+                                                        llvm::Type* type,
+                                                        const std::string& name)
+{
+    llvm::IRBuilder<> entryBuilder(&function->getEntryBlock(),
+                                   function->getEntryBlock().begin());
+    return entryBuilder.CreateAlloca(type, nullptr, name);
 }
 
 // Helper to get the TypeKind from an expression (for identifiers)
@@ -5319,6 +5499,12 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     else if(node->isInline)
         function->addFnAttr(llvm::Attribute::InlineHint);
 
+    if(containsExceptionControlFlow(node->body))
+    {
+        function->addFnAttr(llvm::Attribute::OptimizeNone);
+        function->addFnAttr(llvm::Attribute::NoInline);
+    }
+
     // Track which module this function is from (for visibility checks)
     std::string savedModule = currentModule;
     currentModule = node->sourceModule;
@@ -5344,8 +5530,30 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     cleanupScopes.clear();
     pointerBorrowScopes.clear();
     variableScopeDepthScopes.clear();
+    currentFunctionExceptionFrame = nullptr;
     seedFunctionScopeWithGlobals();
     enterCleanupScope();
+
+    initializeStdlibFunctions();
+    llvm::BasicBlock* functionBodyBB =
+        llvm::BasicBlock::Create(context, "fn.body", function);
+    llvm::BasicBlock* functionExceptionBB =
+        llvm::BasicBlock::Create(context, "fn.exc", function);
+    currentFunctionExceptionFrame =
+        builder.CreateCall(exceptionsPushFrameFunc, {}, "fn.exc.frame");
+    llvm::Value* functionExceptionEnv = builder.CreateCall(
+        exceptionsFrameEnvFunc, {currentFunctionExceptionFrame}, "fn.exc.env");
+    auto* functionSetjmpCall = builder.CreateCall(exceptionsSetjmpFunc,
+                                                  {functionExceptionEnv},
+                                                  "fn.exc.state");
+    functionSetjmpCall->setCanReturnTwice();
+    llvm::Value* functionExceptionState = functionSetjmpCall;
+    llvm::Value* enteredNormally = builder.CreateICmpEQ(
+        functionExceptionState, llvm::ConstantInt::get(
+                                    llvm::Type::getInt32Ty(context), 0),
+        "fn.exc.ok");
+    builder.CreateCondBr(enteredNormally, functionBodyBB, functionExceptionBB);
+    builder.SetInsertPoint(functionBodyBB);
 
     // Set up parameters
     unsigned paramIdx = 0;
@@ -5478,6 +5686,11 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         }
     }
 
+    auto exceptionNamedValues = namedValues;
+    auto exceptionStructVariableTypes = structVariableTypes;
+    auto exceptionCleanupScopes = cleanupScopes;
+    auto exceptionMovedVariables = movedVariables;
+
     // Run scope-exit destructors for locals at normal function fallthrough.
     exitCleanupScope();
 
@@ -5486,6 +5699,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     llvm::BasicBlock* currentBlock = builder.GetInsertBlock();
     if(!currentBlock->getTerminator())
     {
+        if(currentFunctionExceptionFrame)
+            builder.CreateCall(exceptionsPopFrameFunc,
+                               {currentFunctionExceptionFrame});
         if(returnType->isVoidTy())
         {
             builder.CreateRetVoid();
@@ -5505,6 +5721,19 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             }
         }
     }
+
+    builder.SetInsertPoint(functionExceptionBB);
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    namedValues = exceptionNamedValues;
+    structVariableTypes = exceptionStructVariableTypes;
+    cleanupScopes = exceptionCleanupScopes;
+    movedVariables = exceptionMovedVariables;
+    emitAllActiveCleanups();
+    builder.CreateCall(exceptionsRethrowFunc, {});
+    builder.CreateUnreachable();
+    currentFunctionExceptionFrame = nullptr;
 
     // Restore the previous module context
     currentModule = savedModule;
@@ -5551,6 +5780,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto whileNode = dynamic_cast<WhileNode*>(node))
     {
         generateWhileStatement(whileNode);
+    }
+    else if(auto tryCatchNode = dynamic_cast<TryCatchNode*>(node))
+    {
+        generateTryCatchStatement(tryCatchNode);
     }
     else if(auto blockNode = dynamic_cast<BlockStatementNode*>(node))
     {
@@ -5612,6 +5845,10 @@ void CodeGenerator::generateStatement(StatementNode* node)
     else if(auto breakNode = dynamic_cast<BreakNode*>(node))
     {
         generateBreakStatement(breakNode);
+    }
+    else if(auto throwNode = dynamic_cast<ThrowNode*>(node))
+    {
+        generateThrowStatement(throwNode);
     }
     else if(auto continueNode = dynamic_cast<ContinueNode*>(node))
     {
@@ -9599,6 +9836,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             }
         }
 
+        if(currentFunctionExceptionFrame)
+            builder.CreateCall(exceptionsPopFrameFunc,
+                               {currentFunctionExceptionFrame});
         emitAllActiveCleanups();
         builder.CreateRet(returnValue);
     }
@@ -9610,6 +9850,9 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
             reportError(node->line, "non-void function must return a value");
             return;
         }
+        if(currentFunctionExceptionFrame)
+            builder.CreateCall(exceptionsPopFrameFunc,
+                               {currentFunctionExceptionFrame});
         emitAllActiveCleanups();
         builder.CreateRetVoid();
     }
@@ -9633,6 +9876,258 @@ void CodeGenerator::generateContinueStatement(ContinueNode* node)
         return;
     }
     builder.CreateBr(loopContinueBlocks.back());
+}
+
+void CodeGenerator::generateThrowStatement(ThrowNode* node)
+{
+    if(!node || !node->expression)
+    {
+        reportError(node ? node->line : 0, "throw requires an exception value");
+        return;
+    }
+
+    llvm::Value* exceptionValue = generateExpression(node->expression);
+    if(!exceptionValue)
+        return;
+
+    llvm::Type* exceptionType = exceptionValue->getType();
+    if(!exceptionType->isStructTy())
+    {
+        reportError(node->line,
+                    "throw expects a struct exception value");
+        return;
+    }
+
+    auto* exceptionStructType = llvm::cast<llvm::StructType>(exceptionType);
+    std::string exceptionStructName = exceptionStructType->getName().str();
+    auto membersIt = structMembers.find(exceptionStructName);
+    if(membersIt == structMembers.end())
+    {
+        reportError(node->line,
+                    "throw expects a named exception struct");
+        return;
+    }
+
+    int typeNameIndex = -1;
+    int messageIndex = -1;
+    int sourceLineIndex = -1;
+    for(size_t i = 0; i < membersIt->second.size(); ++i)
+    {
+        const auto& member = membersIt->second[i];
+        if(member.first == "type_name")
+            typeNameIndex = static_cast<int>(i);
+        else if(member.first == "message")
+            messageIndex = static_cast<int>(i);
+        else if(member.first == "source_line")
+            sourceLineIndex = static_cast<int>(i);
+    }
+
+    if(typeNameIndex < 0 || messageIndex < 0)
+    {
+        reportError(node->line,
+                    "throw expects fields 'type_name' and 'message'");
+        return;
+    }
+
+    initializeStdlibFunctions();
+    llvm::Value* typeName = builder.CreateExtractValue(
+        exceptionValue, typeNameIndex, "throw.type_name");
+    llvm::Value* message = builder.CreateExtractValue(
+        exceptionValue, messageIndex, "throw.message");
+    llvm::Value* sourceLine = sourceLineIndex >= 0
+        ? builder.CreateExtractValue(exceptionValue, sourceLineIndex,
+                                     "throw.source_line")
+        : llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), node->line);
+
+    if(sourceLine->getType()->isIntegerTy() &&
+       sourceLine->getType() != llvm::Type::getInt32Ty(context))
+    {
+        sourceLine = builder.CreateIntCast(sourceLine,
+                                           llvm::Type::getInt32Ty(context),
+                                           true, "throw.line.cast");
+    }
+
+    consumeMoveFromExpression(node->expression, node->line, "throw");
+    builder.CreateCall(exceptionsThrowFunc, {typeName, message, sourceLine});
+    builder.CreateUnreachable();
+}
+
+void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
+{
+    if(!node || !node->tryBlock || !node->catchBlock || !node->catchType)
+        return;
+
+    if(containsUnsupportedTryControlFlow(node->tryBlock))
+    {
+        reportError(node->line,
+                    "return, break, and continue are not yet supported inside try blocks");
+        return;
+    }
+
+    auto* catchStruct = dynamic_cast<StructTypeRefNode*>(node->catchType);
+    if(!catchStruct)
+    {
+        reportError(node->line, "catch currently requires a struct exception type");
+        return;
+    }
+
+    llvm::Type* catchLlvmType = getLLVMTypeFromNode(node->catchType);
+    auto* catchStructType = llvm::dyn_cast_or_null<llvm::StructType>(catchLlvmType);
+    if(!catchStructType)
+    {
+        reportError(node->line, "catch type must lower to a struct");
+        return;
+    }
+
+    std::string catchStructName = catchStructType->getName().str();
+    auto catchMembersIt = structMembers.find(catchStructName);
+    if(catchMembersIt == structMembers.end())
+    {
+        reportError(node->line, "unknown catch type: " + catchStruct->structName);
+        return;
+    }
+
+    int typeNameIndex = -1;
+    int messageIndex = -1;
+    int sourceLineIndex = -1;
+    int ownedIndex = -1;
+    for(size_t i = 0; i < catchMembersIt->second.size(); ++i)
+    {
+        const auto& member = catchMembersIt->second[i];
+        if(member.first == "type_name")
+            typeNameIndex = static_cast<int>(i);
+        else if(member.first == "message")
+            messageIndex = static_cast<int>(i);
+        else if(member.first == "source_line")
+            sourceLineIndex = static_cast<int>(i);
+        else if(member.first == "owned")
+            ownedIndex = static_cast<int>(i);
+    }
+    if(typeNameIndex < 0 || messageIndex < 0 || sourceLineIndex < 0)
+    {
+        reportError(node->line,
+                    "catch type must contain type_name, message, and source_line");
+        return;
+    }
+
+    initializeStdlibFunctions();
+    llvm::Function* function = builder.GetInsertBlock()->getParent();
+    llvm::Value* frameHandle =
+        builder.CreateCall(exceptionsPushFrameFunc, {}, "try.exc.frame");
+    llvm::Value* frameEnv =
+        builder.CreateCall(exceptionsFrameEnvFunc, {frameHandle}, "try.exc.env");
+    auto* trySetjmpCall = builder.CreateCall(exceptionsSetjmpFunc, {frameEnv},
+                                             "try.exc.state");
+    trySetjmpCall->setCanReturnTwice();
+    llvm::Value* frameState = trySetjmpCall;
+
+    llvm::BasicBlock* tryBodyBB =
+        llvm::BasicBlock::Create(context, "try.body", function);
+    llvm::BasicBlock* catchBB =
+        llvm::BasicBlock::Create(context, "try.catch", function);
+    llvm::BasicBlock* continueBB =
+        llvm::BasicBlock::Create(context, "try.cont", function);
+
+    llvm::Value* enteredNormally = builder.CreateICmpEQ(
+        frameState, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+        "try.exc.ok");
+    builder.CreateCondBr(enteredNormally, tryBodyBB, catchBB);
+
+    int handlerScopeDepth = currentScopeDepth();
+
+    builder.SetInsertPoint(tryBodyBB);
+    enterCleanupScope();
+    if(node->tryBlock->isUnsafe)
+        unsafeDepth++;
+    if(node->tryBlock->statements)
+    {
+        for(auto* stmt : node->tryBlock->statements->statements)
+        {
+            generateStatement(stmt);
+            if(builder.GetInsertBlock()->getTerminator())
+                break;
+        }
+    }
+
+    auto tryNamedValues = namedValues;
+    auto tryStructVariableTypes = structVariableTypes;
+    auto tryCleanupScopes = cleanupScopes;
+    auto tryMovedVariables = movedVariables;
+
+    if(node->tryBlock->isUnsafe)
+        unsafeDepth--;
+    exitCleanupScope();
+    if(!builder.GetInsertBlock()->getTerminator())
+    {
+        builder.CreateCall(exceptionsPopFrameFunc, {frameHandle});
+        builder.CreateBr(continueBB);
+    }
+
+    builder.SetInsertPoint(catchBB);
+    builder.CreateCall(exceptionsPopFrameFunc, {frameHandle});
+    auto outerNamedValues = namedValues;
+    auto outerStructVariableTypes = structVariableTypes;
+    auto outerCleanupScopes = cleanupScopes;
+    auto outerMovedVariables = movedVariables;
+    namedValues = tryNamedValues;
+    structVariableTypes = tryStructVariableTypes;
+    cleanupScopes = tryCleanupScopes;
+    movedVariables = tryMovedVariables;
+    emitActiveCleanupsDeeperThan(handlerScopeDepth);
+    namedValues = outerNamedValues;
+    structVariableTypes = outerStructVariableTypes;
+    cleanupScopes = outerCleanupScopes;
+    movedVariables = outerMovedVariables;
+
+    llvm::Value* caughtTypeName =
+        builder.CreateCall(exceptionsTakeTypeNameFunc, {}, "catch.type_name");
+    llvm::Value* caughtMessage =
+        builder.CreateCall(exceptionsTakeMessageFunc, {}, "catch.message");
+    llvm::Value* caughtSourceLine = builder.CreateCall(
+        exceptionsTakeSourceLineFunc, {}, "catch.source_line");
+
+    llvm::Value* catchValue = llvm::UndefValue::get(catchStructType);
+    catchValue = builder.CreateInsertValue(catchValue, caughtTypeName,
+                                           {static_cast<unsigned>(typeNameIndex)});
+    catchValue = builder.CreateInsertValue(catchValue, caughtMessage,
+                                           {static_cast<unsigned>(messageIndex)});
+    catchValue = builder.CreateInsertValue(
+        catchValue, caughtSourceLine, {static_cast<unsigned>(sourceLineIndex)});
+    if(ownedIndex >= 0)
+    {
+        llvm::Type* ownedType = catchMembersIt->second[static_cast<size_t>(ownedIndex)].second
+            ? getLLVMTypeFromNode(
+                  catchMembersIt->second[static_cast<size_t>(ownedIndex)].second)
+            : llvm::Type::getInt1Ty(context);
+        llvm::Value* ownedValue = nullptr;
+        if(ownedType->isIntegerTy(1))
+            ownedValue = llvm::ConstantInt::get(ownedType, 1, false);
+        else if(ownedType->isIntegerTy())
+            ownedValue = llvm::ConstantInt::get(ownedType, 1, false);
+        if(ownedValue)
+        {
+            catchValue = builder.CreateInsertValue(
+                catchValue, ownedValue, {static_cast<unsigned>(ownedIndex)});
+        }
+    }
+
+    enterCleanupScope();
+    llvm::AllocaInst* catchAlloca = builder.CreateAlloca(
+        catchStructType, nullptr, node->catchName);
+    builder.CreateStore(catchValue, catchAlloca);
+    namedValues[node->catchName] = catchAlloca;
+    variableTypes[node->catchName] = TypeNode::TYPE_STRUCT;
+    structVariableTypes[node->catchName] = catchStructName;
+    clearMovedVariable(node->catchName);
+    recordVariableScopeDepth(node->catchName);
+    registerStructCleanupIfNeeded(node->catchName, catchStructName);
+
+    generateStatement(node->catchBlock);
+    exitCleanupScope();
+    if(!builder.GetInsertBlock()->getTerminator())
+        builder.CreateBr(continueBB);
+
+    builder.SetInsertPoint(continueBB);
 }
 
 llvm::Value* CodeGenerator::generateIntLiteral(IntLiteralNode* node)
@@ -10719,6 +11214,11 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
             resolve_expr(ret->expression, scope);
             return;
         }
+        if(auto* throwNode = dynamic_cast<ThrowNode*>(s))
+        {
+            resolve_expr(throwNode->expression, scope);
+            return;
+        }
         if(auto* assign = dynamic_cast<AssignmentNode*>(s))
         {
             resolve_expr(assign->expression, scope);
@@ -10755,6 +11255,15 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         {
             resolve_expr(whileNode->condition, scope);
             resolve_stmt_list(whileNode->body, scope);
+            return;
+        }
+        if(auto* tryCatch = dynamic_cast<TryCatchNode*>(s))
+        {
+            resolve_type(tryCatch->catchType, scope);
+            if(tryCatch->tryBlock)
+                resolve_stmt_list(tryCatch->tryBlock->statements, scope);
+            if(tryCatch->catchBlock)
+                resolve_stmt_list(tryCatch->catchBlock->statements, scope);
             return;
         }
         if(auto* printNode = dynamic_cast<PrintNode*>(s))
@@ -11138,8 +11647,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
     if(!node->type)
     {
-        llvm::AllocaInst* alloca =
-            builder.CreateAlloca(initValue->getType(), nullptr, node->name);
+        llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
+        llvm::AllocaInst* alloca = initValue->getType()->isStructTy()
+            ? createEntryBlockAlloca(currentFunction, initValue->getType(),
+                                     node->name)
+            : builder.CreateAlloca(initValue->getType(), nullptr, node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
 
@@ -11381,8 +11893,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             return;
         }
 
-        llvm::AllocaInst* alloca =
-            builder.CreateAlloca(structType, nullptr, node->name);
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), structType, node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
@@ -11640,8 +12152,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             return;
         }
 
-        llvm::AllocaInst* alloca =
-            builder.CreateAlloca(structType, nullptr, node->name);
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), structType, node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
@@ -11926,8 +12438,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(!initValue)
             return;
 
-        llvm::AllocaInst* alloca =
-            builder.CreateAlloca(initValue->getType(), nullptr, node->name);
+        llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
+        llvm::AllocaInst* alloca = initValue->getType()->isStructTy()
+            ? createEntryBlockAlloca(currentFunction, initValue->getType(),
+                                     node->name)
+            : builder.CreateAlloca(initValue->getType(), nullptr, node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
 
@@ -12168,8 +12683,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             return;
         }
 
-        llvm::AllocaInst* alloca =
-            builder.CreateAlloca(structType, nullptr, node->name);
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), structType, node->name);
 
         if(node->initExpr)
         {
@@ -12467,8 +12982,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             return;
         }
 
-        llvm::AllocaInst* alloca =
-            builder.CreateAlloca(structType, nullptr, node->name);
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(
+            builder.GetInsertBlock()->getParent(), structType, node->name);
 
         if(node->initExpr)
         {
@@ -13616,6 +14131,49 @@ void CodeGenerator::emitAllActiveCleanups()
 
             llvm::Value* value = builder.CreateLoad(
                 allocaType, alloca, it->varName + ".dropval.ret");
+            builder.CreateCall(it->function, {value});
+        }
+    }
+}
+
+void CodeGenerator::emitActiveCleanupsDeeperThan(int scopeDepth)
+{
+    if(!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+        return;
+
+    for(int depth = static_cast<int>(cleanupScopes.size()); depth > scopeDepth;
+        --depth)
+    {
+        auto& actions = cleanupScopes[static_cast<size_t>(depth - 1)];
+        for(auto it = actions.rbegin(); it != actions.rend(); ++it)
+        {
+            if(movedVariables.count(it->varName))
+                continue;
+            if(!it->function)
+                continue;
+            auto nv = namedValues.find(it->varName);
+            if(nv == namedValues.end() || !nv->second)
+                continue;
+            auto sv = structVariableTypes.find(it->varName);
+            if(sv == structVariableTypes.end() ||
+               sv->second != it->structTypeName)
+                continue;
+
+            auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(nv->second);
+            if(!alloca)
+                continue;
+            llvm::Type* allocaType = alloca->getAllocatedType();
+            if(!allocaType || !allocaType->isStructTy())
+                continue;
+
+            if(it->callKind == ScopeCleanup::CallKind::ByPointerMethod)
+            {
+                builder.CreateCall(it->function, {alloca});
+                continue;
+            }
+
+            llvm::Value* value = builder.CreateLoad(
+                allocaType, alloca, it->varName + ".dropval.exc");
             builder.CreateCall(it->function, {value});
         }
     }

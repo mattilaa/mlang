@@ -1,0 +1,66 @@
+mod std::exceptions;
+mod std::strbuf;
+mod std::testing;
+
+use std::exceptions::*;
+use std::strbuf::*;
+use std::testing::verify;
+
+var g_exception_drop_count: i32 = 0;
+
+struct Guard {
+    var marker: i32;
+};
+
+impl Guard {
+    pub fn free(self: Guard) -> i32 {
+        g_exception_drop_count = g_exception_drop_count + 1;
+        return 0;
+    }
+}
+
+fn make_guard() -> Guard {
+    return Guard { marker: 1 };
+}
+
+#[inline(never)]
+fn raise_direct() -> void {
+    throw with_line("DirectError", "direct failure", 17);
+}
+
+#[inline(never)]
+fn raise_nested() -> void {
+    let guard: Guard = make_guard();
+    verify(guard.marker == 1);
+    throw with_line("NestedError", "nested failure", 29);
+}
+
+#[test]
+fn test_try_catch_catches_exception() {
+    var handled: bool = false;
+    try {
+        raise_direct();
+    } catch e: Exception {
+        handled = true;
+        verify(eq(e.type_name, "DirectError") == 1);
+        verify(eq(e.message, "direct failure") == 1);
+        verify(e.source_line == 17);
+    }
+    verify(handled);
+}
+
+#[test]
+fn test_try_catch_unwinds_raii_across_calls() {
+    g_exception_drop_count = 0;
+    var handled: bool = false;
+    try {
+        raise_nested();
+    } catch e: Exception {
+        handled = true;
+        verify(eq(e.type_name, "NestedError") == 1);
+        verify(eq(e.message, "nested failure") == 1);
+        verify(e.source_line == 29);
+    }
+    verify(handled);
+    verify(g_exception_drop_count == 1);
+}

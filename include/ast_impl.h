@@ -28,6 +28,7 @@ ASTNode* create_deref_assignment_impl(ASTNode* pointer_expr, ASTNode* expr, int 
 ASTNode* create_return_stmt_impl(ASTNode* expr);
 ASTNode* create_break_stmt_impl(int line);
 ASTNode* create_continue_stmt_impl(int line);
+ASTNode* create_throw_stmt_impl(ASTNode* expr, int line);
 ASTNode* create_int_literal_impl(int64_t value);
 ASTNode* create_bool_literal_impl(int value);
 ASTNode* create_float_literal_impl(float value);
@@ -73,6 +74,9 @@ ASTNode* create_for_range_impl(char* var_name, ASTNode* range, ASTNode* body, in
 ASTNode* create_for_iterator_impl(char* var_name, ASTNode* iterable, ASTNode* body, int line);
 ASTNode* create_for_enumerate_impl(char* index_var, char* val_var, ASTNode* iterable, ASTNode* body, int line);
 ASTNode* create_while_statement_impl(ASTNode* condition, ASTNode* body, int line, int uses_colon_without_guard);
+ASTNode* create_try_catch_stmt_impl(ASTNode* try_block, char* catch_name,
+                                    ASTNode* catch_type, ASTNode* catch_block,
+                                    int line);
 ASTNode* create_range_expression_impl(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration_impl(char* name, int line);
 ASTNode* create_use_declaration_impl(char* module_name, char* item_name, int line);

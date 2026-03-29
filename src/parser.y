@@ -316,7 +316,7 @@ enum UpdatePosition
 %token FUNCTION RETURN IF ELSE VOID BOOL FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
-%token MATCH
+%token MATCH TRY CATCH THROW
 %token PUB IMPL TRAIT
 %token EXTERN
 %token STATIC
@@ -364,6 +364,7 @@ enum UpdatePosition
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement nested_function_statement
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
+%type <ast> throw_statement try_catch_statement
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression
 %type <ast> mod_declaration use_declaration
@@ -766,6 +767,8 @@ statement
     | static_assert_statement
     | break_statement
     | continue_statement
+    | throw_statement
+    | try_catch_statement
     | nested_function_statement
     ;
 
@@ -930,6 +933,15 @@ break_statement
 
 continue_statement
     : CONTINUE SEMICOLON { $$ = mla_ast_continue_stmt(yylineno); }
+    ;
+
+throw_statement
+    : THROW expression SEMICOLON { $$ = create_throw_stmt($2, yylineno); }
+    ;
+
+try_catch_statement
+    : TRY block_statement CATCH IDENTIFIER COLON type block_statement
+        { $$ = create_try_catch_stmt($2, $4, $6, $7, yylineno); }
     ;
 
 block_statement
