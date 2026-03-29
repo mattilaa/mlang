@@ -47,6 +47,8 @@ static ASTNode* create_enum_or_ident_from_path(char* path, int line)
 
 static ASTNode* prepend_argument(ASTNode* value, ASTNode* args)
 {
+    // Pipe lowering prepends the left-hand value as the first call argument:
+    //   x |> f(a, b)  =>  f(x, a, b)
     ASTNode* list = mla_ast_argument_list_create(value);
     if(!args)
         return list;
@@ -63,6 +65,8 @@ static ASTNode* prepend_argument(ASTNode* value, ASTNode* args)
 static ASTNode* create_pipe_call(ASTNode* value, char* callee, ASTNode* args,
                                  int line)
 {
+    // Keep the pipe operator as pure parser sugar by rewriting it directly
+    // into an ordinary function call AST.
     ASTNode* fullArgs = prepend_argument(value, args);
     ASTNode* call = mla_ast_function_call_from_list(callee, fullArgs, line);
     if(call)

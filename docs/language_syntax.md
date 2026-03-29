@@ -232,7 +232,7 @@ MLang code:
 - tuple types and tuple literals
 - fold expressions over lists
 
-### Pipe Operator: `|>`
+### Pipe Operator: `|>` {#pipe_operator}
 
 MLang supports a functional pipe operator that forwards the value on the left
 as the first argument of the function on the right.
@@ -262,6 +262,9 @@ Lowering rules:
 - `x |> f(a, b)` becomes `f(x, a, b)`
 
 The operator is left-associative, so chained pipelines evaluate left to right.
+
+This is intended for ML-style left-to-right composition inside ordinary MLang
+code without introducing a separate runtime abstraction.
 
 Example:
 

@@ -9,6 +9,7 @@ Rust-like attributes.
 
 MLang also supports a practical functional-programming subset:
 - immutable `let` bindings
+- pipe operator `|>`
 - closures
 - `Option<T>` / `Result<T, E>`
 - `match`
@@ -19,6 +20,10 @@ For language-level exceptions and the stdlib payload type, see:
 - `stdlib/std/exceptions.mla`
   (`Exception`, `new`, `with_line`, `free`, plus `throw` and `try/catch`
    syntax documented in `docs/language_syntax.md`).
+
+For functional pipe syntax, see:
+- `docs/language_syntax.md`
+  (section `Pipe Operator: |>`).
 
 String allocation intrinsics are also available:
 - `String::new()`
