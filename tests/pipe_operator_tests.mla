@@ -1,0 +1,53 @@
+mod std::testing;
+
+use std::testing::verify;
+
+fn add1(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn mul2(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+fn sub(x: i32, y: i32) -> i32 {
+    return x - y;
+}
+
+fn always_true(x: bool) -> bool {
+    return x;
+}
+
+#[test]
+fn pipe_into_bare_function_name() {
+    let value: i32 = 10 |> add1;
+    verify(value == 11);
+}
+
+#[test]
+fn pipe_into_empty_call_form() {
+    let value: i32 = 10 |> add1() |> mul2();
+    verify(value == 22);
+}
+
+#[test]
+fn pipe_prepends_left_value_to_existing_arguments() {
+    let value: i32 = 5 |> add(3) |> sub(1);
+    verify(value == 7);
+}
+
+#[test]
+fn pipe_is_left_associative() {
+    let value: i32 = 2 |> add(3) |> mul2();
+    verify(value == 10);
+}
+
+#[test]
+fn pipe_works_with_bool_values() {
+    let value: bool = true |> always_true;
+    verify(value);
+}

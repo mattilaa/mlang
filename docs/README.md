@@ -7,10 +7,23 @@ It also includes language-level builtins such as `Option`, `Result`,
 constructors (`Some`, `None`, `Ok`, `Err`), `match`, builtin macros, and
 Rust-like attributes.
 
+MLang also supports a practical functional-programming subset:
+- immutable `let` bindings
+- pipe operator `|>`
+- closures
+- `Option<T>` / `Result<T, E>`
+- `match`
+- tuple literals/types
+- fold expressions over lists
+
 For language-level exceptions and the stdlib payload type, see:
 - `stdlib/std/exceptions.mla`
   (`Exception`, `new`, `with_line`, `free`, plus `throw` and `try/catch`
    syntax documented in `docs/language_syntax.md`).
+
+For functional pipe syntax, see:
+- `docs/language_syntax.md`
+  (section `Pipe Operator: |>`).
 
 String allocation intrinsics are also available:
 - `String::new()`
@@ -152,10 +165,13 @@ Recent branch-level additions reflected in these docs:
 - Guarded `if/else if` and guarded `while` forms; optional plain-colon warnings
 - `switch` / `case` statements for integers, strings, booleans, enums, and
   other `==`-comparable values
+- functional pipe operator `|>` for left-to-right call composition
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
 - `f32`/`f64` primitive names
 - Inline assembly with `volatile` and target-arch qualifiers (`x86`, `x64`, `aarch64`)
 - Lambda and fold expressions with example coverage
+- Functional-programming style examples using closures, `Option`, `Result`,
+  `match`, and folds
 - Exception handling with `throw`, `try/catch`, and `std::exceptions::Exception`
 - Enum backing types (`: i64`, `: u8`), range checks, and compatibility checks
 - Terminal helpers (`std::term`, `std::esc`) including ANSI auto-disable on non-TTY
@@ -170,6 +186,9 @@ Related example files:
 - `examples/lambda_fold_demo.mla`
 - `examples/lambda_fold_patterns.mla`
 - `examples/lambda_fold_advanced.mla`
+- `examples/functional_option_result_demo.mla`
+- `examples/functional_closure_fold_demo.mla`
+- `examples/pipe_operator_demo.mla`
 
 ## Networking + Robot Example
 

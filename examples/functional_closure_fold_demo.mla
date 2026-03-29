@@ -1,0 +1,46 @@
+fn sum(values: list<i32>) -> i32 {
+    return (... + values);
+}
+
+fn product(values: list<i32>) -> i32 {
+    return (values * ...);
+}
+
+fn all_flags(values: list<bool>) -> bool {
+    return (... && values);
+}
+
+fn any_flags(values: list<bool>) -> bool {
+    return (... || values);
+}
+
+fn main() -> i32 {
+    let numbers_sum: list<i32> = [2, 4, 6, 8];
+    let numbers_product: list<i32> = [2, 4, 6, 8];
+    let flags_all: list<bool> = [true, true, false, true];
+    let flags_any: list<bool> = [true, true, false, true];
+
+    println!("sum={}", sum(numbers_sum));
+    println!("product={}", product(numbers_product));
+    println!("all_flags={} any_flags={}", all_flags(flags_all), any_flags(flags_any));
+
+    var bias: i32 = 10;
+    let add_bias = |x: i32| {
+        bias += x;
+    };
+    add_bias(32);
+    let boosted: i32 = bias;
+    println!("boosted={}", boosted);
+
+    var running: i32 = 0;
+    let push_value = |x: i32| {
+        running += x;
+    };
+    push_value(3);
+    let first: i32 = running;
+    push_value(5);
+    let second: i32 = running;
+    println!("running={} then={}", first, second);
+
+    return 0;
+}
