@@ -84,11 +84,64 @@ def main() -> int:
                     "position": {"line": call_line, "character": call_char},
                 },
             )
-            assert isinstance(call_res, list) and call_res, f"expected C definition from call site: {call_res!r}"
+            assert isinstance(call_res, list) and call_res, f"expected extern declaration from call site: {call_res!r}"
             call_target = call_res[0]
-            assert call_target.get("uri") == to_uri(c_src), f"expected call-site jump to native.c: {call_res!r}"
+            assert call_target.get("uri") == to_uri(doc), f"expected call-site jump to extern declaration: {call_res!r}"
             call_start = call_target.get("range", {}).get("start", {})
-            assert call_start.get("line") == 2, f"expected call-site c_add on line 3 in C source: {call_res!r}"
+            assert call_start.get("line") == 0, f"expected call-site c_add on line 1 in MLang source: {call_res!r}"
+
+            libc_doc = root / "extern_libc.mla"
+            libc_text = (
+                "extern fn fopen(path: str8, mode: str8) -> ptr<void>;\n"
+                "\n"
+                "fn main() -> i32 {\n"
+                "  let f: ptr<void> = fopen(\"/tmp/demo.txt\", \"rb\");\n"
+                "  return 0;\n"
+                "}\n"
+            )
+            libc_doc.write_text(libc_text)
+            open_doc(client, libc_doc, libc_text, version=1)
+
+            decl_line, decl_char = position_of(libc_text, "fopen(path:")
+            libc_decl_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(libc_doc)},
+                    "position": {"line": decl_line, "character": decl_char},
+                },
+            )
+            assert isinstance(libc_decl_res, list) and libc_decl_res, (
+                f"expected libc header definition result from extern decl: {libc_decl_res!r}"
+            )
+            libc_decl_uri = libc_decl_res[0].get("uri", "")
+            assert (
+                libc_decl_uri.endswith("/stdio.h")
+                or libc_decl_uri.endswith("\\stdio.h")
+                or libc_decl_uri.endswith("/_stdio.h")
+                or libc_decl_uri.endswith("\\_stdio.h")
+            ), (
+                f"expected fopen extern decl to jump straight to the stdio declaration header: {libc_decl_res!r}"
+            )
+
+            libc_call_line, libc_call_char = position_of(libc_text, "fopen(\"/tmp/demo.txt\"")
+            libc_call_res = client.request(
+                "textDocument/definition",
+                {
+                    "textDocument": {"uri": to_uri(libc_doc)},
+                    "position": {"line": libc_call_line, "character": libc_call_char},
+                },
+            )
+            assert isinstance(libc_call_res, list) and libc_call_res, (
+                f"expected extern declaration result from call site: {libc_call_res!r}"
+            )
+            libc_call_target = libc_call_res[0]
+            assert libc_call_target.get("uri") == to_uri(libc_doc), (
+                f"expected fopen call site to jump to extern declaration first: {libc_call_res!r}"
+            )
+            libc_call_start = libc_call_target.get("range", {}).get("start", {})
+            assert libc_call_start.get("line") == 0, (
+                f"expected fopen call site to land on extern declaration line 1: {libc_call_res!r}"
+            )
         finally:
             client.close()
 

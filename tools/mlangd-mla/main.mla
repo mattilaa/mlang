@@ -70,6 +70,7 @@ use std::strbuf::starts_with;
 use std::strbuf::sub;
 use std::fs::cwd;
 use std::fs::file_exists;
+use std::fs::glob_recursive;
 use std::fs::read_all_text;
 
 extern fn strcmp(a: str8, b: str8) -> i32;
@@ -484,6 +485,13 @@ fn extern_fn_name_at_uri_line(uri: str8, line1: i32) -> str8 {
     if len(text) == 0 { return String::new(); }
     let line_text: str8 = line_text_at(text, line1 - 1);
     return extern_fn_name_from_line(line_text);
+}
+
+fn extern_decl_location_in_text(path: str8, text: str8, name: str8) -> str8 {
+    if len(path) == 0 { return String::new(); }
+    if len(text) == 0 { return String::new(); }
+    if len(name) == 0 { return String::new(); }
+    return first_match_location(path, text, format!("extern fn {}(", name));
 }
 
 fn first_match_location(path: str8, text: str8, pattern: str8) -> str8 {
@@ -1490,6 +1498,164 @@ fn c_internals_location(word: str8) -> str8 {
     return String::new();
 }
 
+fn is_known_c_stdlib_symbol(name: str8) -> i32 {
+    if len(name) == 0 { return 0; }
+    if eq(name, "fopen") == 1 { return 1; }
+    if eq(name, "freopen") == 1 { return 1; }
+    if eq(name, "fdopen") == 1 { return 1; }
+    if eq(name, "fclose") == 1 { return 1; }
+    if eq(name, "fflush") == 1 { return 1; }
+    if eq(name, "fgets") == 1 { return 1; }
+    if eq(name, "fputs") == 1 { return 1; }
+    if eq(name, "fread") == 1 { return 1; }
+    if eq(name, "fwrite") == 1 { return 1; }
+    if eq(name, "fprintf") == 1 { return 1; }
+    if eq(name, "printf") == 1 { return 1; }
+    if eq(name, "snprintf") == 1 { return 1; }
+    if eq(name, "sprintf") == 1 { return 1; }
+    if eq(name, "scanf") == 1 { return 1; }
+    if eq(name, "sscanf") == 1 { return 1; }
+    if eq(name, "puts") == 1 { return 1; }
+    if eq(name, "putchar") == 1 { return 1; }
+    if eq(name, "getchar") == 1 { return 1; }
+    if eq(name, "perror") == 1 { return 1; }
+    if eq(name, "malloc") == 1 { return 1; }
+    if eq(name, "calloc") == 1 { return 1; }
+    if eq(name, "realloc") == 1 { return 1; }
+    if eq(name, "free") == 1 { return 1; }
+    if eq(name, "abort") == 1 { return 1; }
+    if eq(name, "exit") == 1 { return 1; }
+    if eq(name, "atoi") == 1 { return 1; }
+    if eq(name, "atol") == 1 { return 1; }
+    if eq(name, "atoll") == 1 { return 1; }
+    if eq(name, "strtol") == 1 { return 1; }
+    if eq(name, "strtoll") == 1 { return 1; }
+    if eq(name, "strtoul") == 1 { return 1; }
+    if eq(name, "strtoull") == 1 { return 1; }
+    if eq(name, "strtod") == 1 { return 1; }
+    if eq(name, "strtof") == 1 { return 1; }
+    if eq(name, "strlen") == 1 { return 1; }
+    if eq(name, "strcmp") == 1 { return 1; }
+    if eq(name, "strncmp") == 1 { return 1; }
+    if eq(name, "strcpy") == 1 { return 1; }
+    if eq(name, "strncpy") == 1 { return 1; }
+    if eq(name, "strcat") == 1 { return 1; }
+    if eq(name, "strncat") == 1 { return 1; }
+    if eq(name, "strchr") == 1 { return 1; }
+    if eq(name, "strrchr") == 1 { return 1; }
+    if eq(name, "strstr") == 1 { return 1; }
+    if eq(name, "memcpy") == 1 { return 1; }
+    if eq(name, "memmove") == 1 { return 1; }
+    if eq(name, "memset") == 1 { return 1; }
+    if eq(name, "memcmp") == 1 { return 1; }
+    if eq(name, "open") == 1 { return 1; }
+    if eq(name, "close") == 1 { return 1; }
+    if eq(name, "read") == 1 { return 1; }
+    if eq(name, "write") == 1 { return 1; }
+    if eq(name, "lseek") == 1 { return 1; }
+    if eq(name, "unlink") == 1 { return 1; }
+    if eq(name, "stat") == 1 { return 1; }
+    if eq(name, "fstat") == 1 { return 1; }
+    if eq(name, "mkdir") == 1 { return 1; }
+    if eq(name, "rmdir") == 1 { return 1; }
+    if eq(name, "cos") == 1 { return 1; }
+    if eq(name, "cosf") == 1 { return 1; }
+    if eq(name, "cosl") == 1 { return 1; }
+    if eq(name, "sin") == 1 { return 1; }
+    if eq(name, "sinf") == 1 { return 1; }
+    if eq(name, "sinl") == 1 { return 1; }
+    if eq(name, "tan") == 1 { return 1; }
+    if eq(name, "tanf") == 1 { return 1; }
+    if eq(name, "tanl") == 1 { return 1; }
+    if eq(name, "acos") == 1 { return 1; }
+    if eq(name, "asin") == 1 { return 1; }
+    if eq(name, "atan") == 1 { return 1; }
+    if eq(name, "atan2") == 1 { return 1; }
+    if eq(name, "sqrt") == 1 { return 1; }
+    if eq(name, "sqrtf") == 1 { return 1; }
+    if eq(name, "sqrtl") == 1 { return 1; }
+    if eq(name, "pow") == 1 { return 1; }
+    if eq(name, "powf") == 1 { return 1; }
+    if eq(name, "powl") == 1 { return 1; }
+    if eq(name, "exp") == 1 { return 1; }
+    if eq(name, "log") == 1 { return 1; }
+    if eq(name, "floor") == 1 { return 1; }
+    if eq(name, "ceil") == 1 { return 1; }
+    if eq(name, "round") == 1 { return 1; }
+    if eq(name, "fabs") == 1 { return 1; }
+    return 0;
+}
+
+fn c_stdlib_function_location(name: str8) -> str8 {
+    if len(name) == 0 { return String::new(); }
+    if starts_with(name, "__mlang_std_") == 1 { return String::new(); }
+    if is_known_c_stdlib_symbol(name) == 0 { return String::new(); }
+
+    let root: str8 = root_path_from_store();
+    let here: str8 = cwd();
+    let pattern: str8 = format!("{}(", name);
+
+    var headers: list<str8> = [];
+    headers.push("stdio.h");
+    headers.push("_stdio.h");
+    headers.push("stdlib.h");
+    headers.push("_stdlib.h");
+    headers.push("string.h");
+    headers.push("_string.h");
+    headers.push("strings.h");
+    headers.push("math.h");
+    headers.push("unistd.h");
+    headers.push("_unistd.h");
+    headers.push("fcntl.h");
+    headers.push("sys/stat.h");
+    headers.push("sys/types.h");
+    headers.push("ctype.h");
+    headers.push("time.h");
+
+    for i in 0..headers.len() {
+        let hname: str8 = headers[i];
+        var candidates: list<str8> = [];
+        if len(root) > 0 {
+            candidates.push(concat(root, format!("/{}", hname)));
+        }
+        candidates.push(concat(here, format!("/{}", hname)));
+        candidates.push(concat("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/", hname));
+        candidates.push(concat("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/", hname));
+        candidates.push(concat("/usr/include/", hname));
+
+        for j in 0..candidates.len() {
+            let hpath: str8 = candidates[j];
+            if file_exists(hpath) != 1 { continue; }
+            let htext_r: Result<str8, str8> = read_all_text(hpath);
+            if htext_r.is_err() { continue; }
+            let htext: str8 = htext_r.unwrap();
+            let hloc: str8 = first_match_location(hpath, htext, pattern);
+            if len(hloc) > 0 { return hloc; }
+        }
+    }
+
+    var include_roots: list<str8> = [];
+    include_roots.push("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include");
+    include_roots.push("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    include_roots.push("/usr/include");
+
+    for i in 0..include_roots.len() {
+        let inc_root: str8 = include_roots[i];
+        if file_exists(inc_root) != 1 { continue; }
+        let hdrs: list<str8> = glob_recursive(inc_root, "*.h");
+        for j in 0..hdrs.len() {
+            let hpath: str8 = hdrs[j];
+            let htext_r: Result<str8, str8> = read_all_text(hpath);
+            if htext_r.is_err() { continue; }
+            let htext: str8 = htext_r.unwrap();
+            let hloc: str8 = first_match_location(hpath, htext, pattern);
+            if len(hloc) > 0 { return hloc; }
+        }
+    }
+
+    return String::new();
+}
+
 fn extract_word_and_prefix(line_text: str8, col0: i64) -> str8 {
     let n: i64 = len(line_text);
     if n <= 0 { return "::"; }
@@ -2184,6 +2350,16 @@ fn handle_definition(payload: str8) -> str8 {
 
     if len(query_text) > 0 {
             let line_text: str8 = line_text_at(query_text, line);
+            let extern_here0: str8 = extern_fn_name_from_line(line_text);
+            if len(extern_here0) > 0 {
+                let c_std_decl0: str8 = c_stdlib_function_location(extern_here0);
+                if len(c_std_decl0) > 0 { return format!("[{}]", c_std_decl0); }
+                let root_uri0: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
+                if len(root_uri0) > 0 {
+                    let c_loc_ws0: str8 = workspace_c_definition_search(root_uri0, extern_here0);
+                    if len(c_loc_ws0) > 0 { return format!("[{}]", c_loc_ws0); }
+                }
+            }
             let import_loc0: str8 = module_import_location_from_line(line_text);
             if len(import_loc0) > 0 { return format!("[{}]", import_loc0); }
             if line > 0 {
@@ -2275,6 +2451,9 @@ fn handle_definition(payload: str8) -> str8 {
                         }
                     }
                     if len(word) > 0 {
+                        let p_word: str8 = file_uri_to_path(uri);
+                        let decl_loc_word: str8 = extern_decl_location_in_text(p_word, query_text, word);
+                        if len(decl_loc_word) > 0 { return format!("[{}]", decl_loc_word); }
                         let recv_static: str8 = static_call_receiver_name(line_text, word);
                         if len(recv_static) > 0 {
                             let recv_static_assoc: str8 = associated_type_method_location(query_text, recv_static, word);
@@ -2344,6 +2523,8 @@ fn handle_definition(payload: str8) -> str8 {
                     word2 = word_at_col(line_text2, col);
                 }
                 if len(word2) > 0 {
+                    let c_std_loc0: str8 = c_stdlib_function_location(word2);
+                    if len(c_std_loc0) > 0 { return format!("[{}]", c_std_loc0); }
                     let root_uri2: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
                     if len(root_uri2) > 0 {
                         let c_loc_ws: str8 = workspace_c_definition_search(root_uri2, word2);
@@ -2359,18 +2540,13 @@ fn handle_definition(payload: str8) -> str8 {
         Ok(v) => v,
         Err(_e) => DefinitionLocation { id: String::new(), name: String::new(), uri: String::new(), line: 0, column: 0 }
     };
-    let root_uri3: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
-    if len(root_uri3) > 0 {
-        let extern_symbol: str8 = extern_fn_name_at_uri_line(d.uri, d.line);
-        if len(extern_symbol) > 0 {
-            let c_loc_ws2: str8 = workspace_c_definition_search(root_uri3, extern_symbol);
-            if len(c_loc_ws2) > 0 { return format!("[{}]", c_loc_ws2); }
-        }
-    }
     if len(query_text) > 0 {
+            let root_uri3: str8 = text_store_get(g_text_store_handle, "__mlang_root_uri__");
             let line_text2: str8 = line_text_at(query_text, line);
             let extern_here: str8 = extern_fn_name_from_line(line_text2);
             if len(extern_here) > 0 {
+                let c_std_loc2: str8 = c_stdlib_function_location(extern_here);
+                if len(c_std_loc2) > 0 { return format!("[{}]", c_std_loc2); }
                 if len(root_uri3) > 0 {
                     let c_loc_ws3: str8 = workspace_c_definition_search(root_uri3, extern_here);
                     if len(c_loc_ws3) > 0 { return format!("[{}]", c_loc_ws3); }
