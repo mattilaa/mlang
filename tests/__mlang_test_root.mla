@@ -82,3 +82,5 @@ mod std_algorithm_tests;
 use std_algorithm_tests::*;
 mod raii_scope_tests;
 use raii_scope_tests::*;
+mod std_sed_tests;
+use std_sed_tests::*;

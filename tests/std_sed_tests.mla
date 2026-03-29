@@ -1,0 +1,50 @@
+mod std::sed;
+mod std::strbuf;
+mod std::testing;
+
+use std::sed::replace_all;
+use std::sed::replace_first;
+use std::sed::substitute;
+use std::strbuf::eq;
+use std::strbuf::free;
+use std::testing::verify;
+
+fn test_replace_first_impl() -> i32 {
+    let out: str8 = replace_first("alpha beta beta", "beta", "gamma");
+    let ok: i32 = eq(out, "alpha gamma beta");
+    free(out);
+    return ok == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_replace_first() {
+    verify(test_replace_first_impl() == 0);
+}
+
+fn test_replace_all_impl() -> i32 {
+    let out: str8 = replace_all("red green red blue red", "red", "gold");
+    let ok: i32 = eq(out, "gold green gold blue gold");
+    free(out);
+    return ok == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_replace_all() {
+    verify(test_replace_all_impl() == 0);
+}
+
+fn test_substitute_alias_and_empty_needle_impl() -> i32 {
+    let out1: str8 = substitute("a-b-c", "-", "/");
+    let out2: str8 = replace_all("hello", "", "x");
+    let ok1: i32 = eq(out1, "a/b/c");
+    let ok2: i32 = eq(out2, "hello");
+    free(out2);
+    free(out1);
+    if ok1 != 1 { return 1; }
+    return ok2 == 1 ? 0 : 1;
+}
+
+#[test]
+fn test_substitute_alias_and_empty_needle() {
+    verify(test_substitute_alias_and_empty_needle_impl() == 0);
+}

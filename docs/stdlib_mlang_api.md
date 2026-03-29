@@ -25,6 +25,7 @@ mod std::printf;
 mod std::process;
 mod std::rand;
 mod std::regex;
+mod std::sed;
 mod std::sync;
 mod std::term;
 mod std::time;
@@ -63,6 +64,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/process.mla`
 - `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
+- `stdlib/std/sed.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
@@ -979,6 +981,36 @@ Module file: `stdlib/std/regex.mla`
 
 ### Errors
 - `last_error() -> str8`
+
+## std::sed
+
+Module file: `stdlib/std/sed.mla`
+
+Sed-like helpers for literal `str8` substitution. These functions do not use
+regex syntax; matching is byte-based and exact.
+
+- `replace_first(text: str8, needle: str8, replacement: str8) -> str8`
+- `replace_all(text: str8, needle: str8, replacement: str8) -> str8`
+- `substitute(text: str8, needle: str8, replacement: str8) -> str8`
+
+Notes:
+- each function returns a newly allocated string
+- caller frees returned strings with `std::strbuf::free`
+- empty `needle` returns a clone of `text`
+
+Example:
+
+```mla
+mod std::sed;
+mod std::strbuf;
+
+use std::sed::replace_all;
+use std::strbuf::free;
+
+let out: str8 = replace_all("name=foo, name=foo", "foo", "bar");
+println!("{}", out);
+free(out);
+```
 
 ## std::sync
 

@@ -1,0 +1,22 @@
+mod std::sed;
+mod std::strbuf;
+
+use std::sed::replace_all;
+use std::sed::replace_first;
+use std::sed::substitute;
+use std::strbuf::free;
+
+fn main() -> i32 {
+    let once: str8 = replace_first("port=8080 port=8080", "8080", "9090");
+    let all: str8 = replace_all("name=foo, name=foo", "foo", "bar");
+    let path: str8 = substitute("/tmp/demo.txt", "/tmp", "/var/tmp");
+
+    println!("replace_first: {}", once);
+    println!("replace_all: {}", all);
+    println!("substitute: {}", path);
+
+    free(path);
+    free(all);
+    free(once);
+    return 0;
+}

@@ -26,6 +26,10 @@ For higher-level str8 helpers and UTF conversions, see:
    `contains`, `find`, `rfind`, `concat`, `repeat`,
    `to_utf16`, `from_utf16`, `to_utf8`, `free_utf16`)
 
+For sed-style literal string replacement, see:
+- `stdlib/std/sed.mla`
+  (`replace_first`, `replace_all`, `substitute`).
+
 For std-style IO helpers with synchronized stdout, see:
 - `stdlib/std/io.mla`
   (`stdin()`, `stdout()`, `lock(stdout())`, `unlock(lockToken)`,
