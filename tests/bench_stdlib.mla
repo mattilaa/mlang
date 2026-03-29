@@ -1,14 +1,41 @@
 mod std::testing;
 mod std::unordered;
 mod std::bench;
+mod std::exceptions;
 mod std::fft;
 use std::unordered::QuickMapI64I64;
 use std::unordered::QuickMapVecI64I64;
 use std::bench::clobber_memory;
 use std::bench::do_not_optimize_i64;
+use std::exceptions::*;
 use std::fft::forward;
 use std::fft::inverse;
 use std::testing::verify;
+
+var g_exception_bench_drops: i32 = 0;
+
+struct ExceptionBenchGuard {
+    var marker: i32;
+};
+
+impl ExceptionBenchGuard {
+    pub fn free(self: ExceptionBenchGuard) -> i32 {
+        g_exception_bench_drops = g_exception_bench_drops + 1;
+        return self.marker;
+    }
+}
+
+#[inline(never)]
+fn bench_exception_throw(line: i32) -> void {
+    throw with_line("BenchError", "bench throw", line);
+}
+
+#[inline(never)]
+fn bench_exception_throw_with_guard(line: i32) -> void {
+    let guard: ExceptionBenchGuard = ExceptionBenchGuard { marker: line };
+    verify(guard.marker == line);
+    throw with_line("BenchError", "bench unwind", line);
+}
 
 #[test]
 fn bench_vec_push_pop() {
@@ -87,4 +114,48 @@ fn bench_fft_roundtrip_1024() {
     do_not_optimize_i64(checksum);
     clobber_memory();
     verify(checksum != 0);
+}
+
+#[test]
+fn bench_exception_try_no_throw() {
+    var acc: i64 = 0;
+    try {
+        acc = 7;
+    } catch e: Exception {
+        acc = e.source_line;
+        verify(false);
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    verify(acc == 7);
+}
+
+#[test]
+fn bench_exception_throw_catch() {
+    var acc: i64 = 0;
+    try {
+        bench_exception_throw(17);
+        verify(false);
+    } catch e: Exception {
+        acc = e.source_line;
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    verify(acc == 17);
+}
+
+#[test]
+fn bench_exception_throw_catch_unwind() {
+    g_exception_bench_drops = 0;
+    var acc: i64 = 0;
+    try {
+        bench_exception_throw_with_guard(23);
+        verify(false);
+    } catch e: Exception {
+        acc = e.source_line;
+    }
+    do_not_optimize_i64(acc);
+    clobber_memory();
+    verify(acc == 23);
+    verify(g_exception_bench_drops == 1);
 }

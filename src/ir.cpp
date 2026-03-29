@@ -4903,11 +4903,11 @@ void CodeGenerator::generateBenchmarkMain(
     };
 
     llvm::Value* headerFmt = make_cstr(
-        "[BENCH] %-30s %12s %12s %10s\n", "bench.header.fmt");
+        "[BENCH] %-48s %12s %12s %10s\n", "bench.header.fmt");
     llvm::Value* lineFmt = make_cstr(
-        "[BENCH] %-30s %12lld %12lld %10d\n", "bench.line.fmt");
+        "[BENCH] %-48s %12lld %12lld %10d\n", "bench.line.fmt");
     llvm::Value* failFmt = make_cstr(
-        "[BENCH-FAIL] %-25s failures=%d\n", "bench.fail.fmt");
+        "[BENCH-FAIL] %-43s failures=%d\n", "bench.fail.fmt");
 
     llvm::Value* nsTotalHdr = make_cstr("total_ns", "bench.hdr.total");
     llvm::Value* nsPerOpHdr = make_cstr("ns/op", "bench.hdr.nsop");
@@ -4915,7 +4915,7 @@ void CodeGenerator::generateBenchmarkMain(
     llvm::Value* warmupLabel =
         make_cstr("warmup(iters)", "bench.warmup.label");
     llvm::Value* warmupFmt =
-        make_cstr("[BENCH] %-30s %12d\n", "bench.warmup.fmt");
+        make_cstr("[BENCH] %-48s %12d\n", "bench.warmup.fmt");
     builder.CreateCall(printfFunc,
                        {warmupFmt, warmupLabel,
                         llvm::ConstantInt::get(i32Type, benchmarkWarmupIterations)});
