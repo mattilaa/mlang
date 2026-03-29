@@ -127,6 +127,8 @@ Includes:
 - `use type` aliases (including generic aliases) and block-scoped shadowing
 - alias-overlap diagnostics with `file:row:column` locations
 - `f32` / `f64` primitives
+- inline assembly via `asm(...)`, `asm volatile(...)`, and arch-qualified forms
+  such as `asm x64(...)` / `asm aarch64(...)`
 - modern `if/else if/else` block syntax without mandatory `:`
 - guarded `if` forms, including `if let ... = ...: guard` and
   `if let ... == ...: guard`
@@ -145,6 +147,7 @@ Recent branch-level additions reflected in these docs:
 - Guarded `if/else if` and guarded `while` forms; optional plain-colon warnings
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
 - `f32`/`f64` primitive names
+- Inline assembly with `volatile` and target-arch qualifiers (`x86`, `x64`, `aarch64`)
 - Lambda and fold expressions with example coverage
 - Exception handling with `throw`, `try/catch`, and `std::exceptions::Exception`
 - Enum backing types (`: i64`, `: u8`), range checks, and compatibility checks

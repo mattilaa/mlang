@@ -205,6 +205,69 @@ Notes:
 - Uncaught exceptions terminate the program after printing the exception type,
   message, and source line when available.
 
+## Inline Assembly: `asm`
+
+MLang supports expression-style inline assembly lowered directly to LLVM inline
+asm.
+
+Supported source forms:
+- `asm(T, "template", operands...)`
+- `asm volatile(T, "template", operands...)`
+- `asm x86(T, "template", operands...)`
+- `asm x64(T, "template", operands...)`
+- `asm aarch64(T, "template", operands...)`
+- `asm volatile x86(...)`, `asm volatile x64(...)`,
+  `asm volatile aarch64(...)`
+
+Examples:
+
+```mla
+fn main() -> i32 {
+    let value: i64 = 41;
+    let one: i64 = 1;
+    let sum: i64 = asm x64(i64, "addq $2, $0", value, one);
+    asm volatile x64(void, "");
+    if sum == 42 {
+        return 0;
+    }
+    return 1;
+}
+```
+
+```mla
+fn main() -> i32 {
+    let base: i64 = 40;
+    let delta: i64 = 2;
+    let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
+    asm volatile aarch64(void, "yield");
+    if sum == 42 {
+        return 0;
+    }
+    return 1;
+}
+```
+
+Constraints:
+- The result type is explicit in source; use `void` for side-effect-only asm.
+- Inline asm currently supports only integer, pointer, or `void` result types.
+- Operands currently support only integer and pointer values.
+- Non-`void` inline asm must have at least one operand.
+- For non-`void` inline asm, the first operand must have the same type as the
+  declared result type. It is used as the tied input/output register.
+- `asm volatile(...)` is required when side effects must not be optimized away.
+- Arch-qualified forms require a matching compilation target selected with
+  `--target-arch x86`, `--target-arch x64`, or `--target-arch aarch64`.
+- The compiler reports an error if the inline asm architecture qualifier does
+  not match the active target architecture.
+
+Reference examples in the repository:
+- `examples/inline_asm_x64_demo.mla`
+- `examples/inline_asm_aarch64_demo.mla`
+- `examples/inline_asm_x64_hello_demo.mla`
+- `examples/inline_asm_aarch64_hello_demo.mla`
+- `examples/inline_asm_x64_data_hello_demo.mla`
+- `examples/inline_asm_aarch64_data_hello_demo.mla`
+
 ## `main` Return Type Defaulting
 
 Both forms are supported:
