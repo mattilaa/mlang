@@ -324,6 +324,9 @@ Mlang Bench Runner
     Should Contain    ${run.stdout}    bench_vec_push_pop
     Should Contain    ${run.stdout}    bench_quickmap_hash_set_get
     Should Contain    ${run.stdout}    bench_quickmap_vec_set_get
+    Should Contain    ${run.stdout}    bench_exception_try_no_throw
+    Should Contain    ${run.stdout}    bench_exception_throw_catch
+    Should Contain    ${run.stdout}    bench_exception_throw_catch_unwind
 
 Type Inference Regression
     ${run}=    Run Process    ${MLANG}    test    ${EXECDIR}/tests/type_inference_tests.mla

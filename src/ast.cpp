@@ -1945,6 +1945,21 @@ ASTNode* create_while_statement_impl(ASTNode* condition, ASTNode* body, int line
     return node;
 }
 
+ASTNode* create_try_catch_stmt_impl(ASTNode* try_block, char* catch_name,
+                                    ASTNode* catch_type, ASTNode* catch_block,
+                                    int line)
+{
+    auto* tryStmt = dynamic_cast<BlockStatementNode*>(try_block);
+    auto* catchStmt = dynamic_cast<BlockStatementNode*>(catch_block);
+    auto* node = new TryCatchNode(tryStmt,
+                                  catch_name ? std::string(catch_name)
+                                             : std::string(),
+                                  static_cast<TypeNode*>(catch_type),
+                                  catchStmt);
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_for_enumerate_impl(char* index_var, char* val_var, ASTNode* iterable,
                                ASTNode* body, int line)
 {
@@ -2080,6 +2095,13 @@ ASTNode* create_continue_stmt_impl(int line)
     return node;
 }
 
+ASTNode* create_throw_stmt_impl(ASTNode* expr, int line)
+{
+    auto* node = new ThrowNode(static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
 std::string BreakNode::toString() const
 {
     return "break;";
@@ -2088,6 +2110,25 @@ std::string BreakNode::toString() const
 std::string ContinueNode::toString() const
 {
     return "continue;";
+}
+
+std::string ThrowNode::toString() const
+{
+    return "throw " + (expression ? expression->toString() : std::string())
+           + ";";
+}
+
+std::string TryCatchNode::toString() const
+{
+    std::string out = "try ";
+    out += tryBlock ? tryBlock->toString() : "{}";
+    out += " catch ";
+    out += catchName;
+    out += ": ";
+    out += catchType ? catchType->toString() : "<?>"; 
+    out += " ";
+    out += catchBlock ? catchBlock->toString() : "{}";
+    return out;
 }
 
 std::string PrintNode::toString() const

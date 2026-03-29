@@ -1,0 +1,23 @@
+mod std::exceptions;
+
+use std::exceptions::*;
+
+#[inline(never)]
+fn parse_number(text: str8) -> i32 {
+    if text == "42" {
+        return 42;
+    }
+    throw with_line("ParseError", "expected 42", 12);
+}
+
+fn main() -> i32 {
+    println!("before try");
+    try {
+        let value: i32 = parse_number("x");
+        println!("value={}", value);
+    } catch e: Exception {
+        println!("caught {} at {}: {}", e.type_name, e.source_line, e.message);
+    }
+    println!("after try");
+    return 0;
+}

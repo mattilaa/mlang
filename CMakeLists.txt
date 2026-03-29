@@ -255,6 +255,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_unordered.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_bench.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_testing.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_exceptions.c
 )
 add_dependencies(mlang_std ParserTarget LexerTarget)
 target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)

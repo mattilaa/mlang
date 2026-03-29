@@ -123,6 +123,11 @@ ASTNode* create_continue_stmt(int line)
     return create_continue_stmt_impl(line);
 }
 
+ASTNode* create_throw_stmt(ASTNode* expr, int line)
+{
+    return create_throw_stmt_impl(expr, line);
+}
+
 ASTNode* create_int_literal(int64_t value)
 {
     return create_int_literal_impl(value);
@@ -346,6 +351,14 @@ ASTNode* create_for_enumerate(char* index_var, char* val_var, ASTNode* iterable,
 ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line, int uses_colon_without_guard)
 {
     return create_while_statement_impl(condition, body, line, uses_colon_without_guard);
+}
+
+ASTNode* create_try_catch_stmt(ASTNode* try_block, char* catch_name,
+                               ASTNode* catch_type, ASTNode* catch_block,
+                               int line)
+{
+    return create_try_catch_stmt_impl(try_block, catch_name, catch_type,
+                                      catch_block, line);
 }
 
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive)

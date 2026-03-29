@@ -183,6 +183,16 @@ private:
     llvm::FunctionCallee freeFunc;
     llvm::FunctionCallee strcmpFunc;
     llvm::FunctionCallee abortFunc;
+    llvm::FunctionCallee exceptionsPushFrameFunc;
+    llvm::FunctionCallee exceptionsFrameEnvFunc;
+    llvm::FunctionCallee exceptionsSetjmpFunc;
+    llvm::FunctionCallee exceptionsPopFrameFunc;
+    llvm::FunctionCallee exceptionsThrowFunc;
+    llvm::FunctionCallee exceptionsRethrowFunc;
+    llvm::FunctionCallee exceptionsTakeTypeNameFunc;
+    llvm::FunctionCallee exceptionsTakeMessageFunc;
+    llvm::FunctionCallee exceptionsTakeSourceLineFunc;
+    llvm::Value* currentFunctionExceptionFrame = nullptr;
     // Pthread support
     bool pthreadInitialized;
     llvm::FunctionCallee pthreadCreateFunc;
@@ -309,6 +319,9 @@ private:
     void initializeStdlibFunctions();
     void initializeFormatFunctions();
     void initializePthreadFunctions();
+    llvm::AllocaInst* createEntryBlockAlloca(llvm::Function* function,
+                                             llvm::Type* type,
+                                             const std::string& name);
     std::string convertFormatString(const std::string& mlaFormat,
                                     const std::vector<ExpressionNode*>& args,
                                     const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
@@ -346,9 +359,12 @@ private:
     void generateStaticAssert(StaticAssertNode* node);
     void generateBreakStatement(BreakNode* node);
     void generateContinueStatement(ContinueNode* node);
+    void generateThrowStatement(ThrowNode* node);
+    void generateTryCatchStatement(TryCatchNode* node);
     void enterCleanupScope();
     void exitCleanupScope();
     void emitAllActiveCleanups();
+    void emitActiveCleanupsDeeperThan(int scopeDepth);
     ScopeCleanup resolveDropFunctionForStruct(const std::string& structTypeName);
     void registerStructCleanupIfNeeded(const std::string& varName,
                                        const std::string& structTypeName);

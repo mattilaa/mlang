@@ -1,0 +1,36 @@
+/// \file exceptions.mla
+/// \brief Basic exception support for `throw` and `try/catch`.
+
+extern pub fn __mlang_std_exceptions_string_free(s: str8) -> void;
+
+pub struct Exception {
+    var type_name: str8;
+    var message: str8;
+    var source_line: i32;
+    var owned: bool;
+};
+
+pub fn new(type_name: str8, message: str8) -> Exception {
+    return Exception {
+        type_name: type_name,
+        message: message,
+        source_line: 0,
+        owned: false
+    };
+}
+
+pub fn with_line(type_name: str8, message: str8, source_line: i32) -> Exception {
+    return Exception {
+        type_name: type_name,
+        message: message,
+        source_line: source_line,
+        owned: false
+    };
+}
+
+pub fn free(ex: Exception) -> void {
+    if ex.owned {
+        __mlang_std_exceptions_string_free(ex.type_name);
+        __mlang_std_exceptions_string_free(ex.message);
+    }
+}

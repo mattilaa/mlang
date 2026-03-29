@@ -719,6 +719,14 @@ public:
     std::string toString() const override;
 };
 
+class ThrowNode : public StatementNode
+{
+public:
+    ExpressionNode* expression;
+    ThrowNode(ExpressionNode* e) : expression(e) {}
+    std::string toString() const override;
+};
+
 class LetDeclNode : public StatementNode
 {
 public:
@@ -856,6 +864,22 @@ public:
     WhileNode(ExpressionNode* c, StatementListNode* b,
               bool usesColonNoGuard = false)
         : condition(c), body(b), usesColonWithoutGuard(usesColonNoGuard)
+    {
+    }
+    std::string toString() const override;
+};
+
+class TryCatchNode : public StatementNode
+{
+public:
+    BlockStatementNode* tryBlock;
+    std::string catchName;
+    TypeNode* catchType;
+    BlockStatementNode* catchBlock;
+
+    TryCatchNode(BlockStatementNode* t, const std::string& name, TypeNode* type,
+                 BlockStatementNode* c)
+        : tryBlock(t), catchName(name), catchType(type), catchBlock(c)
     {
     }
     std::string toString() const override;
@@ -1335,6 +1359,7 @@ ASTNode* create_deref_assignment(ASTNode* pointer_expr, ASTNode* expr,
 ASTNode* create_return_stmt(ASTNode* expr);
 ASTNode* create_break_stmt(int line);
 ASTNode* create_continue_stmt(int line);
+ASTNode* create_throw_stmt(ASTNode* expr, int line);
 ASTNode* create_int_literal(int64_t value);
 ASTNode* create_bool_literal(int value);
 ASTNode* create_float_literal(float value);
@@ -1396,6 +1421,9 @@ ASTNode* create_for_enumerate(char* index_var, char* val_var,
                              ASTNode* iterable, ASTNode* body, int line);
 ASTNode* create_while_statement(ASTNode* condition, ASTNode* body, int line,
                                 int uses_colon_without_guard);
+ASTNode* create_try_catch_stmt(ASTNode* try_block, char* catch_name,
+                               ASTNode* catch_type, ASTNode* catch_block,
+                               int line);
 ASTNode* create_range_expression(ASTNode* start, ASTNode* end, int inclusive);
 ASTNode* create_mod_declaration(char* name, int line);
 ASTNode* create_use_declaration(char* module_name, char* item_name, int line);

@@ -138,6 +138,9 @@ static int is_try_question_context()
 "return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }
+"try"           { return TRY; }
+"catch"         { return CATCH; }
+"throw"         { return THROW; }
 "match"         { return MATCH; }
 "enum"          { return ENUM; }
 "for"           { return FOR; }
