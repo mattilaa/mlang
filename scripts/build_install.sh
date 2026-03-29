@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--all] [--help]
+Usage: build_install.sh [--install] [--no-install] [--prefix <path>] [--bin-dir <path>] [--system] [--sudo] [--build-dir <dir>] [--use-make] [--asan] [--all] [--help]
                         [-j <n>] [--jobs <n>] [--robot-jobs <n>] [--time-format <full|hms|off>] [--robot-time-format <full|hms|off>]
                         [--artifacts-dir <dir>]
                         [--log-level <error|info|verbose|debug>] [--color-logs] [--no-color-logs]
@@ -22,6 +22,7 @@ Options:
   --sudo             Use sudo for install step
   --build-dir <dir>  Build directory (default: build)
   --use-make         Use Unix Makefiles instead of Ninja
+  --asan             Build with AddressSanitizer and run selected tests under ASAN
   --all              Build/install mlang and mlang_std (default behavior)
   -j, --jobs <n>     Parallel jobs for robot tests (default: all CPU cores)
   --robot-jobs <n>   Same as --jobs, explicit robot-only naming
@@ -70,12 +71,14 @@ prefix="${HOME}/.local"
 bin_dir=""
 use_sudo=false
 build_dir="build"
+build_dir_explicit=false
 generator="Ninja"
 build_all=true
 run_unit_tests=false
 run_lsp_tests=false
 run_robot_tests=false
 install_if_tests_pass=false
+asan_enabled=false
 test_target=""
 merge_to_main=false
 bump_minor=false
@@ -85,6 +88,8 @@ robot_time_format="full"
 artifacts_dir="artifacts"
 log_level="info"
 color_logs="auto"
+asan_compile_flags=""
+asan_link_flags=""
 
 log_level_value() {
   case "$1" in
@@ -348,10 +353,15 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       build_dir="$2"
+      build_dir_explicit=true
       shift 2
       ;;
     --use-make)
       generator="Unix Makefiles"
+      shift
+      ;;
+    --asan)
+      asan_enabled=true
       shift
       ;;
     --all)
@@ -492,6 +502,11 @@ if [[ "$robot_time_format" != "full" && "$robot_time_format" != "hms" && "$robot
   echo "error: invalid time format '$robot_time_format' (use: full|hms|off)" >&2
   exit 1
 fi
+
+if $asan_enabled && ! $build_dir_explicit; then
+  build_dir="build-asan"
+fi
+
 mkdir -p "$artifacts_dir/cpp" "$artifacts_dir/unit" "$artifacts_dir/robot"
 
 init_log_colors
@@ -572,45 +587,98 @@ fi
 # Step 3: build
 # ============================================================================
 log_info "step 3/3: build and optional tests/install"
-cmake -S . -B "$build_dir" -G "$generator" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+cmake_args=(
+  -S .
+  -B "$build_dir"
+  -G "$generator"
+  -DBUILD_TESTS=OFF
+)
+if $asan_enabled; then
+  asan_compile_flags="-fsanitize=address -fno-omit-frame-pointer -g -O1 -fno-optimize-sibling-calls"
+  asan_link_flags="-fsanitize=address -fno-omit-frame-pointer"
+  cmake_args+=(
+    -DCMAKE_BUILD_TYPE=Debug
+    "-DCMAKE_C_FLAGS=${asan_compile_flags}"
+    "-DCMAKE_CXX_FLAGS=${asan_compile_flags}"
+    "-DCMAKE_EXE_LINKER_FLAGS=${asan_link_flags}"
+    "-DCMAKE_SHARED_LINKER_FLAGS=${asan_link_flags}"
+    "-DCMAKE_MODULE_LINKER_FLAGS=${asan_link_flags}"
+  )
+  export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_container_overflow=1:strict_init_order=0}"
+  log_info "asan enabled for build dir: $build_dir"
+else
+  cmake_args+=(-DCMAKE_BUILD_TYPE=Release)
+fi
+
+asan_runtime_env=()
+if $asan_enabled; then
+  asan_runtime_env+=(
+    ASAN_OPTIONS="$ASAN_OPTIONS"
+    MLANG_LINK_FLAGS="$asan_link_flags"
+    MLANG_DEFAULT_OPT_LEVEL=0
+  )
+fi
+
+cmake "${cmake_args[@]}"
 if $build_all; then
   log_info "building targets: mlang mlang_std"
   cmake --build "$build_dir" --target mlang mlang_std
 fi
 
-# Build mlangd-mla with the freshly built compiler/runtime.
-log_info "building tool: mlangd-mla"
-"$build_dir/mlang" "tools/mlangd-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd-mla"
-# Build mlang-format (Mlang implementation, port-in-progress).
-log_info "building tool: mlang-format"
-"$build_dir/mlang" "tools/mlang-format-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-format"
-# Build mlang-frontend-mla (feature-rich Mlang CLI frontend).
-log_info "building tool: mlang-frontend-mla"
-"$build_dir/mlang" "tools/mlang-frontend-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-frontend-mla"
-# Build mlangpkg (Cargo-like package manager prototype).
-log_info "building tool: mlangpkg"
-"$build_dir/mlang" "tools/mlangpkg/mlangpkg.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangpkg"
+if $install_after_build || $run_lsp_tests; then
+  # Build mlangd-mla with the freshly built compiler/runtime.
+  log_info "building tool: mlangd-mla"
+  "$build_dir/mlang" "tools/mlangd-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangd-mla"
+  # Build mlang-format (Mlang implementation, port-in-progress).
+  log_info "building tool: mlang-format"
+  "$build_dir/mlang" "tools/mlang-format-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-format"
+fi
+
+if $install_after_build; then
+  # Build mlang-frontend-mla (feature-rich Mlang CLI frontend).
+  log_info "building tool: mlang-frontend-mla"
+  "$build_dir/mlang" "tools/mlang-frontend-mla/main.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlang-frontend-mla"
+  # Build mlangpkg (Cargo-like package manager prototype).
+  log_info "building tool: mlangpkg"
+  "$build_dir/mlang" "tools/mlangpkg/mlangpkg.mla" -L "$build_dir" -lmlang_std -o "$build_dir/mlangpkg"
+fi
 
 if $run_unit_tests; then
   log_info "running unit tests"
   if [[ -n "$test_target" ]]; then
     if [[ "$color_logs" == "never" ]]; then
-      run_checked_command "mlang tests ($test_target)" env NO_COLOR=1 CLICOLOR=0 MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
+      run_checked_command "mlang tests ($test_target)" env NO_COLOR=1 CLICOLOR=0 "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
     else
-      run_checked_command "mlang tests ($test_target)" env MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
+      run_checked_command "mlang tests ($test_target)" env "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
     fi
   else
+    ctest_env=(
+      TEST_BUILD_DIR="$artifacts_dir/unit/ctest"
+    )
+    if $asan_enabled; then
+      ctest_env+=(
+        TEST_CMAKE_BUILD_TYPE=Debug
+        TEST_C_FLAGS="$asan_compile_flags"
+        TEST_CXX_FLAGS="$asan_compile_flags"
+        TEST_EXE_LINKER_FLAGS="$asan_link_flags"
+        TEST_SHARED_LINKER_FLAGS="$asan_link_flags"
+        TEST_MODULE_LINKER_FLAGS="$asan_link_flags"
+        MLANG_LINK_FLAGS="$asan_link_flags"
+        MLANG_DEFAULT_OPT_LEVEL=0
+        ASAN_OPTIONS="$ASAN_OPTIONS"
+      )
+    fi
     # C++/ctest suite
     if [[ "$color_logs" == "never" ]]; then
-      run_checked_command "ctest suite" env NO_COLOR=1 CLICOLOR=0 CTEST_COLOR=0 GTEST_COLOR=no TEST_BUILD_DIR="$artifacts_dir/unit/ctest" ./tests/run_tests.sh --output-on-failure
+      run_checked_command "ctest suite" env NO_COLOR=1 CLICOLOR=0 CTEST_COLOR=0 GTEST_COLOR=no "${ctest_env[@]}" ./tests/run_tests.sh "$PWD/$build_dir/mlang" --output-on-failure
     else
-      run_checked_command "ctest suite" env TEST_BUILD_DIR="$artifacts_dir/unit/ctest" ./tests/run_tests.sh --output-on-failure
+      run_checked_command "ctest suite" env "${ctest_env[@]}" ./tests/run_tests.sh "$PWD/$build_dir/mlang" --output-on-failure
     fi
     # MLang test suite (*.mla under tests/)
     if [[ "$color_logs" == "never" ]]; then
-      run_checked_command "mlang tests (tests)" env NO_COLOR=1 CLICOLOR=0 MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
+      run_checked_command "mlang tests (tests)" env NO_COLOR=1 CLICOLOR=0 "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
     else
-      run_checked_command "mlang tests (tests)" env MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
+      run_checked_command "mlang tests (tests)" env "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
     fi
   fi
 fi
@@ -618,11 +686,11 @@ fi
 if $run_lsp_tests; then
   log_info "running lsp tests"
   if [[ "$color_logs" == "never" ]]; then
-    run_checked_command "mlang-format e2e tests" env NO_COLOR=1 CLICOLOR=0 python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
-    run_checked_command "mlangd transcript tests" env NO_COLOR=1 CLICOLOR=0 python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
+    run_checked_command "mlang-format e2e tests" env NO_COLOR=1 CLICOLOR=0 ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
+    run_checked_command "mlangd transcript tests" env NO_COLOR=1 CLICOLOR=0 ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
   else
-    run_checked_command "mlang-format e2e tests" python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
-    run_checked_command "mlangd transcript tests" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
+    run_checked_command "mlang-format e2e tests" env ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/mlang_format_spacing_e2e.py --mlang-format "$build_dir/mlang-format"
+    run_checked_command "mlangd transcript tests" env ASAN_OPTIONS="${ASAN_OPTIONS:-}" python3 tests/lsp_mlangd-mla_transcripts.py --mlangd "$build_dir/mlangd-mla"
   fi
 fi
 
@@ -636,10 +704,12 @@ if $run_robot_tests; then
       ROBOT_TIME_FORMAT="$robot_time_format" \
       ROBOT_RESULTS_DIR="$artifacts_dir/robot" \
       MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" \
+      MLANG_BIN="$PWD/$build_dir/mlang" \
       ROBOT_CONSOLE_COLORS=off \
       PYTHONUNBUFFERED=1 \
       NO_COLOR=1 \
       CLICOLOR=0 \
+      "${asan_runtime_env[@]}" \
       ./tests/run_examples_robot.sh
   else
     run_checked_command "robot tests" env \
@@ -649,8 +719,10 @@ if $run_robot_tests; then
       ROBOT_TIME_FORMAT="$robot_time_format" \
       ROBOT_RESULTS_DIR="$artifacts_dir/robot" \
       MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" \
+      MLANG_BIN="$PWD/$build_dir/mlang" \
       ROBOT_CONSOLE_COLORS=ansi \
       PYTHONUNBUFFERED=1 \
+      "${asan_runtime_env[@]}" \
       ./tests/run_examples_robot.sh
   fi
 fi

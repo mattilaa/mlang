@@ -1,6 +1,7 @@
 #include "ir.h"
 #include "module.h"
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -18147,6 +18148,106 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         structTypeName = typeName;
     }
 
+    auto isResultType = [&](const std::string& typeName) -> bool
+    {
+        if(typeName == "Result")
+            return true;
+        auto it = mangledToGenericName.find(typeName);
+        return it != mangledToGenericName.end() && it->second == "Result";
+    };
+
+    auto loadStructField = [&](llvm::Value* basePtr,
+                               const std::string& ownerTypeName,
+                               const std::string& fieldName) -> llvm::Value*
+    {
+        auto memberIt = structMembers.find(ownerTypeName);
+        if(memberIt == structMembers.end())
+        {
+            reportError(node->line, "unknown struct type: " + ownerTypeName);
+            return nullptr;
+        }
+
+        int fieldIndex = -1;
+        TypeNode* fieldType = nullptr;
+        const auto& members = memberIt->second;
+        for(size_t i = 0; i < members.size(); ++i)
+        {
+            if(members[i].first == fieldName)
+            {
+                fieldIndex = static_cast<int>(i);
+                fieldType = members[i].second;
+                break;
+            }
+        }
+
+        if(fieldIndex < 0 || !fieldType)
+        {
+            reportError(node->line, "struct '" + ownerTypeName +
+                                        "' has no field named '" + fieldName +
+                                        "'");
+            return nullptr;
+        }
+
+        llvm::StructType* ownerType = getStructType(ownerTypeName);
+        if(!ownerType)
+            return nullptr;
+        llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
+        llvm::Value* fieldPtr = builder.CreateStructGEP(
+            ownerType, basePtr, static_cast<unsigned>(fieldIndex),
+            fieldName + "_ptr");
+        return builder.CreateLoad(llvmFieldType, fieldPtr, fieldName);
+    };
+
+    if(isResultType(structTypeName))
+    {
+        if(node->methodName == "is_ok")
+        {
+            if(!node->arguments.empty())
+            {
+                reportError(node->line, "is_ok() takes no arguments");
+                return nullptr;
+            }
+            return loadStructField(objPtr, structTypeName, "is_ok");
+        }
+        if(node->methodName == "is_err")
+        {
+            if(!node->arguments.empty())
+            {
+                reportError(node->line, "is_err() takes no arguments");
+                return nullptr;
+            }
+            llvm::Value* isOk =
+                loadStructField(objPtr, structTypeName, "is_ok");
+            if(!isOk)
+                return nullptr;
+            return builder.CreateNot(isOk, "is_err");
+        }
+        if(node->methodName == "unwrap")
+        {
+            if(!node->arguments.empty())
+            {
+                reportError(node->line, "unwrap() takes no arguments");
+                return nullptr;
+            }
+            if(warnResultUnwrap)
+            {
+                reportWarning(node->line, node->col,
+                              "Result.unwrap() may panic on Err; consider "
+                              "match/is_ok/is_err");
+            }
+            return loadStructField(objPtr, structTypeName, "ok");
+        }
+        if(node->methodName == "unwrap_err")
+        {
+            if(!node->arguments.empty())
+            {
+                reportError(node->line, "unwrap_err() takes no arguments");
+                return nullptr;
+            }
+            return loadStructField(objPtr, structTypeName, "err");
+        }
+    }
+
     // Check if method exists on this struct (including inherited methods)
     auto structIt = structMethods.find(structTypeName);
     if(structIt == structMethods.end())
@@ -18164,14 +18265,6 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     node->methodName + "'");
         return nullptr;
     }
-
-    auto isResultType = [&](const std::string& typeName) -> bool
-    {
-        if(typeName == "Result")
-            return true;
-        auto it = mangledToGenericName.find(typeName);
-        return it != mangledToGenericName.end() && it->second == "Result";
-    };
 
     if(node->methodName == "unwrap" && isResultType(structTypeName) &&
        warnResultUnwrap)
@@ -20608,20 +20701,46 @@ bool Backend::initializeTarget()
 
     llvm::TargetOptions opt;
     auto relocModel = std::optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
+    llvm::CodeGenOptLevel codegenOpt = llvm::CodeGenOptLevel::Default;
+    bool conservativeCodegen = false;
+    if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
+    {
+        if(defaultOptEnv[0] == '0' && defaultOptEnv[1] == '\0')
+        {
+            codegenOpt = llvm::CodeGenOptLevel::None;
+            conservativeCodegen = true;
+        }
+    }
+    if(conservativeCodegen)
+    {
+        opt.EnableFastISel = false;
+        opt.EnableGlobalISel = false;
+        opt.GlobalISelAbort = llvm::GlobalISelAbortMode::Disable;
+    }
 
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Triple tripleObj(targetTriple);
-    targetMachine =
-        target->createTargetMachine(tripleObj, cpu, features, opt, relocModel);
+    targetMachine = target->createTargetMachine(tripleObj, cpu, features, opt,
+                                                relocModel, std::nullopt,
+                                                codegenOpt);
 #else
     targetMachine = target->createTargetMachine(targetTriple, cpu, features,
-                                                opt, relocModel);
+                                                opt, relocModel, std::nullopt,
+                                                codegenOpt);
 #endif
 
     if(!targetMachine)
     {
         std::cerr << "Error creating target machine" << std::endl;
         return false;
+    }
+    if(conservativeCodegen)
+    {
+        targetMachine->setFastISel(false);
+        targetMachine->setO0WantsFastISel(false);
+        targetMachine->setGlobalISel(false);
+        targetMachine->setGlobalISelAbort(
+            llvm::GlobalISelAbortMode::Disable);
     }
 
     module->setDataLayout(targetMachine->createDataLayout());
@@ -20749,6 +20868,14 @@ bool Backend::linkExecutable(const std::string& objectFile,
     ensure_artifact_parent_directory(outputFile);
     // Use C++ driver so C++ stdlib symbols from native stdlib objects resolve.
     std::string command = "c++ -o " + outputFile + " " + objectFile;
+    if(const char* extraLinkFlags = std::getenv("MLANG_LINK_FLAGS"))
+    {
+        if(extraLinkFlags[0] != '\0')
+        {
+            command += " ";
+            command += extraLinkFlags;
+        }
+    }
     for(const auto& arg : linkArgs)
     {
         command += " " + arg;

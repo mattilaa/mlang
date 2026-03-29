@@ -133,7 +133,28 @@ cd "$BUILD_DIR"
 # Configure with CMake
 echo ""
 echo "Configuring tests..."
-cmake -DMLA_COMPILER="$COMPILER_PATH" "$ROOT_DIR"
+cmake_args=(
+    -DMLA_COMPILER="$COMPILER_PATH"
+)
+if [ -n "${TEST_CMAKE_BUILD_TYPE:-}" ]; then
+    cmake_args+=("-DCMAKE_BUILD_TYPE=$TEST_CMAKE_BUILD_TYPE")
+fi
+if [ -n "${TEST_C_FLAGS:-}" ]; then
+    cmake_args+=("-DCMAKE_C_FLAGS=$TEST_C_FLAGS")
+fi
+if [ -n "${TEST_CXX_FLAGS:-}" ]; then
+    cmake_args+=("-DCMAKE_CXX_FLAGS=$TEST_CXX_FLAGS")
+fi
+if [ -n "${TEST_EXE_LINKER_FLAGS:-}" ]; then
+    cmake_args+=("-DCMAKE_EXE_LINKER_FLAGS=$TEST_EXE_LINKER_FLAGS")
+fi
+if [ -n "${TEST_SHARED_LINKER_FLAGS:-}" ]; then
+    cmake_args+=("-DCMAKE_SHARED_LINKER_FLAGS=$TEST_SHARED_LINKER_FLAGS")
+fi
+if [ -n "${TEST_MODULE_LINKER_FLAGS:-}" ]; then
+    cmake_args+=("-DCMAKE_MODULE_LINKER_FLAGS=$TEST_MODULE_LINKER_FLAGS")
+fi
+cmake "${cmake_args[@]}" "$ROOT_DIR"
 
 # Build tests
 echo ""

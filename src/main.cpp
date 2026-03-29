@@ -1196,6 +1196,14 @@ int main(int argc, char** argv)
     bool emitLLVMIR = false;
     bool emitBitcode = false;
     int optimizationLevel = 2;
+    if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
+    {
+        if(defaultOptEnv[0] >= '0' && defaultOptEnv[0] <= '3' &&
+           defaultOptEnv[1] == '\0')
+        {
+            optimizationLevel = defaultOptEnv[0] - '0';
+        }
+    }
     bool verbose = false;
     bool debugMode = false;
     bool warnPlainColonIf = true;
