@@ -11,8 +11,13 @@ static int32_t g_testing_quiet = 0;
 static int32_t g_testing_current_index = 0;
 static int32_t g_testing_current_total = 0;
 static char* g_testing_current_name = NULL;
+static char** g_testing_failed_tests = NULL;
+static int32_t g_testing_failed_tests_len = 0;
+static int32_t g_testing_failed_tests_cap = 0;
 
 static void testing_set_current_name(const char* name);
+static void testing_record_failed_test(const char* name);
+static void testing_clear_failed_tests(void);
 
 typedef struct
 {
@@ -79,6 +84,9 @@ void __mlang_std_testing_report_test(int32_t index, int32_t total,
     const char* st = status ? status : "UNKNOWN";
     const char* name = test_name ? test_name : "";
 
+    if(strcmp(st, "FAIL") == 0)
+        testing_record_failed_test(name);
+
     if(total > 0)
     {
         if(strcmp(st, "FAIL") == 0)
@@ -109,6 +117,12 @@ void __mlang_std_testing_report_summary(int32_t total, int32_t pass,
     testing_timestamp_now(timestamp, sizeof(timestamp));
     fprintf(stdout, "%s [SUMMARY] total=%d pass=%d fail=%d\n", timestamp, total,
             pass, fail);
+    for(int32_t i = 0; i < g_testing_failed_tests_len; ++i)
+    {
+        const char* name = g_testing_failed_tests[i] ? g_testing_failed_tests[i]
+                                                     : "";
+        fprintf(stdout, "%s [SUMMARY-FAIL] %s\n", timestamp, name);
+    }
 }
 
 void __mlang_std_testing_set_current_test(int32_t index, int32_t total,
@@ -134,6 +148,52 @@ static void testing_set_current_name(const char* name)
 {
     free(g_testing_current_name);
     g_testing_current_name = testing_strdup(name ? name : "");
+}
+
+static void testing_clear_failed_tests(void)
+{
+    for(int32_t i = 0; i < g_testing_failed_tests_len; ++i)
+    {
+        free(g_testing_failed_tests[i]);
+        g_testing_failed_tests[i] = NULL;
+    }
+    free(g_testing_failed_tests);
+    g_testing_failed_tests = NULL;
+    g_testing_failed_tests_len = 0;
+    g_testing_failed_tests_cap = 0;
+}
+
+static void testing_record_failed_test(const char* name)
+{
+    const char* src = name ? name : "";
+    if(src[0] == '\0')
+        return;
+
+    for(int32_t i = 0; i < g_testing_failed_tests_len; ++i)
+    {
+        const char* existing = g_testing_failed_tests[i] ? g_testing_failed_tests[i]
+                                                         : "";
+        if(strcmp(existing, src) == 0)
+            return;
+    }
+
+    if(g_testing_failed_tests_len >= g_testing_failed_tests_cap)
+    {
+        int32_t next = (g_testing_failed_tests_cap == 0)
+                           ? 4
+                           : (g_testing_failed_tests_cap * 2);
+        char** grown = (char**)realloc(g_testing_failed_tests,
+                                       (size_t)next * sizeof(*grown));
+        if(!grown)
+            return;
+        g_testing_failed_tests = grown;
+        g_testing_failed_tests_cap = next;
+    }
+
+    char* dup = testing_strdup(src);
+    if(!dup)
+        return;
+    g_testing_failed_tests[g_testing_failed_tests_len++] = dup;
 }
 
 static void testing_mock_clear_entries(testing_mock_t* mock)
@@ -215,6 +275,7 @@ void __mlang_std_testing_reset(void)
     g_testing_current_index = 0;
     g_testing_current_total = 0;
     testing_set_current_name("");
+    testing_clear_failed_tests();
 }
 
 int32_t __mlang_std_testing_checks(void)

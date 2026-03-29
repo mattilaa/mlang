@@ -1,0 +1,9 @@
+fn main() -> i32 {
+    let value: i64 = 41;
+    let one: i64 = 1;
+    let sum: i64 = asm x64(i64, "addq $2, $0", value, one);
+    if sum != 42 {
+        return 1;
+    }
+    return 0;
+}

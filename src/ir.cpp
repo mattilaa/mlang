@@ -7,7 +7,41 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <llvm/IR/InlineAsm.h>
+#include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/Triple.h>
 #include <unordered_map>
+
+static std::string normalize_target_arch_name(const std::string& arch)
+{
+    if(arch == "x86" || arch == "i386" || arch == "i686")
+        return "x86";
+    if(arch == "x64" || arch == "x86_64" || arch == "amd64")
+        return "x64";
+    if(arch == "aarch64" || arch == "arm64")
+        return "aarch64";
+    return "";
+}
+
+static std::string llvm_arch_name_for_target(const std::string& arch)
+{
+    if(arch == "x86")
+        return "i386";
+    if(arch == "x64")
+        return "x86_64";
+    if(arch == "aarch64")
+        return "aarch64";
+    return "";
+}
+
+static std::string module_target_triple_string(llvm::Module* module)
+{
+#if LLVM_VERSION_MAJOR >= 21
+    return module ? module->getTargetTriple().str() : std::string();
+#else
+    return module ? module->getTargetTriple() : std::string();
+#endif
+}
 
 static bool is_same_module_family(const std::string& a, const std::string& b)
 {
@@ -40,8 +74,8 @@ static std::string trim_copy(std::string s)
 static bool is_wrapped_generic(const std::string& s, const char* head)
 {
     size_t n = std::strlen(head);
-    return s.size() > n + 2 && s.compare(0, n, head) == 0 &&
-           s[n] == '<' && s.back() == '>';
+    return s.size() > n + 2 && s.compare(0, n, head) == 0 && s[n] == '<' &&
+           s.back() == '>';
 }
 
 static std::vector<std::string> split_top_level_commas(const std::string& s)
@@ -91,11 +125,10 @@ static std::string build_intermediate_object_path(const std::string& outputFile)
 
     std::hash<std::string> hasher;
     fs::path absOut = fs::absolute(outPath, ec);
-    const std::string key = ec ? outputFile : absOut.lexically_normal().string();
-    const auto hashValue =
-        static_cast<unsigned long long>(hasher(key));
-    return (buildDir /
-            (base + "-" + std::to_string(hashValue) + ".o"))
+    const std::string key =
+        ec ? outputFile : absOut.lexically_normal().string();
+    const auto hashValue = static_cast<unsigned long long>(hasher(key));
+    return (buildDir / (base + "-" + std::to_string(hashValue) + ".o"))
         .string();
 }
 
@@ -998,7 +1031,8 @@ static bool inferExprKindForReturn(
     }
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
-        if(call->name == "String::new" || call->name == "String::with_capacity" ||
+        if(call->name == "String::new" ||
+           call->name == "String::with_capacity" ||
            call->name == "String::from" || call->name == "String::to_utf8")
         {
             outKind = TypeNode::TYPE_STRING;
@@ -1028,10 +1062,11 @@ static bool inferExprKindForReturn(
     {
         TypeNode::TypeKind t = TypeNode::TYPE_VOID;
         TypeNode::TypeKind f = TypeNode::TYPE_VOID;
-        if(!inferExprKindForReturn(ternary->trueExpr, localKinds, fnReturnKinds, t))
+        if(!inferExprKindForReturn(ternary->trueExpr, localKinds, fnReturnKinds,
+                                   t))
             return false;
-        if(!inferExprKindForReturn(ternary->falseExpr, localKinds, fnReturnKinds,
-                                   f))
+        if(!inferExprKindForReturn(ternary->falseExpr, localKinds,
+                                   fnReturnKinds, f))
             return false;
         t = normalizeInferredKind(t);
         if(!mergeInferredKinds(t, f))
@@ -1071,12 +1106,14 @@ static bool inferExprKindForReturn(
 }
 
 static void collectReturnKindsFromStmt(
-    StatementNode* stmt, std::unordered_map<std::string, TypeNode::TypeKind>& locals,
+    StatementNode* stmt,
+    std::unordered_map<std::string, TypeNode::TypeKind>& locals,
     const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
     ReturnInferenceData& out);
 
 static void collectReturnKindsFromList(
-    StatementListNode* body, std::unordered_map<std::string, TypeNode::TypeKind>& locals,
+    StatementListNode* body,
+    std::unordered_map<std::string, TypeNode::TypeKind>& locals,
     const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
     ReturnInferenceData& out)
 {
@@ -1087,7 +1124,8 @@ static void collectReturnKindsFromList(
 }
 
 static void collectReturnKindsFromStmt(
-    StatementNode* stmt, std::unordered_map<std::string, TypeNode::TypeKind>& locals,
+    StatementNode* stmt,
+    std::unordered_map<std::string, TypeNode::TypeKind>& locals,
     const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
     ReturnInferenceData& out)
 {
@@ -1117,7 +1155,8 @@ static void collectReturnKindsFromStmt(
         else if(letDecl->expression)
         {
             TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-            if(inferExprKindForReturn(letDecl->expression, locals, fnReturnKinds, k))
+            if(inferExprKindForReturn(letDecl->expression, locals,
+                                      fnReturnKinds, k))
                 locals[letDecl->name] = normalizeInferredKind(k);
         }
         return;
@@ -1131,7 +1170,8 @@ static void collectReturnKindsFromStmt(
         else if(varDecl->initExpr)
         {
             TypeNode::TypeKind k = TypeNode::TYPE_VOID;
-            if(inferExprKindForReturn(varDecl->initExpr, locals, fnReturnKinds, k))
+            if(inferExprKindForReturn(varDecl->initExpr, locals, fnReturnKinds,
+                                      k))
                 locals[varDecl->name] = normalizeInferredKind(k);
         }
         return;
@@ -1139,8 +1179,8 @@ static void collectReturnKindsFromStmt(
     if(auto* block = dynamic_cast<BlockStatementNode*>(stmt))
     {
         auto blockLocals = locals;
-        collectReturnKindsFromList(block->statements, blockLocals, fnReturnKinds,
-                                   out);
+        collectReturnKindsFromList(block->statements, blockLocals,
+                                   fnReturnKinds, out);
         return;
     }
     if(auto* ifNode = dynamic_cast<IfNode*>(stmt))
@@ -1151,8 +1191,8 @@ static void collectReturnKindsFromStmt(
                                        fnReturnKinds, out);
 
         auto thenLocals = ifScopeLocals;
-        collectReturnKindsFromList(ifNode->thenBranch, thenLocals, fnReturnKinds,
-                                   out);
+        collectReturnKindsFromList(ifNode->thenBranch, thenLocals,
+                                   fnReturnKinds, out);
 
         if(ifNode->elseIfBranch)
         {
@@ -1171,13 +1211,15 @@ static void collectReturnKindsFromStmt(
     if(auto* whileNode = dynamic_cast<WhileNode*>(stmt))
     {
         auto loopLocals = locals;
-        collectReturnKindsFromList(whileNode->body, loopLocals, fnReturnKinds, out);
+        collectReturnKindsFromList(whileNode->body, loopLocals, fnReturnKinds,
+                                   out);
         return;
     }
     if(auto* forNode = dynamic_cast<ForNode*>(stmt))
     {
         auto loopLocals = locals;
-        collectReturnKindsFromList(forNode->body, loopLocals, fnReturnKinds, out);
+        collectReturnKindsFromList(forNode->body, loopLocals, fnReturnKinds,
+                                   out);
         return;
     }
 }
@@ -1212,8 +1254,8 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
         if(dynamic_cast<PointerTypeNode*>(t))
             return OwnershipClass::Copy;
 
-        auto classifyStructByName = [&](const std::string& structName)
-            -> OwnershipClass
+        auto classifyStructByName =
+            [&](const std::string& structName) -> OwnershipClass
         {
             if(!resolveVisibleEnumName(structName).empty())
                 return OwnershipClass::Copy;
@@ -1244,10 +1286,8 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
             // Handle<T> and stdlib single-i64 handle wrappers are Copy.
             // These types wrap OS/runtime handles (file descriptors, mutex
             // handles, etc.) where copying the handle integer is safe.
-            if(structName == "Handle" ||
-               structName.rfind("Handle_", 0) == 0 ||
-               structName == "Mutex"   ||
-               structName == "Condvar" ||
+            if(structName == "Handle" || structName.rfind("Handle_", 0) == 0 ||
+               structName == "Mutex" || structName == "Condvar" ||
                structName == "Channel")
                 return OwnershipClass::Copy;
             // User-defined structs are MoveOnly by default (Rust semantics).
@@ -1487,8 +1527,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         if(globalNamedValues.find(ownerName) == globalNamedValues.end() &&
            isVariableMoved(ownerName))
         {
-            reportError(line,
-                        "cannot borrow moved value: '" + ownerName + "'");
+            reportError(line, "cannot borrow moved value: '" + ownerName + "'");
             return false;
         }
 
@@ -1499,8 +1538,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
            ownerDepthIt->second > pointerDepthIt->second)
         {
             reportError(line, "cannot borrow '" + ownerName +
-                                  "' into longer-lived pointer '" +
-                                  pointerVar + "'");
+                                  "' into longer-lived pointer '" + pointerVar +
+                                  "'");
             return false;
         }
 
@@ -1508,8 +1547,7 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
         {
             // &mut: reject if any shared borrowers exist
             auto sharedIt = activeBorrowers.find(ownerName);
-            if(sharedIt != activeBorrowers.end() &&
-               !sharedIt->second.empty())
+            if(sharedIt != activeBorrowers.end() && !sharedIt->second.empty())
             {
                 reportError(line,
                             "cannot borrow '" + ownerName +
@@ -1518,20 +1556,17 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
             }
             // &mut: reject if another &mut borrow exists
             auto mutIt = activeMutBorrower.find(ownerName);
-            if(mutIt != activeMutBorrower.end() &&
-               mutIt->second != pointerVar)
+            if(mutIt != activeMutBorrower.end() && mutIt->second != pointerVar)
             {
-                reportError(line,
-                            "cannot borrow '" + ownerName +
-                                "' as mutable more than once at a time");
+                reportError(line, "cannot borrow '" + ownerName +
+                                      "' as mutable more than once at a time");
                 return false;
             }
             // Owner must be var (mutable)
             if(constantVariables.count(ownerName))
             {
-                reportError(line,
-                            "cannot borrow immutable variable '" + ownerName +
-                                "' as mutable");
+                reportError(line, "cannot borrow immutable variable '" +
+                                      ownerName + "' as mutable");
                 return false;
             }
             pointerBorrowTarget[pointerVar] = ownerName;
@@ -1611,7 +1646,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     // pointers (e.g. *T owning pointers) enforce a single active borrow.
     bool enforceExclusive = false;
     auto pit = pointerElementTypes.find(pointerVar);
-    TypeNode* ptrElemType = pit != pointerElementTypes.end() ? pit->second : nullptr;
+    TypeNode* ptrElemType =
+        pit != pointerElementTypes.end() ? pit->second : nullptr;
     if(ptrElemType)
     {
         TypeNode::TypeKind ownerKind = TypeNode::TYPE_VOID;
@@ -1651,12 +1687,11 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
 
                 if(auto* sr = dynamic_cast<StructTypeRefNode*>(ptrElemType))
                     sameOwnerType = (sr->structName == ownerStructName);
-                else if(auto* gsr =
-                            dynamic_cast<GenericStructTypeRefNode*>(ptrElemType))
-                    sameOwnerType =
-                        (getOrCreateMonomorphizedStruct(gsr->structName,
-                                                        gsr->typeArgs) ==
-                         ownerStructName);
+                else if(auto* gsr = dynamic_cast<GenericStructTypeRefNode*>(
+                            ptrElemType))
+                    sameOwnerType = (getOrCreateMonomorphizedStruct(
+                                         gsr->structName, gsr->typeArgs) ==
+                                     ownerStructName);
                 // Be conservative when owner struct metadata is unavailable.
                 if(ownerStructName.empty())
                     sameOwnerType = true;
@@ -1673,7 +1708,8 @@ void CodeGenerator::registerPointerBorrow(const std::string& pointerVar,
     (void)registerOwnerBorrow(ownerName, enforceExclusive);
 }
 
-std::string CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
+std::string
+CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) const
 {
     std::function<std::string(ExpressionNode*)> resolve =
         [&](ExpressionNode* e) -> std::string
@@ -1717,8 +1753,8 @@ std::string CodeGenerator::resolveBorrowOwnerFromLValue(ExpressionNode* expr) co
     return resolve(expr);
 }
 
-std::string CodeGenerator::getBorrowedOwnerForPointerExpression(
-    ExpressionNode* expr) const
+std::string
+CodeGenerator::getBorrowedOwnerForPointerExpression(ExpressionNode* expr) const
 {
     auto* idExpr = dynamic_cast<IdentifierNode*>(expr);
     if(!idExpr)
@@ -1734,8 +1770,7 @@ std::string CodeGenerator::getBorrowedOwnerForPointerExpression(
 bool CodeGenerator::validatePointerDereference(ExpressionNode* pointerExpr,
                                                int line)
 {
-    std::string ownerName =
-        getBorrowedOwnerForPointerExpression(pointerExpr);
+    std::string ownerName = getBorrowedOwnerForPointerExpression(pointerExpr);
     if(ownerName.empty())
     {
         if(unsafeDepth <= 0)
@@ -1897,15 +1932,13 @@ bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
     }
     if(ty->isIntegerTy())
     {
-        outBool = builder.CreateICmpNE(value,
-                                       llvm::ConstantInt::get(ty, 0),
+        outBool = builder.CreateICmpNE(value, llvm::ConstantInt::get(ty, 0),
                                        context + ".bool");
         return true;
     }
     if(ty->isFloatingPointTy())
     {
-        outBool = builder.CreateFCmpONE(value,
-                                        llvm::ConstantFP::get(ty, 0.0),
+        outBool = builder.CreateFCmpONE(value, llvm::ConstantFP::get(ty, 0.0),
                                         context + ".bool");
         return true;
     }
@@ -1917,9 +1950,9 @@ bool CodeGenerator::convertValueToRuntimeBool(llvm::Value* value, int line,
         typeStr = "pointer";
     else
         typeStr = "non-boolean";
-    reportError(line, context +
-                          " condition must be a boolean or numeric type, got '" +
-                          typeStr + "'");
+    reportError(
+        line, context + " condition must be a boolean or numeric type, got '" +
+                  typeStr + "'");
     return false;
 }
 
@@ -1984,7 +2017,8 @@ void CodeGenerator::consumeMoveFromExpression(ExpressionNode* expr, int line,
 
             if(isVariableMoved(id->name))
             {
-                reportError(line, id->col, "use of moved value: '" + id->name + "'");
+                reportError(line, id->col,
+                            "use of moved value: '" + id->name + "'");
                 return;
             }
 
@@ -2296,7 +2330,8 @@ void CodeGenerator::initializeStdioFunctions()
     );
     fprintfFunc = module->getOrInsertFunction("fprintf", fprintfType);
 
-    // Declare snprintf: int snprintf(char* str, size_t size, const char* format, ...)
+    // Declare snprintf: int snprintf(char* str, size_t size, const char*
+    // format, ...)
     llvm::FunctionType* snprintfType = llvm::FunctionType::get(
         llvm::Type::getInt32Ty(context), {ptrType, int64Type, ptrType},
         true // variadic
@@ -2334,9 +2369,8 @@ void CodeGenerator::initializePthreadFunctions()
 #endif
     llvm::Type* intType = llvm::Type::getInt32Ty(context);
 
-    llvm::FunctionType* pthreadCreateType =
-        llvm::FunctionType::get(intType,
-                                {ptrType, ptrType, ptrType, ptrType}, false);
+    llvm::FunctionType* pthreadCreateType = llvm::FunctionType::get(
+        intType, {ptrType, ptrType, ptrType, ptrType}, false);
     pthreadCreateFunc =
         module->getOrInsertFunction("pthread_create", pthreadCreateType);
 
@@ -2348,26 +2382,22 @@ void CodeGenerator::initializePthreadFunctions()
     llvm::FunctionType* pthreadMutexInitType =
         llvm::FunctionType::get(intType, {ptrType, ptrType}, false);
     pthreadMutexInitFunc =
-        module->getOrInsertFunction("pthread_mutex_init",
-                                    pthreadMutexInitType);
+        module->getOrInsertFunction("pthread_mutex_init", pthreadMutexInitType);
 
     llvm::FunctionType* pthreadMutexDestroyType =
         llvm::FunctionType::get(intType, {ptrType}, false);
-    pthreadMutexDestroyFunc =
-        module->getOrInsertFunction("pthread_mutex_destroy",
-                                    pthreadMutexDestroyType);
+    pthreadMutexDestroyFunc = module->getOrInsertFunction(
+        "pthread_mutex_destroy", pthreadMutexDestroyType);
 
     llvm::FunctionType* pthreadMutexLockType =
         llvm::FunctionType::get(intType, {ptrType}, false);
     pthreadMutexLockFunc =
-        module->getOrInsertFunction("pthread_mutex_lock",
-                                    pthreadMutexLockType);
+        module->getOrInsertFunction("pthread_mutex_lock", pthreadMutexLockType);
 
     llvm::FunctionType* pthreadMutexUnlockType =
         llvm::FunctionType::get(intType, {ptrType}, false);
-    pthreadMutexUnlockFunc =
-        module->getOrInsertFunction("pthread_mutex_unlock",
-                                    pthreadMutexUnlockType);
+    pthreadMutexUnlockFunc = module->getOrInsertFunction(
+        "pthread_mutex_unlock", pthreadMutexUnlockType);
 
     pthreadInitialized = true;
 }
@@ -2390,9 +2420,8 @@ void CodeGenerator::initializeStdlibFunctions()
         llvm::FunctionType::get(ptrType, {int64Type}, false);
     mallocFunc = module->getOrInsertFunction("malloc", mallocType);
 
-    llvm::FunctionType* freeType =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {ptrType},
-                                false);
+    llvm::FunctionType* freeType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context), {ptrType}, false);
     freeFunc = module->getOrInsertFunction("free", freeType);
 
     llvm::FunctionType* strcmpType =
@@ -2405,15 +2434,13 @@ void CodeGenerator::initializeStdlibFunctions()
 
     llvm::FunctionType* pushFrameType =
         llvm::FunctionType::get(int64Type, {}, false);
-    exceptionsPushFrameFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_push_frame",
-                                    pushFrameType);
+    exceptionsPushFrameFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_push_frame", pushFrameType);
 
     llvm::FunctionType* frameEnvType =
         llvm::FunctionType::get(ptrType, {int64Type}, false);
-    exceptionsFrameEnvFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_frame_env",
-                                    frameEnvType);
+    exceptionsFrameEnvFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_frame_env", frameEnvType);
 
     llvm::FunctionType* setjmpType =
         llvm::FunctionType::get(intType, {ptrType}, false);
@@ -2424,39 +2451,32 @@ void CodeGenerator::initializeStdlibFunctions()
         setjmpFn->addFnAttr(llvm::Attribute::ReturnsTwice);
     }
 
-    llvm::FunctionType* popFrameType =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(context), {int64Type},
-                                false);
-    exceptionsPopFrameFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_pop_frame",
-                                    popFrameType);
+    llvm::FunctionType* popFrameType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context), {int64Type}, false);
+    exceptionsPopFrameFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_pop_frame", popFrameType);
 
-    llvm::FunctionType* throwType =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(context),
-                                {ptrType, ptrType, intType}, false);
+    llvm::FunctionType* throwType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(context), {ptrType, ptrType, intType}, false);
     exceptionsThrowFunc =
         module->getOrInsertFunction("__mlang_std_exceptions_throw", throwType);
 
     llvm::FunctionType* rethrowType =
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
-    exceptionsRethrowFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_rethrow_current",
-                                    rethrowType);
+    exceptionsRethrowFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_rethrow_current", rethrowType);
 
     llvm::FunctionType* takeStringType =
         llvm::FunctionType::get(ptrType, {}, false);
-    exceptionsTakeTypeNameFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_take_type_name",
-                                    takeStringType);
-    exceptionsTakeMessageFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_take_message",
-                                    takeStringType);
+    exceptionsTakeTypeNameFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_take_type_name", takeStringType);
+    exceptionsTakeMessageFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_take_message", takeStringType);
 
     llvm::FunctionType* takeLineType =
         llvm::FunctionType::get(intType, {}, false);
-    exceptionsTakeSourceLineFunc =
-        module->getOrInsertFunction("__mlang_std_exceptions_take_source_line",
-                                    takeLineType);
+    exceptionsTakeSourceLineFunc = module->getOrInsertFunction(
+        "__mlang_std_exceptions_take_source_line", takeLineType);
 
     stdlibInitialized = true;
 }
@@ -2506,9 +2526,8 @@ llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
 
     if(!strbufAlignFunc)
     {
-        llvm::FunctionType* alignType =
-            llvm::FunctionType::get(ptrType, {ptrType, int64Type, int32Type},
-                                    false);
+        llvm::FunctionType* alignType = llvm::FunctionType::get(
+            ptrType, {ptrType, int64Type, int32Type}, false);
         strbufAlignFunc =
             module->getOrInsertFunction("__mlang_std_strbuf_align", alignType);
     }
@@ -2525,9 +2544,9 @@ llvm::Value* CodeGenerator::buildAlignedString(llvm::Value* value,
         "fmt.align");
 }
 
-llvm::AllocaInst* CodeGenerator::createEntryBlockAlloca(llvm::Function* function,
-                                                        llvm::Type* type,
-                                                        const std::string& name)
+llvm::AllocaInst*
+CodeGenerator::createEntryBlockAlloca(llvm::Function* function,
+                                      llvm::Type* type, const std::string& name)
 {
     llvm::IRBuilder<> entryBuilder(&function->getEntryBlock(),
                                    function->getEntryBlock().begin());
@@ -2547,7 +2566,8 @@ TypeNode::TypeKind getExpressionTypeKind(
         return TypeNode::TYPE_FLOAT;
     if(dynamic_cast<DoubleLiteralNode*>(expr))
         return TypeNode::TYPE_DOUBLE;
-    if(dynamic_cast<StringLiteralNode*>(expr) || dynamic_cast<FormatNode*>(expr))
+    if(dynamic_cast<StringLiteralNode*>(expr) ||
+       dynamic_cast<FormatNode*>(expr))
         return TypeNode::TYPE_STRING;
     if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
         return castExpr->targetType;
@@ -2610,8 +2630,7 @@ TypeNode::TypeKind getExpressionTypeKind(
     return TypeNode::TYPE_INT;
 }
 
-std::string
-CodeGenerator::convertFormatString(
+std::string CodeGenerator::convertFormatString(
     const std::string& mlaFormat, const std::vector<ExpressionNode*>& args,
     const std::vector<std::pair<std::string, ExpressionNode*>>& namedArgs,
     std::vector<llvm::Value*>& argValues, int line)
@@ -2619,7 +2638,8 @@ CodeGenerator::convertFormatString(
     std::string cFormat;
     size_t argIndex = 0;
 
-    auto trim = [](std::string s) {
+    auto trim = [](std::string s)
+    {
         size_t start = 0;
         while(start < s.size() &&
               std::isspace(static_cast<unsigned char>(s[start])))
@@ -2631,7 +2651,8 @@ CodeGenerator::convertFormatString(
         return s.substr(start, end - start);
     };
 
-    auto findNamedArgument = [&](const std::string& name) -> ExpressionNode* {
+    auto findNamedArgument = [&](const std::string& name) -> ExpressionNode*
+    {
         for(const auto& namedArg : namedArgs)
         {
             if(namedArg.first == name)
@@ -2724,11 +2745,13 @@ CodeGenerator::convertFormatString(
                                     line,
                                     "dynamic alignment width name is empty");
                             }
-                            else if(std::all_of(
-                                        widthSpec.begin(), widthSpec.end(),
-                                        [](unsigned char ch) {
-                                            return std::isalnum(ch) || ch == '_';
-                                        }))
+                            else if(std::all_of(widthSpec.begin(),
+                                                widthSpec.end(),
+                                                [](unsigned char ch)
+                                                {
+                                                    return std::isalnum(ch) ||
+                                                           ch == '_';
+                                                }))
                             {
                                 widthExpr = findNamedArgument(widthSpec);
                                 if(!widthExpr)
@@ -2743,12 +2766,11 @@ CodeGenerator::convertFormatString(
                             }
                         }
                         else if(std::all_of(widthSpec.begin(), widthSpec.end(),
-                                            [](unsigned char ch) {
-                                                return std::isdigit(ch);
-                                            }))
+                                            [](unsigned char ch)
+                                            { return std::isdigit(ch); }))
                         {
-                            widthExpr = new IntLiteralNode(
-                                std::stoll(widthSpec));
+                            widthExpr =
+                                new IntLiteralNode(std::stoll(widthSpec));
                         }
                         else
                         {
@@ -2759,9 +2781,8 @@ CodeGenerator::convertFormatString(
                     }
                     else
                     {
-                        reportError(line,
-                                    "unsupported format specifier: {" + spec +
-                                        "}");
+                        reportError(line, "unsupported format specifier: {" +
+                                              spec + "}");
                     }
                 }
             }
@@ -2791,8 +2812,9 @@ CodeGenerator::convertFormatString(
                 {
                     if(!widthExpr)
                     {
-                        reportError(line,
-                                    "alignment format specifier requires a width");
+                        reportError(
+                            line,
+                            "alignment format specifier requires a width");
                     }
                     else
                     {
@@ -2917,8 +2939,8 @@ std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
     return "unknown";
 }
 
-std::string CodeGenerator::resolveVisibleEnumName(
-    const std::string& enumName) const
+std::string
+CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
 {
     auto it = enumValues.find(enumName);
     if(it != enumValues.end())
@@ -2972,11 +2994,11 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
     llvm::Type* enumTy = getLLVMType(baseKind);
 
     llvm::Value* enumValNorm = enumVal;
-    if(enumValNorm->getType() != enumTy && enumValNorm->getType()->isIntegerTy())
+    if(enumValNorm->getType() != enumTy &&
+       enumValNorm->getType()->isIntegerTy())
     {
-        enumValNorm = builder.CreateIntCast(enumValNorm, enumTy,
-                                            !enumIsUnsigned(baseKind),
-                                            "enum.str.cast");
+        enumValNorm = builder.CreateIntCast(
+            enumValNorm, enumTy, !enumIsUnsigned(baseKind), "enum.str.cast");
     }
 
     std::string unknownText = "<" + resolvedEnumName + ":unknown>";
@@ -2988,8 +3010,8 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
 
     if(orderedIt != enumVariantOrder.end())
     {
-        for(auto it = orderedIt->second.rbegin(); it != orderedIt->second.rend();
-            ++it)
+        for(auto it = orderedIt->second.rbegin();
+            it != orderedIt->second.rend(); ++it)
         {
             llvm::Value* variantConst = llvm::ConstantInt::get(
                 enumTy, it->second, !enumIsUnsigned(baseKind));
@@ -3001,8 +3023,8 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
 #else
             llvm::Value* variantStr = builder.CreateGlobalStringPtr(text);
 #endif
-            out = builder.CreateSelect(isMatch, variantStr, out,
-                                       "enum.str.sel");
+            out =
+                builder.CreateSelect(isMatch, variantStr, out, "enum.str.sel");
         }
         return out;
     }
@@ -3116,9 +3138,9 @@ llvm::Value* CodeGenerator::getLValuePointer(ExpressionNode* expr, int line)
         if(!structType)
             return nullptr;
 
-        return builder.CreateStructGEP(
-            structType, structPtr, static_cast<unsigned>(fieldIndex),
-            fieldAccess->fieldName + "_ptr");
+        return builder.CreateStructGEP(structType, structPtr,
+                                       static_cast<unsigned>(fieldIndex),
+                                       fieldAccess->fieldName + "_ptr");
     }
 
     if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
@@ -3163,8 +3185,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto structIt = structVariableTypes.find(id->name);
             if(structIt == structVariableTypes.end())
             {
-                reportError(line, "variable '" + id->name +
-                                      "' is not a struct");
+                reportError(line,
+                            "variable '" + id->name + "' is not a struct");
                 return nullptr;
             }
             return new StructTypeRefNode(structIt->second);
@@ -3202,9 +3224,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             auto tupleIt = tupleElementTypes.find(id->name);
             if(tupleIt == tupleElementTypes.end())
             {
-                reportError(line,
-                            "tuple element types not known for '" + id->name +
-                                "'");
+                reportError(line, "tuple element types not known for '" +
+                                      id->name + "'");
                 return nullptr;
             }
             auto* list = new TypeListNode();
@@ -3260,7 +3281,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
                         objStructTypeName = structRef->structName;
                     }
                     else if(auto* genRef =
-                                dynamic_cast<GenericStructTypeRefNode*>(objType))
+                                dynamic_cast<GenericStructTypeRefNode*>(
+                                    objType))
                     {
                         objStructTypeName = getOrCreateMonomorphizedStruct(
                             genRef->structName, genRef->typeArgs);
@@ -3281,8 +3303,8 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
 
                 if(kindIt->second == TypeNode::TYPE_STRUCT)
                 {
-                    auto typeIt = structVariableTypes.find(
-                        fieldAccess->structName);
+                    auto typeIt =
+                        structVariableTypes.find(fieldAccess->structName);
                     if(typeIt != structVariableTypes.end())
                     {
                         hasRealNameField =
@@ -3408,29 +3430,29 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
         std::string structName = argType->getStructName().str();
         if(structName.empty())
             structName = getStructTypeName(expr);
-        if(!(debug || ( !structName.empty() && debugStructs.count(structName))))
+        if(!(debug || (!structName.empty() && debugStructs.count(structName))))
         {
             // fall through to non-debug handling below
         }
         else
         {
-        if(structName.empty())
-        {
-            reportError(line, "cannot debug-format unnamed struct");
+            if(structName.empty())
+            {
+                reportError(line, "cannot debug-format unnamed struct");
+                cFormat += "%s";
+                argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+                return;
+            }
+            if(!debugStructs.count(structName))
+            {
+                reportError(line, "struct '" + structName +
+                                      "' does not derive Debug");
+            }
+            llvm::Value* dbg = buildStructDebugString(
+                value, structName, debug ? pretty : false, line);
             cFormat += "%s";
-            argValues.push_back(builder.CreateGlobalStringPtr("<struct>"));
+            argValues.push_back(dbg);
             return;
-        }
-        if(!debugStructs.count(structName))
-        {
-            reportError(line, "struct '" + structName +
-                                  "' does not derive Debug");
-        }
-        llvm::Value* dbg =
-            buildStructDebugString(value, structName, debug ? pretty : false, line);
-        cFormat += "%s";
-        argValues.push_back(dbg);
-        return;
         }
     }
 
@@ -3509,10 +3531,9 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
     }
     else if(argType->isStructTy())
     {
-        std::string structName =
-            argType->getStructName().str().empty()
-                ? "anonymous struct"
-                : argType->getStructName().str();
+        std::string structName = argType->getStructName().str().empty()
+                                     ? "anonymous struct"
+                                     : argType->getStructName().str();
         reportError(line, "cannot print struct type '" + structName +
                               "' directly; use {:?} with #[derive(Debug)]");
         cFormat += "%s";
@@ -3601,7 +3622,8 @@ llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "formatstr");
 #else
-    llvm::Value* formatStr = builder.CreateGlobalStringPtr(cFormat, "formatstr");
+    llvm::Value* formatStr =
+        builder.CreateGlobalStringPtr(cFormat, "formatstr");
 #endif
 
 #if LLVM_VERSION_MAJOR >= 15
@@ -3612,8 +3634,8 @@ llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
-        llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType));
     llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
 
     std::vector<llvm::Value*> sizeArgs;
@@ -3622,14 +3644,12 @@ llvm::Value* CodeGenerator::generateFormatExpression(FormatNode* node)
     sizeArgs.push_back(formatStr);
     sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
 
-    llvm::Value* len32 =
-        builder.CreateCall(snprintfFunc, sizeArgs, "fmtlen");
+    llvm::Value* len32 = builder.CreateCall(snprintfFunc, sizeArgs, "fmtlen");
     llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "fmtlen64");
     llvm::Value* size =
         builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "fmtsz");
 
-    llvm::Value* buffer =
-        builder.CreateCall(mallocFunc, {size}, "fmtbuf");
+    llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "fmtbuf");
 
     std::vector<llvm::Value*> writeArgs;
     writeArgs.push_back(buffer);
@@ -3656,8 +3676,7 @@ void CodeGenerator::generateAssert(AssertNode* node)
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* okBB =
         llvm::BasicBlock::Create(context, "assert.ok", function);
-    llvm::BasicBlock* failBB =
-        llvm::BasicBlock::Create(context, "assert.fail");
+    llvm::BasicBlock* failBB = llvm::BasicBlock::Create(context, "assert.fail");
     builder.CreateCondBr(condBool, okBB, failBB);
 
     failBB->insertInto(function);
@@ -3677,8 +3696,7 @@ void CodeGenerator::generateAssert(AssertNode* node)
     llvm::Type* ptrType =
         llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-    llvm::Value* stderrVal =
-        builder.CreateLoad(ptrType, stderrPtr, "stderr");
+    llvm::Value* stderrVal = builder.CreateLoad(ptrType, stderrPtr, "stderr");
     builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
     builder.CreateCall(abortFunc);
     builder.CreateUnreachable();
@@ -3735,15 +3753,15 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
     }
     else
     {
-        reportError(node->line, "assert_eq! supports only numeric and string types");
+        reportError(node->line,
+                    "assert_eq! supports only numeric and string types");
         return;
     }
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* okBB =
         llvm::BasicBlock::Create(context, "assert.ok", function);
-    llvm::BasicBlock* failBB =
-        llvm::BasicBlock::Create(context, "assert.fail");
+    llvm::BasicBlock* failBB = llvm::BasicBlock::Create(context, "assert.fail");
     builder.CreateCondBr(cmp, okBB, failBB);
 
     failBB->insertInto(function);
@@ -3760,7 +3778,8 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "assertfmt");
 #else
-    llvm::Value* formatStr = builder.CreateGlobalStringPtr(cFormat, "assertfmt");
+    llvm::Value* formatStr =
+        builder.CreateGlobalStringPtr(cFormat, "assertfmt");
 #endif
 
 #if LLVM_VERSION_MAJOR >= 15
@@ -3769,8 +3788,7 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
     llvm::Type* ptrType =
         llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-    llvm::Value* stderrVal =
-        builder.CreateLoad(ptrType, stderrPtr, "stderr");
+    llvm::Value* stderrVal = builder.CreateLoad(ptrType, stderrPtr, "stderr");
 
     std::vector<llvm::Value*> printArgs;
     printArgs.push_back(stderrVal);
@@ -3789,8 +3807,9 @@ void CodeGenerator::generateStaticAssert(StaticAssertNode* node)
     bool cond = false;
     if(!evaluateCompileTimeBool(node->condition, cond))
     {
-        reportError(node->line,
-                    "static_assert! requires a compile-time boolean expression");
+        reportError(
+            node->line,
+            "static_assert! requires a compile-time boolean expression");
         return;
     }
     if(!cond)
@@ -3831,27 +3850,26 @@ llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
-        llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType));
     llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
     std::vector<llvm::Value*> sizeArgs = {nullPtr, zero, formatStr};
     sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
-    llvm::Value* len32 =
-        builder.CreateCall(snprintfFunc, sizeArgs, "dbglen");
+    llvm::Value* len32 = builder.CreateCall(snprintfFunc, sizeArgs, "dbglen");
     llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "dbglen64");
     llvm::Value* size =
         builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "dbgsz");
-    llvm::Value* buffer =
-        builder.CreateCall(mallocFunc, {size}, "dbgbuf");
+    llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "dbgbuf");
     std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
     writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
     builder.CreateCall(snprintfFunc, writeArgs);
     return buffer;
 }
 
-llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
-                                                   const std::string& structName,
-                                                   bool pretty, int line)
+llvm::Value*
+CodeGenerator::buildStructDebugString(llvm::Value* structVal,
+                                      const std::string& structName,
+                                      bool pretty, int line)
 {
     initializeFormatFunctions();
 
@@ -3883,9 +3901,8 @@ llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
         else
             fmt += memberName + ": ";
 
-        llvm::Value* fieldVal =
-            builder.CreateExtractValue(structVal, static_cast<unsigned>(idx),
-                                       "dbgfield");
+        llvm::Value* fieldVal = builder.CreateExtractValue(
+            structVal, static_cast<unsigned>(idx), "dbgfield");
 
         bool handled = false;
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType))
@@ -3907,7 +3924,8 @@ llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
         {
             switch(memberType->kind)
             {
-            case TypeNode::TYPE_BOOL: {
+            case TypeNode::TYPE_BOOL:
+            {
                 fmt += "%d";
                 llvm::Value* intVal = builder.CreateZExt(
                     fieldVal, llvm::Type::getInt32Ty(context), "dbgbool");
@@ -3916,7 +3934,8 @@ llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             }
             case TypeNode::TYPE_I8:
             case TypeNode::TYPE_I16:
-            case TypeNode::TYPE_INT: {
+            case TypeNode::TYPE_INT:
+            {
                 fmt += "%d";
                 llvm::Value* intVal = builder.CreateSExt(
                     fieldVal, llvm::Type::getInt32Ty(context), "dbgint");
@@ -3925,43 +3944,50 @@ llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
             }
             case TypeNode::TYPE_U8:
             case TypeNode::TYPE_U16:
-            case TypeNode::TYPE_U32: {
+            case TypeNode::TYPE_U32:
+            {
                 fmt += "%u";
                 llvm::Value* intVal = builder.CreateZExt(
                     fieldVal, llvm::Type::getInt32Ty(context), "dbgu");
                 argValues.push_back(intVal);
                 break;
             }
-            case TypeNode::TYPE_I32: {
+            case TypeNode::TYPE_I32:
+            {
                 fmt += "%d";
                 argValues.push_back(fieldVal);
                 break;
             }
-            case TypeNode::TYPE_I64: {
+            case TypeNode::TYPE_I64:
+            {
                 fmt += "%lld";
                 argValues.push_back(fieldVal);
                 break;
             }
-            case TypeNode::TYPE_U64: {
+            case TypeNode::TYPE_U64:
+            {
                 fmt += "%llu";
                 argValues.push_back(fieldVal);
                 break;
             }
-            case TypeNode::TYPE_FLOAT: {
+            case TypeNode::TYPE_FLOAT:
+            {
                 fmt += "%f";
                 llvm::Value* doubleVal = builder.CreateFPExt(
                     fieldVal, llvm::Type::getDoubleTy(context), "dbgfloat");
                 argValues.push_back(doubleVal);
                 break;
             }
-            case TypeNode::TYPE_DOUBLE: {
+            case TypeNode::TYPE_DOUBLE:
+            {
                 fmt += "%f";
                 argValues.push_back(fieldVal);
                 break;
             }
             case TypeNode::TYPE_STRING:
             case TypeNode::TYPE_STR8:
-            case TypeNode::TYPE_STR16: {
+            case TypeNode::TYPE_STR16:
+            {
                 fmt += "%s";
                 argValues.push_back(fieldVal);
                 break;
@@ -3999,18 +4025,16 @@ llvm::Value* CodeGenerator::buildStructDebugString(llvm::Value* structVal,
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
-        llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType));
     llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
     std::vector<llvm::Value*> sizeArgs = {nullPtr, zero, formatStr};
     sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
-    llvm::Value* len32 =
-        builder.CreateCall(snprintfFunc, sizeArgs, "dbglen");
+    llvm::Value* len32 = builder.CreateCall(snprintfFunc, sizeArgs, "dbglen");
     llvm::Value* len64 = builder.CreateSExt(len32, int64Type, "dbglen64");
     llvm::Value* size =
         builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "dbgsz");
-    llvm::Value* buffer =
-        builder.CreateCall(mallocFunc, {size}, "dbgbuf");
+    llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "dbgbuf");
     std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
     writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
     builder.CreateCall(snprintfFunc, writeArgs);
@@ -4061,9 +4085,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     auto tryInferFunctionReturnType =
         [&](FunctionDefNode* fn,
-            const std::unordered_map<std::string, TypeNode::TypeKind>& fnReturnKinds,
-            TypeNode::TypeKind& inferred,
-            std::string& reason) -> bool
+            const std::unordered_map<std::string, TypeNode::TypeKind>&
+                fnReturnKinds,
+            TypeNode::TypeKind& inferred, std::string& reason) -> bool
     {
         if(!fn || fn->isExtern || !fn->body)
         {
@@ -4087,7 +4111,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
         if(data.hasBareReturn && !data.valueReturns.empty())
         {
-            reason = "function mixes 'return;' and 'return value;'; add explicit return type";
+            reason = "function mixes 'return;' and 'return value;'; add "
+                     "explicit return type";
             return false;
         }
 
@@ -4095,7 +4120,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         {
             if(data.hasUnknownValueReturn)
             {
-                reason = "cannot infer return type from return expressions; add explicit return type";
+                reason = "cannot infer return type from return expressions; "
+                         "add explicit return type";
                 return false;
             }
             inferred = TypeNode::TYPE_VOID;
@@ -4118,7 +4144,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         }
         if(data.hasUnknownValueReturn)
         {
-            reason = "some return expressions could not be inferred; add explicit return type";
+            reason = "some return expressions could not be inferred; add "
+                     "explicit return type";
             return false;
         }
 
@@ -4141,7 +4168,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
             }
             else if(it->second != normalizeInferredKind(fn->returnType->kind))
             {
-                // Ambiguous overload returns for name-only inference; drop entry.
+                // Ambiguous overload returns for name-only inference; drop
+                // entry.
                 fnReturnKinds.erase(it);
             }
         }
@@ -4180,11 +4208,12 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 continue;
             TypeNode::TypeKind inferredKind = TypeNode::TYPE_VOID;
             std::string reason;
-            if(!tryInferFunctionReturnType(fn, fnReturnKinds, inferredKind, reason))
+            if(!tryInferFunctionReturnType(fn, fnReturnKinds, inferredKind,
+                                           reason))
             {
                 reportError(fn->line,
-                            "cannot infer return type for function '" + fn->name +
-                                "': " + reason);
+                            "cannot infer return type for function '" +
+                                fn->name + "': " + reason);
                 fn->returnType = new TypeNode(TypeNode::TYPE_VOID);
             }
             else
@@ -4222,8 +4251,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
             size_t listIndex = paramCount - 1;
             if(paramCount == 2)
             {
-                mainArgcKind =
-                    mainDef->parameters->parameters[0]->type->kind;
+                mainArgcKind = mainDef->parameters->parameters[0]->type->kind;
                 if(!(mainArgcKind == TypeNode::TYPE_INT ||
                      mainArgcKind == TypeNode::TYPE_I32 ||
                      mainArgcKind == TypeNode::TYPE_I64))
@@ -4248,9 +4276,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 if(!(elemKind == TypeNode::TYPE_STR8 ||
                      elemKind == TypeNode::TYPE_STRING))
                 {
-                    reportError(
-                        mainDef->line,
-                        "invalid signature for 'main': argv must be list<str8>");
+                    reportError(mainDef->line, "invalid signature for 'main': "
+                                               "argv must be list<str8>");
                 }
                 else
                 {
@@ -4272,9 +4299,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
 
     // Reserved type keywords and type/name conflicts.
     const std::unordered_set<std::string> reservedTypeNames = {
-        "void",  "bool", "f32",  "f64",   "str8",   "str16",
-        "list",  "map",  "tuple","i8",    "i16",    "i32",    "i64",
-        "u8",    "u16",  "u32",  "u64"};
+        "void", "bool", "f32", "f64", "str8", "str16", "list", "map", "tuple",
+        "i8",   "i16",  "i32", "i64", "u8",   "u16",   "u32",  "u64"};
 
     std::map<std::string, std::pair<std::string, int>> typeDefs;
     if(!program->typeAliases.empty())
@@ -4322,11 +4348,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
             auto it = typeDefs.find(st->name);
             if(it != typeDefs.end())
             {
-                reportError(st->line,
-                            "type name '" + st->name +
-                                "' conflicts with earlier " + it->second.first +
-                                " defined at line " +
-                                std::to_string(it->second.second));
+                reportError(st->line, "type name '" + st->name +
+                                          "' conflicts with earlier " +
+                                          it->second.first +
+                                          " defined at line " +
+                                          std::to_string(it->second.second));
             }
             else
             {
@@ -4348,12 +4374,12 @@ void CodeGenerator::generateCode(ProgramNode* program)
                     auto eit = typeDefs.find(nestedEnum->name);
                     if(eit != typeDefs.end())
                     {
-                        reportError(
-                            nestedEnum->line,
-                            "type name '" + nestedEnum->name +
-                                "' conflicts with earlier " +
-                                eit->second.first + " defined at line " +
-                                std::to_string(eit->second.second));
+                        reportError(nestedEnum->line,
+                                    "type name '" + nestedEnum->name +
+                                        "' conflicts with earlier " +
+                                        eit->second.first +
+                                        " defined at line " +
+                                        std::to_string(eit->second.second));
                     }
                     else
                     {
@@ -4388,11 +4414,11 @@ void CodeGenerator::generateCode(ProgramNode* program)
             auto it = typeDefs.find(en->name);
             if(it != typeDefs.end())
             {
-                reportError(en->line,
-                            "type name '" + en->name +
-                                "' conflicts with earlier " + it->second.first +
-                                " defined at line " +
-                                std::to_string(it->second.second));
+                reportError(en->line, "type name '" + en->name +
+                                          "' conflicts with earlier " +
+                                          it->second.first +
+                                          " defined at line " +
+                                          std::to_string(it->second.second));
             }
             else
             {
@@ -4410,9 +4436,9 @@ void CodeGenerator::generateCode(ProgramNode* program)
             auto it = typeDefs.find(fn->name);
             if(it != typeDefs.end())
             {
-                reportError(fn->line,
-                            "function name '" + fn->name +
-                                "' conflicts with type '" + it->first + "'");
+                reportError(fn->line, "function name '" + fn->name +
+                                          "' conflicts with type '" +
+                                          it->first + "'");
             }
         }
     }
@@ -4618,7 +4644,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 
     // Generate a C-compatible main wrapper if needed.
-    if(!testMode && mainDef && mainArgMode != MainArgMode::None && mainArgsListType)
+    if(!testMode && mainDef && mainArgMode != MainArgMode::None &&
+       mainArgsListType)
     {
         llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
         llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -4636,9 +4663,8 @@ void CodeGenerator::generateCode(ProgramNode* program)
         std::vector<llvm::Type*> wrapperParams = {i32Type, argvPtrType};
         llvm::FunctionType* wrapperType =
             llvm::FunctionType::get(i32Type, wrapperParams, false);
-        llvm::Function* wrapper =
-            llvm::Function::Create(wrapperType, llvm::Function::ExternalLinkage,
-                                   "main", module.get());
+        llvm::Function* wrapper = llvm::Function::Create(
+            wrapperType, llvm::Function::ExternalLinkage, "main", module.get());
 
         auto argIt = wrapper->arg_begin();
         llvm::Value* argcArg = &*argIt++;
@@ -4650,8 +4676,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
             llvm::BasicBlock::Create(context, "entry", wrapper);
         builder.SetInsertPoint(entry);
 
-        llvm::Value* argc64 =
-            builder.CreateSExt(argcArg, i64Type, "argc64");
+        llvm::Value* argc64 = builder.CreateSExt(argcArg, i64Type, "argc64");
 
         // Build list struct { size: i64, data: ptr }
         llvm::Type* listStructType = getLLVMTypeFromNode(mainArgsListType);
@@ -4691,8 +4716,7 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 callArgs.push_back(argcValue);
             }
             callArgs.push_back(listStruct);
-            llvm::Value* rc =
-                builder.CreateCall(userMain, callArgs, "mainrc");
+            llvm::Value* rc = builder.CreateCall(userMain, callArgs, "mainrc");
             builder.CreateRet(rc);
         }
     }
@@ -4728,18 +4752,15 @@ void CodeGenerator::generateCode(ProgramNode* program)
     }
 }
 
-void CodeGenerator::generateTestMain(
-    const std::vector<FunctionDefNode*>& tests)
+void CodeGenerator::generateTestMain(const std::vector<FunctionDefNode*>& tests)
 {
     initializeStdioFunctions();
 
     llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
     llvm::Type* i8PtrType = llvm::PointerType::get(context, 0);
-    llvm::FunctionType* mainType =
-        llvm::FunctionType::get(i32Type, {}, false);
-    llvm::Function* mainFn =
-        llvm::Function::Create(mainType, llvm::Function::ExternalLinkage,
-                               "main", module.get());
+    llvm::FunctionType* mainType = llvm::FunctionType::get(i32Type, {}, false);
+    llvm::Function* mainFn = llvm::Function::Create(
+        mainType, llvm::Function::ExternalLinkage, "main", module.get());
 
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", mainFn);
@@ -4788,19 +4809,20 @@ void CodeGenerator::generateTestMain(
 
         llvm::Value* totalCur =
             builder.CreateLoad(i32Type, totalTests, "tests.cur");
-        llvm::Value* totalNext =
-            builder.CreateAdd(totalCur, llvm::ConstantInt::get(i32Type, 1),
-                              "tests.next");
+        llvm::Value* totalNext = builder.CreateAdd(
+            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
         builder.CreateStore(totalNext, totalTests);
 
-        std::string suiteName = !testFn->sourceModule.empty()
-                                    ? normalizeTestSuiteName(testFn->sourceModule)
-                                    : defaultSuite;
+        std::string suiteName =
+            !testFn->sourceModule.empty()
+                ? normalizeTestSuiteName(testFn->sourceModule)
+                : defaultSuite;
         std::string displayName =
             suiteName + "." + humanizeTestCaseName(testFn->name);
         llvm::Value* testName = make_cstr(displayName, "test.name");
         llvm::Value* testIndex = totalNext;
-        builder.CreateCall(setCurrentTestFunc, {testIndex, totalNext, testName});
+        builder.CreateCall(setCurrentTestFunc,
+                           {testIndex, totalNext, testName});
         llvm::Value* result = builder.CreateCall(callee, {});
         if(callee->getReturnType()->isVoidTy())
         {
@@ -4826,8 +4848,7 @@ void CodeGenerator::generateTestMain(
 
         llvm::Value* isFail = builder.CreateICmpNE(
             resultI32, llvm::ConstantInt::get(i32Type, 0), "testfail");
-        llvm::Value* failInc =
-            builder.CreateZExt(isFail, i32Type, "failinc");
+        llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "failinc");
         llvm::Value* cur =
             builder.CreateLoad(i32Type, failures, "failures.cur");
         llvm::Value* next = builder.CreateAdd(cur, failInc, "failures.next");
@@ -4849,9 +4870,8 @@ void CodeGenerator::generateTestMain(
 
         failBB->insertInto(mainFn);
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(reportTestFunc,
-                           {testIndex, totalNext, failStatus, testName,
-                            resultI32});
+        builder.CreateCall(reportTestFunc, {testIndex, totalNext, failStatus,
+                                            testName, resultI32});
         builder.CreateBr(contBB);
 
         contBB->insertInto(mainFn);
@@ -4862,8 +4882,7 @@ void CodeGenerator::generateTestMain(
         builder.CreateLoad(i32Type, failures, "failures.total");
     llvm::Value* totalCount =
         builder.CreateLoad(i32Type, totalTests, "tests.total");
-    llvm::Value* passCount =
-        builder.CreateSub(totalCount, total, "tests.pass");
+    llvm::Value* passCount = builder.CreateSub(totalCount, total, "tests.pass");
     builder.CreateCall(reportSummaryFunc, {totalCount, passCount, total});
 
     builder.CreateRet(total);
@@ -4876,11 +4895,9 @@ void CodeGenerator::generateBenchmarkMain(
 
     llvm::Type* i32Type = llvm::Type::getInt32Ty(context);
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
-    llvm::FunctionType* mainType =
-        llvm::FunctionType::get(i32Type, {}, false);
-    llvm::Function* mainFn =
-        llvm::Function::Create(mainType, llvm::Function::ExternalLinkage,
-                               "main", module.get());
+    llvm::FunctionType* mainType = llvm::FunctionType::get(i32Type, {}, false);
+    llvm::Function* mainFn = llvm::Function::Create(
+        mainType, llvm::Function::ExternalLinkage, "main", module.get());
 
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", mainFn);
@@ -4902,27 +4919,43 @@ void CodeGenerator::generateBenchmarkMain(
 #endif
     };
 
-    llvm::Value* headerFmt = make_cstr(
-        "[BENCH] %-48s %12s %12s %10s\n", "bench.header.fmt");
-    llvm::Value* lineFmt = make_cstr(
-        "[BENCH] %-48s %12lld %12lld %10d\n", "bench.line.fmt");
-    llvm::Value* failFmt = make_cstr(
-        "[BENCH-FAIL] %-43s failures=%d\n", "bench.fail.fmt");
+    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
+    size_t benchNameWidth = std::string("warmup(iters)").size();
+    benchNameWidth = std::max(benchNameWidth, std::string("name").size());
+    for(auto* testFn : tests)
+    {
+        if(!testFn || testFn->isExtern)
+            continue;
+        std::string suiteName =
+            !testFn->sourceModule.empty()
+                ? normalizeTestSuiteName(testFn->sourceModule)
+                : defaultSuite;
+        std::string displayName = suiteName + "." + testFn->name;
+        benchNameWidth = std::max(benchNameWidth, displayName.size());
+    }
+    benchNameWidth += 2;
+    llvm::Value* benchNameWidthVal =
+        llvm::ConstantInt::get(i32Type, static_cast<int>(benchNameWidth));
+
+    llvm::Value* headerFmt =
+        make_cstr("[BENCH] %-48s %12s %12s %10s\n", "bench.header.fmt");
+    llvm::Value* lineFmt =
+        make_cstr("[BENCH] %-48s %12lld %12lld %10d\n", "bench.line.fmt");
+    llvm::Value* failFmt =
+        make_cstr("[BENCH-FAIL] %-43s failures=%d\n", "bench.fail.fmt");
 
     llvm::Value* nsTotalHdr = make_cstr("total_ns", "bench.hdr.total");
     llvm::Value* nsPerOpHdr = make_cstr("ns/op", "bench.hdr.nsop");
     llvm::Value* itersHdr = make_cstr("iters", "bench.hdr.iters");
-    llvm::Value* warmupLabel =
-        make_cstr("warmup(iters)", "bench.warmup.label");
+    llvm::Value* warmupLabel = make_cstr("warmup(iters)", "bench.warmup.label");
     llvm::Value* warmupFmt =
         make_cstr("[BENCH] %-48s %12d\n", "bench.warmup.fmt");
-    builder.CreateCall(printfFunc,
-                       {warmupFmt, warmupLabel,
-                        llvm::ConstantInt::get(i32Type, benchmarkWarmupIterations)});
-    builder.CreateCall(printfFunc,
-                       {headerFmt, make_cstr("name", "bench.hdr.name"),
-                        nsTotalHdr, nsPerOpHdr, itersHdr});
-    const std::string defaultSuite = defaultSuiteFromSourceFile(sourceFileName);
+    builder.CreateCall(printfFunc, {warmupFmt, benchNameWidthVal, warmupLabel,
+                                    llvm::ConstantInt::get(
+                                        i32Type, benchmarkWarmupIterations)});
+    builder.CreateCall(printfFunc, {headerFmt, benchNameWidthVal,
+                                    make_cstr("name", "bench.hdr.name"),
+                                    nsTotalHdr, nsPerOpHdr, itersHdr});
 
     for(auto* testFn : tests)
     {
@@ -4933,16 +4966,18 @@ void CodeGenerator::generateBenchmarkMain(
         if(!callee)
             continue;
 
-        std::string suiteName = !testFn->sourceModule.empty()
-                                    ? normalizeTestSuiteName(testFn->sourceModule)
-                                    : defaultSuite;
+        std::string suiteName =
+            !testFn->sourceModule.empty()
+                ? normalizeTestSuiteName(testFn->sourceModule)
+                : defaultSuite;
         std::string displayName = suiteName + "." + testFn->name;
         llvm::Value* testName = make_cstr(displayName, "bench.name");
         llvm::AllocaInst* localFails =
             builder.CreateAlloca(i32Type, nullptr, "bench.local_fails");
         builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), localFails);
 
-        auto emitLoop = [&](int loopCount) {
+        auto emitLoop = [&](int loopCount)
+        {
             llvm::AllocaInst* idx =
                 builder.CreateAlloca(i32Type, nullptr, "bench.i");
             builder.CreateStore(llvm::ConstantInt::get(i32Type, 0), idx);
@@ -4958,7 +4993,8 @@ void CodeGenerator::generateBenchmarkMain(
             builder.SetInsertPoint(condBB);
             llvm::Value* iCur = builder.CreateLoad(i32Type, idx, "bench.i.cur");
             llvm::Value* cond = builder.CreateICmpSLT(
-                iCur, llvm::ConstantInt::get(i32Type, loopCount), "bench.loopcond");
+                iCur, llvm::ConstantInt::get(i32Type, loopCount),
+                "bench.loopcond");
             builder.CreateCondBr(cond, bodyBB, endBB);
 
             builder.SetInsertPoint(bodyBB);
@@ -4966,13 +5002,18 @@ void CodeGenerator::generateBenchmarkMain(
             if(!callee->getReturnType()->isVoidTy())
             {
                 llvm::Value* rcI32 = rc;
-                if(rcI32->getType() != i32Type && rcI32->getType()->isIntegerTy())
-                    rcI32 = builder.CreateIntCast(rcI32, i32Type, true, "bench.rc.cast");
+                if(rcI32->getType() != i32Type &&
+                   rcI32->getType()->isIntegerTy())
+                    rcI32 = builder.CreateIntCast(rcI32, i32Type, true,
+                                                  "bench.rc.cast");
                 llvm::Value* isFail = builder.CreateICmpNE(
                     rcI32, llvm::ConstantInt::get(i32Type, 0), "bench.isfail");
-                llvm::Value* failInc = builder.CreateZExt(isFail, i32Type, "bench.failinc");
-                llvm::Value* cur = builder.CreateLoad(i32Type, localFails, "bench.fail.cur");
-                builder.CreateStore(builder.CreateAdd(cur, failInc), localFails);
+                llvm::Value* failInc =
+                    builder.CreateZExt(isFail, i32Type, "bench.failinc");
+                llvm::Value* cur =
+                    builder.CreateLoad(i32Type, localFails, "bench.fail.cur");
+                builder.CreateStore(builder.CreateAdd(cur, failInc),
+                                    localFails);
             }
             llvm::Value* iNext = builder.CreateAdd(
                 iCur, llvm::ConstantInt::get(i32Type, 1), "bench.i.next");
@@ -4989,14 +5030,20 @@ void CodeGenerator::generateBenchmarkMain(
         emitLoop(benchmarkIterations);
         llvm::Value* endNs = builder.CreateCall(nowNsFunc, {}, "bench.end");
 
-        llvm::Value* elapsedNs = builder.CreateSub(endNs, startNs, "bench.elapsed");
-        llvm::Value* iterI64 = llvm::ConstantInt::get(i64Type, benchmarkIterations);
-        llvm::Value* nsPerOp = builder.CreateSDiv(elapsedNs, iterI64, "bench.nsop");
+        llvm::Value* elapsedNs =
+            builder.CreateSub(endNs, startNs, "bench.elapsed");
+        llvm::Value* iterI64 =
+            llvm::ConstantInt::get(i64Type, benchmarkIterations);
+        llvm::Value* nsPerOp =
+            builder.CreateSDiv(elapsedNs, iterI64, "bench.nsop");
 
-        builder.CreateCall(printfFunc, {lineFmt, testName, elapsedNs, nsPerOp,
-                                        llvm::ConstantInt::get(i32Type, benchmarkIterations)});
+        builder.CreateCall(
+            printfFunc,
+            {lineFmt, benchNameWidthVal, testName, elapsedNs, nsPerOp,
+             llvm::ConstantInt::get(i32Type, benchmarkIterations)});
 
-        llvm::Value* lf = builder.CreateLoad(i32Type, localFails, "bench.localfails");
+        llvm::Value* lf =
+            builder.CreateLoad(i32Type, localFails, "bench.localfails");
         llvm::Value* hasFails = builder.CreateICmpNE(
             lf, llvm::ConstantInt::get(i32Type, 0), "bench.hasfails");
         llvm::BasicBlock* okBB =
@@ -5008,7 +5055,8 @@ void CodeGenerator::generateBenchmarkMain(
         builder.CreateCondBr(hasFails, failBB, okBB);
 
         builder.SetInsertPoint(failBB);
-        builder.CreateCall(printfFunc, {failFmt, testName, lf});
+        builder.CreateCall(printfFunc,
+                           {failFmt, benchNameWidthVal, testName, lf});
         llvm::Value* totalFailCur =
             builder.CreateLoad(i32Type, failures, "bench.totalfail.cur");
         builder.CreateStore(builder.CreateAdd(totalFailCur, lf), failures);
@@ -5047,14 +5095,11 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
         return;
 
     auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(false,
-                                            new TypeNode(TypeNode::TYPE_BOOL),
-                                            "is_ok", nullptr));
-    members->addMember(new StructMemberNode(false,
-                                            new StructTypeRefNode("T"),
-                                            "ok", nullptr));
-    members->addMember(new StructMemberNode(false,
-                                            new StructTypeRefNode("E"),
+    members->addMember(new StructMemberNode(
+        false, new TypeNode(TypeNode::TYPE_BOOL), "is_ok", nullptr));
+    members->addMember(
+        new StructMemberNode(false, new StructTypeRefNode("T"), "ok", nullptr));
+    members->addMember(new StructMemberNode(false, new StructTypeRefNode("E"),
                                             "err", nullptr));
 
     auto make_self_param = []() -> ParameterNode*
@@ -5078,33 +5123,24 @@ void CodeGenerator::ensureResultBuiltin(ProgramNode* program)
         return method;
     };
 
-    members->addMethod(
-        make_simple_method("is_ok", new TypeNode(TypeNode::TYPE_BOOL),
-                           static_cast<ExpressionNode*>(
-                               create_field_access_expr(
-                                   new IdentifierNode("self"),
-                                   strdup("is_ok"), 0))));
-    members->addMethod(
-        make_simple_method("is_err", new TypeNode(TypeNode::TYPE_BOOL),
-                           new BinaryOpNode(
-                               BinaryOpNode::OP_EQ,
-                               static_cast<ExpressionNode*>(
-                                   create_field_access_expr(
-                                       new IdentifierNode("self"),
-                                       strdup("is_ok"), 0)),
-                               new BoolLiteralNode(false))));
-    members->addMethod(
-        make_simple_method("unwrap", new StructTypeRefNode("T"),
-                           static_cast<ExpressionNode*>(
-                               create_field_access_expr(
-                                   new IdentifierNode("self"),
-                                   strdup("ok"), 0))));
-    members->addMethod(
-        make_simple_method("unwrap_err", new StructTypeRefNode("E"),
-                           static_cast<ExpressionNode*>(
-                               create_field_access_expr(
-                                   new IdentifierNode("self"),
-                                   strdup("err"), 0))));
+    members->addMethod(make_simple_method(
+        "is_ok", new TypeNode(TypeNode::TYPE_BOOL),
+        static_cast<ExpressionNode*>(create_field_access_expr(
+            new IdentifierNode("self"), strdup("is_ok"), 0))));
+    members->addMethod(make_simple_method(
+        "is_err", new TypeNode(TypeNode::TYPE_BOOL),
+        new BinaryOpNode(BinaryOpNode::OP_EQ,
+                         static_cast<ExpressionNode*>(create_field_access_expr(
+                             new IdentifierNode("self"), strdup("is_ok"), 0)),
+                         new BoolLiteralNode(false))));
+    members->addMethod(make_simple_method(
+        "unwrap", new StructTypeRefNode("T"),
+        static_cast<ExpressionNode*>(create_field_access_expr(
+            new IdentifierNode("self"), strdup("ok"), 0))));
+    members->addMethod(make_simple_method(
+        "unwrap_err", new StructTypeRefNode("E"),
+        static_cast<ExpressionNode*>(create_field_access_expr(
+            new IdentifierNode("self"), strdup("err"), 0))));
 
     auto* resultDef = new StructDefNode("Result", "", members, true);
     resultDef->typeParams = {"T", "E"};
@@ -5137,11 +5173,9 @@ void CodeGenerator::ensureOptionBuiltin(ProgramNode* program)
         return;
 
     auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(false,
-                                            new TypeNode(TypeNode::TYPE_BOOL),
-                                            "is_some", nullptr));
-    members->addMember(new StructMemberNode(false,
-                                            new StructTypeRefNode("T"),
+    members->addMember(new StructMemberNode(
+        false, new TypeNode(TypeNode::TYPE_BOOL), "is_some", nullptr));
+    members->addMember(new StructMemberNode(false, new StructTypeRefNode("T"),
                                             "value", nullptr));
 
     auto* optionDef = new StructDefNode("Option", "", members, true);
@@ -5175,9 +5209,8 @@ void CodeGenerator::ensureHandleBuiltin(ProgramNode* program)
         return;
 
     auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(false,
-                                            new TypeNode(TypeNode::TYPE_I64),
-                                            "raw", nullptr));
+    members->addMember(new StructMemberNode(
+        false, new TypeNode(TypeNode::TYPE_I64), "raw", nullptr));
 
     auto* handleDef = new StructDefNode("Handle", "", members, true);
     handleDef->typeParams = {"T"};
@@ -5210,9 +5243,8 @@ void CodeGenerator::ensureThreadBuiltin(ProgramNode* program)
         return;
 
     auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(false,
-                                            new TypeNode(TypeNode::TYPE_I8),
-                                            "_pad", nullptr));
+    members->addMember(new StructMemberNode(
+        false, new TypeNode(TypeNode::TYPE_I8), "_pad", nullptr));
 
     auto* threadDef = new StructDefNode("Thread", "", members, true);
     threadDef->sourceModule = "";
@@ -5244,9 +5276,8 @@ void CodeGenerator::ensureMutexBuiltin(ProgramNode* program)
         return;
 
     auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(false,
-                                            new TypeNode(TypeNode::TYPE_I8),
-                                            "_pad", nullptr));
+    members->addMember(new StructMemberNode(
+        false, new TypeNode(TypeNode::TYPE_I8), "_pad", nullptr));
 
     auto* mutexDef = new StructDefNode("Mutex", "", members, true);
     mutexDef->sourceModule = "";
@@ -5278,9 +5309,8 @@ void CodeGenerator::ensureAtomic64Builtin(ProgramNode* program)
         return;
 
     auto* members = new StructMemberListNode();
-    members->addMember(new StructMemberNode(false,
-                                            new TypeNode(TypeNode::TYPE_I8),
-                                            "_pad", nullptr));
+    members->addMember(new StructMemberNode(
+        false, new TypeNode(TypeNode::TYPE_I8), "_pad", nullptr));
 
     auto* atomicDef = new StructDefNode("Atomic64", "", members, true);
     atomicDef->sourceModule = "";
@@ -5322,16 +5352,14 @@ CodeGenerator::generateFunctionDeclaration(FunctionDefNode* node)
            existing->getReturnType() != returnType ||
            existing->isVarArg() != node->parameters->isVarArg)
         {
-            reportError(node->line,
-                        "conflicting declaration for function '" +
-                            node->name + "'");
+            reportError(node->line, "conflicting declaration for function '" +
+                                        node->name + "'");
         }
         return existing;
     }
 
-    llvm::FunctionType* funcType =
-        llvm::FunctionType::get(returnType, paramTypes,
-                                node->parameters->isVarArg);
+    llvm::FunctionType* funcType = llvm::FunctionType::get(
+        returnType, paramTypes, node->parameters->isVarArg);
     llvm::Function* function = llvm::Function::Create(
         funcType, llvm::Function::ExternalLinkage, symbolName, module.get());
 
@@ -5363,8 +5391,8 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         return;
     if(globalNamedValues.find(node->name) != globalNamedValues.end())
     {
-        reportError(node->line, "duplicate global variable: '" + node->name +
-                                    "'");
+        reportError(node->line,
+                    "duplicate global variable: '" + node->name + "'");
         return;
     }
 
@@ -5383,12 +5411,12 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
             kind = TypeNode::TYPE_STRING;
     }
 
-    llvm::Type* llvmTy = node->type ? getLLVMTypeFromNode(node->type)
-                                    : getLLVMType(kind);
+    llvm::Type* llvmTy =
+        node->type ? getLLVMTypeFromNode(node->type) : getLLVMType(kind);
     if(!llvmTy)
     {
-        reportError(node->line, "invalid global variable type for '" +
-                                    node->name + "'");
+        reportError(node->line,
+                    "invalid global variable type for '" + node->name + "'");
         return;
     }
 
@@ -5399,8 +5427,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isIntegerTy())
             {
-                reportError(node->line, "global integer initializer type mismatch for '" +
-                                            node->name + "'");
+                reportError(node->line,
+                            "global integer initializer type mismatch for '" +
+                                node->name + "'");
                 return;
             }
             init = llvm::ConstantInt::get(llvmTy, i->value, true);
@@ -5409,8 +5438,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isIntegerTy(1))
             {
-                reportError(node->line, "global bool initializer type mismatch for '" +
-                                            node->name + "'");
+                reportError(node->line,
+                            "global bool initializer type mismatch for '" +
+                                node->name + "'");
                 return;
             }
             init = llvm::ConstantInt::get(llvmTy, b->value ? 1 : 0, false);
@@ -5419,8 +5449,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isFloatTy())
             {
-                reportError(node->line, "global float initializer type mismatch for '" +
-                                            node->name + "'");
+                reportError(node->line,
+                            "global float initializer type mismatch for '" +
+                                node->name + "'");
                 return;
             }
             init = llvm::ConstantFP::get(llvmTy, f->value);
@@ -5429,8 +5460,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isDoubleTy())
             {
-                reportError(node->line, "global double initializer type mismatch for '" +
-                                            node->name + "'");
+                reportError(node->line,
+                            "global double initializer type mismatch for '" +
+                                node->name + "'");
                 return;
             }
             init = llvm::ConstantFP::get(llvmTy, d->value);
@@ -5439,15 +5471,18 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         {
             if(!llvmTy->isPointerTy())
             {
-                reportError(node->line, "global string initializer type mismatch for '" +
-                                            node->name + "'");
+                reportError(node->line,
+                            "global string initializer type mismatch for '" +
+                                node->name + "'");
                 return;
             }
 #if LLVM_VERSION_MAJOR >= 21
-            auto* gstr = builder.CreateGlobalString(s->value, node->name + ".gstr");
+            auto* gstr =
+                builder.CreateGlobalString(s->value, node->name + ".gstr");
             init = llvm::dyn_cast<llvm::Constant>(gstr);
 #else
-            auto* gstr = builder.CreateGlobalStringPtr(s->value, node->name + ".gstr");
+            auto* gstr =
+                builder.CreateGlobalStringPtr(s->value, node->name + ".gstr");
             init = llvm::dyn_cast<llvm::Constant>(gstr);
 #endif
             if(!init)
@@ -5462,9 +5497,9 @@ void CodeGenerator::generateGlobalVarDeclaration(VarDeclNode* node)
         }
     }
 
-    auto* gv = new llvm::GlobalVariable(
-        *module, llvmTy, false, llvm::GlobalValue::InternalLinkage, init,
-        "__mlang_global_" + node->name);
+    auto* gv = new llvm::GlobalVariable(*module, llvmTy, false,
+                                        llvm::GlobalValue::InternalLinkage,
+                                        init, "__mlang_global_" + node->name);
     globalNamedValues[node->name] = gv;
     globalVariableTypes[node->name] = kind;
 }
@@ -5544,14 +5579,13 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         builder.CreateCall(exceptionsPushFrameFunc, {}, "fn.exc.frame");
     llvm::Value* functionExceptionEnv = builder.CreateCall(
         exceptionsFrameEnvFunc, {currentFunctionExceptionFrame}, "fn.exc.env");
-    auto* functionSetjmpCall = builder.CreateCall(exceptionsSetjmpFunc,
-                                                  {functionExceptionEnv},
-                                                  "fn.exc.state");
+    auto* functionSetjmpCall = builder.CreateCall(
+        exceptionsSetjmpFunc, {functionExceptionEnv}, "fn.exc.state");
     functionSetjmpCall->setCanReturnTwice();
     llvm::Value* functionExceptionState = functionSetjmpCall;
     llvm::Value* enteredNormally = builder.CreateICmpEQ(
-        functionExceptionState, llvm::ConstantInt::get(
-                                    llvm::Type::getInt32Ty(context), 0),
+        functionExceptionState,
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
         "fn.exc.ok");
     builder.CreateCondBr(enteredNormally, functionBodyBB, functionExceptionBB);
     builder.SetInsertPoint(functionBodyBB);
@@ -5571,7 +5605,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         if(paramIdx < node->parameters->parameters.size())
         {
             auto* paramNode = node->parameters->parameters[paramIdx];
-            if(auto* refType = dynamic_cast<ReferenceTypeNode*>(paramNode->type))
+            if(auto* refType =
+                   dynamic_cast<ReferenceTypeNode*>(paramNode->type))
             {
                 // Store inner element kind so the borrow checker treats the
                 // param as the inner type (e.g. &string -> TYPE_STRING).
@@ -5602,7 +5637,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                             structInner->structName;
                 }
                 if(auto* genStructInner =
-                       dynamic_cast<GenericStructTypeRefNode*>(refType->elementType))
+                       dynamic_cast<GenericStructTypeRefNode*>(
+                           refType->elementType))
                 {
                     std::string mangled = getOrCreateMonomorphizedStruct(
                         genStructInner->structName, genStructInner->typeArgs);
@@ -5615,7 +5651,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             }
             else
             {
-            variableTypes[std::string(arg.getName())] = paramNode->type->kind;
+                variableTypes[std::string(arg.getName())] =
+                    paramNode->type->kind;
             }
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(paramNode->type))
@@ -5673,8 +5710,9 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                     if(futureIdents.count(kv.first))
                         continue;
                     // Don't NLL-expire exclusive struct borrows (ptr<T> where T
-                    // is a struct). They remain active until scope exit or explicit
-                    // reassignment so a second borrow of the same owner is rejected.
+                    // is a struct). They remain active until scope exit or
+                    // explicit reassignment so a second borrow of the same
+                    // owner is rejected.
                     auto peit = pointerElementTypes.find(kv.first);
                     if(peit != pointerElementTypes.end() && peit->second &&
                        peit->second->kind == TypeNode::TYPE_STRUCT)
@@ -5717,7 +5755,8 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             else
             {
                 // For non-void functions without a return, add unreachable
-                // This indicates a bug in the source code but prevents LLVM crashes
+                // This indicates a bug in the source code but prevents LLVM
+                // crashes
                 builder.CreateUnreachable();
             }
         }
@@ -5811,8 +5850,9 @@ void CodeGenerator::generateStatement(StatementNode* node)
                     if(futureIdents.count(kv.first))
                         continue;
                     // Don't NLL-expire exclusive struct borrows (ptr<T> where T
-                    // is a struct). They remain active until scope exit or explicit
-                    // reassignment so a second borrow of the same owner is rejected.
+                    // is a struct). They remain active until scope exit or
+                    // explicit reassignment so a second borrow of the same
+                    // owner is rejected.
                     auto peit = pointerElementTypes.find(kv.first);
                     if(peit != pointerElementTypes.end() && peit->second &&
                        peit->second->kind == TypeNode::TYPE_STRUCT)
@@ -5915,6 +5955,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     {
         return generateTryExpression(tryExpr);
     }
+    else if(auto* inlineAsm = dynamic_cast<InlineAsmNode*>(node))
+    {
+        return generateInlineAsm(inlineAsm);
+    }
     else if(auto id = dynamic_cast<IdentifierNode*>(node))
     {
         return generateIdentifier(id);
@@ -5983,6 +6027,132 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     return nullptr;
 }
 
+llvm::Value* CodeGenerator::generateInlineAsm(InlineAsmNode* node)
+{
+    if(!node || !node->resultType)
+    {
+        reportError(node ? node->line : 0, "invalid inline asm expression");
+        return nullptr;
+    }
+
+    if(!node->requiredArch.empty())
+    {
+        const std::string requiredArch =
+            normalize_target_arch_name(node->requiredArch);
+        if(requiredArch.empty())
+        {
+            reportError(node->line, "unsupported inline asm target arch '" +
+                                        node->requiredArch +
+                                        "'; expected x86, x64, or aarch64");
+            return nullptr;
+        }
+
+        std::string effectiveTriple = module_target_triple_string(module.get());
+        if(effectiveTriple.empty())
+            effectiveTriple = llvm::sys::getDefaultTargetTriple();
+        llvm::Triple triple(effectiveTriple);
+        const std::string actualArch =
+            normalize_target_arch_name(triple.getArchName().str());
+        if(actualArch.empty())
+        {
+            reportError(node->line,
+                        "unsupported compilation target arch '" +
+                            triple.getArchName().str() +
+                            "' for inline asm; expected x86, x64, or aarch64");
+            return nullptr;
+        }
+        if(actualArch != requiredArch)
+        {
+            reportError(node->line,
+                        "inline asm target arch '" + requiredArch +
+                            "' does not match compilation target arch '" +
+                            actualArch + "'");
+            return nullptr;
+        }
+    }
+
+    llvm::Type* resultType = getLLVMTypeFromNode(node->resultType);
+    if(!resultType)
+    {
+        reportError(node->line, "inline asm result type could not be resolved");
+        return nullptr;
+    }
+
+    auto supportsRegisterConstraint = [](llvm::Type* ty)
+    { return ty && (ty->isIntegerTy() || ty->isPointerTy()); };
+
+    std::vector<llvm::Value*> argValues;
+    std::vector<llvm::Type*> argTypes;
+    argValues.reserve(node->arguments.size());
+    argTypes.reserve(node->arguments.size());
+    for(auto* arg : node->arguments)
+    {
+        llvm::Value* value = generateExpression(arg);
+        if(!value)
+            return nullptr;
+        if(!supportsRegisterConstraint(value->getType()))
+        {
+            reportError(node->line, "inline asm currently supports only "
+                                    "integer and pointer operands");
+            return nullptr;
+        }
+        argValues.push_back(value);
+        argTypes.push_back(value->getType());
+    }
+
+    const bool returnsVoid = resultType->isVoidTy();
+    if(!returnsVoid && !supportsRegisterConstraint(resultType))
+    {
+        reportError(node->line, "inline asm currently supports only integer, "
+                                "pointer, or void result types");
+        return nullptr;
+    }
+    if(!returnsVoid)
+    {
+        if(argValues.empty())
+        {
+            reportError(node->line,
+                        "non-void inline asm requires at least one operand");
+            return nullptr;
+        }
+        if(argTypes.front() != resultType)
+        {
+            reportError(node->line, "non-void inline asm requires its first "
+                                    "operand to match the result type");
+            return nullptr;
+        }
+    }
+
+    std::string constraints;
+    if(!returnsVoid)
+    {
+        constraints = "=r";
+        for(size_t i = 0; i < argValues.size(); ++i)
+        {
+            constraints += ",";
+            constraints += (i == 0) ? "0" : "r";
+        }
+    }
+    else
+    {
+        for(size_t i = 0; i < argValues.size(); ++i)
+        {
+            if(i > 0)
+                constraints += ",";
+            constraints += "r";
+        }
+    }
+
+    llvm::FunctionType* asmType =
+        llvm::FunctionType::get(resultType, argTypes, false);
+    llvm::InlineAsm* asmFn = llvm::InlineAsm::get(
+        asmType, node->asmTemplate, constraints, node->isVolatile);
+
+    if(returnsVoid)
+        return builder.CreateCall(asmFn, argValues);
+    return builder.CreateCall(asmFn, argValues, "asmtmp");
+}
+
 llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 {
     llvm::Value* L = generateExpression(node->left);
@@ -5993,7 +6163,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
     auto generateTraitBinaryOp = [&](const std::string& traitName,
                                      const std::string& methodName,
-                                     const std::string& opText) -> llvm::Value* {
+                                     const std::string& opText) -> llvm::Value*
+    {
         auto* lhsStructTy = llvm::dyn_cast<llvm::StructType>(L->getType());
         auto* rhsStructTy = llvm::dyn_cast<llvm::StructType>(R->getType());
 
@@ -6016,10 +6187,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(traitIt == structImplementedTraits.end() ||
            traitIt->second.find(traitName) == traitIt->second.end())
         {
-            reportError(node->line,
-                        "struct '" + structTypeName +
-                            "' must implement trait '" + traitName +
-                            "' to use operator '" + opText + "'");
+            reportError(node->line, "struct '" + structTypeName +
+                                        "' must implement trait '" + traitName +
+                                        "' to use operator '" + opText + "'");
             return nullptr;
         }
 
@@ -6033,17 +6203,15 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         auto methodIt = structIt->second.find(methodName);
         if(methodIt == structIt->second.end() || !methodIt->second.second)
         {
-            reportError(node->line,
-                        "trait '" + traitName + "' on struct '" +
-                            structTypeName + "' requires method '" +
-                            methodName + "'");
+            reportError(node->line, "trait '" + traitName + "' on struct '" +
+                                        structTypeName + "' requires method '" +
+                                        methodName + "'");
             return nullptr;
         }
         if(methodIt->second.second->isStatic)
         {
             reportError(node->line,
-                        "trait method '" + methodName +
-                            "' must not be static");
+                        "trait method '" + methodName + "' must not be static");
             return nullptr;
         }
 
@@ -6068,8 +6236,7 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         llvm::Function* callee = module->getFunction(mangledName);
         if(!callee)
         {
-            reportError(node->line,
-                        "unknown trait method: " + methodName);
+            reportError(node->line, "unknown trait method: " + methodName);
             return nullptr;
         }
         if(callee->empty() && monomorphizedTypes.count(definingStruct))
@@ -6121,7 +6288,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                         variableScopeDepth = savedVariableScopeDepth;
                         cleanupScopes = savedCleanupScopes;
                         pointerBorrowScopes = savedPointerBorrowScopes;
-                        variableScopeDepthScopes = savedVariableScopeDepthScopes;
+                        variableScopeDepthScopes =
+                            savedVariableScopeDepthScopes;
                         if(savedBlock)
                             builder.SetInsertPoint(savedBlock);
                     }
@@ -6130,26 +6298,25 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
         if(callee->arg_size() < 2)
         {
-            reportError(node->line,
-                        "trait method '" + methodName +
-                            "' for operator '" + opText +
-                            "' requires one argument");
+            reportError(node->line, "trait method '" + methodName +
+                                        "' for operator '" + opText +
+                                        "' requires one argument");
             return nullptr;
         }
 
         llvm::Value* lhsPtr = getLValuePointer(node->left, node->line);
         if(!lhsPtr)
         {
-            lhsPtr = builder.CreateAlloca(L->getType(), nullptr,
-                                          "traitop.lhs.tmp");
+            lhsPtr =
+                builder.CreateAlloca(L->getType(), nullptr, "traitop.lhs.tmp");
             builder.CreateStore(L, lhsPtr);
         }
 
         llvm::Value* rhsPtr = getLValuePointer(node->right, node->line);
         if(!rhsPtr)
         {
-            rhsPtr = builder.CreateAlloca(R->getType(), nullptr,
-                                          "traitop.rhs.tmp");
+            rhsPtr =
+                builder.CreateAlloca(R->getType(), nullptr, "traitop.rhs.tmp");
             builder.CreateStore(R, rhsPtr);
         }
 
@@ -6199,10 +6366,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         llvm::Value* res = builder.CreateCall(callee, args, "traitop.call");
         if(res->getType() != L->getType())
         {
-            reportError(node->line,
-                        "trait method '" + methodName +
-                            "' used by operator '" + opText +
-                            "' must return the receiver type");
+            reportError(node->line, "trait method '" + methodName +
+                                        "' used by operator '" + opText +
+                                        "' must return the receiver type");
             return nullptr;
         }
         return res;
@@ -6211,7 +6377,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     if(node->op == BinaryOpNode::OP_SPACESHIP)
     {
         auto buildNumericSpaceship = [&](llvm::Value* lhs,
-                                         llvm::Value* rhs) -> llvm::Value* {
+                                         llvm::Value* rhs) -> llvm::Value*
+        {
             bool isFloat = lhs->getType()->isFloatingPointTy() ||
                            rhs->getType()->isFloatingPointTy();
             TypeNode::TypeKind lhsCmpKind =
@@ -6236,17 +6403,15 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 if(lhsBits != rhsBits)
                 {
                     if(lhsBits > rhsBits)
-                        rhs = builder.CreateIntCast(rhs, lhs->getType(),
-                                                    !useUnsignedIntCmp,
-                                                    useUnsignedIntCmp
-                                                        ? "spaceship.zext"
-                                                        : "spaceship.sext");
+                        rhs = builder.CreateIntCast(
+                            rhs, lhs->getType(), !useUnsignedIntCmp,
+                            useUnsignedIntCmp ? "spaceship.zext"
+                                              : "spaceship.sext");
                     else
-                        lhs = builder.CreateIntCast(lhs, rhs->getType(),
-                                                    !useUnsignedIntCmp,
-                                                    useUnsignedIntCmp
-                                                        ? "spaceship.zext"
-                                                        : "spaceship.sext");
+                        lhs = builder.CreateIntCast(
+                            lhs, rhs->getType(), !useUnsignedIntCmp,
+                            useUnsignedIntCmp ? "spaceship.zext"
+                                              : "spaceship.sext");
                 }
             }
 
@@ -6299,10 +6464,9 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             if(traitIt == structImplementedTraits.end() ||
                traitIt->second.find(traitName) == traitIt->second.end())
             {
-                reportError(node->line,
-                            "struct '" + structTypeName +
-                                "' must implement trait '" + traitName +
-                                "' to use <=>");
+                reportError(node->line, "struct '" + structTypeName +
+                                            "' must implement trait '" +
+                                            traitName + "' to use <=>");
                 return nullptr;
             }
 
@@ -6316,17 +6480,16 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             auto methodIt = structIt->second.find(methodName);
             if(methodIt == structIt->second.end() || !methodIt->second.second)
             {
-                reportError(node->line,
-                            "trait '" + traitName + "' on struct '" +
-                                structTypeName + "' requires method '" +
-                                methodName + "'");
+                reportError(node->line, "trait '" + traitName +
+                                            "' on struct '" + structTypeName +
+                                            "' requires method '" + methodName +
+                                            "'");
                 return nullptr;
             }
             if(methodIt->second.second->isStatic)
             {
-                reportError(node->line,
-                            "trait method '" + methodName +
-                                "' must not be static");
+                reportError(node->line, "trait method '" + methodName +
+                                            "' must not be static");
                 return nullptr;
             }
 
@@ -6351,15 +6514,13 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             llvm::Function* callee = module->getFunction(mangledName);
             if(!callee)
             {
-                reportError(node->line,
-                            "unknown trait method: " + methodName);
+                reportError(node->line, "unknown trait method: " + methodName);
                 return nullptr;
             }
             if(callee->arg_size() < 2)
             {
-                reportError(node->line,
-                            "trait method '" + methodName +
-                                "' for <=> requires one argument");
+                reportError(node->line, "trait method '" + methodName +
+                                            "' for <=> requires one argument");
                 return nullptr;
             }
 
@@ -6387,7 +6548,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             if(expectedTy->isPointerTy())
             {
                 arg1 = rhsPtr;
-                if(arg1->getType() != expectedTy && arg1->getType()->isPointerTy())
+                if(arg1->getType() != expectedTy &&
+                   arg1->getType()->isPointerTy())
                     arg1 = builder.CreateBitCast(arg1, expectedTy,
                                                  "spaceship.arg.ptrcast");
             }
@@ -6424,7 +6586,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                     arg1 = builder.CreateFPCast(arg1, expectedTy,
                                                 "spaceship.arg.fpcast");
                 }
-                else if(arg1->getType()->isPointerTy() && expectedTy->isPointerTy())
+                else if(arg1->getType()->isPointerTy() &&
+                        expectedTy->isPointerTy())
                 {
                     arg1 = builder.CreateBitCast(arg1, expectedTy,
                                                  "spaceship.arg.ptrcast");
@@ -6432,7 +6595,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             }
             args.push_back(arg1);
 
-            llvm::Value* cmpVal = builder.CreateCall(callee, args, "spaceship.call");
+            llvm::Value* cmpVal =
+                builder.CreateCall(callee, args, "spaceship.call");
             if(!cmpVal->getType()->isIntegerTy())
             {
                 reportError(node->line,
@@ -6460,7 +6624,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         return numericCmp;
     }
 
-    if(node->op == BinaryOpNode::OP_PLUS || node->op == BinaryOpNode::OP_MINUS ||
+    if(node->op == BinaryOpNode::OP_PLUS ||
+       node->op == BinaryOpNode::OP_MINUS ||
        node->op == BinaryOpNode::OP_MULTIPLY ||
        node->op == BinaryOpNode::OP_DIVIDE ||
        node->op == BinaryOpNode::OP_MODULO)
@@ -6557,7 +6722,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                    : builder.CreateOr(Lb, Rb, "ortmp");
     }
 
-    auto resolveExprKind = [&](ExpressionNode* expr) -> TypeNode::TypeKind {
+    auto resolveExprKind = [&](ExpressionNode* expr) -> TypeNode::TypeKind
+    {
         if(TypeNode* exprType = getLValueType(expr, node->line))
             return exprType->kind;
         return getExpressionTypeKind(expr, variableTypes);
@@ -6565,12 +6731,12 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
     TypeNode::TypeKind lhsKind = resolveExprKind(node->left);
     TypeNode::TypeKind rhsKind = resolveExprKind(node->right);
-    bool useUnsignedIntOps =
-        isUnsignedType(lhsKind) || isUnsignedType(rhsKind);
+    bool useUnsignedIntOps = isUnsignedType(lhsKind) || isUnsignedType(rhsKind);
 
-    if(node->op == BinaryOpNode::OP_BITAND || node->op == BinaryOpNode::OP_BITOR ||
-       node->op == BinaryOpNode::OP_BITXOR || node->op == BinaryOpNode::OP_SHL ||
-       node->op == BinaryOpNode::OP_SHR)
+    if(node->op == BinaryOpNode::OP_BITAND ||
+       node->op == BinaryOpNode::OP_BITOR ||
+       node->op == BinaryOpNode::OP_BITXOR ||
+       node->op == BinaryOpNode::OP_SHL || node->op == BinaryOpNode::OP_SHR)
     {
         if(!L->getType()->isIntegerTy() || !R->getType()->isIntegerTy())
         {
@@ -6583,7 +6749,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         if(node->op == BinaryOpNode::OP_SHL || node->op == BinaryOpNode::OP_SHR)
         {
             if(RBits != LBits)
-                R = builder.CreateIntCast(R, L->getType(), false, "bitshift.cast");
+                R = builder.CreateIntCast(R, L->getType(), false,
+                                          "bitshift.cast");
         }
         else if(LBits != RBits)
         {
@@ -6614,7 +6781,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
     }
 
-    auto typeKindName = [](TypeNode::TypeKind kind) -> std::string {
+    auto typeKindName = [](TypeNode::TypeKind kind) -> std::string
+    {
         switch(kind)
         {
         case TypeNode::TYPE_STRING:
@@ -6696,7 +6864,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             lhsPtr = builder.CreateBitCast(lhsPtr, ptrType, "strcat.lhs.cast");
         if(rhsPtr->getType() != ptrType && rhsPtr->getType()->isPointerTy())
             rhsPtr = builder.CreateBitCast(rhsPtr, ptrType, "strcat.rhs.cast");
-        if(!lhsPtr->getType()->isPointerTy() || !rhsPtr->getType()->isPointerTy())
+        if(!lhsPtr->getType()->isPointerTy() ||
+           !rhsPtr->getType()->isPointerTy())
         {
             reportError(node->line,
                         "invalid string operands for concatenation");
@@ -6723,10 +6892,11 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         }
         if(!sameStringRuntimeKind)
         {
-            reportError(node->line,
-                        "string operations require matching operand types (got '" +
-                            typeKindName(lhsKind) + "' and '" +
-                            typeKindName(rhsKind) + "')");
+            reportError(
+                node->line,
+                "string operations require matching operand types (got '" +
+                    typeKindName(lhsKind) + "' and '" + typeKindName(rhsKind) +
+                    "')");
             return nullptr;
         }
         bool isStringCompareOp = node->op == BinaryOpNode::OP_EQ ||
@@ -6756,7 +6926,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
             lhsPtr = builder.CreateBitCast(lhsPtr, ptrType, "strcmp.lhs.cast");
         if(rhsPtr->getType() != ptrType && rhsPtr->getType()->isPointerTy())
             rhsPtr = builder.CreateBitCast(rhsPtr, ptrType, "strcmp.rhs.cast");
-        if(!lhsPtr->getType()->isPointerTy() || !rhsPtr->getType()->isPointerTy())
+        if(!lhsPtr->getType()->isPointerTy() ||
+           !rhsPtr->getType()->isPointerTy())
         {
             reportError(node->line, "invalid string operands for comparison");
             return nullptr;
@@ -6771,9 +6942,11 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                                      : "__mlang_std_strbuf_eq";
             llvm::FunctionCallee eqFn =
                 module->getOrInsertFunction(eqName, eqFnType);
-            llvm::Value* eqVal = builder.CreateCall(eqFn, {lhsPtr, rhsPtr}, "streq");
+            llvm::Value* eqVal =
+                builder.CreateCall(eqFn, {lhsPtr, rhsPtr}, "streq");
             llvm::Value* eqBool = builder.CreateICmpNE(
-                eqVal, llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+                eqVal,
+                llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
                 "streq.bool");
             if(node->op == BinaryOpNode::OP_EQ)
                 return eqBool;
@@ -6787,7 +6960,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                                   : "__mlang_std_strbuf_compare";
         llvm::FunctionCallee cmpFn =
             module->getOrInsertFunction(cmpName, cmpFnType);
-        llvm::Value* cmpVal = builder.CreateCall(cmpFn, {lhsPtr, rhsPtr}, "strcmp");
+        llvm::Value* cmpVal =
+            builder.CreateCall(cmpFn, {lhsPtr, rhsPtr}, "strcmp");
         llvm::Value* zero =
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0);
         switch(node->op)
@@ -6876,9 +7050,10 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
                 return nullptr;
             }
         }
-        return isFloat ? builder.CreateFDiv(L, R, "divtmp")
-                       : (useUnsignedIntOps ? builder.CreateUDiv(L, R, "divtmp")
-                                            : builder.CreateSDiv(L, R, "divtmp"));
+        return isFloat
+                   ? builder.CreateFDiv(L, R, "divtmp")
+                   : (useUnsignedIntOps ? builder.CreateUDiv(L, R, "divtmp")
+                                        : builder.CreateSDiv(L, R, "divtmp"));
     }
     case BinaryOpNode::OP_MODULO:
     {
@@ -6908,20 +7083,24 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
     }
     case BinaryOpNode::OP_LT:
         return isFloat ? builder.CreateFCmpOLT(L, R, "cmptmp")
-                       : (useUnsignedIntOps ? builder.CreateICmpULT(L, R, "cmptmp")
-                                            : builder.CreateICmpSLT(L, R, "cmptmp"));
+                       : (useUnsignedIntOps
+                              ? builder.CreateICmpULT(L, R, "cmptmp")
+                              : builder.CreateICmpSLT(L, R, "cmptmp"));
     case BinaryOpNode::OP_GT:
         return isFloat ? builder.CreateFCmpOGT(L, R, "cmptmp")
-                       : (useUnsignedIntOps ? builder.CreateICmpUGT(L, R, "cmptmp")
-                                            : builder.CreateICmpSGT(L, R, "cmptmp"));
+                       : (useUnsignedIntOps
+                              ? builder.CreateICmpUGT(L, R, "cmptmp")
+                              : builder.CreateICmpSGT(L, R, "cmptmp"));
     case BinaryOpNode::OP_LE:
         return isFloat ? builder.CreateFCmpOLE(L, R, "cmptmp")
-                       : (useUnsignedIntOps ? builder.CreateICmpULE(L, R, "cmptmp")
-                                            : builder.CreateICmpSLE(L, R, "cmptmp"));
+                       : (useUnsignedIntOps
+                              ? builder.CreateICmpULE(L, R, "cmptmp")
+                              : builder.CreateICmpSLE(L, R, "cmptmp"));
     case BinaryOpNode::OP_GE:
         return isFloat ? builder.CreateFCmpOGE(L, R, "cmptmp")
-                       : (useUnsignedIntOps ? builder.CreateICmpUGE(L, R, "cmptmp")
-                                            : builder.CreateICmpSGE(L, R, "cmptmp"));
+                       : (useUnsignedIntOps
+                              ? builder.CreateICmpUGE(L, R, "cmptmp")
+                              : builder.CreateICmpSGE(L, R, "cmptmp"));
     case BinaryOpNode::OP_EQ:
         return isFloat ? builder.CreateFCmpOEQ(L, R, "cmptmp")
                        : builder.CreateICmpEQ(L, R, "cmptmp");
@@ -6940,7 +7119,8 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         // Handled before numeric op checks.
         return nullptr;
     case BinaryOpNode::OP_SPACESHIP:
-        // Handled in dedicated branch above (numeric + trait-based struct path).
+        // Handled in dedicated branch above (numeric + trait-based struct
+        // path).
         return nullptr;
     }
     return nullptr;
@@ -6959,8 +7139,7 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     auto kindIt = variableTypes.find(listId->name);
     if(kindIt == variableTypes.end() || kindIt->second != TypeNode::TYPE_LIST)
     {
-        reportError(node->line,
-                    "fold expression requires list operand");
+        reportError(node->line, "fold expression requires list operand");
         return nullptr;
     }
 
@@ -6976,7 +7155,8 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     if(!elemType)
         return nullptr;
 
-    if(node->op == BinaryOpNode::OP_PLUS || node->op == BinaryOpNode::OP_MULTIPLY)
+    if(node->op == BinaryOpNode::OP_PLUS ||
+       node->op == BinaryOpNode::OP_MULTIPLY)
     {
         if(!(elemType->isIntegerTy() || elemType->isFloatingPointTy()))
         {
@@ -7048,11 +7228,11 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
         if(v->getType()->isIntegerTy(1))
             return v;
         if(v->getType()->isIntegerTy())
-            return builder.CreateICmpNE(v, llvm::ConstantInt::get(v->getType(), 0),
-                                        name);
+            return builder.CreateICmpNE(
+                v, llvm::ConstantInt::get(v->getType(), 0), name);
         if(v->getType()->isFloatingPointTy())
-            return builder.CreateFCmpONE(v, llvm::ConstantFP::get(v->getType(), 0.0),
-                                         name);
+            return builder.CreateFCmpONE(
+                v, llvm::ConstantFP::get(v->getType(), 0.0), name);
         reportError(node->line,
                     "logical fold requires numeric or boolean list elements");
         return static_cast<llvm::Value*>(nullptr);
@@ -7079,7 +7259,8 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     builder.CreateBr(condBB);
 
     builder.SetInsertPoint(condBB);
-    llvm::Value* idxVal = builder.CreateLoad(i64Type, idxAlloca, "fold.idx.cur");
+    llvm::Value* idxVal =
+        builder.CreateLoad(i64Type, idxAlloca, "fold.idx.cur");
     llvm::Value* cond = nullptr;
     if(node->isRightFold)
         cond = builder.CreateICmpSGT(idxVal, llvm::ConstantInt::get(i64Type, 0),
@@ -7095,9 +7276,11 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
         elemIdx = builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
                                     "fold.elem.idx");
     }
-    llvm::Value* elemPtr = builder.CreateGEP(elemType, dataPtr, elemIdx, "fold.elem.ptr");
+    llvm::Value* elemPtr =
+        builder.CreateGEP(elemType, dataPtr, elemIdx, "fold.elem.ptr");
     llvm::Value* elemVal = builder.CreateLoad(elemType, elemPtr, "fold.elem");
-    llvm::Value* accVal = builder.CreateLoad(accType, accAlloca, "fold.acc.cur");
+    llvm::Value* accVal =
+        builder.CreateLoad(accType, accAlloca, "fold.acc.cur");
 
     llvm::Value* nextAcc = nullptr;
     switch(node->op)
@@ -7134,11 +7317,12 @@ llvm::Value* CodeGenerator::generateFoldExpression(FoldExpressionNode* node)
     }
 
     builder.CreateStore(nextAcc, accAlloca);
-    llvm::Value* nextIdx = node->isRightFold
-                               ? builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
-                                                   "fold.idx.next")
-                               : builder.CreateAdd(idxVal, llvm::ConstantInt::get(i64Type, 1),
-                                                   "fold.idx.next");
+    llvm::Value* nextIdx =
+        node->isRightFold
+            ? builder.CreateSub(idxVal, llvm::ConstantInt::get(i64Type, 1),
+                                "fold.idx.next")
+            : builder.CreateAdd(idxVal, llvm::ConstantInt::get(i64Type, 1),
+                                "fold.idx.next");
     builder.CreateStore(nextIdx, idxAlloca);
     builder.CreateBr(condBB);
 
@@ -7170,10 +7354,9 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             if(traitIt == structImplementedTraits.end() ||
                traitIt->second.find(traitName) == traitIt->second.end())
             {
-                reportError(node->line,
-                            "struct '" + structTypeName +
-                                "' must implement trait '" + traitName +
-                                "' to use unary '-'");
+                reportError(node->line, "struct '" + structTypeName +
+                                            "' must implement trait '" +
+                                            traitName + "' to use unary '-'");
                 return nullptr;
             }
 
@@ -7187,17 +7370,16 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             auto methodIt = structIt->second.find(methodName);
             if(methodIt == structIt->second.end() || !methodIt->second.second)
             {
-                reportError(node->line,
-                            "trait '" + traitName + "' on struct '" +
-                                structTypeName + "' requires method '" +
-                                methodName + "'");
+                reportError(node->line, "trait '" + traitName +
+                                            "' on struct '" + structTypeName +
+                                            "' requires method '" + methodName +
+                                            "'");
                 return nullptr;
             }
             if(methodIt->second.second->isStatic)
             {
-                reportError(node->line,
-                            "trait method '" + methodName +
-                                "' must not be static");
+                reportError(node->line, "trait method '" + methodName +
+                                            "' must not be static");
                 return nullptr;
             }
 
@@ -7222,8 +7404,7 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             llvm::Function* callee = module->getFunction(mangledName);
             if(!callee)
             {
-                reportError(node->line,
-                            "unknown trait method: " + methodName);
+                reportError(node->line, "unknown trait method: " + methodName);
                 return nullptr;
             }
             if(callee->empty() && monomorphizedTypes.count(definingStruct))
@@ -7234,7 +7415,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
                     auto defMethodIt = defStructIt->second.find(methodName);
                     if(defMethodIt != defStructIt->second.end())
                     {
-                        StructMethodNode* methodDef = defMethodIt->second.second;
+                        StructMethodNode* methodDef =
+                            defMethodIt->second.second;
                         if(methodDef && methodDef->body)
                         {
                             llvm::BasicBlock* savedBlock =
@@ -7315,8 +7497,9 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
 
         if(!isFloat && !isInt)
         {
-            reportError(node->line,
-                        "unary '-' requires numeric operand (integer or float)");
+            reportError(
+                node->line,
+                "unary '-' requires numeric operand (integer or float)");
             return nullptr;
         }
         return isFloat ? builder.CreateFNeg(value, "negtmp")
@@ -7339,7 +7522,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
         if(value->getType()->isFloatingPointTy())
         {
             llvm::Value* asBool = builder.CreateFCmpONE(
-                value, llvm::ConstantFP::get(value->getType(), 0.0), "not.bool");
+                value, llvm::ConstantFP::get(value->getType(), 0.0),
+                "not.bool");
             return builder.CreateNot(asBool, "nottmp");
         }
 
@@ -7354,8 +7538,7 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             return nullptr;
         if(!value->getType()->isIntegerTy())
         {
-            reportError(node->line,
-                        "unary '~' requires integer operand");
+            reportError(node->line, "unary '~' requires integer operand");
             return nullptr;
         }
         return builder.CreateNot(value, "bitnottmp");
@@ -7373,9 +7556,10 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
         std::string ownerName = resolveBorrowOwnerFromLValue(node->operand);
         if(!ownerName.empty() && constantVariables.count(ownerName))
         {
-            reportError(node->line,
-                        "cannot take mutable reference of immutable variable '" +
-                            ownerName + "'");
+            reportError(
+                node->line,
+                "cannot take mutable reference of immutable variable '" +
+                    ownerName + "'");
             return nullptr;
         }
         llvm::Value* ptr = getLValuePointer(node->operand, node->line);
@@ -7397,7 +7581,8 @@ llvm::Value* CodeGenerator::generateUnaryOp(UnaryOpNode* node)
             return nullptr;
         }
 
-        TypeNode* elemTypeNode = getPointerElementType(node->operand, node->line);
+        TypeNode* elemTypeNode =
+            getPointerElementType(node->operand, node->line);
         if(!elemTypeNode)
             return nullptr;
         llvm::Type* elemType = getLLVMTypeFromNode(elemTypeNode);
@@ -7429,13 +7614,14 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
     if(ty->isIntegerTy() || ty->isFloatingPointTy())
     {
         llvm::Value* one = ty->isFloatingPointTy()
-            ? llvm::ConstantFP::get(ty, 1.0)
-            : llvm::ConstantInt::get(ty, 1);
-        llvm::Value* newVal = ty->isFloatingPointTy()
-            ? (isInc ? builder.CreateFAdd(oldVal, one, "upd.new")
-                     : builder.CreateFSub(oldVal, one, "upd.new"))
-            : (isInc ? builder.CreateAdd(oldVal, one, "upd.new")
-                     : builder.CreateSub(oldVal, one, "upd.new"));
+                               ? llvm::ConstantFP::get(ty, 1.0)
+                               : llvm::ConstantInt::get(ty, 1);
+        llvm::Value* newVal =
+            ty->isFloatingPointTy()
+                ? (isInc ? builder.CreateFAdd(oldVal, one, "upd.new")
+                         : builder.CreateFSub(oldVal, one, "upd.new"))
+                : (isInc ? builder.CreateAdd(oldVal, one, "upd.new")
+                         : builder.CreateSub(oldVal, one, "upd.new"));
 
         builder.CreateStore(newVal, ptr);
 
@@ -7464,33 +7650,33 @@ llvm::Value* CodeGenerator::generateUpdateExpression(UpdateExpressionNode* node)
     if(traitIt == structImplementedTraits.end() ||
        traitIt->second.find(traitName) == traitIt->second.end())
     {
-        reportError(node->line,
-                    "struct '" + structTypeName + "' must implement trait '" +
-                        traitName + "' to use " + (isInc ? "++" : "--"));
+        reportError(node->line, "struct '" + structTypeName +
+                                    "' must implement trait '" + traitName +
+                                    "' to use " + (isInc ? "++" : "--"));
         return nullptr;
     }
 
     auto structIt = structMethods.find(structTypeName);
     if(structIt == structMethods.end())
     {
-        reportError(node->line, "struct '" + structTypeName + "' has no methods");
+        reportError(node->line,
+                    "struct '" + structTypeName + "' has no methods");
         return nullptr;
     }
     auto methodIt = structIt->second.find(methodName);
     if(methodIt == structIt->second.end())
     {
-        reportError(node->line,
-                    "trait '" + traitName + "' on struct '" + structTypeName +
-                        "' requires method '" + methodName + "'");
+        reportError(node->line, "trait '" + traitName + "' on struct '" +
+                                    structTypeName + "' requires method '" +
+                                    methodName + "'");
         return nullptr;
     }
 
     StructMethodNode* methodNode = methodIt->second.second;
     if(!methodNode)
     {
-        reportError(node->line,
-                    "invalid method metadata for '" + structTypeName + "::" +
-                        methodName + "'");
+        reportError(node->line, "invalid method metadata for '" +
+                                    structTypeName + "::" + methodName + "'");
         return nullptr;
     }
     if(methodNode->isStatic)
@@ -7638,9 +7824,10 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
         else
             typeStr = "non-boolean";
 
-        reportError(node->line,
-                    "ternary condition must be a boolean or numeric type, got '" +
-                        typeStr + "'");
+        reportError(
+            node->line,
+            "ternary condition must be a boolean or numeric type, got '" +
+                typeStr + "'");
         return nullptr;
     }
 
@@ -7663,7 +7850,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::BasicBlock* thenBB =
         llvm::BasicBlock::Create(context, "ternary.then", function);
-    llvm::BasicBlock* elseBB = llvm::BasicBlock::Create(context, "ternary.else");
+    llvm::BasicBlock* elseBB =
+        llvm::BasicBlock::Create(context, "ternary.else");
     llvm::BasicBlock* mergeBB =
         llvm::BasicBlock::Create(context, "ternary.end");
 
@@ -7705,8 +7893,8 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     llvm::BasicBlock* elseEnd = builder.GetInsertBlock();
 
     std::vector<llvm::Type*> types = {thenVal->getType(), elseVal->getType()};
-    auto commonTypeFrom = [&](const std::vector<llvm::Type*>& tps)
-        -> llvm::Type*
+    auto commonTypeFrom =
+        [&](const std::vector<llvm::Type*>& tps) -> llvm::Type*
     {
         if(tps.empty())
             return nullptr;
@@ -7783,19 +7971,21 @@ llvm::Value* CodeGenerator::generateTernaryExpression(TernaryNode* node)
     llvm::Type* commonType = commonTypeFrom(types);
     if(!commonType)
     {
-        std::string t0 = thenVal->getType()->isStructTy()
-                                  ? (thenVal->getType()->getStructName().str().empty()
-                                         ? "struct"
-                                         : thenVal->getType()->getStructName().str())
-                                  : (thenVal->getType()->isPointerTy() ? "pointer"
-                                                                       : "value");
-        std::string t1 = elseVal->getType()->isStructTy()
-                                  ? (elseVal->getType()->getStructName().str().empty()
-                                         ? "struct"
-                                         : elseVal->getType()->getStructName().str())
-                                  : (elseVal->getType()->isPointerTy() ? "pointer"
-                                                                       : "value");
-        reportError(node->line, "ternary branches must return the same type (got " + t0 + " and " + t1 + ")");
+        std::string t0 =
+            thenVal->getType()->isStructTy()
+                ? (thenVal->getType()->getStructName().str().empty()
+                       ? "struct"
+                       : thenVal->getType()->getStructName().str())
+                : (thenVal->getType()->isPointerTy() ? "pointer" : "value");
+        std::string t1 =
+            elseVal->getType()->isStructTy()
+                ? (elseVal->getType()->getStructName().str().empty()
+                       ? "struct"
+                       : elseVal->getType()->getStructName().str())
+                : (elseVal->getType()->isPointerTy() ? "pointer" : "value");
+        reportError(node->line,
+                    "ternary branches must return the same type (got " + t0 +
+                        " and " + t1 + ")");
         return nullptr;
     }
     if(commonType->isVoidTy())
@@ -7914,7 +8104,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
         return nullptr;
     }
 
-    auto* resultStructType = llvm::cast<llvm::StructType>(resultValue->getType());
+    auto* resultStructType =
+        llvm::cast<llvm::StructType>(resultValue->getType());
     std::string resultStructName = resultStructType->getName().str();
     auto resultMembersIt = structMembers.find(resultStructName);
     if(resultMembersIt == structMembers.end())
@@ -7955,8 +8146,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     llvm::Type* expectedRetType = currentFunc->getReturnType();
     if(!expectedRetType->isStructTy())
     {
-        reportError(node->line,
-                    "operator '?' can only be used in functions returning Result<_, _>");
+        reportError(node->line, "operator '?' can only be used in functions "
+                                "returning Result<_, _>");
         return nullptr;
     }
 
@@ -7965,8 +8156,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     auto expectedMembersIt = structMembers.find(expectedStructName);
     if(expectedMembersIt == structMembers.end())
     {
-        reportError(node->line,
-                    "operator '?' can only be used in functions returning Result<_, _>");
+        reportError(node->line, "operator '?' can only be used in functions "
+                                "returning Result<_, _>");
         return nullptr;
     }
 
@@ -7991,13 +8182,14 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     if(expectedIsOkIndex < 0 || expectedOkIndex < 0 || expectedErrIndex < 0 ||
        !expectedErrType)
     {
-        reportError(node->line,
-                    "operator '?' can only be used in functions returning Result<_, _>");
+        reportError(node->line, "operator '?' can only be used in functions "
+                                "returning Result<_, _>");
         return nullptr;
     }
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
-    llvm::BasicBlock* okBB = llvm::BasicBlock::Create(context, "try.ok", function);
+    llvm::BasicBlock* okBB =
+        llvm::BasicBlock::Create(context, "try.ok", function);
     llvm::BasicBlock* errBB = llvm::BasicBlock::Create(context, "try.err");
     llvm::BasicBlock* contBB = llvm::BasicBlock::Create(context, "try.cont");
 
@@ -8006,7 +8198,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     llvm::Type* okLlvmType = getLLVMTypeFromNode(resultOkType);
     if(!okLlvmType)
     {
-        reportError(node->line, "operator '?': failed to resolve Ok payload type");
+        reportError(node->line,
+                    "operator '?': failed to resolve Ok payload type");
         return nullptr;
     }
     llvm::AllocaInst* okSlot =
@@ -8015,40 +8208,42 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
     builder.CreateCondBr(isOkVal, okBB, errBB);
 
     builder.SetInsertPoint(okBB);
-    llvm::Value* okPayload =
-        builder.CreateExtractValue(resultValue, resultOkIndex, "try.ok.payload");
+    llvm::Value* okPayload = builder.CreateExtractValue(
+        resultValue, resultOkIndex, "try.ok.payload");
     builder.CreateStore(okPayload, okSlot);
     builder.CreateBr(contBB);
 
     errBB->insertInto(function);
     builder.SetInsertPoint(errBB);
-    llvm::Value* errPayload =
-        builder.CreateExtractValue(resultValue, resultErrIndex, "try.err.payload");
+    llvm::Value* errPayload = builder.CreateExtractValue(
+        resultValue, resultErrIndex, "try.err.payload");
     llvm::Type* expectedErrLlvmType = getLLVMTypeFromNode(expectedErrType);
     if(!expectedErrLlvmType)
     {
-        reportError(node->line, "operator '?': failed to resolve Err payload type");
+        reportError(node->line,
+                    "operator '?': failed to resolve Err payload type");
         return nullptr;
     }
 
     if(errPayload->getType() != expectedErrLlvmType)
     {
-        if(errPayload->getType()->isIntegerTy() && expectedErrLlvmType->isIntegerTy())
+        if(errPayload->getType()->isIntegerTy() &&
+           expectedErrLlvmType->isIntegerTy())
         {
-            errPayload = builder.CreateIntCast(errPayload, expectedErrLlvmType, true,
-                                               "try.err.cast");
+            errPayload = builder.CreateIntCast(errPayload, expectedErrLlvmType,
+                                               true, "try.err.cast");
         }
         else if(errPayload->getType()->isIntegerTy() &&
                 expectedErrLlvmType->isFloatingPointTy())
         {
-            errPayload =
-                builder.CreateSIToFP(errPayload, expectedErrLlvmType, "try.err.sitofp");
+            errPayload = builder.CreateSIToFP(errPayload, expectedErrLlvmType,
+                                              "try.err.sitofp");
         }
         else if(errPayload->getType()->isFloatingPointTy() &&
                 expectedErrLlvmType->isFloatingPointTy())
         {
-            errPayload =
-                builder.CreateFPCast(errPayload, expectedErrLlvmType, "try.err.fpcast");
+            errPayload = builder.CreateFPCast(errPayload, expectedErrLlvmType,
+                                              "try.err.fpcast");
         }
         else if(errPayload->getType()->isPointerTy() &&
                 expectedErrLlvmType->isPointerTy())
@@ -8064,17 +8259,17 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
         }
         else
         {
-            reportError(node->line,
-                        "operator '?': Err type does not match function return type");
+            reportError(
+                node->line,
+                "operator '?': Err type does not match function return type");
             return nullptr;
         }
     }
 
     llvm::Value* retResult = llvm::UndefValue::get(expectedRetType);
     // For Result<_, string>, append call-site context on every `?` propagation.
-    if(expectedErrType &&
-       (expectedErrType->kind == TypeNode::TYPE_STRING ||
-        expectedErrType->kind == TypeNode::TYPE_STR8))
+    if(expectedErrType && (expectedErrType->kind == TypeNode::TYPE_STRING ||
+                           expectedErrType->kind == TypeNode::TYPE_STR8))
     {
         llvm::Type* charPtrTy = getLLVMType(TypeNode::TYPE_STRING);
         llvm::FunctionCallee addContextFn = module->getOrInsertFunction(
@@ -8087,7 +8282,8 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
         if(fnLabel == "__mlang_user_main")
             fnLabel = "main";
         std::string tryContext = fnLabel + ":" + std::to_string(node->line);
-        llvm::Value* ctxStr = builder.CreateGlobalStringPtr(tryContext, "try.ctx");
+        llvm::Value* ctxStr =
+            builder.CreateGlobalStringPtr(tryContext, "try.ctx");
         errPayload = builder.CreateCall(addContextFn, {errPayload, ctxStr},
                                         "try.err.withctx");
     }
@@ -8096,12 +8292,13 @@ llvm::Value* CodeGenerator::generateTryExpression(TryExpressionNode* node)
         retResult, llvm::ConstantInt::getFalse(context),
         static_cast<unsigned>(expectedIsOkIndex), "try.ret.is_ok");
     retResult = builder.CreateInsertValue(
-        retResult, llvm::Constant::getNullValue(expectedRetType->getStructElementType(
-                       static_cast<unsigned>(expectedOkIndex))),
+        retResult,
+        llvm::Constant::getNullValue(expectedRetType->getStructElementType(
+            static_cast<unsigned>(expectedOkIndex))),
         static_cast<unsigned>(expectedOkIndex), "try.ret.ok");
-    retResult = builder.CreateInsertValue(retResult, errPayload,
-                                          static_cast<unsigned>(expectedErrIndex),
-                                          "try.ret.err");
+    retResult = builder.CreateInsertValue(
+        retResult, errPayload, static_cast<unsigned>(expectedErrIndex),
+        "try.ret.err");
     emitAllActiveCleanups();
     builder.CreateRet(retResult);
 
@@ -8527,8 +8724,7 @@ void CodeGenerator::generateWhileStatement(WhileNode* node)
         movedVariables.insert(bodyMoved.begin(), bodyMoved.end());
         for(const auto& kv : bodyPointerBorrowTarget)
         {
-            if(pointerBorrowTarget.find(kv.first) ==
-               pointerBorrowTarget.end())
+            if(pointerBorrowTarget.find(kv.first) == pointerBorrowTarget.end())
             {
                 pointerBorrowTarget[kv.first] = kv.second;
             }
@@ -8779,8 +8975,7 @@ void CodeGenerator::generateForStatement(ForNode* node)
         if(rangeNeverExecutes)
         {
             movedVariables = std::move(stateBeforeLoopMoved);
-            pointerBorrowTarget =
-                std::move(stateBeforeLoopPointerBorrowTarget);
+            pointerBorrowTarget = std::move(stateBeforeLoopPointerBorrowTarget);
             activeBorrowers = std::move(stateBeforeLoopActiveBorrowers);
         }
     }
@@ -8844,8 +9039,8 @@ void CodeGenerator::generateForStatement(ForNode* node)
         }
         else if(!resolveVisibleEnumName(identifier->name).empty())
         {
-            generateForEnumIteration(
-                node, resolveVisibleEnumName(identifier->name));
+            generateForEnumIteration(node,
+                                     resolveVisibleEnumName(identifier->name));
         }
         else
         {
@@ -8860,11 +9055,10 @@ void CodeGenerator::generateForStatement(ForNode* node)
     }
     else
     {
-        reportError(
-            node->line,
-            "for loops support range expressions (start..end), list "
-            "iteration, enum iteration, and map iteration "
-            "(.keys(), .values(), .entries())");
+        reportError(node->line,
+                    "for loops support range expressions (start..end), list "
+                    "iteration, enum iteration, and map iteration "
+                    "(.keys(), .values(), .entries())");
     }
 }
 
@@ -9168,7 +9362,8 @@ void CodeGenerator::generateForListVariableIteration(ForNode* node,
             enumVariableTypes.erase(node->varName);
         }
     }
-    else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
+    else if(auto* genRef =
+                dynamic_cast<GenericStructTypeRefNode*>(elemTypeNode))
     {
         variableTypes[node->varName] = TypeNode::TYPE_STRUCT;
         structVariableTypes[node->varName] = getOrCreateMonomorphizedStruct(
@@ -9415,8 +9610,8 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
             builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
         llvm::Value* variantConst = llvm::ConstantInt::get(
             enumTy, orderIt->second[i].second, !enumIsUnsigned(baseKind));
-        enumVal = builder.CreateSelect(isThis, variantConst, enumVal,
-                                       "selectenum");
+        enumVal =
+            builder.CreateSelect(isThis, variantConst, enumVal, "selectenum");
     }
     builder.CreateStore(enumVal, loopVar);
 
@@ -9894,8 +10089,7 @@ void CodeGenerator::generateThrowStatement(ThrowNode* node)
     llvm::Type* exceptionType = exceptionValue->getType();
     if(!exceptionType->isStructTy())
     {
-        reportError(node->line,
-                    "throw expects a struct exception value");
+        reportError(node->line, "throw expects a struct exception value");
         return;
     }
 
@@ -9904,8 +10098,7 @@ void CodeGenerator::generateThrowStatement(ThrowNode* node)
     auto membersIt = structMembers.find(exceptionStructName);
     if(membersIt == structMembers.end())
     {
-        reportError(node->line,
-                    "throw expects a named exception struct");
+        reportError(node->line, "throw expects a named exception struct");
         return;
     }
 
@@ -9935,17 +10128,19 @@ void CodeGenerator::generateThrowStatement(ThrowNode* node)
         exceptionValue, typeNameIndex, "throw.type_name");
     llvm::Value* message = builder.CreateExtractValue(
         exceptionValue, messageIndex, "throw.message");
-    llvm::Value* sourceLine = sourceLineIndex >= 0
-        ? builder.CreateExtractValue(exceptionValue, sourceLineIndex,
-                                     "throw.source_line")
-        : llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), node->line);
+    llvm::Value* sourceLine =
+        sourceLineIndex >= 0
+            ? builder.CreateExtractValue(exceptionValue, sourceLineIndex,
+                                         "throw.source_line")
+            : llvm::ConstantInt::get(llvm::Type::getInt32Ty(context),
+                                     node->line);
 
     if(sourceLine->getType()->isIntegerTy() &&
        sourceLine->getType() != llvm::Type::getInt32Ty(context))
     {
-        sourceLine = builder.CreateIntCast(sourceLine,
-                                           llvm::Type::getInt32Ty(context),
-                                           true, "throw.line.cast");
+        sourceLine =
+            builder.CreateIntCast(sourceLine, llvm::Type::getInt32Ty(context),
+                                  true, "throw.line.cast");
     }
 
     consumeMoveFromExpression(node->expression, node->line, "throw");
@@ -9960,20 +10155,22 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
 
     if(containsUnsupportedTryControlFlow(node->tryBlock))
     {
-        reportError(node->line,
-                    "return, break, and continue are not yet supported inside try blocks");
+        reportError(node->line, "return, break, and continue are not yet "
+                                "supported inside try blocks");
         return;
     }
 
     auto* catchStruct = dynamic_cast<StructTypeRefNode*>(node->catchType);
     if(!catchStruct)
     {
-        reportError(node->line, "catch currently requires a struct exception type");
+        reportError(node->line,
+                    "catch currently requires a struct exception type");
         return;
     }
 
     llvm::Type* catchLlvmType = getLLVMTypeFromNode(node->catchType);
-    auto* catchStructType = llvm::dyn_cast_or_null<llvm::StructType>(catchLlvmType);
+    auto* catchStructType =
+        llvm::dyn_cast_or_null<llvm::StructType>(catchLlvmType);
     if(!catchStructType)
     {
         reportError(node->line, "catch type must lower to a struct");
@@ -9984,7 +10181,8 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     auto catchMembersIt = structMembers.find(catchStructName);
     if(catchMembersIt == structMembers.end())
     {
-        reportError(node->line, "unknown catch type: " + catchStruct->structName);
+        reportError(node->line,
+                    "unknown catch type: " + catchStruct->structName);
         return;
     }
 
@@ -10006,8 +10204,9 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     }
     if(typeNameIndex < 0 || messageIndex < 0 || sourceLineIndex < 0)
     {
-        reportError(node->line,
-                    "catch type must contain type_name, message, and source_line");
+        reportError(
+            node->line,
+            "catch type must contain type_name, message, and source_line");
         return;
     }
 
@@ -10015,10 +10214,10 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     llvm::Function* function = builder.GetInsertBlock()->getParent();
     llvm::Value* frameHandle =
         builder.CreateCall(exceptionsPushFrameFunc, {}, "try.exc.frame");
-    llvm::Value* frameEnv =
-        builder.CreateCall(exceptionsFrameEnvFunc, {frameHandle}, "try.exc.env");
-    auto* trySetjmpCall = builder.CreateCall(exceptionsSetjmpFunc, {frameEnv},
-                                             "try.exc.state");
+    llvm::Value* frameEnv = builder.CreateCall(exceptionsFrameEnvFunc,
+                                               {frameHandle}, "try.exc.env");
+    auto* trySetjmpCall =
+        builder.CreateCall(exceptionsSetjmpFunc, {frameEnv}, "try.exc.state");
     trySetjmpCall->setCanReturnTwice();
     llvm::Value* frameState = trySetjmpCall;
 
@@ -10088,18 +10287,20 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
         exceptionsTakeSourceLineFunc, {}, "catch.source_line");
 
     llvm::Value* catchValue = llvm::UndefValue::get(catchStructType);
-    catchValue = builder.CreateInsertValue(catchValue, caughtTypeName,
-                                           {static_cast<unsigned>(typeNameIndex)});
-    catchValue = builder.CreateInsertValue(catchValue, caughtMessage,
-                                           {static_cast<unsigned>(messageIndex)});
+    catchValue = builder.CreateInsertValue(
+        catchValue, caughtTypeName, {static_cast<unsigned>(typeNameIndex)});
+    catchValue = builder.CreateInsertValue(
+        catchValue, caughtMessage, {static_cast<unsigned>(messageIndex)});
     catchValue = builder.CreateInsertValue(
         catchValue, caughtSourceLine, {static_cast<unsigned>(sourceLineIndex)});
     if(ownedIndex >= 0)
     {
-        llvm::Type* ownedType = catchMembersIt->second[static_cast<size_t>(ownedIndex)].second
-            ? getLLVMTypeFromNode(
-                  catchMembersIt->second[static_cast<size_t>(ownedIndex)].second)
-            : llvm::Type::getInt1Ty(context);
+        llvm::Type* ownedType =
+            catchMembersIt->second[static_cast<size_t>(ownedIndex)].second
+                ? getLLVMTypeFromNode(
+                      catchMembersIt->second[static_cast<size_t>(ownedIndex)]
+                          .second)
+                : llvm::Type::getInt1Ty(context);
         llvm::Value* ownedValue = nullptr;
         if(ownedType->isIntegerTy(1))
             ownedValue = llvm::ConstantInt::get(ownedType, 1, false);
@@ -10113,8 +10314,8 @@ void CodeGenerator::generateTryCatchStatement(TryCatchNode* node)
     }
 
     enterCleanupScope();
-    llvm::AllocaInst* catchAlloca = builder.CreateAlloca(
-        catchStructType, nullptr, node->catchName);
+    llvm::AllocaInst* catchAlloca =
+        builder.CreateAlloca(catchStructType, nullptr, node->catchName);
     builder.CreateStore(catchValue, catchAlloca);
     namedValues[node->catchName] = catchAlloca;
     variableTypes[node->catchName] = TypeNode::TYPE_STRUCT;
@@ -10167,8 +10368,7 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
     std::string resolvedEnumName = resolveVisibleEnumName(node->enumName);
     if(resolvedEnumName.empty())
     {
-        reportError(node->line,
-                    "unknown enum: '" + node->enumName + "'");
+        reportError(node->line, "unknown enum: '" + node->enumName + "'");
         return nullptr;
     }
     auto enumIt = enumValues.find(resolvedEnumName);
@@ -10201,7 +10401,8 @@ llvm::Value* CodeGenerator::generateIdentifier(IdentifierNode* node)
         return builder.CreateLoad(alloca->getAllocatedType(), alloca,
                                   node->name);
     }
-    if(llvm::GlobalVariable* global = llvm::dyn_cast<llvm::GlobalVariable>(value))
+    if(llvm::GlobalVariable* global =
+           llvm::dyn_cast<llvm::GlobalVariable>(value))
     {
         return builder.CreateLoad(global->getValueType(), global, node->name);
     }
@@ -10269,8 +10470,7 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
     if(!isEnumIntegralType(baseKind))
     {
         reportError(node->line,
-                    "enum '" + node->name +
-                        "' has non-integer backing type");
+                    "enum '" + node->name + "' has non-integer backing type");
         return;
     }
 
@@ -10318,8 +10518,7 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                     auto refEnumIt = enumValues.find(refEnumName);
                     if(refEnumIt != enumValues.end())
                     {
-                        auto refVarIt =
-                            refEnumIt->second.find(refVariantName);
+                        auto refVarIt = refEnumIt->second.find(refVariantName);
                         if(refVarIt != refEnumIt->second.end())
                         {
                             value = refVarIt->second;
@@ -10330,12 +10529,11 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
 
                 if(!resolved)
                 {
-                    reportError(
-                        variant->line > 0 ? variant->line : node->line,
-                        "enum variant '" + variant->name +
-                            "' references unknown enum value '" +
-                            refEnumName + "::" + refVariantName +
-                            "' in enum '" + node->name + "'");
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "enum variant '" + variant->name +
+                                    "' references unknown enum value '" +
+                                    refEnumName + "::" + refVariantName +
+                                    "' in enum '" + node->name + "'");
                     return;
                 }
 
@@ -10359,24 +10557,23 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
                     if(refBkIt != enumBaseTypes.end())
                         refBaseKind = refBkIt->second;
 
-                    reportError(
-                        variant->line > 0 ? variant->line : node->line,
-                        "enum types/values are not compatible: '" +
-                            variant->refEnumName + "::" +
-                            variant->refVariantName + "' (" +
-                            enumBaseTypeName(refBaseKind) + ", value " +
-                            std::to_string(value) + ") cannot fit in enum '" +
-                            node->name + "' backing type '" +
-                            enumBaseTypeName(baseKind) + "'");
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "enum types/values are not compatible: '" +
+                                    variant->refEnumName +
+                                    "::" + variant->refVariantName + "' (" +
+                                    enumBaseTypeName(refBaseKind) + ", value " +
+                                    std::to_string(value) +
+                                    ") cannot fit in enum '" + node->name +
+                                    "' backing type '" +
+                                    enumBaseTypeName(baseKind) + "'");
                 }
                 else
                 {
-                    reportError(
-                        variant->line > 0 ? variant->line : node->line,
-                        "enum variant value '" + std::to_string(value) +
-                            "' does not fit backing type '" +
-                            enumBaseTypeName(baseKind) + "' in enum '" +
-                            node->name + "'");
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "enum variant value '" + std::to_string(value) +
+                                    "' does not fit backing type '" +
+                                    enumBaseTypeName(baseKind) + "' in enum '" +
+                                    node->name + "'");
                 }
                 return;
             }
@@ -10587,9 +10784,9 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
         {
             for(size_t i = 0; i < tupleType->elementTypes->types.size(); ++i)
             {
-                tupleType->elementTypes->types[i] = resolveTypeAliasNode(
-                    tupleType->elementTypes->types[i], scopeTypeParams,
-                    aliasStack);
+                tupleType->elementTypes->types[i] =
+                    resolveTypeAliasNode(tupleType->elementTypes->types[i],
+                                         scopeTypeParams, aliasStack);
             }
         }
         return tupleType;
@@ -10597,15 +10794,15 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
 
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
     {
-        ptrType->elementType = resolveTypeAliasNode(ptrType->elementType,
-                                                    scopeTypeParams, aliasStack);
+        ptrType->elementType = resolveTypeAliasNode(
+            ptrType->elementType, scopeTypeParams, aliasStack);
         return ptrType;
     }
 
     if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
     {
-        refType->elementType = resolveTypeAliasNode(refType->elementType,
-                                                    scopeTypeParams, aliasStack);
+        refType->elementType = resolveTypeAliasNode(
+            refType->elementType, scopeTypeParams, aliasStack);
         return refType;
     }
 
@@ -10620,17 +10817,16 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
 
         if(!it->second.typeParams.empty())
         {
-            reportError(typeNode->line,
-                        "generic type alias '" + structType->structName +
-                            "' requires type arguments");
+            reportError(typeNode->line, "generic type alias '" +
+                                            structType->structName +
+                                            "' requires type arguments");
             return typeNode;
         }
 
         if(in_stack(structType->structName))
         {
-            reportError(typeNode->line,
-                        "cyclic type alias detected for '" +
-                            structType->structName + "'");
+            reportError(typeNode->line, "cyclic type alias detected for '" +
+                                            structType->structName + "'");
             return typeNode;
         }
 
@@ -10645,9 +10841,8 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
     {
         for(size_t i = 0; i < genStruct->typeArgs.size(); ++i)
         {
-            genStruct->typeArgs[i] = resolveTypeAliasNode(genStruct->typeArgs[i],
-                                                          scopeTypeParams,
-                                                          aliasStack);
+            genStruct->typeArgs[i] = resolveTypeAliasNode(
+                genStruct->typeArgs[i], scopeTypeParams, aliasStack);
         }
 
         if(scopeTypeParams.count(genStruct->structName))
@@ -10659,17 +10854,15 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
 
         if(it->second.typeParams.empty())
         {
-            reportError(typeNode->line,
-                        "type alias '" + genStruct->structName +
-                            "' does not take type arguments");
+            reportError(typeNode->line, "type alias '" + genStruct->structName +
+                                            "' does not take type arguments");
             return typeNode;
         }
 
         if(genStruct->typeArgs.size() != it->second.typeParams.size())
         {
             reportError(typeNode->line,
-                        "type alias '" + genStruct->structName +
-                            "' expects " +
+                        "type alias '" + genStruct->structName + "' expects " +
                             std::to_string(it->second.typeParams.size()) +
                             " type arguments, got " +
                             std::to_string(genStruct->typeArgs.size()));
@@ -10678,16 +10871,15 @@ TypeNode* CodeGenerator::resolveTypeAliasNode(
 
         if(in_stack(genStruct->structName))
         {
-            reportError(typeNode->line,
-                        "cyclic type alias detected for '" +
-                            genStruct->structName + "'");
+            reportError(typeNode->line, "cyclic type alias detected for '" +
+                                            genStruct->structName + "'");
             return typeNode;
         }
 
         aliasStack.push_back(genStruct->structName);
         TypeNode* aliasType = cloneTypeNode(it->second.aliasedType);
-        TypeNode* expanded = substituteTypeParams(aliasType, it->second.typeParams,
-                                                  genStruct->typeArgs);
+        TypeNode* expanded = substituteTypeParams(
+            aliasType, it->second.typeParams, genStruct->typeArgs);
         expanded = resolveTypeAliasNode(expanded, scopeTypeParams, aliasStack);
         aliasStack.pop_back();
         return expanded;
@@ -10703,9 +10895,8 @@ void CodeGenerator::buildTypeAliasTable(ProgramNode* program)
         return;
 
     std::set<std::string> knownTypeNames = {
-        "void", "bool", "str8",  "str16",  "list",   "map",    "tuple",
-        "ptr",  "i8",   "i16",   "i32",    "i64",    "u8",     "u16",
-        "u32",  "u64",  "f32",   "f64"};
+        "void", "bool", "str8", "str16", "list", "map", "tuple", "ptr", "i8",
+        "i16",  "i32",  "i64",  "u8",    "u16",  "u32", "u64",   "f32", "f64"};
     if(program->structList)
     {
         for(auto* st : program->structList->structs)
@@ -10859,16 +11050,16 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
                 {
                     const int prevLine = it->second.first;
                     const int prevCol = it->second.second;
-                    std::string prevAt = prevCol > 0
-                                             ? ("line " + std::to_string(prevLine) +
-                                                ", column " +
-                                                std::to_string(prevCol))
-                                             : ("line " + std::to_string(prevLine));
-                    reportError(aliasStmt->line, aliasStmt->col,
-                                "type alias '" + aliasStmt->name +
-                                    "' overlaps with previous alias declaration in "
-                                    "the same scope at " +
-                                    prevAt);
+                    std::string prevAt =
+                        prevCol > 0 ? ("line " + std::to_string(prevLine) +
+                                       ", column " + std::to_string(prevCol))
+                                    : ("line " + std::to_string(prevLine));
+                    reportError(
+                        aliasStmt->line, aliasStmt->col,
+                        "type alias '" + aliasStmt->name +
+                            "' overlaps with previous alias declaration in "
+                            "the same scope at " +
+                            prevAt);
                 }
                 else
                 {
@@ -11298,8 +11489,8 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
         }
     };
 
-    resolve_stmt_list = [&](StatementListNode* list,
-                            const std::set<std::string>& scope)
+    resolve_stmt_list =
+        [&](StatementListNode* list, const std::set<std::string>& scope)
     {
         if(!list)
             return;
@@ -11322,14 +11513,15 @@ void CodeGenerator::resolveTypeAliasesInProgram(ProgramNode* program)
                 info.col = aliasStmt->col;
                 info.typeParams = aliasStmt->typeParams;
                 if(info.typeParams.empty())
-                    collect_alias_params(aliasStmt->aliasedType, info.typeParams, scope);
+                    collect_alias_params(aliasStmt->aliasedType,
+                                         info.typeParams, scope);
 
                 std::set<std::string> aliasScope = scope;
                 for(const auto& p : info.typeParams)
                     aliasScope.insert(p);
                 std::vector<std::string> aliasStack;
-                info.aliasedType =
-                    resolveTypeAliasNode(info.aliasedType, aliasScope, aliasStack);
+                info.aliasedType = resolveTypeAliasNode(info.aliasedType,
+                                                        aliasScope, aliasStack);
 
                 AliasRestore restore;
                 restore.name = aliasStmt->name;
@@ -11497,7 +11689,7 @@ std::string CodeGenerator::functionSymbolName(FunctionDefNode* node) const
 }
 
 void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
-                                              llvm::Function* function)
+                                             llvm::Function* function)
 {
     if(!node || !function)
         return;
@@ -11522,10 +11714,14 @@ void CodeGenerator::registerFunctionOverload(FunctionDefNode* node,
         }
     }
 
-    FunctionOverloadInfo info{
-        node, function, signatureKey, function->getName().str(),
-        node->parameters ? node->parameters->isVarArg : false, node->isPublic,
-        node->sourceModule};
+    FunctionOverloadInfo info{node,
+                              function,
+                              signatureKey,
+                              function->getName().str(),
+                              node->parameters ? node->parameters->isVarArg
+                                               : false,
+                              node->isPublic,
+                              node->sourceModule};
     overloads.push_back(info);
 
     functionVisibility[signatureKey] =
@@ -11593,12 +11789,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         llvm::Type* ptrType =
             llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-        llvm::AllocaInst* alloca = builder.CreateAlloca(
-            ptrType, nullptr, node->name + ".closure");
-        builder.CreateStore(
-            llvm::ConstantPointerNull::get(
-                llvm::cast<llvm::PointerType>(ptrType)),
-            alloca);
+        llvm::AllocaInst* alloca =
+            builder.CreateAlloca(ptrType, nullptr, node->name + ".closure");
+        builder.CreateStore(llvm::ConstantPointerNull::get(
+                                llvm::cast<llvm::PointerType>(ptrType)),
+                            alloca);
         namedValues[node->name] = alloca;
         return;
     }
@@ -11633,9 +11828,9 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 if(typeIt != variableTypes.end() &&
                    typeIt->second == TypeNode::TYPE_STRING)
                 {
-                    initValue = builder.CreateLoad(initValue->getType(),
-                                                   initValue,
-                                                   id->name + ".str_borrow");
+                    initValue =
+                        builder.CreateLoad(initValue->getType(), initValue,
+                                           id->name + ".str_borrow");
                 }
             }
         }
@@ -11649,17 +11844,21 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
     if(!node->type)
     {
         llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
-        llvm::AllocaInst* alloca = initValue->getType()->isStructTy()
-            ? createEntryBlockAlloca(currentFunction, initValue->getType(),
-                                     node->name)
-            : builder.CreateAlloca(initValue->getType(), nullptr, node->name);
+        llvm::AllocaInst* alloca =
+            initValue->getType()->isStructTy()
+                ? createEntryBlockAlloca(currentFunction, initValue->getType(),
+                                         node->name)
+                : builder.CreateAlloca(initValue->getType(), nullptr,
+                                       node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
 
-        auto infer_kind_from_expr = [&](ExpressionNode* expr) -> TypeNode::TypeKind
+        auto infer_kind_from_expr =
+            [&](ExpressionNode* expr) -> TypeNode::TypeKind
         {
             if(dynamic_cast<IntLiteralNode*>(expr))
-                return TypeNode::TYPE_I64;  // generateIntLiteral always emits i64
+                return TypeNode::TYPE_I64; // generateIntLiteral always emits
+                                           // i64
             if(dynamic_cast<BoolLiteralNode*>(expr))
                 return TypeNode::TYPE_BOOL;
             if(dynamic_cast<FloatLiteralNode*>(expr))
@@ -11755,7 +11954,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             return TypeNode::TYPE_INT;
         };
 
-        TypeNode::TypeKind inferredKind = infer_kind_from_expr(node->expression);
+        TypeNode::TypeKind inferredKind =
+            infer_kind_from_expr(node->expression);
         variableTypes[node->name] = inferredKind;
 
         if(auto* id = dynamic_cast<IdentifierNode*>(node->expression))
@@ -11789,8 +11989,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         {
             if(call->name == "String::new" ||
                call->name == "String::with_capacity" ||
-               call->name == "String::from" ||
-               call->name == "String::to_utf8")
+               call->name == "String::from" || call->name == "String::to_utf8")
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
@@ -11842,7 +12041,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 static_cast<TypeNode*>(create_type_node(keyKind)),
                 static_cast<TypeNode*>(create_type_node(valKind)));
         }
-        else if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->expression))
+        else if(auto* tupleLit =
+                    dynamic_cast<TupleLiteralNode*>(node->expression))
         {
             variableTypes[node->name] = TypeNode::TYPE_TUPLE;
             std::vector<TypeNode*> elems;
@@ -11850,13 +12050,14 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 for(auto* e : tupleLit->elements->elements)
                 {
-                    elems.push_back(
-                        static_cast<TypeNode*>(create_type_node(infer_kind_from_expr(e))));
+                    elems.push_back(static_cast<TypeNode*>(
+                        create_type_node(infer_kind_from_expr(e))));
                 }
             }
             tupleElementTypes[node->name] = elems;
         }
-        else if(auto* structLit = dynamic_cast<StructLiteralNode*>(node->expression))
+        else if(auto* structLit =
+                    dynamic_cast<StructLiteralNode*>(node->expression))
         {
             variableTypes[node->name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[node->name] = structLit->structName;
@@ -11869,8 +12070,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
-            bool _is_mut_borrow = _borrow_unary &&
-                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            bool _is_mut_borrow =
+                _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
             registerPointerBorrow(node->name, node->expression, node->line,
                                   _is_mut_borrow);
         }
@@ -11976,8 +12177,8 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         variableTypes[node->name] = TypeNode::TYPE_PTR;
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
-            bool _is_mut_borrow = _borrow_unary &&
-                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            bool _is_mut_borrow =
+                _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
             registerPointerBorrow(node->name, node->expression, node->line,
                                   _is_mut_borrow);
         }
@@ -12131,8 +12332,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                 }
                 else
                 {
-                    reportError(node->line,
-                                "enum initializer must be integer");
+                    reportError(node->line, "enum initializer must be integer");
                     return;
                 }
             }
@@ -12264,8 +12464,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         dynamic_cast<GenericStructTypeRefNode*>(node->type))
             {
                 kind = TypeNode::TYPE_STRUCT;
-                structTypeName = getOrCreateMonomorphizedStruct(
-                    gsr->structName, gsr->typeArgs);
+                structTypeName = getOrCreateMonomorphizedStruct(gsr->structName,
+                                                                gsr->typeArgs);
             }
         }
 
@@ -12273,8 +12473,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             if(!node->initExpr)
             {
-                reportError(node->line,
-                            "static/global var declaration without type requires initializer");
+                reportError(node->line, "static/global var declaration without "
+                                        "type requires initializer");
                 return;
             }
             llvm::Value* initValue = generateExpression(node->initExpr);
@@ -12296,18 +12496,17 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         auto* gv = module->getGlobalVariable(storageName);
         if(!gv)
         {
-            gv = new llvm::GlobalVariable(*module, targetType, false,
-                                          llvm::GlobalValue::InternalLinkage,
-                                          llvm::Constant::getNullValue(targetType),
-                                          storageName);
+            gv = new llvm::GlobalVariable(
+                *module, targetType, false, llvm::GlobalValue::InternalLinkage,
+                llvm::Constant::getNullValue(targetType), storageName);
         }
 
         if(node->initExpr)
         {
             if((kind == TypeNode::TYPE_PTR || targetType->isPointerTy()) &&
-               !validateNoEscapingBorrow(
-                   node->initExpr, node->line,
-                   "store in global/static '" + node->name + "'"))
+               !validateNoEscapingBorrow(node->initExpr, node->line,
+                                         "store in global/static '" +
+                                             node->name + "'"))
             {
                 return;
             }
@@ -12325,10 +12524,12 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 }
 
                 llvm::Function* fn = builder.GetInsertBlock()->getParent();
-                auto* initBB = llvm::BasicBlock::Create(context, "static.init", fn);
-                auto* contBB = llvm::BasicBlock::Create(context, "static.cont", fn);
-                llvm::Value* isInit =
-                    builder.CreateLoad(guard->getValueType(), guard, "static.inited");
+                auto* initBB =
+                    llvm::BasicBlock::Create(context, "static.init", fn);
+                auto* contBB =
+                    llvm::BasicBlock::Create(context, "static.cont", fn);
+                llvm::Value* isInit = builder.CreateLoad(
+                    guard->getValueType(), guard, "static.inited");
                 builder.CreateCondBr(isInit, contBB, initBB);
 
                 builder.SetInsertPoint(initBB);
@@ -12337,17 +12538,28 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     return;
                 if(initValue->getType() != targetType)
                 {
-                    if(initValue->getType()->isIntegerTy() && targetType->isIntegerTy())
-                        initValue = builder.CreateSExtOrTrunc(initValue, targetType, "static.cast");
-                    else if(initValue->getType()->isIntegerTy() && targetType->isFloatingPointTy())
-                        initValue = builder.CreateSIToFP(initValue, targetType, "static.sitofp");
-                    else if(initValue->getType()->isFloatingPointTy() && targetType->isIntegerTy())
-                        initValue = builder.CreateFPToSI(initValue, targetType, "static.fptosi");
-                    else if(initValue->getType()->isFloatingPointTy() && targetType->isFloatingPointTy())
-                        initValue = builder.CreateFPCast(initValue, targetType, "static.fpcast");
+                    if(initValue->getType()->isIntegerTy() &&
+                       targetType->isIntegerTy())
+                        initValue = builder.CreateSExtOrTrunc(
+                            initValue, targetType, "static.cast");
+                    else if(initValue->getType()->isIntegerTy() &&
+                            targetType->isFloatingPointTy())
+                        initValue = builder.CreateSIToFP(initValue, targetType,
+                                                         "static.sitofp");
+                    else if(initValue->getType()->isFloatingPointTy() &&
+                            targetType->isIntegerTy())
+                        initValue = builder.CreateFPToSI(initValue, targetType,
+                                                         "static.fptosi");
+                    else if(initValue->getType()->isFloatingPointTy() &&
+                            targetType->isFloatingPointTy())
+                        initValue = builder.CreateFPCast(initValue, targetType,
+                                                         "static.fpcast");
                     else
                     {
-                        reportError(node->line, "type mismatch in static initializer for '" + node->name + "'");
+                        reportError(
+                            node->line,
+                            "type mismatch in static initializer for '" +
+                                node->name + "'");
                         return;
                     }
                 }
@@ -12356,7 +12568,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 builder.CreateBr(contBB);
                 builder.SetInsertPoint(contBB);
             }
-            else if(auto* cinit = llvm::dyn_cast<llvm::Constant>(generateExpression(node->initExpr)))
+            else if(auto* cinit = llvm::dyn_cast<llvm::Constant>(
+                        generateExpression(node->initExpr)))
             {
                 gv->setInitializer(cinit);
             }
@@ -12367,17 +12580,28 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                     return;
                 if(initValue->getType() != targetType)
                 {
-                    if(initValue->getType()->isIntegerTy() && targetType->isIntegerTy())
-                        initValue = builder.CreateSExtOrTrunc(initValue, targetType, "global.cast");
-                    else if(initValue->getType()->isIntegerTy() && targetType->isFloatingPointTy())
-                        initValue = builder.CreateSIToFP(initValue, targetType, "global.sitofp");
-                    else if(initValue->getType()->isFloatingPointTy() && targetType->isIntegerTy())
-                        initValue = builder.CreateFPToSI(initValue, targetType, "global.fptosi");
-                    else if(initValue->getType()->isFloatingPointTy() && targetType->isFloatingPointTy())
-                        initValue = builder.CreateFPCast(initValue, targetType, "global.fpcast");
+                    if(initValue->getType()->isIntegerTy() &&
+                       targetType->isIntegerTy())
+                        initValue = builder.CreateSExtOrTrunc(
+                            initValue, targetType, "global.cast");
+                    else if(initValue->getType()->isIntegerTy() &&
+                            targetType->isFloatingPointTy())
+                        initValue = builder.CreateSIToFP(initValue, targetType,
+                                                         "global.sitofp");
+                    else if(initValue->getType()->isFloatingPointTy() &&
+                            targetType->isIntegerTy())
+                        initValue = builder.CreateFPToSI(initValue, targetType,
+                                                         "global.fptosi");
+                    else if(initValue->getType()->isFloatingPointTy() &&
+                            targetType->isFloatingPointTy())
+                        initValue = builder.CreateFPCast(initValue, targetType,
+                                                         "global.fpcast");
                     else
                     {
-                        reportError(node->line, "type mismatch in global initializer for '" + node->name + "'");
+                        reportError(
+                            node->line,
+                            "type mismatch in global initializer for '" +
+                                node->name + "'");
                         return;
                     }
                 }
@@ -12415,12 +12639,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             llvm::Type* ptrType =
                 llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-            llvm::AllocaInst* alloca = builder.CreateAlloca(
-                ptrType, nullptr, node->name + ".closure");
-            builder.CreateStore(
-                llvm::ConstantPointerNull::get(
-                    llvm::cast<llvm::PointerType>(ptrType)),
-                alloca);
+            llvm::AllocaInst* alloca =
+                builder.CreateAlloca(ptrType, nullptr, node->name + ".closure");
+            builder.CreateStore(llvm::ConstantPointerNull::get(
+                                    llvm::cast<llvm::PointerType>(ptrType)),
+                                alloca);
             namedValues[node->name] = alloca;
             return;
         }
@@ -12440,17 +12663,21 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             return;
 
         llvm::Function* currentFunction = builder.GetInsertBlock()->getParent();
-        llvm::AllocaInst* alloca = initValue->getType()->isStructTy()
-            ? createEntryBlockAlloca(currentFunction, initValue->getType(),
-                                     node->name)
-            : builder.CreateAlloca(initValue->getType(), nullptr, node->name);
+        llvm::AllocaInst* alloca =
+            initValue->getType()->isStructTy()
+                ? createEntryBlockAlloca(currentFunction, initValue->getType(),
+                                         node->name)
+                : builder.CreateAlloca(initValue->getType(), nullptr,
+                                       node->name);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
 
-        auto infer_kind_from_expr = [&](ExpressionNode* expr) -> TypeNode::TypeKind
+        auto infer_kind_from_expr =
+            [&](ExpressionNode* expr) -> TypeNode::TypeKind
         {
             if(dynamic_cast<IntLiteralNode*>(expr))
-                return TypeNode::TYPE_I64;  // generateIntLiteral always emits i64
+                return TypeNode::TYPE_I64; // generateIntLiteral always emits
+                                           // i64
             if(dynamic_cast<BoolLiteralNode*>(expr))
                 return TypeNode::TYPE_BOOL;
             if(dynamic_cast<FloatLiteralNode*>(expr))
@@ -12580,8 +12807,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         {
             if(call->name == "String::new" ||
                call->name == "String::with_capacity" ||
-               call->name == "String::from" ||
-               call->name == "String::to_utf8")
+               call->name == "String::from" || call->name == "String::to_utf8")
             {
                 variableTypes[node->name] = TypeNode::TYPE_STRING;
             }
@@ -12633,7 +12859,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 static_cast<TypeNode*>(create_type_node(keyKind)),
                 static_cast<TypeNode*>(create_type_node(valKind)));
         }
-        else if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(node->initExpr))
+        else if(auto* tupleLit =
+                    dynamic_cast<TupleLiteralNode*>(node->initExpr))
         {
             variableTypes[node->name] = TypeNode::TYPE_TUPLE;
             std::vector<TypeNode*> elems;
@@ -12641,13 +12868,14 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             {
                 for(auto* e : tupleLit->elements->elements)
                 {
-                    elems.push_back(
-                        static_cast<TypeNode*>(create_type_node(infer_kind_from_expr(e))));
+                    elems.push_back(static_cast<TypeNode*>(
+                        create_type_node(infer_kind_from_expr(e))));
                 }
             }
             tupleElementTypes[node->name] = elems;
         }
-        else if(auto* structLit = dynamic_cast<StructLiteralNode*>(node->initExpr))
+        else if(auto* structLit =
+                    dynamic_cast<StructLiteralNode*>(node->initExpr))
         {
             variableTypes[node->name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[node->name] = structLit->structName;
@@ -12660,8 +12888,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
-            bool _is_mut_borrow = _borrow_unary &&
-                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            bool _is_mut_borrow =
+                _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
             registerPointerBorrow(node->name, node->initExpr, node->line,
                                   _is_mut_borrow);
         }
@@ -12724,8 +12952,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
 
         if(node->initExpr)
         {
-            llvm::Type* declElem =
-                getLLVMType(genListType->elementType->kind);
+            llvm::Type* declElem = getLLVMType(genListType->elementType->kind);
             llvm::Value* initValue = nullptr;
             if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
                 initValue = generateListLiteral(listLit, declElem);
@@ -12804,8 +13031,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         variableTypes[node->name] = TypeNode::TYPE_PTR;
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->initExpr);
-            bool _is_mut_borrow = _borrow_unary &&
-                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            bool _is_mut_borrow =
+                _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
             registerPointerBorrow(node->name, node->initExpr, node->line,
                                   _is_mut_borrow);
         }
@@ -13100,10 +13327,9 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     auto mutBorIt = activeMutBorrower.find(node->name);
     if(mutBorIt != activeMutBorrower.end())
     {
-        reportError(node->line,
-                    "cannot assign to '" + node->name +
-                        "' directly while mutably borrowed by '" +
-                        mutBorIt->second + "'");
+        reportError(node->line, "cannot assign to '" + node->name +
+                                    "' directly while mutably borrowed by '" +
+                                    mutBorIt->second + "'");
         return;
     }
     consumeMoveFromExpression(node->expression, node->line,
@@ -13168,17 +13394,16 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     clearMovedVariable(node->name);
     if(targetType->isPointerTy())
     {
-        if(targetGlobal &&
-           !validateNoEscapingBorrow(
-               node->expression, node->line,
-               "store in global/static '" + node->name + "'"))
+        if(targetGlobal && !validateNoEscapingBorrow(
+                               node->expression, node->line,
+                               "store in global/static '" + node->name + "'"))
         {
             return;
         }
         {
             auto* _borrow_unary = dynamic_cast<UnaryOpNode*>(node->expression);
-            bool _is_mut_borrow = _borrow_unary &&
-                _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
+            bool _is_mut_borrow =
+                _borrow_unary && _borrow_unary->op == UnaryOpNode::OP_ADDR_MUT;
             registerPointerBorrow(node->name, node->expression, node->line,
                                   _is_mut_borrow);
         }
@@ -13265,8 +13490,7 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                 return;
             }
             structTypeName = typeIt->second;
-            targetGlobalStorage =
-                llvm::isa<llvm::GlobalVariable>(structPtr);
+            targetGlobalStorage = llvm::isa<llvm::GlobalVariable>(structPtr);
 
             // Handle self pointer
             if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(structPtr))
@@ -13333,11 +13557,10 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
                     {
                         if(unary->op == UnaryOpNode::OP_DEREF)
                         {
-                            if(auto* pid =
-                                   dynamic_cast<IdentifierNode*>(unary->operand))
+                            if(auto* pid = dynamic_cast<IdentifierNode*>(
+                                   unary->operand))
                             {
-                                auto pit =
-                                    pointerBorrowTarget.find(pid->name);
+                                auto pit = pointerBorrowTarget.find(pid->name);
                                 if(pit != pointerBorrowTarget.end() &&
                                    pit->second == ownerName)
                                 {
@@ -13428,9 +13651,9 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
     // Convert value if needed
     llvm::Type* targetType = getLLVMTypeFromNode(fieldType);
     if(targetType->isPointerTy() && targetGlobalStorage &&
-       !validateNoEscapingBorrow(
-           node->expression, node->line,
-           "store in global/static field '" + fieldName + "'"))
+       !validateNoEscapingBorrow(node->expression, node->line,
+                                 "store in global/static field '" + fieldName +
+                                     "'"))
     {
         return;
     }
@@ -13570,15 +13793,13 @@ void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
         {
             value = builder.CreateFPToSI(value, elemType, "fptosi");
         }
-        else if(valueType->isFloatingPointTy() &&
-                elemType->isFloatingPointTy())
+        else if(valueType->isFloatingPointTy() && elemType->isFloatingPointTy())
         {
             value = builder.CreateFPCast(value, elemType, "fpcast");
         }
         else
         {
-            reportError(node->line,
-                        "type mismatch in deref assignment");
+            reportError(node->line, "type mismatch in deref assignment");
             return;
         }
     }
@@ -13619,7 +13840,8 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             }
             if(inferredStructName.empty())
             {
-                reportError(line, "variable '" + id->name + "' is not a struct");
+                reportError(line,
+                            "variable '" + id->name + "' is not a struct");
                 return {nullptr, ""};
             }
         }
@@ -13636,9 +13858,9 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             }
         }
 
-        return {actualPtr,
-                typeIt != structVariableTypes.end() ? typeIt->second
-                                                    : inferredStructName};
+        return {actualPtr, typeIt != structVariableTypes.end()
+                               ? typeIt->second
+                               : inferredStructName};
     }
 
     // Case 2: Field access (e.g., "a.b" in "a.b.c")
@@ -13782,12 +14004,10 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             {
                 return {ptrVal, structRef->structName};
             }
-            if(auto* genRef =
-                   dynamic_cast<GenericStructTypeRefNode*>(elemType))
+            if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(elemType))
             {
-                std::string mangled =
-                    getOrCreateMonomorphizedStruct(genRef->structName,
-                                                   genRef->typeArgs);
+                std::string mangled = getOrCreateMonomorphizedStruct(
+                    genRef->structName, genRef->typeArgs);
                 return {ptrVal, mangled};
             }
         }
@@ -13861,7 +14081,8 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
             auto structIt = structVariableTypes.find(node->structName);
             if(structIt != structVariableTypes.end())
             {
-                hasRealNameField = structHasFieldNamed(structIt->second, "name");
+                hasRealNameField =
+                    structHasFieldNamed(structIt->second, "name");
             }
         }
 
@@ -13898,8 +14119,7 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
     else
     {
         // Simple access: get from structName
-        if(!validateVariableAccessible(node->structName, node->line,
-                                       node->col))
+        if(!validateVariableAccessible(node->structName, node->line, node->col))
             return nullptr;
         structPtr = namedValues[node->structName];
         if(!structPtr)
@@ -13922,9 +14142,8 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
             }
             if(structTypeName.empty())
             {
-                reportError(node->line,
-                            "variable '" + node->structName +
-                                "' is not a struct");
+                reportError(node->line, "variable '" + node->structName +
+                                            "' is not a struct");
                 return nullptr;
             }
         }
@@ -14014,10 +14233,11 @@ void CodeGenerator::reportWarning(int line, int col, const std::string& message)
     const std::string& file =
         sourceFileName.empty() ? std::string("<input>") : sourceFileName;
     if(line > 0 && col > 0)
-        std::cerr << file << ":" << line << ":" << col << ": warning: " << message
-                  << std::endl;
+        std::cerr << file << ":" << line << ":" << col
+                  << ": warning: " << message << std::endl;
     else if(line > 0)
-        std::cerr << file << ":" << line << ": warning: " << message << std::endl;
+        std::cerr << file << ":" << line << ": warning: " << message
+                  << std::endl;
     else
         std::cerr << file << ": warning: " << message << std::endl;
 }
@@ -14088,8 +14308,8 @@ void CodeGenerator::exitCleanupScope()
             continue;
         }
 
-        llvm::Value* value = builder.CreateLoad(allocaType, alloca,
-                                                it->varName + ".dropval");
+        llvm::Value* value =
+            builder.CreateLoad(allocaType, alloca, it->varName + ".dropval");
         builder.CreateCall(it->function, {value});
     }
 }
@@ -14190,7 +14410,8 @@ CodeGenerator::resolveDropFunctionForStruct(const std::string& structTypeName)
     if(!structType)
         return cleanup;
 
-    auto find_drop = [&](const std::string& fnName) -> llvm::Function* {
+    auto find_drop = [&](const std::string& fnName) -> llvm::Function*
+    {
         auto it = functionOverloads.find(fnName);
         if(it == functionOverloads.end())
             return nullptr;
@@ -14282,10 +14503,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         std::set<std::string> movedOwnersInCall;
         if(!implicitWholeOwner.empty())
             wholeOwnersInCall.insert(implicitWholeOwner);
-        auto describeBorrowPath = [&](ExpressionNode* expr,
-                                      std::string& ownerOut,
-                                      std::string& pathOut,
-                                      bool& isWholeOwnerOut) -> bool
+        auto describeBorrowPath =
+            [&](ExpressionNode* expr, std::string& ownerOut,
+                std::string& pathOut, bool& isWholeOwnerOut) -> bool
         {
             ownerOut = resolveBorrowOwnerFromLValue(expr);
             if(ownerOut.empty())
@@ -14514,9 +14734,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
 
             auto* unary = dynamic_cast<UnaryOpNode*>(arg);
-            if(!unary ||
-               (unary->op != UnaryOpNode::OP_ADDR &&
-                unary->op != UnaryOpNode::OP_ADDR_MUT))
+            if(!unary || (unary->op != UnaryOpNode::OP_ADDR &&
+                          unary->op != UnaryOpNode::OP_ADDR_MUT))
                 continue;
 
             std::string owner;
@@ -14538,7 +14757,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             auto mutIt = activeMutBorrower.find(owner);
             if(wantsMutable)
             {
-                if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+                if(activeIt != activeBorrowers.end() &&
+                   !activeIt->second.empty())
                 {
                     reportError(
                         node->line,
@@ -14548,10 +14768,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 }
                 if(mutIt != activeMutBorrower.end())
                 {
-                    reportError(
-                        node->line,
-                        "cannot borrow '" + owner +
-                            "' as mutable more than once at a time");
+                    reportError(node->line,
+                                "cannot borrow '" + owner +
+                                    "' as mutable more than once at a time");
                     return false;
                 }
             }
@@ -14559,20 +14778,21 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             {
                 if(mutIt != activeMutBorrower.end())
                 {
-                    reportError(node->line,
-                                "cannot borrow '" + owner +
-                                    "' as immutable because it is also borrowed "
-                                    "as mutable by '" +
-                                    mutIt->second + "'");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as immutable because it is also borrowed "
+                            "as mutable by '" +
+                            mutIt->second + "'");
                     return false;
                 }
                 if(activeIt != activeBorrowers.end() &&
                    !activeIt->second.empty())
                 {
                     std::string by = *activeIt->second.begin();
-                    reportError(node->line, "cannot borrow '" + owner +
-                                                "' while already borrowed by '" +
-                                                by + "'");
+                    reportError(node->line,
+                                "cannot borrow '" + owner +
+                                    "' while already borrowed by '" + by + "'");
                     return false;
                 }
             }
@@ -14586,10 +14806,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             if(wholeOwnersInCall.count(movedOwner) ||
                subpathsInCall.find(movedOwner) != subpathsInCall.end())
             {
-                reportError(node->line,
-                            "cannot move '" + movedOwner +
-                                "' while borrowed in call to '" + calleeName +
-                                "'");
+                reportError(node->line, "cannot move '" + movedOwner +
+                                            "' while borrowed in call to '" +
+                                            calleeName + "'");
                 return false;
             }
         }
@@ -14603,16 +14822,17 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         return fnName.size() > 5 &&
                fnName.compare(fnName.size() - 5, 5, "_free") == 0;
     };
-    auto precheckFreeLikeArgument =
-        [&](ExpressionNode* argExpr, const std::string& fnName) -> bool
+    auto precheckFreeLikeArgument = [&](ExpressionNode* argExpr,
+                                        const std::string& fnName) -> bool
     {
         if(!argExpr)
             return true;
         if((fnName == "String::free" || fnName == "free") &&
            dynamic_cast<StringLiteralNode*>(argExpr))
         {
-            reportError(node->line,
-                        "cannot free string literal; free only heap-allocated strings");
+            reportError(
+                node->line,
+                "cannot free string literal; free only heap-allocated strings");
             return false;
         }
         if(auto* idArg = dynamic_cast<IdentifierNode*>(argExpr))
@@ -14649,8 +14869,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 #if LLVM_VERSION_MAJOR >= 15
         llvm::Type* ptrType = llvm::PointerType::get(context, 0);
 #else
-        llvm::Type* ptrType = llvm::PointerType::get(
-            llvm::Type::getInt8Ty(context), 0);
+        llvm::Type* ptrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
         std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
         llvm::StructType* listStructType =
@@ -14688,9 +14908,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             return nullptr;
         if(!cap->getType()->isIntegerTy())
         {
-            reportError(
-                node->line,
-                "String::with_capacity expects an integer capacity");
+            reportError(node->line,
+                        "String::with_capacity expects an integer capacity");
             return nullptr;
         }
         if(cap->getType()->getIntegerBitWidth() < 64)
@@ -14755,8 +14974,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 #endif
         llvm::FunctionType* cloneFnType =
             llvm::FunctionType::get(ptrType, {ptrType}, false);
-        llvm::FunctionCallee cloneFn =
-            module->getOrInsertFunction("__mlang_std_strbuf_clone", cloneFnType);
+        llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
+            "__mlang_std_strbuf_clone", cloneFnType);
         return builder.CreateCall(cloneFn, {arg}, "string_from");
     }
 
@@ -14791,19 +15010,20 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             // Re-entrancy guard — recursive inline closures are unsupported.
             if(!activeInlineClosures.insert(node->name).second)
             {
-                reportError(node->line,
-                            "recursive call to inline closure '" + node->name +
-                                "' is not supported");
+                reportError(node->line, "recursive call to inline closure '" +
+                                            node->name + "' is not supported");
                 return nullptr;
             }
             ClosureNode* closure = closIt->second;
             size_t expectedArgs =
-                (closure->parameters ? closure->parameters->parameters.size() : 0);
+                (closure->parameters ? closure->parameters->parameters.size()
+                                     : 0);
             if(node->arguments.size() != expectedArgs)
             {
                 reportError(node->line,
                             "inline lambda '" + node->name + "' expects " +
-                                std::to_string(expectedArgs) + " argument(s), got " +
+                                std::to_string(expectedArgs) +
+                                " argument(s), got " +
                                 std::to_string(node->arguments.size()));
                 activeInlineClosures.erase(node->name);
                 return nullptr;
@@ -14841,9 +15061,9 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     activeInlineClosures.erase(node->name);
                     return nullptr;
                 }
-                consumeMoveFromExpression(node->arguments[i], node->line,
-                                          "passing argument to inline lambda '" +
-                                              node->name + "'");
+                consumeMoveFromExpression(
+                    node->arguments[i], node->line,
+                    "passing argument to inline lambda '" + node->name + "'");
                 llvm::Type* expectedType = getLLVMTypeFromNode(param->type);
                 if(!expectedType)
                 {
@@ -14867,7 +15087,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     if(argVal->getType()->isIntegerTy() &&
                        expectedType->isIntegerTy())
                     {
-                        unsigned srcBits = argVal->getType()->getIntegerBitWidth();
+                        unsigned srcBits =
+                            argVal->getType()->getIntegerBitWidth();
                         unsigned dstBits = expectedType->getIntegerBitWidth();
                         if(srcBits > dstBits)
                             argVal = builder.CreateTrunc(argVal, expectedType,
@@ -14909,14 +15130,16 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 recordVariableScopeDepth(param->name);
                 variableTypes[param->name] = param->type->kind;
 
-                if(auto* structType = dynamic_cast<StructTypeRefNode*>(param->type))
+                if(auto* structType =
+                       dynamic_cast<StructTypeRefNode*>(param->type))
                 {
                     std::string resolvedEnumName =
                         resolveVisibleEnumName(structType->structName);
                     if(!resolvedEnumName.empty())
                         enumVariableTypes[param->name] = resolvedEnumName;
                     else
-                        structVariableTypes[param->name] = structType->structName;
+                        structVariableTypes[param->name] =
+                            structType->structName;
                 }
                 if(auto* genListType =
                        dynamic_cast<GenericListTypeNode*>(param->type))
@@ -14935,7 +15158,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
 
             // Clear loop context so break/continue don't escape the closure.
-            auto savedBreak    = loopBreakBlocks;
+            auto savedBreak = loopBreakBlocks;
             auto savedContinue = loopContinueBlocks;
             loopBreakBlocks.clear();
             loopContinueBlocks.clear();
@@ -14953,7 +15176,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
             exitCleanupScope();
 
-            loopBreakBlocks  = std::move(savedBreak);
+            loopBreakBlocks = std::move(savedBreak);
             loopContinueBlocks = std::move(savedContinue);
             restoreInlineState();
             activeInlineClosures.erase(node->name);
@@ -14971,7 +15194,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         std::string sig = functionSignatureKey(fn);
         for(const auto& info : it->second)
         {
-            if(info.signatureKey == sig && info.sourceModule == fn->sourceModule)
+            if(info.signatureKey == sig &&
+               info.sourceModule == fn->sourceModule)
                 return true;
         }
         return false;
@@ -15082,21 +15306,18 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     llvm::Function* callee = module->getFunction(mangledName);
                     if(!callee)
                     {
-                        callee =
-                            generateMethodDeclaration(resolvedStructName,
-                                                      mit->second.second);
+                        callee = generateMethodDeclaration(resolvedStructName,
+                                                           mit->second.second);
                     }
                     if(callee && callee->empty())
                     {
-                        callee =
-                            generateMethodDefinition(resolvedStructName,
-                                                     mit->second.second);
+                        callee = generateMethodDefinition(resolvedStructName,
+                                                          mit->second.second);
                     }
                     if(!callee)
                     {
-                        reportError(node->line,
-                                    "unknown static method: '" + node->name +
-                                        "'");
+                        reportError(node->line, "unknown static method: '" +
+                                                    node->name + "'");
                         return nullptr;
                     }
 
@@ -15130,7 +15351,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                             "passing argument to static method '" + node->name +
                                 "'");
 
-                        llvm::Type* expectedType = callee->getArg(idx)->getType();
+                        llvm::Type* expectedType =
+                            callee->getArg(idx)->getType();
                         if(argVal->getType() != expectedType)
                         {
                             int convCost = 0;
@@ -15295,9 +15517,8 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         }
         else
         {
-            reportError(node->line,
-                        "no matching overload for function '" + node->name +
-                            "'");
+            reportError(node->line, "no matching overload for function '" +
+                                        node->name + "'");
         }
         return nullptr;
     }
@@ -15424,14 +15645,14 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 if(refType->isMutable)
                 {
                     auto* argExpr = node->arguments[paramIdx];
-                    auto* unary   = dynamic_cast<UnaryOpNode*>(argExpr);
+                    auto* unary = dynamic_cast<UnaryOpNode*>(argExpr);
                     bool isRefMut =
                         unary && unary->op == UnaryOpNode::OP_ADDR_MUT;
                     if(!isRefMut)
                     {
-                        reportError(node->line,
-                                    "parameter '" + declParam->name +
-                                        "' expects &mut argument");
+                        reportError(node->line, "parameter '" +
+                                                    declParam->name +
+                                                    "' expects &mut argument");
                         return nullptr;
                     }
                 }
@@ -15482,35 +15703,34 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
     }
 
     static int closureSeq = 0;
-    std::string closureName =
-        "__mlang_closure_" + std::to_string(closureSeq++);
+    std::string closureName = "__mlang_closure_" + std::to_string(closureSeq++);
 
     llvm::FunctionType* closureFnType =
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
-    llvm::Function* closureFn = llvm::Function::Create(
-        closureFnType, llvm::Function::PrivateLinkage, closureName,
-        module.get());
+    llvm::Function* closureFn =
+        llvm::Function::Create(closureFnType, llvm::Function::PrivateLinkage,
+                               closureName, module.get());
 
     // Save current codegen state so we can restore it after the closure body
-    auto savedIP                  = builder.saveIP();
-    auto savedNamedValues         = namedValues;
-    auto savedConstantVars        = constantVariables;
-    auto savedMovedVars           = movedVariables;
-    auto savedPtrBorrowTarget     = pointerBorrowTarget;
-    auto savedActiveBorrowers     = activeBorrowers;
-    auto savedActiveMutBorrow     = activeMutBorrower;
-    auto savedVarScopeDepth       = variableScopeDepth;
-    auto savedVarTypes            = variableTypes;
-    auto savedStructVarTypes      = structVariableTypes;
-    auto savedEnumVarTypes        = enumVariableTypes;
-    auto savedCleanupScopes       = cleanupScopes;
-    auto savedPtrBorrowScopes     = pointerBorrowScopes;
-    auto savedVarDepthScopes      = variableScopeDepthScopes;
-    auto savedLoopBreak           = loopBreakBlocks;
-    auto savedLoopContinue        = loopContinueBlocks;
-    auto savedModule              = currentModule;
-    auto savedClosureVars         = closureVariables;
-    auto savedActiveInline        = activeInlineClosures;
+    auto savedIP = builder.saveIP();
+    auto savedNamedValues = namedValues;
+    auto savedConstantVars = constantVariables;
+    auto savedMovedVars = movedVariables;
+    auto savedPtrBorrowTarget = pointerBorrowTarget;
+    auto savedActiveBorrowers = activeBorrowers;
+    auto savedActiveMutBorrow = activeMutBorrower;
+    auto savedVarScopeDepth = variableScopeDepth;
+    auto savedVarTypes = variableTypes;
+    auto savedStructVarTypes = structVariableTypes;
+    auto savedEnumVarTypes = enumVariableTypes;
+    auto savedCleanupScopes = cleanupScopes;
+    auto savedPtrBorrowScopes = pointerBorrowScopes;
+    auto savedVarDepthScopes = variableScopeDepthScopes;
+    auto savedLoopBreak = loopBreakBlocks;
+    auto savedLoopContinue = loopContinueBlocks;
+    auto savedModule = currentModule;
+    auto savedClosureVars = closureVariables;
+    auto savedActiveInline = activeInlineClosures;
 
     // Initialise a fresh scope for the closure body
     namedValues.clear();
@@ -15556,24 +15776,24 @@ llvm::Function* CodeGenerator::generateClosureFn(ClosureNode* node)
         builder.CreateRetVoid();
 
     // Restore caller state
-    namedValues              = std::move(savedNamedValues);
-    constantVariables        = std::move(savedConstantVars);
-    movedVariables           = std::move(savedMovedVars);
-    pointerBorrowTarget      = std::move(savedPtrBorrowTarget);
-    activeBorrowers          = std::move(savedActiveBorrowers);
-    activeMutBorrower        = std::move(savedActiveMutBorrow);
-    variableScopeDepth       = std::move(savedVarScopeDepth);
-    variableTypes            = std::move(savedVarTypes);
-    structVariableTypes      = std::move(savedStructVarTypes);
-    enumVariableTypes        = std::move(savedEnumVarTypes);
-    cleanupScopes            = std::move(savedCleanupScopes);
-    pointerBorrowScopes      = std::move(savedPtrBorrowScopes);
+    namedValues = std::move(savedNamedValues);
+    constantVariables = std::move(savedConstantVars);
+    movedVariables = std::move(savedMovedVars);
+    pointerBorrowTarget = std::move(savedPtrBorrowTarget);
+    activeBorrowers = std::move(savedActiveBorrowers);
+    activeMutBorrower = std::move(savedActiveMutBorrow);
+    variableScopeDepth = std::move(savedVarScopeDepth);
+    variableTypes = std::move(savedVarTypes);
+    structVariableTypes = std::move(savedStructVarTypes);
+    enumVariableTypes = std::move(savedEnumVarTypes);
+    cleanupScopes = std::move(savedCleanupScopes);
+    pointerBorrowScopes = std::move(savedPtrBorrowScopes);
     variableScopeDepthScopes = std::move(savedVarDepthScopes);
-    loopBreakBlocks          = std::move(savedLoopBreak);
-    loopContinueBlocks       = std::move(savedLoopContinue);
-    currentModule            = std::move(savedModule);
-    closureVariables         = std::move(savedClosureVars);
-    activeInlineClosures     = std::move(savedActiveInline);
+    loopBreakBlocks = std::move(savedLoopBreak);
+    loopContinueBlocks = std::move(savedLoopContinue);
+    currentModule = std::move(savedModule);
+    closureVariables = std::move(savedClosureVars);
+    activeInlineClosures = std::move(savedActiveInline);
     builder.restoreIP(savedIP);
 
     return closureFn;
@@ -15610,8 +15830,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         auto* targetId = dynamic_cast<IdentifierNode*>(node->arguments[0]);
         if(!targetId)
         {
-            reportError(node->line,
-                        "thread_spawn expects a function name identifier or closure");
+            reportError(
+                node->line,
+                "thread_spawn expects a function name identifier or closure");
             return nullptr;
         }
 
@@ -15631,9 +15852,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                     continue;
                 if(targetFunc && targetFunc != candidate)
                 {
-                    reportError(node->line,
-                                "ambiguous function: '" + targetId->name +
-                                    "' for thread_spawn");
+                    reportError(node->line, "ambiguous function: '" +
+                                                targetId->name +
+                                                "' for thread_spawn");
                     return nullptr;
                 }
                 targetFunc = candidate;
@@ -15682,8 +15903,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                 if(rawIndex >= 0)
                     continue;
             }
-            reportError(node->line,
-                        "thread_spawn arguments must be integer or handle types");
+            reportError(
+                node->line,
+                "thread_spawn arguments must be integer or handle types");
             return nullptr;
         }
     }
@@ -15699,8 +15921,8 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
 #endif
     llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
 
-    std::string wrapperName = "__mlang_thread_wrapper_" +
-                              targetFunc->getName().str();
+    std::string wrapperName =
+        "__mlang_thread_wrapper_" + targetFunc->getName().str();
     if(argCount > 0)
         wrapperName += "_args" + std::to_string(argCount);
     llvm::Function* wrapperFunc = module->getFunction(wrapperName);
@@ -15708,9 +15930,9 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
     {
         llvm::FunctionType* wrapperType =
             llvm::FunctionType::get(ptrType, {ptrType}, false);
-        wrapperFunc = llvm::Function::Create(
-            wrapperType, llvm::Function::PrivateLinkage, wrapperName,
-            module.get());
+        wrapperFunc =
+            llvm::Function::Create(wrapperType, llvm::Function::PrivateLinkage,
+                                   wrapperName, module.get());
 
         auto savedIP = builder.saveIP();
         llvm::BasicBlock* entry =
@@ -15725,15 +15947,13 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             {
                 llvm::Value* offset = llvm::ConstantInt::get(
                     int64Type, static_cast<uint64_t>(i * 8), false);
-                llvm::Value* bytePtr = builder.CreateGEP(
-                    llvm::Type::getInt8Ty(context), basePtr, offset,
-                    "thread.argbyte");
+                llvm::Value* bytePtr =
+                    builder.CreateGEP(llvm::Type::getInt8Ty(context), basePtr,
+                                      offset, "thread.argbyte");
 #if LLVM_VERSION_MAJOR < 15
-                llvm::Type* int64PtrType =
-                    llvm::PointerType::get(int64Type, 0);
-                llvm::Value* argPtr =
-                    builder.CreateBitCast(bytePtr, int64PtrType,
-                                          "thread.argptr");
+                llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
+                llvm::Value* argPtr = builder.CreateBitCast(
+                    bytePtr, int64PtrType, "thread.argptr");
                 llvm::Value* argVal =
                     builder.CreateLoad(int64Type, argPtr, "thread.arg");
 #else
@@ -15750,11 +15970,11 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                         unsigned srcBits = int64Type->getIntegerBitWidth();
                         unsigned dstBits = expectedType->getIntegerBitWidth();
                         if(srcBits > dstBits)
-                            callArg = builder.CreateTrunc(
-                                callArg, expectedType, "thread.trunc");
+                            callArg = builder.CreateTrunc(callArg, expectedType,
+                                                          "thread.trunc");
                         else if(srcBits < dstBits)
-                            callArg = builder.CreateSExt(
-                                callArg, expectedType, "thread.sext");
+                            callArg = builder.CreateSExt(callArg, expectedType,
+                                                         "thread.sext");
                     }
                     callArgs.push_back(callArg);
                 }
@@ -15784,28 +16004,26 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             builder.CreateCall(targetFunc, {});
         }
 
-        llvm::Value* nullPtr =
-            llvm::ConstantPointerNull::get(
-#if LLVM_VERSION_MAJOR >= 15
-                llvm::cast<llvm::PointerType>(ptrType)
-#else
-                llvm::cast<llvm::PointerType>(ptrType)
-#endif
-            );
-        builder.CreateRet(nullPtr);
-        builder.restoreIP(savedIP);
-    }
-
-    llvm::AllocaInst* threadHandle =
-        builder.CreateAlloca(ptrType, nullptr, "thread.handle");
-    llvm::Value* nullPtr =
-        llvm::ConstantPointerNull::get(
+        llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
 #if LLVM_VERSION_MAJOR >= 15
             llvm::cast<llvm::PointerType>(ptrType)
 #else
             llvm::cast<llvm::PointerType>(ptrType)
 #endif
         );
+        builder.CreateRet(nullPtr);
+        builder.restoreIP(savedIP);
+    }
+
+    llvm::AllocaInst* threadHandle =
+        builder.CreateAlloca(ptrType, nullptr, "thread.handle");
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::cast<llvm::PointerType>(ptrType)
+#else
+        llvm::cast<llvm::PointerType>(ptrType)
+#endif
+    );
     llvm::Value* wrapperPtr =
         builder.CreateBitCast(wrapperFunc, ptrType, "thread.wrapper");
     llvm::Value* argPtr = nullPtr;
@@ -15816,22 +16034,21 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
         argPtr = builder.CreateCall(mallocFunc, {sizeVal}, "thread.argptr");
         for(size_t i = 0; i < argCount; ++i)
         {
-            llvm::Value* rawArg =
-                generateExpression(node->arguments[i + 1]);
+            llvm::Value* rawArg = generateExpression(node->arguments[i + 1]);
             if(!rawArg)
                 return nullptr;
             if(rawArg->getType()->isIntegerTy())
             {
                 if(rawArg->getType() != int64Type)
                 {
-                    rawArg = builder.CreateSExt(rawArg, int64Type,
-                                                "thread.argsext");
+                    rawArg =
+                        builder.CreateSExt(rawArg, int64Type, "thread.argsext");
                 }
             }
             else if(rawArg->getType()->isStructTy())
             {
-                auto* structType = llvm::cast<llvm::StructType>(
-                    rawArg->getType());
+                auto* structType =
+                    llvm::cast<llvm::StructType>(rawArg->getType());
                 std::string structName = structType->getName().str();
                 auto memIt = structMembers.find(structName);
                 int rawIndex = -1;
@@ -15853,11 +16070,11 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
                     return nullptr;
                 }
                 rawArg = builder.CreateExtractValue(rawArg, rawIndex,
-                                                   "thread.handle.raw");
+                                                    "thread.handle.raw");
                 if(rawArg->getType() != int64Type)
                 {
-                    rawArg = builder.CreateSExt(rawArg, int64Type,
-                                                "thread.argsext");
+                    rawArg =
+                        builder.CreateSExt(rawArg, int64Type, "thread.argsext");
                 }
             }
             else
@@ -15868,15 +16085,13 @@ llvm::Value* CodeGenerator::generateThreadSpawn(FunctionCallNode* node)
             }
             llvm::Value* offset = llvm::ConstantInt::get(
                 int64Type, static_cast<uint64_t>(i * 8), false);
-            llvm::Value* bytePtr = builder.CreateGEP(
-                llvm::Type::getInt8Ty(context), argPtr, offset,
-                "thread.argbyte");
+            llvm::Value* bytePtr =
+                builder.CreateGEP(llvm::Type::getInt8Ty(context), argPtr,
+                                  offset, "thread.argbyte");
 #if LLVM_VERSION_MAJOR < 15
-            llvm::Type* int64PtrType =
-                llvm::PointerType::get(int64Type, 0);
-            llvm::Value* typedPtr =
-                builder.CreateBitCast(bytePtr, int64PtrType,
-                                      "thread.argptr_i64");
+            llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
+            llvm::Value* typedPtr = builder.CreateBitCast(bytePtr, int64PtrType,
+                                                          "thread.argptr_i64");
             builder.CreateStore(rawArg, typedPtr);
 #else
             builder.CreateStore(rawArg, bytePtr);
@@ -15928,21 +16143,20 @@ llvm::Value* CodeGenerator::generateThreadJoin(FunctionCallNode* node)
 
     llvm::Value* threadPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "thread.ptr");
-    llvm::Value* nullPtr =
-        llvm::ConstantPointerNull::get(
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
 #if LLVM_VERSION_MAJOR >= 15
-            llvm::cast<llvm::PointerType>(ptrType)
+        llvm::cast<llvm::PointerType>(ptrType)
 #else
-            llvm::cast<llvm::PointerType>(ptrType)
+        llvm::cast<llvm::PointerType>(ptrType)
 #endif
-        );
+    );
 
     return builder.CreateCall(pthreadJoinFunc, {threadPtr, nullPtr},
                               "thread.join");
 }
 
 llvm::Value* CodeGenerator::buildHandleValue(const std::string& handleTypeName,
-                                              llvm::Value* rawHandle, int line)
+                                             llvm::Value* rawHandle, int line)
 {
     if(!rawHandle)
         return nullptr;
@@ -16000,14 +16214,12 @@ llvm::Value* CodeGenerator::buildHandleValue(const std::string& handleTypeName,
     }
 
     llvm::Value* handleVal = llvm::Constant::getNullValue(handleType);
-    return builder.CreateInsertValue(handleVal, rawVal,
-                                     static_cast<unsigned>(rawIndex),
-                                     "handle.raw");
+    return builder.CreateInsertValue(
+        handleVal, rawVal, static_cast<unsigned>(rawIndex), "handle.raw");
 }
 
-llvm::Value* CodeGenerator::extractHandleValue(ExpressionNode* expr,
-                                                const std::string& expectedHandleType,
-                                                int line)
+llvm::Value* CodeGenerator::extractHandleValue(
+    ExpressionNode* expr, const std::string& expectedHandleType, int line)
 {
     llvm::Value* val = generateExpression(expr);
     if(!val)
@@ -16030,7 +16242,7 @@ llvm::Value* CodeGenerator::extractHandleValue(ExpressionNode* expr,
         if(!expectedHandleType.empty() && structName != expectedHandleType)
         {
             reportError(line, "handle type mismatch: expected " +
-                                   expectedHandleType + ", got " + structName);
+                                  expectedHandleType + ", got " + structName);
             return nullptr;
         }
 
@@ -16057,8 +16269,7 @@ llvm::Value* CodeGenerator::extractHandleValue(ExpressionNode* expr,
         llvm::Value* rawVal =
             builder.CreateExtractValue(val, rawIndex, "handle.raw");
         if(rawVal->getType() != int64Type)
-            rawVal =
-                builder.CreateSExt(rawVal, int64Type, "handle.sext");
+            rawVal = builder.CreateSExt(rawVal, int64Type, "handle.sext");
         return rawVal;
     }
 
@@ -16087,14 +16298,13 @@ llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
 
     llvm::Value* sizeVal = llvm::ConstantInt::get(int64Type, 64, false);
     llvm::Value* mem = builder.CreateCall(mallocFunc, {sizeVal}, "mutex.mem");
-    llvm::Value* nullPtr =
-        llvm::ConstantPointerNull::get(
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
 #if LLVM_VERSION_MAJOR >= 15
-            llvm::cast<llvm::PointerType>(ptrType)
+        llvm::cast<llvm::PointerType>(ptrType)
 #else
-            llvm::cast<llvm::PointerType>(ptrType)
+        llvm::cast<llvm::PointerType>(ptrType)
 #endif
-        );
+    );
     builder.CreateCall(pthreadMutexInitFunc, {mem, nullPtr});
     llvm::Value* rawHandle =
         builder.CreatePtrToInt(mem, int64Type, "mutex.handle_i64");
@@ -16134,8 +16344,7 @@ llvm::Value* CodeGenerator::generateMutexLock(FunctionCallNode* node)
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
-    return builder.CreateCall(pthreadMutexLockFunc, {mutexPtr},
-                              "mutex.lock");
+    return builder.CreateCall(pthreadMutexLockFunc, {mutexPtr}, "mutex.lock");
 }
 
 llvm::Value* CodeGenerator::generateMutexUnlock(FunctionCallNode* node)
@@ -16201,9 +16410,8 @@ llvm::Value* CodeGenerator::generateMutexDestroy(FunctionCallNode* node)
 
     llvm::Value* mutexPtr =
         builder.CreateIntToPtr(handleVal, ptrType, "mutex.ptr");
-    llvm::Value* result =
-        builder.CreateCall(pthreadMutexDestroyFunc, {mutexPtr},
-                           "mutex.destroy");
+    llvm::Value* result = builder.CreateCall(pthreadMutexDestroyFunc,
+                                             {mutexPtr}, "mutex.destroy");
     builder.CreateCall(freeFunc, {mutexPtr});
     return result;
 }
@@ -16235,14 +16443,12 @@ llvm::Value* CodeGenerator::generateAtomicI64New(FunctionCallNode* node)
         return nullptr;
     }
     if(initVal->getType() != int64Type)
-        initVal =
-            builder.CreateSExt(initVal, int64Type, "atomic.sext");
+        initVal = builder.CreateSExt(initVal, int64Type, "atomic.sext");
 
     llvm::Value* sizeVal = llvm::ConstantInt::get(int64Type, 8, false);
     llvm::Value* mem = builder.CreateCall(mallocFunc, {sizeVal}, "atomic.mem");
 #if LLVM_VERSION_MAJOR < 15
-    llvm::Type* int64PtrType =
-        llvm::PointerType::get(int64Type, 0);
+    llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
     llvm::Value* typedPtr =
         builder.CreateBitCast(mem, int64PtrType, "atomic.ptr");
     builder.CreateStore(initVal, typedPtr);
@@ -16283,11 +16489,9 @@ llvm::Value* CodeGenerator::generateAtomicI64Load(FunctionCallNode* node)
     if(!handleVal)
         return nullptr;
 
-    llvm::Value* ptr =
-        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+    llvm::Value* ptr = builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
 #if LLVM_VERSION_MAJOR < 15
-    llvm::Type* int64PtrType =
-        llvm::PointerType::get(int64Type, 0);
+    llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     auto* loadInst = builder.CreateLoad(int64Type, ptr, "atomic.load");
@@ -16321,14 +16525,11 @@ llvm::Value* CodeGenerator::generateAtomicI64Store(FunctionCallNode* node)
     if(!handleVal || !valueVal)
         return nullptr;
     if(valueVal->getType() != int64Type)
-        valueVal =
-            builder.CreateSExt(valueVal, int64Type, "atomic.sextval");
+        valueVal = builder.CreateSExt(valueVal, int64Type, "atomic.sextval");
 
-    llvm::Value* ptr =
-        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+    llvm::Value* ptr = builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
 #if LLVM_VERSION_MAJOR < 15
-    llvm::Type* int64PtrType =
-        llvm::PointerType::get(int64Type, 0);
+    llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     auto* storeInst = builder.CreateStore(valueVal, ptr);
@@ -16364,11 +16565,9 @@ llvm::Value* CodeGenerator::generateAtomicI64Add(FunctionCallNode* node)
     if(addVal->getType() != int64Type)
         addVal = builder.CreateSExt(addVal, int64Type, "atomic.sextval");
 
-    llvm::Value* ptr =
-        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+    llvm::Value* ptr = builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
 #if LLVM_VERSION_MAJOR < 15
-    llvm::Type* int64PtrType =
-        llvm::PointerType::get(int64Type, 0);
+    llvm::Type* int64PtrType = llvm::PointerType::get(int64Type, 0);
     ptr = builder.CreateBitCast(ptr, int64PtrType, "atomic.ptr_i64");
 #endif
     return builder.CreateAtomicRMW(
@@ -16403,9 +16602,8 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
        globalNamedValues.find(freeOwner) == globalNamedValues.end() &&
        isVariableMoved(freeOwner))
     {
-        reportError(node->line,
-                    "double free or use-after-free of value: '" +
-                        freeOwner + "'");
+        reportError(node->line, "double free or use-after-free of value: '" +
+                                    freeOwner + "'");
         return nullptr;
     }
     llvm::Value* handleVal =
@@ -16413,8 +16611,7 @@ llvm::Value* CodeGenerator::generateAtomicI64Free(FunctionCallNode* node)
     if(!handleVal)
         return nullptr;
 
-    llvm::Value* ptr =
-        builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
+    llvm::Value* ptr = builder.CreateIntToPtr(handleVal, ptrType, "atomic.ptr");
     if(!freeOwner.empty() &&
        globalNamedValues.find(freeOwner) == globalNamedValues.end())
     {
@@ -16576,12 +16773,9 @@ CodeGenerator::generateMethodDeclaration(const std::string& structName,
 
             std::string signatureKey = qname + "#" + function->getName().str();
 
-            FunctionOverloadInfo info{nullptr,
-                                      function,
-                                      signatureKey,
-                                      function->getName().str(),
-                                      false,
-                                      method->isPublic,
+            FunctionOverloadInfo info{nullptr,      function,
+                                      signatureKey, function->getName().str(),
+                                      false,        method->isPublic,
                                       srcModule};
             overloads.push_back(info);
         }
@@ -16796,10 +16990,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
         std::set<std::string> movedOwnersInCall;
         if(!implicitWholeOwner.empty())
             wholeOwnersInCall.insert(implicitWholeOwner);
-        auto describeBorrowPath = [&](ExpressionNode* expr,
-                                      std::string& ownerOut,
-                                      std::string& pathOut,
-                                      bool& isWholeOwnerOut) -> bool
+        auto describeBorrowPath =
+            [&](ExpressionNode* expr, std::string& ownerOut,
+                std::string& pathOut, bool& isWholeOwnerOut) -> bool
         {
             ownerOut = resolveBorrowOwnerFromLValue(expr);
             if(ownerOut.empty())
@@ -17028,9 +17221,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             }
 
             auto* unary = dynamic_cast<UnaryOpNode*>(arg);
-            if(!unary ||
-               (unary->op != UnaryOpNode::OP_ADDR &&
-                unary->op != UnaryOpNode::OP_ADDR_MUT))
+            if(!unary || (unary->op != UnaryOpNode::OP_ADDR &&
+                          unary->op != UnaryOpNode::OP_ADDR_MUT))
                 continue;
 
             std::string owner;
@@ -17052,7 +17244,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             auto mutIt = activeMutBorrower.find(owner);
             if(wantsMutable)
             {
-                if(activeIt != activeBorrowers.end() && !activeIt->second.empty())
+                if(activeIt != activeBorrowers.end() &&
+                   !activeIt->second.empty())
                 {
                     reportError(
                         node->line,
@@ -17062,10 +17255,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 if(mutIt != activeMutBorrower.end())
                 {
-                    reportError(
-                        node->line,
-                        "cannot borrow '" + owner +
-                            "' as mutable more than once at a time");
+                    reportError(node->line,
+                                "cannot borrow '" + owner +
+                                    "' as mutable more than once at a time");
                     return false;
                 }
             }
@@ -17073,20 +17265,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             {
                 if(mutIt != activeMutBorrower.end())
                 {
-                    reportError(node->line,
-                                "cannot borrow '" + owner +
-                                    "' as immutable because it is also borrowed "
-                                    "as mutable by '" +
-                                    mutIt->second + "'");
+                    reportError(
+                        node->line,
+                        "cannot borrow '" + owner +
+                            "' as immutable because it is also borrowed "
+                            "as mutable by '" +
+                            mutIt->second + "'");
                     return false;
                 }
                 if(activeIt != activeBorrowers.end() &&
                    !activeIt->second.empty())
                 {
                     std::string by = *activeIt->second.begin();
-                    reportError(node->line, "cannot borrow '" + owner +
-                                                "' while already borrowed by '" +
-                                                by + "'");
+                    reportError(node->line,
+                                "cannot borrow '" + owner +
+                                    "' while already borrowed by '" + by + "'");
                     return false;
                 }
             }
@@ -17100,10 +17293,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             if(wholeOwnersInCall.count(movedOwner) ||
                subpathsInCall.find(movedOwner) != subpathsInCall.end())
             {
-                reportError(node->line,
-                            "cannot move '" + movedOwner +
-                                "' while borrowed in call to '" + calleeName +
-                                "'");
+                reportError(node->line, "cannot move '" + movedOwner +
+                                            "' while borrowed in call to '" +
+                                            calleeName + "'");
                 return false;
             }
         }
@@ -17148,18 +17340,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(borrowIt != activeBorrowers.end() &&
                        !borrowIt->second.empty())
                     {
-                        reportError(node->line,
-                                    "cannot mutate '" + objId->name +
-                                        "' while it is borrowed");
+                        reportError(node->line, "cannot mutate '" +
+                                                    objId->name +
+                                                    "' while it is borrowed");
                         return nullptr;
                     }
                     auto mutBorrowIt = activeMutBorrower.find(objId->name);
                     if(mutBorrowIt != activeMutBorrower.end())
                     {
-                        reportError(node->line,
-                                    "cannot mutate '" + objId->name +
-                                        "' directly while mutably borrowed by '" +
-                                        mutBorrowIt->second + "'");
+                        reportError(
+                            node->line,
+                            "cannot mutate '" + objId->name +
+                                "' directly while mutably borrowed by '" +
+                                mutBorrowIt->second + "'");
                         return nullptr;
                     }
                     llvm::Value* allocaPtr = namedValues[objId->name];
@@ -17181,12 +17374,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         generateExpression(node->arguments[0]);
                     if(!suffix)
                         return nullptr;
-                    llvm::FunctionType* concatFnType =
-                        llvm::FunctionType::get(ptrType, {ptrType, ptrType},
-                                                false);
-                    llvm::FunctionCallee concatFn =
-                        module->getOrInsertFunction(
-                            "__mlang_std_strbuf_concat", concatFnType);
+                    llvm::FunctionType* concatFnType = llvm::FunctionType::get(
+                        ptrType, {ptrType, ptrType}, false);
+                    llvm::FunctionCallee concatFn = module->getOrInsertFunction(
+                        "__mlang_std_strbuf_concat", concatFnType);
                     llvm::Value* newStr = builder.CreateCall(
                         concatFn, {currentStr, suffix}, "push_str.result");
                     builder.CreateStore(newStr, allocaPtr);
@@ -17220,7 +17411,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee cloneFn = module->getOrInsertFunction(
                         "__mlang_std_strbuf_clone", cloneFnType);
                     return builder.CreateCall(cloneFn, {currentStr},
-                                             objId->name + ".clone");
+                                              objId->name + ".clone");
                 }
                 // --- len() ---
                 if(node->methodName == "len")
@@ -17251,7 +17442,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee lenFn = module->getOrInsertFunction(
                         "__mlang_std_strbuf_len", lenFnType);
                     return builder.CreateCall(lenFn, {currentStr},
-                                             objId->name + ".len");
+                                              objId->name + ".len");
                 }
                 // --- is_empty() ---
                 if(node->methodName == "is_empty")
@@ -17283,11 +17474,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee emptyFn = module->getOrInsertFunction(
                         "__mlang_std_strbuf_is_empty", emptyFnType);
                     return builder.CreateCall(emptyFn, {currentStr},
-                                             objId->name + ".is_empty");
+                                              objId->name + ".is_empty");
                 }
-                reportError(node->line,
-                            "string has no method named '" +
-                                node->methodName + "'");
+                reportError(node->line, "string has no method named '" +
+                                            node->methodName + "'");
                 return nullptr;
             }
         }
@@ -17313,7 +17503,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         return nullptr;
                     }
                     // List struct layout: {i64 count, ptr data}
-                    // Extract field 0 (count) via extractvalue after loading the struct
+                    // Extract field 0 (count) via extractvalue after loading
+                    // the struct
                     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
 #if LLVM_VERSION_MAJOR >= 15
                     llvm::Type* ptrType = llvm::PointerType::get(context, 0);
@@ -17321,7 +17512,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::Type* ptrType = llvm::PointerType::get(
                         llvm::Type::getInt8Ty(context), 0);
 #endif
-                    std::vector<llvm::Type*> listStructTypes = {i64Type, ptrType};
+                    std::vector<llvm::Type*> listStructTypes = {i64Type,
+                                                                ptrType};
                     llvm::StructType* listStructType =
                         llvm::StructType::get(context, listStructTypes);
                     llvm::Value* listStruct = builder.CreateLoad(
@@ -17333,21 +17525,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::Value* allocaPtr2 = namedValues[objId->name];
                 if(!allocaPtr2)
                 {
-                    reportError(node->line,
-                                "unknown variable: " + objId->name);
+                    reportError(node->line, "unknown variable: " + objId->name);
                     return nullptr;
                 }
                 llvm::Type* voidType2 = llvm::Type::getVoidTy(context);
 #if LLVM_VERSION_MAJOR >= 15
-                llvm::Type* opaquePtrType =
-                    llvm::PointerType::get(context, 0);
+                llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
 #else
-                llvm::Type* opaquePtrType = llvm::PointerType::get(
-                    llvm::Type::getInt8Ty(context), 0);
+                llvm::Type* opaquePtrType =
+                    llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
                 llvm::Type* i32Type2 = llvm::Type::getInt32Ty(context);
                 llvm::Type* i64Type2 = llvm::Type::getInt64Ty(context);
-                llvm::Type* i1Type2  = llvm::Type::getInt1Ty(context);
+                llvm::Type* i1Type2 = llvm::Type::getInt1Ty(context);
 
                 // Determine element type for overload selection
                 TypeNode::TypeKind elemKind2 = TypeNode::TYPE_I32;
@@ -17365,7 +17555,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 bool elemIsStr = (elemKind2 == TypeNode::TYPE_STRING ||
                                   elemKind2 == TypeNode::TYPE_STR8);
 
-                auto callVecVoidFn = [&](const std::string& fnName) {
+                auto callVecVoidFn = [&](const std::string& fnName)
+                {
                     llvm::FunctionType* ft = llvm::FunctionType::get(
                         voidType2, {opaquePtrType}, false);
                     llvm::FunctionCallee fn =
@@ -17388,8 +17579,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                                         opaquePtrType};
                     llvm::StructType* lsType =
                         llvm::StructType::get(context, lsTypes);
-                    llvm::Value* ls = builder.CreateLoad(
-                        lsType, allocaPtr2, objId->name + ".load");
+                    llvm::Value* ls = builder.CreateLoad(lsType, allocaPtr2,
+                                                         objId->name + ".load");
                     llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
                     return builder.CreateICmpEQ(
                         cnt, llvm::ConstantInt::get(i64Type2, 0),
@@ -17403,9 +17594,9 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         reportError(node->line, "push() takes one argument");
                         return nullptr;
                     }
-                    llvm::Value* val2 =
-                        generateExpression(node->arguments[0]);
-                    if(!val2) return nullptr;
+                    llvm::Value* val2 = generateExpression(node->arguments[0]);
+                    if(!val2)
+                        return nullptr;
 
                     std::string fnName2;
                     llvm::Type* valType2;
@@ -17441,30 +17632,36 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                           : val2->getType();
                         if(!elemLlvmType)
                         {
-                            reportError(node->line,
-                                        "unsupported list element type for push()");
+                            reportError(
+                                node->line,
+                                "unsupported list element type for push()");
                             return nullptr;
                         }
-                        llvm::AllocaInst* tmpElem =
-                            builder.CreateAlloca(elemLlvmType, nullptr, "vec.push.tmp");
+                        llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                            elemLlvmType, nullptr, "vec.push.tmp");
                         if(val2->getType() != elemLlvmType)
                         {
                             reportError(node->line,
-                                        "push() argument type mismatch for list element");
+                                        "push() argument type mismatch for "
+                                        "list element");
                             return nullptr;
                         }
                         builder.CreateStore(val2, tmpElem);
-                        llvm::Value* elemPtrAsOpaque =
-                            builder.CreateBitCast(tmpElem, opaquePtrType, "vec.push.ptr");
+                        llvm::Value* elemPtrAsOpaque = builder.CreateBitCast(
+                            tmpElem, opaquePtrType, "vec.push.ptr");
                         uint64_t elemSizeU =
-                            module->getDataLayout().getTypeAllocSize(elemLlvmType);
-                        llvm::Value* elemSize =
-                            llvm::ConstantInt::get(i64Type2, (uint64_t)elemSizeU);
+                            module->getDataLayout().getTypeAllocSize(
+                                elemLlvmType);
+                        llvm::Value* elemSize = llvm::ConstantInt::get(
+                            i64Type2, (uint64_t)elemSizeU);
                         llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                            voidType2, {opaquePtrType, opaquePtrType, i64Type2}, false);
+                            voidType2, {opaquePtrType, opaquePtrType, i64Type2},
+                            false);
                         llvm::FunctionCallee fnRaw =
-                            module->getOrInsertFunction("__mlang_std_vec_push_raw", ftRaw);
-                        builder.CreateCall(fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
+                            module->getOrInsertFunction(
+                                "__mlang_std_vec_push_raw", ftRaw);
+                        builder.CreateCall(
+                            fnRaw, {allocaPtr2, elemPtrAsOpaque, elemSize});
                         return llvm::Constant::getNullValue(voidType2);
                     }
                     llvm::FunctionType* ft2 = llvm::FunctionType::get(
@@ -17495,21 +17692,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::Type* retType3;
                         if(elemIsStr)
                         {
-                            fnName3  = "__mlang_std_vec_pop_str";
+                            fnName3 = "__mlang_std_vec_pop_str";
                             retType3 = opaquePtrType;
                         }
                         else if(elemIsI64)
                         {
-                            fnName3  = "__mlang_std_vec_pop_i64";
+                            fnName3 = "__mlang_std_vec_pop_i64";
                             retType3 = i64Type2;
                         }
                         else
                         {
-                            fnName3  = "__mlang_std_vec_pop_i32";
+                            fnName3 = "__mlang_std_vec_pop_i32";
                             retType3 = i32Type2;
                         }
-                        llvm::FunctionType* ft3 =
-                            llvm::FunctionType::get(retType3, {opaquePtrType}, false);
+                        llvm::FunctionType* ft3 = llvm::FunctionType::get(
+                            retType3, {opaquePtrType}, false);
                         llvm::FunctionCallee fn3 =
                             module->getOrInsertFunction(fnName3, ft3);
                         return builder.CreateCall(fn3, {allocaPtr2},
@@ -17524,19 +17721,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "unsupported list element type for pop()");
                         return nullptr;
                     }
-                    llvm::AllocaInst* tmpElem =
-                        builder.CreateAlloca(elemLlvmType, nullptr, "vec.pop.tmp");
-                    llvm::Value* tmpElemPtr =
-                        builder.CreateBitCast(tmpElem, opaquePtrType, "vec.pop.ptr");
+                    llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                        elemLlvmType, nullptr, "vec.pop.tmp");
+                    llvm::Value* tmpElemPtr = builder.CreateBitCast(
+                        tmpElem, opaquePtrType, "vec.pop.ptr");
                     uint64_t elemSizeU =
                         module->getDataLayout().getTypeAllocSize(elemLlvmType);
                     llvm::Value* elemSize =
                         llvm::ConstantInt::get(i64Type2, (uint64_t)elemSizeU);
                     llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                        i32Type2, {opaquePtrType, opaquePtrType, i64Type2}, false);
-                    llvm::FunctionCallee fnRaw =
-                        module->getOrInsertFunction("__mlang_std_vec_pop_raw", ftRaw);
-                    builder.CreateCall(fnRaw, {allocaPtr2, tmpElemPtr, elemSize});
+                        i32Type2, {opaquePtrType, opaquePtrType, i64Type2},
+                        false);
+                    llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                        "__mlang_std_vec_pop_raw", ftRaw);
+                    builder.CreateCall(fnRaw,
+                                       {allocaPtr2, tmpElemPtr, elemSize});
                     return builder.CreateLoad(elemLlvmType, tmpElem,
                                               objId->name + ".pop");
                 }
@@ -17545,8 +17744,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "clear() takes no arguments");
+                        reportError(node->line, "clear() takes no arguments");
                         return nullptr;
                     }
                     return callVecVoidFn("__mlang_std_vec_clear");
@@ -17560,22 +17758,22 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "contains() takes one argument");
                         return nullptr;
                     }
-                    llvm::Value* val4 =
-                        generateExpression(node->arguments[0]);
-                    if(!val4) return nullptr;
+                    llvm::Value* val4 = generateExpression(node->arguments[0]);
+                    if(!val4)
+                        return nullptr;
 
                     std::string fnName4;
                     llvm::Type* valType4;
                     if(elemIsI64)
                     {
-                        fnName4  = "__mlang_std_vec_contains_i64";
+                        fnName4 = "__mlang_std_vec_contains_i64";
                         valType4 = i64Type2;
                         if(val4->getType() != i64Type2)
                             val4 = builder.CreateSExt(val4, i64Type2);
                     }
                     else
                     {
-                        fnName4  = "__mlang_std_vec_contains_i32";
+                        fnName4 = "__mlang_std_vec_contains_i32";
                         valType4 = i32Type2;
                         if(val4->getType() != i32Type2)
                             val4 = builder.CreateTrunc(val4, i32Type2);
@@ -17585,7 +17783,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn4 =
                         module->getOrInsertFunction(fnName4, ft4);
                     return builder.CreateCall(fn4, {allocaPtr2, val4},
-                                             objId->name + ".contains");
+                                              objId->name + ".contains");
                 }
                 // --- index_of(val) ---
                 if(node->methodName == "index_of")
@@ -17596,22 +17794,22 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "index_of() takes one argument");
                         return nullptr;
                     }
-                    llvm::Value* val5 =
-                        generateExpression(node->arguments[0]);
-                    if(!val5) return nullptr;
+                    llvm::Value* val5 = generateExpression(node->arguments[0]);
+                    if(!val5)
+                        return nullptr;
 
                     std::string fnName5;
                     llvm::Type* valType5;
                     if(elemIsI64)
                     {
-                        fnName5  = "__mlang_std_vec_index_of_i64";
+                        fnName5 = "__mlang_std_vec_index_of_i64";
                         valType5 = i64Type2;
                         if(val5->getType() != i64Type2)
                             val5 = builder.CreateSExt(val5, i64Type2);
                     }
                     else
                     {
-                        fnName5  = "__mlang_std_vec_index_of_i32";
+                        fnName5 = "__mlang_std_vec_index_of_i32";
                         valType5 = i32Type2;
                         if(val5->getType() != i32Type2)
                             val5 = builder.CreateTrunc(val5, i32Type2);
@@ -17621,20 +17819,19 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionCallee fn5 =
                         module->getOrInsertFunction(fnName5, ft5);
                     return builder.CreateCall(fn5, {allocaPtr2, val5},
-                                             objId->name + ".index_of");
+                                              objId->name + ".index_of");
                 }
                 // --- sort() ---
                 if(node->methodName == "sort")
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "sort() takes no arguments");
+                        reportError(node->line, "sort() takes no arguments");
                         return nullptr;
                     }
-                    return callVecVoidFn(elemIsI64 ?
-                        "__mlang_std_vec_sort_i64" :
-                        "__mlang_std_vec_sort_i32");
+                    return callVecVoidFn(elemIsI64
+                                             ? "__mlang_std_vec_sort_i64"
+                                             : "__mlang_std_vec_sort_i32");
                 }
                 // --- sort_desc() ---
                 if(node->methodName == "sort_desc")
@@ -17645,31 +17842,29 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                     "sort_desc() takes no arguments");
                         return nullptr;
                     }
-                    return callVecVoidFn(elemIsI64 ?
-                        "__mlang_std_vec_sort_desc_i64" :
-                        "__mlang_std_vec_sort_desc_i32");
+                    return callVecVoidFn(elemIsI64
+                                             ? "__mlang_std_vec_sort_desc_i64"
+                                             : "__mlang_std_vec_sort_desc_i32");
                 }
                 // --- reverse() ---
                 if(node->methodName == "reverse")
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "reverse() takes no arguments");
+                        reportError(node->line, "reverse() takes no arguments");
                         return nullptr;
                     }
                     return callVecVoidFn(
-                        elemIsStr ? "__mlang_std_vec_reverse_str" :
-                        elemIsI64 ? "__mlang_std_vec_reverse_i64" :
-                                    "__mlang_std_vec_reverse_i32");
+                        elemIsStr   ? "__mlang_std_vec_reverse_str"
+                        : elemIsI64 ? "__mlang_std_vec_reverse_i64"
+                                    : "__mlang_std_vec_reverse_i32");
                 }
                 // --- dedup() ---
                 if(node->methodName == "dedup")
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "dedup() takes no arguments");
+                        reportError(node->line, "dedup() takes no arguments");
                         return nullptr;
                     }
                     return callVecVoidFn("__mlang_std_vec_dedup_i32");
@@ -17679,8 +17874,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "first() takes no arguments");
+                        reportError(node->line, "first() takes no arguments");
                         return nullptr;
                     }
                     // v[0] — direct GEP (same pattern as last())
@@ -17690,22 +17884,21 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::StructType::get(context, lsTypes5);
                     llvm::Value* ls5 = builder.CreateLoad(
                         lsType5, allocaPtr2, objId->name + ".load");
-                    llvm::Value* dataPtr5 = builder.CreateExtractValue(
-                        ls5, 1, "dataptr");
+                    llvm::Value* dataPtr5 =
+                        builder.CreateExtractValue(ls5, 1, "dataptr");
                     llvm::Type* elemType5 = getLLVMType(elemKind2);
                     llvm::Value* zero5 = llvm::ConstantInt::get(i64Type2, 0);
-                    llvm::Value* gep5 = builder.CreateGEP(
-                        elemType5, dataPtr5, zero5, "first.ptr");
+                    llvm::Value* gep5 = builder.CreateGEP(elemType5, dataPtr5,
+                                                          zero5, "first.ptr");
                     return builder.CreateLoad(elemType5, gep5,
-                                             objId->name + ".first");
+                                              objId->name + ".first");
                 }
                 // --- last() ---
                 if(node->methodName == "last")
                 {
                     if(!node->arguments.empty())
                     {
-                        reportError(node->line,
-                                    "last() takes no arguments");
+                        reportError(node->line, "last() takes no arguments");
                         return nullptr;
                     }
                     // v[v.len() - 1]
@@ -17715,23 +17908,23 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         llvm::StructType::get(context, lsTypes6);
                     llvm::Value* ls6 = builder.CreateLoad(
                         lsType6, allocaPtr2, objId->name + ".load");
-                    llvm::Value* cnt6 = builder.CreateExtractValue(
-                        ls6, 0, "count");
+                    llvm::Value* cnt6 =
+                        builder.CreateExtractValue(ls6, 0, "count");
                     llvm::Value* lastIdx = builder.CreateSub(
                         cnt6, llvm::ConstantInt::get(i64Type2, 1), "lastIdx");
                     // Generate via list indexing using lastIdx directly
-                    // We replicate the GEP logic to avoid parsing -1 as a literal
-                    llvm::Value* dataPtr6 = builder.CreateExtractValue(
-                        ls6, 1, "dataptr");
+                    // We replicate the GEP logic to avoid parsing -1 as a
+                    // literal
+                    llvm::Value* dataPtr6 =
+                        builder.CreateExtractValue(ls6, 1, "dataptr");
                     llvm::Type* elemType6 = getLLVMType(elemKind2);
-                    llvm::Value* gep6 = builder.CreateGEP(
-                        elemType6, dataPtr6, lastIdx, "last.ptr");
+                    llvm::Value* gep6 = builder.CreateGEP(elemType6, dataPtr6,
+                                                          lastIdx, "last.ptr");
                     return builder.CreateLoad(elemType6, gep6,
-                                             objId->name + ".last");
+                                              objId->name + ".last");
                 }
-                reportError(node->line,
-                            "Vec has no method named '" +
-                                node->methodName + "'");
+                reportError(node->line, "Vec has no method named '" +
+                                            node->methodName + "'");
                 return nullptr;
             }
         }
@@ -17773,9 +17966,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return builder.CreateExtractValue(mapStruct, 0,
                                                       objId->name + ".len");
                 }
-                reportError(node->line,
-                            "map has no method named '" +
-                                node->methodName + "'");
+                reportError(node->line, "map has no method named '" +
+                                            node->methodName + "'");
                 return nullptr;
             }
         }
@@ -17841,9 +18033,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     llvm::FunctionType::get(ptrType, {ptrType, ptrType}, false);
                 llvm::FunctionCallee concatFn = module->getOrInsertFunction(
                     "__mlang_std_strbuf_concat", concatFnType);
-                llvm::Value* newStr =
-                    builder.CreateCall(concatFn, {currentStr, suffix},
-                                       "field.push_str.result");
+                llvm::Value* newStr = builder.CreateCall(
+                    concatFn, {currentStr, suffix}, "field.push_str.result");
                 builder.CreateStore(newStr, recvPtr);
                 return llvm::Constant::getNullValue(ptrType);
             }
@@ -17893,7 +18084,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 llvm::FunctionCallee emptyFn = module->getOrInsertFunction(
                     "__mlang_std_strbuf_is_empty", emptyFnType);
                 return builder.CreateCall(emptyFn, {currentStr},
-                                         "field.is_empty");
+                                          "field.is_empty");
             }
             reportError(node->line, "string has no method named '" +
                                         node->methodName + "'");
@@ -17919,15 +18110,17 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
             llvm::Type* opaquePtrType =
                 llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
 #endif
-            bool elemIsI64 =
-                (elemKind == TypeNode::TYPE_I64 || elemKind == TypeNode::TYPE_U64);
-            bool elemIsStr =
-                (elemKind == TypeNode::TYPE_STRING || elemKind == TypeNode::TYPE_STR8);
-            bool elemIsI32Like =
-                (elemKind == TypeNode::TYPE_I32 || elemKind == TypeNode::TYPE_U32 ||
-                 elemKind == TypeNode::TYPE_I16 || elemKind == TypeNode::TYPE_U16 ||
-                 elemKind == TypeNode::TYPE_I8 || elemKind == TypeNode::TYPE_U8 ||
-                 elemKind == TypeNode::TYPE_BOOL);
+            bool elemIsI64 = (elemKind == TypeNode::TYPE_I64 ||
+                              elemKind == TypeNode::TYPE_U64);
+            bool elemIsStr = (elemKind == TypeNode::TYPE_STRING ||
+                              elemKind == TypeNode::TYPE_STR8);
+            bool elemIsI32Like = (elemKind == TypeNode::TYPE_I32 ||
+                                  elemKind == TypeNode::TYPE_U32 ||
+                                  elemKind == TypeNode::TYPE_I16 ||
+                                  elemKind == TypeNode::TYPE_U16 ||
+                                  elemKind == TypeNode::TYPE_I8 ||
+                                  elemKind == TypeNode::TYPE_U8 ||
+                                  elemKind == TypeNode::TYPE_BOOL);
 
             if(node->methodName == "len")
             {
@@ -17940,8 +18133,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                                             opaquePtrType};
                 llvm::StructType* listStructType =
                     llvm::StructType::get(context, listStructTypes);
-                llvm::Value* listStruct =
-                    builder.CreateLoad(listStructType, recvPtr, "fieldlist.load");
+                llvm::Value* listStruct = builder.CreateLoad(
+                    listStructType, recvPtr, "fieldlist.load");
                 return builder.CreateExtractValue(listStruct, 0,
                                                   "fieldlist.len");
             }
@@ -17953,13 +18146,14 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     return nullptr;
                 }
                 std::vector<llvm::Type*> lsTypes = {i64Type, opaquePtrType};
-                llvm::StructType* lsType = llvm::StructType::get(context, lsTypes);
+                llvm::StructType* lsType =
+                    llvm::StructType::get(context, lsTypes);
                 llvm::Value* ls =
                     builder.CreateLoad(lsType, recvPtr, "fieldlist.load");
                 llvm::Value* cnt = builder.CreateExtractValue(ls, 0);
-                return builder.CreateICmpEQ(
-                    cnt, llvm::ConstantInt::get(i64Type, 0),
-                    "fieldlist.is_empty");
+                return builder.CreateICmpEQ(cnt,
+                                            llvm::ConstantInt::get(i64Type, 0),
+                                            "fieldlist.is_empty");
             }
             if(node->methodName == "push")
             {
@@ -17990,33 +18184,41 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(!elemIsI32Like)
                     {
                         TypeNode* recvElemType = nullptr;
-                        if(auto* gl = dynamic_cast<GenericListTypeNode*>(recvType))
+                        if(auto* gl =
+                               dynamic_cast<GenericListTypeNode*>(recvType))
                             recvElemType = gl->elementType;
                         llvm::Type* elemLlvmType =
-                            recvElemType ? getLLVMTypeFromNode(recvElemType) : nullptr;
+                            recvElemType ? getLLVMTypeFromNode(recvElemType)
+                                         : nullptr;
                         if(!elemLlvmType)
                         {
-                            reportError(node->line,
-                                        "unsupported list element type for push()");
+                            reportError(
+                                node->line,
+                                "unsupported list element type for push()");
                             return nullptr;
                         }
                         if(val->getType() == elemLlvmType &&
                            !elemLlvmType->isIntegerTy(32))
                         {
-                            llvm::AllocaInst* tmpElem =
-                                builder.CreateAlloca(elemLlvmType, nullptr, "fieldlist.push.tmp");
+                            llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                                elemLlvmType, nullptr, "fieldlist.push.tmp");
                             builder.CreateStore(val, tmpElem);
                             llvm::Value* elemPtrAsOpaque =
-                                builder.CreateBitCast(tmpElem, opaquePtrType, "fieldlist.push.ptr");
+                                builder.CreateBitCast(tmpElem, opaquePtrType,
+                                                      "fieldlist.push.ptr");
                             uint64_t elemSizeU =
-                                module->getDataLayout().getTypeAllocSize(elemLlvmType);
-                            llvm::Value* elemSize =
-                                llvm::ConstantInt::get(i64Type, (uint64_t)elemSizeU);
+                                module->getDataLayout().getTypeAllocSize(
+                                    elemLlvmType);
+                            llvm::Value* elemSize = llvm::ConstantInt::get(
+                                i64Type, (uint64_t)elemSizeU);
                             llvm::FunctionType* ftRaw = llvm::FunctionType::get(
-                                voidType, {opaquePtrType, opaquePtrType, i64Type}, false);
-                            llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
-                                "__mlang_std_vec_push_raw", ftRaw);
-                            builder.CreateCall(fnRaw, {recvPtr, elemPtrAsOpaque, elemSize});
+                                voidType,
+                                {opaquePtrType, opaquePtrType, i64Type}, false);
+                            llvm::FunctionCallee fnRaw =
+                                module->getOrInsertFunction(
+                                    "__mlang_std_vec_push_raw", ftRaw);
+                            builder.CreateCall(
+                                fnRaw, {recvPtr, elemPtrAsOpaque, elemSize});
                             return llvm::Constant::getNullValue(voidType);
                         }
                     }
@@ -18025,10 +18227,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     if(val->getType() != i32Type)
                         val = builder.CreateTrunc(val, i32Type);
                 }
-                llvm::FunctionType* ft =
-                    llvm::FunctionType::get(voidType, {opaquePtrType, valType},
-                                            false);
-                llvm::FunctionCallee fn = module->getOrInsertFunction(fnName, ft);
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    voidType, {opaquePtrType, valType}, false);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction(fnName, ft);
                 builder.CreateCall(fn, {recvPtr, val});
                 return llvm::Constant::getNullValue(voidType);
             }
@@ -18058,9 +18260,10 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                         fnName = "__mlang_std_vec_pop_i32";
                         retType = i32Type;
                     }
-                    llvm::FunctionType* ft =
-                        llvm::FunctionType::get(retType, {opaquePtrType}, false);
-                    llvm::FunctionCallee fn = module->getOrInsertFunction(fnName, ft);
+                    llvm::FunctionType* ft = llvm::FunctionType::get(
+                        retType, {opaquePtrType}, false);
+                    llvm::FunctionCallee fn =
+                        module->getOrInsertFunction(fnName, ft);
                     return builder.CreateCall(fn, {recvPtr}, "fieldlist.pop");
                 }
                 TypeNode* recvElemType = nullptr;
@@ -18070,23 +18273,25 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     recvElemType ? getLLVMTypeFromNode(recvElemType) : nullptr;
                 if(!elemLlvmType)
                 {
-                    reportError(node->line, "unsupported list element type for pop()");
+                    reportError(node->line,
+                                "unsupported list element type for pop()");
                     return nullptr;
                 }
-                llvm::AllocaInst* tmpElem =
-                    builder.CreateAlloca(elemLlvmType, nullptr, "fieldlist.pop.tmp");
-                llvm::Value* tmpElemPtr =
-                    builder.CreateBitCast(tmpElem, opaquePtrType, "fieldlist.pop.ptr");
+                llvm::AllocaInst* tmpElem = builder.CreateAlloca(
+                    elemLlvmType, nullptr, "fieldlist.pop.tmp");
+                llvm::Value* tmpElemPtr = builder.CreateBitCast(
+                    tmpElem, opaquePtrType, "fieldlist.pop.ptr");
                 uint64_t elemSizeU =
                     module->getDataLayout().getTypeAllocSize(elemLlvmType);
                 llvm::Value* elemSize =
                     llvm::ConstantInt::get(i64Type, (uint64_t)elemSizeU);
                 llvm::FunctionType* ftRaw = llvm::FunctionType::get(
                     i32Type, {opaquePtrType, opaquePtrType, i64Type}, false);
-                llvm::FunctionCallee fnRaw =
-                    module->getOrInsertFunction("__mlang_std_vec_pop_raw", ftRaw);
+                llvm::FunctionCallee fnRaw = module->getOrInsertFunction(
+                    "__mlang_std_vec_pop_raw", ftRaw);
                 builder.CreateCall(fnRaw, {recvPtr, tmpElemPtr, elemSize});
-                return builder.CreateLoad(elemLlvmType, tmpElem, "fieldlist.pop");
+                return builder.CreateLoad(elemLlvmType, tmpElem,
+                                          "fieldlist.pop");
             }
             if(node->methodName == "clear")
             {
@@ -18097,13 +18302,13 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                 }
                 llvm::FunctionType* ft =
                     llvm::FunctionType::get(voidType, {opaquePtrType}, false);
-                llvm::FunctionCallee fn = module->getOrInsertFunction(
-                    "__mlang_std_vec_clear", ft);
+                llvm::FunctionCallee fn =
+                    module->getOrInsertFunction("__mlang_std_vec_clear", ft);
                 builder.CreateCall(fn, {recvPtr});
                 return llvm::Constant::getNullValue(voidType);
             }
-            reportError(node->line, "Vec has no method named '" +
-                                        node->methodName + "'");
+            reportError(node->line,
+                        "Vec has no method named '" + node->methodName + "'");
             return nullptr;
         }
         if(recvType && recvType->kind == TypeNode::TYPE_MAP)
@@ -18115,7 +18320,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     reportError(node->line, "len() takes no arguments");
                     return nullptr;
                 }
-                llvm::Value* recvPtr = getLValuePointer(node->object, node->line);
+                llvm::Value* recvPtr =
+                    getLValuePointer(node->object, node->line);
                 if(!recvPtr)
                     return nullptr;
                 llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -18133,8 +18339,8 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     builder.CreateLoad(mapStructType, recvPtr, "fieldmap.load");
                 return builder.CreateExtractValue(mapStruct, 0, "fieldmap.len");
             }
-            reportError(node->line, "map has no method named '" +
-                                        node->methodName + "'");
+            reportError(node->line,
+                        "map has no method named '" + node->methodName + "'");
             return nullptr;
         }
 
@@ -18370,8 +18576,7 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                     variableScopeDepth = savedVariableScopeDepth;
                     cleanupScopes = savedCleanupScopes;
                     pointerBorrowScopes = savedPointerBorrowScopes;
-                    variableScopeDepthScopes =
-                        savedVariableScopeDepthScopes;
+                    variableScopeDepthScopes = savedVariableScopeDepthScopes;
 
                     if(savedBlock)
                     {
@@ -18469,7 +18674,7 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
 }
 
 llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
-                                                 llvm::Type* declaredElemType)
+                                                llvm::Type* declaredElemType)
 {
     // List structure: { i64 size, ptr data }
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -18500,7 +18705,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 
     // Generate all elements
     std::vector<llvm::Value*> elementValues;
-    // Preferred element type: use declared type if provided, else infer from first
+    // Preferred element type: use declared type if provided, else infer from
+    // first
     llvm::Type* elementType = declaredElemType;
 
     for(auto* elem : node->elements->elements)
@@ -18512,7 +18718,8 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
         {
             elementType = val->getType();
         }
-        // Coerce element to match the target element type (e.g., truncate i64 → i32)
+        // Coerce element to match the target element type (e.g., truncate i64 →
+        // i32)
         if(val->getType() != elementType)
         {
             if(val->getType()->isIntegerTy() && elementType->isIntegerTy())
@@ -18558,7 +18765,7 @@ llvm::Value* CodeGenerator::generateListLiteral(ListLiteralNode* node,
 }
 
 llvm::Value* CodeGenerator::generateArrayFill(ArrayFillNode* node,
-                                               llvm::Type* declaredElemType)
+                                              llvm::Type* declaredElemType)
 {
     // [val; N] — a list of N copies of val
     llvm::Type* i64Type = llvm::Type::getInt64Ty(context);
@@ -19007,16 +19214,14 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     // Check if this is a generic struct instantiation (has type arguments)
     if(node->structName == "Result" && node->typeArgs.empty())
     {
-        reportError(node->line,
-                    "Result literals require type arguments (e.g. "
-                    "Ok<i32, string>(...))");
+        reportError(node->line, "Result literals require type arguments (e.g. "
+                                "Ok<i32, string>(...))");
         return nullptr;
     }
     if(node->structName == "Option" && node->typeArgs.empty())
     {
-        reportError(node->line,
-                    "Option literals require type arguments (e.g. "
-                    "Some<i32>(...))");
+        reportError(node->line, "Option literals require type arguments (e.g. "
+                                "Some<i32>(...))");
         return nullptr;
     }
     if(!node->typeArgs.empty())
@@ -19317,19 +19522,17 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     bool hasOption = hasSome || hasNone;
     if(hasResult && (hasLiteral || hasOption))
     {
-        reportError(node->line,
-                    "match cannot mix Result and other patterns");
+        reportError(node->line, "match cannot mix Result and other patterns");
         return nullptr;
     }
     if(hasOption && hasLiteral)
     {
-        reportError(node->line,
-                    "match cannot mix Option and literal patterns");
+        reportError(node->line, "match cannot mix Option and literal patterns");
         return nullptr;
     }
 
-    auto bindValue = [&](const std::string& name, TypeNode* type,
-                         llvm::Value* value)
+    auto bindValue =
+        [&](const std::string& name, TypeNode* type, llvm::Value* value)
     {
         if(name.empty() || !type || !value)
             return;
@@ -19359,15 +19562,13 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 structVariableTypes[name] = structRef->structName;
             }
         }
-        else if(auto* genRef =
-                    dynamic_cast<GenericStructTypeRefNode*>(type))
+        else if(auto* genRef = dynamic_cast<GenericStructTypeRefNode*>(type))
         {
             variableTypes[name] = TypeNode::TYPE_STRUCT;
             structVariableTypes[name] = getOrCreateMonomorphizedStruct(
                 genRef->structName, genRef->typeArgs);
         }
-        else if(auto* listType =
-                    dynamic_cast<GenericListTypeNode*>(type))
+        else if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
         {
             variableTypes[name] = TypeNode::TYPE_LIST;
             listElementTypes[name] = listType->elementType;
@@ -19420,12 +19621,11 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         auto savedVariableScopeDepth = variableScopeDepth;
         auto savedVariableScopeDepthScopes = variableScopeDepthScopes;
 
-        std::string binding =
-            arm && arm->pattern ? arm->pattern->binding : "";
+        std::string binding = arm && arm->pattern ? arm->pattern->binding : "";
         if(!binding.empty())
         {
-            llvm::Value* payload = builder.CreateExtractValue(
-                matchVal, valueIndex, "match.val");
+            llvm::Value* payload =
+                builder.CreateExtractValue(matchVal, valueIndex, "match.val");
             bindValue(binding, valueType, payload);
         }
 
@@ -19566,7 +19766,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
         std::vector<std::set<std::string>> armMovedStates;
         std::vector<std::map<std::string, std::string>> armPointerBorrowStates;
-        std::vector<std::map<std::string, std::set<std::string>>> armActiveBorrowerStates;
+        std::vector<std::map<std::string, std::set<std::string>>>
+            armActiveBorrowerStates;
         if(okFallsThrough)
         {
             armValues.push_back({okValue, okEnd});
@@ -19583,8 +19784,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
         if(armValues.empty())
         {
-            reportError(node->line,
-                        "match expression has no continuing arm");
+            reportError(node->line, "match expression has no continuing arm");
             return nullptr;
         }
         llvm::Type* okValueType = armValues[0].first->getType();
@@ -19629,10 +19829,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             else if(okValueType->isFloatingPointTy() &&
                     errValueType->isFloatingPointTy())
             {
-                commonType = okValueType->isDoubleTy() ||
-                                     errValueType->isDoubleTy()
-                                 ? llvm::Type::getDoubleTy(context)
-                                 : llvm::Type::getFloatTy(context);
+                commonType =
+                    okValueType->isDoubleTy() || errValueType->isDoubleTy()
+                        ? llvm::Type::getDoubleTy(context)
+                        : llvm::Type::getFloatTy(context);
             }
             else if(okValueType->isFloatingPointTy() &&
                     errValueType->isIntegerTy())
@@ -19651,10 +19851,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
                 return nullptr;
             }
 
-            armValues[0].first =
-                castInBlock(armValues[0].first, commonType, armValues[0].second);
-            armValues[1].first =
-                castInBlock(armValues[1].first, commonType, armValues[1].second);
+            armValues[0].first = castInBlock(armValues[0].first, commonType,
+                                             armValues[0].second);
+            armValues[1].first = castInBlock(armValues[1].first, commonType,
+                                             armValues[1].second);
             okValueType = commonType;
         }
 
@@ -19664,9 +19864,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             return nullptr;
         }
 
-        llvm::PHINode* phi =
-            builder.CreatePHI(okValueType, (unsigned)armValues.size(),
-                              "match.result");
+        llvm::PHINode* phi = builder.CreatePHI(
+            okValueType, (unsigned)armValues.size(), "match.result");
         for(const auto& pair : armValues)
             phi->addIncoming(pair.first, pair.second);
         std::set<std::string> mergedMoved;
@@ -19773,10 +19972,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::set<std::string> someMovedState;
         std::map<std::string, std::string> somePointerBorrowTarget;
         std::map<std::string, std::set<std::string>> someActiveBorrowers;
-        llvm::Value* someValue = generateArmValue(someArm, valueIndex,
-                                                  valueType, &someMovedState,
-                                                  &somePointerBorrowTarget,
-                                                  &someActiveBorrowers);
+        llvm::Value* someValue =
+            generateArmValue(someArm, valueIndex, valueType, &someMovedState,
+                             &somePointerBorrowTarget, &someActiveBorrowers);
         if(!someValue)
             return nullptr;
         llvm::BasicBlock* someEnd = builder.GetInsertBlock();
@@ -19788,10 +19986,9 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::set<std::string> noneMovedState;
         std::map<std::string, std::string> nonePointerBorrowTarget;
         std::map<std::string, std::set<std::string>> noneActiveBorrowers;
-        llvm::Value* noneValue = generateArmValue(noneArm, valueIndex,
-                                                  valueType, &noneMovedState,
-                                                  &nonePointerBorrowTarget,
-                                                  &noneActiveBorrowers);
+        llvm::Value* noneValue =
+            generateArmValue(noneArm, valueIndex, valueType, &noneMovedState,
+                             &nonePointerBorrowTarget, &noneActiveBorrowers);
         if(!noneValue)
             return nullptr;
         llvm::BasicBlock* noneEnd = builder.GetInsertBlock();
@@ -19803,7 +20000,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
         std::vector<std::set<std::string>> armMovedStates;
         std::vector<std::map<std::string, std::string>> armPointerBorrowStates;
-        std::vector<std::map<std::string, std::set<std::string>>> armActiveBorrowerStates;
+        std::vector<std::map<std::string, std::set<std::string>>>
+            armActiveBorrowerStates;
         if(someFallsThrough)
         {
             armValues.push_back({someValue, someEnd});
@@ -19820,8 +20018,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         }
         if(armValues.empty())
         {
-            reportError(node->line,
-                        "match expression has no continuing arm");
+            reportError(node->line, "match expression has no continuing arm");
             return nullptr;
         }
         llvm::Type* someValueType = armValues[0].first->getType();
@@ -19867,10 +20064,10 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             else if(someValueType->isFloatingPointTy() &&
                     noneValueType->isFloatingPointTy())
             {
-                commonType = someValueType->isDoubleTy() ||
-                                     noneValueType->isDoubleTy()
-                                 ? llvm::Type::getDoubleTy(context)
-                                 : llvm::Type::getFloatTy(context);
+                commonType =
+                    someValueType->isDoubleTy() || noneValueType->isDoubleTy()
+                        ? llvm::Type::getDoubleTy(context)
+                        : llvm::Type::getFloatTy(context);
             }
             else if(someValueType->isFloatingPointTy() &&
                     noneValueType->isIntegerTy())
@@ -19902,9 +20099,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             return nullptr;
         }
 
-        llvm::PHINode* phi =
-            builder.CreatePHI(someValueType, (unsigned)armValues.size(),
-                              "match.result");
+        llvm::PHINode* phi = builder.CreatePHI(
+            someValueType, (unsigned)armValues.size(), "match.result");
         for(const auto& pair : armValues)
             phi->addIncoming(pair.first, pair.second);
         std::set<std::string> mergedMoved;
@@ -19939,8 +20135,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
 
     if(!literalArms.empty() && !wildcardArm)
     {
-        reportError(node->line,
-                    "literal match requires a wildcard arm");
+        reportError(node->line, "literal match requires a wildcard arm");
         return nullptr;
     }
 
@@ -19956,8 +20151,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         return nullptr;
     }
 
-    auto buildLiteralCompare =
-        [&](llvm::Value* litVal) -> llvm::Value*
+    auto buildLiteralCompare = [&](llvm::Value* litVal) -> llvm::Value*
     {
         if(!litVal)
             return nullptr;
@@ -20003,7 +20197,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             }
             return builder.CreateICmpEQ(matchVal, litVal, "match.pcmp");
         }
-        reportError(node->line, "literal match expects numeric or pointer type");
+        reportError(node->line,
+                    "literal match expects numeric or pointer type");
         return nullptr;
     };
 
@@ -20017,7 +20212,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> armValues;
     std::vector<std::set<std::string>> armMovedStates;
     std::vector<std::map<std::string, std::string>> armPointerBorrowStates;
-    std::vector<std::map<std::string, std::set<std::string>>> armActiveBorrowerStates;
+    std::vector<std::map<std::string, std::set<std::string>>>
+        armActiveBorrowerStates;
     std::vector<llvm::BasicBlock*> armBlocks;
 
     llvm::BasicBlock* nextBB = nullptr;
@@ -20031,8 +20227,7 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             isLast ? (wildcardBB ? wildcardBB : mergeBB)
                    : llvm::BasicBlock::Create(context, "match.next", func);
 
-        llvm::Value* litVal =
-            generateExpression(arm->pattern->literal);
+        llvm::Value* litVal = generateExpression(arm->pattern->literal);
         llvm::Value* cmp = buildLiteralCompare(litVal);
         if(!cmp)
             return nullptr;
@@ -20105,8 +20300,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
     for(const auto& pair : armValues)
         armTypes.push_back(pair.first->getType());
 
-    auto commonTypeFrom = [&](const std::vector<llvm::Type*>& types)
-        -> llvm::Type*
+    auto commonTypeFrom =
+        [&](const std::vector<llvm::Type*>& types) -> llvm::Type*
     {
         if(types.empty())
             return nullptr;
@@ -20203,7 +20398,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
             unsigned srcBits = src->getIntegerBitWidth();
             unsigned dstBits = commonType->getIntegerBitWidth();
             if(srcBits > dstBits)
-                casted = castBuilder.CreateTrunc(val, commonType, "match.trunc");
+                casted =
+                    castBuilder.CreateTrunc(val, commonType, "match.trunc");
             else if(srcBits < dstBits)
                 casted = castBuilder.CreateSExt(val, commonType, "match.sext");
         }
@@ -20218,8 +20414,8 @@ llvm::Value* CodeGenerator::generateMatchExpression(MatchExpressionNode* node)
         pair.first = casted;
     }
     builder.SetInsertPoint(mergeBB);
-    llvm::PHINode* phi =
-        builder.CreatePHI(commonType, (unsigned)armValues.size(), "match.result");
+    llvm::PHINode* phi = builder.CreatePHI(
+        commonType, (unsigned)armValues.size(), "match.result");
     for(const auto& pair : armValues)
         phi->addIncoming(pair.first, pair.second);
     std::set<std::string> mergedMoved;
@@ -20354,8 +20550,8 @@ static std::string generateMangledName(const std::string& baseName,
         return out.empty() ? "unknown" : out;
     };
 
-    std::function<std::string(TypeNode*)> mangle_type = [&](TypeNode* t)
-        -> std::string
+    std::function<std::string(TypeNode*)> mangle_type =
+        [&](TypeNode* t) -> std::string
     {
         if(!t)
             return "unknown";
@@ -20649,8 +20845,9 @@ std::string CodeGenerator::getOrCreateMonomorphizedStruct(
 }
 
 // Backend implementation
-Backend::Backend(std::unique_ptr<llvm::Module>& m)
-    : module(m), targetMachine(nullptr)
+Backend::Backend(std::unique_ptr<llvm::Module>& m,
+                 const std::string& archOverride)
+    : module(m), targetMachine(nullptr), targetArchOverride(archOverride)
 {
     initializeTarget();
 }
@@ -20663,7 +20860,25 @@ bool Backend::initializeTarget()
     llvm::InitializeAllAsmParsers();
     llvm::InitializeAllAsmPrinters();
 
-    targetTriple = llvm::sys::getDefaultTargetTriple();
+    targetTriple = module_target_triple_string(module.get());
+    if(targetTriple.empty())
+        targetTriple = llvm::sys::getDefaultTargetTriple();
+    if(!targetArchOverride.empty())
+    {
+        const std::string normalizedArch =
+            normalize_target_arch_name(targetArchOverride);
+        const std::string llvmArch = llvm_arch_name_for_target(normalizedArch);
+        if(normalizedArch.empty() || llvmArch.empty())
+        {
+            std::cerr << "Error: Unsupported target arch '"
+                      << targetArchOverride << "'" << std::endl;
+            return false;
+        }
+
+        llvm::Triple triple(targetTriple);
+        triple.setArchName(llvmArch);
+        targetTriple = triple.str();
+    }
 
     // Normalize macOS version in triple to avoid linker warnings
     // The default triple may contain a newer macOS version than the linker
@@ -20720,13 +20935,11 @@ bool Backend::initializeTarget()
 
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Triple tripleObj(targetTriple);
-    targetMachine = target->createTargetMachine(tripleObj, cpu, features, opt,
-                                                relocModel, std::nullopt,
-                                                codegenOpt);
+    targetMachine = target->createTargetMachine(
+        tripleObj, cpu, features, opt, relocModel, std::nullopt, codegenOpt);
 #else
-    targetMachine = target->createTargetMachine(targetTriple, cpu, features,
-                                                opt, relocModel, std::nullopt,
-                                                codegenOpt);
+    targetMachine = target->createTargetMachine(
+        targetTriple, cpu, features, opt, relocModel, std::nullopt, codegenOpt);
 #endif
 
     if(!targetMachine)
@@ -20739,8 +20952,7 @@ bool Backend::initializeTarget()
         targetMachine->setFastISel(false);
         targetMachine->setO0WantsFastISel(false);
         targetMachine->setGlobalISel(false);
-        targetMachine->setGlobalISelAbort(
-            llvm::GlobalISelAbortMode::Disable);
+        targetMachine->setGlobalISelAbort(llvm::GlobalISelAbortMode::Disable);
     }
 
     module->setDataLayout(targetMachine->createDataLayout());

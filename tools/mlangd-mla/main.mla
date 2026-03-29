@@ -1663,6 +1663,8 @@ fn completion_kind_lsp(label: str8) -> i32 {
     if eq(label, "var") == 1 { return 14; }
     if eq(label, "if") == 1 { return 14; }
     if eq(label, "else") == 1 { return 14; }
+    if eq(label, "asm") == 1 { return 14; }
+    if eq(label, "volatile") == 1 { return 14; }
     if eq(label, "for") == 1 { return 14; }
     if eq(label, "return") == 1 { return 14; }
     if eq(label, "struct") == 1 { return 14; }
@@ -1694,6 +1696,8 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "var") == 1 { return "keyword: mutable binding"; }
     if eq(label, "if") == 1 { return "keyword: conditional branch"; }
     if eq(label, "else") == 1 { return "keyword: alternate branch"; }
+    if eq(label, "asm") == 1 { return "keyword: inline assembly expression"; }
+    if eq(label, "volatile") == 1 { return "keyword: marks inline assembly as side-effecting"; }
     if eq(label, "for") == 1 { return "keyword: loop over range/iterable"; }
     if eq(label, "return") == 1 { return "keyword: return from function"; }
     if eq(label, "struct") == 1 { return "keyword: struct type declaration"; }
@@ -1782,6 +1786,12 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "else") == 1 {
         return "Alternate branch executed when the preceding if-condition is false.";
+    }
+    if eq(label, "asm") == 1 {
+        return "Inline assembly expression lowered directly to LLVM inline asm. Use `asm(type, \"...\", args...)` or `asm volatile(type, \"...\", args...)`.";
+    }
+    if eq(label, "volatile") == 1 {
+        return "Marks inline assembly as side-effecting so LLVM keeps and orders it conservatively.";
     }
     if eq(label, "let") == 1 {
         return "Introduce an immutable local binding.";

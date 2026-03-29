@@ -126,6 +126,8 @@ static int is_try_question_context()
                   strcat(yylval.sval, "\\"); }
     \\0         { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
                   strcat(yylval.sval, "\0"); }
+    \n          { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + 2);
+                  strcat(yylval.sval, "\n"); }
     [^\\\n\"]+  { yylval.sval = (char*)realloc(yylval.sval, strlen(yylval.sval) + strlen(yytext) + 1);
                   strcat(yylval.sval, yytext); }
 }
@@ -146,6 +148,8 @@ static int is_try_question_context()
 "for"           { return FOR; }
 "while"         { return WHILE; }
 "unsafe"        { return UNSAFE; }
+"asm"           { return ASM; }
+"volatile"      { return VOLATILE; }
 "in"            { return IN; }
 "break"         { return BREAK; }
 "continue"      { return CONTINUE; }

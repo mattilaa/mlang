@@ -90,7 +90,44 @@ def main() -> int:
             "expected compact relational operators when disabled"
         )
 
-    print("PASS: mlang-format spacing e2e (fn/var/for keyword spacing)")
+        multiline_path = root / "multiline_string_case.mla"
+        multiline_path.write_text(
+            "fn main() -> i32 {\n"
+            "let asm_text: str8 = \"mov $0, $1\n"
+            "    add $0, $0, $2\n"
+            "ret\";\n"
+            "let msg: str8 = \"Hello\n"
+            "  world\";\n"
+            "return 0;\n"
+            "}\n"
+        )
+
+        out_multiline = subprocess.run(
+            [str(formatter), str(multiline_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert "fn main() -> i32 {\n" in out_multiline, (
+            "expected multiline case to keep outer function formatting"
+        )
+        assert 'let asm_text: str8 = "mov $0, $1\n' in out_multiline, (
+            "expected formatter to preserve multiline string opening line"
+        )
+        assert "    add $0, $0, $2\n" in out_multiline, (
+            "expected formatter to preserve multiline asm row alignment"
+        )
+        assert 'ret";\n' in out_multiline, (
+            "expected formatter to preserve multiline string closing line"
+        )
+        assert 'let msg: str8 = "Hello\n' in out_multiline, (
+            "expected formatter to preserve generic multiline string opening line"
+        )
+        assert '  world";\n' in out_multiline, (
+            "expected formatter to preserve generic multiline string indentation"
+        )
+
+    print("PASS: mlang-format spacing e2e (including multiline string preservation)")
     return 0
 
 

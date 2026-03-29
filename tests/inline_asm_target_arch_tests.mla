@@ -1,0 +1,228 @@
+mod std::fs;
+mod std::process;
+mod std::strbuf;
+mod std::testing;
+
+use std::fs::read_all_text;
+use std::fs::write_all_text;
+use std::process::spawn;
+use std::process::Child;
+use std::process::ChildStdout;
+use std::process::ChildStderr;
+use std::process::ExitStatus;
+use std::strbuf::contains;
+use std::testing::verify;
+
+struct CompilerRunCapture {
+    var rc: i32;
+    var stdout_text: str8;
+    var stderr_text: str8;
+};
+
+fn read_child_stdout_all(out: ChildStdout) -> str8 {
+    var buf: str8 = String::with_capacity(8192);
+    let rr: Result<i64, str8> = out.read(buf, 8192);
+    if rr.is_err(): { return ""; }
+    let _ = out.close();
+    return buf;
+}
+
+fn read_child_stderr_all(err: ChildStderr) -> str8 {
+    var buf: str8 = String::with_capacity(8192);
+    let rr: Result<i64, str8> = err.read(buf, 8192);
+    if rr.is_err(): { return ""; }
+    let _ = err.close();
+    return buf;
+}
+
+fn run_compiler_capture(args: list<str8>) -> i32 {
+    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    if cr.is_err(): { return -1; }
+    let child: Child = cr.unwrap();
+    let status_r: Result<ExitStatus, str8> = child.wait();
+    let _ = child.close();
+    if status_r.is_err(): { return -1; }
+    let status: ExitStatus = status_r.unwrap();
+    return status.code();
+}
+
+fn run_compiler_capture_stdout_stderr(args: list<str8>) -> CompilerRunCapture {
+    let cr: Result<Child, str8> = spawn("./build/mlang", args);
+    if cr.is_err() { return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
+    let child: Child = cr.unwrap();
+
+    let out_r: Result<ChildStdout, str8> = child.stdout();
+    if out_r.is_err() { let _ = child.close(); return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
+    let out: ChildStdout = out_r.unwrap();
+    let err_r: Result<ChildStderr, str8> = child.stderr();
+    if err_r.is_err() { let _ = out.close(); let _ = child.close(); return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" }; }
+    let err: ChildStderr = err_r.unwrap();
+
+    let status_r: Result<ExitStatus, str8> = child.wait();
+    if status_r.is_err() {
+        let _ = out.close();
+        let _ = err.close();
+        let _ = child.close();
+        return CompilerRunCapture { rc: -1, stdout_text: "", stderr_text: "" };
+    }
+    let status: ExitStatus = status_r.unwrap();
+    let stdout_text: str8 = read_child_stdout_all(out);
+    let stderr_text: str8 = read_child_stderr_all(err);
+    let _ = child.close();
+    return CompilerRunCapture { rc: status.code(), stdout_text: stdout_text, stderr_text: stderr_text };
+}
+
+#[test]
+fn test_inline_asm_aarch64_target_override_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_aarch64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_aarch64_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let base: i64 = 4;\n    let delta: i64 = 5;\n    let sum: i64 = asm aarch64(i64, \"add $0, $1, $2\", base, delta);\n    if sum != 9 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "aarch64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "target triple = \"aarch64") == 0 { return 1; }
+    if contains(text, "call i64 asm \"add $0, $1, $2\"") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_reports_arch_mismatch() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_arch_mismatch.mla";
+    let src: str8 = "fn main() -> i32 {\n    let value: i64 = 9;\n    let copy: i64 = asm aarch64(i64, \"\", value);\n    if copy != 9 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let result: CompilerRunCapture = run_compiler_capture_stdout_stderr(["--target-arch", "x64", "-emit-llvm", src_path, "-o", "/tmp/mlang_inline_asm_arch_mismatch.ll", "-L", "build", "-lmlang_std"]);
+    if result.rc == 0 { return 1; }
+    if contains(result.stdout_text, "inline asm target arch 'aarch64' does not match compilation target arch 'x64'") == 0 &&
+       contains(result.stderr_text, "inline asm target arch 'aarch64' does not match compilation target arch 'x64'") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_multiline_aarch64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_multiline_aarch64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_multiline_aarch64_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let counter: i64 = 41;\n    let increment: i64 = 1;\n    let updated: i64 = asm aarch64(i64, \"mov $0, $1\\nadd $0, $0, $2\", counter, increment);\n    if updated != 42 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "aarch64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "mov $0, $1\\0Aadd $0, $0, $2") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_raw_multiline_aarch64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_raw_multiline_aarch64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_raw_multiline_aarch64_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let counter: i64 = 41;\n    let increment: i64 = 1;\n    let updated: i64 = asm aarch64(i64,\n        \"mov $0, $1\nadd $0, $0, $2\",\n        counter,\n        increment\n    );\n    if updated != 42 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "aarch64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "mov $0, $1\\0Aadd $0, $0, $2") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_multiline_x64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_multiline_x64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_multiline_x64_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let counter: i64 = 41;\n    let increment: i64 = 1;\n    let updated: i64 = asm x64(i64, \"movq $1, $0\\naddq $2, $0\", counter, increment);\n    if updated != 42 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "x64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "movq $1, $0\\0Aaddq $2, $0") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_raw_multiline_x64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_raw_multiline_x64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_raw_multiline_x64_emit.ll";
+    let src: str8 = "fn main() -> i32 {\n    let counter: i64 = 41;\n    let increment: i64 = 1;\n    let updated: i64 = asm x64(i64,\n        \"movq $1, $0\naddq $2, $0\",\n        counter,\n        increment\n    );\n    if updated != 42 { return 1; }\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "x64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, "movq $1, $0\\0Aaddq $2, $0") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_embedded_string_aarch64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_embedded_string_aarch64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_embedded_string_aarch64_emit.ll";
+    let src: str8 = "extern fn puts(s: str8) -> i32;\n\nfn main() -> i32 {\n    let seed: str8 = \"seed\";\n    let msg: str8 = asm aarch64(\n        str8,\n        \".p2align 2\\nadr $0, 1f\\nb 2f\\n1:\\n.asciz \\\"Hello world from AArch64 data asm\\\"\\n.p2align 2\\n2:\",\n        seed\n    );\n    puts(msg);\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "aarch64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, ".asciz \\22Hello world from AArch64 data asm\\22") == 0 { return 1; }
+    if contains(text, "adr $0, 1f") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_embedded_string_x64_emits_llvm() -> i32 {
+    let src_path: str8 = "/tmp/mlang_inline_asm_embedded_string_x64_emit.mla";
+    let ll_path: str8 = "/tmp/mlang_inline_asm_embedded_string_x64_emit.ll";
+    let src: str8 = "extern fn puts(s: str8) -> i32;\n\nfn main() -> i32 {\n    let seed: str8 = \"seed\";\n    let msg: str8 = asm x64(\n        str8,\n        \"jmp 2f\\n1:\\n.asciz \\\"Hello world from x64 data asm\\\"\\n2:\\nleaq 1b(%rip), $0\",\n        seed\n    );\n    puts(msg);\n    return 0;\n}\n";
+    let wr: Result<i32, str8> = write_all_text(src_path, src);
+    if wr.is_err() { return 1; }
+
+    let rc: i32 = run_compiler_capture(["--target-arch", "x64", "-emit-llvm", src_path, "-o", ll_path, "-L", "build", "-lmlang_std"]);
+    if rc != 0 { return 1; }
+
+    let text_r: Result<str8, str8> = read_all_text(ll_path);
+    if text_r.is_err() { return 1; }
+    let text: str8 = text_r.unwrap();
+    if contains(text, ".asciz \\22Hello world from x64 data asm\\22") == 0 { return 1; }
+    if contains(text, "leaq 1b(%rip), $0") == 0 { return 1; }
+    return 0;
+}
+
+#[test]
+fn test_inline_asm_target_arch_tests() {
+    verify(test_inline_asm_aarch64_target_override_emits_llvm() == 0);
+    verify(test_inline_asm_reports_arch_mismatch() == 0);
+    verify(test_inline_asm_multiline_aarch64_emits_llvm() == 0);
+    verify(test_inline_asm_raw_multiline_aarch64_emits_llvm() == 0);
+    verify(test_inline_asm_multiline_x64_emits_llvm() == 0);
+    verify(test_inline_asm_raw_multiline_x64_emits_llvm() == 0);
+    verify(test_inline_asm_embedded_string_aarch64_emits_llvm() == 0);
+    verify(test_inline_asm_embedded_string_x64_emits_llvm() == 0);
+}

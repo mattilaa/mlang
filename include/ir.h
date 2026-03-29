@@ -373,6 +373,17 @@ private:
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
+    /// \brief Lower an inline asm expression to LLVM inline asm.
+    ///
+    /// Current constraints are intentionally narrow so optimization behavior
+    /// stays predictable:
+    /// - operands must be integer or pointer values
+    /// - result type must be integer, pointer, or `void`
+    /// - non-`void` asm ties the first operand to the output register
+    ///
+    /// `asm volatile(...)` is emitted with LLVM `sideeffect`; plain `asm(...)`
+    /// is emitted without it.
+    llvm::Value* generateInlineAsm(InlineAsmNode* node);
     llvm::Value* generateBinaryOp(BinaryOpNode* node);
     llvm::Value* generateFoldExpression(FoldExpressionNode* node);
     llvm::Value* generateUnaryOp(UnaryOpNode* node);
@@ -482,8 +493,8 @@ private:
 class Backend
 {
 public:
-    Backend(std::unique_ptr<llvm::Module>& m);
-
+    Backend(std::unique_ptr<llvm::Module>& m,
+            const std::string& archOverride = "");
     bool emitObjectFile(const std::string& filename);
     bool emitAssemblyFile(const std::string& filename);
     bool emitLLVMIR(const std::string& filename);
@@ -500,6 +511,7 @@ private:
     std::unique_ptr<llvm::Module>& module;
     llvm::TargetMachine* targetMachine;
     std::string targetTriple;
+    std::string targetArchOverride;
 
     bool initializeTarget();
     bool linkExecutable(const std::string& objectFile,

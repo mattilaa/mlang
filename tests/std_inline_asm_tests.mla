@@ -1,0 +1,28 @@
+mod std::testing;
+
+use std::testing::verify;
+use std::testing::verify_eq;
+
+#[test]
+fn inline_asm_identity_returns_first_operand() {
+    let value: i64 = 41;
+    let result: i64 = asm(i64, "", value);
+    verify_eq(41, result);
+}
+
+#[test]
+fn inline_asm_can_be_used_in_condition() {
+    let flag: i64 = 1;
+    var seen: i32 = 0;
+    if asm(i64, "", flag) != 0 {
+        seen = 1;
+    }
+    verify_eq_i32(1, seen);
+}
+
+#[test]
+fn inline_asm_volatile_void_statement_compiles_and_runs() {
+    let value: i64 = 7;
+    asm volatile(void, "", value);
+    verify(true);
+}

@@ -634,6 +634,13 @@ ASTNode* mla_ast_try_expression(ASTNode* expr, int line)
     return create_try_expression(expr, line);
 }
 
+ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
+                            ASTNode* args, int is_volatile, int line)
+{
+    return create_inline_asm_impl(type, asm_text, arch_name, args, is_volatile,
+                                  line);
+}
+
 ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line)
 {
     return create_update_expression_impl(kind, is_prefix, operand, line);

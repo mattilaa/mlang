@@ -105,6 +105,25 @@ search paths in `mlang.toml`:
 module_paths = ["modules", "vendor/mlang"]
 ```
 
+## Inline Assembly
+MLang supports direct inline assembly through the `asm` keyword. The compiler
+lowers it straight to LLVM inline asm, so there is no extra C wrapper boundary.
+
+Supported forms:
+
+```mla
+let value: i64 = 9;
+let copy: i64 = asm(i64, "", value);
+asm volatile(void, "", value);
+```
+
+Current first-version constraints:
+- operands must be integer or pointer values
+- result type must be integer, pointer, or `void`
+- non-`void` asm uses the first operand as the tied input/output operand
+- `asm volatile(...)` lowers with LLVM `sideeffect`
+- plain `asm(...)` lowers without `sideeffect`
+
 ## Package Manager (MLang Backend Default)
 `mlang pkg ...` now prefers the MLang implementation in
 `tools/mlang-pkg-mla/main.mla` by default, with automatic fallback to the C++
@@ -659,4 +678,50 @@ entry = "src/main.mla"
 
 [c-dependencies]
 curl = { pkg_config = "libcurl" }
+```
+### Inline asm target architecture
+
+Inline asm can be pinned to a target architecture directly in source:
+
+```mla
+let sum: i64 = asm aarch64(i64, "add $0, $1, $2", base, delta);
+asm volatile aarch64(void, "yield");
+```
+
+Plain quoted strings can also span source lines directly. Newlines inside the
+literal become `\n` in the resulting value, so asm templates can be written as
+real multiline blocks instead of `\n`-escaped single lines. `mlang-format`
+preserves the rows inside these multiline string literals so asm examples stay
+aligned.
+
+For embedded string/data examples, LLVM inline asm uses directives such as
+`.asciz` and `.p2align` rather than NASM-style `db`.
+
+Supported architecture names are `x86`, `x64`, and `aarch64`. The compiler
+target can be selected with `--target-arch`:
+
+```bash
+./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo
+./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_hello_demo
+./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_data_hello_demo
+./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_demo.ll
+./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_hello_demo.ll
+./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_data_hello_demo.ll
+./build/mlang tools/mlang-frontend-mla/main.mla -L build -lmlang_std -o /tmp/mlang-frontend-mla
+/tmp/mlang-frontend-mla --backend ./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo_frontend
+```
+
+If an asm block is tagged for the wrong architecture, compilation fails with an
+explicit error before code generation continues.
+
+On an Apple Silicon Mac, prefer the `aarch64` example above for local compile
+and run. For non-host architectures such as `x64`, use `-emit-llvm` or `-S`
+locally unless you also have the matching toolchain and runtime available.
+
+Benchmark commands:
+
+```bash
+./build/mlang bench tests/inline_asm_bench_tests.mla --bench-iters 200000 --bench-warmup 20000 -L build -lmlang_std
+./build/mlang --tests tests/inline_asm_target_arch_tests.mla -L build -lmlang_std
+./build/mlang --tests tests/multiline_string_tests.mla -L build -lmlang_std -o /tmp/multiline_string_tests_bin && /tmp/multiline_string_tests_bin
 ```

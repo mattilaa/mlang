@@ -2071,6 +2071,14 @@ char* __mlang_std_jsonrpc_extract_range_text(const char* text, int64_t start_lin
     return out;
 }
 
+static int append_char_dyn(char** io_out, size_t* io_cap, size_t* io_w, char c);
+static int append_text_dyn(char** io_out, size_t* io_cap, size_t* io_w,
+                           const char* s, size_t n);
+static int line_multiline_string_fragment(const char* s, size_t n,
+                                          int* in_string_io);
+static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
+                                                        int* in_string_io);
+
 char* __mlang_std_jsonrpc_format_text_basic(const char* text)
 {
     if(!text)
@@ -2083,12 +2091,30 @@ char* __mlang_std_jsonrpc_format_text_basic(const char* text)
 
     size_t w = 0u;
     const char* p = text;
+    int in_multiline_string = 0;
     while(*p)
     {
         const char* ls = p;
         while(*p && *p != '\n')
             ++p;
         const char* le = p;
+        int line_string_state = in_multiline_string;
+        const int preserve_line =
+            line_multiline_string_fragment(ls, (size_t)(le - ls),
+                                           &line_string_state);
+        in_multiline_string = line_string_state;
+        if(preserve_line)
+        {
+            if(append_text_dyn(&out, &cap, &w, ls, (size_t)(le - ls)) != 0)
+                goto oom;
+            if(*p == '\n')
+            {
+                if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                    goto oom;
+                ++p;
+            }
+            continue;
+        }
         while(le > ls && (le[-1] == ' ' || le[-1] == '\t' || le[-1] == '\r'))
             --le;
 
@@ -2121,7 +2147,18 @@ char* __mlang_std_jsonrpc_format_text_basic(const char* text)
 
     out[w] = '\0';
     return out;
+oom:
+    free(out);
+    return dup_cstr("");
 }
+
+static int append_char_dyn(char** io_out, size_t* io_cap, size_t* io_w, char c);
+static int append_text_dyn(char** io_out, size_t* io_cap, size_t* io_w,
+                           const char* s, size_t n);
+static int line_multiline_string_fragment(const char* s, size_t n,
+                                          int* in_string_io);
+static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
+                                                        int* in_string_io);
 
 static char* format_text_with_options_impl(const char* text, int64_t tab_size,
                                            int insert_spaces)
@@ -2141,12 +2178,30 @@ static char* format_text_with_options_impl(const char* text, int64_t tab_size,
 
     size_t w = 0u;
     const char* p = text;
+    int in_multiline_string = 0;
     while(*p)
     {
         const char* ls = p;
         while(*p && *p != '\n')
             ++p;
         const char* le = p;
+        int line_string_state = in_multiline_string;
+        const int preserve_line =
+            line_multiline_string_fragment(ls, (size_t)(le - ls),
+                                           &line_string_state);
+        in_multiline_string = line_string_state;
+        if(preserve_line)
+        {
+            if(append_text_dyn(&out, &cap, &w, ls, (size_t)(le - ls)) != 0)
+                goto oom;
+            if(*p == '\n')
+            {
+                if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                    goto oom;
+                ++p;
+            }
+            continue;
+        }
         while(le > ls && (le[-1] == ' ' || le[-1] == '\t' || le[-1] == '\r'))
             --le;
 
@@ -2177,6 +2232,9 @@ static char* format_text_with_options_impl(const char* text, int64_t tab_size,
 
     out[w] = '\0';
     return out;
+oom:
+    free(out);
+    return dup_cstr("");
 }
 
 char* __mlang_std_jsonrpc_format_text_with_options(const char* text,
@@ -2721,12 +2779,30 @@ static char* apply_single_line_brace_spacing(const char* text, int enable)
     out[0] = '\0';
 
     const char* p = text;
+    int in_multiline_string = 0;
     while(*p)
     {
         const char* ls = p;
         while(*p && *p != '\n')
             ++p;
         const char* le = p;
+        int line_string_state = in_multiline_string;
+        const int preserve_line =
+            line_multiline_string_fragment(ls, (size_t)(le - ls),
+                                           &line_string_state);
+        in_multiline_string = line_string_state;
+        if(preserve_line)
+        {
+            if(append_text_dyn(&out, &cap, &w, ls, (size_t)(le - ls)) != 0)
+                goto oom;
+            if(*p == '\n')
+            {
+                if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                    goto oom;
+                ++p;
+            }
+            continue;
+        }
         int single_line = 0;
         const char* open = memchr(ls, '{', (size_t)(le - ls));
         const char* close = memchr(ls, '}', (size_t)(le - ls));
@@ -2849,6 +2925,105 @@ static int count_net_brace_delta_code_only(const char* s, size_t n)
     return depth;
 }
 
+static int line_multiline_string_fragment(const char* s, size_t n,
+                                          int* in_string_io)
+{
+    int in_string = (in_string_io && *in_string_io) ? 1 : 0;
+    const int started_in_string = in_string;
+    int escape = 0;
+
+    for(size_t i = 0; s && i < n; ++i)
+    {
+        const char c = s[i];
+        if(in_string)
+        {
+            if(escape)
+            {
+                escape = 0;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escape = 1;
+                continue;
+            }
+            if(c == '"')
+                in_string = 0;
+            continue;
+        }
+
+        if(c == '"')
+            in_string = 1;
+    }
+
+    if(in_string_io)
+        *in_string_io = in_string;
+    return started_in_string || in_string;
+}
+
+static int count_net_brace_delta_code_with_string_state(const char* s, size_t n,
+                                                        int* in_string_io)
+{
+    int depth = 0;
+    int in_string = (in_string_io && *in_string_io) ? 1 : 0;
+    int in_line_comment = 0;
+    int in_block_comment = 0;
+
+    for(size_t i = 0; s && i < n; ++i)
+    {
+        char c = s[i];
+        char n1 = s[i + 1u];
+
+        if(in_string)
+        {
+            if(c == '\\' && n1 != '\0')
+            {
+                ++i;
+                continue;
+            }
+            if(c == '"')
+                in_string = 0;
+            continue;
+        }
+        if(in_line_comment)
+            break;
+        if(in_block_comment)
+        {
+            if(c == '*' && n1 == '/')
+            {
+                in_block_comment = 0;
+                ++i;
+            }
+            continue;
+        }
+
+        if(c == '"')
+        {
+            in_string = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '/')
+        {
+            in_line_comment = 1;
+            continue;
+        }
+        if(c == '/' && n1 == '*')
+        {
+            in_block_comment = 1;
+            ++i;
+            continue;
+        }
+        if(c == '{')
+            depth++;
+        else if(c == '}')
+            depth--;
+    }
+
+    if(in_string_io)
+        *in_string_io = in_string;
+    return depth;
+}
+
 static char* apply_block_indentation(const char* text, int64_t tab_size,
                                      int insert_spaces)
 {
@@ -2868,12 +3043,34 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
 
     int depth = 0;
     const char* p = text;
+    int in_multiline_string = 0;
     while(*p)
     {
         const char* ls = p;
         while(*p && *p != '\n')
             ++p;
         const char* le = p;
+        int line_string_state = in_multiline_string;
+        const int preserve_line =
+            line_multiline_string_fragment(ls, (size_t)(le - ls),
+                                           &line_string_state);
+        if(preserve_line)
+        {
+            if(append_text_dyn(&out, &cap, &w, ls, (size_t)(le - ls)) != 0)
+                goto oom;
+            depth += count_net_brace_delta_code_with_string_state(
+                ls, (size_t)(le - ls), &in_multiline_string);
+            if(depth < 0)
+                depth = 0;
+            if(*p == '\n')
+            {
+                if(append_char_dyn(&out, &cap, &w, '\n') != 0)
+                    goto oom;
+                ++p;
+            }
+            continue;
+        }
+        in_multiline_string = line_string_state;
 
         const char* first = ls;
         while(first < le && (*first == ' ' || *first == '\t'))
@@ -2915,7 +3112,8 @@ static char* apply_block_indentation(const char* text, int64_t tab_size,
         if(append_text_dyn(&out, &cap, &w, first, (size_t)(le - first)) != 0)
             goto oom;
 
-        depth += count_net_brace_delta_code_only(first, (size_t)(le - first));
+        depth += count_net_brace_delta_code_with_string_state(
+            first, (size_t)(le - first), &in_multiline_string);
         if(depth < 0)
             depth = 0;
 

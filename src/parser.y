@@ -107,6 +107,8 @@ ASTNode* mla_ast_literal_bool(int value);
 ASTNode* mla_ast_literal_float(float value);
 ASTNode* mla_ast_literal_double(float value);
 ASTNode* mla_ast_literal_string(char* value);
+ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
+                            ASTNode* args, int is_volatile, int line);
 ASTNode* create_identifier(char* name);
 ASTNode* create_identifier_line(char* name, int line);
 ASTNode* create_identifier_at(char* name, int line, int col);
@@ -320,6 +322,7 @@ enum UpdatePosition
 %token PUB IMPL TRAIT
 %token EXTERN
 %token STATIC
+%token ASM VOLATILE
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
@@ -366,7 +369,7 @@ enum UpdatePosition
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
 %type <ast> throw_statement try_catch_statement
 %type <ast> break_statement continue_statement
-%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression
+%type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression
 %type <ast> mod_declaration use_declaration
 %type <sval> module_path
 %type <ast> print_statement argument_list format_argument format_argument_list assert_eq_statement assert_statement static_assert_statement
@@ -1301,6 +1304,7 @@ condition_unary
     | index_expression
     | tuple_literal
     | map_iterator
+    | asm_expression
     ;
 
 condition_postfix
@@ -1346,6 +1350,7 @@ condition_primary
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | fold_expression { $$ = $1; }
+    | asm_expression { $$ = $1; }
     ;
 
 fold_expression
@@ -1416,6 +1421,26 @@ unary_expression
     | tuple_literal
     | map_iterator
     | struct_literal
+    | asm_expression
+    ;
+
+asm_expression
+    : ASM LPAREN type COMMA STRING_LITERAL RPAREN
+        { $$ = mla_ast_inline_asm($3, $5, NULL, NULL, 0, yylineno); }
+    | ASM LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = mla_ast_inline_asm($3, $5, NULL, $7, 0, yylineno); }
+    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, $2, NULL, 0, yylineno); }
+    | ASM IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, $2, $8, 0, yylineno); }
+    | ASM VOLATILE LPAREN type COMMA STRING_LITERAL RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, NULL, NULL, 1, yylineno); }
+    | ASM VOLATILE LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = mla_ast_inline_asm($4, $6, NULL, $8, 1, yylineno); }
+    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL RPAREN
+        { $$ = mla_ast_inline_asm($5, $7, $3, NULL, 1, yylineno); }
+    | ASM VOLATILE IDENTIFIER LPAREN type COMMA STRING_LITERAL COMMA argument_list RPAREN
+        { $$ = mla_ast_inline_asm($5, $7, $3, $9, 1, yylineno); }
     ;
 
 match_expression
@@ -1515,6 +1540,7 @@ primary_expression
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | fold_expression { $$ = $1; }
+    | asm_expression { $$ = $1; }
     ;
 
 /* Struct literal: StructName { field: value, ... } */
