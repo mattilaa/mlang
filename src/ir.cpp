@@ -3248,6 +3248,20 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
         return new TypeNode(kind);
     }
 
+    if(auto* index = dynamic_cast<IndexExpressionNode*>(expr))
+    {
+        if(auto* baseId = dynamic_cast<IdentifierNode*>(index->base))
+        {
+            auto listIt = listElementTypes.find(baseId->name);
+            if(listIt != listElementTypes.end())
+                return cloneTypeNode(listIt->second);
+
+            auto mapIt = mapKeyValueTypes.find(baseId->name);
+            if(mapIt != mapKeyValueTypes.end())
+                return cloneTypeNode(mapIt->second.second);
+        }
+    }
+
     if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
     {
         auto overloadIt = functionOverloads.find(call->name);
@@ -4938,18 +4952,18 @@ void CodeGenerator::generateBenchmarkMain(
         llvm::ConstantInt::get(i32Type, static_cast<int>(benchNameWidth));
 
     llvm::Value* headerFmt =
-        make_cstr("[BENCH] %-48s %12s %12s %10s\n", "bench.header.fmt");
+        make_cstr("[BENCH] %-*s %12s %12s %10s\n", "bench.header.fmt");
     llvm::Value* lineFmt =
-        make_cstr("[BENCH] %-48s %12lld %12lld %10d\n", "bench.line.fmt");
+        make_cstr("[BENCH] %-*s %12lld %12lld %10d\n", "bench.line.fmt");
     llvm::Value* failFmt =
-        make_cstr("[BENCH-FAIL] %-43s failures=%d\n", "bench.fail.fmt");
+        make_cstr("[BENCH-FAIL] %-*s failures=%d\n", "bench.fail.fmt");
 
     llvm::Value* nsTotalHdr = make_cstr("total_ns", "bench.hdr.total");
     llvm::Value* nsPerOpHdr = make_cstr("ns/op", "bench.hdr.nsop");
     llvm::Value* itersHdr = make_cstr("iters", "bench.hdr.iters");
     llvm::Value* warmupLabel = make_cstr("warmup(iters)", "bench.warmup.label");
     llvm::Value* warmupFmt =
-        make_cstr("[BENCH] %-48s %12d\n", "bench.warmup.fmt");
+        make_cstr("[BENCH] %-*s %12d\n", "bench.warmup.fmt");
     builder.CreateCall(printfFunc, {warmupFmt, benchNameWidthVal, warmupLabel,
                                     llvm::ConstantInt::get(
                                         i32Type, benchmarkWarmupIterations)});
@@ -5629,12 +5643,20 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
                 if(auto* structInner =
                        dynamic_cast<StructTypeRefNode*>(refType->elementType))
                 {
-                    if(!resolveVisibleEnumName(structInner->structName).empty())
+                    std::string resolvedEnumName =
+                        resolveVisibleEnumName(structInner->structName);
+                    if(!resolvedEnumName.empty())
+                    {
+                        variableTypes[std::string(arg.getName())] =
+                            TypeNode::TYPE_INT;
                         enumVariableTypes[std::string(arg.getName())] =
-                            resolveVisibleEnumName(structInner->structName);
+                            resolvedEnumName;
+                    }
                     else
+                    {
                         structVariableTypes[std::string(arg.getName())] =
                             structInner->structName;
+                    }
                 }
                 if(auto* genStructInner =
                        dynamic_cast<GenericStructTypeRefNode*>(
@@ -5657,12 +5679,20 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
             if(auto* structType =
                    dynamic_cast<StructTypeRefNode*>(paramNode->type))
             {
-                if(!resolveVisibleEnumName(structType->structName).empty())
+                std::string resolvedEnumName =
+                    resolveVisibleEnumName(structType->structName);
+                if(!resolvedEnumName.empty())
+                {
+                    variableTypes[std::string(arg.getName())] =
+                        TypeNode::TYPE_INT;
                     enumVariableTypes[std::string(arg.getName())] =
-                        resolveVisibleEnumName(structType->structName);
+                        resolvedEnumName;
+                }
                 else
+                {
                     structVariableTypes[std::string(arg.getName())] =
                         structType->structName;
+                }
             }
             if(auto* genStructType =
                    dynamic_cast<GenericStructTypeRefNode*>(paramNode->type))
@@ -6977,6 +7007,27 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
         default:
             reportError(node->line, "unsupported string comparison");
             return nullptr;
+        }
+    }
+
+    if(L->getType()->isIntegerTy(1) && R->getType()->isIntegerTy(1))
+    {
+        switch(node->op)
+        {
+        case BinaryOpNode::OP_EQ:
+            return builder.CreateICmpEQ(L, R, "bool.eq");
+        case BinaryOpNode::OP_NE:
+            return builder.CreateICmpNE(L, R, "bool.ne");
+        case BinaryOpNode::OP_LT:
+            return builder.CreateICmpULT(L, R, "bool.lt");
+        case BinaryOpNode::OP_LE:
+            return builder.CreateICmpULE(L, R, "bool.le");
+        case BinaryOpNode::OP_GT:
+            return builder.CreateICmpUGT(L, R, "bool.gt");
+        case BinaryOpNode::OP_GE:
+            return builder.CreateICmpUGE(L, R, "bool.ge");
+        default:
+            break;
         }
     }
 
@@ -10612,6 +10663,13 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
     if(!typeNode)
         return "void";
 
+    if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
+    {
+        return refType->isMutable
+                   ? "ref_mut_" + typeMangle(refType->elementType)
+                   : "ref_" + typeMangle(refType->elementType);
+    }
+
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
         return "ptr_" + typeMangle(ptrType->elementType);
 
@@ -10676,6 +10734,10 @@ std::string CodeGenerator::typeMangle(TypeNode* typeNode) const
         return "tuple";
     case TypeNode::TYPE_PTR:
         return "ptr";
+    case TypeNode::TYPE_REF:
+        return "ref";
+    case TypeNode::TYPE_REF_MUT:
+        return "ref_mut";
     case TypeNode::TYPE_STRUCT:
         return "struct";
     case TypeNode::TYPE_I8:
@@ -11983,6 +12045,70 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             auto pit = pointerElementTypes.find(id->name);
             if(pit != pointerElementTypes.end())
                 pointerElementTypes[node->name] = pit->second;
+        }
+
+        if(TypeNode* inferredExprType =
+               getLValueType(node->expression, node->line))
+        {
+            if(auto* structRef =
+                   dynamic_cast<StructTypeRefNode*>(inferredExprType))
+            {
+                std::string resolvedEnumName =
+                    resolveVisibleEnumName(structRef->structName);
+                if(!resolvedEnumName.empty())
+                {
+                    variableTypes[node->name] = TypeNode::TYPE_INT;
+                    enumVariableTypes[node->name] = resolvedEnumName;
+                }
+                else
+                {
+                    variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+                    structVariableTypes[node->name] = structRef->structName;
+                    registerStructCleanupIfNeeded(node->name,
+                                                  structRef->structName);
+                }
+            }
+            else if(auto* genStructRef =
+                        dynamic_cast<GenericStructTypeRefNode*>(
+                            inferredExprType))
+            {
+                std::string mangledName = getOrCreateMonomorphizedStruct(
+                    genStructRef->structName, genStructRef->typeArgs);
+                variableTypes[node->name] = TypeNode::TYPE_STRUCT;
+                structVariableTypes[node->name] = mangledName;
+                registerStructCleanupIfNeeded(node->name, mangledName);
+            }
+            else if(auto* genListType =
+                        dynamic_cast<GenericListTypeNode*>(inferredExprType))
+            {
+                variableTypes[node->name] = TypeNode::TYPE_LIST;
+                listElementTypes[node->name] = genListType->elementType;
+            }
+            else if(auto* mapType =
+                        dynamic_cast<MapTypeNode*>(inferredExprType))
+            {
+                variableTypes[node->name] = TypeNode::TYPE_MAP;
+                mapKeyValueTypes[node->name] =
+                    std::make_pair(mapType->keyType, mapType->valueType);
+            }
+            else if(auto* tupleType =
+                        dynamic_cast<TupleTypeNode*>(inferredExprType))
+            {
+                variableTypes[node->name] = TypeNode::TYPE_TUPLE;
+                std::vector<TypeNode*> elemTypes;
+                if(tupleType->elementTypes)
+                {
+                    for(auto* t : tupleType->elementTypes->types)
+                        elemTypes.push_back(t);
+                }
+                tupleElementTypes[node->name] = elemTypes;
+            }
+            else if(auto* ptrType =
+                        dynamic_cast<PointerTypeNode*>(inferredExprType))
+            {
+                variableTypes[node->name] = TypeNode::TYPE_PTR;
+                pointerElementTypes[node->name] = ptrType->elementType;
+            }
         }
 
         if(auto* call = dynamic_cast<FunctionCallNode*>(node->expression))
@@ -15136,7 +15262,10 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                     std::string resolvedEnumName =
                         resolveVisibleEnumName(structType->structName);
                     if(!resolvedEnumName.empty())
+                    {
+                        variableTypes[param->name] = TypeNode::TYPE_INT;
                         enumVariableTypes[param->name] = resolvedEnumName;
+                    }
                     else
                         structVariableTypes[param->name] =
                             structType->structName;
@@ -15199,6 +15328,37 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
                 return true;
         }
         return false;
+    };
+
+    auto isCompositeSemanticType = [&](TypeNode* type) -> bool
+    {
+        while(auto* refType = dynamic_cast<ReferenceTypeNode*>(type))
+            type = refType->elementType;
+        if(!type)
+            return false;
+        return dynamic_cast<GenericListTypeNode*>(type) != nullptr ||
+               dynamic_cast<MapTypeNode*>(type) != nullptr ||
+               dynamic_cast<TupleTypeNode*>(type) != nullptr;
+    };
+
+    auto semanticArgumentType = [&](ExpressionNode* expr) -> TypeNode*
+    {
+        if(!expr)
+            return nullptr;
+        if(TypeNode* ty = getLValueType(expr, node->line))
+            return ty;
+
+        if(dynamic_cast<StringLiteralNode*>(expr))
+            return new TypeNode(TypeNode::TYPE_STR8);
+        if(dynamic_cast<BoolLiteralNode*>(expr))
+            return new TypeNode(TypeNode::TYPE_BOOL);
+        if(dynamic_cast<IntLiteralNode*>(expr))
+            return new TypeNode(TypeNode::TYPE_I64);
+        if(dynamic_cast<FloatLiteralNode*>(expr))
+            return new TypeNode(TypeNode::TYPE_FLOAT);
+        if(dynamic_cast<DoubleLiteralNode*>(expr))
+            return new TypeNode(TypeNode::TYPE_DOUBLE);
+        return nullptr;
     };
 
     auto registerModuleFunctionsOnDemand = [&](const std::string& moduleName)
@@ -15483,6 +15643,29 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         bool ok = true;
         for(size_t i = 0; i < expectedArgs; ++i)
         {
+            if(info.node && info.node->parameters &&
+               i < info.node->parameters->parameters.size())
+            {
+                TypeNode* expectedSemantic =
+                    info.node->parameters->parameters[i]->type;
+                if(auto* refType =
+                       dynamic_cast<ReferenceTypeNode*>(expectedSemantic))
+                {
+                    expectedSemantic = refType->elementType;
+                }
+
+                TypeNode* actualSemantic =
+                    semanticArgumentType(node->arguments[i]);
+                if((isCompositeSemanticType(expectedSemantic) ||
+                    isCompositeSemanticType(actualSemantic)) &&
+                   actualSemantic &&
+                   typeMangle(actualSemantic) != typeMangle(expectedSemantic))
+                {
+                    ok = false;
+                    break;
+                }
+            }
+
             int cost = 0;
             if(!canConvertType(argVals[i]->getType(),
                                callee->getArg(i)->getType(), cost))
@@ -16905,8 +17088,12 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
                     std::string resolvedEnumName =
                         resolveVisibleEnumName(structType->structName);
                     if(!resolvedEnumName.empty())
+                    {
+                        variableTypes[std::string(arg.getName())] =
+                            TypeNode::TYPE_INT;
                         enumVariableTypes[std::string(arg.getName())] =
                             resolvedEnumName;
+                    }
                     else
                         structVariableTypes[std::string(arg.getName())] =
                             structType->structName;

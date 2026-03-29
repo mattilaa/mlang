@@ -84,3 +84,5 @@ mod raii_scope_tests;
 use raii_scope_tests::*;
 mod std_sed_tests;
 use std_sed_tests::*;
+mod switch_statement_tests;
+use switch_statement_tests::*;

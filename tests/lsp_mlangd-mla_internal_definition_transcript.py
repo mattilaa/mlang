@@ -149,7 +149,7 @@ def main() -> int:
             cap_t_target_line = int(cap_t_start.get("line", -1))
             assert cap_t_target_line >= 0, f"String type line missing: {cap_t_res!r}"
             cap_t_line_text = cap_t_target.read_text().splitlines()[cap_t_target_line]
-            assert "@builtin string" in cap_t_line_text, f"String type target text mismatch: {cap_t_line_text!r}"
+            assert "@builtin str8" in cap_t_line_text, f"String type target text mismatch: {cap_t_line_text!r}"
 
             type_line, type_char = position_of(text, "string =")
             type_res = client.request(
@@ -167,7 +167,7 @@ def main() -> int:
             type_target_line = int(type_start.get("line", -1))
             assert type_target_line >= 0, f"string type target line missing: {type_res!r}"
             type_line_text = type_target.read_text().splitlines()[type_target_line]
-            assert "@builtin string" in type_line_text, f"string type target text mismatch: {type_line_text!r}"
+            assert "@builtin str8" in type_line_text, f"string type target text mismatch: {type_line_text!r}"
 
             generic_line, generic_char = position_of(text, "list<string>")
             generic_char += len("list<")
@@ -186,7 +186,7 @@ def main() -> int:
             generic_target_line = int(generic_start.get("line", -1))
             assert generic_target_line >= 0, f"generic string type target line missing: {generic_res!r}"
             generic_line_text = generic_target.read_text().splitlines()[generic_target_line]
-            assert "@builtin string" in generic_line_text, f"generic string type target text mismatch: {generic_line_text!r}"
+            assert "@builtin str8" in generic_line_text, f"generic string type target text mismatch: {generic_line_text!r}"
 
             i32_line, i32_char = position_of(text, "i32 =")
             i32_res = client.request(
@@ -222,7 +222,7 @@ def main() -> int:
             int_target_line = int(int_start.get("line", -1))
             assert int_target_line >= 0, f"int target line missing: {int_res!r}"
             int_line_text = int_target.read_text().splitlines()[int_target_line]
-            assert "@builtin int" in int_line_text, f"int target text mismatch: {int_line_text!r}"
+            assert "@builtin i32" in int_line_text, f"int target text mismatch: {int_line_text!r}"
         finally:
             client.close()
 

@@ -164,6 +164,56 @@ Compatibility and diagnostics:
   the target enum backing type.
 - Nested enum declarations (`Outer::Inner`) are supported.
 
+## `switch` / `case`
+
+MLang supports block-style `switch` statements with direct `case value: { ... }`
+syntax.
+
+Example:
+
+```mla
+enum SwitchColor {
+    Red,
+    Green,
+    Blue
+};
+
+fn main() -> i32 {
+    let color: SwitchColor = SwitchColor::Green;
+    var text: str8 = "unset";
+
+    switch color {
+        case SwitchColor::Red: {
+            text = "red";
+        }
+        case SwitchColor::Green: {
+            text = "green";
+        }
+        default: {
+            text = "other";
+        }
+    }
+
+    println!("{}", text);
+    return 0;
+}
+```
+
+Supported practical case-value forms include:
+- integer and floating-point literals
+- `str8` string literals and variables
+- `str16` variables
+- booleans
+- enum values such as `SwitchColor::Green`
+- identifiers, function calls, casts, and comparison-capable expressions
+
+Notes:
+- `switch` evaluates its subject expression once.
+- `default` is optional.
+- `case` values use the direct syntax `case value: { ... }`.
+- The current implementation lowers `switch` into an equivalent `if` / `else if`
+  chain, so matching relies on the existing `==` support for the compared type.
+
 ## Exceptions: `throw` and `try/catch`
 
 MLang supports stack-unwinding exceptions with an explicit payload type from

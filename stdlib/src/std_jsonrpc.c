@@ -3506,7 +3506,7 @@ char* __mlang_std_jsonrpc_organize_imports_text(const char* text)
     size_t uniq = 0u;
     for(size_t i = 0; i < ilen; ++i)
     {
-        if(i == 0 || strcmp(imports[i], imports[i - 1u]) != 0)
+        if(uniq == 0u || strcmp(imports[i], imports[uniq - 1u]) != 0)
             imports[uniq++] = imports[i];
         else
             free(imports[i]);

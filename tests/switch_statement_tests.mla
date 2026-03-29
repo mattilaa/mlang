@@ -1,0 +1,148 @@
+mod std::strbuf;
+mod std::testing;
+
+use std::strbuf::eq;
+use std::strbuf::free;
+use std::strbuf::free_utf16;
+use std::strbuf::from_utf16;
+use std::strbuf::to_utf16;
+use std::testing::verify;
+
+enum SwitchColor {
+    Red,
+    Green,
+    Blue
+};
+
+var g_switch_eval_count: i32 = 0;
+
+fn next_switch_value() -> i32 {
+    g_switch_eval_count += 1;
+    return 2;
+}
+
+#[test]
+fn switch_evaluates_subject_once() {
+    g_switch_eval_count = 0;
+    var out: i32 = 0;
+    switch next_switch_value() {
+        case 1: {
+            out = 11;
+        }
+        case 2: {
+            out = 22;
+        }
+        default: {
+            out = 99;
+        }
+    }
+    verify(out == 22);
+    verify(g_switch_eval_count == 1);
+}
+
+#[test]
+fn switch_i32_works() {
+    var out: i32 = 0;
+    switch 7 {
+        case 1: {
+            out = 10;
+        }
+        case 7: {
+            out = 70;
+        }
+        default: {
+            out = -1;
+        }
+    }
+    verify(out == 70);
+}
+
+#[test]
+fn switch_str8_works() {
+    var out: str8 = "unknown";
+    switch "beta" {
+        case "alpha": {
+            out = "A";
+        }
+        case "beta": {
+            out = "B";
+        }
+        default: {
+            out = "?";
+        }
+    }
+    verify(eq(out, "B") == 1);
+}
+
+#[test]
+fn switch_str16_works() {
+    let word: str16 = to_utf16("bye");
+    let hi16: str16 = to_utf16("hi");
+    let bye16: str16 = to_utf16("bye");
+    var out: i32 = 0;
+    switch word {
+        case hi16: {
+            out = 1;
+        }
+        case bye16: {
+            out = 2;
+        }
+        default: {
+            out = 3;
+        }
+    }
+    verify(out == 2);
+    free_utf16(bye16);
+    free_utf16(hi16);
+    free_utf16(word);
+}
+
+#[test]
+fn switch_bool_and_enum_work() {
+    var flag_text: str8 = "?";
+    switch true {
+        case false: {
+            flag_text = "no";
+        }
+        case true: {
+            flag_text = "yes";
+        }
+        default: {
+            flag_text = "other";
+        }
+    }
+    verify(eq(flag_text, "yes") == 1);
+
+    let c: SwitchColor = SwitchColor::Green;
+    var code: i32 = 0;
+    switch c {
+        case SwitchColor::Red: {
+            code = 10;
+        }
+        case SwitchColor::Green: {
+            code = 20;
+        }
+        default: {
+            code = 30;
+        }
+    }
+    verify(code == 20);
+}
+
+#[test]
+fn switch_default_can_handle_no_match() {
+    let value16: str16 = to_utf16("left");
+    let right16: str16 = to_utf16("right");
+    var out8: str8 = "init";
+    switch value16 {
+        case right16: {
+            out8 = "matched";
+        }
+        default: {
+            out8 = "fallback";
+        }
+    }
+    verify(eq(out8, "fallback") == 1);
+    free_utf16(right16);
+    free_utf16(value16);
+}

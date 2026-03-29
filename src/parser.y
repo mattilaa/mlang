@@ -68,6 +68,153 @@ extern int yylineno;
 extern int yycolumn_token;
 extern char* yytext;
 void yyerror(const char* s);
+extern "C" {
+    extern bool parseHadError;
+}
+
+class SwitchCaseParseNode : public ASTNode
+{
+public:
+    ExpressionNode* value;
+    StatementListNode* body;
+    bool isDefault;
+
+    SwitchCaseParseNode(ExpressionNode* v, StatementListNode* b, bool d)
+        : value(v), body(b), isDefault(d)
+    {
+    }
+
+    std::string toString() const override
+    {
+        return isDefault ? "default" : "case";
+    }
+};
+
+class SwitchCaseListParseNode : public ASTNode
+{
+public:
+    std::vector<SwitchCaseParseNode*> cases;
+
+    void addCase(SwitchCaseParseNode* c)
+    {
+        if(c)
+            cases.push_back(c);
+    }
+
+    std::string toString() const override
+    {
+        return "switch-case-list";
+    }
+};
+
+static int g_switchTempCounter = 0;
+
+static char* make_switch_temp_name()
+{
+    char buf[64];
+    snprintf(buf, sizeof(buf), "__switch_tmp_%d", g_switchTempCounter++);
+    return strdup(buf);
+}
+
+static ASTNode* create_switch_case_node(ASTNode* value, ASTNode* body,
+                                        int isDefault, int line, int col)
+{
+    auto* blockBody = dynamic_cast<BlockStatementNode*>(body);
+    StatementListNode* stmtList =
+        blockBody ? blockBody->statements
+                  : dynamic_cast<StatementListNode*>(body);
+    auto* node = new SwitchCaseParseNode(static_cast<ExpressionNode*>(value),
+                                         stmtList, isDefault != 0);
+    node->line = line;
+    node->col = col;
+    return node;
+}
+
+static ASTNode* create_switch_case_list_node(ASTNode* firstCase)
+{
+    auto* list = new SwitchCaseListParseNode();
+    list->addCase(dynamic_cast<SwitchCaseParseNode*>(firstCase));
+    return list;
+}
+
+static ASTNode* add_switch_case_node(ASTNode* listNode, ASTNode* caseNode)
+{
+    auto* list = dynamic_cast<SwitchCaseListParseNode*>(listNode);
+    if(list)
+        list->addCase(dynamic_cast<SwitchCaseParseNode*>(caseNode));
+    return listNode;
+}
+
+static ASTNode* create_switch_statement_desugared(ASTNode* subject,
+                                                  ASTNode* caseListNode,
+                                                  int line, int col)
+{
+    auto* cases = dynamic_cast<SwitchCaseListParseNode*>(caseListNode);
+    char* tempName = make_switch_temp_name();
+    ASTNode* letStmt = create_let_declaration(NULL, tempName, subject);
+    if(letStmt)
+    {
+        letStmt->line = line;
+        letStmt->col = col;
+    }
+
+    ASTNode* blockList = create_statement_list(letStmt);
+    StatementListNode* defaultBody = nullptr;
+    std::vector<SwitchCaseParseNode*> normalCases;
+
+    if(cases)
+    {
+        for(auto* caseNode : cases->cases)
+        {
+            if(!caseNode)
+                continue;
+            if(caseNode->isDefault)
+            {
+                if(defaultBody)
+                {
+                    parseHadError = true;
+                    yyerror("duplicate default case in switch");
+                    continue;
+                }
+                defaultBody = caseNode->body;
+                continue;
+            }
+            normalCases.push_back(caseNode);
+        }
+    }
+
+    StatementListNode* currentElse = defaultBody;
+    for(auto it = normalCases.rbegin(); it != normalCases.rend(); ++it)
+    {
+        SwitchCaseParseNode* caseNode = *it;
+        ASTNode* lhs = create_identifier_line(strdup(tempName), line);
+        ASTNode* cmp = create_binary_op(EQ, lhs, caseNode->value);
+        ASTNode* ifStmt =
+            create_if_statement(cmp, caseNode->body, NULL, currentElse);
+        if(ifStmt)
+        {
+            ifStmt->line = line;
+            ifStmt->col = col;
+        }
+        currentElse = static_cast<StatementListNode*>(
+            create_statement_list(ifStmt));
+    }
+
+    if(currentElse)
+    {
+        for(auto* stmt : currentElse->statements)
+            blockList = add_statement(blockList, stmt);
+    }
+
+    auto* block = dynamic_cast<BlockStatementNode*>(
+        create_block_statement(blockList));
+    if(block)
+    {
+        block->line = line;
+        block->col = col;
+    }
+    return block;
+}
 
 // Source file name used in error messages (set by main before yyparse())
 const char* g_sourceFile = "<input>";
@@ -127,6 +274,7 @@ ASTNode* mla_ast_list_literal(ASTNode* elements);
 ASTNode* mla_ast_list_element_list(ASTNode* element);
 ASTNode* mla_ast_list_element_list_add(ASTNode* list, ASTNode* element);
 ASTNode* mla_ast_array_fill(ASTNode* value, ASTNode* count);
+ASTNode* create_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* mla_ast_if_statement(ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* mla_ast_if_statement_with_init(ASTNode* condition_init, ASTNode* condition, ASTNode* then_branch, ASTNode* else_if_branch, ASTNode* else_branch);
 ASTNode* create_let_declaration(ASTNode* type, char* name, ASTNode* expr);
@@ -186,6 +334,9 @@ ASTNode* mla_ast_assert_eq(ASTNode* left, ASTNode* right, int line);
 ASTNode* mla_ast_assert(ASTNode* condition, int line);
 ASTNode* mla_ast_static_assert(ASTNode* condition, int line);
 ASTNode* mla_ast_expression_statement(ASTNode* expr);
+ASTNode* create_statement_list(ASTNode* stmt);
+ASTNode* add_statement(ASTNode* list, ASTNode* stmt);
+ASTNode* create_block_statement(ASTNode* stmt_list);
 ASTNode* mla_ast_unsafe_block(ASTNode* block, int line);
 ASTNode* mla_ast_break_stmt(int line);
 ASTNode* mla_ast_continue_stmt(int line);
@@ -318,7 +469,7 @@ enum UpdatePosition
 %token FUNCTION RETURN IF ELSE VOID BOOL FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
-%token MATCH TRY CATCH THROW
+%token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT
 %token EXTERN
 %token STATIC
@@ -355,6 +506,7 @@ enum UpdatePosition
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
+%type <ast> switch_subject_expression switch_case_value
 %type <ast> condition_expression condition_logical_or condition_logical_and
 %type <ast> block_condition_expression block_condition_logical_or block_condition_logical_and
 %type <ast> block_condition_bitor block_condition_bitxor block_condition_bitand
@@ -367,7 +519,7 @@ enum UpdatePosition
 %type <ast> list_literal list_elements
 %type <ast> let_statement var_statement assignment_statement expression_statement nested_function_statement
 %type <ast> return_statement block_statement colon_block_statement colon_statement for_statement while_statement range_expression
-%type <ast> throw_statement try_catch_statement
+%type <ast> throw_statement try_catch_statement switch_statement switch_case_list switch_case switch_default_case
 %type <ast> break_statement continue_statement
 %type <ast> primary_expression postfix_expression unary_expression binary_expression function_call fold_expression asm_expression
 %type <ast> mod_declaration use_declaration
@@ -772,6 +924,7 @@ statement
     | continue_statement
     | throw_statement
     | try_catch_statement
+    | switch_statement
     | nested_function_statement
     ;
 
@@ -945,6 +1098,40 @@ throw_statement
 try_catch_statement
     : TRY block_statement CATCH IDENTIFIER COLON type block_statement
         { $$ = create_try_catch_stmt($2, $4, $6, $7, yylineno); }
+    ;
+
+switch_statement
+    : SWITCH switch_subject_expression LBRACE switch_case_list RBRACE
+        { $$ = create_switch_statement_desugared($2, $4, yylineno, yycolumn_token); }
+    ;
+
+switch_subject_expression
+    : block_condition_expression
+    ;
+
+switch_case_list
+    : switch_case
+        { $$ = create_switch_case_list_node($1); }
+    | switch_default_case
+        { $$ = create_switch_case_list_node($1); }
+    | switch_case_list switch_case
+        { $$ = add_switch_case_node($1, $2); }
+    | switch_case_list switch_default_case
+        { $$ = add_switch_case_node($1, $2); }
+    ;
+
+switch_case
+    : CASE switch_case_value COLON block_statement
+        { $$ = create_switch_case_node($2, $4, 0, yylineno, yycolumn_token); }
+    ;
+
+switch_case_value
+    : block_condition_expression
+    ;
+
+switch_default_case
+    : DEFAULT COLON block_statement
+        { $$ = create_switch_case_node(NULL, $3, 1, yylineno, yycolumn_token); }
     ;
 
 block_statement

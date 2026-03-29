@@ -25,6 +25,13 @@ static std::string type_mangle(TypeNode* typeNode)
     if(!typeNode)
         return "void";
 
+    if(auto* refType = dynamic_cast<ReferenceTypeNode*>(typeNode))
+    {
+        return refType->isMutable
+                   ? "ref_mut_" + type_mangle(refType->elementType)
+                   : "ref_" + type_mangle(refType->elementType);
+    }
+
     if(auto* ptrType = dynamic_cast<PointerTypeNode*>(typeNode))
         return "ptr_" + type_mangle(ptrType->elementType);
 
@@ -89,6 +96,10 @@ static std::string type_mangle(TypeNode* typeNode)
         return "tuple";
     case TypeNode::TYPE_PTR:
         return "ptr";
+    case TypeNode::TYPE_REF:
+        return "ref";
+    case TypeNode::TYPE_REF_MUT:
+        return "ref_mut";
     case TypeNode::TYPE_STRUCT:
         return "struct";
     case TypeNode::TYPE_I8:

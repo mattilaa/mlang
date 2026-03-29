@@ -134,6 +134,7 @@ Includes:
 - inline assembly via `asm(...)`, `asm volatile(...)`, and arch-qualified forms
   such as `asm x64(...)` / `asm aarch64(...)`
 - modern `if/else if/else` block syntax without mandatory `:`
+- block-style `switch` statements with direct `case value: { ... }` syntax
 - guarded `if` forms, including `if let ... = ...: guard` and
   `if let ... == ...: guard`
 - empty-block warnings
@@ -149,6 +150,8 @@ Recent branch-level additions reflected in these docs:
 - `std::bench` anti-optimization helpers for benchmark code
 - `use type` aliases with generic + block scope support and overlap diagnostics
 - Guarded `if/else if` and guarded `while` forms; optional plain-colon warnings
+- `switch` / `case` statements for integers, strings, booleans, enums, and
+  other `==`-comparable values
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
 - `f32`/`f64` primitive names
 - Inline assembly with `volatile` and target-arch qualifiers (`x86`, `x64`, `aarch64`)
