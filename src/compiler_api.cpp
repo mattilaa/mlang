@@ -841,6 +841,19 @@ static std::uint64_t alignUp(std::uint64_t value, std::uint64_t align) {
     return rem == 0 ? value : (value + (align - rem));
 }
 
+static bool isBitFieldTypeNode(TypeNode* type) {
+    if (!type) {
+        return false;
+    }
+    if (type->kind == TypeNode::TYPE_BIT) {
+        return true;
+    }
+    if (auto* ref = dynamic_cast<StructTypeRefNode*>(type)) {
+        return ref->structName == "bit";
+    }
+    return false;
+}
+
 static StructDefNode* findStructDef(ProgramNode* program, std::string_view name) {
     if (!program || !program->structList) {
         return nullptr;
@@ -883,6 +896,8 @@ static LayoutInfo computeStructLayout(StructDefNode* st,
     }
 
     if (st->members) {
+        bool packingBitRun = false;
+        std::uint64_t packedBitsInByte = 0;
         for (StructMemberNode* member : st->members->members) {
             if (!member || !member->type) {
                 continue;
@@ -892,6 +907,20 @@ static LayoutInfo computeStructLayout(StructDefNode* st,
                 visiting.erase(st->name);
                 return {};
             }
+            const bool is_bit_field = isBitFieldTypeNode(member->type);
+            if (is_bit_field) {
+                max_align = std::max<std::uint64_t>(max_align, 1);
+                if (!packingBitRun || packedBitsInByte >= 8) {
+                    offset = alignUp(offset, 1);
+                    offset += 1;
+                    packedBitsInByte = 0;
+                    packingBitRun = true;
+                }
+                ++packedBitsInByte;
+                continue;
+            }
+            packingBitRun = false;
+            packedBitsInByte = 0;
             max_align = std::max(max_align, field.align);
             offset = alignUp(offset, field.align);
             offset += field.size;

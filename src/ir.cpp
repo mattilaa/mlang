@@ -824,6 +824,8 @@ static std::string displayTypeName(TypeNode* type)
         return "void";
     case TypeNode::TYPE_BOOL:
         return "bool";
+    case TypeNode::TYPE_BIT:
+        return "bit";
     case TypeNode::TYPE_INT:
         return "i32";
     case TypeNode::TYPE_FLOAT:
@@ -889,6 +891,17 @@ static std::string normalizeTestSuiteName(std::string name)
     if(name.empty())
         return "Main";
     return name;
+}
+
+static bool isBitFieldTypeNode(TypeNode* type)
+{
+    if(!type)
+        return false;
+    if(type->kind == TypeNode::TYPE_BIT)
+        return true;
+    if(auto* ref = dynamic_cast<StructTypeRefNode*>(type))
+        return ref->structName == "bit";
+    return false;
 }
 
 static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
@@ -2916,6 +2929,99 @@ bool CodeGenerator::structHasFieldNamed(const std::string& structTypeName,
             return true;
     }
     return false;
+}
+
+const CodeGenerator::StructFieldLayout*
+CodeGenerator::getStructFieldLayout(const std::string& structName,
+                                    int fieldIndex) const
+{
+    auto it = structFieldLayouts.find(structName);
+    if(it == structFieldLayouts.end())
+        return nullptr;
+    if(fieldIndex < 0 ||
+       static_cast<size_t>(fieldIndex) >= it->second.size())
+        return nullptr;
+    return &it->second[static_cast<size_t>(fieldIndex)];
+}
+
+llvm::Value* CodeGenerator::loadStructFieldValue(const std::string& structTypeName,
+                                                 llvm::Value* structPtr,
+                                                 int fieldIndex,
+                                                 TypeNode* fieldType,
+                                                 const std::string& fieldName)
+{
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+        return nullptr;
+
+    const StructFieldLayout* layout =
+        getStructFieldLayout(structTypeName, fieldIndex);
+    if(!layout)
+        return nullptr;
+
+    llvm::Type* storageType = structType->getElementType(layout->storageIndex);
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, layout->storageIndex, fieldName + "_ptr");
+    llvm::Value* storage = builder.CreateLoad(storageType, fieldPtr, fieldName);
+
+    if(!layout->packedBit)
+        return storage;
+
+    llvm::Value* shifted = builder.CreateLShr(
+        storage, llvm::ConstantInt::get(storageType, layout->bitOffset),
+        fieldName + ".bit_shift");
+    llvm::Value* masked = builder.CreateAnd(
+        shifted, llvm::ConstantInt::get(storageType, 1), fieldName + ".bit");
+    return builder.CreateTrunc(masked, llvm::Type::getInt1Ty(context),
+                               fieldName);
+}
+
+void CodeGenerator::storeStructFieldValue(const std::string& structTypeName,
+                                          llvm::Value* structPtr,
+                                          int fieldIndex,
+                                          TypeNode* fieldType,
+                                          llvm::Value* value,
+                                          const std::string& fieldName,
+                                          int line)
+{
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+        return;
+
+    const StructFieldLayout* layout =
+        getStructFieldLayout(structTypeName, fieldIndex);
+    if(!layout)
+        return;
+
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, layout->storageIndex, fieldName + "_ptr");
+    llvm::Type* storageType = structType->getElementType(layout->storageIndex);
+
+    if(!layout->packedBit)
+    {
+        builder.CreateStore(value, fieldPtr);
+        return;
+    }
+
+    llvm::Value* storage = builder.CreateLoad(storageType, fieldPtr,
+                                              fieldName + ".storage");
+    llvm::Value* zextValue = value;
+    if(!value->getType()->isIntegerTy(1))
+    {
+        reportError(line, "bit field '" + fieldName + "' expects a bit value");
+        return;
+    }
+    zextValue = builder.CreateZExt(value, storageType, fieldName + ".zext");
+    llvm::Value* shifted = builder.CreateShl(
+        zextValue, llvm::ConstantInt::get(storageType, layout->bitOffset),
+        fieldName + ".shifted");
+    llvm::Value* mask = llvm::ConstantInt::get(
+        storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
+    llvm::Value* cleared =
+        builder.CreateAnd(storage, builder.CreateNot(mask), fieldName + ".clear");
+    llvm::Value* combined =
+        builder.CreateOr(cleared, shifted, fieldName + ".combined");
+    builder.CreateStore(combined, fieldPtr);
 }
 
 std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
@@ -10671,6 +10777,7 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
 {
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
+    std::vector<StructFieldLayout> layouts;
 
     // If this struct has a base, include base struct's fields first
     if(!node->baseName.empty())
@@ -10678,10 +10785,17 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         auto baseMemIt = structMembers.find(node->baseName);
         if(baseMemIt != structMembers.end())
         {
+            llvm::StructType* baseStructType = getStructType(node->baseName);
+            auto baseLayoutIt = structFieldLayouts.find(node->baseName);
             for(const auto& baseMember : baseMemIt->second)
-            {
-                memberTypes.push_back(getLLVMTypeFromNode(baseMember.second));
                 members.push_back(baseMember);
+            if(baseLayoutIt != structFieldLayouts.end())
+                layouts.insert(layouts.end(), baseLayoutIt->second.begin(),
+                               baseLayoutIt->second.end());
+            if(baseStructType)
+            {
+                for(unsigned i = 0; i < baseStructType->getNumElements(); ++i)
+                    memberTypes.push_back(baseStructType->getElementType(i));
             }
         }
         else
@@ -10692,16 +10806,41 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     }
 
     // Add this struct's own members
+    bool packingBitRun = false;
+    unsigned packedStorageIndex = 0;
+    unsigned packedBitOffset = 0;
     for(auto member : node->members->members)
     {
-        memberTypes.push_back(getLLVMTypeFromNode(member->type));
         members.push_back({member->name, member->type});
+        StructFieldLayout layout;
+        if(isBitFieldTypeNode(member->type))
+        {
+            if(!packingBitRun || packedBitOffset >= 8)
+            {
+                packedStorageIndex = static_cast<unsigned>(memberTypes.size());
+                memberTypes.push_back(llvm::Type::getInt8Ty(context));
+                packedBitOffset = 0;
+                packingBitRun = true;
+            }
+            layout.storageIndex = packedStorageIndex;
+            layout.packedBit = true;
+            layout.bitOffset = packedBitOffset++;
+        }
+        else
+        {
+            packingBitRun = false;
+            packedBitOffset = 0;
+            layout.storageIndex = static_cast<unsigned>(memberTypes.size());
+            memberTypes.push_back(getLLVMTypeFromNode(member->type));
+        }
+        layouts.push_back(layout);
     }
 
     llvm::StructType* structType =
         llvm::StructType::create(context, memberTypes, node->name);
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
+    structFieldLayouts[node->name] = layouts;
     if(node->deriveDebug)
         debugStructs.insert(node->name);
 
@@ -14069,11 +14208,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
     }
 
-    // Create GEP to field and store
-    llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, static_cast<unsigned>(fieldIndex),
-        fieldName + "_ptr");
-    builder.CreateStore(value, fieldPtr);
+    storeStructFieldValue(structTypeName, structPtr, fieldIndex, fieldType,
+                          value, fieldName, node->line);
 }
 
 void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
@@ -14295,10 +14431,14 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             llvm::StructType* structType = getStructType(objTypeName);
             if(!structType)
                 return {nullptr, ""};
+            const StructFieldLayout* layout =
+                getStructFieldLayout(objTypeName, fieldIndex);
+            if(!layout)
+                return {nullptr, ""};
 
             // Get pointer to the nested struct field
             llvm::Value* fieldPtr = builder.CreateStructGEP(
-                structType, objPtr, static_cast<unsigned>(fieldIndex),
+                structType, objPtr, layout->storageIndex,
                 fieldAccess->fieldName + "_ptr");
 
             return {fieldPtr, structTypeRef->structName};
@@ -14531,19 +14671,8 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
         return nullptr;
     }
 
-    // Get struct type
-    llvm::StructType* structType = getStructType(structTypeName);
-    if(!structType)
-        return nullptr;
-
-    // Get field type
-    llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
-
-    // Create GEP to field and load
-    llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, static_cast<unsigned>(fieldIndex),
-        node->fieldName + "_ptr");
-    return builder.CreateLoad(llvmFieldType, fieldPtr, node->fieldName);
+    return loadStructFieldValue(structTypeName, structPtr, fieldIndex,
+                                fieldType, node->fieldName);
 }
 
 void CodeGenerator::reportError(int line, const std::string& message)
@@ -19776,8 +19905,20 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             return nullptr;
         }
 
-        // Get the expected field type from the struct
-        llvm::Type* expectedType = structType->getElementType(memberIndex);
+        const StructFieldLayout* layout =
+            getStructFieldLayout(structTypeName, memberIndex);
+        if(!layout)
+        {
+            reportError(node->line, "missing field layout for '" + fieldName +
+                                        "' in struct '" + structTypeName + "'");
+            return nullptr;
+        }
+
+        // Get the expected field type from the struct storage
+        llvm::Type* expectedType = layout->packedBit
+                                       ? llvm::Type::getInt1Ty(context)
+                                       : structType->getElementType(
+                                             layout->storageIndex);
         llvm::Type* actualType = fieldValue->getType();
 
         // Convert value to expected type if needed
@@ -19867,9 +20008,34 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         }
 
         // Insert the value into the struct
-        structVal = builder.CreateInsertValue(
-            structVal, fieldValue, static_cast<unsigned>(memberIndex),
-            structTypeName + "." + fieldName);
+        if(layout->packedBit)
+        {
+            llvm::Type* storageType = structType->getElementType(layout->storageIndex);
+            llvm::Value* currentStorage = builder.CreateExtractValue(
+                structVal, {layout->storageIndex},
+                structTypeName + "." + fieldName + ".storage");
+            llvm::Value* zextValue = builder.CreateZExt(
+                fieldValue, storageType, structTypeName + "." + fieldName + ".zext");
+            llvm::Value* shifted = builder.CreateShl(
+                zextValue, llvm::ConstantInt::get(storageType, layout->bitOffset),
+                structTypeName + "." + fieldName + ".shift");
+            llvm::Value* mask = llvm::ConstantInt::get(
+                storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
+            llvm::Value* cleared = builder.CreateAnd(
+                currentStorage, builder.CreateNot(mask),
+                structTypeName + "." + fieldName + ".clear");
+            llvm::Value* combined = builder.CreateOr(
+                cleared, shifted, structTypeName + "." + fieldName + ".combine");
+            structVal = builder.CreateInsertValue(
+                structVal, combined, {layout->storageIndex},
+                structTypeName + "." + fieldName);
+        }
+        else
+        {
+            structVal = builder.CreateInsertValue(
+                structVal, fieldValue, {layout->storageIndex},
+                structTypeName + "." + fieldName);
+        }
     }
 
     return structVal;
@@ -21092,8 +21258,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     // Generate the monomorphized struct type
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
+    std::vector<StructFieldLayout> layouts;
 
     // Process each member, substituting type parameters
+    bool packingBitRun = false;
+    unsigned packedStorageIndex = 0;
+    unsigned packedBitOffset = 0;
     if(templateStruct->members)
     {
         for(auto* member : templateStruct->members->members)
@@ -21101,18 +21271,38 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             TypeNode* substitutedType =
                 substituteTypeParams(member->type, typeParams, typeArgs);
 
-            llvm::Type* llvmType = getLLVMTypeFromNode(substitutedType);
-            if(!llvmType)
-            {
-                std::cerr << "Error: Failed to get LLVM type for member '"
-                          << member->name << "' in " << mangledName
-                          << std::endl;
-                hasError = true;
-                return;
-            }
-
-            memberTypes.push_back(llvmType);
             members.push_back({member->name, substitutedType});
+            StructFieldLayout layout;
+            if(isBitFieldTypeNode(substitutedType))
+            {
+                if(!packingBitRun || packedBitOffset >= 8)
+                {
+                    packedStorageIndex = static_cast<unsigned>(memberTypes.size());
+                    memberTypes.push_back(llvm::Type::getInt8Ty(context));
+                    packedBitOffset = 0;
+                    packingBitRun = true;
+                }
+                layout.storageIndex = packedStorageIndex;
+                layout.packedBit = true;
+                layout.bitOffset = packedBitOffset++;
+            }
+            else
+            {
+                llvm::Type* llvmType = getLLVMTypeFromNode(substitutedType);
+                if(!llvmType)
+                {
+                    std::cerr << "Error: Failed to get LLVM type for member '"
+                              << member->name << "' in " << mangledName
+                              << std::endl;
+                    hasError = true;
+                    return;
+                }
+                packingBitRun = false;
+                packedBitOffset = 0;
+                layout.storageIndex = static_cast<unsigned>(memberTypes.size());
+                memberTypes.push_back(llvmType);
+            }
+            layouts.push_back(layout);
         }
     }
 
@@ -21123,6 +21313,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     // Register the monomorphized type
     structTypes[mangledName] = structType;
     structMembers[mangledName] = members;
+    structFieldLayouts[mangledName] = layouts;
     monomorphizedTypes.insert(mangledName);
     mangledToGenericName[mangledName] = genericName;
     std::vector<TypeNode*> storedTypeArgs;

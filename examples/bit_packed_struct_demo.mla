@@ -1,0 +1,25 @@
+mod std::bits;
+
+use std::bits::OFF;
+use std::bits::ON;
+
+struct DeviceFlags {
+    var rx: bit;
+    var tx: bit;
+    var ready: bool;
+};
+
+fn main() -> i32 {
+    var flags: DeviceFlags = DeviceFlags {
+        rx: ON(),
+        tx: OFF(),
+        ready: true
+    };
+
+    println!("sizeof(DeviceFlags)={}", sizeof(DeviceFlags));
+    println!("rx={} tx={} ready={}", i32(flags.rx), i32(flags.tx), flags.ready ? 1 : 0);
+
+    flags.tx = ON();
+    println!("after tx update: rx={} tx={}", i32(flags.rx), i32(flags.tx));
+    return 0;
+}

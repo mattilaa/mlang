@@ -15,6 +15,18 @@ struct Lamp {
     var ready: bool;
 };
 
+struct DeviceFlags {
+    var rx: bit;
+    var tx: bit;
+    var ready: bool;
+};
+
+struct DeviceFlags2 {
+    var first: bit;
+    var second: bit;
+    var enabled: bool;
+};
+
 #[test]
 fn test_bit_values_and_struct_field_updates() {
     var state: bit = 0;
@@ -56,6 +68,24 @@ fn test_sizeof_builtin_and_container_sizes() {
     verify_eq_i64(16, sizeof(bools));
     verify_eq_i64(16, sizeof(ints));
     verify_eq_i64(sizeof(list<bool>), sizeof(list<i32>));
+}
+
+#[test]
+fn test_packed_bit_struct_sizeof_is_two_bytes() {
+    verify_eq_i64(2, sizeof(DeviceFlags));
+    verify_eq_i64(2, sizeof(DeviceFlags2));
+
+    let a: DeviceFlags = DeviceFlags { rx: ON(), tx: OFF(), ready: true };
+    let b: DeviceFlags2 = DeviceFlags2 { first: OFF(), second: ON(), enabled: false };
+    verify_eq_i64(2, sizeof(a));
+    verify_eq_i64(2, sizeof(b));
+
+    verify_eq_i32(1, i32(a.rx));
+    verify_eq_i32(0, i32(a.tx));
+    verify(a.ready);
+    verify_eq_i32(0, i32(b.first));
+    verify_eq_i32(1, i32(b.second));
+    verify(!b.enabled);
 }
 
 #[test]
