@@ -242,6 +242,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_rand.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_sync.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_signal.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_esc.c

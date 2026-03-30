@@ -1,0 +1,101 @@
+/// \file signal.mla
+/// \brief POSIX-style process signal helpers for MLang (`std::signal`).
+///
+/// This module wraps C signal handling with a small runtime dispatcher:
+/// - install a function handler for a signal
+/// - raise a signal in the current process
+/// - inspect how many times a signal was received
+///
+/// Handlers should stay minimal and async-signal-safe in practice. The
+/// intended pattern is to set global/static flags or counters and let normal
+/// code react afterward.
+
+extern pub fn __mlang_std_signal_last_error() -> str8;
+extern pub fn __mlang_std_signal_set(signum: i32, handler: ptr<void>) -> i32;
+extern pub fn __mlang_std_signal_ignore(signum: i32) -> i32;
+extern pub fn __mlang_std_signal_reset_default(signum: i32) -> i32;
+extern pub fn __mlang_std_signal_raise(signum: i32) -> i32;
+extern pub fn __mlang_std_signal_received_count(signum: i32) -> i64;
+extern pub fn __mlang_std_signal_clear_received(signum: i32) -> i32;
+extern pub fn __mlang_std_signal_sigint() -> i32;
+extern pub fn __mlang_std_signal_sigterm() -> i32;
+extern pub fn __mlang_std_signal_sigusr1() -> i32;
+extern pub fn __mlang_std_signal_sigusr2() -> i32;
+
+/// @brief Return the last backend signal error string.
+pub fn last_error() -> str8 {
+    return __mlang_std_signal_last_error();
+}
+
+/// @brief Install a process-global handler function for `signum`.
+///
+/// Example:
+/// `signal::on(signal::sigusr1(), on_usr1);`
+pub fn on(signum: i32, handler: ptr<void>) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_signal_set(signum, handler);
+    if rc != 0 {
+        return Err<i32, str8>(last_error());
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Ignore a signal.
+pub fn ignore(signum: i32) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_signal_ignore(signum);
+    if rc != 0 {
+        return Err<i32, str8>(last_error());
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Restore the default OS action for `signum`.
+pub fn reset_default(signum: i32) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_signal_reset_default(signum);
+    if rc != 0 {
+        return Err<i32, str8>(last_error());
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Raise a signal in the current process.
+pub fn raise(signum: i32) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_signal_raise(signum);
+    if rc != 0 {
+        return Err<i32, str8>(last_error());
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Return how many times `signum` has been caught by the runtime.
+pub fn received_count(signum: i32) -> i64 {
+    return __mlang_std_signal_received_count(signum);
+}
+
+/// @brief Clear the runtime receive counter for `signum`.
+pub fn clear_received(signum: i32) -> Result<i32, str8> {
+    let rc: i32 = __mlang_std_signal_clear_received(signum);
+    if rc != 0 {
+        return Err<i32, str8>(last_error());
+    }
+    return Ok<i32, str8>(0);
+}
+
+/// @brief Return `SIGINT`.
+pub fn sigint() -> i32 {
+    return __mlang_std_signal_sigint();
+}
+
+/// @brief Return `SIGTERM`.
+pub fn sigterm() -> i32 {
+    return __mlang_std_signal_sigterm();
+}
+
+/// @brief Return `SIGUSR1` when available.
+pub fn sigusr1() -> i32 {
+    return __mlang_std_signal_sigusr1();
+}
+
+/// @brief Return `SIGUSR2` when available.
+pub fn sigusr2() -> i32 {
+    return __mlang_std_signal_sigusr2();
+}

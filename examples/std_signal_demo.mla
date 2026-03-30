@@ -1,0 +1,37 @@
+mod std::signal;
+mod std::io;
+
+var demo_hits: i32 = 0;
+var demo_last_signal: i32 = 0;
+
+fn on_signal(sig: i32) -> void {
+    demo_hits = demo_hits + 1;
+    demo_last_signal = sig;
+}
+
+fn main() -> i32 {
+    let sig: i32 = std::signal::sigusr1();
+    let clear_r: Result<i32, str8> = std::signal::clear_received(sig);
+    if clear_r.is_err() {
+        println!("clear_received failed: {}", std::signal::last_error());
+        return 1;
+    }
+
+    let set_r: Result<i32, str8> = std::signal::on(sig, on_signal);
+    if set_r.is_err() {
+        println!("signal install failed: {}", std::signal::last_error());
+        return 1;
+    }
+    let raise_r: Result<i32, str8> = std::signal::raise(sig);
+    if raise_r.is_err() {
+        println!("signal raise failed: {}", std::signal::last_error());
+        let _ = std::signal::reset_default(sig);
+        return 1;
+    }
+
+    println!("signal={} hits={}", demo_last_signal, demo_hits);
+    println!("grabbed_count={}", std::signal::received_count(sig));
+
+    let _ = std::signal::reset_default(sig);
+    return 0;
+}

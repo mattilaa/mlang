@@ -215,7 +215,7 @@ See also:
   `move-only`) that borrow checking builds on.
 - `docs/stdlib_mlang_api.md` for Mlang-level stdlib module APIs
   (`std::bench`, `std::esc`, `std::fs`, `std::io`, `std::json`, `std::math`, `std::net`,
-  `std::process`, `std::rand`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
+  `std::process`, `std::signal`, `std::rand`, `std::regex`, `std::strbuf`, `std::sync`, `std::term`,
   `std::exceptions`,
   `std::testing`,
   `std::thread`, `std::time`, `std::unordered`, `std::vec`).

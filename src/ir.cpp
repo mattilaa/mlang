@@ -14959,6 +14959,45 @@ void CodeGenerator::registerStructCleanupIfNeeded(
 
 llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 {
+    auto resolveFunctionPointerArgument =
+        [&](const std::string& name) -> llvm::Function*
+    {
+        llvm::Function* resolved = nullptr;
+        auto overloadIt = functionOverloads.find(name);
+        if(overloadIt != functionOverloads.end())
+        {
+            for(auto& info : overloadIt->second)
+            {
+                if(!isOverloadVisible(info) || !info.function)
+                    continue;
+                if(resolved && resolved != info.function)
+                    return nullptr;
+                resolved = info.function;
+            }
+        }
+        if(resolved)
+            return resolved;
+        return module->getFunction(name);
+    };
+
+    auto unresolvedFunctionPointerArgName =
+        [&](ExpressionNode* expr) -> std::string
+    {
+        auto* id = dynamic_cast<IdentifierNode*>(expr);
+        if(!id)
+            return "";
+        if(globalNamedValues.find(id->name) == globalNamedValues.end() &&
+           isVariableMoved(id->name))
+            return "";
+        if(isVariableCurrentlyVisible(id->name))
+        {
+            auto valueIt = namedValues.find(id->name);
+            if(valueIt != namedValues.end() && valueIt->second)
+                return "";
+        }
+        return id->name;
+    };
+
     auto validateTemporaryBorrowArguments =
         [&](const std::vector<ExpressionNode*>& args,
             const std::string& calleeName,
@@ -15919,9 +15958,19 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
     }
 
     std::vector<llvm::Value*> argVals;
+    std::vector<std::string> unresolvedFunctionArgNames;
     argVals.reserve(node->arguments.size());
+    unresolvedFunctionArgNames.reserve(node->arguments.size());
     for(auto arg : node->arguments)
     {
+        std::string unresolvedFnName = unresolvedFunctionPointerArgName(arg);
+        if(!unresolvedFnName.empty())
+        {
+            argVals.push_back(nullptr);
+            unresolvedFunctionArgNames.push_back(unresolvedFnName);
+            continue;
+        }
+
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
@@ -15948,6 +15997,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
             }
         }
         argVals.push_back(argVal);
+        unresolvedFunctionArgNames.push_back("");
     }
 
     FunctionOverloadInfo* best = nullptr;
@@ -15983,6 +16033,24 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         bool ok = true;
         for(size_t i = 0; i < expectedArgs; ++i)
         {
+            if(!argVals[i])
+            {
+                llvm::Type* expectedType = callee->getArg(i)->getType();
+                if(!(expectedType->isPointerTy() || expectedType->isIntegerTy()))
+                {
+                    ok = false;
+                    break;
+                }
+                if(unresolvedFunctionArgNames[i].empty() ||
+                   !resolveFunctionPointerArgument(
+                       unresolvedFunctionArgNames[i]))
+                {
+                    ok = false;
+                    break;
+                }
+                continue;
+            }
+
             if(info.node && info.node->parameters &&
                i < info.node->parameters->parameters.size())
             {
@@ -16073,6 +16141,46 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
         if(paramIdx < expectedArgs)
         {
             llvm::Type* expectedType = callee->getArg(paramIdx)->getType();
+            if(!argVal)
+            {
+                const std::string& fnName = unresolvedFunctionArgNames[paramIdx];
+                llvm::Function* fn = resolveFunctionPointerArgument(fnName);
+                if(!fn)
+                {
+                    reportError(
+                        node->line,
+                        "unknown function pointer argument: '" + fnName + "'");
+                    return nullptr;
+                }
+
+                if(expectedType->isPointerTy())
+                {
+                    argVal = builder.CreateBitCast(fn, expectedType, "fn.ptr");
+                }
+                else if(expectedType->isIntegerTy())
+                {
+#if LLVM_VERSION_MAJOR >= 15
+                    llvm::Type* rawPtrType = llvm::PointerType::get(context, 0);
+#else
+                    llvm::Type* rawPtrType =
+                        llvm::PointerType::get(llvm::Type::getInt8Ty(context),
+                                               0);
+#endif
+                    llvm::Value* fnPtr =
+                        builder.CreateBitCast(fn, rawPtrType, "fn.rawptr");
+                    argVal = builder.CreatePtrToInt(fnPtr, expectedType,
+                                                    "fn.ptrtoint");
+                }
+                else
+                {
+                    reportError(node->line,
+                                "function pointer argument '" + fnName +
+                                    "' requires pointer or integer "
+                                    "parameter type");
+                    return nullptr;
+                }
+            }
+
             llvm::Type* actualType = argVal->getType();
 
             if(actualType != expectedType)

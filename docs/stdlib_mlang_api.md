@@ -23,6 +23,7 @@ mod std::algorithm::fft;
 mod std::net;
 mod std::printf;
 mod std::process;
+mod std::signal;
 mod std::rand;
 mod std::regex;
 mod std::sed;
@@ -62,6 +63,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/net.mla`
 - `stdlib/std/printf.mla`
 - `stdlib/std/process.mla`
+- `stdlib/std/signal.mla`
 - `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
 - `stdlib/std/sed.mla`
@@ -984,6 +986,47 @@ Module file: `stdlib/std/process.mla`
 - `ExitStatus::code(self: ExitStatus) -> i32`
 - `ExitStatus::signaled(self: ExitStatus) -> i32`
 - `ExitStatus::signal(self: ExitStatus) -> i32`
+
+## std::signal
+
+Module file: `stdlib/std/signal.mla`
+
+POSIX-style signal helpers with a runtime dispatcher that both grabs received
+signals and forwards them to an installed MLang function handler.
+
+### API
+- `last_error() -> str8`
+- `on(signum: i32, handler: ptr<void>) -> Result<i32, str8>`
+- `ignore(signum: i32) -> Result<i32, str8>`
+- `reset_default(signum: i32) -> Result<i32, str8>`
+- `raise(signum: i32) -> Result<i32, str8>`
+- `received_count(signum: i32) -> i64`
+- `clear_received(signum: i32) -> Result<i32, str8>`
+- `sigint() -> i32`
+- `sigterm() -> i32`
+- `sigusr1() -> i32`
+- `sigusr2() -> i32`
+
+Example:
+
+```mla
+mod std::signal;
+
+var hits: i32 = 0;
+
+fn on_usr1(sig: i32) -> void {
+    hits = hits + 1;
+}
+
+fn main() -> i32 {
+    let sig: i32 = std::signal::sigusr1();
+    let _ = std::signal::clear_received(sig);
+    let _ = std::signal::on(sig, on_usr1);
+    let _ = std::signal::raise(sig);
+    let _ = std::signal::reset_default(sig);
+    return hits;
+}
+```
 
 ## std::rand
 

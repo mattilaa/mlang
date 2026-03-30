@@ -1,0 +1,78 @@
+mod std::signal;
+mod std::testing;
+
+use std::testing::verify;
+use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
+
+var g_signal_hits: i32 = 0;
+var g_last_signal: i32 = 0;
+
+fn on_usr1(sig: i32) -> void {
+    g_signal_hits = g_signal_hits + 1;
+    g_last_signal = sig;
+}
+
+fn reset_signal_state() -> void {
+    g_signal_hits = 0;
+    g_last_signal = 0;
+}
+
+#[test]
+fn test_signal_handler_runs_for_self_raised_signal() {
+    let sig: i32 = std::signal::sigusr1();
+    let clr: Result<i32, str8> = std::signal::clear_received(sig);
+    verify(clr.is_ok());
+    let setr: Result<i32, str8> = std::signal::on(sig, on_usr1);
+    verify(setr.is_ok());
+    reset_signal_state();
+
+    let rr: Result<i32, str8> = std::signal::raise(sig);
+    verify(rr.is_ok());
+
+    verify_eq_i32(1, g_signal_hits);
+    verify_eq_i32(sig, g_last_signal);
+    verify_eq_i64(1, std::signal::received_count(sig));
+    let resetr: Result<i32, str8> = std::signal::reset_default(sig);
+    verify(resetr.is_ok());
+}
+
+#[test]
+fn test_signal_receive_counter_tracks_multiple_raises() {
+    let sig: i32 = std::signal::sigusr2();
+    let clr: Result<i32, str8> = std::signal::clear_received(sig);
+    verify(clr.is_ok());
+    let setr: Result<i32, str8> = std::signal::on(sig, on_usr1);
+    verify(setr.is_ok());
+    reset_signal_state();
+
+    let r1: Result<i32, str8> = std::signal::raise(sig);
+    let r2: Result<i32, str8> = std::signal::raise(sig);
+    verify(r1.is_ok());
+    verify(r2.is_ok());
+
+    verify_eq_i32(2, g_signal_hits);
+    verify_eq_i32(sig, g_last_signal);
+    verify_eq_i64(2, std::signal::received_count(sig));
+    let resetr: Result<i32, str8> = std::signal::reset_default(sig);
+    verify(resetr.is_ok());
+}
+
+#[test]
+fn test_signal_ignore_prevents_runtime_grab_count_growth() {
+    let sig: i32 = std::signal::sigusr1();
+    let clr: Result<i32, str8> = std::signal::clear_received(sig);
+    verify(clr.is_ok());
+    let ignr: Result<i32, str8> = std::signal::ignore(sig);
+    verify(ignr.is_ok());
+    reset_signal_state();
+
+    let rr: Result<i32, str8> = std::signal::raise(sig);
+    verify(rr.is_ok());
+
+    verify_eq_i32(0, g_signal_hits);
+    verify_eq_i32(0, g_last_signal);
+    verify_eq_i64(0, std::signal::received_count(sig));
+    let resetr: Result<i32, str8> = std::signal::reset_default(sig);
+    verify(resetr.is_ok());
+}
