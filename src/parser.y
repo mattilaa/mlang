@@ -292,6 +292,8 @@ ASTNode* mla_ast_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* mla_ast_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
 ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
+ASTNode* mla_ast_sizeof_type_expression(ASTNode* type, int line);
+ASTNode* mla_ast_sizeof_value_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);
 ASTNode* mla_argument_list_create(ASTNode* arg);
@@ -495,14 +497,14 @@ enum UpdatePosition
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
+%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
 %token PUB IMPL TRAIT
 %token EXTERN
 %token STATIC
-%token ASM VOLATILE
+%token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
 %token LET VAR
@@ -886,6 +888,7 @@ parameter
 type
     : VOID   { $$ = mla_ast_type_node(TypeNode::TYPE_VOID); }
     | BOOL   { $$ = mla_ast_type_node(TypeNode::TYPE_BOOL); }
+    | BIT    { $$ = mla_ast_type_node(TypeNode::TYPE_BIT); }
     | FLOAT  { $$ = mla_ast_type_node(TypeNode::TYPE_FLOAT); }
     | DOUBLE { $$ = mla_ast_type_node(TypeNode::TYPE_DOUBLE); }
     | STR8   { $$ = mla_ast_type_node(TypeNode::TYPE_STR8); }
@@ -1567,6 +1570,10 @@ condition_primary
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | fold_expression { $$ = $1; }
+    | SIZEOF LPAREN type RPAREN
+        { $$ = mla_ast_sizeof_type_expression($3, yylineno); }
+    | SIZEOF LPAREN block_condition_expression RPAREN
+        { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
     | asm_expression { $$ = $1; }
     ;
 
@@ -1767,6 +1774,10 @@ primary_expression
     | PIPE parameters PIPE LBRACE statement_list RBRACE
         { $$ = create_closure_with_params($2, $5); }
     | fold_expression { $$ = $1; }
+    | SIZEOF LPAREN type RPAREN
+        { $$ = mla_ast_sizeof_type_expression($3, yylineno); }
+    | SIZEOF LPAREN expression RPAREN
+        { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
     | asm_expression { $$ = $1; }
     ;
 
@@ -1843,6 +1854,7 @@ function_call
 
 cast_expression
     : CAST_INT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_INT, $2); }
+    | BIT LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_BIT, $3); }
     | CAST_FLOAT expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_FLOAT, $2); }
     | CAST_DOUBLE expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_DOUBLE, $2); }
     | I32 LPAREN expression RPAREN { $$ = mla_ast_cast_expression(TypeNode::TYPE_I32, $3); }

@@ -1,0 +1,211 @@
+mod std::testing;
+mod std::bits;
+mod std::bitset;
+
+use std::bits::OFF;
+use std::bits::ON;
+use std::bitset::BitSet;
+use std::testing::verify;
+use std::testing::verify_eq;
+use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
+
+struct Lamp {
+    var state: bit;
+    var ready: bool;
+};
+
+struct DeviceFlags {
+    var rx: bit;
+    var tx: bit;
+    var ready: bool;
+};
+
+struct DeviceFlags2 {
+    var first: bit;
+    var second: bit;
+    var enabled: bool;
+};
+
+struct PackedByteFlags {
+    var b0: bit;
+    var b1: bit;
+    var b2: bit;
+    var b3: bit;
+    var b4: bit;
+    var b5: bit;
+    var b6: bit;
+    var b7: bit;
+};
+
+struct MixedPackedFlags {
+    var b0: bit;
+    var b1: bit;
+    var b2: bit;
+    var b3: bit;
+    var b4: bit;
+    var b5: bit;
+    var ready: bool;
+};
+
+#[test]
+fn test_bit_values_and_struct_field_updates() {
+    var state: bit = 0;
+    verify_eq_i32(0, i32(state));
+    state = 1;
+    verify_eq_i32(1, i32(state));
+    state = OFF();
+    verify_eq_i32(0, i32(state));
+    state = ON();
+    verify_eq_i32(1, i32(state));
+
+    var lamp: Lamp = Lamp {
+        state: OFF(),
+        ready: true
+    };
+    verify_eq_i32(0, i32(lamp.state));
+    lamp.state = 1;
+    verify_eq_i32(1, i32(lamp.state));
+    lamp.state = OFF();
+    verify_eq_i32(0, i32(lamp.state));
+}
+
+#[test]
+fn test_sizeof_builtin_and_container_sizes() {
+    verify_eq_i64(1, sizeof(bool));
+    verify_eq_i64(1, sizeof(bit));
+    verify_eq_i64(1, sizeof(u8));
+    verify_eq_i64(2, sizeof(u16));
+    verify_eq_i64(8, sizeof(i64));
+    verify(sizeof(Lamp) >= 2);
+
+    let count: i64 = 7;
+    let lamp: Lamp = Lamp { state: ON(), ready: false };
+    verify_eq_i64(8, sizeof(count));
+    verify_eq_i64(sizeof(Lamp), sizeof(lamp));
+
+    let bools: list<bool> = [true, false, true, false];
+    let ints: list<i32> = [1, 2, 3, 4];
+    verify_eq_i64(16, sizeof(bools));
+    verify_eq_i64(16, sizeof(ints));
+    verify_eq_i64(sizeof(list<bool>), sizeof(list<i32>));
+}
+
+#[test]
+fn test_packed_bit_struct_sizeof_is_two_bytes() {
+    verify_eq_i64(2, sizeof(DeviceFlags));
+    verify_eq_i64(2, sizeof(DeviceFlags2));
+
+    let a: DeviceFlags = DeviceFlags { rx: ON(), tx: OFF(), ready: true };
+    let b: DeviceFlags2 = DeviceFlags2 { first: OFF(), second: ON(), enabled: false };
+    verify_eq_i64(2, sizeof(a));
+    verify_eq_i64(2, sizeof(b));
+
+    verify_eq_i32(1, i32(a.rx));
+    verify_eq_i32(0, i32(a.tx));
+    verify(a.ready);
+    verify_eq_i32(0, i32(b.first));
+    verify_eq_i32(1, i32(b.second));
+    verify(!b.enabled);
+}
+
+#[test]
+fn test_eight_bits_pack_into_one_byte() {
+    verify_eq_i64(1, sizeof(PackedByteFlags));
+
+    var bits: PackedByteFlags = PackedByteFlags {
+        b0: ON(),
+        b1: OFF(),
+        b2: ON(),
+        b3: OFF(),
+        b4: ON(),
+        b5: OFF(),
+        b6: ON(),
+        b7: OFF()
+    };
+    verify_eq_i64(1, sizeof(bits));
+
+    verify_eq_i32(1, i32(bits.b0));
+    verify_eq_i32(0, i32(bits.b1));
+    verify_eq_i32(1, i32(bits.b2));
+    verify_eq_i32(0, i32(bits.b3));
+    verify_eq_i32(1, i32(bits.b4));
+    verify_eq_i32(0, i32(bits.b5));
+    verify_eq_i32(1, i32(bits.b6));
+    verify_eq_i32(0, i32(bits.b7));
+
+    bits.b1 = ON();
+    bits.b3 = ON();
+    bits.b5 = ON();
+    bits.b7 = ON();
+
+    verify_eq_i32(1, i32(bits.b0));
+    verify_eq_i32(1, i32(bits.b1));
+    verify_eq_i32(1, i32(bits.b2));
+    verify_eq_i32(1, i32(bits.b3));
+    verify_eq_i32(1, i32(bits.b4));
+    verify_eq_i32(1, i32(bits.b5));
+    verify_eq_i32(1, i32(bits.b6));
+    verify_eq_i32(1, i32(bits.b7));
+}
+
+#[test]
+fn test_six_bits_and_one_bool_take_two_bytes() {
+    verify_eq_i64(2, sizeof(MixedPackedFlags));
+
+    var flags: MixedPackedFlags = MixedPackedFlags {
+        b0: ON(),
+        b1: OFF(),
+        b2: ON(),
+        b3: OFF(),
+        b4: ON(),
+        b5: OFF(),
+        ready: true
+    };
+    verify_eq_i64(2, sizeof(flags));
+
+    verify_eq_i32(1, i32(flags.b0));
+    verify_eq_i32(0, i32(flags.b1));
+    verify_eq_i32(1, i32(flags.b2));
+    verify_eq_i32(0, i32(flags.b3));
+    verify_eq_i32(1, i32(flags.b4));
+    verify_eq_i32(0, i32(flags.b5));
+    verify(flags.ready);
+
+    flags.b1 = ON();
+    flags.b3 = ON();
+    flags.b5 = ON();
+    flags.ready = false;
+
+    verify_eq_i32(1, i32(flags.b0));
+    verify_eq_i32(1, i32(flags.b1));
+    verify_eq_i32(1, i32(flags.b2));
+    verify_eq_i32(1, i32(flags.b3));
+    verify_eq_i32(1, i32(flags.b4));
+    verify_eq_i32(1, i32(flags.b5));
+    verify(!flags.ready);
+}
+
+#[test]
+fn test_bitset_len_tracks_bits_not_bools_as_bytes() {
+    let r: Result<BitSet, str8> = BitSet::new(0);
+    verify(!r.is_err());
+    let bs: BitSet = r.unwrap();
+
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify_eq_i64(4, bs.len());
+
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify_eq_i64(8, bs.len());
+
+    verify(bs.resize(16, false) == 0);
+    verify_eq_i64(16, bs.len());
+
+    bs.close();
+}

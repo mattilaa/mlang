@@ -43,6 +43,15 @@ For sed-style literal string replacement, see:
 - `stdlib/std/sed.mla`
   (`replace_first`, `replace_all`, `substitute`).
 
+For logical bit helpers, see:
+- `stdlib/std/bits.mla`
+  (`ON`, `OFF` for the builtin `bit` type).
+
+For packed one-bit storage, see:
+- `stdlib/std/bitset.mla`
+  (`BitSet::new`, `len`, `resize`, `set`, `get`, `push`, `pop`, `count_ones`).
+  This is the packed alternative to `list<bool>`, which is not bit-packed.
+
 For std-style IO helpers with synchronized stdout, see:
 - `stdlib/std/io.mla`
   (`stdin()`, `stdout()`, `lock(stdout())`, `unlock(lockToken)`,
@@ -166,6 +175,7 @@ Recent branch-level additions reflected in these docs:
 - `switch` / `case` statements for integers, strings, booleans, enums, and
   other `==`-comparable values
 - functional pipe operator `|>` for left-to-right call composition
+- builtin `bit` values plus `sizeof(Type)` / `sizeof(expr)`
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
 - `f32`/`f64` primitive names
 - Inline assembly with `volatile` and target-arch qualifiers (`x86`, `x64`, `aarch64`)

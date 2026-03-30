@@ -123,6 +123,8 @@ ASTNode* mla_ast_binary_op(int op, ASTNode* left, ASTNode* right);
 ASTNode* mla_ast_fold_expression(int op, ASTNode* pack_expr, int is_right_fold);
 ASTNode* mla_ast_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f, int line);
 ASTNode* mla_ast_try_expression(ASTNode* expr, int line);
+ASTNode* mla_ast_sizeof_type_expression(ASTNode* type, int line);
+ASTNode* mla_ast_sizeof_value_expression(ASTNode* expr, int line);
 ASTNode* mla_ast_inline_asm(ASTNode* type, char* asm_text, char* arch_name,
                             ASTNode* args, int is_volatile, int line);
 ASTNode* mla_ast_update_expression(int kind, int is_prefix, ASTNode* operand, int line);

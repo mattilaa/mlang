@@ -1,0 +1,83 @@
+mod std::bits;
+
+use std::bits::OFF;
+use std::bits::ON;
+
+struct DeviceFlags {
+    var rx: bit;
+    var tx: bit;
+    var ready: bool;
+};
+
+struct PackedByteFlags {
+    var b0: bit;
+    var b1: bit;
+    var b2: bit;
+    var b3: bit;
+    var b4: bit;
+    var b5: bit;
+    var b6: bit;
+    var b7: bit;
+};
+
+struct MixedPackedFlags {
+    var b0: bit;
+    var b1: bit;
+    var b2: bit;
+    var b3: bit;
+    var b4: bit;
+    var b5: bit;
+    var ready: bool;
+};
+
+fn main() -> i32 {
+    var flags: DeviceFlags = DeviceFlags {
+        rx: ON(),
+        tx: OFF(),
+        ready: true
+    };
+
+    println!("sizeof(DeviceFlags)={}", sizeof(DeviceFlags));
+    println!("rx={} tx={} ready={}", i32(flags.rx), i32(flags.tx), flags.ready ? 1 : 0);
+
+    flags.tx = ON();
+    println!("after tx update: rx={} tx={}", i32(flags.rx), i32(flags.tx));
+
+    var packed: PackedByteFlags = PackedByteFlags {
+        b0: ON(),
+        b1: OFF(),
+        b2: ON(),
+        b3: OFF(),
+        b4: ON(),
+        b5: OFF(),
+        b6: ON(),
+        b7: OFF()
+    };
+    println!("sizeof(PackedByteFlags)={}", sizeof(PackedByteFlags));
+    println!("packed bits={}{}{}{}{}{}{}{}",
+             i32(packed.b0), i32(packed.b1), i32(packed.b2), i32(packed.b3),
+             i32(packed.b4), i32(packed.b5), i32(packed.b6), i32(packed.b7));
+
+    packed.b1 = ON();
+    packed.b3 = ON();
+    packed.b5 = ON();
+    packed.b7 = ON();
+    println!("packed bits after update={}{}{}{}{}{}{}{}",
+             i32(packed.b0), i32(packed.b1), i32(packed.b2), i32(packed.b3),
+             i32(packed.b4), i32(packed.b5), i32(packed.b6), i32(packed.b7));
+
+    var mixed: MixedPackedFlags = MixedPackedFlags {
+        b0: ON(),
+        b1: OFF(),
+        b2: ON(),
+        b3: OFF(),
+        b4: ON(),
+        b5: OFF(),
+        ready: true
+    };
+    println!("sizeof(MixedPackedFlags)={}", sizeof(MixedPackedFlags));
+    println!("mixed bits={}{}{}{}{}{} ready={}",
+             i32(mixed.b0), i32(mixed.b1), i32(mixed.b2), i32(mixed.b3),
+             i32(mixed.b4), i32(mixed.b5), mixed.ready ? 1 : 0);
+    return 0;
+}

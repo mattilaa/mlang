@@ -612,6 +612,43 @@ Module file: `stdlib/std/fs.mla`
 - `File::write(self: File, s: str8) -> Result<i64, str8>`
 - `File::write_line(self: File, s: str8) -> Result<i64, str8>`
 
+## Builtin `bit` and `sizeof`
+
+Builtin reference source: `stdlib/types.mla`
+
+### `bit`
+- `bit` is a builtin logical 0/1 type
+- Use `bit(expr)` to convert an integer or bool expression
+- `sizeof(bit)` reports the ABI byte size
+
+### `sizeof`
+- `sizeof(Type) -> i64`
+- `sizeof(expr) -> i64`
+- Returns the ABI byte size in bytes
+
+Examples:
+
+```mla
+var enabled: bit = 1;
+println!("bit={} bool={} list_header={}",
+         sizeof(bit), sizeof(bool), sizeof(list<bool>));
+```
+
+### `list<bool>` vs `std::bitset::BitSet`
+- `list<bool>` is a normal list container, not a packed `std::vector<bool>`-style specialization
+- Use `std::bitset::BitSet` when you need one-bit-per-entry dense storage
+- `BitSet::len()` is measured in bits
+
+## std::bits
+
+Module file: `stdlib/std/bits.mla`
+
+### Helpers
+- `ON() -> bit`
+- `OFF() -> bit`
+
+These helpers provide readable aliases for the two builtin `bit` values.
+
 ### Reader API
 - `BufReader::new(file: File) -> BufReader`
 - `BufReader::with_capacity(file: File, capacity: i64) -> BufReader`

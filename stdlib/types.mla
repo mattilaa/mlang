@@ -8,6 +8,12 @@
 // @builtin bool
 // Boolean value: true or false.
 
+// @builtin bit
+// Logical one-bit value with domain 0 or 1.
+// Use `bit(expr)` to convert an integer/bool expression to `bit`.
+// `sizeof(bit)` follows normal ABI byte sizing even though the value domain is
+// a single logical bit.
+
 // @builtin i8
 // Signed 8-bit integer. Range: -128..127.
 
@@ -49,12 +55,18 @@
 
 // @builtin list
 // Generic list type: list<T>.
+// `list<bool>` is a normal list container, not a packed bit-vector.
+// For dense one-bit storage use `std::bitset::BitSet`.
 
 // @builtin map
 // Generic map type: map<K, V>.
 
 // @builtin tuple
 // Tuple type: tuple<T1, T2, ...>.
+
+// @builtin sizeof
+// Builtin size query: `sizeof(Type)` or `sizeof(expr)`.
+// Returns the ABI size in bytes as `i64`.
 
 // @builtin ptr
 // Pointer type: ptr<T>.

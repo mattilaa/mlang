@@ -48,6 +48,7 @@ public:
     {
         TYPE_VOID,
         TYPE_BOOL,
+        TYPE_BIT,
         TYPE_INT,
         TYPE_FLOAT,
         TYPE_DOUBLE,
@@ -399,6 +400,17 @@ public:
     ExpressionNode* expression;
 
     TryExpressionNode(ExpressionNode* expr) : expression(expr) {}
+    std::string toString() const override;
+};
+
+class SizeofExpressionNode : public ExpressionNode
+{
+public:
+    TypeNode* typeTarget = nullptr;
+    ExpressionNode* expressionTarget = nullptr;
+
+    explicit SizeofExpressionNode(TypeNode* t) : typeTarget(t) {}
+    explicit SizeofExpressionNode(ExpressionNode* e) : expressionTarget(e) {}
     std::string toString() const override;
 };
 
@@ -1408,6 +1420,8 @@ ASTNode* create_unary_op(int op, ASTNode* operand);
 ASTNode* create_ternary_expression(ASTNode* cond, ASTNode* t, ASTNode* f,
                                    int line);
 ASTNode* create_try_expression(ASTNode* expr, int line);
+ASTNode* create_sizeof_type_expression(ASTNode* type, int line);
+ASTNode* create_sizeof_value_expression(ASTNode* expr, int line);
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2,
                               int line);
 ASTNode* create_function_call_multi(char* name, ASTNode* args, int line);

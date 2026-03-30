@@ -272,6 +272,186 @@ static std::vector<std::string_view> splitLines(std::string_view text) {
     return lines;
 }
 
+struct TextLayoutInfo {
+    std::uint64_t size = 0;
+    std::uint64_t align = 1;
+    bool ok = false;
+};
+
+static std::string trimTextWs(std::string_view s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start])) != 0) {
+        ++start;
+    }
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1])) != 0) {
+        --end;
+    }
+    return std::string(s.substr(start, end - start));
+}
+
+static std::uint64_t alignUpText(std::uint64_t value, std::uint64_t align) {
+    if (align <= 1) {
+        return value;
+    }
+    const std::uint64_t rem = value % align;
+    return rem == 0 ? value : (value + (align - rem));
+}
+
+static std::optional<std::string> extractStructFieldType(std::string_view line,
+                                                         std::string* out_name = nullptr) {
+    const std::string trimmed = trimTextWs(line);
+    if (!(startsWith(trimmed, "var ") || startsWith(trimmed, "let "))) {
+        return std::nullopt;
+    }
+    const size_t name_start = trimmed.find(' ');
+    if (name_start == std::string::npos) {
+        return std::nullopt;
+    }
+    const size_t colon = trimmed.find(':', name_start + 1);
+    if (colon == std::string::npos) {
+        return std::nullopt;
+    }
+    const std::string member_name =
+        trimTextWs(std::string_view(trimmed).substr(name_start + 1, colon - name_start - 1));
+    size_t type_end = trimmed.find(';', colon + 1);
+    if (type_end == std::string::npos) {
+        type_end = trimmed.find('=', colon + 1);
+    }
+    if (type_end == std::string::npos) {
+        type_end = trimmed.size();
+    }
+    if (out_name) {
+        *out_name = member_name;
+    }
+    return trimTextWs(std::string_view(trimmed).substr(colon + 1, type_end - colon - 1));
+}
+
+static TextLayoutInfo computeTextTypeLayout(std::string_view type_text,
+                                            const std::vector<std::string_view>& lines,
+                                            std::set<std::string>& visiting_structs);
+
+static TextLayoutInfo computeTextStructLayout(std::string_view struct_name,
+                                              const std::vector<std::string_view>& lines,
+                                              std::set<std::string>& visiting_structs) {
+    const std::string struct_name_s(struct_name);
+    if (visiting_structs.find(struct_name_s) != visiting_structs.end()) {
+        return {};
+    }
+    visiting_structs.insert(struct_name_s);
+
+    const std::string needle = "struct " + struct_name_s;
+    bool in_struct = false;
+    std::uint64_t offset = 0;
+    std::uint64_t max_align = 1;
+    for (std::string_view raw_line : lines) {
+        const std::string line = trimTextWs(raw_line);
+        if (!in_struct) {
+            if (startsWith(line, needle)) {
+                in_struct = true;
+            }
+            continue;
+        }
+        if (line == "};" || line == "}") {
+            visiting_structs.erase(struct_name_s);
+            return {alignUpText(offset, max_align), max_align, true};
+        }
+        std::string member_name;
+        std::optional<std::string> field_ty = extractStructFieldType(line, &member_name);
+        if (!field_ty.has_value()) {
+            continue;
+        }
+        TextLayoutInfo field = computeTextTypeLayout(*field_ty, lines, visiting_structs);
+        if (!field.ok) {
+            visiting_structs.erase(struct_name_s);
+            return {};
+        }
+        max_align = std::max(max_align, field.align);
+        offset = alignUpText(offset, field.align);
+        offset += field.size;
+    }
+
+    visiting_structs.erase(struct_name_s);
+    return {};
+}
+
+static TextLayoutInfo computeTextTypeLayout(std::string_view type_text,
+                                            const std::vector<std::string_view>& lines,
+                                            std::set<std::string>& visiting_structs) {
+    const std::string ty = trimTextWs(type_text);
+    if (ty.empty()) {
+        return {};
+    }
+    if (ty == "bool" || ty == "bit" || ty == "i8" || ty == "u8") {
+        return {1, 1, true};
+    }
+    if (ty == "i16" || ty == "u16") {
+        return {2, 2, true};
+    }
+    if (ty == "int" || ty == "i32" || ty == "u32" || ty == "f32") {
+        return {4, 4, true};
+    }
+    if (ty == "i64" || ty == "u64" || ty == "f64" ||
+        ty == "str8" || ty == "str16" || ty == "string") {
+        return {8, 8, true};
+    }
+    if (ty.find("ptr<") == 0 || ty.find("&") == 0) {
+        return {8, 8, true};
+    }
+    if (ty.find("list<") == 0) {
+        return {16, 8, true};
+    }
+    if (ty.find("map<") == 0) {
+        return {24, 8, true};
+    }
+    return computeTextStructLayout(ty, lines, visiting_structs);
+}
+
+static std::string structLayoutSummaryFromText(std::string_view text,
+                                               std::string_view struct_name) {
+    const std::vector<std::string_view> lines = splitLines(text);
+    std::set<std::string> visiting_structs;
+    TextLayoutInfo layout = computeTextStructLayout(struct_name, lines, visiting_structs);
+    if (!layout.ok) {
+        return {};
+    }
+
+    const std::string needle = "struct " + std::string(struct_name);
+    bool in_struct = false;
+    std::string out = "size=" + std::to_string(layout.size) + " bytes";
+    bool first = true;
+    for (std::string_view raw_line : lines) {
+        const std::string line = trimTextWs(raw_line);
+        if (!in_struct) {
+            if (startsWith(line, needle)) {
+                in_struct = true;
+            }
+            continue;
+        }
+        if (line == "};" || line == "}") {
+            break;
+        }
+        std::string member_name;
+        std::optional<std::string> field_ty = extractStructFieldType(line, &member_name);
+        if (!field_ty.has_value()) {
+            continue;
+        }
+        std::set<std::string> field_visiting;
+        TextLayoutInfo field = computeTextTypeLayout(*field_ty, lines, field_visiting);
+        if (!field.ok) {
+            continue;
+        }
+        if (first) {
+            out += " | fields: ";
+            first = false;
+        } else {
+            out += ", ";
+        }
+        out += member_name + ": " + *field_ty + " (" + std::to_string(field.size) + "B)";
+    }
+    return out;
+}
+
 static std::string uriToPath(std::string_view uri) {
     const size_t pos = uri.find("://");
     if (pos == std::string_view::npos) {
@@ -645,6 +825,252 @@ static std::string methodSignatureFromAst(const std::string& owner,
     sig += ") -> ";
     sig += method->returnType ? method->returnType->toString() : "void";
     return sig;
+}
+
+struct LayoutInfo {
+    std::uint64_t size = 0;
+    std::uint64_t align = 1;
+    bool ok = false;
+};
+
+static std::uint64_t alignUp(std::uint64_t value, std::uint64_t align) {
+    if (align <= 1) {
+        return value;
+    }
+    const std::uint64_t rem = value % align;
+    return rem == 0 ? value : (value + (align - rem));
+}
+
+static bool isBitFieldTypeNode(TypeNode* type) {
+    if (!type) {
+        return false;
+    }
+    if (type->kind == TypeNode::TYPE_BIT) {
+        return true;
+    }
+    if (auto* ref = dynamic_cast<StructTypeRefNode*>(type)) {
+        return ref->structName == "bit";
+    }
+    return false;
+}
+
+static StructDefNode* findStructDef(ProgramNode* program, std::string_view name) {
+    if (!program || !program->structList) {
+        return nullptr;
+    }
+    for (StructDefNode* st : program->structList->structs) {
+        if (st && st->name == name) {
+            return st;
+        }
+    }
+    return nullptr;
+}
+
+static LayoutInfo computeTypeLayout(TypeNode* type,
+                                    ProgramNode* program,
+                                    std::set<std::string>& visiting);
+
+static LayoutInfo computeStructLayout(StructDefNode* st,
+                                      ProgramNode* program,
+                                      std::set<std::string>& visiting) {
+    if (!st) {
+        return {};
+    }
+    if (visiting.find(st->name) != visiting.end()) {
+        return {};
+    }
+    visiting.insert(st->name);
+
+    std::uint64_t offset = 0;
+    std::uint64_t max_align = 1;
+    if (!st->baseName.empty()) {
+        if (StructDefNode* base = findStructDef(program, st->baseName)) {
+            LayoutInfo baseInfo = computeStructLayout(base, program, visiting);
+            if (!baseInfo.ok) {
+                visiting.erase(st->name);
+                return {};
+            }
+            offset = baseInfo.size;
+            max_align = std::max(max_align, baseInfo.align);
+        }
+    }
+
+    if (st->members) {
+        bool packingBitRun = false;
+        std::uint64_t packedBitsInByte = 0;
+        for (StructMemberNode* member : st->members->members) {
+            if (!member || !member->type) {
+                continue;
+            }
+            LayoutInfo field = computeTypeLayout(member->type, program, visiting);
+            if (!field.ok) {
+                visiting.erase(st->name);
+                return {};
+            }
+            const bool is_bit_field = isBitFieldTypeNode(member->type);
+            if (is_bit_field) {
+                max_align = std::max<std::uint64_t>(max_align, 1);
+                if (!packingBitRun || packedBitsInByte >= 8) {
+                    offset = alignUp(offset, 1);
+                    offset += 1;
+                    packedBitsInByte = 0;
+                    packingBitRun = true;
+                }
+                ++packedBitsInByte;
+                continue;
+            }
+            packingBitRun = false;
+            packedBitsInByte = 0;
+            max_align = std::max(max_align, field.align);
+            offset = alignUp(offset, field.align);
+            offset += field.size;
+        }
+    }
+
+    visiting.erase(st->name);
+    LayoutInfo out;
+    out.align = max_align;
+    out.size = alignUp(offset, max_align);
+    out.ok = true;
+    return out;
+}
+
+static LayoutInfo computeTypeLayout(TypeNode* type,
+                                    ProgramNode* program,
+                                    std::set<std::string>& visiting) {
+    if (!type) {
+        return {};
+    }
+
+    if (auto* structRef = dynamic_cast<StructTypeRefNode*>(type)) {
+        if (StructDefNode* st = findStructDef(program, structRef->structName)) {
+            return computeStructLayout(st, program, visiting);
+        }
+        const std::string& name = structRef->structName;
+        if (name == "bool" || name == "bit" || name == "i8" || name == "u8") {
+            return {1, 1, true};
+        }
+        if (name == "i16" || name == "u16") {
+            return {2, 2, true};
+        }
+        if (name == "int" || name == "i32" || name == "u32" || name == "f32") {
+            return {4, 4, true};
+        }
+        if (name == "i64" || name == "u64" || name == "f64" ||
+            name == "str8" || name == "str16" || name == "string") {
+            return {8, 8, true};
+        }
+        if (startsWith(name, "list<")) {
+            return {16, 8, true};
+        }
+        if (startsWith(name, "map<")) {
+            return {24, 8, true};
+        }
+        return {};
+    }
+
+    if (dynamic_cast<PointerTypeNode*>(type) || dynamic_cast<ReferenceTypeNode*>(type)) {
+        return {8, 8, true};
+    }
+
+    if (auto* listType = dynamic_cast<GenericListTypeNode*>(type)) {
+        (void)listType;
+        return {16, 8, true};
+    }
+
+    if (dynamic_cast<ListTypeNode*>(type)) {
+        return {16, 8, true};
+    }
+
+    if (dynamic_cast<MapTypeNode*>(type)) {
+        return {24, 8, true};
+    }
+
+    if (auto* tupleType = dynamic_cast<TupleTypeNode*>(type)) {
+        std::uint64_t offset = 0;
+        std::uint64_t max_align = 1;
+        if (tupleType->elementTypes) {
+            for (TypeNode* elem : tupleType->elementTypes->types) {
+                LayoutInfo elemInfo = computeTypeLayout(elem, program, visiting);
+                if (!elemInfo.ok) {
+                    return {};
+                }
+                max_align = std::max(max_align, elemInfo.align);
+                offset = alignUp(offset, elemInfo.align);
+                offset += elemInfo.size;
+            }
+        }
+        return {alignUp(offset, max_align), max_align, true};
+    }
+
+    switch (type->kind) {
+    case TypeNode::TYPE_VOID:
+        return {0, 1, true};
+    case TypeNode::TYPE_BOOL:
+    case TypeNode::TYPE_BIT:
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_U8:
+        return {1, 1, true};
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_U16:
+        return {2, 2, true};
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_FLOAT:
+        return {4, 4, true};
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U64:
+    case TypeNode::TYPE_DOUBLE:
+    case TypeNode::TYPE_STRING:
+    case TypeNode::TYPE_STR8:
+    case TypeNode::TYPE_STR16:
+    case TypeNode::TYPE_PTR:
+    case TypeNode::TYPE_REF:
+    case TypeNode::TYPE_REF_MUT:
+        return {8, 8, true};
+    case TypeNode::TYPE_STRUCT:
+    case TypeNode::TYPE_LIST:
+    case TypeNode::TYPE_MAP:
+    case TypeNode::TYPE_TUPLE:
+        break;
+    }
+    return {};
+}
+
+static std::string structLayoutSummary(StructDefNode* st, ProgramNode* program) {
+    if (!st) {
+        return {};
+    }
+    std::set<std::string> visiting;
+    LayoutInfo layout = computeStructLayout(st, program, visiting);
+    if (!layout.ok) {
+        return {};
+    }
+    std::string out = "size=" + std::to_string(layout.size) + " bytes";
+    if (!st->members || st->members->members.empty()) {
+        return out;
+    }
+
+    out += " | fields: ";
+    bool first = true;
+    for (StructMemberNode* member : st->members->members) {
+        if (!member || !member->type) {
+            continue;
+        }
+        std::set<std::string> fieldVisiting;
+        LayoutInfo field = computeTypeLayout(member->type, program, fieldVisiting);
+        if (!field.ok) {
+            continue;
+        }
+        if (!first) {
+            out += ", ";
+        }
+        first = false;
+        out += member->name + ": " + typeToString(member->type) + " (" +
+               std::to_string(field.size) + "B)";
+    }
+    return out;
 }
 
 static ProgramNode* parseProgramFromText(std::string_view text,
@@ -1111,8 +1537,9 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             if (!st) {
                 continue;
             }
+            std::string structSummary = structLayoutSummary(st, program);
             addSemanticSymbol(out, lines, st->name, 3,
-                              st->line > 0 ? st->line : 1, 0, {}, {});
+                              st->line > 0 ? st->line : 1, 0, structSummary, {});
             if (st->members) {
                 for (StructMemberNode* member : st->members->members) {
                     if (!member) {
@@ -3641,6 +4068,14 @@ int __mlang_compiler_document_hover(mlang_compiler_session* session,
     hover += " [" + std::string(mlang::compiler_api::symbolKindName(resolved->symbol.kind)) + "]";
     if (!resolved->symbol.type_info.empty()) {
         hover += " : " + resolved->symbol.type_info;
+    }
+    if (resolved->symbol.kind == 3) {
+        const std::string summary =
+            mlang::compiler_api::structLayoutSummaryFromText(
+                current->text, resolved->symbol.name);
+        if (!summary.empty()) {
+            hover += " | " + summary;
+        }
     }
     if (!resolved->symbol.signature.empty()) {
         hover += " | " + resolved->symbol.signature;

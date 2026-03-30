@@ -85,10 +85,17 @@ private:
     std::map<std::string, llvm::Value*> namedValues;
     std::map<std::string, llvm::Value*> globalNamedValues;
     std::map<std::string, llvm::Type*> structTypes;
+    struct StructFieldLayout
+    {
+        unsigned storageIndex = 0;
+        bool packedBit = false;
+        unsigned bitOffset = 0;
+    };
     // Store struct member info: struct name -> vector of (member name, member
     // type)
     std::map<std::string, std::vector<std::pair<std::string, TypeNode*>>>
         structMembers;
+    std::map<std::string, std::vector<StructFieldLayout>> structFieldLayouts;
     // Track struct inheritance: derived struct name -> base struct name
     std::map<std::string, std::string> structBases;
     std::set<std::string> constantVariables;
@@ -305,6 +312,16 @@ private:
     void consumeMoveFromExpression(ExpressionNode* expr, int line,
                                    const std::string& context);
     llvm::StructType* getStructType(const std::string& name);
+    const StructFieldLayout* getStructFieldLayout(const std::string& structName,
+                                                  int fieldIndex) const;
+    llvm::Value* loadStructFieldValue(const std::string& structTypeName,
+                                      llvm::Value* structPtr, int fieldIndex,
+                                      TypeNode* fieldType,
+                                      const std::string& fieldName);
+    void storeStructFieldValue(const std::string& structTypeName,
+                               llvm::Value* structPtr, int fieldIndex,
+                               TypeNode* fieldType, llvm::Value* value,
+                               const std::string& fieldName, int line);
     std::string typeMangle(TypeNode* typeNode) const;
     std::string functionSignatureKey(FunctionDefNode* node) const;
     std::string functionSymbolName(FunctionDefNode* node) const;
@@ -373,6 +390,7 @@ private:
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
+    llvm::Value* generateSizeofExpression(SizeofExpressionNode* node);
     /// \brief Lower an inline asm expression to LLVM inline asm.
     ///
     /// Current constraints are intentionally narrow so optimization behavior
@@ -441,6 +459,7 @@ private:
     llvm::Value* getLValuePointer(ExpressionNode* expr, int line);
     TypeNode* getLValueType(ExpressionNode* expr, int line);
     TypeNode* getPointerElementType(ExpressionNode* expr, int line);
+    TypeNode* inferExpressionTypeNode(ExpressionNode* expr, int line);
     void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
                            bool pretty, std::string& cFormat,
                            std::vector<llvm::Value*>& argValues, int line);

@@ -152,6 +152,7 @@ static int is_try_question_context()
 "for"           { return FOR; }
 "while"         { return WHILE; }
 "unsafe"        { return UNSAFE; }
+"sizeof"        { return SIZEOF; }
 "asm"           { return ASM; }
 "volatile"      { return VOLATILE; }
 "in"            { return IN; }
@@ -165,6 +166,7 @@ static int is_try_question_context()
 "var"           { return VAR; }
 "void"          { return VOID; }
 "bool"          { return BOOL; }
+"bit"           { return BIT; }
 "true"          { return TRUE_LIT; }
 "false"         { return FALSE_LIT; }
 "f32"           { return FLOAT; }

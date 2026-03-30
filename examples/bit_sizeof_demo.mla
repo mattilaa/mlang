@@ -1,0 +1,66 @@
+mod std::bits;
+mod std::bitset;
+
+use std::bits::OFF;
+use std::bits::ON;
+use std::bitset::BitSet;
+
+struct DeviceFlags {
+    var power: bit;
+    var fault: bit;
+    var armed: bool;
+};
+
+struct DeviceFlags2 {
+    var armed: bool;
+    var power: bit;
+    var fault: bit;
+};
+
+fn main() -> i32 {
+    var flags: DeviceFlags = DeviceFlags {
+        power: OFF(),
+        fault: 0,
+        armed: true
+    };
+
+    var flags2: DeviceFlags2 = DeviceFlags2 {
+        armed: true,
+        power: OFF(),
+        fault: 0
+    };
+    println!("sizeof(bit)={}", sizeof(bit));
+    println!("sizeof(bool)={}", sizeof(bool));
+    println!("sizeof(u8)={}", sizeof(u8));
+    println!("sizeof(u16)={}", sizeof(u16));
+    println!("sizeof(DeviceFlags)={}", sizeof(DeviceFlags));
+    println!("sizeof(DeviceFlags2)={}", sizeof(DeviceFlags2));
+    println!("sizeof(flags)={}", sizeof(flags));
+    println!("sizeof(flags2)={}", sizeof(flags2));
+    println!("sizeof(list<bool>)={}", sizeof(list<bool>));
+
+    println!("power={}", i32(flags.power));
+    flags.power = 1;
+    flags.fault = ON();
+    println!("power={} fault={}", i32(flags.power), i32(flags.fault));
+    println!("flags2 armed={} power={} fault={}",
+             flags2.armed ? 1 : 0, i32(flags2.power), i32(flags2.fault));
+
+    let r: Result<BitSet, str8> = BitSet::new(0);
+    if r.is_err() {
+        println!("bitset init failed: {}", r.unwrap_err());
+        return 1;
+    }
+    let bs: BitSet = r.unwrap();
+    if bs.push(true) != 0 { return 1; }
+    if bs.push(false) != 0 { return 1; }
+    if bs.push(true) != 0 { return 1; }
+    if bs.push(false) != 0 { return 1; }
+    println!("bitset bits={}", bs.len());
+    if bs.resize(8, false) != 0 { return 1; }
+    println!("bitset bits after resize={}", bs.len());
+    if bs.resize(16, false) != 0 { return 1; }
+    println!("bitset bits after second resize={}", bs.len());
+    bs.close();
+    return 0;
+}

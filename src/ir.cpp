@@ -137,6 +137,8 @@ static TypeNode* type_from_text(std::string t)
     t = trim_copy(t);
     if(t == "bool")
         return new TypeNode(TypeNode::TYPE_BOOL);
+    if(t == "bit")
+        return new TypeNode(TypeNode::TYPE_BIT);
     if(t == "i32")
         return new TypeNode(TypeNode::TYPE_I32);
     if(t == "i8")
@@ -258,6 +260,11 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
     if(auto* tryE = dynamic_cast<TryExpressionNode*>(node))
     {
         collectUsedIdents(tryE->expression, out);
+        return;
+    }
+    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(node))
+    {
+        collectUsedIdents(sizeofExpr->expressionTarget, out);
         return;
     }
     if(auto* es = dynamic_cast<ExpressionStatementNode*>(node))
@@ -553,6 +560,7 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
     case TypeNode::TYPE_VOID:
         return llvm::Type::getVoidTy(context);
     case TypeNode::TYPE_BOOL:
+    case TypeNode::TYPE_BIT:
         return llvm::Type::getInt1Ty(context);
     case TypeNode::TYPE_INT:
     case TypeNode::TYPE_I32:
@@ -720,6 +728,8 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
         return "void";
     case TypeNode::TYPE_BOOL:
         return "bool";
+    case TypeNode::TYPE_BIT:
+        return "bit";
     case TypeNode::TYPE_INT:
         return "i32";
     case TypeNode::TYPE_I32:
@@ -814,6 +824,8 @@ static std::string displayTypeName(TypeNode* type)
         return "void";
     case TypeNode::TYPE_BOOL:
         return "bool";
+    case TypeNode::TYPE_BIT:
+        return "bit";
     case TypeNode::TYPE_INT:
         return "i32";
     case TypeNode::TYPE_FLOAT:
@@ -879,6 +891,17 @@ static std::string normalizeTestSuiteName(std::string name)
     if(name.empty())
         return "Main";
     return name;
+}
+
+static bool isBitFieldTypeNode(TypeNode* type)
+{
+    if(!type)
+        return false;
+    if(type->kind == TypeNode::TYPE_BIT)
+        return true;
+    if(auto* ref = dynamic_cast<StructTypeRefNode*>(type))
+        return ref->structName == "bit";
+    return false;
 }
 
 static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
@@ -2908,6 +2931,99 @@ bool CodeGenerator::structHasFieldNamed(const std::string& structTypeName,
     return false;
 }
 
+const CodeGenerator::StructFieldLayout*
+CodeGenerator::getStructFieldLayout(const std::string& structName,
+                                    int fieldIndex) const
+{
+    auto it = structFieldLayouts.find(structName);
+    if(it == structFieldLayouts.end())
+        return nullptr;
+    if(fieldIndex < 0 ||
+       static_cast<size_t>(fieldIndex) >= it->second.size())
+        return nullptr;
+    return &it->second[static_cast<size_t>(fieldIndex)];
+}
+
+llvm::Value* CodeGenerator::loadStructFieldValue(const std::string& structTypeName,
+                                                 llvm::Value* structPtr,
+                                                 int fieldIndex,
+                                                 TypeNode* fieldType,
+                                                 const std::string& fieldName)
+{
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+        return nullptr;
+
+    const StructFieldLayout* layout =
+        getStructFieldLayout(structTypeName, fieldIndex);
+    if(!layout)
+        return nullptr;
+
+    llvm::Type* storageType = structType->getElementType(layout->storageIndex);
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, layout->storageIndex, fieldName + "_ptr");
+    llvm::Value* storage = builder.CreateLoad(storageType, fieldPtr, fieldName);
+
+    if(!layout->packedBit)
+        return storage;
+
+    llvm::Value* shifted = builder.CreateLShr(
+        storage, llvm::ConstantInt::get(storageType, layout->bitOffset),
+        fieldName + ".bit_shift");
+    llvm::Value* masked = builder.CreateAnd(
+        shifted, llvm::ConstantInt::get(storageType, 1), fieldName + ".bit");
+    return builder.CreateTrunc(masked, llvm::Type::getInt1Ty(context),
+                               fieldName);
+}
+
+void CodeGenerator::storeStructFieldValue(const std::string& structTypeName,
+                                          llvm::Value* structPtr,
+                                          int fieldIndex,
+                                          TypeNode* fieldType,
+                                          llvm::Value* value,
+                                          const std::string& fieldName,
+                                          int line)
+{
+    llvm::StructType* structType = getStructType(structTypeName);
+    if(!structType)
+        return;
+
+    const StructFieldLayout* layout =
+        getStructFieldLayout(structTypeName, fieldIndex);
+    if(!layout)
+        return;
+
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, structPtr, layout->storageIndex, fieldName + "_ptr");
+    llvm::Type* storageType = structType->getElementType(layout->storageIndex);
+
+    if(!layout->packedBit)
+    {
+        builder.CreateStore(value, fieldPtr);
+        return;
+    }
+
+    llvm::Value* storage = builder.CreateLoad(storageType, fieldPtr,
+                                              fieldName + ".storage");
+    llvm::Value* zextValue = value;
+    if(!value->getType()->isIntegerTy(1))
+    {
+        reportError(line, "bit field '" + fieldName + "' expects a bit value");
+        return;
+    }
+    zextValue = builder.CreateZExt(value, storageType, fieldName + ".zext");
+    llvm::Value* shifted = builder.CreateShl(
+        zextValue, llvm::ConstantInt::get(storageType, layout->bitOffset),
+        fieldName + ".shifted");
+    llvm::Value* mask = llvm::ConstantInt::get(
+        storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
+    llvm::Value* cleared =
+        builder.CreateAnd(storage, builder.CreateNot(mask), fieldName + ".clear");
+    llvm::Value* combined =
+        builder.CreateOr(cleared, shifted, fieldName + ".combined");
+    builder.CreateStore(combined, fieldPtr);
+}
+
 std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
                                                     int line)
 {
@@ -3422,6 +3538,198 @@ TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
 
     reportError(line, "dereference requires a pointer value");
     return nullptr;
+}
+
+TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
+{
+    if(!expr)
+        return nullptr;
+
+    if(TypeNode* lvalueType = getLValueType(expr, line))
+        return cloneTypeNode(lvalueType);
+
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_BOOL);
+    if(dynamic_cast<IntLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_I64);
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_FLOAT);
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_DOUBLE);
+    if(dynamic_cast<StringLiteralNode*>(expr) ||
+       dynamic_cast<FormatNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_STR8);
+
+    if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+        return new TypeNode(castExpr->targetType);
+
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR ||
+           unary->op == UnaryOpNode::OP_ADDR_MUT)
+        {
+            TypeNode* pointee = inferExpressionTypeNode(unary->operand, line);
+            if(!pointee)
+                return nullptr;
+            return new PointerTypeNode(pointee);
+        }
+        if(unary->op == UnaryOpNode::OP_DEREF)
+            return cloneTypeNode(getPointerElementType(unary->operand, line));
+    }
+
+    if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
+    {
+        if(TypeNode* thenType =
+               inferExpressionTypeNode(ternary->trueExpr, line))
+            return thenType;
+        return inferExpressionTypeNode(ternary->falseExpr, line);
+    }
+
+    if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(expr))
+    {
+        auto* typeList = new TypeListNode();
+        if(tupleLit->elements)
+        {
+            for(auto* elem : tupleLit->elements->elements)
+            {
+                TypeNode* elemType = inferExpressionTypeNode(elem, line);
+                if(!elemType)
+                    return nullptr;
+                typeList->addType(elemType);
+            }
+        }
+        return new TupleTypeNode(typeList);
+    }
+
+    if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+    {
+        if(!listLit->elements || listLit->elements->elements.empty())
+            return new ListTypeNode();
+
+        TypeNode* elemType =
+            inferExpressionTypeNode(listLit->elements->elements.front(), line);
+        if(!elemType)
+            return nullptr;
+        return new GenericListTypeNode(elemType);
+    }
+
+    if(auto* arrFill = dynamic_cast<ArrayFillNode*>(expr))
+    {
+        TypeNode* elemType = inferExpressionTypeNode(arrFill->value, line);
+        if(!elemType)
+            return nullptr;
+        return new GenericListTypeNode(elemType);
+    }
+
+    if(auto* mapLit = dynamic_cast<MapLiteralNode*>(expr))
+    {
+        if(!mapLit->entries || mapLit->entries->entries.empty())
+            return new TypeNode(TypeNode::TYPE_MAP);
+
+        auto* entry = mapLit->entries->entries.front();
+        TypeNode* keyType = inferExpressionTypeNode(entry->key, line);
+        TypeNode* valueType = inferExpressionTypeNode(entry->value, line);
+        if(!keyType || !valueType)
+            return nullptr;
+        return new MapTypeNode(keyType, valueType);
+    }
+
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(bin->op == BinaryOpNode::OP_LT || bin->op == BinaryOpNode::OP_GT ||
+           bin->op == BinaryOpNode::OP_LE || bin->op == BinaryOpNode::OP_GE ||
+           bin->op == BinaryOpNode::OP_EQ || bin->op == BinaryOpNode::OP_NE ||
+           bin->op == BinaryOpNode::OP_AND || bin->op == BinaryOpNode::OP_OR)
+            return new TypeNode(TypeNode::TYPE_BOOL);
+
+        if(bin->op == BinaryOpNode::OP_SPACESHIP)
+            return new TypeNode(TypeNode::TYPE_I32);
+
+        TypeNode* leftType = inferExpressionTypeNode(bin->left, line);
+        TypeNode* rightType = inferExpressionTypeNode(bin->right, line);
+        if(leftType &&
+           (leftType->kind == TypeNode::TYPE_STR8 ||
+            leftType->kind == TypeNode::TYPE_STR16 ||
+            leftType->kind == TypeNode::TYPE_STRING))
+            return leftType;
+        if(rightType &&
+           (rightType->kind == TypeNode::TYPE_DOUBLE ||
+            rightType->kind == TypeNode::TYPE_FLOAT))
+            return rightType;
+        if(leftType)
+            return leftType;
+        return rightType;
+    }
+
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        auto overloadIt = functionOverloads.find(call->name);
+        if(overloadIt != functionOverloads.end())
+        {
+            for(const auto& info : overloadIt->second)
+            {
+                if(info.node && info.node->returnType && isOverloadVisible(info))
+                    return cloneTypeNode(info.node->returnType);
+            }
+        }
+    }
+
+    if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(methodCall->methodName == "clone")
+            return inferExpressionTypeNode(methodCall->object, line);
+        if(methodCall->methodName == "len")
+            return new TypeNode(TypeNode::TYPE_I64);
+        if(methodCall->methodName == "is_empty" ||
+           methodCall->methodName == "is_ok" ||
+           methodCall->methodName == "is_err" ||
+           methodCall->methodName == "is_some")
+            return new TypeNode(TypeNode::TYPE_BOOL);
+    }
+
+    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_I64);
+
+    return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
+{
+    TypeNode* targetType = nullptr;
+    if(node->typeTarget)
+    {
+        targetType = cloneTypeNode(node->typeTarget);
+        if(auto* namedTarget =
+               dynamic_cast<StructTypeRefNode*>(node->typeTarget))
+        {
+            auto varIt = variableTypes.find(namedTarget->structName);
+            if(varIt != variableTypes.end())
+            {
+                IdentifierNode idExpr(namedTarget->structName);
+                idExpr.line = node->line;
+                targetType = inferExpressionTypeNode(&idExpr, node->line);
+            }
+        }
+    }
+    else
+        targetType = inferExpressionTypeNode(node->expressionTarget, node->line);
+
+    if(!targetType)
+    {
+        reportError(node->line, "cannot infer type for sizeof expression");
+        return nullptr;
+    }
+
+    llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
+    if(!llvmType)
+    {
+        reportError(node->line, "cannot lower sizeof target type");
+        return nullptr;
+    }
+
+    const llvm::DataLayout& dl = module->getDataLayout();
+    uint64_t sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
+    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), sizeBytes);
 }
 
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
@@ -5984,6 +6292,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto tryExpr = dynamic_cast<TryExpressionNode*>(node))
     {
         return generateTryExpression(tryExpr);
+    }
+    else if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(node))
+    {
+        return generateSizeofExpression(sizeofExpr);
     }
     else if(auto* inlineAsm = dynamic_cast<InlineAsmNode*>(node))
     {
@@ -10465,6 +10777,7 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
 {
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
+    std::vector<StructFieldLayout> layouts;
 
     // If this struct has a base, include base struct's fields first
     if(!node->baseName.empty())
@@ -10472,10 +10785,17 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
         auto baseMemIt = structMembers.find(node->baseName);
         if(baseMemIt != structMembers.end())
         {
+            llvm::StructType* baseStructType = getStructType(node->baseName);
+            auto baseLayoutIt = structFieldLayouts.find(node->baseName);
             for(const auto& baseMember : baseMemIt->second)
-            {
-                memberTypes.push_back(getLLVMTypeFromNode(baseMember.second));
                 members.push_back(baseMember);
+            if(baseLayoutIt != structFieldLayouts.end())
+                layouts.insert(layouts.end(), baseLayoutIt->second.begin(),
+                               baseLayoutIt->second.end());
+            if(baseStructType)
+            {
+                for(unsigned i = 0; i < baseStructType->getNumElements(); ++i)
+                    memberTypes.push_back(baseStructType->getElementType(i));
             }
         }
         else
@@ -10486,16 +10806,41 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     }
 
     // Add this struct's own members
+    bool packingBitRun = false;
+    unsigned packedStorageIndex = 0;
+    unsigned packedBitOffset = 0;
     for(auto member : node->members->members)
     {
-        memberTypes.push_back(getLLVMTypeFromNode(member->type));
         members.push_back({member->name, member->type});
+        StructFieldLayout layout;
+        if(isBitFieldTypeNode(member->type))
+        {
+            if(!packingBitRun || packedBitOffset >= 8)
+            {
+                packedStorageIndex = static_cast<unsigned>(memberTypes.size());
+                memberTypes.push_back(llvm::Type::getInt8Ty(context));
+                packedBitOffset = 0;
+                packingBitRun = true;
+            }
+            layout.storageIndex = packedStorageIndex;
+            layout.packedBit = true;
+            layout.bitOffset = packedBitOffset++;
+        }
+        else
+        {
+            packingBitRun = false;
+            packedBitOffset = 0;
+            layout.storageIndex = static_cast<unsigned>(memberTypes.size());
+            memberTypes.push_back(getLLVMTypeFromNode(member->type));
+        }
+        layouts.push_back(layout);
     }
 
     llvm::StructType* structType =
         llvm::StructType::create(context, memberTypes, node->name);
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
+    structFieldLayouts[node->name] = layouts;
     if(node->deriveDebug)
         debugStructs.insert(node->name);
 
@@ -12607,7 +12952,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             if(!initValue)
                 return;
             targetType = initValue->getType();
-            if(targetType->isIntegerTy(1))
+            if(TypeNode* inferredNode =
+                   inferExpressionTypeNode(node->initExpr, node->line))
+                kind = inferredNode->kind;
+            else if(targetType->isIntegerTy(1))
                 kind = TypeNode::TYPE_BOOL;
             else if(targetType->isFloatTy())
                 kind = TypeNode::TYPE_FLOAT;
@@ -12801,6 +13149,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         auto infer_kind_from_expr =
             [&](ExpressionNode* expr) -> TypeNode::TypeKind
         {
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expr))
+                return cast->targetType;
             if(dynamic_cast<IntLiteralNode*>(expr))
                 return TypeNode::TYPE_I64; // generateIntLiteral always emits
                                            // i64
@@ -13858,11 +14208,8 @@ void CodeGenerator::generateFieldAssignment(FieldAssignmentNode* node)
         }
     }
 
-    // Create GEP to field and store
-    llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, static_cast<unsigned>(fieldIndex),
-        fieldName + "_ptr");
-    builder.CreateStore(value, fieldPtr);
+    storeStructFieldValue(structTypeName, structPtr, fieldIndex, fieldType,
+                          value, fieldName, node->line);
 }
 
 void CodeGenerator::generateDerefAssignment(DerefAssignmentNode* node)
@@ -14084,10 +14431,14 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
             llvm::StructType* structType = getStructType(objTypeName);
             if(!structType)
                 return {nullptr, ""};
+            const StructFieldLayout* layout =
+                getStructFieldLayout(objTypeName, fieldIndex);
+            if(!layout)
+                return {nullptr, ""};
 
             // Get pointer to the nested struct field
             llvm::Value* fieldPtr = builder.CreateStructGEP(
-                structType, objPtr, static_cast<unsigned>(fieldIndex),
+                structType, objPtr, layout->storageIndex,
                 fieldAccess->fieldName + "_ptr");
 
             return {fieldPtr, structTypeRef->structName};
@@ -14320,19 +14671,8 @@ llvm::Value* CodeGenerator::generateFieldAccess(FieldAccessNode* node)
         return nullptr;
     }
 
-    // Get struct type
-    llvm::StructType* structType = getStructType(structTypeName);
-    if(!structType)
-        return nullptr;
-
-    // Get field type
-    llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
-
-    // Create GEP to field and load
-    llvm::Value* fieldPtr = builder.CreateStructGEP(
-        structType, structPtr, static_cast<unsigned>(fieldIndex),
-        node->fieldName + "_ptr");
-    return builder.CreateLoad(llvmFieldType, fieldPtr, node->fieldName);
+    return loadStructFieldValue(structTypeName, structPtr, fieldIndex,
+                                fieldType, node->fieldName);
 }
 
 void CodeGenerator::reportError(int line, const std::string& message)
@@ -18828,11 +19168,51 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     if(!value)
         return nullptr;
 
+    TypeNode* sourceTypeNode =
+        inferExpressionTypeNode(node->expression, node->line);
+
+    if(node->targetType == TypeNode::TYPE_BIT)
+    {
+        llvm::Type* bitType = llvm::Type::getInt1Ty(context);
+        if(value->getType()->isIntegerTy(1))
+            return value;
+
+        if(!value->getType()->isIntegerTy())
+        {
+            reportError(node->line, "bit cast expects an integer or bool value");
+            return nullptr;
+        }
+
+        if(auto* ci = llvm::dyn_cast<llvm::ConstantInt>(value))
+        {
+            const uint64_t raw = ci->getZExtValue();
+            if(raw > 1u)
+            {
+                reportError(node->line,
+                            "bit cast expects integer value 0 or 1");
+                return nullptr;
+            }
+        }
+
+        return builder.CreateICmpNE(
+            value, llvm::ConstantInt::get(value->getType(), 0), "bitcast");
+    }
+
     llvm::Type* targetType = getLLVMType(node->targetType);
     llvm::Type* sourceType = value->getType();
 
     if(sourceType == targetType)
         return value;
+
+    if(sourceType->isIntegerTy() && targetType->isIntegerTy())
+    {
+        bool treatAsUnsigned =
+            sourceType->isIntegerTy(1) ||
+            (sourceTypeNode && isUnsignedType(sourceTypeNode->kind));
+        return builder.CreateIntCast(value, targetType, !treatAsUnsigned,
+                                     treatAsUnsigned ? "zextcast"
+                                                     : "sextcast");
+    }
 
     // Integer to float/double
     if(sourceType->isIntegerTy())
@@ -19525,8 +19905,20 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
             return nullptr;
         }
 
-        // Get the expected field type from the struct
-        llvm::Type* expectedType = structType->getElementType(memberIndex);
+        const StructFieldLayout* layout =
+            getStructFieldLayout(structTypeName, memberIndex);
+        if(!layout)
+        {
+            reportError(node->line, "missing field layout for '" + fieldName +
+                                        "' in struct '" + structTypeName + "'");
+            return nullptr;
+        }
+
+        // Get the expected field type from the struct storage
+        llvm::Type* expectedType = layout->packedBit
+                                       ? llvm::Type::getInt1Ty(context)
+                                       : structType->getElementType(
+                                             layout->storageIndex);
         llvm::Type* actualType = fieldValue->getType();
 
         // Convert value to expected type if needed
@@ -19616,9 +20008,34 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         }
 
         // Insert the value into the struct
-        structVal = builder.CreateInsertValue(
-            structVal, fieldValue, static_cast<unsigned>(memberIndex),
-            structTypeName + "." + fieldName);
+        if(layout->packedBit)
+        {
+            llvm::Type* storageType = structType->getElementType(layout->storageIndex);
+            llvm::Value* currentStorage = builder.CreateExtractValue(
+                structVal, {layout->storageIndex},
+                structTypeName + "." + fieldName + ".storage");
+            llvm::Value* zextValue = builder.CreateZExt(
+                fieldValue, storageType, structTypeName + "." + fieldName + ".zext");
+            llvm::Value* shifted = builder.CreateShl(
+                zextValue, llvm::ConstantInt::get(storageType, layout->bitOffset),
+                structTypeName + "." + fieldName + ".shift");
+            llvm::Value* mask = llvm::ConstantInt::get(
+                storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
+            llvm::Value* cleared = builder.CreateAnd(
+                currentStorage, builder.CreateNot(mask),
+                structTypeName + "." + fieldName + ".clear");
+            llvm::Value* combined = builder.CreateOr(
+                cleared, shifted, structTypeName + "." + fieldName + ".combine");
+            structVal = builder.CreateInsertValue(
+                structVal, combined, {layout->storageIndex},
+                structTypeName + "." + fieldName);
+        }
+        else
+        {
+            structVal = builder.CreateInsertValue(
+                structVal, fieldValue, {layout->storageIndex},
+                structTypeName + "." + fieldName);
+        }
     }
 
     return structVal;
@@ -20841,8 +21258,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     // Generate the monomorphized struct type
     std::vector<llvm::Type*> memberTypes;
     std::vector<std::pair<std::string, TypeNode*>> members;
+    std::vector<StructFieldLayout> layouts;
 
     // Process each member, substituting type parameters
+    bool packingBitRun = false;
+    unsigned packedStorageIndex = 0;
+    unsigned packedBitOffset = 0;
     if(templateStruct->members)
     {
         for(auto* member : templateStruct->members->members)
@@ -20850,18 +21271,38 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             TypeNode* substitutedType =
                 substituteTypeParams(member->type, typeParams, typeArgs);
 
-            llvm::Type* llvmType = getLLVMTypeFromNode(substitutedType);
-            if(!llvmType)
-            {
-                std::cerr << "Error: Failed to get LLVM type for member '"
-                          << member->name << "' in " << mangledName
-                          << std::endl;
-                hasError = true;
-                return;
-            }
-
-            memberTypes.push_back(llvmType);
             members.push_back({member->name, substitutedType});
+            StructFieldLayout layout;
+            if(isBitFieldTypeNode(substitutedType))
+            {
+                if(!packingBitRun || packedBitOffset >= 8)
+                {
+                    packedStorageIndex = static_cast<unsigned>(memberTypes.size());
+                    memberTypes.push_back(llvm::Type::getInt8Ty(context));
+                    packedBitOffset = 0;
+                    packingBitRun = true;
+                }
+                layout.storageIndex = packedStorageIndex;
+                layout.packedBit = true;
+                layout.bitOffset = packedBitOffset++;
+            }
+            else
+            {
+                llvm::Type* llvmType = getLLVMTypeFromNode(substitutedType);
+                if(!llvmType)
+                {
+                    std::cerr << "Error: Failed to get LLVM type for member '"
+                              << member->name << "' in " << mangledName
+                              << std::endl;
+                    hasError = true;
+                    return;
+                }
+                packingBitRun = false;
+                packedBitOffset = 0;
+                layout.storageIndex = static_cast<unsigned>(memberTypes.size());
+                memberTypes.push_back(llvmType);
+            }
+            layouts.push_back(layout);
         }
     }
 
@@ -20872,6 +21313,7 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
     // Register the monomorphized type
     structTypes[mangledName] = structType;
     structMembers[mangledName] = members;
+    structFieldLayouts[mangledName] = layouts;
     monomorphizedTypes.insert(mangledName);
     mangledToGenericName[mangledName] = genericName;
     std::vector<TypeNode*> storedTypeArgs;
