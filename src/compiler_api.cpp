@@ -2985,6 +2985,48 @@ static std::vector<std::string> computeSemanticCompletions(
     return std::vector<std::string>(dedup.begin(), dedup.end());
 }
 
+static std::optional<std::vector<std::string>> fastBuiltinCompletionsFromText(
+    std::string_view text,
+    int line,
+    int column) {
+    const std::optional<size_t> offset = offsetFromLineColumn(text, line, column);
+    if (!offset.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto qualified = qualifiedCompletionContextAtOffset(text, *offset);
+    if (!qualified.has_value()) {
+        return std::nullopt;
+    }
+
+    std::string owner = qualified->owner;
+    if (qualified->member_access) {
+        if (owner == "self") {
+            return std::nullopt;
+        }
+        owner = visibleTypedOwnerFromText(text, line, owner);
+    }
+    owner = normalizeStructTypeName(owner);
+    if (owner.empty()) {
+        return std::nullopt;
+    }
+
+    const auto& builtin_members = builtinMemberNames(owner);
+    if (builtin_members.empty()) {
+        return std::nullopt;
+    }
+
+    std::vector<std::string> out;
+    out.reserve(builtin_members.size());
+    for (const auto& name : builtin_members) {
+        if (qualified->member_prefix.empty() ||
+            startsWith(name, qualified->member_prefix)) {
+            out.push_back(name);
+        }
+    }
+    return out;
+}
+
 static const char* symbolKindName(int kind) {
     switch (kind) {
     case 1:
@@ -3219,6 +3261,22 @@ public:
             completion_cache_uri_ == key &&
             completion_cache_line_ == line &&
             completion_cache_column_ == column) {
+            out_items = completion_cache_items_;
+            return Status::Ok;
+        }
+
+        const auto doc_it = documents_.find(key);
+        if (doc_it == documents_.end()) {
+            return Status::DocumentNotFound;
+        }
+        if (const auto quick =
+                fastBuiltinCompletionsFromText(doc_it->second.text, line, column);
+            quick.has_value()) {
+            completion_cache_items_ = *quick;
+            completion_cache_generation_ = semantic_generation_;
+            completion_cache_uri_ = key;
+            completion_cache_line_ = line;
+            completion_cache_column_ = column;
             out_items = completion_cache_items_;
             return Status::Ok;
         }
