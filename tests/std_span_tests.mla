@@ -28,7 +28,8 @@ fn test_span_sizeof_and_static_asserts() {
     let ints: Span<i32> = [1, 2, 3];
     let flags: span<bool> = [true, false];
     static_assert!(sizeof(list<i32>) == 16);
-    static_assert!(sizeof(list<bool>) == 16);
+    static_assert!(sizeof(ints) == sizeof(list<i32>));
+    static_assert!(sizeof(flags) == sizeof(list<bool>));
 
     verify_eq_i64(sizeof(ints), sizeof(list<i32>));
     verify_eq_i64(sizeof(flags), sizeof(list<bool>));

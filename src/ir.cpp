@@ -1826,8 +1826,69 @@ bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
         if(sizeofExpr->typeTarget)
             targetType = cloneTypeNode(sizeofExpr->typeTarget);
         else
-            targetType = inferExpressionTypeNode(sizeofExpr->expressionTarget,
-                                                sizeofExpr->line);
+        {
+            if(auto* id =
+                   dynamic_cast<IdentifierNode*>(sizeofExpr->expressionTarget))
+            {
+                auto it = variableTypes.find(id->name);
+                if(it != variableTypes.end())
+                {
+                    switch(it->second)
+                    {
+                    case TypeNode::TYPE_STRUCT:
+                    {
+                        auto sit = structVariableTypes.find(id->name);
+                        if(sit != structVariableTypes.end())
+                            targetType = new StructTypeRefNode(sit->second);
+                        break;
+                    }
+                    case TypeNode::TYPE_LIST:
+                    {
+                        auto lit = listElementTypes.find(id->name);
+                        if(lit != listElementTypes.end())
+                            targetType =
+                                new GenericListTypeNode(cloneTypeNode(lit->second));
+                        break;
+                    }
+                    case TypeNode::TYPE_MAP:
+                    {
+                        auto mit = mapKeyValueTypes.find(id->name);
+                        if(mit != mapKeyValueTypes.end())
+                            targetType = new MapTypeNode(
+                                cloneTypeNode(mit->second.first),
+                                cloneTypeNode(mit->second.second));
+                        break;
+                    }
+                    case TypeNode::TYPE_TUPLE:
+                    {
+                        auto tit = tupleElementTypes.find(id->name);
+                        if(tit != tupleElementTypes.end())
+                        {
+                            auto* types = new TypeListNode();
+                            for(auto* elem : tit->second)
+                                types->addType(cloneTypeNode(elem));
+                            targetType = new TupleTypeNode(types);
+                        }
+                        break;
+                    }
+                    case TypeNode::TYPE_PTR:
+                    {
+                        auto pit = pointerElementTypes.find(id->name);
+                        if(pit != pointerElementTypes.end())
+                            targetType =
+                                new PointerTypeNode(cloneTypeNode(pit->second));
+                        break;
+                    }
+                    default:
+                        targetType = new TypeNode(it->second);
+                        break;
+                    }
+                }
+            }
+            if(!targetType)
+                targetType = inferExpressionTypeNode(sizeofExpr->expressionTarget,
+                                                    sizeofExpr->line);
+        }
         if(!targetType)
             return false;
         llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
@@ -4144,15 +4205,217 @@ void CodeGenerator::generateAssertEq(AssertEqNode* node)
 
 void CodeGenerator::generateStaticAssert(StaticAssertNode* node)
 {
-    bool cond = false;
-    if(!evaluateCompileTimeBool(node->condition, cond))
+    auto resolveStaticAssertType = [&](SizeofExpressionNode* sizeofExpr)
+        -> TypeNode*
     {
-        reportError(
-            node->line,
-            "static_assert! requires a compile-time boolean expression");
-        return;
+        if(!sizeofExpr)
+            return nullptr;
+        if(sizeofExpr->typeTarget)
+            return cloneTypeNode(sizeofExpr->typeTarget);
+        if(auto* id =
+               dynamic_cast<IdentifierNode*>(sizeofExpr->expressionTarget))
+        {
+            auto it = variableTypes.find(id->name);
+            if(it != variableTypes.end())
+            {
+                switch(it->second)
+                {
+                case TypeNode::TYPE_STRUCT:
+                {
+                    auto sit = structVariableTypes.find(id->name);
+                    if(sit != structVariableTypes.end())
+                        return new StructTypeRefNode(sit->second);
+                    break;
+                }
+                case TypeNode::TYPE_LIST:
+                {
+                    auto lit = listElementTypes.find(id->name);
+                    if(lit != listElementTypes.end())
+                        return new GenericListTypeNode(cloneTypeNode(lit->second));
+                    break;
+                }
+                case TypeNode::TYPE_MAP:
+                {
+                    auto mit = mapKeyValueTypes.find(id->name);
+                    if(mit != mapKeyValueTypes.end())
+                        return new MapTypeNode(cloneTypeNode(mit->second.first),
+                                               cloneTypeNode(mit->second.second));
+                    break;
+                }
+                case TypeNode::TYPE_TUPLE:
+                {
+                    auto tit = tupleElementTypes.find(id->name);
+                    if(tit != tupleElementTypes.end())
+                    {
+                        auto* types = new TypeListNode();
+                        for(auto* elem : tit->second)
+                            types->addType(cloneTypeNode(elem));
+                        return new TupleTypeNode(types);
+                    }
+                    break;
+                }
+                case TypeNode::TYPE_PTR:
+                {
+                    auto pit = pointerElementTypes.find(id->name);
+                    if(pit != pointerElementTypes.end())
+                        return new PointerTypeNode(cloneTypeNode(pit->second));
+                    break;
+                }
+                default:
+                    return new TypeNode(it->second);
+                }
+            }
+        }
+        return inferExpressionTypeNode(sizeofExpr->expressionTarget,
+                                       sizeofExpr->line);
+    };
+
+    std::function<bool(ExpressionNode*, int64_t&)> evalConstInt =
+        [&](ExpressionNode* expr, int64_t& out) -> bool
+    {
+        if(!expr)
+            return false;
+        if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
+        {
+            TypeNode* targetType = resolveStaticAssertType(sizeofExpr);
+            if(!targetType)
+                return false;
+            llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
+            if(!llvmType)
+                return false;
+            out = static_cast<int64_t>(
+                module->getDataLayout().getTypeAllocSize(llvmType).getFixedValue());
+            return true;
+        }
+        if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
+        {
+            out = i->value;
+            return true;
+        }
+        if(auto* b = dynamic_cast<BoolLiteralNode*>(expr))
+        {
+            out = b->value ? 1 : 0;
+            return true;
+        }
+        if(auto* un = dynamic_cast<UnaryOpNode*>(expr))
+        {
+            int64_t v = 0;
+            if(!evalConstInt(un->operand, v))
+                return false;
+            switch(un->op)
+            {
+            case UnaryOpNode::OP_NEG:
+                out = -v;
+                return true;
+            case UnaryOpNode::OP_NOT:
+                out = (v == 0) ? 1 : 0;
+                return true;
+            case UnaryOpNode::OP_BITNOT:
+                out = ~v;
+                return true;
+            default:
+                return false;
+            }
+        }
+        if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+        {
+            int64_t lhs = 0;
+            int64_t rhs = 0;
+            if(!evalConstInt(bin->left, lhs) || !evalConstInt(bin->right, rhs))
+                return false;
+            switch(bin->op)
+            {
+            case BinaryOpNode::OP_PLUS:
+                out = lhs + rhs;
+                return true;
+            case BinaryOpNode::OP_MINUS:
+                out = lhs - rhs;
+                return true;
+            case BinaryOpNode::OP_MULTIPLY:
+                out = lhs * rhs;
+                return true;
+            case BinaryOpNode::OP_DIVIDE:
+                if(rhs == 0)
+                    return false;
+                out = lhs / rhs;
+                return true;
+            case BinaryOpNode::OP_MODULO:
+                if(rhs == 0)
+                    return false;
+                out = lhs % rhs;
+                return true;
+            case BinaryOpNode::OP_BITAND:
+                out = lhs & rhs;
+                return true;
+            case BinaryOpNode::OP_BITOR:
+                out = lhs | rhs;
+                return true;
+            case BinaryOpNode::OP_BITXOR:
+                out = lhs ^ rhs;
+                return true;
+            case BinaryOpNode::OP_SHL:
+                out = lhs << rhs;
+                return true;
+            case BinaryOpNode::OP_SHR:
+                out = lhs >> rhs;
+                return true;
+            case BinaryOpNode::OP_LT:
+                out = lhs < rhs ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_GT:
+                out = lhs > rhs ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_LE:
+                out = lhs <= rhs ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_GE:
+                out = lhs >= rhs ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_EQ:
+                out = lhs == rhs ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_NE:
+                out = lhs != rhs ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_AND:
+                out = (lhs != 0 && rhs != 0) ? 1 : 0;
+                return true;
+            case BinaryOpNode::OP_OR:
+                out = (lhs != 0 || rhs != 0) ? 1 : 0;
+                return true;
+            default:
+                return false;
+            }
+        }
+        if(auto* tern = dynamic_cast<TernaryNode*>(expr))
+        {
+            int64_t cond = 0;
+            if(!evalConstInt(tern->condition, cond))
+                return false;
+            return evalConstInt(cond != 0 ? tern->trueExpr : tern->falseExpr,
+                                out);
+        }
+        return false;
+    };
+
+    int64_t condInt = 0;
+    if(!evalConstInt(node->condition, condInt))
+    {
+        llvm::Value* folded = node->condition ? generateExpression(node->condition)
+                                              : nullptr;
+        if(auto* foldedInt = llvm::dyn_cast_or_null<llvm::ConstantInt>(folded))
+        {
+            condInt = foldedInt->isZero() ? 0 : 1;
+        }
+        else
+        {
+            reportError(
+                node->line,
+                "static_assert! requires a compile-time boolean expression");
+            return;
+        }
     }
-    if(!cond)
+    if(condInt == 0)
     {
         reportError(node->line, "static_assert! failed");
     }
