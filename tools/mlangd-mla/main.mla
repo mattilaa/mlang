@@ -1906,6 +1906,22 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "unwrap") == 1 { return "builtin Result/Option method"; }
     if eq(label, "unwrap_err") == 1 { return "builtin Result method"; }
     if eq(label, "is_some") == 1 { return "builtin Option method"; }
+    if eq(label, "set") == 1 { return "BitSet method"; }
+    if eq(label, "get") == 1 { return "BitSet method"; }
+    if eq(label, "toggle") == 1 { return "BitSet method"; }
+    if eq(label, "push") == 1 { return "BitSet method"; }
+    if eq(label, "pop") == 1 { return "BitSet method"; }
+    if eq(label, "resize") == 1 { return "BitSet method"; }
+    if eq(label, "clear") == 1 { return "BitSet method"; }
+    if eq(label, "len") == 1 { return "BitSet method"; }
+    if eq(label, "capacity") == 1 { return "BitSet method"; }
+    if eq(label, "count_ones") == 1 { return "BitSet method"; }
+    if eq(label, "and_eq") == 1 { return "BitSet method"; }
+    if eq(label, "or_eq") == 1 { return "BitSet method"; }
+    if eq(label, "xor_eq") == 1 { return "BitSet method"; }
+    if eq(label, "not_eq") == 1 { return "BitSet method"; }
+    if eq(label, "raw_handle") == 1 { return "BitSet method"; }
+    if eq(label, "close") == 1 { return "BitSet method"; }
     return String::new();
 }
 
@@ -1942,6 +1958,54 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "is_some") == 1 {
         return "Option<T>.is_some() returns true when the value is Some.";
+    }
+    if eq(label, "set") == 1 {
+        return "BitSet.set(index, value) writes a single bit at the given index.";
+    }
+    if eq(label, "get") == 1 {
+        return "BitSet.get(index) returns Result<bool, str8> for the bit at the given index.";
+    }
+    if eq(label, "toggle") == 1 {
+        return "BitSet.toggle(index) flips a single bit in place.";
+    }
+    if eq(label, "push") == 1 {
+        return "BitSet.push(value) appends one bit to the packed bitset.";
+    }
+    if eq(label, "pop") == 1 {
+        return "BitSet.pop() removes and returns the last bit as Result<bool, str8>.";
+    }
+    if eq(label, "resize") == 1 {
+        return "BitSet.resize(new_len, fill) changes the logical bit length and fills new bits.";
+    }
+    if eq(label, "clear") == 1 {
+        return "BitSet.clear() resets all stored bits to zero.";
+    }
+    if eq(label, "len") == 1 {
+        return "BitSet.len() returns the logical bit length.";
+    }
+    if eq(label, "capacity") == 1 {
+        return "BitSet.capacity() returns the reserved capacity in bits.";
+    }
+    if eq(label, "count_ones") == 1 {
+        return "BitSet.count_ones() counts how many bits are set to 1.";
+    }
+    if eq(label, "and_eq") == 1 {
+        return "BitSet.and_eq(rhs_handle) applies an in-place bitwise AND with another bitset.";
+    }
+    if eq(label, "or_eq") == 1 {
+        return "BitSet.or_eq(rhs_handle) applies an in-place bitwise OR with another bitset.";
+    }
+    if eq(label, "xor_eq") == 1 {
+        return "BitSet.xor_eq(rhs_handle) applies an in-place bitwise XOR with another bitset.";
+    }
+    if eq(label, "not_eq") == 1 {
+        return "BitSet.not_eq() inverts all bits in place.";
+    }
+    if eq(label, "raw_handle") == 1 {
+        return "BitSet.raw_handle() returns the underlying runtime handle.";
+    }
+    if eq(label, "close") == 1 {
+        return "BitSet.close() releases the underlying packed bitset storage.";
     }
     if eq(label, "bool") == 1 {
         return "Boolean type with true/false values.";
@@ -2718,8 +2782,26 @@ fn handle_completion(payload: str8) -> str8 {
         Err(_e) => 0
     };
 
-    let current_symbols: list<DocumentSymbol> = load_document_symbols(uri);
-    let current_text: str8 = text_store_get(g_text_store_handle, uri);
+    var need_symbol_meta: i32 = 0;
+    for i in 0..n {
+        let ir0: Result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
+        if ir0.is_err() { continue; }
+        let label0: str8 = match ir0 {
+            Ok(v) => v,
+            Err(_e) => String::new()
+        };
+        if len(completion_detail(label0)) == 0 || len(completion_documentation(label0)) == 0 {
+            need_symbol_meta = 1;
+            break;
+        }
+    }
+
+    var current_symbols: list<DocumentSymbol> = [];
+    var current_text: str8 = String::new();
+    if need_symbol_meta == 1 {
+        current_symbols = load_document_symbols(uri);
+        current_text = text_store_get(g_text_store_handle, uri);
+    }
 
     var out: str8 = String::new();
     let p0: str8 = concat(out, "[");
