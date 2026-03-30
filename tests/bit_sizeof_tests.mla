@@ -38,6 +38,16 @@ struct PackedByteFlags {
     var b7: bit;
 };
 
+struct MixedPackedFlags {
+    var b0: bit;
+    var b1: bit;
+    var b2: bit;
+    var b3: bit;
+    var b4: bit;
+    var b5: bit;
+    var ready: bool;
+};
+
 #[test]
 fn test_bit_values_and_struct_field_updates() {
     var state: bit = 0;
@@ -137,6 +147,43 @@ fn test_eight_bits_pack_into_one_byte() {
     verify_eq_i32(1, i32(bits.b5));
     verify_eq_i32(1, i32(bits.b6));
     verify_eq_i32(1, i32(bits.b7));
+}
+
+#[test]
+fn test_six_bits_and_one_bool_take_two_bytes() {
+    verify_eq_i64(2, sizeof(MixedPackedFlags));
+
+    var flags: MixedPackedFlags = MixedPackedFlags {
+        b0: ON(),
+        b1: OFF(),
+        b2: ON(),
+        b3: OFF(),
+        b4: ON(),
+        b5: OFF(),
+        ready: true
+    };
+    verify_eq_i64(2, sizeof(flags));
+
+    verify_eq_i32(1, i32(flags.b0));
+    verify_eq_i32(0, i32(flags.b1));
+    verify_eq_i32(1, i32(flags.b2));
+    verify_eq_i32(0, i32(flags.b3));
+    verify_eq_i32(1, i32(flags.b4));
+    verify_eq_i32(0, i32(flags.b5));
+    verify(flags.ready);
+
+    flags.b1 = ON();
+    flags.b3 = ON();
+    flags.b5 = ON();
+    flags.ready = false;
+
+    verify_eq_i32(1, i32(flags.b0));
+    verify_eq_i32(1, i32(flags.b1));
+    verify_eq_i32(1, i32(flags.b2));
+    verify_eq_i32(1, i32(flags.b3));
+    verify_eq_i32(1, i32(flags.b4));
+    verify_eq_i32(1, i32(flags.b5));
+    verify(!flags.ready);
 }
 
 #[test]
