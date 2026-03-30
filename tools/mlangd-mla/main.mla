@@ -92,6 +92,11 @@ var g_log_level: i32 = 2;
 var g_log_handle: i64 = 0;
 var g_log_color: i32 = 0;
 
+struct CompletionMeta {
+    var detail: str8;
+    var doc: str8;
+};
+
 fn log_level_error() -> i32 { return 0; }
 fn log_level_warn() -> i32 { return 1; }
 fn log_level_info() -> i32 { return 2; }
@@ -1896,6 +1901,27 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "Mutex") == 1 { return "builtin mutex handle payload marker type"; }
     if eq(label, "Atomic64") == 1 { return "builtin 64-bit atomic handle payload marker type"; }
     if eq(label, "string") == 1 { return "builtin UTF-8 string type"; }
+    if eq(label, "is_ok") == 1 { return "builtin Result method"; }
+    if eq(label, "is_err") == 1 { return "builtin Result method"; }
+    if eq(label, "unwrap") == 1 { return "builtin Result/Option method"; }
+    if eq(label, "unwrap_err") == 1 { return "builtin Result method"; }
+    if eq(label, "is_some") == 1 { return "builtin Option method"; }
+    if eq(label, "set") == 1 { return "BitSet method"; }
+    if eq(label, "get") == 1 { return "BitSet method"; }
+    if eq(label, "toggle") == 1 { return "BitSet method"; }
+    if eq(label, "push") == 1 { return "BitSet method"; }
+    if eq(label, "pop") == 1 { return "BitSet method"; }
+    if eq(label, "resize") == 1 { return "BitSet method"; }
+    if eq(label, "clear") == 1 { return "BitSet method"; }
+    if eq(label, "len") == 1 { return "BitSet method"; }
+    if eq(label, "capacity") == 1 { return "BitSet method"; }
+    if eq(label, "count_ones") == 1 { return "BitSet method"; }
+    if eq(label, "and_eq") == 1 { return "BitSet method"; }
+    if eq(label, "or_eq") == 1 { return "BitSet method"; }
+    if eq(label, "xor_eq") == 1 { return "BitSet method"; }
+    if eq(label, "not_eq") == 1 { return "BitSet method"; }
+    if eq(label, "raw_handle") == 1 { return "BitSet method"; }
+    if eq(label, "close") == 1 { return "BitSet method"; }
     return String::new();
 }
 
@@ -1917,6 +1943,69 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "f64") == 1 {
         return "Alias for f64.";
+    }
+    if eq(label, "is_ok") == 1 {
+        return "Result<T, E>.is_ok() returns true when the value is Ok.";
+    }
+    if eq(label, "is_err") == 1 {
+        return "Result<T, E>.is_err() returns true when the value is Err.";
+    }
+    if eq(label, "unwrap") == 1 {
+        return "Result<T, E>.unwrap() returns the Ok value and may panic on Err. Option<T>.unwrap() returns the Some value.";
+    }
+    if eq(label, "unwrap_err") == 1 {
+        return "Result<T, E>.unwrap_err() returns the Err value.";
+    }
+    if eq(label, "is_some") == 1 {
+        return "Option<T>.is_some() returns true when the value is Some.";
+    }
+    if eq(label, "set") == 1 {
+        return "BitSet.set(index, value) writes a single bit at the given index.";
+    }
+    if eq(label, "get") == 1 {
+        return "BitSet.get(index) returns Result<bool, str8> for the bit at the given index.";
+    }
+    if eq(label, "toggle") == 1 {
+        return "BitSet.toggle(index) flips a single bit in place.";
+    }
+    if eq(label, "push") == 1 {
+        return "BitSet.push(value) appends one bit to the packed bitset.";
+    }
+    if eq(label, "pop") == 1 {
+        return "BitSet.pop() removes and returns the last bit as Result<bool, str8>.";
+    }
+    if eq(label, "resize") == 1 {
+        return "BitSet.resize(new_len, fill) changes the logical bit length and fills new bits.";
+    }
+    if eq(label, "clear") == 1 {
+        return "BitSet.clear() resets all stored bits to zero.";
+    }
+    if eq(label, "len") == 1 {
+        return "BitSet.len() returns the logical bit length.";
+    }
+    if eq(label, "capacity") == 1 {
+        return "BitSet.capacity() returns the reserved capacity in bits.";
+    }
+    if eq(label, "count_ones") == 1 {
+        return "BitSet.count_ones() counts how many bits are set to 1.";
+    }
+    if eq(label, "and_eq") == 1 {
+        return "BitSet.and_eq(rhs_handle) applies an in-place bitwise AND with another bitset.";
+    }
+    if eq(label, "or_eq") == 1 {
+        return "BitSet.or_eq(rhs_handle) applies an in-place bitwise OR with another bitset.";
+    }
+    if eq(label, "xor_eq") == 1 {
+        return "BitSet.xor_eq(rhs_handle) applies an in-place bitwise XOR with another bitset.";
+    }
+    if eq(label, "not_eq") == 1 {
+        return "BitSet.not_eq() inverts all bits in place.";
+    }
+    if eq(label, "raw_handle") == 1 {
+        return "BitSet.raw_handle() returns the underlying runtime handle.";
+    }
+    if eq(label, "close") == 1 {
+        return "BitSet.close() releases the underlying packed bitset storage.";
     }
     if eq(label, "bool") == 1 {
         return "Boolean type with true/false values.";
@@ -1981,12 +2070,12 @@ fn completion_documentation(label: str8) -> str8 {
     return String::new();
 }
 
-fn completion_symbol_detail_in_uri(target_uri: str8, label: str8) -> str8 {
-    if len(target_uri) == 0 { return String::new(); }
-    if len(label) == 0 { return String::new(); }
+fn load_document_symbols(target_uri: str8) -> list<DocumentSymbol> {
+    var out: list<DocumentSymbol> = [];
+    if len(target_uri) == 0 { return out; }
     let s: SessionRef = current_session();
     let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
-    if cr.is_err() { return String::new(); }
+    if cr.is_err() { return out; }
     let n: i32 = match cr {
         Ok(v) => v,
         Err(_e) => 0
@@ -2006,35 +2095,9 @@ fn completion_symbol_detail_in_uri(target_uri: str8, label: str8) -> str8 {
                 column: 0
             }
         };
-        if eq(sym.name, label) != 1 { continue; }
-        if len(sym.signature) > 0 { return sym.signature; }
-        if len(sym.type_info) > 0 { return sym.type_info; }
-        if ensure_text_store() == 0 {
-            let text: str8 = text_store_get(g_text_store_handle, target_uri);
-            if len(text) > 0 {
-                let line0: i64 = sym.line - 1;
-                if line0 >= 0 {
-                    let ltxt: str8 = line_text_at(text, line0);
-                    if contains(ltxt, "struct ") == 1 {
-                        if contains(ltxt, label) == 1 {
-                            return format!("struct {}", label);
-                        }
-                    }
-                    if contains(ltxt, "enum ") == 1 {
-                        if contains(ltxt, label) == 1 {
-                            return format!("enum {}", label);
-                        }
-                    }
-                    if contains(ltxt, "fn ") == 1 {
-                        if contains(ltxt, label) == 1 {
-                            return format!("fn {}", label);
-                        }
-                    }
-                }
-            }
-        }
+        out.push(sym);
     }
-    return String::new();
+    return out;
 }
 
 fn doc_comment_above_symbol(text: str8, line1: i32) -> str8 {
@@ -2087,85 +2150,75 @@ fn declaration_doc_in_text(text: str8, label: str8) -> str8 {
     return String::new();
 }
 
-fn completion_symbol_doc_in_uri(target_uri: str8, label: str8) -> str8 {
-    if len(target_uri) == 0 { return String::new(); }
-    if len(label) == 0 { return String::new(); }
-    let s: SessionRef = current_session();
-    let cr: Result<i32, str8> = s.document_symbol_count(target_uri);
-    if cr.is_err() { return String::new(); }
-    let n: i32 = match cr {
-        Ok(v) => v,
-        Err(_e) => 0
-    };
-    var text_cache: str8 = String::new();
-    if ensure_text_store() == 0 {
-        text_cache = text_store_get(g_text_store_handle, target_uri);
+fn completion_symbol_meta_from_symbols(label: str8,
+                                       symbols: &list<DocumentSymbol>,
+                                       text_cache: str8) -> CompletionMeta {
+    if len(label) == 0 {
+        return CompletionMeta { detail: String::new(), doc: String::new() };
     }
-    for i in 0..n {
-        let sr: Result<DocumentSymbol, str8> = s.document_symbol_get(target_uri, i);
-        if sr.is_err() { continue; }
-        let sym: DocumentSymbol = match sr {
-            Ok(v) => v,
-            Err(_e) => DocumentSymbol {
-                id: String::new(),
-                name: String::new(),
-                type_info: String::new(),
-                signature: String::new(),
-                kind: 0,
-                line: 0,
-                column: 0
-            }
-        };
+    for sym in symbols {
         if eq(sym.name, label) != 1 { continue; }
-        if len(text_cache) > 0 {
-            let doc_comment: str8 = doc_comment_above_symbol(text_cache, sym.line);
-            if len(doc_comment) > 0 { return doc_comment; }
-        }
-        if len(sym.type_info) > 0 {
-            if len(sym.signature) > 0 {
-                if eq(sym.type_info, sym.signature) != 1 {
-                    return format!("type: {}", sym.type_info);
+
+        var detail: str8 = String::new();
+        if len(sym.signature) > 0 {
+            detail = sym.signature;
+        } else if len(sym.type_info) > 0 {
+            detail = sym.type_info;
+        } else if len(text_cache) > 0 {
+            let line0: i64 = sym.line - 1;
+            if line0 >= 0 {
+                let ltxt: str8 = line_text_at(text_cache, line0);
+                if contains(ltxt, "struct ") == 1 {
+                    if contains(ltxt, label) == 1 {
+                        detail = format!("struct {}", label);
+                    }
+                }
+                if len(detail) == 0 {
+                    if contains(ltxt, "enum ") == 1 {
+                        if contains(ltxt, label) == 1 {
+                            detail = format!("enum {}", label);
+                        }
+                    }
+                }
+                if len(detail) == 0 {
+                    if contains(ltxt, "fn ") == 1 {
+                        if contains(ltxt, label) == 1 {
+                            detail = format!("fn {}", label);
+                        }
+                    }
                 }
             }
-            return sym.type_info;
         }
-        if len(sym.signature) > 0 { return sym.signature; }
+
+        var doc: str8 = String::new();
+        if len(text_cache) > 0 {
+            doc = doc_comment_above_symbol(text_cache, sym.line);
+        }
+        if len(doc) == 0 {
+            if len(sym.type_info) > 0 {
+                if len(sym.signature) > 0 {
+                    if eq(sym.type_info, sym.signature) != 1 {
+                        doc = format!("type: {}", sym.type_info);
+                    }
+                } else {
+                    doc = sym.type_info;
+                }
+            }
+        }
+        if len(doc) == 0 {
+            if len(sym.signature) > 0 {
+                doc = sym.signature;
+            }
+        }
+        return CompletionMeta { detail: detail, doc: doc };
     }
     if len(text_cache) > 0 {
         let fallback_doc: str8 = declaration_doc_in_text(text_cache, label);
-        if len(fallback_doc) > 0 { return fallback_doc; }
+        if len(fallback_doc) > 0 {
+            return CompletionMeta { detail: String::new(), doc: fallback_doc };
+        }
     }
-    return String::new();
-}
-
-fn completion_symbol_detail(current_uri: str8, label: str8) -> str8 {
-    let d0: str8 = completion_symbol_detail_in_uri(current_uri, label);
-    if len(d0) > 0 { return d0; }
-    if ensure_uri_store() != 0 { return String::new(); }
-    let n: i64 = uri_store_count(g_uri_store_handle);
-    for i in 0..n {
-        let u: str8 = uri_store_get(g_uri_store_handle, i);
-        if len(u) == 0 { continue; }
-        if eq(u, current_uri) == 1 { continue; }
-        let d: str8 = completion_symbol_detail_in_uri(u, label);
-        if len(d) > 0 { return d; }
-    }
-    return String::new();
-}
-
-fn completion_symbol_doc(current_uri: str8, label: str8) -> str8 {
-    let d0: str8 = completion_symbol_doc_in_uri(current_uri, label);
-    if len(d0) > 0 { return d0; }
-    if ensure_uri_store() != 0 { return String::new(); }
-    let n: i64 = uri_store_count(g_uri_store_handle);
-    for i in 0..n {
-        let u: str8 = uri_store_get(g_uri_store_handle, i);
-        if len(u) == 0 { continue; }
-        if eq(u, current_uri) == 1 { continue; }
-        let d: str8 = completion_symbol_doc_in_uri(u, label);
-        if len(d) > 0 { return d; }
-    }
-    return String::new();
+    return CompletionMeta { detail: String::new(), doc: String::new() };
 }
 
 fn handle_did_open(payload: str8) -> i32 {
@@ -2713,6 +2766,7 @@ fn handle_hover(payload: str8) -> str8 {
 
 fn handle_completion(payload: str8) -> str8 {
     if ensure_session() != 0 { return "[]"; }
+    if ensure_text_store() != 0 { return "[]"; }
     let uri: str8 = extract_text_document_uri(payload);
     let line: i64 = extract_position_line(payload);
     let col: i64 = extract_position_character(payload);
@@ -2727,6 +2781,27 @@ fn handle_completion(payload: str8) -> str8 {
         Ok(v) => v,
         Err(_e) => 0
     };
+
+    var need_symbol_meta: i32 = 0;
+    for i in 0..n {
+        let ir0: Result<str8, str8> = s.completion_get(uri, line + 1, col + 1, i);
+        if ir0.is_err() { continue; }
+        let label0: str8 = match ir0 {
+            Ok(v) => v,
+            Err(_e) => String::new()
+        };
+        if len(completion_detail(label0)) == 0 || len(completion_documentation(label0)) == 0 {
+            need_symbol_meta = 1;
+            break;
+        }
+    }
+
+    var current_symbols: list<DocumentSymbol> = [];
+    var current_text: str8 = String::new();
+    if need_symbol_meta == 1 {
+        current_symbols = load_document_symbols(uri);
+        current_text = text_store_get(g_text_store_handle, uri);
+    }
 
     var out: str8 = String::new();
     let p0: str8 = concat(out, "[");
@@ -2744,11 +2819,16 @@ fn handle_completion(payload: str8) -> str8 {
         let kind: i32 = completion_kind_lsp(label_raw);
         var detail_raw: str8 = completion_detail(label_raw);
         var doc_raw: str8 = completion_documentation(label_raw);
-        if len(detail_raw) == 0 {
-            detail_raw = completion_symbol_detail(uri, label_raw);
-        }
-        if len(doc_raw) == 0 {
-            doc_raw = completion_symbol_doc(uri, label_raw);
+        if len(detail_raw) == 0 || len(doc_raw) == 0 {
+            let meta: CompletionMeta =
+                completion_symbol_meta_from_symbols(label_raw, current_symbols,
+                                                   current_text);
+            if len(detail_raw) == 0 {
+                detail_raw = meta.detail;
+            }
+            if len(doc_raw) == 0 {
+                doc_raw = meta.doc;
+            }
         }
         let detail: str8 = json_escape(detail_raw);
         let doc: str8 = json_escape(doc_raw);
