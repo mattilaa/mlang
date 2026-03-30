@@ -1,0 +1,27 @@
+mod std::span;
+mod std::vec;
+
+fn weighted_sum(values: Span<i32>) -> i32 {
+    var total: i32 = 0;
+    for i in 0..values.len() {
+        total = total + (values[i] * i32(i + 1));
+    }
+    return total;
+}
+
+fn main() -> i32 {
+    static_assert!(sizeof(list<i32>) == 16);
+
+    let readings: list<i32> = [4, 8, 15, 16, 23, 42];
+    let view: Span<i32> = readings;
+    println!("sizeof(Span<i32>)={}", sizeof(view));
+    println!("len={} first={} last={}", view.len(), view[0], view[view.len() - 1]);
+    println!("weighted_sum={}", weighted_sum(view));
+
+    let fill_view: span<i32> = [3; 5];
+    println!("fill_len={} fill_mid={}", fill_view.len(), fill_view[2]);
+
+    let vec_view: Span<i32> = vec![9, 8, 7];
+    println!("vec_sum={}", weighted_sum(vec_view));
+    return 0;
+}

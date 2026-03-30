@@ -43,6 +43,11 @@ For sed-style literal string replacement, see:
 - `stdlib/std/sed.mla`
   (`replace_first`, `replace_all`, `substitute`).
 
+For C++20-style span/view aliases, see:
+- `stdlib/std/span.mla`
+  (`Span<T>` / `span<T>` as safe non-owning aliases over `list<T>` with the
+   same `sizeof` and bounds-check behavior).
+
 For logical bit helpers, see:
 - `stdlib/std/bits.mla`
   (`ON`, `OFF` for the builtin `bit` type).

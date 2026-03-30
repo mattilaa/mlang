@@ -26,6 +26,7 @@ mod std::process;
 mod std::rand;
 mod std::regex;
 mod std::sed;
+mod std::span;
 mod std::sync;
 mod std::term;
 mod std::time;
@@ -65,6 +66,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
 - `stdlib/std/sed.mla`
+- `stdlib/std/span.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
@@ -1047,6 +1049,38 @@ use std::strbuf::free;
 let out: str8 = replace_all("name=foo, name=foo", "foo", "bar");
 println!("{}", out);
 free(out);
+```
+
+## std::span
+
+Module file: `stdlib/std/span.mla`
+
+C++20-style non-owning span/view aliases over the existing safe list runtime
+shape.
+
+- `Span<T>` is a compiler alias for `list<T>`
+- `span<T>` is the lowercase alias for the same type
+
+Properties:
+- `sizeof(Span<T>) == sizeof(list<T>)`
+- indexing uses the same compile-time and runtime bounds checks as `list<T>`
+- values can be initialized from normal lists, `Vec<T>`, and array-fill forms
+  like `[value; N]`
+
+Example:
+
+```mla
+mod std::span;
+
+fn sum(values: Span<i32>) -> i32 {
+    var total: i32 = 0;
+    for i in 0..values.len() {
+        total = total + values[i];
+    }
+    return total;
+}
+
+static_assert!(sizeof(Span<i32>) == sizeof(list<i32>));
 ```
 
 ## std::sync

@@ -914,8 +914,11 @@ type
     | module_path GENERIC_LT type_list GT
         {
             auto* list = static_cast<TypeListNode*>($3);
-            // Vec<T> is a built-in alias for list<T>; for N != 1 fall back to generic struct.
-            if(strcmp($1, "Vec") == 0 && list && list->types.size() == 1)
+            // Vec<T> / Span<T> / span<T> are built-in aliases for list<T>;
+            // for other arities fall back to a normal generic struct type.
+            if((strcmp($1, "Vec") == 0 || strcmp($1, "Span") == 0 ||
+                strcmp($1, "span") == 0) &&
+               list && list->types.size() == 1)
                 $$ = mla_ast_generic_list_type(list->types[0]);
             else
                 $$ = mla_ast_generic_struct_type_ref($1, $3);
@@ -1572,6 +1575,18 @@ condition_primary
     | fold_expression { $$ = $1; }
     | SIZEOF LPAREN type RPAREN
         { $$ = mla_ast_sizeof_type_expression($3, yylineno); }
+    | SIZEOF LPAREN module_path GENERIC_LT type_list GT RPAREN
+        {
+            auto* list = static_cast<TypeListNode*>($5);
+            if((strcmp($3, "Vec") == 0 || strcmp($3, "Span") == 0 ||
+                strcmp($3, "span") == 0) &&
+               list && list->types.size() == 1)
+                $$ = mla_ast_sizeof_type_expression(
+                    mla_ast_generic_list_type(list->types[0]), yylineno);
+            else
+                $$ = mla_ast_sizeof_type_expression(
+                    mla_ast_generic_struct_type_ref($3, $5), yylineno);
+        }
     | SIZEOF LPAREN block_condition_expression RPAREN
         { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
     | asm_expression { $$ = $1; }

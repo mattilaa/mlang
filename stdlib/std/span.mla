@@ -1,0 +1,40 @@
+/// \file span.mla
+/// \brief C++20-style `std::span` view alias for MLang.
+///
+/// `Span<T>` and `span<T>` are compiler aliases for `list<T>`.
+/// They provide a lightweight non-owning view shape with the same runtime ABI
+/// and the same indexing/bounds behavior as `list<T>`.
+///
+/// ```mlang
+/// mod std::span;
+///
+/// fn sum(values: Span<i32>) -> i32 {
+///     var total: i32 = 0;
+///     for i in 0..values.len() {
+///         total = total + values[i];
+///     }
+///     return total;
+/// }
+///
+/// fn main() -> i32 {
+///     let data: list<i32> = [10, 20, 30];
+///     let view: Span<i32> = data;
+///     static_assert!(sizeof(Span<i32>) == sizeof(list<i32>));
+///     println!("sum={}", sum(view));
+///     return 0;
+/// }
+/// ```
+///
+/// Safety:
+/// - `Span<T>` indexing uses the same compile-time and runtime bounds checks as
+///   `list<T>`.
+/// - `Span<T>` does not own the underlying storage; it is a view alias over the
+///   existing list container shape.
+///
+/// The aliases below are documentation anchors for IDE hover/go-to-definition.
+
+/// @brief Uppercase C++-style span alias.
+use type Span<T> = list<T>;
+
+/// @brief Lowercase `std::span`-style alias.
+use type span<T> = list<T>;

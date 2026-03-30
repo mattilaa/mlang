@@ -1820,6 +1820,24 @@ bool CodeGenerator::evaluateCompileTimeInt(ExpressionNode* expr, int64_t& out)
 {
     if(!expr)
         return false;
+    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
+    {
+        TypeNode* targetType = nullptr;
+        if(sizeofExpr->typeTarget)
+            targetType = cloneTypeNode(sizeofExpr->typeTarget);
+        else
+            targetType = inferExpressionTypeNode(sizeofExpr->expressionTarget,
+                                                sizeofExpr->line);
+        if(!targetType)
+            return false;
+        llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
+        if(!llvmType)
+            return false;
+        const llvm::DataLayout& dl = module->getDataLayout();
+        out = static_cast<int64_t>(
+            dl.getTypeAllocSize(llvmType).getFixedValue());
+        return true;
+    }
     if(auto* i = dynamic_cast<IntLiteralNode*>(expr))
     {
         out = i->value;
@@ -19534,6 +19552,8 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
     auto listIt = listElementTypes.find(baseId->name);
     if(listIt != listElementTypes.end())
     {
+        initializeFormatFunctions();
+
         // List indexing
         TypeNode* elemTypeNode = listIt->second;
         llvm::Type* elementType = getLLVMType(elemTypeNode->kind);
@@ -19552,6 +19572,8 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         // Load list struct
         llvm::Value* listStruct =
             builder.CreateLoad(listStructType, basePtr, "list");
+        llvm::Value* listSize =
+            builder.CreateExtractValue(listStruct, 0, "size");
         llvm::Value* dataPtr =
             builder.CreateExtractValue(listStruct, 1, "data");
 
@@ -19560,6 +19582,42 @@ llvm::Value* CodeGenerator::generateIndexExpression(IndexExpressionNode* node)
         {
             indexVal = builder.CreateSExtOrTrunc(indexVal, i64Type, "idx64");
         }
+
+        llvm::Function* function = builder.GetInsertBlock()->getParent();
+        llvm::BasicBlock* okBB =
+            llvm::BasicBlock::Create(context, "index.ok", function);
+        llvm::BasicBlock* failBB =
+            llvm::BasicBlock::Create(context, "index.fail", function);
+
+        llvm::Value* nonNegative = builder.CreateICmpSGE(
+            indexVal, llvm::ConstantInt::get(i64Type, 0), "index.nonneg");
+        llvm::Value* withinUpper =
+            builder.CreateICmpSLT(indexVal, listSize, "index.upper");
+        llvm::Value* inBounds =
+            builder.CreateAnd(nonNegative, withinUpper, "index.inbounds");
+        builder.CreateCondBr(inBounds, okBB, failBB);
+
+        builder.SetInsertPoint(failBB);
+#if LLVM_VERSION_MAJOR >= 21
+        llvm::Value* formatStr = builder.CreateGlobalString(
+            "list/span index out of bounds\n", "index.bounds.msg");
+#else
+        llvm::Value* formatStr = builder.CreateGlobalStringPtr(
+            "list/span index out of bounds\n", "index.bounds.msg");
+#endif
+#if LLVM_VERSION_MAJOR >= 15
+        llvm::Type* opaquePtrType = llvm::PointerType::get(context, 0);
+#else
+        llvm::Type* opaquePtrType =
+            llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+        llvm::Value* stderrVal =
+            builder.CreateLoad(opaquePtrType, stderrPtr, "stderr");
+        builder.CreateCall(fprintfFunc, {stderrVal, formatStr});
+        builder.CreateCall(abortFunc, {});
+        builder.CreateUnreachable();
+
+        builder.SetInsertPoint(okBB);
 
         // Get element pointer and load
         llvm::Value* elemPtr =
