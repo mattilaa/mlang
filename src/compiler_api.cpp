@@ -2377,6 +2377,7 @@ static std::string completionPrefixAtOffset(std::string_view text, size_t offset
 struct QualifiedCompletionContext {
     std::string owner;
     std::string member_prefix;
+    bool member_access = false;
 };
 
 static std::optional<QualifiedCompletionContext>
@@ -2396,11 +2397,17 @@ qualifiedCompletionContextAtOffset(std::string_view text, size_t offset) {
            std::isspace(static_cast<unsigned char>(text[p - 1])) != 0) {
         --p;
     }
-    if (p < 2 || text[p - 1] != ':' || text[p - 2] != ':') {
+    bool is_scope = false;
+    bool is_member = false;
+    if (p >= 2 && text[p - 1] == ':' && text[p - 2] == ':') {
+        is_scope = true;
+    } else if (p >= 1 && text[p - 1] == '.') {
+        is_member = true;
+    } else {
         return std::nullopt;
     }
 
-    size_t owner_end = p - 2;
+    size_t owner_end = is_scope ? (p - 2) : (p - 1);
     while (owner_end > 0 &&
            std::isspace(static_cast<unsigned char>(text[owner_end - 1])) != 0) {
         --owner_end;
@@ -2420,6 +2427,7 @@ qualifiedCompletionContextAtOffset(std::string_view text, size_t offset) {
     QualifiedCompletionContext out;
     out.owner = std::string(text.substr(owner_start, owner_end - owner_start));
     out.member_prefix = member_prefix;
+    out.member_access = is_member;
     return out;
 }
 
@@ -2434,6 +2442,50 @@ static bool symbolBelongsToOwner(std::string_view owner,
     return startsWith(sym.signature, field_prefix) ||
            startsWith(sym.signature, method_prefix) ||
            startsWith(sym.signature, variant_prefix);
+}
+
+static std::string visibleTypedOwnerFromText(std::string_view text,
+                                             int query_line,
+                                             std::string_view name) {
+    if (name.empty()) {
+        return {};
+    }
+    const std::vector<std::string_view> lines = splitLines(text);
+    for (int y = std::min(query_line - 1, static_cast<int>(lines.size()) - 1);
+         y >= 0; --y) {
+        const std::string line = trimTextWs(lines[static_cast<size_t>(y)]);
+        if (!(startsWith(line, "let ") || startsWith(line, "var "))) {
+            continue;
+        }
+        const size_t name_pos = line.find(std::string(name));
+        if (name_pos == std::string::npos) {
+            continue;
+        }
+        const bool left_ok = (name_pos == 0) || !isIdentContinue(line[name_pos - 1]);
+        const size_t after_name = name_pos + name.size();
+        const bool right_ok = (after_name >= line.size()) || !isIdentContinue(line[after_name]);
+        if (!left_ok || !right_ok) {
+            continue;
+        }
+        size_t colon = line.find(':', after_name);
+        if (colon == std::string::npos) {
+            continue;
+        }
+        size_t type_start = colon + 1;
+        while (type_start < line.size() &&
+               std::isspace(static_cast<unsigned char>(line[type_start])) != 0) {
+            ++type_start;
+        }
+        if (type_start >= line.size() || !isIdentStart(line[type_start])) {
+            continue;
+        }
+        size_t type_end = type_start + 1;
+        while (type_end < line.size() && isIdentContinue(line[type_end])) {
+            ++type_end;
+        }
+        return std::string(line.substr(type_start, type_end - type_start));
+    }
+    return {};
 }
 
 static std::vector<std::string> enumVariantsFromText(std::string_view text,
@@ -2525,6 +2577,113 @@ static std::vector<std::string> enumVariantsFromText(std::string_view text,
 
         pos = body_end + 1;
     }
+    return out;
+}
+
+static std::vector<std::string> implMethodsFromText(std::string_view text,
+                                                    std::string_view owner_name) {
+    std::vector<std::string> out;
+    if (owner_name.empty()) {
+        return out;
+    }
+    std::unordered_set<std::string> seen;
+    const std::vector<std::string_view> lines = splitLines(text);
+    bool in_impl = false;
+    int brace_depth = 0;
+    for (std::string_view raw_line : lines) {
+        const std::string line = trimTextWs(raw_line);
+        if (!in_impl) {
+            std::string parsed_owner;
+            if (parseImplOwnerFromLine(line, parsed_owner) &&
+                parsed_owner == owner_name) {
+                in_impl = true;
+                brace_depth = 0;
+            } else {
+                continue;
+            }
+        }
+
+        for (char ch : line) {
+            if (ch == '{') {
+                ++brace_depth;
+            } else if (ch == '}') {
+                --brace_depth;
+            }
+        }
+
+        const size_t fn_pos = line.find("fn ");
+        if (fn_pos != std::string::npos) {
+            size_t pos = fn_pos + 3;
+            while (pos < line.size() &&
+                   std::isspace(static_cast<unsigned char>(line[pos])) != 0) {
+                ++pos;
+            }
+            if (pos < line.size() && isIdentStart(line[pos])) {
+                size_t end = pos + 1;
+                while (end < line.size() && isIdentContinue(line[end])) {
+                    ++end;
+                }
+                seen.insert(std::string(line.substr(pos, end - pos)));
+            }
+        }
+
+        if (in_impl && brace_depth <= 0) {
+            in_impl = false;
+        }
+    }
+    out.insert(out.end(), seen.begin(), seen.end());
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+static std::vector<std::string> moduleNamesFromText(std::string_view text) {
+    std::vector<std::string> out;
+    std::unordered_set<std::string> seen;
+    const std::vector<std::string_view> lines = splitLines(text);
+    for (std::string_view raw_line : lines) {
+        const std::string line = trimTextWs(raw_line);
+        if (startsWith(line, "mod ")) {
+            size_t start = 4;
+            while (start < line.size() &&
+                   std::isspace(static_cast<unsigned char>(line[start])) != 0) {
+                ++start;
+            }
+            size_t end = start;
+            while (end < line.size() &&
+                   (isIdentContinue(line[end]) || line[end] == ':')) {
+                ++end;
+            }
+            if (end > start) {
+                seen.insert(line.substr(start, end - start));
+            }
+            continue;
+        }
+        if (startsWith(line, "use ")) {
+            size_t start = 4;
+            while (start < line.size() &&
+                   std::isspace(static_cast<unsigned char>(line[start])) != 0) {
+                ++start;
+            }
+            size_t end = start;
+            while (end < line.size() &&
+                   (isIdentContinue(line[end]) || line[end] == ':')) {
+                ++end;
+            }
+            if (end <= start) {
+                continue;
+            }
+            std::string path = line.substr(start, end - start);
+            const size_t tail = path.rfind("::");
+            if (tail != std::string::npos) {
+                path = path.substr(0, tail);
+            }
+            if (!path.empty()) {
+                seen.insert(path);
+            }
+        }
+    }
+    out.insert(out.end(), seen.begin(), seen.end());
+    std::sort(out.begin(), out.end());
     return out;
 }
 
@@ -2632,8 +2791,27 @@ static std::vector<std::string> computeSemanticCompletions(
             }
         };
 
+        std::string owner = qualified->owner;
+        if (qualified->member_access) {
+            if (owner == "self") {
+                owner = structContextAtLine(current, line);
+            } else {
+                const int query_depth = lineDepthAt(current, line);
+                const SemanticSymbol* object_sym =
+                    findVisibleVarByName(current, owner, line, query_depth);
+                if (object_sym) {
+                    owner = normalizeStructTypeName(object_sym->type_info);
+                } else {
+                    owner = visibleTypedOwnerFromText(current.text, line, owner);
+                }
+            }
+        }
+        if (owner.empty()) {
+            return {};
+        }
+
         for (const SemanticSymbol& sym : current.symbols) {
-            if (symbolBelongsToOwner(qualified->owner, sym)) {
+            if (symbolBelongsToOwner(owner, sym)) {
                 consider_member(sym.name);
             }
         }
@@ -2642,21 +2820,50 @@ static std::vector<std::string> computeSemanticCompletions(
                 continue;
             }
             for (const SemanticSymbol& sym : doc.symbols) {
-                if (symbolBelongsToOwner(qualified->owner, sym)) {
+                if (symbolBelongsToOwner(owner, sym)) {
                     consider_member(sym.name);
                 }
             }
         }
 
-        for (const auto& name : enumVariantsFromText(current.text, qualified->owner)) {
+        for (const auto& name : enumVariantsFromText(current.text, owner)) {
             consider_member(name);
         }
         for (const DocumentSemantic& doc : all_docs) {
             if (doc.uri == current.uri) {
                 continue;
             }
-            for (const auto& name : enumVariantsFromText(doc.text, qualified->owner)) {
+            for (const auto& name : enumVariantsFromText(doc.text, owner)) {
                 consider_member(name);
+            }
+        }
+        for (const auto& name : implMethodsFromText(current.text, owner)) {
+            consider_member(name);
+        }
+        for (const DocumentSemantic& doc : all_docs) {
+            if (doc.uri == current.uri) {
+                continue;
+            }
+            for (const auto& name : implMethodsFromText(doc.text, owner)) {
+                consider_member(name);
+            }
+        }
+        if (scoped_dedup.empty()) {
+            for (const auto& module_name : moduleNamesFromText(current.text)) {
+                const auto file_path = resolveModuleFilePath(current.uri, module_name);
+                if (!file_path.has_value()) {
+                    continue;
+                }
+                const auto loaded = loadFilesystemSemanticDocument(*file_path);
+                if (!loaded.has_value()) {
+                    continue;
+                }
+                for (const auto& name : implMethodsFromText(loaded->text, owner)) {
+                    consider_member(name);
+                }
+                for (const auto& name : enumVariantsFromText(loaded->text, owner)) {
+                    consider_member(name);
+                }
             }
         }
 
@@ -2918,6 +3125,58 @@ public:
         return semanticSnapshotForUri(uri, docs, &current);
     }
 
+    Status completionSnapshotForPosition(std::string_view uri,
+                                         int line,
+                                         int column,
+                                         std::vector<std::string>& out_items) {
+        if (uri.empty()) {
+            return Status::InvalidArgument;
+        }
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        const std::string key(uri);
+        if (documents_.find(key) == documents_.end()) {
+            return Status::DocumentNotFound;
+        }
+
+        if (completion_cache_generation_ == semantic_generation_ &&
+            completion_cache_uri_ == key &&
+            completion_cache_line_ == line &&
+            completion_cache_column_ == column) {
+            out_items = completion_cache_items_;
+            return Status::Ok;
+        }
+
+        ensureBaseSemanticCacheLocked();
+        auto it = hydrated_semantic_cache_.find(key);
+        if (it == hydrated_semantic_cache_.end() ||
+            it->second.generation != semantic_generation_) {
+            HydratedSemanticSnapshot snap;
+            snap.generation = semantic_generation_;
+            snap.docs = base_semantic_docs_;
+            hydrateFilesystemModulesFor(key, snap.docs);
+            for (size_t i = 0; i < snap.docs.size(); ++i) {
+                snap.uri_to_index[snap.docs[i].uri] = i;
+            }
+            it = hydrated_semantic_cache_.insert_or_assign(key, std::move(snap)).first;
+        }
+
+        const auto idx_it = it->second.uri_to_index.find(key);
+        if (idx_it == it->second.uri_to_index.end()) {
+            return Status::DocumentNotFound;
+        }
+
+        const DocumentSemantic& current = it->second.docs[idx_it->second];
+        completion_cache_items_ =
+            computeSemanticCompletions(current, it->second.docs, line, column);
+        completion_cache_generation_ = semantic_generation_;
+        completion_cache_uri_ = key;
+        completion_cache_line_ = line;
+        completion_cache_column_ = column;
+        out_items = completion_cache_items_;
+        return Status::Ok;
+    }
+
 private:
     struct HydratedSemanticSnapshot {
         std::uint64_t generation = 0;
@@ -2930,6 +3189,11 @@ private:
         base_semantic_generation_ = std::numeric_limits<std::uint64_t>::max();
         base_semantic_docs_.clear();
         hydrated_semantic_cache_.clear();
+        completion_cache_generation_ = 0;
+        completion_cache_uri_.clear();
+        completion_cache_line_ = -1;
+        completion_cache_column_ = -1;
+        completion_cache_items_.clear();
     }
 
     void ensureBaseSemanticCacheLocked() {
@@ -2952,6 +3216,11 @@ private:
     std::uint64_t base_semantic_generation_ = std::numeric_limits<std::uint64_t>::max();
     std::vector<DocumentSemantic> base_semantic_docs_;
     std::unordered_map<std::string, HydratedSemanticSnapshot> hydrated_semantic_cache_;
+    std::uint64_t completion_cache_generation_ = 0;
+    std::string completion_cache_uri_;
+    int completion_cache_line_ = -1;
+    int completion_cache_column_ = -1;
+    std::vector<std::string> completion_cache_items_;
 };
 
 class GlobalStore {
@@ -3269,16 +3538,18 @@ int __mlang_compiler_document_completion_count(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store;
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
-    const mlang::compiler_api::DocumentSemantic* current = nullptr;
-    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
-    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
-        return prep;
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
     }
 
-    const auto completions =
-        mlang::compiler_api::computeSemanticCompletions(*current, sem_docs, line, column);
+    std::vector<std::string> completions;
+    const mlang::compiler_api::Status st =
+        store->completionSnapshotForPosition(uri, line, column, completions);
+    if (st != mlang::compiler_api::Status::Ok) {
+        return static_cast<int>(st);
+    }
     *out_count = static_cast<int>(completions.size());
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
@@ -3296,16 +3567,18 @@ int __mlang_compiler_document_completion_get(mlang_compiler_session* session,
         return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
     }
 
-    std::shared_ptr<mlang::compiler_api::SessionStore> store;
-    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
-    const mlang::compiler_api::DocumentSemantic* current = nullptr;
-    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
-    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
-        return prep;
+    std::shared_ptr<mlang::compiler_api::SessionStore> store =
+        mlang::compiler_api::GlobalStore::instance().getSession(session->id);
+    if (!store) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidSession);
     }
 
-    const auto completions =
-        mlang::compiler_api::computeSemanticCompletions(*current, sem_docs, line, column);
+    std::vector<std::string> completions;
+    const mlang::compiler_api::Status st =
+        store->completionSnapshotForPosition(uri, line, column, completions);
+    if (st != mlang::compiler_api::Status::Ok) {
+        return static_cast<int>(st);
+    }
     if (index < 0 || static_cast<size_t>(index) >= completions.size()) {
         return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
     }
