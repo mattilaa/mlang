@@ -27,6 +27,17 @@ struct DeviceFlags2 {
     var enabled: bool;
 };
 
+struct PackedByteFlags {
+    var b0: bit;
+    var b1: bit;
+    var b2: bit;
+    var b3: bit;
+    var b4: bit;
+    var b5: bit;
+    var b6: bit;
+    var b7: bit;
+};
+
 #[test]
 fn test_bit_values_and_struct_field_updates() {
     var state: bit = 0;
@@ -86,6 +97,46 @@ fn test_packed_bit_struct_sizeof_is_two_bytes() {
     verify_eq_i32(0, i32(b.first));
     verify_eq_i32(1, i32(b.second));
     verify(!b.enabled);
+}
+
+#[test]
+fn test_eight_bits_pack_into_one_byte() {
+    verify_eq_i64(1, sizeof(PackedByteFlags));
+
+    var bits: PackedByteFlags = PackedByteFlags {
+        b0: ON(),
+        b1: OFF(),
+        b2: ON(),
+        b3: OFF(),
+        b4: ON(),
+        b5: OFF(),
+        b6: ON(),
+        b7: OFF()
+    };
+    verify_eq_i64(1, sizeof(bits));
+
+    verify_eq_i32(1, i32(bits.b0));
+    verify_eq_i32(0, i32(bits.b1));
+    verify_eq_i32(1, i32(bits.b2));
+    verify_eq_i32(0, i32(bits.b3));
+    verify_eq_i32(1, i32(bits.b4));
+    verify_eq_i32(0, i32(bits.b5));
+    verify_eq_i32(1, i32(bits.b6));
+    verify_eq_i32(0, i32(bits.b7));
+
+    bits.b1 = ON();
+    bits.b3 = ON();
+    bits.b5 = ON();
+    bits.b7 = ON();
+
+    verify_eq_i32(1, i32(bits.b0));
+    verify_eq_i32(1, i32(bits.b1));
+    verify_eq_i32(1, i32(bits.b2));
+    verify_eq_i32(1, i32(bits.b3));
+    verify_eq_i32(1, i32(bits.b4));
+    verify_eq_i32(1, i32(bits.b5));
+    verify_eq_i32(1, i32(bits.b6));
+    verify_eq_i32(1, i32(bits.b7));
 }
 
 #[test]
