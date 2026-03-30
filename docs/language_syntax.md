@@ -510,6 +510,14 @@ Both forms are supported:
 - `sizeof(Type)`
 - `sizeof(expr)`
 
+When the size can be resolved at compile time, `sizeof(...)` can also be used
+inside `static_assert!`:
+
+```mla
+let view: Span<i32> = [1, 2, 3];
+static_assert!(sizeof(view) == sizeof(list<i32>));
+```
+
 Important distinction:
 - `list<bool>` is a normal list container with ordinary element storage
 - `std::bitset::BitSet` stores values densely at one bit per entry

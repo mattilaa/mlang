@@ -26,6 +26,7 @@ mod std::process;
 mod std::rand;
 mod std::regex;
 mod std::sed;
+mod std::span;
 mod std::sync;
 mod std::term;
 mod std::time;
@@ -65,6 +66,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/rand.mla`
 - `stdlib/std/regex.mla`
 - `stdlib/std/sed.mla`
+- `stdlib/std/span.mla`
 - `stdlib/std/sync.mla`
 - `stdlib/std/term.mla`
 - `stdlib/std/time.mla`
@@ -625,6 +627,7 @@ Builtin reference source: `stdlib/types.mla`
 - `sizeof(Type) -> i64`
 - `sizeof(expr) -> i64`
 - Returns the ABI byte size in bytes
+- Can be used in `static_assert!` when the target size is known at compile time
 
 Examples:
 
@@ -632,6 +635,7 @@ Examples:
 var enabled: bit = 1;
 println!("bit={} bool={} list_header={}",
          sizeof(bit), sizeof(bool), sizeof(list<bool>));
+static_assert!(sizeof(enabled) == sizeof(bit));
 ```
 
 ### `list<bool>` vs `std::bitset::BitSet`
@@ -1047,6 +1051,42 @@ use std::strbuf::free;
 let out: str8 = replace_all("name=foo, name=foo", "foo", "bar");
 println!("{}", out);
 free(out);
+```
+
+## std::span
+
+Module file: `stdlib/std/span.mla`
+
+C++20-style non-owning span/view aliases over the existing safe list runtime
+shape.
+
+- `Span<T>` is a compiler alias for `list<T>`
+- `span<T>` is the lowercase alias for the same type
+
+Properties:
+- `sizeof(Span<T>) == sizeof(list<T>)`
+- indexing uses the same compile-time and runtime bounds checks as `list<T>`
+- values can be initialized from normal lists, `Vec<T>`, and array-fill forms
+  like `[value; N]`
+- `sizeof(spanValue)` is accepted in `static_assert!` when the span value type
+  is known at compile time
+
+Example:
+
+```mla
+mod std::span;
+
+fn sum(values: Span<i32>) -> i32 {
+    var total: i32 = 0;
+    for i in 0..values.len() {
+        total = total + values[i];
+    }
+    return total;
+}
+
+static_assert!(sizeof(Span<i32>) == sizeof(list<i32>));
+let view: Span<i32> = [1, 2, 3];
+static_assert!(sizeof(view) == sizeof(list<i32>));
 ```
 
 ## std::sync

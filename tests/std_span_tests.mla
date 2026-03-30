@@ -1,0 +1,62 @@
+mod std::span;
+mod std::vec;
+mod std::testing;
+
+use std::testing::verify;
+use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
+
+fn sum_span(values: Span<i32>) -> i32 {
+    var total: i32 = 0;
+    for i in 0..values.len() {
+        total = total + values[i];
+    }
+    return total;
+}
+
+fn all_true(values: &span<bool>) -> bool {
+    for i in 0..values.len() {
+        if !values[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+#[test]
+fn test_span_sizeof_and_static_asserts() {
+    let ints: Span<i32> = [1, 2, 3];
+    let flags: span<bool> = [true, false];
+    static_assert!(sizeof(list<i32>) == 16);
+    static_assert!(sizeof(ints) == sizeof(list<i32>));
+    static_assert!(sizeof(flags) == sizeof(list<bool>));
+
+    verify_eq_i64(sizeof(ints), sizeof(list<i32>));
+    verify_eq_i64(sizeof(flags), sizeof(list<bool>));
+    verify_eq_i64(16, sizeof(ints));
+}
+
+#[test]
+fn test_span_from_list_and_vec_alias() {
+    let ints: list<i32> = [10, 20, 30, 40];
+    let view: Span<i32> = ints;
+    verify_eq_i32(4, i32(view.len()));
+    verify_eq_i32(10, view[0]);
+    verify_eq_i32(40, view[3]);
+    verify_eq_i32(100, sum_span(view));
+
+    let vec_values: Vec<i32> = vec![1, 2, 3, 4];
+    let vec_view: span<i32> = vec_values;
+    verify_eq_i32(10, sum_span(vec_view));
+}
+
+#[test]
+fn test_span_from_array_like_fill_and_bool_view() {
+    let filled: Span<i32> = [7; 4];
+    verify_eq_i32(4, i32(filled.len()));
+    verify_eq_i32(28, sum_span(filled));
+
+    let flags: span<bool> = [true, true, true, true];
+    verify(all_true(flags));
+    verify_eq_i32(1, i32(flags[2]));
+}

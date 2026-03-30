@@ -43,6 +43,11 @@ For sed-style literal string replacement, see:
 - `stdlib/std/sed.mla`
   (`replace_first`, `replace_all`, `substitute`).
 
+For C++20-style span/view aliases, see:
+- `stdlib/std/span.mla`
+  (`Span<T>` / `span<T>` as safe non-owning aliases over `list<T>` with the
+   same `sizeof` and bounds-check behavior, including `static_assert!(sizeof(expr) == ...)`).
+
 For logical bit helpers, see:
 - `stdlib/std/bits.mla`
   (`ON`, `OFF` for the builtin `bit` type).
@@ -175,7 +180,7 @@ Recent branch-level additions reflected in these docs:
 - `switch` / `case` statements for integers, strings, booleans, enums, and
   other `==`-comparable values
 - functional pipe operator `|>` for left-to-right call composition
-- builtin `bit` values plus `sizeof(Type)` / `sizeof(expr)`
+- builtin `bit` values plus `sizeof(Type)` / `sizeof(expr)` in runtime code and `static_assert!`
 - `fn main() {}` defaulting to `-> i32`, plus function return-type inference
 - `f32`/`f64` primitive names
 - Inline assembly with `volatile` and target-arch qualifiers (`x86`, `x64`, `aarch64`)
