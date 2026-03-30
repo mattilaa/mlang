@@ -1001,8 +1001,11 @@ signals and forwards them to an installed MLang function handler.
 - `reset_default(signum: i32) -> Result<i32, str8>`
 - `raise(signum: i32) -> Result<i32, str8>`
 - `received_count(signum: i32) -> i64`
+- `was_received(signum: i32) -> i32`
 - `clear_received(signum: i32) -> Result<i32, str8>`
 - `sigint() -> i32`
+- `sighup() -> i32`
+- `sigquit() -> i32`
 - `sigterm() -> i32`
 - `sigusr1() -> i32`
 - `sigusr2() -> i32`

@@ -76,3 +76,26 @@ fn test_signal_ignore_prevents_runtime_grab_count_growth() {
     let resetr: Result<i32, str8> = std::signal::reset_default(sig);
     verify(resetr.is_ok());
 }
+
+#[test]
+fn test_signal_clear_received_resets_grabbed_state() {
+    let sig: i32 = std::signal::sigusr2();
+    let clr: Result<i32, str8> = std::signal::clear_received(sig);
+    verify(clr.is_ok());
+    let setr: Result<i32, str8> = std::signal::on(sig, on_usr1);
+    verify(setr.is_ok());
+    reset_signal_state();
+
+    let rr: Result<i32, str8> = std::signal::raise(sig);
+    verify(rr.is_ok());
+    verify_eq_i32(1, std::signal::was_received(sig));
+    verify_eq_i64(1, std::signal::received_count(sig));
+
+    let clr2: Result<i32, str8> = std::signal::clear_received(sig);
+    verify(clr2.is_ok());
+    verify_eq_i32(0, std::signal::was_received(sig));
+    verify_eq_i64(0, std::signal::received_count(sig));
+
+    let resetr: Result<i32, str8> = std::signal::reset_default(sig);
+    verify(resetr.is_ok());
+}

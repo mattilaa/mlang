@@ -31,6 +31,7 @@ fn main() -> i32 {
 
     println!("signal={} hits={}", demo_last_signal, demo_hits);
     println!("grabbed_count={}", std::signal::received_count(sig));
+    println!("was_received={}", std::signal::was_received(sig));
 
     let _ = std::signal::reset_default(sig);
     return 0;

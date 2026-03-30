@@ -18,6 +18,8 @@ extern pub fn __mlang_std_signal_raise(signum: i32) -> i32;
 extern pub fn __mlang_std_signal_received_count(signum: i32) -> i64;
 extern pub fn __mlang_std_signal_clear_received(signum: i32) -> i32;
 extern pub fn __mlang_std_signal_sigint() -> i32;
+extern pub fn __mlang_std_signal_sighup() -> i32;
+extern pub fn __mlang_std_signal_sigquit() -> i32;
 extern pub fn __mlang_std_signal_sigterm() -> i32;
 extern pub fn __mlang_std_signal_sigusr1() -> i32;
 extern pub fn __mlang_std_signal_sigusr2() -> i32;
@@ -71,6 +73,11 @@ pub fn received_count(signum: i32) -> i64 {
     return __mlang_std_signal_received_count(signum);
 }
 
+/// @brief Return 1 when the signal was grabbed at least once.
+pub fn was_received(signum: i32) -> i32 {
+    return received_count(signum) > 0 ? 1 : 0;
+}
+
 /// @brief Clear the runtime receive counter for `signum`.
 pub fn clear_received(signum: i32) -> Result<i32, str8> {
     let rc: i32 = __mlang_std_signal_clear_received(signum);
@@ -83,6 +90,16 @@ pub fn clear_received(signum: i32) -> Result<i32, str8> {
 /// @brief Return `SIGINT`.
 pub fn sigint() -> i32 {
     return __mlang_std_signal_sigint();
+}
+
+/// @brief Return `SIGHUP` when available.
+pub fn sighup() -> i32 {
+    return __mlang_std_signal_sighup();
+}
+
+/// @brief Return `SIGQUIT` when available.
+pub fn sigquit() -> i32 {
+    return __mlang_std_signal_sigquit();
 }
 
 /// @brief Return `SIGTERM`.

@@ -141,6 +141,24 @@ int __mlang_std_signal_sigint(void)
     return SIGINT;
 }
 
+int __mlang_std_signal_sighup(void)
+{
+#ifdef SIGHUP
+    return SIGHUP;
+#else
+    return SIGTERM;
+#endif
+}
+
+int __mlang_std_signal_sigquit(void)
+{
+#ifdef SIGQUIT
+    return SIGQUIT;
+#else
+    return SIGTERM;
+#endif
+}
+
 int __mlang_std_signal_sigterm(void)
 {
     return SIGTERM;
