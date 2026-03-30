@@ -271,6 +271,8 @@ include(FetchContent)
 find_path(RAPIDJSON_INCLUDE_DIR rapidjson/document.h
     PATH_SUFFIXES include
     PATHS
+        ${CMAKE_SOURCE_DIR}/build/_deps/rapidjson-src
+        ${CMAKE_SOURCE_DIR}/build/_deps/rapidjson-src/include
         /opt/homebrew/opt/rapidjson
         /usr/local/opt/rapidjson
         /opt/homebrew

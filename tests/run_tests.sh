@@ -19,16 +19,28 @@ JOBS=""
 
 detect_jobs() {
     if command -v nproc >/dev/null 2>&1; then
-        nproc
-        return
+        local n
+        n="$(nproc 2>/dev/null || true)"
+        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ]; then
+            echo "$n"
+            return
+        fi
     fi
     if command -v sysctl >/dev/null 2>&1; then
-        sysctl -n hw.ncpu
-        return
+        local n
+        n="$(sysctl -n hw.ncpu 2>/dev/null || true)"
+        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ]; then
+            echo "$n"
+            return
+        fi
     fi
     if command -v getconf >/dev/null 2>&1; then
-        getconf _NPROCESSORS_ONLN
-        return
+        local n
+        n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ]; then
+            echo "$n"
+            return
+        fi
     fi
     echo 1
 }

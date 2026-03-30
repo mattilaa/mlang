@@ -86,6 +86,23 @@ if(TARGET mlang)
 endif()
 
 if(BUILD_CPP_GTESTS)
+    # Reuse the main build's RapidJSON checkout when available so the
+    # standalone test configure stays offline-friendly.
+    find_path(RAPIDJSON_INCLUDE_DIR rapidjson/document.h
+        PATH_SUFFIXES include
+        PATHS
+            ${CMAKE_CURRENT_SOURCE_DIR}/../build/_deps/rapidjson-src
+            ${CMAKE_CURRENT_SOURCE_DIR}/../build/_deps/rapidjson-src/include
+            /opt/homebrew/opt/rapidjson
+            /usr/local/opt/rapidjson
+            /opt/homebrew
+            /usr/local
+            /usr
+    )
+    if(RAPIDJSON_INCLUDE_DIR AND TARGET mlang_std)
+        target_include_directories(mlang_std PRIVATE ${RAPIDJSON_INCLUDE_DIR})
+    endif()
+
     include(FetchContent)
     FetchContent_Declare(
         googletest
@@ -97,10 +114,17 @@ if(BUILD_CPP_GTESTS)
     add_executable(mla_tests mla_tests.cpp)
     target_compile_features(mla_tests PRIVATE cxx_std_17)
     target_include_directories(mla_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_compile_definitions(mla_tests PRIVATE
-        DEFAULT_COMPILER_PATH="$<TARGET_FILE:mlang>"
-        DEFAULT_MLANG_LIB_DIR="${MLANG_LIB_DIR}"
-    )
+    if(TARGET mlang)
+        target_compile_definitions(mla_tests PRIVATE
+            DEFAULT_COMPILER_PATH="$<TARGET_FILE:mlang>"
+            DEFAULT_MLANG_LIB_DIR="${MLANG_LIB_DIR}"
+        )
+    else()
+        target_compile_definitions(mla_tests PRIVATE
+            DEFAULT_COMPILER_PATH="${MLA_COMPILER_CMD}"
+            DEFAULT_MLANG_LIB_DIR="${MLANG_LIB_DIR}"
+        )
+    endif()
     target_link_libraries(mla_tests PRIVATE GTest::gtest GTest::gtest_main)
 
     if(TARGET mlang)
