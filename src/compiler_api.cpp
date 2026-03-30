@@ -2687,6 +2687,50 @@ static std::vector<std::string> moduleNamesFromText(std::string_view text) {
     return out;
 }
 
+static const std::vector<std::string>& builtinMemberNames(std::string_view owner) {
+    static const std::vector<std::string> kEmpty;
+    static const std::vector<std::string> kBitSet = {
+        "and_eq",
+        "capacity",
+        "clear",
+        "close",
+        "count_ones",
+        "get",
+        "len",
+        "new",
+        "not_eq",
+        "or_eq",
+        "pop",
+        "push",
+        "raw_handle",
+        "resize",
+        "set",
+        "toggle",
+        "xor_eq",
+    };
+    static const std::vector<std::string> kResult = {
+        "is_err",
+        "is_ok",
+        "unwrap",
+        "unwrap_err",
+    };
+    static const std::vector<std::string> kOption = {
+        "is_some",
+        "unwrap",
+    };
+
+    if (owner == "BitSet") {
+        return kBitSet;
+    }
+    if (owner == "Result") {
+        return kResult;
+    }
+    if (owner == "Option") {
+        return kOption;
+    }
+    return kEmpty;
+}
+
 static bool isKeywordToken(std::string_view token) {
     static constexpr std::string_view kKeywords[] = {
         "fn", "let", "var", "struct", "mod", "use", "if", "else", "while",
@@ -2792,22 +2836,32 @@ static std::vector<std::string> computeSemanticCompletions(
         };
 
         std::string owner = qualified->owner;
+        std::string text_owner_fallback;
         if (qualified->member_access) {
             if (owner == "self") {
                 owner = structContextAtLine(current, line);
             } else {
+                const std::string object_name = owner;
+                text_owner_fallback = visibleTypedOwnerFromText(current.text, line, object_name);
                 const int query_depth = lineDepthAt(current, line);
                 const SemanticSymbol* object_sym =
                     findVisibleVarByName(current, owner, line, query_depth);
                 if (object_sym) {
                     owner = normalizeStructTypeName(object_sym->type_info);
-                } else {
-                    owner = visibleTypedOwnerFromText(current.text, line, owner);
+                }
+                if (owner.empty()) {
+                    owner = text_owner_fallback;
                 }
             }
         }
         if (owner.empty()) {
             return {};
+        }
+
+        if (!text_owner_fallback.empty()) {
+            for (const auto& name : builtinMemberNames(text_owner_fallback)) {
+                consider_member(name);
+            }
         }
 
         for (const SemanticSymbol& sym : current.symbols) {
@@ -2846,6 +2900,28 @@ static std::vector<std::string> computeSemanticCompletions(
             }
             for (const auto& name : implMethodsFromText(doc.text, owner)) {
                 consider_member(name);
+            }
+        }
+        if (scoped_dedup.empty()) {
+            if (!text_owner_fallback.empty() && text_owner_fallback != owner) {
+                owner = text_owner_fallback;
+                for (const auto& name : builtinMemberNames(owner)) {
+                    consider_member(name);
+                }
+                for (const auto& name : implMethodsFromText(current.text, owner)) {
+                    consider_member(name);
+                }
+                for (const DocumentSemantic& doc : all_docs) {
+                    if (doc.uri == current.uri) {
+                        continue;
+                    }
+                    for (const auto& name : implMethodsFromText(doc.text, owner)) {
+                        consider_member(name);
+                    }
+                    for (const auto& name : enumVariantsFromText(doc.text, owner)) {
+                        consider_member(name);
+                    }
+                }
             }
         }
         if (scoped_dedup.empty()) {

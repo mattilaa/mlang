@@ -1901,6 +1901,11 @@ fn completion_detail(label: str8) -> str8 {
     if eq(label, "Mutex") == 1 { return "builtin mutex handle payload marker type"; }
     if eq(label, "Atomic64") == 1 { return "builtin 64-bit atomic handle payload marker type"; }
     if eq(label, "string") == 1 { return "builtin UTF-8 string type"; }
+    if eq(label, "is_ok") == 1 { return "builtin Result method"; }
+    if eq(label, "is_err") == 1 { return "builtin Result method"; }
+    if eq(label, "unwrap") == 1 { return "builtin Result/Option method"; }
+    if eq(label, "unwrap_err") == 1 { return "builtin Result method"; }
+    if eq(label, "is_some") == 1 { return "builtin Option method"; }
     return String::new();
 }
 
@@ -1922,6 +1927,21 @@ fn completion_documentation(label: str8) -> str8 {
     }
     if eq(label, "f64") == 1 {
         return "Alias for f64.";
+    }
+    if eq(label, "is_ok") == 1 {
+        return "Result<T, E>.is_ok() returns true when the value is Ok.";
+    }
+    if eq(label, "is_err") == 1 {
+        return "Result<T, E>.is_err() returns true when the value is Err.";
+    }
+    if eq(label, "unwrap") == 1 {
+        return "Result<T, E>.unwrap() returns the Ok value and may panic on Err. Option<T>.unwrap() returns the Some value.";
+    }
+    if eq(label, "unwrap_err") == 1 {
+        return "Result<T, E>.unwrap_err() returns the Err value.";
+    }
+    if eq(label, "is_some") == 1 {
+        return "Option<T>.is_some() returns true when the value is Some.";
     }
     if eq(label, "bool") == 1 {
         return "Boolean type with true/false values.";
