@@ -373,6 +373,7 @@ private:
     llvm::Value* generateMatchExpression(MatchExpressionNode* node);
     llvm::Value* generateTernaryExpression(TernaryNode* node);
     llvm::Value* generateTryExpression(TryExpressionNode* node);
+    llvm::Value* generateSizeofExpression(SizeofExpressionNode* node);
     /// \brief Lower an inline asm expression to LLVM inline asm.
     ///
     /// Current constraints are intentionally narrow so optimization behavior
@@ -441,6 +442,7 @@ private:
     llvm::Value* getLValuePointer(ExpressionNode* expr, int line);
     TypeNode* getLValueType(ExpressionNode* expr, int line);
     TypeNode* getPointerElementType(ExpressionNode* expr, int line);
+    TypeNode* inferExpressionTypeNode(ExpressionNode* expr, int line);
     void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
                            bool pretty, std::string& cFormat,
                            std::vector<llvm::Value*>& argValues, int line);

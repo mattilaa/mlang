@@ -136,6 +136,29 @@ fn test_compiler_hover_and_completion() -> i32 {
 }
 
 #[test]
+fn test_compiler_hover_struct_shows_size_summary() -> i32 {
+    let sr: Result<Session, str8> = session_create();
+    if sr.is_err(): { return 1; }
+    let s: Session = sr.unwrap();
+
+    let uri: str8 = "mem://hover_struct_size.mla";
+    let src: str8 = "struct DeviceFlags {\n  var power: bit;\n  var armed: bool;\n};\nfn main() -> i32 {\n  let d: DeviceFlags = DeviceFlags { power: 1, armed: true };\n  return 0;\n}";
+
+    let od: Result<i32, str8> = s.open_document(uri, "mlang", src, 1);
+    if od.is_err(): { return 1; }
+
+    let hr: Result<str8, str8> = s.hover(uri, 1, 9);
+    if hr.is_err(): { return 1; }
+    let h: str8 = hr.unwrap();
+    if contains(h, "size=2 bytes") == 0: { return 1; }
+    if contains(h, "power: bit (1B)") == 0: { return 1; }
+    if contains(h, "armed: bool (1B)") == 0: { return 1; }
+
+    let _ = s.destroy();
+    return 0;
+}
+
+#[test]
 fn test_compiler_semantic_queries_require_ast_parse() -> i32 {
     let sr: Result<Session, str8> = session_create();
     if sr.is_err(): { return 1; }

@@ -407,6 +407,20 @@ ASTNode* create_try_expression_impl(ASTNode* expr, int line)
     return node;
 }
 
+ASTNode* create_sizeof_type_expression_impl(ASTNode* type, int line)
+{
+    auto* node = new SizeofExpressionNode(static_cast<TypeNode*>(type));
+    node->line = line;
+    return node;
+}
+
+ASTNode* create_sizeof_value_expression_impl(ASTNode* expr, int line)
+{
+    auto* node = new SizeofExpressionNode(static_cast<ExpressionNode*>(expr));
+    node->line = line;
+    return node;
+}
+
 ASTNode* create_inline_asm_impl(ASTNode* type, char* asm_text, char* arch_name,
                                 ASTNode* args, int is_volatile, int line)
 {
@@ -630,6 +644,9 @@ ASTNode* create_cast_expression_impl(int type, ASTNode* expr)
     TypeNode::TypeKind targetType;
     switch(type)
     {
+    case TypeNode::TYPE_BIT:
+        targetType = TypeNode::TYPE_BIT;
+        break;
     case TypeNode::TYPE_INT:
         targetType = TypeNode::TYPE_INT;
         break;
@@ -1139,6 +1156,8 @@ std::string TypeNode::toString() const
         return "void";
     case TYPE_BOOL:
         return "bool";
+    case TYPE_BIT:
+        return "bit";
     case TYPE_INT:
         return "i32";
     case TYPE_FLOAT:
@@ -1520,6 +1539,15 @@ std::string TernaryNode::toString() const
 std::string TryExpressionNode::toString() const
 {
     return expression->toString() + "?";
+}
+
+std::string SizeofExpressionNode::toString() const
+{
+    if(typeTarget)
+        return "sizeof(" + typeTarget->toString() + ")";
+    return "sizeof(" +
+           (expressionTarget ? expressionTarget->toString() : "<unknown>") +
+           ")";
 }
 
 std::string InlineAsmNode::toString() const
@@ -2433,6 +2461,8 @@ std::string GenericStructTypeRefNode::getMangledName() const
         {
         case TypeNode::TYPE_BOOL:
             return "bool";
+        case TypeNode::TYPE_BIT:
+            return "bit";
         case TypeNode::TYPE_INT:
         case TypeNode::TYPE_I32:
             return "i32";

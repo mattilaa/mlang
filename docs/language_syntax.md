@@ -484,3 +484,32 @@ These demonstrate:
 - nested lambdas over computed data
 - left/right folds over numeric and boolean lists
 - empty-list identity behavior for folds
+
+## `bit` and `sizeof`
+
+MLang provides a builtin `bit` type for logical `0` / `1` values:
+
+```mla
+var state: bit = 0;
+state = 1;
+state = bit(0);
+```
+
+`bit` is useful for flags stored in structs and other low-level state. For
+readable aliases you can wrap the two values in helpers such as
+`std::bits::ON()` and `std::bits::OFF()`.
+
+The builtin `sizeof(...)` returns the ABI byte size as `i64`:
+
+```mla
+println!("bit={} bool={} header={}",
+         sizeof(bit), sizeof(bool), sizeof(list<bool>));
+```
+
+Both forms are supported:
+- `sizeof(Type)`
+- `sizeof(expr)`
+
+Important distinction:
+- `list<bool>` is a normal list container with ordinary element storage
+- `std::bitset::BitSet` stores values densely at one bit per entry

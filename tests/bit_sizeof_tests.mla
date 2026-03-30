@@ -1,0 +1,83 @@
+mod std::testing;
+mod std::bits;
+mod std::bitset;
+
+use std::bits::OFF;
+use std::bits::ON;
+use std::bitset::BitSet;
+use std::testing::verify;
+use std::testing::verify_eq;
+use std::testing::verify_eq_i32;
+use std::testing::verify_eq_i64;
+
+struct Lamp {
+    var state: bit;
+    var ready: bool;
+};
+
+#[test]
+fn test_bit_values_and_struct_field_updates() {
+    var state: bit = 0;
+    verify_eq_i32(0, i32(state));
+    state = 1;
+    verify_eq_i32(1, i32(state));
+    state = OFF();
+    verify_eq_i32(0, i32(state));
+    state = ON();
+    verify_eq_i32(1, i32(state));
+
+    var lamp: Lamp = Lamp {
+        state: OFF(),
+        ready: true
+    };
+    verify_eq_i32(0, i32(lamp.state));
+    lamp.state = 1;
+    verify_eq_i32(1, i32(lamp.state));
+    lamp.state = OFF();
+    verify_eq_i32(0, i32(lamp.state));
+}
+
+#[test]
+fn test_sizeof_builtin_and_container_sizes() {
+    verify_eq_i64(1, sizeof(bool));
+    verify_eq_i64(1, sizeof(bit));
+    verify_eq_i64(1, sizeof(u8));
+    verify_eq_i64(2, sizeof(u16));
+    verify_eq_i64(8, sizeof(i64));
+    verify(sizeof(Lamp) >= 2);
+
+    let count: i64 = 7;
+    let lamp: Lamp = Lamp { state: ON(), ready: false };
+    verify_eq_i64(8, sizeof(count));
+    verify_eq_i64(sizeof(Lamp), sizeof(lamp));
+
+    let bools: list<bool> = [true, false, true, false];
+    let ints: list<i32> = [1, 2, 3, 4];
+    verify_eq_i64(16, sizeof(bools));
+    verify_eq_i64(16, sizeof(ints));
+    verify_eq_i64(sizeof(list<bool>), sizeof(list<i32>));
+}
+
+#[test]
+fn test_bitset_len_tracks_bits_not_bools_as_bytes() {
+    let r: Result<BitSet, str8> = BitSet::new(0);
+    verify(!r.is_err());
+    let bs: BitSet = r.unwrap();
+
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify_eq_i64(4, bs.len());
+
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify(bs.push(true) == 0);
+    verify(bs.push(false) == 0);
+    verify_eq_i64(8, bs.len());
+
+    verify(bs.resize(16, false) == 0);
+    verify_eq_i64(16, bs.len());
+
+    bs.close();
+}

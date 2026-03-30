@@ -88,3 +88,5 @@ mod switch_statement_tests;
 use switch_statement_tests::*;
 mod pipe_operator_tests;
 use pipe_operator_tests::*;
+mod bit_sizeof_tests;
+use bit_sizeof_tests::*;

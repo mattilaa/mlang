@@ -1,0 +1,16 @@
+/// \file bits.mla
+/// \brief Helpers for the builtin `bit` type.
+///
+/// `bit` is a logical one-bit domain whose values are only `0` or `1`.
+/// Standalone `bit` values still use normal ABI byte-sized storage rules for
+/// `sizeof(bit)`, but packed bit storage is provided by `std::bitset::BitSet`.
+
+/// @brief Logical on value (`1`).
+pub fn ON() -> bit {
+    return bit(1);
+}
+
+/// @brief Logical off value (`0`).
+pub fn OFF() -> bit {
+    return bit(0);
+}

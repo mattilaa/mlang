@@ -198,6 +198,16 @@ ASTNode* create_try_expression(ASTNode* expr, int line)
     return create_try_expression_impl(expr, line);
 }
 
+ASTNode* create_sizeof_type_expression(ASTNode* type, int line)
+{
+    return create_sizeof_type_expression_impl(type, line);
+}
+
+ASTNode* create_sizeof_value_expression(ASTNode* expr, int line)
+{
+    return create_sizeof_value_expression_impl(expr, line);
+}
+
 ASTNode* create_function_call(char* name, ASTNode* arg1, ASTNode* arg2, int line)
 {
     return create_function_call_impl(name, arg1, arg2, line);

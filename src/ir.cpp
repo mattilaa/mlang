@@ -137,6 +137,8 @@ static TypeNode* type_from_text(std::string t)
     t = trim_copy(t);
     if(t == "bool")
         return new TypeNode(TypeNode::TYPE_BOOL);
+    if(t == "bit")
+        return new TypeNode(TypeNode::TYPE_BIT);
     if(t == "i32")
         return new TypeNode(TypeNode::TYPE_I32);
     if(t == "i8")
@@ -258,6 +260,11 @@ static void collectUsedIdents(ASTNode* node, std::set<std::string>& out)
     if(auto* tryE = dynamic_cast<TryExpressionNode*>(node))
     {
         collectUsedIdents(tryE->expression, out);
+        return;
+    }
+    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(node))
+    {
+        collectUsedIdents(sizeofExpr->expressionTarget, out);
         return;
     }
     if(auto* es = dynamic_cast<ExpressionStatementNode*>(node))
@@ -553,6 +560,7 @@ llvm::Type* CodeGenerator::getLLVMType(TypeNode::TypeKind kind)
     case TypeNode::TYPE_VOID:
         return llvm::Type::getVoidTy(context);
     case TypeNode::TYPE_BOOL:
+    case TypeNode::TYPE_BIT:
         return llvm::Type::getInt1Ty(context);
     case TypeNode::TYPE_INT:
     case TypeNode::TYPE_I32:
@@ -720,6 +728,8 @@ static std::string inferredTypeName(TypeNode::TypeKind kind)
         return "void";
     case TypeNode::TYPE_BOOL:
         return "bool";
+    case TypeNode::TYPE_BIT:
+        return "bit";
     case TypeNode::TYPE_INT:
         return "i32";
     case TypeNode::TYPE_I32:
@@ -3424,6 +3434,198 @@ TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
     return nullptr;
 }
 
+TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
+{
+    if(!expr)
+        return nullptr;
+
+    if(TypeNode* lvalueType = getLValueType(expr, line))
+        return cloneTypeNode(lvalueType);
+
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_BOOL);
+    if(dynamic_cast<IntLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_I64);
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_FLOAT);
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_DOUBLE);
+    if(dynamic_cast<StringLiteralNode*>(expr) ||
+       dynamic_cast<FormatNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_STR8);
+
+    if(auto* castExpr = dynamic_cast<CastExpressionNode*>(expr))
+        return new TypeNode(castExpr->targetType);
+
+    if(auto* unary = dynamic_cast<UnaryOpNode*>(expr))
+    {
+        if(unary->op == UnaryOpNode::OP_ADDR ||
+           unary->op == UnaryOpNode::OP_ADDR_MUT)
+        {
+            TypeNode* pointee = inferExpressionTypeNode(unary->operand, line);
+            if(!pointee)
+                return nullptr;
+            return new PointerTypeNode(pointee);
+        }
+        if(unary->op == UnaryOpNode::OP_DEREF)
+            return cloneTypeNode(getPointerElementType(unary->operand, line));
+    }
+
+    if(auto* ternary = dynamic_cast<TernaryNode*>(expr))
+    {
+        if(TypeNode* thenType =
+               inferExpressionTypeNode(ternary->trueExpr, line))
+            return thenType;
+        return inferExpressionTypeNode(ternary->falseExpr, line);
+    }
+
+    if(auto* tupleLit = dynamic_cast<TupleLiteralNode*>(expr))
+    {
+        auto* typeList = new TypeListNode();
+        if(tupleLit->elements)
+        {
+            for(auto* elem : tupleLit->elements->elements)
+            {
+                TypeNode* elemType = inferExpressionTypeNode(elem, line);
+                if(!elemType)
+                    return nullptr;
+                typeList->addType(elemType);
+            }
+        }
+        return new TupleTypeNode(typeList);
+    }
+
+    if(auto* listLit = dynamic_cast<ListLiteralNode*>(expr))
+    {
+        if(!listLit->elements || listLit->elements->elements.empty())
+            return new ListTypeNode();
+
+        TypeNode* elemType =
+            inferExpressionTypeNode(listLit->elements->elements.front(), line);
+        if(!elemType)
+            return nullptr;
+        return new GenericListTypeNode(elemType);
+    }
+
+    if(auto* arrFill = dynamic_cast<ArrayFillNode*>(expr))
+    {
+        TypeNode* elemType = inferExpressionTypeNode(arrFill->value, line);
+        if(!elemType)
+            return nullptr;
+        return new GenericListTypeNode(elemType);
+    }
+
+    if(auto* mapLit = dynamic_cast<MapLiteralNode*>(expr))
+    {
+        if(!mapLit->entries || mapLit->entries->entries.empty())
+            return new TypeNode(TypeNode::TYPE_MAP);
+
+        auto* entry = mapLit->entries->entries.front();
+        TypeNode* keyType = inferExpressionTypeNode(entry->key, line);
+        TypeNode* valueType = inferExpressionTypeNode(entry->value, line);
+        if(!keyType || !valueType)
+            return nullptr;
+        return new MapTypeNode(keyType, valueType);
+    }
+
+    if(auto* bin = dynamic_cast<BinaryOpNode*>(expr))
+    {
+        if(bin->op == BinaryOpNode::OP_LT || bin->op == BinaryOpNode::OP_GT ||
+           bin->op == BinaryOpNode::OP_LE || bin->op == BinaryOpNode::OP_GE ||
+           bin->op == BinaryOpNode::OP_EQ || bin->op == BinaryOpNode::OP_NE ||
+           bin->op == BinaryOpNode::OP_AND || bin->op == BinaryOpNode::OP_OR)
+            return new TypeNode(TypeNode::TYPE_BOOL);
+
+        if(bin->op == BinaryOpNode::OP_SPACESHIP)
+            return new TypeNode(TypeNode::TYPE_I32);
+
+        TypeNode* leftType = inferExpressionTypeNode(bin->left, line);
+        TypeNode* rightType = inferExpressionTypeNode(bin->right, line);
+        if(leftType &&
+           (leftType->kind == TypeNode::TYPE_STR8 ||
+            leftType->kind == TypeNode::TYPE_STR16 ||
+            leftType->kind == TypeNode::TYPE_STRING))
+            return leftType;
+        if(rightType &&
+           (rightType->kind == TypeNode::TYPE_DOUBLE ||
+            rightType->kind == TypeNode::TYPE_FLOAT))
+            return rightType;
+        if(leftType)
+            return leftType;
+        return rightType;
+    }
+
+    if(auto* call = dynamic_cast<FunctionCallNode*>(expr))
+    {
+        auto overloadIt = functionOverloads.find(call->name);
+        if(overloadIt != functionOverloads.end())
+        {
+            for(const auto& info : overloadIt->second)
+            {
+                if(info.node && info.node->returnType && isOverloadVisible(info))
+                    return cloneTypeNode(info.node->returnType);
+            }
+        }
+    }
+
+    if(auto* methodCall = dynamic_cast<MethodCallNode*>(expr))
+    {
+        if(methodCall->methodName == "clone")
+            return inferExpressionTypeNode(methodCall->object, line);
+        if(methodCall->methodName == "len")
+            return new TypeNode(TypeNode::TYPE_I64);
+        if(methodCall->methodName == "is_empty" ||
+           methodCall->methodName == "is_ok" ||
+           methodCall->methodName == "is_err" ||
+           methodCall->methodName == "is_some")
+            return new TypeNode(TypeNode::TYPE_BOOL);
+    }
+
+    if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_I64);
+
+    return nullptr;
+}
+
+llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
+{
+    TypeNode* targetType = nullptr;
+    if(node->typeTarget)
+    {
+        targetType = cloneTypeNode(node->typeTarget);
+        if(auto* namedTarget =
+               dynamic_cast<StructTypeRefNode*>(node->typeTarget))
+        {
+            auto varIt = variableTypes.find(namedTarget->structName);
+            if(varIt != variableTypes.end())
+            {
+                IdentifierNode idExpr(namedTarget->structName);
+                idExpr.line = node->line;
+                targetType = inferExpressionTypeNode(&idExpr, node->line);
+            }
+        }
+    }
+    else
+        targetType = inferExpressionTypeNode(node->expressionTarget, node->line);
+
+    if(!targetType)
+    {
+        reportError(node->line, "cannot infer type for sizeof expression");
+        return nullptr;
+    }
+
+    llvm::Type* llvmType = getLLVMTypeFromNode(targetType);
+    if(!llvmType)
+    {
+        reportError(node->line, "cannot lower sizeof target type");
+        return nullptr;
+    }
+
+    const llvm::DataLayout& dl = module->getDataLayout();
+    uint64_t sizeBytes = dl.getTypeAllocSize(llvmType).getFixedValue();
+    return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), sizeBytes);
+}
+
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
                                       bool debug, bool pretty,
                                       std::string& cFormat,
@@ -5984,6 +6186,10 @@ llvm::Value* CodeGenerator::generateExpression(ExpressionNode* node)
     else if(auto tryExpr = dynamic_cast<TryExpressionNode*>(node))
     {
         return generateTryExpression(tryExpr);
+    }
+    else if(auto* sizeofExpr = dynamic_cast<SizeofExpressionNode*>(node))
+    {
+        return generateSizeofExpression(sizeofExpr);
     }
     else if(auto* inlineAsm = dynamic_cast<InlineAsmNode*>(node))
     {
@@ -12607,7 +12813,10 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             if(!initValue)
                 return;
             targetType = initValue->getType();
-            if(targetType->isIntegerTy(1))
+            if(TypeNode* inferredNode =
+                   inferExpressionTypeNode(node->initExpr, node->line))
+                kind = inferredNode->kind;
+            else if(targetType->isIntegerTy(1))
                 kind = TypeNode::TYPE_BOOL;
             else if(targetType->isFloatTy())
                 kind = TypeNode::TYPE_FLOAT;
@@ -12801,6 +13010,8 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         auto infer_kind_from_expr =
             [&](ExpressionNode* expr) -> TypeNode::TypeKind
         {
+            if(auto* cast = dynamic_cast<CastExpressionNode*>(expr))
+                return cast->targetType;
             if(dynamic_cast<IntLiteralNode*>(expr))
                 return TypeNode::TYPE_I64; // generateIntLiteral always emits
                                            // i64
@@ -18828,11 +19039,51 @@ llvm::Value* CodeGenerator::generateCastExpression(CastExpressionNode* node)
     if(!value)
         return nullptr;
 
+    TypeNode* sourceTypeNode =
+        inferExpressionTypeNode(node->expression, node->line);
+
+    if(node->targetType == TypeNode::TYPE_BIT)
+    {
+        llvm::Type* bitType = llvm::Type::getInt1Ty(context);
+        if(value->getType()->isIntegerTy(1))
+            return value;
+
+        if(!value->getType()->isIntegerTy())
+        {
+            reportError(node->line, "bit cast expects an integer or bool value");
+            return nullptr;
+        }
+
+        if(auto* ci = llvm::dyn_cast<llvm::ConstantInt>(value))
+        {
+            const uint64_t raw = ci->getZExtValue();
+            if(raw > 1u)
+            {
+                reportError(node->line,
+                            "bit cast expects integer value 0 or 1");
+                return nullptr;
+            }
+        }
+
+        return builder.CreateICmpNE(
+            value, llvm::ConstantInt::get(value->getType(), 0), "bitcast");
+    }
+
     llvm::Type* targetType = getLLVMType(node->targetType);
     llvm::Type* sourceType = value->getType();
 
     if(sourceType == targetType)
         return value;
+
+    if(sourceType->isIntegerTy() && targetType->isIntegerTy())
+    {
+        bool treatAsUnsigned =
+            sourceType->isIntegerTy(1) ||
+            (sourceTypeNode && isUnsignedType(sourceTypeNode->kind));
+        return builder.CreateIntCast(value, targetType, !treatAsUnsigned,
+                                     treatAsUnsigned ? "zextcast"
+                                                     : "sextcast");
+    }
 
     // Integer to float/double
     if(sourceType->isIntegerTy())
