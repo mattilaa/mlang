@@ -1,0 +1,94 @@
+// Minimal driver-style example using only stdio.
+// Commands:
+//   on
+//   off
+//   fault
+//   clear
+//   status
+//   quit
+
+mod std::io;
+mod std::strbuf;
+
+use std::io::*;
+use std::strbuf::*;
+
+struct DeviceState {
+    var powered: bool;
+    var faulted: bool;
+    var last_command: str8;
+};
+
+fn main() -> i32 {
+    let input: Stdin = stdin();
+
+    set_stdout_buffering(buffering_line(), 1024);
+
+    var state: DeviceState = DeviceState {
+        powered: false,
+        faulted: false,
+        last_command: from("boot")
+    };
+
+    writeln(stdout(), "mlang stdio driver demo");
+    writeln(stdout(), "commands: on, off, fault, clear, status, quit");
+
+    var line: str8 = with_capacity(128);
+    while true {
+        write(stdout(), "driver> ");
+
+        let n: i64 = read_line(input, line, 128);
+        if n < 0 {
+            writeln(stdout(), "input closed");
+            break;
+        }
+
+        let cmd: str8 = trim(line);
+
+        if eq(cmd, "on") == 1 {
+            state.powered = true;
+            state.faulted = false;
+            free(state.last_command);
+            state.last_command = from(cmd);
+            writeln(stdout(), "device powered on");
+        } else if eq(cmd, "off") == 1 {
+            state.powered = false;
+            free(state.last_command);
+            state.last_command = from(cmd);
+            writeln(stdout(), "device powered off");
+        } else if eq(cmd, "fault") == 1 {
+            state.faulted = true;
+            free(state.last_command);
+            state.last_command = from(cmd);
+            writeln(stdout(), "device fault latched");
+        } else if eq(cmd, "clear") == 1 {
+            state.faulted = false;
+            free(state.last_command);
+            state.last_command = from(cmd);
+            writeln(stdout(), "fault cleared");
+        } else if eq(cmd, "status") == 1 {
+            free(state.last_command);
+            state.last_command = from(cmd);
+            writeln(
+                stdout(),
+                format!(
+                    "status powered={} faulted={} last={}",
+                    state.powered ? "on" : "off",
+                    state.faulted ? "yes" : "no",
+                    state.last_command
+                )
+            );
+        } else if eq(cmd, "quit") == 1 || eq(cmd, "exit") == 1 {
+            free(cmd);
+            break;
+        } else {
+            writeln(stdout(), "unknown command");
+        }
+
+        free(cmd);
+    }
+
+    free(line);
+    free(state.last_command);
+    return 0;
+}

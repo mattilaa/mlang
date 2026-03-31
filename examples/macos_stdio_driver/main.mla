@@ -1,0 +1,99 @@
+// macOS user-space driver-style demo controlled over stdio.
+// Intended to be started/stopped by the shell scripts in this directory.
+
+mod std::io;
+mod std::strbuf;
+mod std::time;
+
+use std::io::*;
+use std::strbuf::*;
+use std::time::sleep_ms;
+
+struct DeviceState {
+    var attached: bool;
+    var powered: bool;
+    var faulted: bool;
+    var last_command: str8;
+};
+
+fn print_status(state: &DeviceState) -> void {
+    writeln(
+        stdout(),
+        format!(
+            "status attached={} powered={} faulted={} last={}",
+            state.attached ? "yes" : "no",
+            state.powered ? "on" : "off",
+            state.faulted ? "yes" : "no",
+            state.last_command
+        )
+    );
+}
+
+fn main() -> i32 {
+    let input: Stdin = stdin();
+    set_stdout_buffering(buffering_line(), 1024);
+
+    var state: DeviceState = DeviceState {
+        attached: true,
+        powered: false,
+        faulted: false,
+        last_command: from("attach")
+    };
+
+    writeln(stdout(), "macos stdio driver demo attached");
+    writeln(stdout(), "commands: on, off, fault, clear, status, ping, quit");
+
+    var line: str8 = with_capacity(128);
+    while true {
+        let n: i64 = read_line_nonblocking(input, line, 128);
+        if n > 0 {
+            let cmd: str8 = trim(line);
+
+            if eq(cmd, "on") == 1 {
+                state.powered = true;
+                state.faulted = false;
+                free(state.last_command);
+                state.last_command = from(cmd);
+                writeln(stdout(), "ok powered on");
+            } else if eq(cmd, "off") == 1 {
+                state.powered = false;
+                free(state.last_command);
+                state.last_command = from(cmd);
+                writeln(stdout(), "ok powered off");
+            } else if eq(cmd, "fault") == 1 {
+                state.faulted = true;
+                free(state.last_command);
+                state.last_command = from(cmd);
+                writeln(stdout(), "ok fault latched");
+            } else if eq(cmd, "clear") == 1 {
+                state.faulted = false;
+                free(state.last_command);
+                state.last_command = from(cmd);
+                writeln(stdout(), "ok fault cleared");
+            } else if eq(cmd, "status") == 1 {
+                free(state.last_command);
+                state.last_command = from(cmd);
+                print_status(state);
+            } else if eq(cmd, "ping") == 1 {
+                free(state.last_command);
+                state.last_command = from(cmd);
+                writeln(stdout(), "pong");
+            } else if eq(cmd, "quit") == 1 || eq(cmd, "detach") == 1 {
+                free(cmd);
+                break;
+            } else if len(cmd) > 0 {
+                writeln(stdout(), format!("error unknown command '{}'", cmd));
+            }
+
+            free(cmd);
+        }
+
+        sleep_ms(50);
+    }
+
+    state.attached = false;
+    writeln(stdout(), "macos stdio driver demo detached");
+    free(line);
+    free(state.last_command);
+    return 0;
+}
