@@ -294,6 +294,7 @@ static int is_try_question_context()
 [0-9]+\.[0-9]+f { yylval.fval = atof(yytext); return FLOAT_LITERAL; }
 [0-9]+\.[0-9]+  { yylval.dval = atof(yytext); return DOUBLE_LITERAL; }
 0[bB][01]+      { yylval.ival = strtoll(yytext + 2, NULL, 2); return INT_LITERAL; }
+0[xX][0-9a-fA-F]+ { yylval.ival = strtoll(yytext + 2, NULL, 16); return INT_LITERAL; }
 [0-9]+          { yylval.ival = strtoll(yytext, NULL, 10); return INT_LITERAL; }
 "++"            { return PLUS_PLUS; }
 "--"            { return MINUS_MINUS; }

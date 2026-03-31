@@ -1111,6 +1111,8 @@ public:
     std::string name;
     bool hasExplicitValue = false;
     int64_t explicitValue = 0;
+    bool hasExplicitStringValue = false;
+    std::string explicitStringValue;
     bool hasReferenceValue = false;
     std::string refEnumName;
     std::string refVariantName;
@@ -1118,6 +1120,11 @@ public:
     EnumVariantNode(const std::string& n, bool hasValue = false,
                     int64_t value = 0)
         : name(n), hasExplicitValue(hasValue), explicitValue(value)
+    {
+    }
+    EnumVariantNode(const std::string& n, const std::string& stringValue)
+        : name(n), hasExplicitStringValue(true),
+          explicitStringValue(stringValue)
     {
     }
     std::string toString() const override;
@@ -1525,6 +1532,7 @@ ASTNode* create_enum_def(char* name, ASTNode* variants, int is_public,
                          int backing_type = TypeNode::TYPE_I32);
 ASTNode* create_enum_variant(char* name, int has_explicit_value = 0,
                              long long explicit_value = 0);
+ASTNode* create_enum_variant_string(char* name, char* explicit_string_value);
 ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name,
                                  char* ref_variant_name);
 ASTNode* create_enum_variant_list(ASTNode* variant);

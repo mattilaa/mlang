@@ -132,6 +132,7 @@ ASTNode* add_match_arm_impl(ASTNode* list, ASTNode* arm);
 ASTNode* create_match_expression_impl(ASTNode* target, ASTNode* arms, int line);
 ASTNode* create_enum_def_impl(char* name, ASTNode* variants, int is_public, int backing_type);
 ASTNode* create_enum_variant_impl(char* name, int has_explicit_value, long long explicit_value);
+ASTNode* create_enum_variant_string_impl(char* name, char* explicit_string_value);
 ASTNode* create_enum_variant_ref_impl(char* name, char* ref_enum_name, char* ref_variant_name);
 ASTNode* create_enum_variant_list_impl(ASTNode* variant);
 ASTNode* add_enum_variant_impl(ASTNode* list, ASTNode* variant);

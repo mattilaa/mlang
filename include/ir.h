@@ -129,9 +129,12 @@ private:
     std::map<std::string, std::string> globalStructVariableTypes;
     // Track enum variants: enum name -> variant name -> value
     std::map<std::string, std::map<std::string, int64_t>> enumValues;
+    std::map<std::string, std::map<std::string, std::string>> enumStringValues;
     // Track enum variants in declaration order for iteration/printing.
     std::map<std::string, std::vector<std::pair<std::string, int64_t>>>
         enumVariantOrder;
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>>
+        enumStringVariantOrder;
     // Track enum backing integer kind per enum name.
     std::map<std::string, TypeNode::TypeKind> enumBaseTypes;
     std::set<std::string> debugStructs;

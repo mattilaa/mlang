@@ -156,6 +156,7 @@ Relevant example files in the repository:
 - `examples/std_span_demo.mla`
 - `examples/exceptions_try_catch_demo.mla`
 - `examples/switch_demo.mla`
+- `examples/enum_string_hex_demo.mla`
 - `examples/pipe_operator_demo.mla`
 - `examples/bit_packed_struct_demo.mla`
 - `examples/c_lib_file_io_demo.mla`
