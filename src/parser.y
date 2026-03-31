@@ -354,6 +354,7 @@ ASTNode* mla_ast_format_argument_list_create(ASTNode* arg);
 ASTNode* mla_ast_format_argument_list_add(ASTNode* list, ASTNode* arg);
 
 ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long explicit_value);
+ASTNode* mla_ast_enum_variant_string(char* name, char* explicit_string_value);
 ASTNode* mla_ast_enum_variant_list(ASTNode* variant);
 ASTNode* mla_ast_enum_variant_list_add(ASTNode* list, ASTNode* variant);
 ASTNode* mla_ast_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name);
@@ -562,7 +563,7 @@ enum UpdatePosition
 %type <ast> map_iterator
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
-%type <ival> enum_base_type_opt enum_int_type
+%type <ival> enum_base_type_opt enum_backing_type enum_int_type
 
 %left PIPE_PIPE
 %left PIPE_GT
@@ -672,7 +673,12 @@ enum_def
 
 enum_base_type_opt
     : /* empty */ { $$ = TypeNode::TYPE_I32; }
-    | COLON enum_int_type { $$ = $2; }
+    | COLON enum_backing_type { $$ = $2; }
+    ;
+
+enum_backing_type
+    : enum_int_type { $$ = $1; }
+    | STR8 { $$ = TypeNode::TYPE_STR8; }
     ;
 
 enum_int_type
@@ -695,6 +701,7 @@ enum_variant
     : IDENTIFIER { $$ = mla_ast_enum_variant($1, 0, 0); }
     | IDENTIFIER ASSIGN INT_LITERAL { $$ = mla_ast_enum_variant($1, 1, $3); }
     | IDENTIFIER ASSIGN MINUS INT_LITERAL { $$ = mla_ast_enum_variant($1, 1, -$4); }
+    | IDENTIFIER ASSIGN STRING_LITERAL { $$ = mla_ast_enum_variant_string($1, $3); }
     | IDENTIFIER ASSIGN module_path COLONCOLON IDENTIFIER
         { $$ = mla_ast_enum_variant_ref($1, $3, $5); }
     ;

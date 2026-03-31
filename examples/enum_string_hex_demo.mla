@@ -1,0 +1,39 @@
+// Demonstrates string-backed enums and hex-valued integer enums.
+
+enum HttpMethod: str8 {
+    Get = "GET",
+    Post = "POST",
+    Patch = "PATCH"
+};
+
+enum ErrorMask: u32 {
+    None = 0x00,
+    Retry = 0x10,
+    Fatal = 0x2A
+};
+
+fn mask_value(v: ErrorMask) -> i64 {
+    return match v {
+        ErrorMask::None => 0x00,
+        ErrorMask::Retry => 0x10,
+        ErrorMask::Fatal => 0x2A,
+        _ => -1
+    };
+}
+
+fn main() -> i32 {
+    var method: HttpMethod = HttpMethod::Get;
+    println!("method={}", method);
+    method = HttpMethod::Patch;
+    println!("method after assign={}", method);
+
+    println!("iterate methods:");
+    for (i, item) in HttpMethod.enumerate() {
+        println!("  [{}] {}", i, item);
+    }
+
+    let mask: ErrorMask = ErrorMask::Fatal;
+    println!("fatal mask decimal={}", mask_value(mask));
+    println!("hex literal decimal={}", 0x2A);
+    return 0;
+}

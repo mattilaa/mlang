@@ -13,6 +13,19 @@ enum Status {
     Done
 };
 
+enum HttpMethod: str8 {
+    Get = "GET",
+    Post = "POST",
+    Patch = "PATCH",
+    Submit = HttpMethod::Post
+};
+
+enum HexColor: u32 {
+    Red = 0x10,
+    Green = 0x20,
+    Blue = 0x2A
+};
+
 struct Outer {
     enum Inner {
         Low,
@@ -43,6 +56,16 @@ fn inner_score(v: Outer::Inner) -> i32 {
     return match v {
         Outer::Inner::Low => 100,
         Outer::Inner::High => 200,
+        _ => 0
+    };
+}
+
+fn method_rank(m: HttpMethod) -> i32 {
+    return match m {
+        HttpMethod::Get => 1,
+        HttpMethod::Post => 2,
+        HttpMethod::Patch => 3,
+        HttpMethod::Submit => 4,
         _ => 0
     };
 }
@@ -101,4 +124,59 @@ fn test_enum_enumerate_exposes_index_and_value() {
     }
     verify(idx_acc == 12);
     verify(value_acc == 123);
+}
+
+#[test]
+fn test_string_backed_enum_match_compare_and_assign() {
+    var method: HttpMethod = HttpMethod::Get;
+    verify(method == "GET");
+    method = HttpMethod::Patch;
+    verify(method == "PATCH");
+    verify(method_rank(method) == 3);
+}
+
+#[test]
+fn test_string_backed_enum_switch_and_iteration() {
+    let method: HttpMethod = HttpMethod::Post;
+    var text: str8 = "unset";
+    switch method {
+    case HttpMethod::Get: {
+        text = "get";
+    }
+    case HttpMethod::Post: {
+        text = "post";
+    }
+    case HttpMethod::Patch: {
+        text = "patch";
+    }
+    default: {
+        text = "other";
+    }
+    }
+    verify(text == "post");
+
+    var count: i64 = 0;
+    for (i, m) in HttpMethod.enumerate() {
+        if i == 0 { verify(m == "GET"); }
+        if i == 1 { verify(m == "POST"); }
+        if i == 2 { verify(m == "PATCH"); }
+        if i == 3 { verify(m == "POST"); }
+        count = count + 1;
+    }
+    verify(count == 4);
+}
+
+#[test]
+fn test_hex_integer_literals_and_enum_values() {
+    let mask: i64 = 0x2A;
+    verify(mask == 42);
+
+    let c: HexColor = HexColor::Blue;
+    let v: i64 = match c {
+        HexColor::Red => 0x10,
+        HexColor::Green => 0x20,
+        HexColor::Blue => 0x2A,
+        _ => 0
+    };
+    verify(v == 42);
 }

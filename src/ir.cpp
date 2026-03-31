@@ -645,6 +645,11 @@ static bool isEnumIntegralType(TypeNode::TypeKind kind)
     }
 }
 
+static bool isEnumStringType(TypeNode::TypeKind kind)
+{
+    return kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STRING;
+}
+
 static unsigned enumBitWidth(TypeNode::TypeKind kind)
 {
     switch(kind)
@@ -3137,8 +3142,13 @@ std::string CodeGenerator::expressionTypeNameForLog(ExpressionNode* expr,
 std::string
 CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
 {
-    auto it = enumValues.find(enumName);
-    if(it != enumValues.end())
+    auto hasEnumNamed = [&](const std::string& name) -> bool
+    {
+        return enumValues.find(name) != enumValues.end() ||
+               enumStringValues.find(name) != enumStringValues.end();
+    };
+
+    if(hasEnumNamed(enumName))
         return enumName;
 
     std::string shortName = enumName;
@@ -3146,12 +3156,23 @@ CodeGenerator::resolveVisibleEnumName(const std::string& enumName) const
     if(scopePos != std::string::npos && (scopePos + 2) < enumName.size())
     {
         shortName = enumName.substr(scopePos + 2);
-        auto shortIt = enumValues.find(shortName);
-        if(shortIt != enumValues.end())
+        if(hasEnumNamed(shortName))
             return shortName;
     }
 
     for(const auto& kv : enumValues)
+    {
+        const std::string& candidate = kv.first;
+        if(candidate.size() > shortName.size() &&
+           candidate.compare(candidate.size() - shortName.size(),
+                             shortName.size(), shortName) == 0)
+        {
+            char sep = candidate[candidate.size() - shortName.size() - 1];
+            if(sep == ':' || sep == '.' || sep == '_')
+                return candidate;
+        }
+    }
+    for(const auto& kv : enumStringValues)
     {
         const std::string& candidate = kv.first;
         if(candidate.size() > shortName.size() &&
@@ -3181,11 +3202,22 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
 #endif
     }
     auto orderedIt = enumVariantOrder.find(resolvedEnumName);
+    auto orderedStrIt = enumStringVariantOrder.find(resolvedEnumName);
 
     TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
     auto bkIt = enumBaseTypes.find(resolvedEnumName);
     if(bkIt != enumBaseTypes.end())
         baseKind = bkIt->second;
+    if(isEnumStringType(baseKind))
+    {
+        if(enumVal->getType()->isPointerTy())
+            return enumVal;
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString("<enum>");
+#else
+        return builder.CreateGlobalStringPtr("<enum>");
+#endif
+    }
     llvm::Type* enumTy = getLLVMType(baseKind);
 
     llvm::Value* enumValNorm = enumVal;
@@ -3223,6 +3255,10 @@ llvm::Value* CodeGenerator::buildEnumString(llvm::Value* enumVal,
         }
         return out;
     }
+
+    if(orderedStrIt != enumStringVariantOrder.end() &&
+       !orderedStrIt->second.empty())
+        return out;
 
     auto enumIt = enumValues.find(resolvedEnumName);
     if(enumIt == enumValues.end())
@@ -3387,6 +3423,12 @@ TypeNode* CodeGenerator::getLValueType(ExpressionNode* expr, int line)
             return new StructTypeRefNode(structIt->second);
         }
         if(kind == TypeNode::TYPE_INT)
+        {
+            auto enumIt = enumVariableTypes.find(id->name);
+            if(enumIt != enumVariableTypes.end())
+                return new StructTypeRefNode(enumIt->second);
+        }
+        if(kind == TypeNode::TYPE_STR8 || kind == TypeNode::TYPE_STRING)
         {
             auto enumIt = enumVariableTypes.find(id->name);
             if(enumIt != enumVariableTypes.end())
@@ -7347,6 +7389,14 @@ llvm::Value* CodeGenerator::generateBinaryOp(BinaryOpNode* node)
 
     auto resolveExprKind = [&](ExpressionNode* expr) -> TypeNode::TypeKind
     {
+        std::string enumName = getEnumTypeName(expr, node->line);
+        if(!enumName.empty())
+        {
+            std::string resolvedEnumName = resolveVisibleEnumName(enumName);
+            auto baseIt = enumBaseTypes.find(resolvedEnumName);
+            if(baseIt != enumBaseTypes.end())
+                return baseIt->second;
+        }
         if(TypeNode* exprType = getLValueType(expr, node->line))
             return exprType->kind;
         return getExpressionTypeKind(expr, variableTypes);
@@ -10161,7 +10211,12 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
                                              const std::string& enumName)
 {
     auto orderIt = enumVariantOrder.find(enumName);
-    if(orderIt == enumVariantOrder.end() || orderIt->second.empty())
+    auto strOrderIt = enumStringVariantOrder.find(enumName);
+    bool hasIntOrder =
+        orderIt != enumVariantOrder.end() && !orderIt->second.empty();
+    bool hasStrOrder =
+        strOrderIt != enumStringVariantOrder.end() && !strOrderIt->second.empty();
+    if(!hasIntOrder && !hasStrOrder)
         return;
 
     llvm::Function* function = builder.GetInsertBlock()->getParent();
@@ -10222,7 +10277,8 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
         recordVariableScopeDepth(node->indexVarName);
     }
 
-    const int64_t variantCount = static_cast<int64_t>(orderIt->second.size());
+    const int64_t variantCount = static_cast<int64_t>(
+        hasIntOrder ? orderIt->second.size() : strOrderIt->second.size());
 
     llvm::BasicBlock* condBB =
         llvm::BasicBlock::Create(context, "for.cond", function);
@@ -10245,19 +10301,43 @@ void CodeGenerator::generateForEnumIteration(ForNode* node,
     bodyBB->insertInto(function);
     builder.SetInsertPoint(bodyBB);
 
-    llvm::Value* enumVal = llvm::ConstantInt::get(
-        enumTy, orderIt->second.front().second, !enumIsUnsigned(baseKind));
-    for(size_t i = 0; i < orderIt->second.size(); ++i)
+    if(isEnumStringType(baseKind))
     {
-        llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
-        llvm::Value* isThis =
-            builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
-        llvm::Value* variantConst = llvm::ConstantInt::get(
-            enumTy, orderIt->second[i].second, !enumIsUnsigned(baseKind));
-        enumVal =
-            builder.CreateSelect(isThis, variantConst, enumVal, "selectenum");
+        llvm::Value* enumVal = nullptr;
+        for(size_t i = 0; i < strOrderIt->second.size(); ++i)
+        {
+            llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
+            llvm::Value* isThis =
+                builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* variantConst =
+                builder.CreateGlobalString(strOrderIt->second[i].second);
+#else
+            llvm::Value* variantConst =
+                builder.CreateGlobalStringPtr(strOrderIt->second[i].second);
+#endif
+            enumVal = enumVal ? builder.CreateSelect(isThis, variantConst, enumVal,
+                                                     "selectenumstr")
+                              : variantConst;
+        }
+        builder.CreateStore(enumVal, loopVar);
     }
-    builder.CreateStore(enumVal, loopVar);
+    else
+    {
+        llvm::Value* enumVal = llvm::ConstantInt::get(
+            enumTy, orderIt->second.front().second, !enumIsUnsigned(baseKind));
+        for(size_t i = 0; i < orderIt->second.size(); ++i)
+        {
+            llvm::Value* idxConst = llvm::ConstantInt::get(indexType, i);
+            llvm::Value* isThis =
+                builder.CreateICmpEQ(currentIdx, idxConst, "iseq");
+            llvm::Value* variantConst = llvm::ConstantInt::get(
+                enumTy, orderIt->second[i].second, !enumIsUnsigned(baseKind));
+            enumVal =
+                builder.CreateSelect(isThis, variantConst, enumVal, "selectenum");
+        }
+        builder.CreateStore(enumVal, loopVar);
+    }
 
     if(node->body)
     {
@@ -11015,6 +11095,31 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
         reportError(node->line, "unknown enum: '" + node->enumName + "'");
         return nullptr;
     }
+    TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+    auto bkIt = enumBaseTypes.find(resolvedEnumName);
+    if(bkIt != enumBaseTypes.end())
+        baseKind = bkIt->second;
+    if(isEnumStringType(baseKind))
+    {
+        auto enumIt = enumStringValues.find(resolvedEnumName);
+        if(enumIt == enumStringValues.end())
+        {
+            reportError(node->line, "unknown enum: '" + node->enumName + "'");
+            return nullptr;
+        }
+        auto variantIt = enumIt->second.find(node->variantName);
+        if(variantIt == enumIt->second.end())
+        {
+            reportError(node->line,
+                        "unknown enum variant: '" + node->variantName + "'");
+            return nullptr;
+        }
+#if LLVM_VERSION_MAJOR >= 21
+        return builder.CreateGlobalString(variantIt->second);
+#else
+        return builder.CreateGlobalStringPtr(variantIt->second);
+#endif
+    }
     auto enumIt = enumValues.find(resolvedEnumName);
     auto variantIt = enumIt->second.find(node->variantName);
     if(variantIt == enumIt->second.end())
@@ -11023,10 +11128,6 @@ llvm::Value* CodeGenerator::generateEnumLiteral(EnumLiteralNode* node)
                     "unknown enum variant: '" + node->variantName + "'");
         return nullptr;
     }
-    TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
-    auto bkIt = enumBaseTypes.find(resolvedEnumName);
-    if(bkIt != enumBaseTypes.end())
-        baseKind = bkIt->second;
     llvm::Type* enumTy = getLLVMType(baseKind);
     return llvm::ConstantInt::get(enumTy, variantIt->second,
                                   !enumIsUnsigned(baseKind));
@@ -11144,10 +11245,90 @@ void CodeGenerator::generateEnumDefinition(EnumDefNode* node)
     }
 
     TypeNode::TypeKind baseKind = node->backingType;
-    if(!isEnumIntegralType(baseKind))
+    if(!isEnumIntegralType(baseKind) && !isEnumStringType(baseKind))
     {
         reportError(node->line,
-                    "enum '" + node->name + "' has non-integer backing type");
+                    "enum '" + node->name + "' has unsupported backing type");
+        return;
+    }
+
+    if(isEnumStringType(baseKind))
+    {
+        std::map<std::string, std::string> variants;
+        std::vector<std::pair<std::string, std::string>> orderedVariants;
+        if(node->variants)
+        {
+            for(auto* variant : node->variants->variants)
+            {
+                if(!variant)
+                    continue;
+                if(variants.find(variant->name) != variants.end())
+                {
+                    reportError(node->line,
+                                "duplicate enum variant: '" + variant->name + "'");
+                    return;
+                }
+
+                std::string value = variant->name;
+                if(variant->hasExplicitStringValue)
+                {
+                    value = variant->explicitStringValue;
+                }
+                else if(variant->hasReferenceValue)
+                {
+                    bool resolved = false;
+                    if(variant->refEnumName == node->name)
+                    {
+                        auto selfIt = variants.find(variant->refVariantName);
+                        if(selfIt != variants.end())
+                        {
+                            value = selfIt->second;
+                            resolved = true;
+                        }
+                    }
+                    else
+                    {
+                        auto refEnumIt = enumStringValues.find(variant->refEnumName);
+                        if(refEnumIt != enumStringValues.end())
+                        {
+                            auto refVarIt =
+                                refEnumIt->second.find(variant->refVariantName);
+                            if(refVarIt != refEnumIt->second.end())
+                            {
+                                value = refVarIt->second;
+                                resolved = true;
+                            }
+                        }
+                    }
+
+                    if(!resolved)
+                    {
+                        reportError(
+                            variant->line > 0 ? variant->line : node->line,
+                            "enum variant '" + variant->name +
+                                "' references unknown string enum value '" +
+                                variant->refEnumName + "::" +
+                                variant->refVariantName + "' in enum '" +
+                                node->name + "'");
+                        return;
+                    }
+                }
+                else if(variant->hasExplicitValue)
+                {
+                    reportError(variant->line > 0 ? variant->line : node->line,
+                                "string-backed enum '" + node->name +
+                                    "' requires string variant values");
+                    return;
+                }
+
+                variants[variant->name] = value;
+                orderedVariants.push_back({variant->name, value});
+            }
+        }
+
+        enumStringValues[node->name] = variants;
+        enumStringVariantOrder[node->name] = orderedVariants;
+        enumBaseTypes[node->name] = TypeNode::TYPE_STR8;
         return;
     }
 
@@ -12679,11 +12860,15 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             if(auto* structRef =
                    dynamic_cast<StructTypeRefNode*>(inferredExprType))
             {
-                std::string resolvedEnumName =
-                    resolveVisibleEnumName(structRef->structName);
+                    std::string resolvedEnumName =
+                        resolveVisibleEnumName(structRef->structName);
                 if(!resolvedEnumName.empty())
                 {
-                    variableTypes[node->name] = TypeNode::TYPE_INT;
+                    TypeNode::TypeKind baseKind = TypeNode::TYPE_I32;
+                    auto baseIt = enumBaseTypes.find(resolvedEnumName);
+                    if(baseIt != enumBaseTypes.end())
+                        baseKind = baseIt->second;
+                    variableTypes[node->name] = baseKind;
                     enumVariableTypes[node->name] = resolvedEnumName;
                 }
                 else
@@ -12758,6 +12943,11 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
         if(auto* enumLit = dynamic_cast<EnumLiteralNode*>(node->expression))
         {
             enumVariableTypes[node->name] = enumLit->enumName;
+            std::string resolvedEnumName =
+                resolveVisibleEnumName(enumLit->enumName);
+            auto baseIt = enumBaseTypes.find(resolvedEnumName);
+            if(baseIt != enumBaseTypes.end())
+                variableTypes[node->name] = baseIt->second;
         }
 
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->expression))
@@ -13068,33 +13258,50 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
             {
                 initValue = generateExpression(node->expression);
             }
-            if(!initValue)
-            {
-                initValue = llvm::ConstantInt::get(targetType, 0, true);
-            }
-
-            if(initValue->getType() != targetType)
-            {
-                if(initValue->getType()->isIntegerTy())
+                if(!initValue)
                 {
-                    initValue = builder.CreateIntCast(
-                        initValue, targetType, !enumIsUnsigned(baseKind),
+                    if(isEnumStringType(baseKind))
+                    {
+                        initValue = llvm::ConstantPointerNull::get(
+                            llvm::cast<llvm::PointerType>(targetType));
+                    }
+                    else
+                    {
+                        initValue = llvm::ConstantInt::get(targetType, 0, true);
+                    }
+                }
+
+                if(initValue->getType() != targetType)
+                {
+                    if(isEnumStringType(baseKind) &&
+                       initValue->getType()->isPointerTy())
+                    {
+                        initValue = builder.CreateBitCast(initValue, targetType,
+                                                          "enum.cast.ptr");
+                    }
+                    else if(initValue->getType()->isIntegerTy())
+                    {
+                        initValue = builder.CreateIntCast(
+                            initValue, targetType, !enumIsUnsigned(baseKind),
                         enumIsUnsigned(baseKind) ? "enum.cast.u"
                                                  : "enum.cast.s");
+                    }
+                    else
+                    {
+                        reportError(node->line,
+                                    isEnumStringType(baseKind)
+                                        ? "enum initializer must be str8"
+                                        : "enum initializer must be integer");
+                        return;
+                    }
                 }
-                else
-                {
-                    reportError(node->line, "enum initializer must be integer");
-                    return;
-                }
-            }
 
-            builder.CreateStore(initValue, alloca);
-            namedValues[node->name] = alloca;
-            variableTypes[node->name] = TypeNode::TYPE_INT;
-            enumVariableTypes[node->name] = resolvedEnumName;
-            constantVariables.insert(node->name);
-            return;
+                builder.CreateStore(initValue, alloca);
+                namedValues[node->name] = alloca;
+                variableTypes[node->name] = baseKind;
+                enumVariableTypes[node->name] = resolvedEnumName;
+                constantVariables.insert(node->name);
+                return;
         }
 
         llvm::Type* structType = getStructType(structRef->structName);
@@ -13581,6 +13788,11 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
         if(auto* enumLit = dynamic_cast<EnumLiteralNode*>(node->initExpr))
         {
             enumVariableTypes[node->name] = enumLit->enumName;
+            std::string resolvedEnumName =
+                resolveVisibleEnumName(enumLit->enumName);
+            auto baseIt = enumBaseTypes.find(resolvedEnumName);
+            if(baseIt != enumBaseTypes.end())
+                variableTypes[node->name] = baseIt->second;
         }
 
         if(auto* listLit = dynamic_cast<ListLiteralNode*>(node->initExpr))
@@ -13934,7 +14146,13 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                 {
                     if(initValue->getType() != targetType)
                     {
-                        if(initValue->getType()->isIntegerTy())
+                        if(isEnumStringType(baseKind) &&
+                           initValue->getType()->isPointerTy())
+                        {
+                            initValue = builder.CreateBitCast(initValue, targetType,
+                                                              "enum.cast.ptr");
+                        }
+                        else if(initValue->getType()->isIntegerTy())
                         {
                             initValue = builder.CreateIntCast(
                                 initValue, targetType,
@@ -13945,7 +14163,9 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                         else
                         {
                             reportError(node->line,
-                                        "enum initializer must be integer");
+                                        isEnumStringType(baseKind)
+                                            ? "enum initializer must be str8"
+                                            : "enum initializer must be integer");
                             return;
                         }
                     }
@@ -13954,7 +14174,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             }
 
             namedValues[node->name] = alloca;
-            variableTypes[node->name] = TypeNode::TYPE_INT;
+            variableTypes[node->name] = baseKind;
             enumVariableTypes[node->name] = resolvedEnumName;
             return;
         }
@@ -14112,7 +14332,22 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
     // Convert value to target type if necessary
     if(valueType != targetType)
     {
-        if(valueType->isIntegerTy() && targetType->isIntegerTy())
+        bool isEnumAssignment = enumVariableTypes.find(node->name) != enumVariableTypes.end();
+        TypeNode::TypeKind enumBaseKind = TypeNode::TYPE_I32;
+        if(isEnumAssignment)
+        {
+            std::string enumName = resolveVisibleEnumName(enumVariableTypes[node->name]);
+            auto baseIt = enumBaseTypes.find(enumName);
+            if(baseIt != enumBaseTypes.end())
+                enumBaseKind = baseIt->second;
+        }
+
+        if(isEnumAssignment && isEnumStringType(enumBaseKind) &&
+           valueType->isPointerTy() && targetType->isPointerTy())
+        {
+            value = builder.CreateBitCast(value, targetType, "enum.assign.ptr");
+        }
+        else if(valueType->isIntegerTy() && targetType->isIntegerTy())
         {
             unsigned valueBits = valueType->getIntegerBitWidth();
             unsigned targetBits = targetType->getIntegerBitWidth();
@@ -14141,8 +14376,10 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         else
         {
             reportError(node->line,
-                        "type mismatch in assignment to variable '" +
-                            node->name + "'");
+                        (isEnumAssignment && isEnumStringType(enumBaseKind))
+                            ? "string-backed enum assignment requires str8 value"
+                            : "type mismatch in assignment to variable '" +
+                                  node->name + "'");
             return;
         }
     }

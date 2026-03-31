@@ -591,6 +591,11 @@ ASTNode* create_enum_variant(char* name, int has_explicit_value, long long expli
     return create_enum_variant_impl(name, has_explicit_value, explicit_value);
 }
 
+ASTNode* create_enum_variant_string(char* name, char* explicit_string_value)
+{
+    return create_enum_variant_string_impl(name, explicit_string_value);
+}
+
 ASTNode* create_enum_variant_ref(char* name, char* ref_enum_name, char* ref_variant_name)
 {
     return create_enum_variant_ref_impl(name, ref_enum_name, ref_variant_name);

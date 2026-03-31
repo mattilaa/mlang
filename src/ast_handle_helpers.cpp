@@ -208,6 +208,11 @@ ASTNode* mla_ast_enum_variant(char* name, int has_explicit_value, long long expl
     return create_enum_variant_impl(name, has_explicit_value, explicit_value);
 }
 
+ASTNode* mla_ast_enum_variant_string(char* name, char* explicit_string_value)
+{
+    return create_enum_variant_string_impl(name, explicit_string_value);
+}
+
 ASTNode* mla_ast_enum_variant_list(ASTNode* variant)
 {
     return create_enum_variant_list_impl(variant);

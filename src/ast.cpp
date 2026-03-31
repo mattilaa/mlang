@@ -715,6 +715,13 @@ ASTNode* create_enum_variant_impl(char* name, int has_explicit_value,
                                static_cast<int64_t>(explicit_value));
 }
 
+ASTNode* create_enum_variant_string_impl(char* name,
+                                         char* explicit_string_value)
+{
+    return new EnumVariantNode(std::string(name),
+                               std::string(explicit_string_value));
+}
+
 ASTNode* create_enum_variant_ref_impl(char* name, char* ref_enum_name,
                                  char* ref_variant_name)
 {
@@ -1785,6 +1792,8 @@ std::string EnumVariantNode::toString() const
 {
     if(hasReferenceValue)
         return name + " = " + refEnumName + "::" + refVariantName;
+    if(hasExplicitStringValue)
+        return name + " = \"" + explicitStringValue + "\"";
     if(hasExplicitValue)
         return name + " = " + std::to_string(explicitValue);
     return name;
