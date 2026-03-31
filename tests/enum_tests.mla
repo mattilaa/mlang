@@ -1,6 +1,6 @@
 mod std::testing;
 
-use std::testing::verify;
+use std::testing::verify_eq;
 enum Color {
     Red,
     Green,
@@ -73,15 +73,15 @@ fn method_rank(m: HttpMethod) -> i32 {
 #[test]
 fn test_enum_literal_and_match() {
     let c: Color = Color::Green;
-    verify(color_code(c) == 2);
+    verify_eq(2, color_code(c));
 }
 
 #[test]
 fn test_enum_multiple_variants() {
-    if status_score(Status::Idle) != 10: { verify(false); }
-    if status_score(Status::Busy) != 20: { verify(false); }
-    if status_score(Status::Done) != 30: { verify(false); }
-    }
+    verify_eq(10, status_score(Status::Idle));
+    verify_eq(20, status_score(Status::Busy));
+    verify_eq(30, status_score(Status::Done));
+}
 
 #[test]
 fn test_option_enum_match_still_works() {
@@ -90,19 +90,19 @@ fn test_option_enum_match_still_works() {
         Some(v) => color_code(v),
         None => 0
     };
-    verify(out == 3);
+    verify_eq(3, out);
 }
 
 #[test]
 fn test_nested_enum_type_and_literal() {
     let v: Outer::Inner = Outer::Inner::High;
-    verify(inner_score(v) == 200);
+    verify_eq(200, inner_score(v));
 }
 
 #[test]
 fn test_nested_enum_struct_member() {
     let o: Outer = Outer { level: Outer::Inner::High };
-    verify(inner_score(o.level) == 200);
+    verify_eq(200, inner_score(o.level));
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn test_enum_iteration_runs_in_declaration_order() {
     for s in Status {
         acc = acc * 10 + (status_score(s) / 10);
     }
-    verify(acc == 123);
+    verify_eq(123, acc);
 }
 
 #[test]
@@ -122,17 +122,18 @@ fn test_enum_enumerate_exposes_index_and_value() {
         idx_acc = idx_acc * 10 + i;
         value_acc = value_acc * 10 + (status_score(s) / 10);
     }
-    verify(idx_acc == 12);
-    verify(value_acc == 123);
+    verify_eq(12, idx_acc);
+    verify_eq(123, value_acc);
 }
 
 #[test]
 fn test_string_backed_enum_match_compare_and_assign() {
     var method: HttpMethod = HttpMethod::Get;
-    verify(method == "GET");
+    verify_eq(HttpMethod::Get, "GET");
+    verify_eq("GET", method);
     method = HttpMethod::Patch;
-    verify(method == "PATCH");
-    verify(method_rank(method) == 3);
+    verify_eq("PATCH", method);
+    verify_eq(3, method_rank(method));
 }
 
 #[test]
@@ -153,23 +154,23 @@ fn test_string_backed_enum_switch_and_iteration() {
         text = "other";
     }
     }
-    verify(text == "post");
+    verify_eq("post", text);
 
     var count: i64 = 0;
     for (i, m) in HttpMethod.enumerate() {
-        if i == 0 { verify(m == "GET"); }
-        if i == 1 { verify(m == "POST"); }
-        if i == 2 { verify(m == "PATCH"); }
-        if i == 3 { verify(m == "POST"); }
+        if i == 0 { verify_eq("GET", m); }
+        if i == 1 { verify_eq("POST", m); }
+        if i == 2 { verify_eq("PATCH", m); }
+        if i == 3 { verify_eq("POST", m); }
         count = count + 1;
     }
-    verify(count == 4);
+    verify_eq(4, count);
 }
 
 #[test]
 fn test_hex_integer_literals_and_enum_values() {
     let mask: i64 = 0x2A;
-    verify(mask == 42);
+    verify_eq(42, mask);
 
     let c: HexColor = HexColor::Blue;
     let v: i64 = match c {
@@ -178,5 +179,5 @@ fn test_hex_integer_literals_and_enum_values() {
         HexColor::Blue => 0x2A,
         _ => 0
     };
-    verify(v == 42);
+    verify_eq(42, v);
 }
