@@ -87,10 +87,13 @@ collection/str8 values (including values typed through `use type` aliases).
 
 ## Built-in Enum Behavior
 
-Enum declarations define named integral values and may specify an explicit
-backing type such as `u8` or `i64`.
+Enum declarations define named values and may specify an explicit integer
+backing type such as `u8` or `i64`, or `str8` for string-backed enums.
 
 - Enum values format/print as `EnumName::Variant`.
+- Integer-backed enums accept decimal, binary, and hex integer literals.
+- Unknown integer-backed enum values print as `<EnumName:unknown>`.
+- `str8`-backed enums compare directly with `str8`.
 - `for value in Status { ... }` iterates the enum in declaration order.
 - `for (i, value) in Status.enumerate() { ... }` iterates in declaration order
   and exposes a zero-based `i64` index.
@@ -111,6 +114,19 @@ for value in Status {
 for (i, value) in Status.enumerate() {
     println!("[{}] {}", i, value);
 }
+```
+
+String-backed example:
+
+```mla
+enum HttpMethod : str8 {
+    Get = "GET",
+    Post = "POST",
+    Patch = "PATCH",
+};
+
+let method: HttpMethod = HttpMethod::Post;
+verify_eq("POST", method);
 ```
 
 ### `str8`

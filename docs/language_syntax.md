@@ -157,12 +157,39 @@ enum Status : i64 {
 };
 ```
 
+String-backed enums are also supported with `str8`:
+
+```mla
+enum HttpMethod : str8 {
+    Get = "GET",
+    Post = "POST",
+    Patch = "PATCH",
+};
+```
+
 Compatibility and diagnostics:
 - Values must fit the declared backing type.
 - Compiler errors include `file.mla:row:column` locations for invalid values.
 - Compatible enum values can be referenced across enums when representable in
   the target enum backing type.
 - Nested enum declarations (`Outer::Inner`) are supported.
+- `str8`-backed enums support string literal values and same-enum value reuse.
+- String-backed enums can be compared with `str8`, matched, switched on,
+  iterated, printed, and reassigned.
+
+Hex integer literals are accepted in expressions and enum values:
+
+```mla
+enum ErrorMask : u32 {
+    None = 0x00,
+    Retry = 0x10,
+    Fatal = 0x2A,
+};
+```
+
+See also:
+- `examples/enum_print_demo.mla`
+- `examples/enum_string_hex_demo.mla`
 
 ## `switch` / `case`
 
