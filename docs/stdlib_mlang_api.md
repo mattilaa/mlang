@@ -32,6 +32,7 @@ mod std::term;
 mod std::time;
 mod std::timer;
 mod std::fs;
+mod std::hash;
 mod std::strbuf;
 mod std::bytes;
 mod std::serde;
@@ -72,6 +73,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/time.mla`
 - `stdlib/std/timer.mla`
 - `stdlib/std/strbuf.mla`
+- `stdlib/std/hash.mla`
 - `stdlib/std/bytes.mla`
 - `stdlib/std/serde.mla`
 - `stdlib/std/protocol.mla`
@@ -1466,4 +1468,40 @@ for x in v {
 for(i, x) in v.enumerate() {
     println!("v[{}] = {}", i, x);
 }
+```
+## std::hash
+
+Module file: `stdlib/std/hash.mla`
+
+Stable 64-bit hashing helpers for cache keys, fingerprints, and combined IDs.
+
+### Free functions
+- `init() -> i64`
+- `hash_i64(value: i64) -> i64`
+- `hash_bool(value: bool) -> i64`
+- `hash_str(text: str8) -> i64`
+- `hash_str16(text: str16) -> i64`
+- `combine(seed: i64, value_hash: i64) -> i64`
+- `to_hex(value: i64) -> str8`
+
+### Incremental builder
+- `Hasher::new() -> Hasher`
+- `Hasher::write_i64(self: &mut Self, value: i64) -> void`
+- `Hasher::write_bool(self: &mut Self, value: bool) -> void`
+- `Hasher::write_str(self: &mut Self, text: str8) -> void`
+- `Hasher::write_str16(self: &mut Self, text: str16) -> void`
+- `Hasher::write_hash(self: &mut Self, value_hash: i64) -> void`
+- `Hasher::finish(self: Hasher) -> i64`
+- `Hasher::finish_hex(self: Hasher) -> str8`
+
+Example:
+
+```mla
+mod std::hash;
+use std::hash::*;
+
+var h: Hasher = Hasher::new();
+h.write_str("device");
+h.write_i64(42);
+println!("{}", h.finish_hex());
 ```

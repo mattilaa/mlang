@@ -92,3 +92,5 @@ mod bit_sizeof_tests;
 use bit_sizeof_tests::*;
 mod std_span_tests;
 use std_span_tests::*;
+mod std_hash_tests;
+use std_hash_tests::*;
