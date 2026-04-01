@@ -49,6 +49,8 @@ MLang supports builtin platform macros for multiplatform source selection:
 - `posix!()`
 - `linux!()`
 - `macos!()`
+- `x64!()`
+- `aarch64!()`
 
 These evaluate to compile-time boolean values, so they work in normal control
 flow and in `static_assert!`.
@@ -62,6 +64,31 @@ if windows!() {
     println!("windows code path");
 } else if posix!() {
     println!("posix code path");
+}
+```
+
+## Architecture-Gated Functions
+
+MLang supports compile-time architecture-gated function definitions with:
+
+- `#[x86-64]`
+- `#[aarch64]`
+
+Only the matching function definition is included in the compiled program.
+This is useful for inline asm implementations that would otherwise fail
+validation on the wrong target.
+
+Example:
+
+```mla
+#[aarch64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm aarch64(i64, "add $0, $1, $2", lhs, rhs);
+}
+
+#[x86-64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm x64(i64, "movq $1, $0\naddq $2, $0", lhs, rhs);
 }
 ```
 

@@ -46,6 +46,14 @@
 // Returns compile-time `true` on macOS targets/hosts, else `false`.
 // Usage: if macos!() { ... }
 
+// @builtin_macro x64
+// Returns compile-time `true` on x86-64 targets/hosts, else `false`.
+// Usage: if x64!() { ... }
+
+// @builtin_macro aarch64
+// Returns compile-time `true` on AArch64 targets/hosts, else `false`.
+// Usage: if aarch64!() { ... }
+
 // @builtin_macro vec
 // Creates a Vec<T> (list<T>) from a literal or fill expression.
 // Usage: vec![a, b, c]   -- list from elements

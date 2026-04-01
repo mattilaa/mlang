@@ -161,6 +161,7 @@ Relevant example files in the repository:
 - `examples/bit_packed_struct_demo.mla`
 - `examples/c_lib_file_io_demo.mla`
 - `examples/c_lib_text_parse_demo.mla`
+- `examples/platform_inline_asm_demo.mla`
 
 ## Design Direction
 

@@ -13,3 +13,15 @@
 // Usage:
 // #[test]
 // fn test_add() -> i32 { return 0; }
+
+// @builtin_attribute x86-64
+// Includes the following function only on x86-64 builds/hosts.
+// Usage:
+// #[x86-64]
+// fn arch_add(a: i64, b: i64) -> i64 { ... }
+
+// @builtin_attribute aarch64
+// Includes the following function only on AArch64 builds/hosts.
+// Usage:
+// #[aarch64]
+// fn arch_add(a: i64, b: i64) -> i64 { ... }

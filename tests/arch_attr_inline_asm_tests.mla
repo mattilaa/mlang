@@ -1,0 +1,31 @@
+mod std::platform;
+mod std::testing;
+
+use std::platform::arch;
+use std::testing::verify_eq;
+
+#[aarch64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm aarch64(i64, "add $0, $1, $2", lhs, rhs);
+}
+
+#[x86-64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm x64(i64, "movq $1, $0\naddq $2, $0", lhs, rhs);
+}
+
+#[aarch64]
+fn arch_label() -> str8 {
+    return "aarch64";
+}
+
+#[x86-64]
+fn arch_label() -> str8 {
+    return "x64";
+}
+
+#[test]
+fn test_arch_attrs_select_matching_inline_asm_impl() {
+    verify_eq(arch_sum(40, 2), 42);
+    verify_eq(arch_label(), arch());
+}

@@ -1,0 +1,25 @@
+mod std::platform;
+
+use std::platform::*;
+
+#[aarch64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm aarch64(i64, "add $0, $1, $2", lhs, rhs);
+}
+
+#[x86-64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm x64(i64, "movq $1, $0\naddq $2, $0", lhs, rhs);
+}
+
+fn main() -> i32 {
+    static_assert!(x64!() || aarch64!());
+
+    let lhs: i64 = 40;
+    let rhs: i64 = 2;
+    let sum: i64 = arch_sum(lhs, rhs);
+
+    println!("platform={} arch={}", family(), arch());
+    println!("sum={}", sum);
+    return 0;
+}

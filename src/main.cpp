@@ -33,6 +33,7 @@
 extern int yyparse();
 extern FILE* yyin;
 extern const char* g_sourceFile;   // set before yyparse() for error messages
+extern const char* g_targetArchForParse;
 extern "C"
 {
     extern ASTNode* programRoot;
@@ -194,6 +195,8 @@ static void write_mlang_commands_json(
         "posix!",
         "linux!",
         "macos!",
+        "x64!",
+        "aarch64!",
         "static_assert!",
         "assert_eq!"
     };
@@ -1544,6 +1547,7 @@ int main(int argc, char** argv)
 
         parseHadError = false;
         g_sourceFile = inputFile.c_str();
+        g_targetArchForParse = targetArch.c_str();
         if(yyparse() != 0 || parseHadError)
         {
             std::cerr << "Parsing failed." << std::endl;

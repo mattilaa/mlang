@@ -109,6 +109,44 @@ fn debug_only(x: i32) -> i32 {
 }
 ```
 
+## `#[x86-64]`
+
+Applies to function definitions. The annotated function is included only when
+compiling/running on an x86-64 target/host.
+
+Typical use case:
+- arch-specific inline asm helpers
+
+Example:
+
+```mla
+#[x86-64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm x64(i64, "movq $1, $0\naddq $2, $0", lhs, rhs);
+}
+```
+
+## `#[aarch64]`
+
+Applies to function definitions. The annotated function is included only when
+compiling/running on an AArch64 target/host.
+
+Example:
+
+```mla
+#[aarch64]
+fn arch_sum(lhs: i64, rhs: i64) -> i64 {
+    return asm aarch64(i64, "add $0, $1, $2", lhs, rhs);
+}
+```
+
+These attributes are intended for cases where ordinary `if` branches are not
+enough because non-matching inline asm would still be validated by the
+compiler. See:
+- `examples/platform_inline_asm_demo.mla`
+- `tests/arch_attr_inline_asm_tests.mla`
+- `tests/inline_asm_target_arch_tests.mla`
+
 ## Adding a New Rust-like Attribute
 
 To add a new attribute such as `#[derive(Clone)]`, update these compiler stages:
@@ -122,4 +160,5 @@ To add a new attribute such as `#[derive(Clone)]`, update these compiler stages:
 
 Note:
 - `#[derive(Debug)]`, `#[test]`, `#[inline]`, `#[inline(always)]`, and
-  `#[inline(never)]` are the attribute forms currently recognized.
+  `#[inline(never)]`, `#[x86-64]`, and `#[aarch64]` are the attribute forms
+  currently recognized.

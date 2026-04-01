@@ -23,6 +23,16 @@ pub fn is_macos() -> bool {
     return macos!();
 }
 
+/// @brief Return `true` on x86-64.
+pub fn is_x64() -> bool {
+    return x64!();
+}
+
+/// @brief Return `true` on AArch64.
+pub fn is_aarch64() -> bool {
+    return aarch64!();
+}
+
 /// @brief Return a readable platform family name.
 pub fn family() -> str8 {
     if windows!() {
@@ -36,6 +46,17 @@ pub fn family() -> str8 {
     }
     if posix!() {
         return "posix";
+    }
+    return "unknown";
+}
+
+/// @brief Return a readable CPU architecture name.
+pub fn arch() -> str8 {
+    if aarch64!() {
+        return "aarch64";
+    }
+    if x64!() {
+        return "x64";
     }
     return "unknown";
 }

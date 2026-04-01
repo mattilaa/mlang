@@ -12,11 +12,14 @@ fn test_platform_macros_and_helpers_are_consistent() {
     static_assert!(!(linux!() && macos!()));
     static_assert!(!linux!() || posix!());
     static_assert!(!macos!() || posix!());
+    static_assert!(!(x64!() && aarch64!()));
 
     verify_eq(windows!(), is_windows());
     verify_eq(posix!(), is_posix());
     verify_eq(linux!(), is_linux());
     verify_eq(macos!(), is_macos());
+    verify_eq(x64!(), is_x64());
+    verify_eq(aarch64!(), is_aarch64());
 }
 
 #[test]
@@ -34,5 +37,17 @@ fn test_platform_family_name_matches_flags() {
         verify_eq(fam, "posix");
     } else {
         verify_eq(fam, "unknown");
+    }
+}
+
+#[test]
+fn test_platform_arch_name_matches_flags() {
+    let name: str8 = arch();
+    if aarch64!() {
+        verify_eq(name, "aarch64");
+    } else if x64!() {
+        verify_eq(name, "x64");
+    } else {
+        verify_eq(name, "unknown");
     }
 }

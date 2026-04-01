@@ -199,10 +199,14 @@ static int is_try_question_context()
 "posix!"        { return POSIX_MACRO; }
 "linux!"        { return LINUX_MACRO; }
 "macos!"        { return MACOS_MACRO; }
+"x64!"          { return X64_MACRO; }
+"aarch64!"      { return AARCH64_MACRO; }
 "static_assert!" { return STATIC_ASSERT; }
 "vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]"    { return DERIVE_DEBUG; }
 "#[test]"             { return TEST_ATTR; }
+"#[x86-64]"          { return X86_64_ATTR; }
+"#[aarch64]"         { return AARCH64_ATTR; }
 "#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }
 "#[inline(never)]"    { return INLINE_NEVER_ATTR; }
 "#[inline]"           { return INLINE_ATTR; }

@@ -100,6 +100,7 @@ void yyerror(const char* s);
 extern "C" {
     extern bool parseHadError;
 }
+extern const char* g_targetArchForParse;
 
 class SwitchCaseParseNode : public ASTNode
 {
@@ -254,6 +255,17 @@ static int parser_host_is_windows()
 #endif
 }
 
+static std::string parser_normalize_target_arch_name(const std::string& arch)
+{
+    if(arch == "x86_64" || arch == "amd64" || arch == "x64")
+        return "x64";
+    if(arch == "aarch64" || arch == "arm64")
+        return "aarch64";
+    if(arch == "x86" || arch == "i386" || arch == "i686")
+        return "x86";
+    return arch;
+}
+
 static int parser_host_is_linux()
 {
 #if defined(__linux__)
@@ -284,8 +296,49 @@ static int parser_host_is_posix()
 #endif
 }
 
+static int parser_host_is_x64()
+{
+#if defined(__x86_64__) || defined(_M_X64)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static int parser_host_is_aarch64()
+{
+#if defined(__aarch64__) || defined(_M_ARM64)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static int parser_arch_attr_matches(long long mask)
+{
+    const long long ARCH_X86_64 = 1LL << 0;
+    const long long ARCH_AARCH64 = 1LL << 1;
+    std::string target = parser_normalize_target_arch_name(
+        g_targetArchForParse ? g_targetArchForParse : "");
+    if(target.empty())
+    {
+        if(parser_host_is_aarch64())
+            target = "aarch64";
+        else if(parser_host_is_x64())
+            target = "x64";
+    }
+    if(mask == 0)
+        return 1;
+    if((mask & ARCH_X86_64) && target == "x64")
+        return 1;
+    if((mask & ARCH_AARCH64) && target == "aarch64")
+        return 1;
+    return 0;
+}
+
 // Source file name used in error messages (set by main before yyparse())
 const char* g_sourceFile = "<input>";
+const char* g_targetArchForParse = "";
 
 // External reference to programRoot defined in globals.cpp
 extern "C" {
@@ -552,6 +605,7 @@ enum UpdatePosition
 %token MOD USE AS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
+%token X64_MACRO AARCH64_MACRO
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE PIPE_GT CARET NOT TILDE SHL SHR
 %token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS
@@ -568,12 +622,15 @@ enum UpdatePosition
 %token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token X86_64_ATTR
+%token AARCH64_ATTR
 %token INLINE_ATTR
 %token INLINE_ALWAYS_ATTR
 %token INLINE_NEVER_ATTR
 
 %type <ast> program top_level_list top_level_item test_function_def
 %type <ast> inline_function_def
+%type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def
 %type <ast> struct_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
@@ -604,6 +661,7 @@ enum UpdatePosition
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
+%type <ival> arch_attr arch_attr_list
 
 %left PIPE_PIPE
 %left PIPE_GT
@@ -639,6 +697,9 @@ top_level_item
     | function_def
     | test_function_def
     | inline_function_def
+    | arch_gated_function_def
+    | arch_gated_test_function_def
+    | arch_gated_inline_function_def
     | mod_declaration
     | use_declaration
     | type_alias_def
@@ -903,6 +964,75 @@ function_def
 test_function_def
     : TEST_ATTR function_def
         { static_cast<FunctionDefNode*>($2)->isTest = true; $$ = $2; }
+    ;
+
+arch_attr
+    : X86_64_ATTR { $$ = 1; }
+    | AARCH64_ATTR { $$ = 2; }
+    ;
+
+arch_attr_list
+    : arch_attr { $$ = $1; }
+    | arch_attr_list arch_attr { $$ = $1 | $2; }
+    ;
+
+arch_gated_function_def
+    : arch_attr_list function_def
+        { $$ = parser_arch_attr_matches($1) ? $2 : NULL; }
+    ;
+
+arch_gated_test_function_def
+    : arch_attr_list TEST_ATTR function_def
+        {
+            if(parser_arch_attr_matches($1) && $3)
+            {
+                static_cast<FunctionDefNode*>($3)->isTest = true;
+                $$ = $3;
+            }
+            else
+            {
+                $$ = NULL;
+            }
+        }
+    ;
+
+arch_gated_inline_function_def
+    : arch_attr_list INLINE_ATTR function_def
+        {
+            if(parser_arch_attr_matches($1) && $3)
+            {
+                static_cast<FunctionDefNode*>($3)->isInline = true;
+                $$ = $3;
+            }
+            else
+            {
+                $$ = NULL;
+            }
+        }
+    | arch_attr_list INLINE_ALWAYS_ATTR function_def
+        {
+            if(parser_arch_attr_matches($1) && $3)
+            {
+                static_cast<FunctionDefNode*>($3)->isInlineAlways = true;
+                $$ = $3;
+            }
+            else
+            {
+                $$ = NULL;
+            }
+        }
+    | arch_attr_list INLINE_NEVER_ATTR function_def
+        {
+            if(parser_arch_attr_matches($1) && $3)
+            {
+                static_cast<FunctionDefNode*>($3)->isInlineNever = true;
+                $$ = $3;
+            }
+            else
+            {
+                $$ = NULL;
+            }
+        }
     ;
 
 inline_function_def
@@ -1604,6 +1734,8 @@ condition_primary
     | POSIX_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_posix()); }
     | LINUX_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_linux()); }
     | MACOS_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_macos()); }
+    | X64_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_x64()); }
+    | AARCH64_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_aarch64()); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN
