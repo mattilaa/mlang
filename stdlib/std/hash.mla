@@ -1,0 +1,95 @@
+/// \file hash.mla
+/// \brief Stable 64-bit hashing helpers for MLang (std::hash).
+///
+/// This module exposes deterministic hashes suitable for cache keys, lookup
+/// fingerprints, and combined IDs. The values are stable across runs.
+
+extern pub fn __mlang_std_hash_init() -> i64;
+extern pub fn __mlang_std_hash_i64(value: i64) -> i64;
+extern pub fn __mlang_std_hash_bool(value: i32) -> i64;
+extern pub fn __mlang_std_hash_str(text: str8) -> i64;
+extern pub fn __mlang_std_hash_str16(text: str16) -> i64;
+extern pub fn __mlang_std_hash_combine(seed: i64, value_hash: i64) -> i64;
+extern pub fn __mlang_std_hash_to_hex(value: i64) -> str8;
+
+/// @brief Incremental stable 64-bit hasher.
+pub struct Hasher {
+    var state: i64;
+};
+
+/// @brief Create the default initial hash seed.
+pub fn init() -> i64 {
+    return __mlang_std_hash_init();
+}
+
+/// @brief Hash an `i64` value into a stable 64-bit fingerprint.
+pub fn hash_i64(value: i64) -> i64 {
+    return __mlang_std_hash_i64(value);
+}
+
+/// @brief Hash a boolean value into a stable 64-bit fingerprint.
+pub fn hash_bool(value: bool) -> i64 {
+    return __mlang_std_hash_bool(value ? 1 : 0);
+}
+
+/// @brief Hash a UTF-8 string by its raw bytes.
+pub fn hash_str(text: str8) -> i64 {
+    return __mlang_std_hash_str(text);
+}
+
+/// @brief Hash a UTF-16 string by its code units.
+pub fn hash_str16(text: str16) -> i64 {
+    return __mlang_std_hash_str16(text);
+}
+
+/// @brief Combine two already-hashed values into one stable hash.
+pub fn combine(seed: i64, value_hash: i64) -> i64 {
+    return __mlang_std_hash_combine(seed, value_hash);
+}
+
+/// @brief Render a hash as a 16-digit lowercase hex string.
+pub fn to_hex(value: i64) -> str8 {
+    return __mlang_std_hash_to_hex(value);
+}
+
+impl Hasher {
+    /// @brief Create a new hasher with the default seed.
+    pub fn new() -> Hasher {
+        return Hasher { state: init() };
+    }
+
+    /// @brief Append an `i64` value into the running hash.
+    pub fn write_i64(self: &mut Self, value: i64) -> void {
+        self.state = combine(self.state, hash_i64(value));
+    }
+
+    /// @brief Append a boolean value into the running hash.
+    pub fn write_bool(self: &mut Self, value: bool) -> void {
+        self.state = combine(self.state, hash_bool(value));
+    }
+
+    /// @brief Append a UTF-8 string into the running hash.
+    pub fn write_str(self: &mut Self, text: str8) -> void {
+        self.state = combine(self.state, hash_str(text));
+    }
+
+    /// @brief Append a UTF-16 string into the running hash.
+    pub fn write_str16(self: &mut Self, text: str16) -> void {
+        self.state = combine(self.state, hash_str16(text));
+    }
+
+    /// @brief Append a pre-hashed value into the running hash.
+    pub fn write_hash(self: &mut Self, value_hash: i64) -> void {
+        self.state = combine(self.state, value_hash);
+    }
+
+    /// @brief Return the current 64-bit hash.
+    pub fn finish(self: Hasher) -> i64 {
+        return self.state;
+    }
+
+    /// @brief Return the current 64-bit hash as lowercase hex.
+    pub fn finish_hex(self: Hasher) -> str8 {
+        return to_hex(self.state);
+    }
+}

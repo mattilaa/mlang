@@ -35,6 +35,9 @@ Currently provided:
    `pad_i64_left/pad_i64_right/zpad_i64`, UTF-8<->UTF-16 converters and helpers).
 - `std/bytes.mla`: dynamic raw byte buffer helpers for protocol/binary payloads
   (reserve/append/index/set, binary-safe `to_hex`, text-oriented `to_string`).
+- `std/hash.mla`: stable 64-bit hashing helpers
+  (`hash_str`, `hash_str16`, `hash_i64`, `hash_bool`, `combine`, `to_hex`,
+   and incremental `Hasher`).
 - `std/serde.mla`: binary serialization/deserialization helpers with
   growable output buffer and sequential reader
   (`Binary::write_*`, `Reader::read_*`, file roundtrip helpers, and

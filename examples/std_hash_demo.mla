@@ -1,0 +1,30 @@
+mod std::hash;
+mod std::strbuf;
+
+use std::hash::*;
+use std::strbuf::free_utf16;
+use std::strbuf::to_utf16;
+
+fn main() -> i32 {
+    let route_hash: i64 = hash_str("GET:/api/devices");
+    let route_hex: str8 = to_hex(route_hash);
+
+    var device_key: Hasher = Hasher::new();
+    device_key.write_str("sensor");
+    device_key.write_i64(42);
+    device_key.write_bool(true);
+    let device_hex: str8 = device_key.finish_hex();
+
+    let name16: str16 = to_utf16("driver0");
+    let utf16_hex: str8 = to_hex(hash_str16(name16));
+
+    println!("route hash={} hex={}", route_hash, route_hex);
+    println!("device key hex={}", device_hex);
+    println!("utf16 name hash={}", utf16_hex);
+
+    free_utf16(name16);
+    String::free(route_hex);
+    String::free(device_hex);
+    String::free(utf16_hex);
+    return 0;
+}

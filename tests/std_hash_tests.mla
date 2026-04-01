@@ -1,0 +1,55 @@
+mod std::testing;
+mod std::hash;
+mod std::strbuf;
+
+use std::hash::*;
+use std::strbuf::eq;
+use std::strbuf::free_utf16;
+use std::strbuf::to_utf16;
+use std::testing::verify_eq;
+use std::testing::verify_not_eq;
+
+#[test]
+fn test_hash_str_and_i64_are_stable() {
+    verify_eq(hash_str("hello"), hash_str("hello"));
+    verify_not_eq(hash_str("hello"), hash_str("world"));
+    let hello_hex: str8 = to_hex(hash_str("hello"));
+    let i64_hex: str8 = to_hex(hash_i64(42));
+    verify_eq(hello_hex, "a430d84680aabd0b");
+    verify_eq(i64_hex, "810879608e4259cc");
+    String::free(hello_hex);
+    String::free(i64_hex);
+}
+
+#[test]
+fn test_hash_combine_and_builder_match() {
+    let direct: i64 = combine(
+        combine(
+            combine(init(), hash_str("device")),
+            hash_i64(7)
+        ),
+        hash_bool(true)
+    );
+
+    var h: Hasher = Hasher::new();
+    h.write_str("device");
+    h.write_i64(7);
+    h.write_bool(true);
+
+    verify_eq(h.finish(), direct);
+    let builder_hex: str8 = h.finish_hex();
+    let direct_hex: str8 = to_hex(direct);
+    verify_eq(builder_hex, direct_hex);
+    String::free(builder_hex);
+    String::free(direct_hex);
+}
+
+#[test]
+fn test_hash_str16_is_stable() {
+    let text16: str16 = to_utf16("hash me");
+    let h1: i64 = hash_str16(text16);
+    let h2: i64 = hash_str16(text16);
+    verify_eq(h1, h2);
+    verify_not_eq(h1, hash_str("hash me"));
+    free_utf16(text16);
+}
