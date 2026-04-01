@@ -41,6 +41,30 @@ Available primitive floating-point types:
 - `f32`
 - `f64`
 
+## Platform Macros
+
+MLang supports builtin platform macros for multiplatform source selection:
+
+- `windows!()`
+- `posix!()`
+- `linux!()`
+- `macos!()`
+
+These evaluate to compile-time boolean values, so they work in normal control
+flow and in `static_assert!`.
+
+Example:
+
+```mla
+static_assert!(windows!() || posix!());
+
+if windows!() {
+    println!("windows code path");
+} else if posix!() {
+    println!("posix code path");
+}
+```
+
 ## Type Name Property (`.name`)
 
 Values expose a read-only synthetic `.name` property for logging static type

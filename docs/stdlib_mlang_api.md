@@ -33,6 +33,7 @@ mod std::time;
 mod std::timer;
 mod std::fs;
 mod std::hash;
+mod std::platform;
 mod std::strbuf;
 mod std::bytes;
 mod std::serde;
@@ -74,6 +75,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/timer.mla`
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/hash.mla`
+- `stdlib/std/platform.mla`
 - `stdlib/std/bytes.mla`
 - `stdlib/std/serde.mla`
 - `stdlib/std/protocol.mla`
@@ -1504,4 +1506,41 @@ var h: Hasher = Hasher::new();
 h.write_str("device");
 h.write_i64(42);
 println!("{}", h.finish_hex());
+```
+
+## std::platform
+
+Module file: `stdlib/std/platform.mla`
+
+Multiplatform detection helpers built on compiler-recognized platform macros.
+
+### Builtin macros
+- `windows!() -> bool`
+- `posix!() -> bool`
+- `linux!() -> bool`
+- `macos!() -> bool`
+
+These macros evaluate as compile-time booleans, so they can be used inside
+`static_assert!` and ordinary `if` branches.
+
+### Helper functions
+- `is_windows() -> bool`
+- `is_posix() -> bool`
+- `is_linux() -> bool`
+- `is_macos() -> bool`
+- `family() -> str8`
+
+Example:
+
+```mla
+mod std::platform;
+use std::platform::*;
+
+static_assert!(windows!() || posix!());
+
+if windows!() {
+    println!("win32 path");
+} else if posix!() {
+    println!("posix path");
+}
 ```

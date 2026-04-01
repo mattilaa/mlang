@@ -1,0 +1,21 @@
+mod std::platform;
+
+use std::platform::*;
+
+fn main() -> i32 {
+    println!("family={}", family());
+    println!("windows={} posix={} linux={} macos={}",
+        is_windows(),
+        is_posix(),
+        is_linux(),
+        is_macos()
+    );
+
+    if windows!() {
+        println!("use Windows-specific paths and APIs here");
+    } else if posix!() {
+        println!("use POSIX-specific paths and APIs here");
+    }
+
+    return 0;
+}

@@ -245,6 +245,45 @@ static ASTNode* create_switch_statement_desugared(ASTNode* subject,
     return block;
 }
 
+static int parser_host_is_windows()
+{
+#if defined(_WIN32)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static int parser_host_is_linux()
+{
+#if defined(__linux__)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static int parser_host_is_macos()
+{
+#if defined(__APPLE__) && defined(__MACH__)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static int parser_host_is_posix()
+{
+#if defined(_WIN32)
+    return 0;
+#elif defined(__unix__) || defined(__unix) || defined(__APPLE__) || \
+    defined(__MACH__) || defined(__linux__)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 // Source file name used in error messages (set by main before yyparse())
 const char* g_sourceFile = "<input>";
 
@@ -512,6 +551,7 @@ enum UpdatePosition
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE AS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
+%token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
 %token PLUS_PLUS MINUS_MINUS
 %token PLUS MINUS MULTIPLY DIVIDE MODULO ASSIGN AMP AMP_MUT AMP_AMP PIPE PIPE_PIPE PIPE_GT CARET NOT TILDE SHL SHR
 %token PLUS_ELLIPSIS MULTIPLY_ELLIPSIS AMP_AMP_ELLIPSIS PIPE_PIPE_ELLIPSIS
@@ -1560,6 +1600,10 @@ condition_primary
     | STRING_LITERAL { $$ = mla_ast_literal_string($1); }
     | TRUE_LIT { $$ = mla_ast_literal_bool(1); }
     | FALSE_LIT { $$ = mla_ast_literal_bool(0); }
+    | WINDOWS_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_windows()); }
+    | POSIX_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_posix()); }
+    | LINUX_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_linux()); }
+    | MACOS_MACRO LPAREN RPAREN { $$ = mla_ast_literal_bool(parser_host_is_macos()); }
     | FORMAT LPAREN STRING_LITERAL RPAREN
         { $$ = mla_ast_format_expr($3, NULL, yylineno); }
     | FORMAT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN

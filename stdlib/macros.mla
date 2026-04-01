@@ -30,6 +30,22 @@
 // Asserts that two values are equal. Debug-only by default.
 // Usage: assert_eq!(left, right);
 
+// @builtin_macro windows
+// Returns compile-time `true` on Windows targets/hosts, else `false`.
+// Usage: if windows!() { ... }
+
+// @builtin_macro posix
+// Returns compile-time `true` on POSIX-style targets/hosts, else `false`.
+// Usage: static_assert!(windows!() || posix!());
+
+// @builtin_macro linux
+// Returns compile-time `true` on Linux targets/hosts, else `false`.
+// Usage: if linux!() { ... }
+
+// @builtin_macro macos
+// Returns compile-time `true` on macOS targets/hosts, else `false`.
+// Usage: if macos!() { ... }
+
 // @builtin_macro vec
 // Creates a Vec<T> (list<T>) from a literal or fill expression.
 // Usage: vec![a, b, c]   -- list from elements

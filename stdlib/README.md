@@ -38,6 +38,8 @@ Currently provided:
 - `std/hash.mla`: stable 64-bit hashing helpers
   (`hash_str`, `hash_str16`, `hash_i64`, `hash_bool`, `combine`, `to_hex`,
    and incremental `Hasher`).
+- `std/platform.mla`: multiplatform detection helpers built on
+  builtin macros (`windows!()`, `posix!()`, `linux!()`, `macos!()`).
 - `std/serde.mla`: binary serialization/deserialization helpers with
   growable output buffer and sequential reader
   (`Binary::write_*`, `Reader::read_*`, file roundtrip helpers, and

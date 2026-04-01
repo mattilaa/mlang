@@ -195,6 +195,10 @@ static int is_try_question_context()
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
 "assert!"       { return ASSERT; }
+"windows!"      { return WINDOWS_MACRO; }
+"posix!"        { return POSIX_MACRO; }
+"linux!"        { return LINUX_MACRO; }
+"macos!"        { return MACOS_MACRO; }
 "static_assert!" { return STATIC_ASSERT; }
 "vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]"    { return DERIVE_DEBUG; }

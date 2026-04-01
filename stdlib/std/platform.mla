@@ -1,0 +1,41 @@
+/// \file platform.mla
+/// \brief Platform detection helpers built on top of builtin platform macros.
+///
+/// These helpers are intended for multiplatform code paths in MLang source.
+
+/// @brief Return `true` on Windows.
+pub fn is_windows() -> bool {
+    return windows!();
+}
+
+/// @brief Return `true` on POSIX-style systems.
+pub fn is_posix() -> bool {
+    return posix!();
+}
+
+/// @brief Return `true` on Linux.
+pub fn is_linux() -> bool {
+    return linux!();
+}
+
+/// @brief Return `true` on macOS.
+pub fn is_macos() -> bool {
+    return macos!();
+}
+
+/// @brief Return a readable platform family name.
+pub fn family() -> str8 {
+    if windows!() {
+        return "windows";
+    }
+    if macos!() {
+        return "macos";
+    }
+    if linux!() {
+        return "linux";
+    }
+    if posix!() {
+        return "posix";
+    }
+    return "unknown";
+}

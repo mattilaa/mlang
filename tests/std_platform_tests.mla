@@ -1,0 +1,38 @@
+mod std::platform;
+mod std::testing;
+
+use std::platform::*;
+use std::testing::verify_eq;
+use std::testing::verify_true;
+
+#[test]
+fn test_platform_macros_and_helpers_are_consistent() {
+    static_assert!(windows!() || posix!());
+    static_assert!(!(windows!() && posix!()));
+    static_assert!(!(linux!() && macos!()));
+    static_assert!(!linux!() || posix!());
+    static_assert!(!macos!() || posix!());
+
+    verify_eq(windows!(), is_windows());
+    verify_eq(posix!(), is_posix());
+    verify_eq(linux!(), is_linux());
+    verify_eq(macos!(), is_macos());
+}
+
+#[test]
+fn test_platform_family_name_matches_flags() {
+    let fam: str8 = family();
+    if windows!() {
+        verify_eq(fam, "windows");
+    } else if macos!() {
+        verify_eq(fam, "macos");
+        verify_true(posix!());
+    } else if linux!() {
+        verify_eq(fam, "linux");
+        verify_true(posix!());
+    } else if posix!() {
+        verify_eq(fam, "posix");
+    } else {
+        verify_eq(fam, "unknown");
+    }
+}

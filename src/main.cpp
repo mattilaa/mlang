@@ -190,6 +190,10 @@ static void write_mlang_commands_json(
         "debug!",
         "format!",
         "assert!",
+        "windows!",
+        "posix!",
+        "linux!",
+        "macos!",
         "static_assert!",
         "assert_eq!"
     };
