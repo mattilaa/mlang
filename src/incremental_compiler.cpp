@@ -1,4 +1,5 @@
 #include "incremental_compiler.h"
+#include "source_filter.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -317,8 +318,10 @@ ProgramNode* IncrementalCompiler::parseText(std::string_view text)
     yylineno = 1;
     parseHadError = false;
 
+    const std::string filteredText =
+        mlang::preprocess_conditional_regions(text, "");
     YY_BUFFER_STATE buffer =
-        yy_scan_bytes(text.data(), static_cast<int>(text.size()));
+        yy_scan_bytes(filteredText.data(), static_cast<int>(filteredText.size()));
     int result = yyparse();
     yy_delete_buffer(buffer);
 

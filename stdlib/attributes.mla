@@ -25,3 +25,29 @@
 // Usage:
 // #[aarch64]
 // fn arch_add(a: i64, b: i64) -> i64 { ... }
+
+// @builtin_region windows
+// Includes the enclosed source only on Windows.
+// Usage:
+// [windows]
+// fn platform_name() -> str8 { return "windows"; }
+// [/windows]
+
+// @builtin_region posix
+// Includes the enclosed source only on POSIX systems.
+// Usage:
+// [posix]
+// fn platform_name() -> str8 { return "posix"; }
+// [/posix]
+
+// @builtin_region linux
+// Includes the enclosed source only on Linux.
+
+// @builtin_region macos
+// Includes the enclosed source only on macOS.
+
+// @builtin_region x86-64
+// Includes the enclosed source only on x86-64 targets.
+
+// @builtin_region aarch64
+// Includes the enclosed source only on AArch64 targets.
