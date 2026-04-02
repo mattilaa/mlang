@@ -1789,18 +1789,17 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             visual_route_pos = route_n - 1;
             visual_in_venue = 1;
         }
-        while route_n > 0 {
+        if route_n > 0 {
             let current_city: i64 = render_route[visual_route_pos];
             if visual_in_venue == 1 {
                 let venue_drinks_here: i64 = max_i64(drink_count_for_city(drink_promilles_x100, current_city, promille_per_drink_x100), 1);
                 let venue_duration_ms: i64 = venue_drinks_here * 1000;
                 let venue_elapsed_ms: i64 = now_frame_ms - visual_phase_start_ms;
-                if venue_elapsed_ms < venue_duration_ms || visual_route_pos >= (route_n - 1) {
-                    break;
+                if venue_elapsed_ms >= venue_duration_ms && visual_route_pos < (route_n - 1) {
+                    visual_promille_base_x100 += drink_promilles_x100[current_city];
+                    visual_in_venue = 0;
+                    visual_phase_start_ms = now_frame_ms;
                 }
-                visual_promille_base_x100 += drink_promilles_x100[current_city];
-                visual_in_venue = 0;
-                visual_phase_start_ms += venue_duration_ms;
             } else {
                 let next_city: i64 = render_route[visual_route_pos + 1];
                 let travel_minutes_visual: i64 =
@@ -1808,13 +1807,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     slope_effort_minutes(elevations_m[current_city], elevations_m[next_city], 0, visual_promille_base_x100, tolerance_pct);
                 let travel_duration_ms: i64 = max_i64(travel_minutes_visual * 80, 400);
                 let travel_elapsed_ms: i64 = now_frame_ms - visual_phase_start_ms;
-                if travel_elapsed_ms < travel_duration_ms {
-                    break;
+                if travel_elapsed_ms >= travel_duration_ms {
+                    visual_promille_base_x100 = decay_promille_x100(visual_promille_base_x100, travel_minutes_visual);
+                    visual_route_pos += 1;
+                    visual_in_venue = 1;
+                    visual_phase_start_ms = now_frame_ms;
                 }
-                visual_promille_base_x100 = decay_promille_x100(visual_promille_base_x100, travel_minutes_visual);
-                visual_route_pos += 1;
-                visual_in_venue = 1;
-                visual_phase_start_ms += travel_duration_ms;
             }
         }
         var salesman_from: i64 = -1;
