@@ -15,6 +15,10 @@ use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
 use std::ascii::AsciiKey;
 use std::esc::acs_hline;
+use std::esc::acs_llcorner;
+use std::esc::acs_lrcorner;
+use std::esc::acs_ulcorner;
+use std::esc::acs_urcorner;
 use std::esc::acs_vline;
 use std::esc::alt_screen_off;
 use std::esc::alt_screen_on;
@@ -1983,7 +1987,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
 
         let hline_g: str8 = acs_hline();
-        for _i in 0..(w + 2) { bput(builder, hline_g); }
+        let ulcorner_g: str8 = acs_ulcorner();
+        let urcorner_g: str8 = acs_urcorner();
+        let llcorner_g: str8 = acs_llcorner();
+        let lrcorner_g: str8 = acs_lrcorner();
+        bput(builder, ulcorner_g);
+        for _i in 0..w { bput(builder, hline_g); }
+        bput(builder, urcorner_g);
         bput(builder, "\r\n");
 
         let show_venue_progress: bool =
@@ -2138,8 +2148,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             bput(builder, v); bput(builder, "\r\n");
         }
 
-        for _i in 0..(w + 2) { bput(builder, hline_g); }
+        bput(builder, llcorner_g);
+        for _i in 0..w { bput(builder, hline_g); }
+        bput(builder, lrcorner_g);
         free(phase_bar);
+        free(ulcorner_g);
+        free(urcorner_g);
+        free(llcorner_g);
+        free(lrcorner_g);
         if show_venue_progress {
             free(venue_progress_text);
             free(venue_gain_text);
