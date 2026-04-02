@@ -2000,7 +2000,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             at_venue_now == 1 && salesman_to >= 0 && salesman_to < route_city_n;
         let venue_progress_text: str8 =
             show_venue_progress ?
-            format!("{} {}% {}d", phase_bar, phase_progress_pct, current_venue_drinks) :
+            format!("{} {}%", phase_bar, phase_progress_pct) :
             "";
         let venue_gain_value_text: str8 =
             show_venue_progress ?
