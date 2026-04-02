@@ -1500,8 +1500,10 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     let improved_copy: list<i64> = clone_i64_list(route);
                     best_cost = c;
                     best_route = route;
-                    pending_route = improved_copy;
-                    has_pending_route = 1;
+                    if stable_mode == 0 {
+                        pending_route = improved_copy;
+                        has_pending_route = 1;
+                    }
                     last_improve_gen = gen;
                 }
                 let fit: i64 = fitness_bias - c;
@@ -1516,7 +1518,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             gen += 1;
         }
 
-        if has_pending_route == 1 {
+        if stable_mode == 0 && has_pending_route == 1 {
             let points_render_now: list<i64> = route_to_points(w, h, render_route, xs, ys);
             let prn: i64 = points_render_now.len();
             if prn <= 0 || (walker_step % prn) == 0 {
