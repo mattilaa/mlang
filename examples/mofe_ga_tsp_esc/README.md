@@ -21,7 +21,7 @@ Choose a fixed starting venue:
 Compact display with explicit alcohol settings:
 
 ```sh
-./examples/mofe_ga_tsp_esc/run_demo.sh Thu 15:00 compact promille=0.25 drinks=2 avg=60
+./examples/mofe_ga_tsp_esc/run_demo.sh Thu 15:00 stable compact promille=0.25 drinks=2 avg=60
 ```
 
 Lower-tolerance harder crawl:
@@ -36,6 +36,7 @@ Arguments:
 - optional start place name
 - optional `tolerance` or `tolerance=0..100`
 - optional `compact`
+- optional `stable`
 - optional `promille=0.00` or `start_promille=0.00`
 - optional `drinks=N`
 - optional `avg=MIN` or `stay=MIN`
@@ -45,6 +46,7 @@ Notes:
 - If the start place is omitted, the demo picks a random start venue.
 - The header shows the current best score, walked meters, and route preview.
 - `compact` mode shows only `path`, `schedule`, `alcohol plan`, and live `alcohol now`.
+- `stable` disables the random start venue fallback and starts the on-screen walker from the beginning of the route.
 - `promille` sets the starting alcohol level.
 - `drinks` sets drinks consumed at each venue.
 - `avg` / `stay` sets the average minutes spent in one venue for the GA route calculation.

@@ -223,6 +223,11 @@ fn is_compact_flag(text: str8) -> bool {
     return eq(s, "compact") == 1 || eq(s, "--compact") == 1 || eq(s, "minimal") == 1 || eq(s, "--minimal") == 1;
 }
 
+fn is_stable_flag(text: str8) -> bool {
+    let s: str8 = trim(text);
+    return eq(s, "stable") == 1 || eq(s, "--stable") == 1 || eq(s, "no-random") == 1 || eq(s, "--no-random") == 1;
+}
+
 fn starts_with_text(text: str8, prefix: str8) -> bool {
     let n: i64 = len(text);
     let pn: i64 = len(prefix);
@@ -1286,12 +1291,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let help_arg: str8 = args[1];
         if eq(help_arg, "--help") == 1 || eq(help_arg, "-h") == 1 {
             println!("Usage: mofe_ga_tsp_esc <Mon|Tue|Wed|Thu|Fri|Sat|Sun> <HH:MM> [start venue] [tolerance|tolerance=0..100] [compact]");
-            println!("       mofe_ga_tsp_esc <day> <time> [start venue] [compact] [promille=0.00] [drinks=N] [avg=MIN]");
+            println!("       mofe_ga_tsp_esc <day> <time> [start venue] [compact] [stable] [promille=0.00] [drinks=N] [avg=MIN]");
             println!("");
             println!("Arguments:");
             println!("  start venue           Optional fixed starting bar name");
             println!("  tolerance=0..100      Higher means easier route scoring, default 60");
             println!("  compact               Show only path, schedule, alcohol plan, alcohol now");
+            println!("  stable                Disable random route start and walker jump-in");
             println!("  promille=0.00         Starting alcohol level in promille, default 0.00");
             println!("  drinks=N              Drinks consumed at each venue, default 1");
             println!("  avg=MIN or stay=MIN   Average minutes spent in a venue, default 45");
@@ -1303,7 +1309,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             println!("  mofe_ga_tsp_esc Thu 15:00");
             println!("  mofe_ga_tsp_esc Thu 15:00 Flipperikellari");
             println!("  mofe_ga_tsp_esc Thu 15:00 Flipperikellari 40 compact");
-            println!("  mofe_ga_tsp_esc Thu 15:00 compact promille=0.25 drinks=2 avg=60");
+            println!("  mofe_ga_tsp_esc Thu 15:00 stable compact promille=0.25 drinks=2 avg=60");
             return 0;
         }
     }
@@ -1377,6 +1383,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var requested_start_name: str8 = "";
     var tolerance_pct: i64 = 60;
     var compact_mode: i32 = 0;
+    var stable_mode: i32 = 0;
     var start_promille_x100: i64 = 0;
     var drinks_per_venue: i64 = 1;
     let promille_per_drink_x100: i64 = 18;
@@ -1385,6 +1392,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let arg: str8 = args[i];
         if is_compact_flag(arg) {
             compact_mode = 1;
+        } else if is_stable_flag(arg) {
+            stable_mode = 1;
         } else if starts_with_text(arg, "promille=") {
             start_promille_x100 = parse_promille_x100_or_default(sub(arg, 9, len(arg) - 9), 0);
         } else if starts_with_text(arg, "start_promille=") {
@@ -1405,7 +1414,10 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     let drink_promilles_x100: list<i64> = build_drink_promilles_x100(city_count, drinks_per_venue, promille_per_drink_x100);
     let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
-    let start_city: i64 = parsed_start_city >= 0 ? parsed_start_city : range_i64(0, city_count - 1);
+    let start_city: i64 =
+        parsed_start_city >= 0 ? parsed_start_city :
+        stable_mode == 1 ? 0 :
+        range_i64(0, city_count - 1);
     let gps_xs_m: list<i64> = project_xs(lats_deg, lons_deg, 1.0);
     let gps_ys_m: list<i64> = project_ys(lats_deg, lons_deg, 1.0);
 
@@ -1424,7 +1436,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var best_cost: i64 = random_cost;
     var gen: i64 = 0;
     var last_improve_gen: i64 = 0;
-    var walker_step: i64 = range_i64(0, 1000000);
+    var walker_step: i64 = stable_mode == 1 ? 0 : range_i64(0, 1000000);
 
     let start_ms: i64 = now_ms();
     let wrap_off: str8 = "\x1b[?7l";
