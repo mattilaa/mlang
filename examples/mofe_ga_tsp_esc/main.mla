@@ -171,6 +171,29 @@ fn parse_hhmm_or_default(text: str8, fallback_minutes: i64) -> i64 {
     return hours * 60 + minutes;
 }
 
+fn parse_weekday_or_default(text: str8, fallback_day: i64) -> i64 {
+    let s: str8 = trim(text);
+    if eq(s, "Mon") == 1 { return 0; }
+    if eq(s, "Tue") == 1 { return 1; }
+    if eq(s, "Wed") == 1 { return 2; }
+    if eq(s, "Thu") == 1 { return 3; }
+    if eq(s, "Fri") == 1 { return 4; }
+    if eq(s, "Sat") == 1 { return 5; }
+    if eq(s, "Sun") == 1 { return 6; }
+    return fallback_day;
+}
+
+fn weekday_name(day_idx: i64) -> str8 {
+    if day_idx == 0 { return "Mon"; }
+    if day_idx == 1 { return "Tue"; }
+    if day_idx == 2 { return "Wed"; }
+    if day_idx == 3 { return "Thu"; }
+    if day_idx == 4 { return "Fri"; }
+    if day_idx == 5 { return "Sat"; }
+    if day_idx == 6 { return "Sun"; }
+    return "Thu";
+}
+
 fn two_digits(v: i64) -> str8 {
     if v < 10 {
         return format!("0{}", v);
@@ -219,6 +242,170 @@ fn adjusted_arrival(city: i64, current_minutes: i64, open_from: &list<i64>) -> i
 
 fn visit_duration_minutes() -> i64 {
     return 45;
+}
+
+fn opening_time_for(day_idx: i64, city: i64) -> i64 {
+    if day_idx == 0 {
+        if city == 0 { return 17 * 60; }
+        if city == 1 { return 13 * 60; }
+        if city == 2 { return 15 * 60; }
+        if city == 3 { return 13 * 60; }
+        if city == 4 { return 9 * 60; }
+        if city == 5 { return 13 * 60; }
+        if city == 6 { return 14 * 60; }
+        if city == 7 { return 11 * 60; }
+    }
+    if day_idx == 1 {
+        if city == 0 { return 17 * 60; }
+        if city == 1 { return 13 * 60; }
+        if city == 2 { return 15 * 60; }
+        if city == 3 { return 13 * 60; }
+        if city == 4 { return 9 * 60; }
+        if city == 5 { return 13 * 60; }
+        if city == 6 { return 14 * 60; }
+        if city == 7 { return 11 * 60; }
+    }
+    if day_idx == 2 {
+        if city == 0 { return 17 * 60; }
+        if city == 1 { return 13 * 60; }
+        if city == 2 { return 15 * 60; }
+        if city == 3 { return 13 * 60; }
+        if city == 4 { return 9 * 60; }
+        if city == 5 { return 13 * 60; }
+        if city == 6 { return 14 * 60; }
+        if city == 7 { return 11 * 60; }
+    }
+    if day_idx == 3 {
+        if city == 0 { return 17 * 60; }
+        if city == 1 { return 13 * 60; }
+        if city == 2 { return 15 * 60; }
+        if city == 3 { return 13 * 60; }
+        if city == 4 { return 9 * 60; }
+        if city == 5 { return 13 * 60; }
+        if city == 6 { return 14 * 60; }
+        if city == 7 { return 11 * 60; }
+    }
+    if day_idx == 4 {
+        if city == 0 { return 16 * 60; }
+        if city == 1 { return 13 * 60; }
+        if city == 2 { return 14 * 60; }
+        if city == 3 { return 13 * 60; }
+        if city == 4 { return 9 * 60; }
+        if city == 5 { return 12 * 60; }
+        if city == 6 { return 14 * 60; }
+        if city == 7 { return 11 * 60; }
+    }
+    if day_idx == 5 {
+        if city == 0 { return 14 * 60; }
+        if city == 1 { return 12 * 60; }
+        if city == 2 { return 14 * 60; }
+        if city == 3 { return 12 * 60; }
+        if city == 4 { return 10 * 60; }
+        if city == 5 { return 12 * 60; }
+        if city == 6 { return 12 * 60; }
+        if city == 7 { return 12 * 60; }
+    }
+    if day_idx == 6 {
+        if city == 0 { return 16 * 60; }
+        if city == 1 { return 13 * 60; }
+        if city == 2 { return 16 * 60; }
+        if city == 3 { return 14 * 60; }
+        if city == 4 { return 12 * 60; }
+        if city == 5 { return 13 * 60; }
+        if city == 6 { return 14 * 60; }
+        if city == 7 { return 12 * 60; }
+    }
+    return 13 * 60;
+}
+
+fn closing_time_for(day_idx: i64, city: i64) -> i64 {
+    if day_idx == 0 {
+        if city == 0 { return 22 * 60; }
+        if city == 1 { return 24 * 60; }
+        if city == 2 { return 24 * 60; }
+        if city == 3 { return 24 * 60; }
+        if city == 4 { return 24 * 60; }
+        if city == 5 { return 24 * 60; }
+        if city == 6 { return 24 * 60; }
+        if city == 7 { return 21 * 60; }
+    }
+    if day_idx == 1 {
+        if city == 0 { return 22 * 60; }
+        if city == 1 { return 24 * 60; }
+        if city == 2 { return 24 * 60; }
+        if city == 3 { return 24 * 60; }
+        if city == 4 { return 24 * 60; }
+        if city == 5 { return 24 * 60; }
+        if city == 6 { return 24 * 60; }
+        if city == 7 { return 21 * 60; }
+    }
+    if day_idx == 2 {
+        if city == 0 { return 22 * 60; }
+        if city == 1 { return 25 * 60; }
+        if city == 2 { return 25 * 60; }
+        if city == 3 { return 25 * 60; }
+        if city == 4 { return 25 * 60; }
+        if city == 5 { return 25 * 60; }
+        if city == 6 { return 25 * 60; }
+        if city == 7 { return 21 * 60; }
+    }
+    if day_idx == 3 {
+        if city == 0 { return 22 * 60; }
+        if city == 1 { return 25 * 60; }
+        if city == 2 { return 25 * 60; }
+        if city == 3 { return 26 * 60; }
+        if city == 4 { return 26 * 60; }
+        if city == 5 { return 25 * 60; }
+        if city == 6 { return 29 * 60; }
+        if city == 7 { return 22 * 60; }
+    }
+    if day_idx == 4 {
+        if city == 0 { return 25 * 60; }
+        if city == 1 { return 26 * 60; }
+        if city == 2 { return 26 * 60; }
+        if city == 3 { return 28 * 60; }
+        if city == 4 { return 28 * 60; }
+        if city == 5 { return 26 * 60; }
+        if city == 6 { return 29 * 60; }
+        if city == 7 { return 23 * 60; }
+    }
+    if day_idx == 5 {
+        if city == 0 { return 25 * 60; }
+        if city == 1 { return 26 * 60; }
+        if city == 2 { return 26 * 60; }
+        if city == 3 { return 28 * 60; }
+        if city == 4 { return 28 * 60; }
+        if city == 5 { return 26 * 60; }
+        if city == 6 { return 29 * 60; }
+        if city == 7 { return 23 * 60; }
+    }
+    if day_idx == 6 {
+        if city == 0 { return 22 * 60; }
+        if city == 1 { return 24 * 60; }
+        if city == 2 { return 24 * 60; }
+        if city == 3 { return 24 * 60; }
+        if city == 4 { return 24 * 60; }
+        if city == 5 { return 23 * 60; }
+        if city == 6 { return 24 * 60; }
+        if city == 7 { return 21 * 60; }
+    }
+    return 24 * 60;
+}
+
+fn build_openings_for_day(day_idx: i64, city_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for city in 0..city_count {
+        out.push(opening_time_for(day_idx, city));
+    }
+    return out;
+}
+
+fn build_closings_for_day(day_idx: i64, city_count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for city in 0..city_count {
+        out.push(closing_time_for(day_idx, city));
+    }
+    return out;
 }
 
 fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
@@ -791,7 +978,8 @@ fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64
 fn main(argc: i32, args: list<str8>) -> i32 {
     seed(now_ms());
 
-    let time_arg: str8 = argc >= 2 ? args[1] : "18:00";
+    let day_arg: str8 = argc >= 2 ? args[1] : "Thu";
+    let time_arg: str8 = argc >= 3 ? args[2] : "18:00";
 
     let term = stdout_size();
     var cols: i64 = term.cols;
@@ -839,31 +1027,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         24.9373,
         25.0157
     ];
-    // Thursday opening windows in minutes from midnight.
-    // A few venues do not publish clean official schedules, so the snapshot mixes official pages
-    // with stable public listings collected on 2026-04-02.
-    let open_from: list<i64> = [
-        17 * 60,
-        13 * 60,
-        15 * 60,
-        13 * 60,
-        9 * 60,
-        13 * 60,
-        14 * 60,
-        11 * 60
-    ];
-    let close_at: list<i64> = [
-        22 * 60,
-        25 * 60,
-        25 * 60,
-        26 * 60,
-        26 * 60,
-        25 * 60,
-        29 * 60,
-        22 * 60
-    ];
+    let weekday_idx: i64 = parse_weekday_or_default(day_arg, 3);
+    let weekday_text: str8 = weekday_name(weekday_idx);
+    let open_from: list<i64> = build_openings_for_day(weekday_idx, city_count);
+    let close_at: list<i64> = build_closings_for_day(weekday_idx, city_count);
     let start_minutes: i64 = parse_hhmm_or_default(time_arg, 18 * 60);
-    let requested_start_name: str8 = argc >= 3 ? args[2] : "";
+    let requested_start_name: str8 = argc >= 4 ? args[3] : "";
     let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
     let start_city: i64 = parsed_start_city >= 0 ? parsed_start_city : range_i64(0, city_count - 1);
     let gps_xs_m: list<i64> = project_xs(lats_deg, lons_deg, 1.0);
@@ -1014,7 +1183,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         bput(builder, cursor(cmd_clear_screen()));
         bput(builder, cursor(cmd_home()));
         bput_fullwidth_logo(builder, "M.O.F.E.", cols);
-        let l0: str8 = format!("M.O.F.E. Thursday crawl  q=quit  gen={}/{}  t={}ms  start={} @ {}", gen, generations_total, elapsed_ms, start_place_text, start_at_text);
+        let l0: str8 = format!("M.O.F.E. {} crawl  q=quit  gen={}/{}  t={}ms  start={} @ {}", weekday_text, gen, generations_total, elapsed_ms, start_place_text, start_at_text);
         bput_line_fit(builder, l0, cols - 2);
         free(l0);
         free(start_at_text);
