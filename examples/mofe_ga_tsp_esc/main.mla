@@ -55,7 +55,10 @@ use std::strbuf::builder_append;
 use std::strbuf::builder_free;
 use std::strbuf::builder_new;
 use std::strbuf::builder_take_string;
+use std::strbuf::contains;
+use std::strbuf::eq;
 use std::strbuf::repeat;
+use std::strbuf::trim;
 
 fn iabs(v: i64) -> i64 {
     return v < 0 ? -v : v;
@@ -131,24 +134,129 @@ fn idx_2d(x: i64, y: i64, w: i64) -> i64 {
     return y * w + x;
 }
 
-fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>) -> i64 {
+fn digit_value(ch: str8) -> i64 {
+    if eq(ch, "0") == 1 { return 0; }
+    if eq(ch, "1") == 1 { return 1; }
+    if eq(ch, "2") == 1 { return 2; }
+    if eq(ch, "3") == 1 { return 3; }
+    if eq(ch, "4") == 1 { return 4; }
+    if eq(ch, "5") == 1 { return 5; }
+    if eq(ch, "6") == 1 { return 6; }
+    if eq(ch, "7") == 1 { return 7; }
+    if eq(ch, "8") == 1 { return 8; }
+    if eq(ch, "9") == 1 { return 9; }
+    return -1;
+}
+
+fn parse_hhmm_or_default(text: str8, fallback_minutes: i64) -> i64 {
+    let s: str8 = trim(text);
+    if len(s) != 5 {
+        return fallback_minutes;
+    }
+    if eq(sub(s, 2, 1), ":") != 1 {
+        return fallback_minutes;
+    }
+    let h0: i64 = digit_value(sub(s, 0, 1));
+    let h1: i64 = digit_value(sub(s, 1, 1));
+    let m0: i64 = digit_value(sub(s, 3, 1));
+    let m1: i64 = digit_value(sub(s, 4, 1));
+    if h0 < 0 || h1 < 0 || m0 < 0 || m1 < 0 {
+        return fallback_minutes;
+    }
+    let hours: i64 = h0 * 10 + h1;
+    let minutes: i64 = m0 * 10 + m1;
+    if hours < 0 || hours > 23 || minutes < 0 || minutes > 59 {
+        return fallback_minutes;
+    }
+    return hours * 60 + minutes;
+}
+
+fn two_digits(v: i64) -> str8 {
+    if v < 10 {
+        return format!("0{}", v);
+    }
+    return format!("{}", v);
+}
+
+fn fmt_hhmm(total_minutes: i64) -> str8 {
+    var day_prefix: str8 = "";
+    var mins: i64 = total_minutes;
+    if mins >= 1440 {
+        mins = mins - 1440;
+        day_prefix = "+1 ";
+    }
+    let hh: str8 = two_digits((mins / 60) % 24);
+    let mm: str8 = two_digits(mins % 60);
+    return format!("{}{}:{}", day_prefix, hh, mm);
+}
+
+fn walk_time_minutes(lat_a: f64, lon_a: f64, lat_b: f64, lon_b: f64) -> i64 {
+    let meters: i64 = distance_m(lat_a, lon_a, lat_b, lon_b);
+    let mins: i64 = (meters + 79) / 80;
+    return mins > 1 ? mins : 1;
+}
+
+fn opening_penalty(city: i64, current_minutes: i64, open_from: &list<i64>, close_at: &list<i64>) -> i64 {
+    let opens: i64 = open_from[city];
+    let closes: i64 = close_at[city];
+    if current_minutes < opens {
+        let wait: i64 = opens - current_minutes;
+        return wait * 20;
+    }
+    if current_minutes > closes {
+        return 500000 + (current_minutes - closes) * 400;
+    }
+    return 0;
+}
+
+fn adjusted_arrival(city: i64, current_minutes: i64, open_from: &list<i64>) -> i64 {
+    let opens: i64 = open_from[city];
+    if current_minutes < opens {
+        return opens;
+    }
+    return current_minutes;
+}
+
+fn visit_duration_minutes() -> i64 {
+    return 45;
+}
+
+fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
+              start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, start_city: i64) -> i64 {
     let n: i64 = route.len();
     let city_n: i64 = min_i64(lats_deg.len(), lons_deg.len());
-    if n <= 1 {
+    if n <= 0 {
         return 0;
     }
     var total: i64 = 0;
+    var clock_minutes: i64 = start_minutes;
+    let first: i64 = route[0];
+    if start_city >= 0 && first != start_city {
+        total += 10000000;
+    }
+    if first < 0 || first >= city_n {
+        return 1000000000;
+    }
+    total += opening_penalty(first, clock_minutes, open_from, close_at);
+    clock_minutes = adjusted_arrival(first, clock_minutes, open_from) + visit_duration_minutes();
     for i in 0..n {
+        let ni: i64 = i + 1;
+        if ni >= n {
+            break;
+        }
         let a: i64 = route[i];
-        let ni: i64 = (i + 1) % n;
         let b: i64 = route[ni];
         if a < 0 || a >= city_n || b < 0 || b >= city_n {
             total += 1000000000;
             continue;
         }
-        total += distance_m(lats_deg[a], lons_deg[a], lats_deg[b], lons_deg[b]);
+        let travel_minutes: i64 = walk_time_minutes(lats_deg[a], lons_deg[a], lats_deg[b], lons_deg[b]);
+        clock_minutes += travel_minutes;
+        total += travel_minutes;
+        total += opening_penalty(b, clock_minutes, open_from, close_at);
+        clock_minutes = adjusted_arrival(b, clock_minutes, open_from) + visit_duration_minutes();
     }
-    return total;
+    return total + (clock_minutes - start_minutes);
 }
 
 fn geo_seg_cost(a: i64, b: i64, lats_deg: &list<f64>, lons_deg: &list<f64>) -> i64 {
@@ -250,6 +358,28 @@ fn get_genome(flat: &list<i64>, index: i64, gene_count: i64) -> list<i64> {
     return out;
 }
 
+fn rotate_route_to_start(route: &list<i64>, start_city: i64) -> list<i64> {
+    let n: i64 = route.len();
+    if n <= 0 || start_city < 0 {
+        return clone_i64_list(route);
+    }
+    var pivot: i64 = -1;
+    for i in 0..n {
+        if route[i] == start_city {
+            pivot = i;
+            break;
+        }
+    }
+    if pivot < 0 {
+        return clone_i64_list(route);
+    }
+    var out: list<i64> = [];
+    for i in 0..n {
+        out.push(route[(pivot + i) % n]);
+    }
+    return out;
+}
+
 fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i64> {
     var out: list<i64> = [];
     for p in 0..pop_size {
@@ -257,6 +387,19 @@ fn repair_population(flat: &list<i64>, pop_size: i64, gene_count: i64) -> list<i
         let fixed: list<i64> = repair_permutation(g, gene_count);
         for i in 0..gene_count {
             out.push(fixed[i]);
+        }
+    }
+    return out;
+}
+
+fn repair_population_with_start(flat: &list<i64>, pop_size: i64, gene_count: i64, start_city: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for p in 0..pop_size {
+        let g: list<i64> = get_genome(flat, p, gene_count);
+        let fixed: list<i64> = repair_permutation(g, gene_count);
+        let rotated: list<i64> = rotate_route_to_start(fixed, start_city);
+        for i in 0..gene_count {
+            out.push(rotated[i]);
         }
     }
     return out;
@@ -332,28 +475,12 @@ fn overlap_score(existing: &list<i64>, candidate: &list<i64>) -> i64 {
     return score;
 }
 
-fn draw_segment(points: &list<i64>, w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
-
-    let hv: list<i64> = build_path_hv(w, h, x0, y0, x1, y1);
-    let vh: list<i64> = build_path_vh(w, h, x0, y0, x1, y1);
-    let use_hv: bool = overlap_score(points, hv) <= overlap_score(points, vh);
-
-    var out: list<i64> = [];
-    let pn: i64 = points.len();
-    for i in 0..pn {
-        out.push(points[i]);
+fn add_unique_i64(points: &list<i64>, value: i64) -> list<i64> {
+    if has_value(points, value) {
+        return clone_i64_list(points);
     }
-    if use_hv {
-        let cn_hv: i64 = hv.len();
-        for i in 0..cn_hv {
-            out.push(hv[i]);
-        }
-    } else {
-        let cn_vh: i64 = vh.len();
-        for i in 0..cn_vh {
-            out.push(vh[i]);
-        }
-    }
+    var out: list<i64> = clone_i64_list(points);
+    out.push(value);
     return out;
 }
 
@@ -365,12 +492,90 @@ fn route_to_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<
         return out;
     }
     for i in 0..n {
+        let ni: i64 = i + 1;
+        if ni >= n {
+            break;
+        }
         let a: i64 = route[i];
-        let b: i64 = route[(i + 1) % n];
+        let b: i64 = route[ni];
         if a < 0 || a >= city_n || b < 0 || b >= city_n {
             continue;
         }
-        out = draw_segment(out, w, h, xs[a], ys[a], xs[b], ys[b]);
+        let path: list<i64> = build_path_hv(w, h, xs[a], ys[a], xs[b], ys[b]);
+        let pn: i64 = path.len();
+        for pi in 0..pn {
+            out = add_unique_i64(out, path[pi]);
+        }
+    }
+    return out;
+}
+
+fn route_to_horizontal_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = route.len();
+    let city_n: i64 = min_i64(xs.len(), ys.len());
+    if n <= 1 {
+        return out;
+    }
+    for i in 0..n {
+        let ni: i64 = i + 1;
+        if ni >= n {
+            break;
+        }
+        let a: i64 = route[i];
+        let b: i64 = route[ni];
+        if a < 0 || a >= city_n || b < 0 || b >= city_n {
+            continue;
+        }
+        let x0: i64 = xs[a];
+        let y0: i64 = ys[a];
+        let x1: i64 = xs[b];
+        let sx: i64 = x1 >= x0 ? 1 : -1;
+        var x: i64 = x0;
+        while true {
+            let xi: i64 = clamp_i64(x, 0, w - 1);
+            let yi: i64 = clamp_i64(y0, 0, h - 1);
+            out = add_unique_i64(out, idx_2d(xi, yi, w));
+            if x == x1 {
+                break;
+            }
+            x += sx;
+        }
+    }
+    return out;
+}
+
+fn route_to_vertical_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = route.len();
+    let city_n: i64 = min_i64(xs.len(), ys.len());
+    if n <= 1 {
+        return out;
+    }
+    for i in 0..n {
+        let ni: i64 = i + 1;
+        if ni >= n {
+            break;
+        }
+        let a: i64 = route[i];
+        let b: i64 = route[ni];
+        if a < 0 || a >= city_n || b < 0 || b >= city_n {
+            continue;
+        }
+        let x1: i64 = xs[b];
+        let y0: i64 = ys[a];
+        let y1: i64 = ys[b];
+        let sy: i64 = y1 >= y0 ? 1 : -1;
+        var y: i64 = y0;
+        while true {
+            let xi: i64 = clamp_i64(x1, 0, w - 1);
+            let yi: i64 = clamp_i64(y, 0, h - 1);
+            out = add_unique_i64(out, idx_2d(xi, yi, w));
+            if y == y1 {
+                break;
+            }
+            y += sy;
+        }
     }
     return out;
 }
@@ -404,7 +609,7 @@ fn bput_line_fit(builder: i64, s: str8, width: i64) -> void {
 }
 
 fn centered_logo_line(text: str8, width: i64) -> str8 {
-    let safe_w: i64 = width > 1 ? width - 1 : width;
+    let safe_w: i64 = width > 0 ? width : 0;
     let text_n: i64 = len(text);
     let pad_total: i64 = safe_w > text_n ? safe_w - text_n : 0;
     let left_pad: i64 = pad_total / 2;
@@ -426,6 +631,13 @@ fn centered_logo_line(text: str8, width: i64) -> str8 {
     return line;
 }
 
+fn bput_fullwidth_logo(builder: i64, text: str8, width: i64) -> void {
+    let line: str8 = centered_logo_line(text, width);
+    bput(builder, line);
+    bput(builder, "\r\n");
+    free(line);
+}
+
 fn clone_i64_list(src: &list<i64>) -> list<i64> {
     var out: list<i64> = [];
     let n: i64 = src.len();
@@ -435,26 +647,21 @@ fn clone_i64_list(src: &list<i64>) -> list<i64> {
     return out;
 }
 
-fn route_cell_glyph(points: &list<i64>, x: i64, y: i64, w: i64, h: i64) -> str8 {
-    let left: bool = x > 0 ? has_value(points, idx_2d(x - 1, y, w)) : false;
-    let right: bool = x + 1 < w ? has_value(points, idx_2d(x + 1, y, w)) : false;
-    let up: bool = y > 0 ? has_value(points, idx_2d(x, y - 1, w)) : false;
-    let down: bool = y + 1 < h ? has_value(points, idx_2d(x, y + 1, w)) : false;
+fn route_cell_glyph(h_points: &list<i64>, v_points: &list<i64>, x: i64, y: i64, w: i64, h: i64) -> str8 {
+    let here: i64 = idx_2d(x, y, w);
+    let left: bool = has_value(h_points, here) && x > 0 && has_value(h_points, idx_2d(x - 1, y, w));
+    let right: bool = has_value(h_points, here) && x + 1 < w && has_value(h_points, idx_2d(x + 1, y, w));
+    let up: bool = has_value(v_points, here) && y > 0 && has_value(v_points, idx_2d(x, y - 1, w));
+    let down: bool = has_value(v_points, here) && y + 1 < h && has_value(v_points, idx_2d(x, y + 1, w));
 
-    if (left || right) && !(up || down) { return "─"; }
-    if (up || down) && !(left || right) { return "│"; }
     if right && down && !left && !up { return "┌"; }
     if left && down && !right && !up { return "┐"; }
     if right && up && !left && !down { return "└"; }
     if left && up && !right && !down { return "┘"; }
-    if left && right && up && down { return "┼"; }
-    if left && right && down { return "┬"; }
-    if left && right && up { return "┴"; }
-    if up && down && right { return "├"; }
-    if up && down && left { return "┤"; }
     if left && right { return "─"; }
     if up && down { return "│"; }
-    if (left || right) && (up || down) { return "┼"; }
+    if left || right { return "─"; }
+    if up || down { return "│"; }
     return "•";
 }
 
@@ -472,7 +679,8 @@ fn reverse_segment(route: &list<i64>, start: i64, end: i64) -> list<i64> {
     return out;
 }
 
-fn two_opt_improve(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>) -> list<i64> {
+fn two_opt_improve(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
+                   start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, start_city: i64) -> list<i64> {
     var cur: list<i64> = clone_i64_list(route);
     let n: i64 = cur.len();
     if n < 4 {
@@ -483,14 +691,14 @@ fn two_opt_improve(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: 
     while improved == 1 {
         improved = 0;
         let i_end: i64 = n - 2;
-        var cur_cost: i64 = route_cost(cur, xs, ys, lats_deg, lons_deg);
+        var cur_cost: i64 = route_cost(cur, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
 
         for i in 1..i_end {
             let j_start: i64 = i + 1;
             let j_end: i64 = n - 1;
             for j in j_start..j_end {
                 let cand: list<i64> = reverse_segment(cur, i, j);
-                let c: i64 = route_cost(cand, xs, ys, lats_deg, lons_deg);
+                let c: i64 = route_cost(cand, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
                 if c < cur_cost {
                     cur = cand;
                     cur_cost = c;
@@ -524,8 +732,66 @@ fn inject_elite_front(pop_flat: &list<i64>, pop_size: i64, gene_count: i64, elit
     return out;
 }
 
-fn main() -> i32 {
+fn city_index_from_name(query: str8, city_names: &list<str8>) -> i64 {
+    let q: str8 = trim(query);
+    if len(q) <= 0 {
+        return -1;
+    }
+    let n: i64 = city_names.len();
+    for i in 0..n {
+        if eq(city_names[i], q) == 1 {
+            return i;
+        }
+    }
+    for i in 0..n {
+        if contains(city_names[i], q) == 1 || contains(q, city_names[i]) == 1 {
+            return i;
+        }
+    }
+    if eq(q, "Pub Perakammari") == 1 || eq(q, "Perakammari") == 1 {
+        return 6;
+    }
+    return -1;
+}
+
+fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64>, lons_deg: &list<f64>,
+                 start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>) -> str8 {
+    let builder: i64 = builder_new(512);
+    var clock_minutes: i64 = start_minutes;
+    let n: i64 = route.len();
+    for i in 0..n {
+        let city: i64 = route[i];
+        if city < 0 || city >= city_names.len() {
+            continue;
+        }
+        if i > 0 {
+            let prev: i64 = route[i - 1];
+            clock_minutes += walk_time_minutes(lats_deg[prev], lons_deg[prev], lats_deg[city], lons_deg[city]);
+        }
+        clock_minutes = adjusted_arrival(city, clock_minutes, open_from);
+        if i > 0 {
+            bput(builder, "  ");
+        }
+        let at: str8 = fmt_hhmm(clock_minutes);
+        let line: str8 = format!("{} {}", at, city_names[city]);
+        bput(builder, line);
+        free(line);
+        free(at);
+        clock_minutes += visit_duration_minutes();
+        if i >= 3 && n > 5 {
+            bput(builder, "  ...");
+            break;
+        }
+    }
+    let out: str8 = builder_take_string(builder);
+    builder_free(builder);
+    return out;
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
     seed(now_ms());
+
+    let time_arg: str8 = argc >= 2 ? args[1] : "18:00";
 
     let term = stdout_size();
     var cols: i64 = term.cols;
@@ -550,7 +816,7 @@ fn main() -> i32 {
         "Bar Viiskulma",
         "Om'pu",
         "Berlin Bierhaus",
-        "Pub Perakammari",
+        "Pub Peräkammari",
         "CoolHead"
     ];
     let lats_deg: list<f64> = [
@@ -573,6 +839,33 @@ fn main() -> i32 {
         24.9373,
         25.0157
     ];
+    // Thursday opening windows in minutes from midnight.
+    // A few venues do not publish clean official schedules, so the snapshot mixes official pages
+    // with stable public listings collected on 2026-04-02.
+    let open_from: list<i64> = [
+        17 * 60,
+        13 * 60,
+        15 * 60,
+        13 * 60,
+        9 * 60,
+        13 * 60,
+        14 * 60,
+        11 * 60
+    ];
+    let close_at: list<i64> = [
+        22 * 60,
+        25 * 60,
+        25 * 60,
+        26 * 60,
+        26 * 60,
+        25 * 60,
+        29 * 60,
+        22 * 60
+    ];
+    let start_minutes: i64 = parse_hhmm_or_default(time_arg, 18 * 60);
+    let requested_start_name: str8 = argc >= 3 ? args[2] : "";
+    let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
+    let start_city: i64 = parsed_start_city >= 0 ? parsed_start_city : range_i64(0, city_count - 1);
     let gps_xs_m: list<i64> = project_xs(lats_deg, lons_deg, 1.0);
     let gps_ys_m: list<i64> = project_ys(lats_deg, lons_deg, 1.0);
 
@@ -580,12 +873,12 @@ fn main() -> i32 {
     var ys: list<i64> = project_lats_to_y(gps_ys_m, h);
 
     var population: list<i64> = random_population_i64(pop_size, city_count, 0, city_count - 1);
-    population = repair_population(population, pop_size, city_count);
-    let initial_route: list<i64> = get_genome(population, 0, city_count);
-    let random_cost: i64 = route_cost(initial_route, xs, ys, lats_deg, lons_deg);
-    var best_route: list<i64> = get_genome(population, 0, city_count);
-    var render_route: list<i64> = get_genome(population, 0, city_count);
-    var pending_route: list<i64> = get_genome(population, 0, city_count);
+    population = repair_population_with_start(population, pop_size, city_count, start_city);
+    let initial_route: list<i64> = nearest_neighbor_route(start_city, city_count, lats_deg, lons_deg);
+    let random_cost: i64 = route_cost(initial_route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
+    var best_route: list<i64> = clone_i64_list(initial_route);
+    var render_route: list<i64> = clone_i64_list(initial_route);
+    var pending_route: list<i64> = clone_i64_list(initial_route);
     var has_pending_route: i32 = 0;
     var best_cost: i64 = random_cost;
     var gen: i64 = 0;
@@ -636,11 +929,14 @@ fn main() -> i32 {
             var fitness: list<i64> = [];
             for p in 0..pop_size {
                 var route: list<i64> = get_genome(population, p, city_count);
-                var c: i64 = route_cost(route, xs, ys, lats_deg, lons_deg);
+                var c: i64 = route_cost(route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
                 // Periodic local refinement on a subset of candidates.
                 if p < 8 {
-                    let improved_r: list<i64> = two_opt_improve(route, xs, ys, lats_deg, lons_deg);
-                    let improved_c: i64 = route_cost(improved_r, xs, ys, lats_deg, lons_deg);
+                    let improved_r: list<i64> = rotate_route_to_start(
+                        two_opt_improve(route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city),
+                        start_city
+                    );
+                    let improved_c: i64 = route_cost(improved_r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
                     if improved_c < c {
                         route = improved_r;
                         c = improved_c;
@@ -662,7 +958,7 @@ fn main() -> i32 {
             let next_flat: list<i64> = reproduce_next_population_i64(
                 population, pop_size, city_count, fitness, mutation_permille, 0, city_count - 1, tournament_size
             );
-            let repaired: list<i64> = repair_population(next_flat, pop_size, city_count);
+            let repaired: list<i64> = repair_population_with_start(next_flat, pop_size, city_count, start_city);
             population = inject_elite_front(repaired, pop_size, city_count, best_route);
             gen += 1;
         }
@@ -679,6 +975,10 @@ fn main() -> i32 {
 
         let points_initial: list<i64> = route_to_points(w, h, initial_route, xs, ys);
         let points_best: list<i64> = route_to_points(w, h, render_route, xs, ys);
+        let points_initial_h: list<i64> = route_to_horizontal_points(w, h, initial_route, xs, ys);
+        let points_initial_v: list<i64> = route_to_vertical_points(w, h, initial_route, xs, ys);
+        let points_best_h: list<i64> = route_to_horizontal_points(w, h, render_route, xs, ys);
+        let points_best_v: list<i64> = route_to_vertical_points(w, h, render_route, xs, ys);
         let points_best_n: i64 = points_best.len();
         let walker_idx: i64 = points_best_n > 0 ? walker_step % points_best_n : -1;
         let walker_cell: i64 = points_best_n > 0 ? points_best[walker_idx] : -1;
@@ -699,6 +999,8 @@ fn main() -> i32 {
         walker_step += 1;
 
         let elapsed_ms: i64 = now_ms() - start_ms;
+        let start_at_text: str8 = fmt_hhmm(start_minutes);
+        let start_place_text: str8 = city_names[start_city];
         var route_preview_n: i64 = 4;
         if cols >= 130 {
             route_preview_n = 8;
@@ -711,12 +1013,11 @@ fn main() -> i32 {
         let builder: i64 = builder_new(65536);
         bput(builder, cursor(cmd_clear_screen()));
         bput(builder, cursor(cmd_home()));
-        let logo_line: str8 = centered_logo_line("M.O.F.E.", cols - 2);
-        bput_line_fit(builder, logo_line, cols - 2);
-        free(logo_line);
-        let l0: str8 = format!("M.O.F.E. pub crawl  q=quit  gen={}/{}  t={}ms", gen, generations_total, elapsed_ms);
+        bput_fullwidth_logo(builder, "M.O.F.E.", cols);
+        let l0: str8 = format!("M.O.F.E. Thursday crawl  q=quit  gen={}/{}  t={}ms  start={} @ {}", gen, generations_total, elapsed_ms, start_place_text, start_at_text);
         bput_line_fit(builder, l0, cols - 2);
         free(l0);
+        free(start_at_text);
         let from_name: str8 = salesman_from >= 0 ? city_names[salesman_from] : "?";
         let to_name: str8 = salesman_to >= 0 ? city_names[salesman_to] : "?";
         let from_lat: f64 = salesman_from >= 0 ? lats_deg[salesman_from] : 0.0;
@@ -724,7 +1025,7 @@ fn main() -> i32 {
         let to_lat: f64 = salesman_to >= 0 ? lats_deg[salesman_to] : 0.0;
         let to_lon: f64 = salesman_to >= 0 ? lons_deg[salesman_to] : 0.0;
         let l1: str8 = format!(
-            "cost best={} random={}  gps {}({},{}) -> {}({},{})",
+            "score best={} random={}  gps {}({},{}) -> {}({},{})",
             best_cost, random_cost,
             from_name, from_lat, from_lon,
             to_name, to_lat, to_lon
@@ -757,7 +1058,10 @@ fn main() -> i32 {
         bput_line_fit(builder, path_line, cols - 2);
         free(path_line);
         builder_free(path_builder);
-        let l3: str8 = "legend: magenta=random  green=best  yellow=city  cyan=salesman";
+        let schedule_line: str8 = route_summary(render_route, city_names, lats_deg, lons_deg, start_minutes, open_from, close_at);
+        bput_line_fit(builder, schedule_line, cols - 2);
+        free(schedule_line);
+        let l3: str8 = "legend: magenta=random  green=best  yellow=city  cyan=salesman  score=travel+wait+closed penalties";
         bput_line_fit(builder, l3, cols - 2);
 
         let hline_g: str8 = acs_hline();
@@ -820,7 +1124,7 @@ fn main() -> i32 {
                     free(ch);
                     free(label_char);
                 } else if moving_here {
-                    let gmv: str8 = route_cell_glyph(points_best, x, y, w, h);
+                    let gmv: str8 = route_cell_glyph(points_best_h, points_best_v, x, y, w, h);
                     let ch: str8 = format!(
                         "{}{}{}{}{}{}{}",
                         bold_on(),
@@ -841,17 +1145,18 @@ fn main() -> i32 {
                     free(ch);
                     free(initial);
                 } else if p0 && p1 {
-                    let g: str8 = route_cell_glyph(points_best, x, y, w, h);
+                    let g: str8 = route_cell_glyph(points_best_h, points_best_v, x, y, w, h);
                     let ch: str8 = format!("{}{}{}", fg(color_bright_white()), g, reset());
                     bput(builder, ch);
                     free(ch);
                 } else if p1 {
-                    let g: str8 = route_cell_glyph(points_best, x, y, w, h);
+                    let g: str8 = route_cell_glyph(points_best_h, points_best_v, x, y, w, h);
                     let ch: str8 = format!("{}{}{}", fg(color_bright_green()), g, reset());
                     bput(builder, ch);
                     free(ch);
                 } else if p0 {
-                    let ch: str8 = format!("{}·{}", fg(color_bright_magenta()), reset());
+                    let g0: str8 = route_cell_glyph(points_initial_h, points_initial_v, x, y, w, h);
+                    let ch: str8 = format!("{}{}{}", fg(color_bright_magenta()), g0, reset());
                     bput(builder, ch);
                     free(ch);
                 } else {
@@ -874,14 +1179,14 @@ fn main() -> i32 {
     var fitness: list<i64> = [];
     for p in 0..pop_size {
         let r: list<i64> = get_genome(population, p, city_count);
-        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg);
+        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
         let f: i64 = fitness_bias - c;
         fitness.push(f > 1 ? f : 1);
     }
     let bi: i64 = argmax_i64(fitness);
     if bi >= 0 {
         let r: list<i64> = get_genome(population, bi, city_count);
-        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg);
+        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, start_city);
         if c < best_cost {
             best_cost = c;
             best_route = r;
@@ -898,6 +1203,9 @@ fn main() -> i32 {
         print!("{}", best_route[i]);
     }
     println!("");
+    let final_schedule: str8 = route_summary(best_route, city_names, lats_deg, lons_deg, start_minutes, open_from, close_at);
+    println!("schedule: {}", final_schedule);
+    free(final_schedule);
     println!("{}done{}", fg(color_bright_black()), reset());
     sleep_ms(600);
 
