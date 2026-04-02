@@ -562,6 +562,31 @@ fn venue_route_cell(w: i64, h: i64, route: &list<i64>, route_pos: i64, xs: &list
     return city_cell;
 }
 
+fn venue_path_stop_cell(w: i64, h: i64, route: &list<i64>, route_pos: i64, xs: &list<i64>, ys: &list<i64>) -> i64 {
+    let n: i64 = route.len();
+    if n <= 0 || route_pos < 0 || route_pos >= n {
+        return -1;
+    }
+    let city: i64 = route[route_pos];
+    if route_pos > 0 {
+        let prev: i64 = route[route_pos - 1];
+        let incoming: list<i64> = build_path_hv(w, h, xs[prev], ys[prev], xs[city], ys[city]);
+        let in_n: i64 = incoming.len();
+        if in_n > 0 {
+            return incoming[in_n - 1];
+        }
+    }
+    if route_pos + 1 < n {
+        let next: i64 = route[route_pos + 1];
+        let outgoing: list<i64> = build_path_hv(w, h, xs[city], ys[city], xs[next], ys[next]);
+        let out_n: i64 = outgoing.len();
+        if out_n > 0 {
+            return outgoing[0];
+        }
+    }
+    return idx_2d(xs[city], ys[city], w);
+}
+
 fn crawl_phase_state_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
                                 drink_promilles_x100: &list<i64>, start_minutes: i64,
                                 open_from: &list<i64>, elevations_m: &list<i64>,
@@ -1845,18 +1870,18 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         var walker_cell: i64 = path_walker_cell;
         if at_venue_now == 1 && salesman_to >= 0 && salesman_to < route_city_n {
             if salesman_route_pos >= 0 {
-                walker_cell = venue_route_cell(w, h, render_route, salesman_route_pos, xs, ys);
+                walker_cell = venue_path_stop_cell(w, h, render_route, salesman_route_pos, xs, ys);
             } else {
                 walker_cell = idx_2d(xs[salesman_to], ys[salesman_to], w);
             }
         } else if salesman_from >= 0 && salesman_from < route_city_n && salesman_to >= 0 && salesman_to < route_city_n {
             let walk_from_cell: i64 =
                 salesman_from_route_pos >= 0 ?
-                venue_route_cell(w, h, render_route, salesman_from_route_pos, xs, ys) :
+                venue_path_stop_cell(w, h, render_route, salesman_from_route_pos, xs, ys) :
                 idx_2d(xs[salesman_from], ys[salesman_from], w);
             let walk_to_cell: i64 =
                 salesman_route_pos >= 0 ?
-                venue_route_cell(w, h, render_route, salesman_route_pos, xs, ys) :
+                venue_path_stop_cell(w, h, render_route, salesman_route_pos, xs, ys) :
                 idx_2d(xs[salesman_to], ys[salesman_to], w);
             let walk_phase_path: list<i64> = build_path_hv(
                 w, h,
