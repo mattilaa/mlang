@@ -1515,6 +1515,27 @@ int main(int argc, char** argv)
         }
     }
 
+    {
+        std::error_code oec;
+        std::filesystem::path outPath(outputFile);
+        if(!outputFile.empty() && std::filesystem::is_directory(outPath, oec))
+        {
+            std::string baseName;
+            if(testMode)
+            {
+                baseName = benchmarkMode ? "mlang_bench_bin" : "mlang_test_bin";
+            }
+            else
+            {
+                std::filesystem::path inPath(inputFile);
+                baseName = inPath.stem().string();
+                if(baseName.empty())
+                    baseName = "a.out";
+            }
+            outputFile = (outPath / baseName).string();
+        }
+    }
+
     std::ifstream input_stream(inputFile);
     if(!input_stream)
     {
