@@ -408,6 +408,14 @@ fn drink_count_for_city(drink_promilles_x100: &list<i64>, city: i64, promille_pe
     return drink_promilles_x100[city] / promille_per_drink_x100;
 }
 
+fn stay_minutes_for_city(drink_promilles_x100: &list<i64>, city: i64, avg_stay_minutes: i64) -> i64 {
+    let promille_per_drink_x100: i64 = 18;
+    let drinks_here: i64 = max_i64(drink_count_for_city(drink_promilles_x100, city, promille_per_drink_x100), 1);
+    let min_minutes_per_drink: i64 = 13;
+    let base_minutes: i64 = max_i64(avg_stay_minutes, min_minutes_per_drink);
+    return base_minutes * drinks_here;
+}
+
 fn decay_promille_x100(current_promille_x100: i64, minutes_elapsed: i64) -> i64 {
     let drop: i64 = (minutes_elapsed * 10) / 60;
     let next: i64 = current_promille_x100 - drop;
@@ -455,7 +463,8 @@ fn route_end_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f6
     if n <= 0 {
         return start_minutes;
     }
-    var clock_minutes: i64 = adjusted_arrival(route[0], start_minutes, open_from) + avg_stay_minutes;
+    let first_stay_minutes: i64 = stay_minutes_for_city(drink_promilles_x100, route[0], avg_stay_minutes);
+    var clock_minutes: i64 = adjusted_arrival(route[0], start_minutes, open_from) + first_stay_minutes;
     var last_clock_minutes: i64 = clock_minutes;
     var promille_x100: i64 = start_promille_x100;
     promille_x100 += drink_promilles_x100[route[0]];
@@ -466,7 +475,8 @@ fn route_end_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f6
         promille_x100 = decay_promille_x100(promille_x100, clock_minutes - last_clock_minutes);
         clock_minutes += slope_effort_minutes(elevations_m[prev], elevations_m[city], clock_minutes - start_minutes, promille_x100, tolerance_pct);
         promille_x100 += drink_promilles_x100[city];
-        clock_minutes = adjusted_arrival(city, clock_minutes, open_from) + avg_stay_minutes;
+        let stay_minutes: i64 = stay_minutes_for_city(drink_promilles_x100, city, avg_stay_minutes);
+        clock_minutes = adjusted_arrival(city, clock_minutes, open_from) + stay_minutes;
         last_clock_minutes = clock_minutes;
     }
     return clock_minutes;
@@ -490,9 +500,10 @@ fn route_promille_x100_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_
     if current_minutes <= first_arrive {
         return promille_x100;
     }
-    let first_leave: i64 = first_arrive + avg_stay_minutes;
+    let first_stay_minutes: i64 = stay_minutes_for_city(drink_promilles_x100, first, avg_stay_minutes);
+    let first_leave: i64 = first_arrive + first_stay_minutes;
     if current_minutes <= first_leave {
-        let first_gain: i64 = (drink_promilles_x100[first] * (current_minutes - first_arrive)) / max_i64(avg_stay_minutes, 1);
+        let first_gain: i64 = (drink_promilles_x100[first] * (current_minutes - first_arrive)) / max_i64(first_stay_minutes, 1);
         return promille_x100 + first_gain;
     }
     promille_x100 += drink_promilles_x100[first];
@@ -513,9 +524,10 @@ fn route_promille_x100_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_
         if current_minutes <= clock_minutes {
             return promille_x100;
         }
-        let leave_minutes: i64 = clock_minutes + avg_stay_minutes;
+        let stay_minutes: i64 = stay_minutes_for_city(drink_promilles_x100, city, avg_stay_minutes);
+        let leave_minutes: i64 = clock_minutes + stay_minutes;
         if current_minutes <= leave_minutes {
-            let venue_gain: i64 = (drink_promilles_x100[city] * (current_minutes - clock_minutes)) / max_i64(avg_stay_minutes, 1);
+            let venue_gain: i64 = (drink_promilles_x100[city] * (current_minutes - clock_minutes)) / max_i64(stay_minutes, 1);
             return promille_x100 + venue_gain;
         }
         promille_x100 += drink_promilles_x100[city];
@@ -567,9 +579,10 @@ fn crawl_phase_state_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_de
     if current_minutes <= arrive_minutes {
         return [1, first, first, 0];
     }
-    let first_leave: i64 = arrive_minutes + avg_stay_minutes;
+    let first_stay_minutes: i64 = stay_minutes_for_city(drink_promilles_x100, first, avg_stay_minutes);
+    let first_leave: i64 = arrive_minutes + first_stay_minutes;
     if current_minutes <= first_leave {
-        let pct: i64 = ((current_minutes - arrive_minutes) * 100) / max_i64(avg_stay_minutes, 1);
+        let pct: i64 = ((current_minutes - arrive_minutes) * 100) / max_i64(first_stay_minutes, 1);
         return [1, first, first, clamp_i64(pct, 0, 100)];
     }
     promille_x100 += drink_promilles_x100[first];
@@ -592,9 +605,10 @@ fn crawl_phase_state_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_de
             return [1, city, city, 0];
         }
         promille_x100 += drink_promilles_x100[city];
-        let leave_minutes: i64 = arrive_minutes + avg_stay_minutes;
+        let stay_minutes: i64 = stay_minutes_for_city(drink_promilles_x100, city, avg_stay_minutes);
+        let leave_minutes: i64 = arrive_minutes + stay_minutes;
         if current_minutes <= leave_minutes {
-            let pct: i64 = ((current_minutes - arrive_minutes) * 100) / max_i64(avg_stay_minutes, 1);
+            let pct: i64 = ((current_minutes - arrive_minutes) * 100) / max_i64(stay_minutes, 1);
             return [1, city, city, clamp_i64(pct, 0, 100)];
         }
         clock_minutes = leave_minutes;
@@ -808,7 +822,7 @@ fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list
     }
     total += opening_penalty(first, clock_minutes, open_from, close_at, tolerance_pct);
     promille_x100 += drink_promilles_x100[first];
-    clock_minutes = adjusted_arrival(first, clock_minutes, open_from) + avg_stay_minutes;
+    clock_minutes = adjusted_arrival(first, clock_minutes, open_from) + stay_minutes_for_city(drink_promilles_x100, first, avg_stay_minutes);
     last_clock_minutes = clock_minutes;
     for i in 0..n {
         let ni: i64 = i + 1;
@@ -829,7 +843,7 @@ fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list
         total += slope_effort_minutes(elevations_m[a], elevations_m[b], clock_minutes - start_minutes, promille_x100, tolerance_pct);
         total += opening_penalty(b, clock_minutes, open_from, close_at, tolerance_pct);
         promille_x100 += drink_promilles_x100[b];
-        clock_minutes = adjusted_arrival(b, clock_minutes, open_from) + avg_stay_minutes;
+        clock_minutes = adjusted_arrival(b, clock_minutes, open_from) + stay_minutes_for_city(drink_promilles_x100, b, avg_stay_minutes);
         last_clock_minutes = clock_minutes;
     }
     return total + (clock_minutes - start_minutes);
@@ -1358,6 +1372,35 @@ fn city_index_from_name(query: str8, city_names: &list<str8>) -> i64 {
     return -1;
 }
 
+fn proposed_start_city(city_count: i64, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
+                       start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, elevations_m: &list<i64>,
+                       drink_promilles_x100: &list<i64>, tolerance_pct: i64, start_promille_x100: i64,
+                       avg_stay_minutes: i64, fallback_city: i64) -> i64 {
+    var best_city: i64 = fallback_city;
+    var best_cost: i64 = 1000000000000;
+    for city in 0..city_count {
+        if city >= open_from.len() || city >= close_at.len() {
+            continue;
+        }
+        let opens: i64 = open_from[city];
+        let closes: i64 = close_at[city];
+        if opens <= 0 || closes <= 0 {
+            continue;
+        }
+        let route: list<i64> = nearest_neighbor_route(city, city_count, lats_deg, lons_deg);
+        let cost: i64 = route_cost(
+            route, xs, ys, lats_deg, lons_deg, start_minutes,
+            open_from, close_at, elevations_m, drink_promilles_x100,
+            city, tolerance_pct, start_promille_x100, avg_stay_minutes
+        );
+        if cost < best_cost {
+            best_cost = cost;
+            best_city = city;
+        }
+    }
+    return best_city;
+}
+
 fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64>, lons_deg: &list<f64>,
                  start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, elevations_m: &list<i64>,
                  drink_promilles_x100: &list<i64>, tolerance_pct: i64, start_promille_x100: i64,
@@ -1389,7 +1432,7 @@ fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64
         bput(builder, line);
         free(line);
         free(at);
-        clock_minutes += avg_stay_minutes;
+        clock_minutes += stay_minutes_for_city(drink_promilles_x100, city, avg_stay_minutes);
         last_clock_minutes = clock_minutes;
         if i >= 3 && n > 5 {
             bput(builder, "  ...");
@@ -1560,17 +1603,22 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             requested_start_name = arg;
         }
     }
-    let drink_promilles_x100: list<i64> = build_drink_promilles_x100(city_count, avg_drinks_per_venue, promille_per_drink_x100);
-    let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
-    let start_city: i64 =
-        parsed_start_city >= 0 ? parsed_start_city :
-        stable_mode == 1 ? 0 :
-        range_i64(0, city_count - 1);
     let gps_xs_m: list<i64> = project_xs(lats_deg, lons_deg, 1.0);
     let gps_ys_m: list<i64> = project_ys(lats_deg, lons_deg, 1.0);
 
     var xs: list<i64> = project_lons_to_x(gps_xs_m, w);
     var ys: list<i64> = project_lats_to_y(gps_ys_m, h);
+    let drink_promilles_x100: list<i64> = build_drink_promilles_x100(city_count, avg_drinks_per_venue, promille_per_drink_x100);
+    let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
+    let fallback_start_city: i64 = proposed_start_city(
+        city_count, xs, ys, lats_deg, lons_deg, start_minutes,
+        open_from, close_at, elevations_m, drink_promilles_x100,
+        tolerance_pct, start_promille_x100, avg_stay_minutes, 0
+    );
+    let start_city: i64 =
+        parsed_start_city >= 0 ? parsed_start_city :
+        stable_mode == 1 ? fallback_start_city :
+        range_i64(0, city_count - 1);
 
     var population: list<i64> = random_population_i64(pop_size, city_count, 0, city_count - 1);
     population = repair_population_with_start(population, pop_size, city_count, start_city);
@@ -1718,12 +1766,52 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             salesman_to >= 0 ? drink_count_for_city(drink_promilles_x100, salesman_to, promille_per_drink_x100) : 0;
         let current_venue_gain_x100: i64 =
             salesman_to >= 0 && salesman_to < drink_promilles_x100.len() ? (drink_promilles_x100[salesman_to] * phase_progress_pct) / 100 : 0;
+        var salesman_from_route_pos: i64 = -1;
+        var salesman_route_pos: i64 = -1;
+        if salesman_from >= 0 {
+            for rp in 0..route_n {
+                if render_route[rp] == salesman_from {
+                    salesman_from_route_pos = rp;
+                    break;
+                }
+            }
+        }
+        if salesman_to >= 0 {
+            for rp in 0..route_n {
+                if render_route[rp] == salesman_to {
+                    salesman_route_pos = rp;
+                    break;
+                }
+            }
+        }
         var walker_cell: i64 = path_walker_cell;
         if at_venue_now == 1 && salesman_to >= 0 && salesman_to < route_city_n {
-            walker_cell = idx_2d(xs[salesman_to], ys[salesman_to], w);
-        } else {
-            walker_step += 1;
+            if salesman_route_pos >= 0 {
+                walker_cell = venue_route_cell(w, h, render_route, salesman_route_pos, xs, ys);
+            } else {
+                walker_cell = idx_2d(xs[salesman_to], ys[salesman_to], w);
+            }
+        } else if salesman_from >= 0 && salesman_from < route_city_n && salesman_to >= 0 && salesman_to < route_city_n {
+            let walk_from_cell: i64 =
+                salesman_from_route_pos >= 0 ?
+                venue_route_cell(w, h, render_route, salesman_from_route_pos, xs, ys) :
+                idx_2d(xs[salesman_from], ys[salesman_from], w);
+            let walk_to_cell: i64 =
+                salesman_route_pos >= 0 ?
+                venue_route_cell(w, h, render_route, salesman_route_pos, xs, ys) :
+                idx_2d(xs[salesman_to], ys[salesman_to], w);
+            let walk_phase_path: list<i64> = build_path_hv(
+                w, h,
+                walk_from_cell % w, walk_from_cell / w,
+                walk_to_cell % w, walk_to_cell / w
+            );
+            let walk_phase_n: i64 = walk_phase_path.len();
+            if walk_phase_n > 0 {
+                let walk_phase_idx: i64 = ((walk_phase_n - 1) * clamp_i64(phase_progress_pct, 0, 100)) / 100;
+                walker_cell = walk_phase_path[clamp_i64(walk_phase_idx, 0, walk_phase_n - 1)];
+            }
         }
+        walker_step += 1;
         let current_promille_text: str8 = fmt_promille_x100(current_promille_x100);
         let crawl_clock_text: str8 = fmt_hhmm(crawl_clock_minutes);
         var route_preview_n: i64 = 4;
@@ -1838,13 +1926,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             clamp_i64(walker_y + 1, 1, h - 2) : -1;
         let venue_progress_x: i64 =
             show_venue_progress ?
-            clamp_i64(walker_x + 2, 1, max_i64(w - venue_progress_len - 1, 1)) : -1;
+            clamp_i64(walker_x - (venue_progress_len / 2), 1, max_i64(w - venue_progress_len - 1, 1)) : -1;
         let venue_gain_y: i64 =
             show_venue_progress ?
             clamp_i64(walker_y - 1, 1, h - 2) : -1;
         let venue_gain_x: i64 =
             show_venue_progress ?
-            clamp_i64(walker_x + 2, 1, max_i64(w - venue_gain_len - 1, 1)) : -1;
+            clamp_i64(walker_x - (venue_gain_len / 2), 1, max_i64(w - venue_gain_len - 1, 1)) : -1;
 
         let v: str8 = acs_vline();
         for y in 0..h {
@@ -1899,18 +1987,19 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     x >= venue_gain_x &&
                     x < (venue_gain_x + venue_gain_len);
 
-                if label_here == 1 {
+                if moving_here {
                     let ch: str8 = format!(
-                        "{}{}{}{}{}",
+                        "{}{}{}{}{}{}{}",
                         bold_on(),
                         fg(color_black()),
-                        bg(color_bright_white()),
-                        label_char,
-                        reset()
+                        bg(color_bright_blue()),
+                        fg(color_bright_white()),
+                        "@",
+                        reset(),
+                        bold_off()
                     );
                     bput(builder, ch);
                     free(ch);
-                    free(label_char);
                 } else if venue_gain_here {
                     let pi: i64 = x - venue_gain_x;
                     let pch0: str8 = sub(venue_gain_text, pi, 1);
@@ -1925,20 +2014,18 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     bput(builder, pch);
                     free(pch);
                     free(pch0);
-                } else if moving_here {
-                    let gmv: str8 = route_cell_glyph(points_best_h, points_best_v, x, y, w, h);
+                } else if label_here == 1 {
                     let ch: str8 = format!(
-                        "{}{}{}{}{}{}{}",
+                        "{}{}{}{}{}",
                         bold_on(),
                         fg(color_black()),
-                        bg(color_bright_blue()),
-                        fg(color_bright_white()),
-                        gmv,
-                        reset(),
-                        bold_off()
+                        bg(color_bright_white()),
+                        label_char,
+                        reset()
                     );
                     bput(builder, ch);
                     free(ch);
+                    free(label_char);
                 } else if city_here == 1 {
                     let cname: str8 = city_names[city_idx];
                     let initial: str8 = sub(cname, 0, 1);
