@@ -383,12 +383,29 @@ fn clamp_avg_stay_minutes(v: i64) -> i64 {
     return clamp_i64(v, 5, 240);
 }
 
-fn build_drink_promilles_x100(city_count: i64, drinks_per_venue: i64, promille_per_drink_x100: i64) -> list<i64> {
+fn build_drink_promilles_x100(city_count: i64, avg_drinks_per_venue: i64, promille_per_drink_x100: i64) -> list<i64> {
     var out: list<i64> = [];
+    if avg_drinks_per_venue <= 0 {
+        for _i in 0..city_count {
+            out.push(0);
+        }
+        return out;
+    }
+    let low: i64 = max_i64(avg_drinks_per_venue - 1, 0);
+    let high: i64 = min_i64(avg_drinks_per_venue + 1, 12);
     for _i in 0..city_count {
-        out.push(drinks_per_venue * promille_per_drink_x100);
+        let drinks_here: i64 =
+            low >= high ? low : range_i64(low, high);
+        out.push(drinks_here * promille_per_drink_x100);
     }
     return out;
+}
+
+fn drink_count_for_city(drink_promilles_x100: &list<i64>, city: i64, promille_per_drink_x100: i64) -> i64 {
+    if city < 0 || city >= drink_promilles_x100.len() || promille_per_drink_x100 <= 0 {
+        return 0;
+    }
+    return drink_promilles_x100[city] / promille_per_drink_x100;
 }
 
 fn decay_promille_x100(current_promille_x100: i64, minutes_elapsed: i64) -> i64 {
@@ -1440,6 +1457,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             println!("");
             println!("Defaults:");
             println!("  1 drink = 0.18 promille equivalent (about 3 beers)");
+            println!("  drinks=N means average drinks per venue; actual venue drinks vary randomly");
             println!("");
             println!("Examples:");
             println!("  mofe_ga_tsp_esc Thu 15:00");
@@ -1521,7 +1539,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var compact_mode: i32 = 0;
     var stable_mode: i32 = 0;
     var start_promille_x100: i64 = 0;
-    var drinks_per_venue: i64 = 1;
+    var avg_drinks_per_venue: i64 = 1;
     let promille_per_drink_x100: i64 = 18;
     var avg_stay_minutes: i64 = 45;
     for i in 3..argc {
@@ -1535,7 +1553,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         } else if starts_with_text(arg, "start_promille=") {
             start_promille_x100 = parse_promille_x100_or_default(sub(arg, 15, len(arg) - 15), 0);
         } else if starts_with_text(arg, "drinks=") {
-            drinks_per_venue = clamp_i64(parse_i64_or_default(sub(arg, 7, len(arg) - 7), 1), 0, 12);
+            avg_drinks_per_venue = clamp_i64(parse_i64_or_default(sub(arg, 7, len(arg) - 7), 1), 0, 12);
         } else if starts_with_text(arg, "avg=") {
             avg_stay_minutes = clamp_avg_stay_minutes(parse_i64_or_default(sub(arg, 4, len(arg) - 4), 45));
         } else if starts_with_text(arg, "stay=") {
@@ -1548,7 +1566,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             requested_start_name = arg;
         }
     }
-    let drink_promilles_x100: list<i64> = build_drink_promilles_x100(city_count, drinks_per_venue, promille_per_drink_x100);
+    let drink_promilles_x100: list<i64> = build_drink_promilles_x100(city_count, avg_drinks_per_venue, promille_per_drink_x100);
     let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
     let start_city: i64 =
         parsed_start_city >= 0 ? parsed_start_city :
@@ -1664,11 +1682,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             }
         }
 
-        let points_initial: list<i64> = route_to_points(w, h, initial_route, xs, ys);
+        let points_initial: list<i64> =
+            compact_mode == 1 ? [] : route_to_points(w, h, initial_route, xs, ys);
         let points_best: list<i64> = route_to_points(w, h, render_route, xs, ys);
         let walk_points_best: list<i64> = route_to_walk_points(w, h, render_route, xs, ys);
-        let points_initial_h: list<i64> = route_to_horizontal_points(w, h, initial_route, xs, ys);
-        let points_initial_v: list<i64> = route_to_vertical_points(w, h, initial_route, xs, ys);
+        let points_initial_h: list<i64> =
+            compact_mode == 1 ? [] : route_to_horizontal_points(w, h, initial_route, xs, ys);
+        let points_initial_v: list<i64> =
+            compact_mode == 1 ? [] : route_to_vertical_points(w, h, initial_route, xs, ys);
         let points_best_h: list<i64> = route_to_horizontal_points(w, h, render_route, xs, ys);
         let points_best_v: list<i64> = route_to_vertical_points(w, h, render_route, xs, ys);
         let walk_points_best_n: i64 = walk_points_best.len();
@@ -1698,8 +1719,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let salesman_from: i64 = visual_state[2];
         let salesman_to: i64 = visual_state[3];
         let phase_progress_pct: i64 = visual_state[4];
-        let walker_cell: i64 =
-            path_walker_cell >= 0 ? path_walker_cell : visual_walker_cell;
+        let current_venue_drinks: i64 =
+            salesman_to >= 0 ? drink_count_for_city(drink_promilles_x100, salesman_to, promille_per_drink_x100) : 0;
+        var walker_cell: i64 = path_walker_cell >= 0 ? path_walker_cell : visual_walker_cell;
+        if at_venue_now == 1 && salesman_to >= 0 && salesman_to < route_city_n {
+            walker_cell = idx_2d(xs[salesman_to], ys[salesman_to], w);
+        }
         let current_promille_text: str8 = fmt_promille_x100(current_promille_x100);
         let crawl_clock_text: str8 = fmt_hhmm(crawl_clock_minutes);
         var route_preview_n: i64 = 4;
@@ -1741,7 +1766,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
         free(start_at_text);
         let start_promille_text: str8 = fmt_promille_x100(start_promille_x100);
-        let alcohol_now_line: str8 = format!("alcohol now: {}‰ @ {}  start={}‰  drinks/venue={} (1 drink={}‰ stay={}m)", current_promille_text, crawl_clock_text, start_promille_text, drinks_per_venue, promille_per_drink_x100, avg_stay_minutes);
+        let alcohol_now_line: str8 = format!("alcohol now: {}‰ @ {}  start={}‰  avg drinks/venue={} (this={}  1 drink={}‰ stay={}m)", current_promille_text, crawl_clock_text, start_promille_text, avg_drinks_per_venue, current_venue_drinks, promille_per_drink_x100, avg_stay_minutes);
         let phase_bar: str8 = progress_bar(cols >= 120 ? 18 : 12, phase_progress_pct);
         let phase_label_city: str8 =
             salesman_to >= 0 && salesman_to < route_city_n ? city_names[salesman_to] : "?";
@@ -1795,9 +1820,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             at_venue_now == 1 && salesman_to >= 0 && salesman_to < route_city_n;
         let venue_progress_text: str8 =
             show_venue_progress ?
-            format!("{} {}% {}d", phase_bar, phase_progress_pct, drinks_per_venue) :
+            format!("{} {}% {}d", phase_bar, phase_progress_pct, current_venue_drinks) :
             "";
-        let walker_promille_text: str8 = format!("{}‰", fmt_promille_x100(current_promille_x100));
+        let walker_promille_text: str8 = format!("{}p", fmt_promille_x100(current_promille_x100));
         let venue_progress_len: i64 = len(venue_progress_text);
         let walker_promille_len: i64 = len(walker_promille_text);
         let walker_x: i64 = walker_cell >= 0 ? walker_cell % w : 0;
@@ -1964,7 +1989,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
 
-    println!("final best cost={} tolerance={} start_promille={} drinks/venue={} drink={}‰", best_cost, tolerance_pct, start_promille_x100, drinks_per_venue, promille_per_drink_x100);
+    println!("final best cost={} tolerance={} start_promille={} avg_drinks/venue={} drink={}‰", best_cost, tolerance_pct, start_promille_x100, avg_drinks_per_venue, promille_per_drink_x100);
     println!("meters walked={}", walked_meters(best_route, lats_deg, lons_deg));
     print!("best path: ");
     let best_n: i64 = best_route.len();
