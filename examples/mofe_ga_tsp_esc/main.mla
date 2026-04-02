@@ -99,8 +99,8 @@ fn project_lons_to_x(lons_e4: &list<i64>, w: i64) -> list<i64> {
         if span <= 0 {
             out.push(w / 2);
         } else {
-            let x: i64 = 1 + ((lons_e4[i] - lo) * (w - 3)) / span;
-            out.push(clamp_i64(x, 1, w - 2));
+            let x: i64 = 2 + ((lons_e4[i] - lo) * (w - 5)) / span;
+            out.push(clamp_i64(x, 2, w - 3));
         }
     }
     return out;
@@ -123,8 +123,8 @@ fn project_lats_to_y(lats_e4: &list<i64>, h: i64) -> list<i64> {
         if span <= 0 {
             out.push(h / 2);
         } else {
-            let y: i64 = 1 + ((hi - lats_e4[i]) * (h - 3)) / span;
-            out.push(clamp_i64(y, 1, h - 2));
+            let y: i64 = 2 + ((hi - lats_e4[i]) * (h - 5)) / span;
+            out.push(clamp_i64(y, 2, h - 3));
         }
     }
     return out;
@@ -965,6 +965,32 @@ fn route_to_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<
     return out;
 }
 
+fn route_to_walk_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = route.len();
+    let city_n: i64 = min_i64(xs.len(), ys.len());
+    if n <= 1 {
+        return out;
+    }
+    for i in 0..n {
+        let ni: i64 = i + 1;
+        if ni >= n {
+            break;
+        }
+        let a: i64 = route[i];
+        let b: i64 = route[ni];
+        if a < 0 || a >= city_n || b < 0 || b >= city_n {
+            continue;
+        }
+        let path: list<i64> = build_path_hv(w, h, xs[a], ys[a], xs[b], ys[b]);
+        let pn: i64 = path.len();
+        for pi in 0..pn {
+            out.push(path[pi]);
+        }
+    }
+    return out;
+}
+
 fn route_to_horizontal_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
     var out: list<i64> = [];
     let n: i64 = route.len();
@@ -1340,7 +1366,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         "Bar Viiskulma",
         "Om'pu",
         "Berlin Bierhaus",
-        "Pub Peräkammari",
+        "Pub Perakammari",
         "CoolHead"
     ];
     let lats_deg: list<f64> = [
@@ -1530,13 +1556,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
         let points_initial: list<i64> = route_to_points(w, h, initial_route, xs, ys);
         let points_best: list<i64> = route_to_points(w, h, render_route, xs, ys);
+        let walk_points_best: list<i64> = route_to_walk_points(w, h, render_route, xs, ys);
         let points_initial_h: list<i64> = route_to_horizontal_points(w, h, initial_route, xs, ys);
         let points_initial_v: list<i64> = route_to_vertical_points(w, h, initial_route, xs, ys);
         let points_best_h: list<i64> = route_to_horizontal_points(w, h, render_route, xs, ys);
         let points_best_v: list<i64> = route_to_vertical_points(w, h, render_route, xs, ys);
-        let points_best_n: i64 = points_best.len();
-        let walker_idx: i64 = points_best_n > 0 ? walker_step % points_best_n : -1;
-        let walker_cell: i64 = points_best_n > 0 ? points_best[walker_idx] : -1;
+        let walk_points_best_n: i64 = walk_points_best.len();
+        let walker_idx: i64 = walk_points_best_n > 0 ? walker_step % walk_points_best_n : -1;
+        let walker_cell: i64 = walk_points_best_n > 0 ? walk_points_best[walker_idx] : -1;
         let route_n: i64 = render_route.len();
         let route_city_n: i64 = city_names.len();
         var salesman_from: i64 = -1;
@@ -1671,15 +1698,15 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     let lname: str8 = city_names[c];
                     let ln: i64 = len(lname);
                     let ly_raw: i64 = ys[c] - 1;
-                    let ly: i64 = ly_raw < 0 ? 0 : ly_raw;
+                    let ly: i64 = clamp_i64(ly_raw, 1, h - 2);
                     var lx: i64 = xs[c] - (ln / 2);
-                    if lx < 0 {
-                        lx = 0;
+                    if lx < 1 {
+                        lx = 1;
                     }
                     if lx + ln >= w {
-                        lx = w - ln - 1;
-                        if lx < 0 {
-                            lx = 0;
+                        lx = w - ln - 2;
+                        if lx < 1 {
+                            lx = 1;
                         }
                     }
                     if y == ly && x >= lx && x < (lx + ln) {
