@@ -219,6 +219,24 @@ fn walk_time_minutes(lat_a: f64, lon_a: f64, lat_b: f64, lon_b: f64) -> i64 {
     return mins > 1 ? mins : 1;
 }
 
+fn walked_meters(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>) -> i64 {
+    let n: i64 = route.len();
+    var total: i64 = 0;
+    if n <= 1 {
+        return 0;
+    }
+    for i in 0..n {
+        let ni: i64 = i + 1;
+        if ni >= n {
+            break;
+        }
+        let a: i64 = route[i];
+        let b: i64 = route[ni];
+        total += distance_m(lats_deg[a], lons_deg[a], lats_deg[b], lons_deg[b]);
+    }
+    return total;
+}
+
 fn slope_effort_minutes(from_elev_m: i64, to_elev_m: i64, elapsed_minutes: i64) -> i64 {
     let gain: i64 = to_elev_m - from_elev_m;
     let fatigue_stage: i64 =
@@ -263,7 +281,7 @@ fn visit_duration_minutes() -> i64 {
 
 fn opening_time_for(day_idx: i64, city: i64) -> i64 {
     if day_idx == 0 {
-        if city == 0 { return 17 * 60; }
+        if city == 0 { return 0; }
         if city == 1 { return 13 * 60; }
         if city == 2 { return 15 * 60; }
         if city == 3 { return 13 * 60; }
@@ -273,7 +291,7 @@ fn opening_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 11 * 60; }
     }
     if day_idx == 1 {
-        if city == 0 { return 17 * 60; }
+        if city == 0 { return 0; }
         if city == 1 { return 13 * 60; }
         if city == 2 { return 15 * 60; }
         if city == 3 { return 13 * 60; }
@@ -283,7 +301,7 @@ fn opening_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 11 * 60; }
     }
     if day_idx == 2 {
-        if city == 0 { return 17 * 60; }
+        if city == 0 { return 0; }
         if city == 1 { return 13 * 60; }
         if city == 2 { return 15 * 60; }
         if city == 3 { return 13 * 60; }
@@ -303,7 +321,7 @@ fn opening_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 11 * 60; }
     }
     if day_idx == 4 {
-        if city == 0 { return 16 * 60; }
+        if city == 0 { return 0; }
         if city == 1 { return 13 * 60; }
         if city == 2 { return 14 * 60; }
         if city == 3 { return 13 * 60; }
@@ -313,7 +331,7 @@ fn opening_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 11 * 60; }
     }
     if day_idx == 5 {
-        if city == 0 { return 14 * 60; }
+        if city == 0 { return 0; }
         if city == 1 { return 12 * 60; }
         if city == 2 { return 14 * 60; }
         if city == 3 { return 12 * 60; }
@@ -323,7 +341,7 @@ fn opening_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 12 * 60; }
     }
     if day_idx == 6 {
-        if city == 0 { return 16 * 60; }
+        if city == 0 { return 0; }
         if city == 1 { return 13 * 60; }
         if city == 2 { return 16 * 60; }
         if city == 3 { return 14 * 60; }
@@ -337,7 +355,7 @@ fn opening_time_for(day_idx: i64, city: i64) -> i64 {
 
 fn closing_time_for(day_idx: i64, city: i64) -> i64 {
     if day_idx == 0 {
-        if city == 0 { return 22 * 60; }
+        if city == 0 { return -1; }
         if city == 1 { return 24 * 60; }
         if city == 2 { return 24 * 60; }
         if city == 3 { return 24 * 60; }
@@ -347,7 +365,7 @@ fn closing_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 21 * 60; }
     }
     if day_idx == 1 {
-        if city == 0 { return 22 * 60; }
+        if city == 0 { return -1; }
         if city == 1 { return 24 * 60; }
         if city == 2 { return 24 * 60; }
         if city == 3 { return 24 * 60; }
@@ -357,7 +375,7 @@ fn closing_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 21 * 60; }
     }
     if day_idx == 2 {
-        if city == 0 { return 22 * 60; }
+        if city == 0 { return -1; }
         if city == 1 { return 25 * 60; }
         if city == 2 { return 25 * 60; }
         if city == 3 { return 25 * 60; }
@@ -377,7 +395,7 @@ fn closing_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 22 * 60; }
     }
     if day_idx == 4 {
-        if city == 0 { return 25 * 60; }
+        if city == 0 { return -1; }
         if city == 1 { return 26 * 60; }
         if city == 2 { return 26 * 60; }
         if city == 3 { return 28 * 60; }
@@ -387,7 +405,7 @@ fn closing_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 23 * 60; }
     }
     if day_idx == 5 {
-        if city == 0 { return 25 * 60; }
+        if city == 0 { return -1; }
         if city == 1 { return 26 * 60; }
         if city == 2 { return 26 * 60; }
         if city == 3 { return 28 * 60; }
@@ -397,7 +415,7 @@ fn closing_time_for(day_idx: i64, city: i64) -> i64 {
         if city == 7 { return 23 * 60; }
     }
     if day_idx == 6 {
-        if city == 0 { return 22 * 60; }
+        if city == 0 { return -1; }
         if city == 1 { return 24 * 60; }
         if city == 2 { return 24 * 60; }
         if city == 3 { return 24 * 60; }
@@ -1076,6 +1094,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     population = repair_population_with_start(population, pop_size, city_count, start_city);
     let initial_route: list<i64> = nearest_neighbor_route(start_city, city_count, lats_deg, lons_deg);
     let random_cost: i64 = route_cost(initial_route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, start_city);
+    let random_meters: i64 = walked_meters(initial_route, lats_deg, lons_deg);
     var best_route: list<i64> = clone_i64_list(initial_route);
     var render_route: list<i64> = clone_i64_list(initial_route);
     var pending_route: list<i64> = clone_i64_list(initial_route);
@@ -1201,6 +1220,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let elapsed_ms: i64 = now_ms() - start_ms;
         let start_at_text: str8 = fmt_hhmm(start_minutes);
         let start_place_text: str8 = city_names[start_city];
+        let best_meters_now: i64 = walked_meters(render_route, lats_deg, lons_deg);
         var route_preview_n: i64 = 4;
         if cols >= 130 {
             route_preview_n = 8;
@@ -1227,8 +1247,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let from_elev: i64 = salesman_from >= 0 ? elevations_m[salesman_from] : 0;
         let to_elev: i64 = salesman_to >= 0 ? elevations_m[salesman_to] : 0;
         let l1: str8 = format!(
-            "score best={} random={}  gps {}({},{},{}m) -> {}({},{},{}m)",
-            best_cost, random_cost,
+            "score best={} random={}  walked={}m random={}m  gps {}({},{},{}m) -> {}({},{},{}m)",
+            best_cost, random_cost, best_meters_now, random_meters,
             from_name, from_lat, from_lon, from_elev,
             to_name, to_lat, to_lon, to_elev
         );
@@ -1396,6 +1416,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     println!("final best cost={}", best_cost);
+    println!("meters walked={}", walked_meters(best_route, lats_deg, lons_deg));
     print!("best path: ");
     let best_n: i64 = best_route.len();
     for i in 0..best_n {
