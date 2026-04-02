@@ -1,0 +1,46 @@
+mod std::gps;
+mod std::math;
+mod std::testing;
+
+use std::gps::*;
+use std::math::abs;
+use std::testing::verify_eq;
+use std::testing::verify_true;
+
+fn approx_f64(a: f64, b: f64, eps: f64) -> bool {
+    return abs(a - b) <= eps;
+}
+
+#[test]
+fn test_deg_to_rad_and_constants_are_reasonable() {
+    verify_true(approx_f64(pi(), 3.141592653589793, 0.000000001));
+    verify_true(approx_f64(deg_to_rad(180.0), pi(), 0.000000001));
+    verify_true(approx_f64(earth_radius_m(), 6371008.8, 0.001));
+}
+
+#[test]
+fn test_projected_xy_lists_are_tsp_ready() {
+    let lats: list<f64> = [0.0, 0.0, 1.0];
+    let lons: list<f64> = [0.0, 1.0, 0.0];
+
+    let xs: list<i64> = project_xs(lats, lons, 1000.0);
+    let ys: list<i64> = project_ys(lats, lons, 1000.0);
+
+    verify_eq(xs.len(), 3);
+    verify_eq(ys.len(), 3);
+    verify_eq(xs[0], 0);
+    verify_eq(ys[0], 0);
+    verify_eq(ys[1], 0);
+    verify_eq(xs[2], 0);
+    verify_true(xs[1] >= 110 && xs[1] <= 112);
+    verify_true(ys[2] >= 111 && ys[2] <= 112);
+}
+
+#[test]
+fn test_distance_m_matches_local_geographic_scale() {
+    let equator_east: i64 = distance_m(0.0, 0.0, 0.0, 1.0);
+    let north: i64 = distance_m(0.0, 0.0, 1.0, 0.0);
+
+    verify_true(equator_east >= 111000 && equator_east <= 111500);
+    verify_true(north >= 111000 && north <= 111500);
+}

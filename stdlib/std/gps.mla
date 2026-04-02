@@ -1,0 +1,106 @@
+/// \file gps.mla
+/// \brief GPS/latitude-longitude helpers for routing and TSP-style algorithms.
+///
+/// This module is intended to convert latitude/longitude lists into local
+/// integer XY coordinates that can be used with the existing GA/TSP examples.
+
+mod std::math;
+
+use std::math::cos;
+use std::math::sqrt;
+
+extern fn llround(value: f64) -> i64;
+
+/// @brief Degrees-to-radians conversion factor.
+pub fn pi() -> f64 {
+    return 3.14159265358979323846;
+}
+
+/// @brief Mean Earth radius in meters.
+pub fn earth_radius_m() -> f64 {
+    return 6371008.8;
+}
+
+/// @brief Convert degrees to radians.
+pub fn deg_to_rad(deg: f64) -> f64 {
+    return deg * (pi() / 180.0);
+}
+
+fn round_to_i64(v: f64) -> i64 {
+    return llround(v);
+}
+
+fn mean_f64(values: &list<f64>) -> f64 {
+    let n: i64 = values.len();
+    if n <= 0 {
+        return 0.0;
+    }
+    var total: f64 = 0.0;
+    for i in 0..n {
+        total += values[i];
+    }
+    return total / f64(n);
+}
+
+/// @brief Project a single longitude to local X using an equirectangular approximation.
+pub fn project_x(origin_lon_deg: f64, lon_deg: f64, ref_lat_deg: f64, meters_per_unit: f64) -> i64 {
+    let r: f64 = earth_radius_m();
+    let lon0: f64 = deg_to_rad(origin_lon_deg);
+    let lon1: f64 = deg_to_rad(lon_deg);
+    let ref_lat: f64 = deg_to_rad(ref_lat_deg);
+    let dx_m: f64 = (lon1 - lon0) * cos(ref_lat) * r;
+    return round_to_i64(dx_m / meters_per_unit);
+}
+
+/// @brief Project a single latitude to local Y using an equirectangular approximation.
+pub fn project_y(origin_lat_deg: f64, lat_deg: f64, meters_per_unit: f64) -> i64 {
+    let r: f64 = earth_radius_m();
+    let lat0: f64 = deg_to_rad(origin_lat_deg);
+    let lat1: f64 = deg_to_rad(lat_deg);
+    let dy_m: f64 = (lat1 - lat0) * r;
+    return round_to_i64(dy_m / meters_per_unit);
+}
+
+/// @brief Convert longitude list to local integer X values for TSP/grid usage.
+///
+/// The first coordinate is used as the origin and the mean latitude is used for
+/// longitude scaling.
+pub fn project_xs(lats_deg: &list<f64>, lons_deg: &list<f64>, meters_per_unit: f64) -> list<i64> {
+    var xs: list<i64> = [];
+    let n: i64 = lats_deg.len();
+    if n <= 0 || lons_deg.len() != n {
+        return xs;
+    }
+
+    let origin_lon_deg: f64 = lons_deg[0];
+    let ref_lat_deg: f64 = mean_f64(lats_deg);
+    for i in 0..n {
+        xs.push(project_x(origin_lon_deg, lons_deg[i], ref_lat_deg, meters_per_unit));
+    }
+    return xs;
+}
+
+/// @brief Convert latitude list to local integer Y values for TSP/grid usage.
+///
+/// The first coordinate is used as the origin.
+pub fn project_ys(lats_deg: &list<f64>, lons_deg: &list<f64>, meters_per_unit: f64) -> list<i64> {
+    var ys: list<i64> = [];
+    let n: i64 = lats_deg.len();
+    if n <= 0 || lons_deg.len() != n {
+        return ys;
+    }
+
+    let origin_lat_deg: f64 = lats_deg[0];
+    for i in 0..n {
+        ys.push(project_y(origin_lat_deg, lats_deg[i], meters_per_unit));
+    }
+    return ys;
+}
+
+/// @brief Approximate geographic segment distance in meters.
+pub fn distance_m(lat_a_deg: f64, lon_a_deg: f64, lat_b_deg: f64, lon_b_deg: f64) -> i64 {
+    let ref_lat_deg: f64 = (lat_a_deg + lat_b_deg) / 2.0;
+    let dx: f64 = f64(project_x(lon_a_deg, lon_b_deg, ref_lat_deg, 1.0));
+    let dy: f64 = f64(project_y(lat_a_deg, lat_b_deg, 1.0));
+    return round_to_i64(sqrt((dx * dx) + (dy * dy)));
+}
