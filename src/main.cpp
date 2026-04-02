@@ -1,7 +1,8 @@
 #include "ast.h"
 #include "ir.h"
-#include "package_manager.h"
 #include "module.h"
+#include "package_manager.h"
+#include "source_filter.h"
 #include <array>
 #include <cctype>
 #include <chrono>
@@ -39,6 +40,12 @@ extern "C"
     extern ASTNode* programRoot;
     extern bool parseHadError;
 }
+
+typedef size_t yy_size_t;
+struct yy_buffer_state;
+typedef yy_buffer_state* YY_BUFFER_STATE;
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 void printUsage(const char* programName)
 {
@@ -1508,14 +1515,16 @@ int main(int argc, char** argv)
         }
     }
 
-    FILE* input_file = fopen(inputFile.c_str(), "r");
-    if(!input_file)
+    std::ifstream input_stream(inputFile);
+    if(!input_stream)
     {
         std::cerr << "Error opening file: " << inputFile << std::endl;
         return 1;
     }
-
-    yyin = input_file;
+    const std::string rawInput((std::istreambuf_iterator<char>(input_stream)),
+                               std::istreambuf_iterator<char>());
+    const std::string filteredInput =
+        mlang::preprocess_conditional_regions(rawInput, targetArch);
 
     // Create LLVM context and module
     llvm::LLVMContext context;
@@ -1548,10 +1557,13 @@ int main(int argc, char** argv)
         parseHadError = false;
         g_sourceFile = inputFile.c_str();
         g_targetArchForParse = targetArch.c_str();
-        if(yyparse() != 0 || parseHadError)
+        YY_BUFFER_STATE parseBuffer = yy_scan_bytes(
+            filteredInput.data(), static_cast<yy_size_t>(filteredInput.size()));
+        const int parseResult = yyparse();
+        yy_delete_buffer(parseBuffer);
+        if(parseResult != 0 || parseHadError)
         {
             std::cerr << "Parsing failed." << std::endl;
-            fclose(input_file);
             return 1;
         }
 
@@ -1563,7 +1575,6 @@ int main(int argc, char** argv)
         if(!programRoot)
         {
             std::cerr << "Error: No program root node created" << std::endl;
-            fclose(input_file);
             return 1;
         }
 
@@ -1608,6 +1619,7 @@ int main(int argc, char** argv)
             // Initialize module loader
             moduleLoader =
                 std::make_unique<ModuleLoader>(basePath, moduleSearchPaths);
+            moduleLoader->setTargetArch(targetArch);
 
             // Process mod declarations (load modules)
             if(!program->modules.empty())
@@ -1621,7 +1633,6 @@ int main(int argc, char** argv)
                 if(!moduleLoader->processModDeclarations(program, errorMsg))
                 {
                     std::cerr << "Error: " << errorMsg << std::endl;
-                    fclose(input_file);
                     delete programRoot;
                     return 1;
                 }
@@ -1630,7 +1641,6 @@ int main(int argc, char** argv)
                 if(!moduleLoader->processUseDeclarations(program, errorMsg))
                 {
                     std::cerr << "Error: " << errorMsg << std::endl;
-                    fclose(input_file);
                     delete programRoot;
                     return 1;
                 }
@@ -1677,7 +1687,6 @@ int main(int argc, char** argv)
             if(generator.hadError())
             {
                 std::cerr << "Compilation failed due to errors." << std::endl;
-                fclose(input_file);
                 delete programRoot;
                 return 1;
             }
@@ -1772,7 +1781,6 @@ int main(int argc, char** argv)
             if(!success)
             {
                 std::cerr << "Compilation failed." << std::endl;
-                fclose(input_file);
                 delete programRoot;
                 return 1;
             }
@@ -1780,14 +1788,12 @@ int main(int argc, char** argv)
         else
         {
             std::cerr << "Error: Invalid program root node type" << std::endl;
-            fclose(input_file);
             return 1;
         }
     }
     catch(const std::exception& e)
     {
         std::cerr << "Error during compilation: " << e.what() << std::endl;
-        fclose(input_file);
         return 1;
     }
 
@@ -1836,7 +1842,6 @@ int main(int argc, char** argv)
                               builtinMacros, builtinFunctions);
 
     // Clean up
-    fclose(input_file);
     delete programRoot;
 
     if(verbose)

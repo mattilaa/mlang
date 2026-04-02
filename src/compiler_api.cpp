@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "source_filter.h"
 
 #include <algorithm>
 #include <atomic>
@@ -1081,8 +1082,10 @@ static ProgramNode* parseProgramFromText(std::string_view text,
     yylineno = 1;
     parseHadError = false;
 
-    YY_BUFFER_STATE buffer =
-        yy_scan_bytes(text.data(), static_cast<yy_size_t>(text.size()));
+    const std::string filteredText =
+        mlang::preprocess_conditional_regions(text, "");
+    YY_BUFFER_STATE buffer = yy_scan_bytes(filteredText.data(),
+                                           static_cast<yy_size_t>(filteredText.size()));
     const int result = yyparse();
     yy_delete_buffer(buffer);
 

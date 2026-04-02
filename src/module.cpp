@@ -1,4 +1,5 @@
 #include "module.h"
+#include "source_filter.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -158,14 +159,19 @@ static std::string function_signature_key(FunctionDefNode* node)
 extern int yyparse();
 extern FILE* yyin;
 extern int yylineno;
+extern const char* g_sourceFile;
+extern const char* g_targetArchForParse;
 extern "C"
 {
     extern ASTNode* programRoot;
     extern bool parseHadError;
 }
 
-// Reset lexer state for new file
-extern void yyrestart(FILE* input_file);
+typedef size_t yy_size_t;
+struct yy_buffer_state;
+typedef yy_buffer_state* YY_BUFFER_STATE;
+extern YY_BUFFER_STATE yy_scan_bytes(const char* bytes, yy_size_t len);
+extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
 
 ModuleLoader::ModuleLoader(const std::string& basePath,
                            const std::vector<std::string>& extraPaths)
@@ -211,13 +217,17 @@ std::string ModuleLoader::resolveModulePath(const std::string& moduleName)
 
 ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
 {
-    FILE* file = fopen(filePath.c_str(), "r");
+    std::ifstream file(filePath);
     if(!file)
     {
         std::cerr << "Error: Cannot open module file: " << filePath
                   << std::endl;
         return nullptr;
     }
+    const std::string rawText((std::istreambuf_iterator<char>(file)),
+                              std::istreambuf_iterator<char>());
+    const std::string filteredText =
+        mlang::preprocess_conditional_regions(rawText, targetArchOverride);
 
     // Save current parser state
     ASTNode* savedRoot = programRoot;
@@ -226,14 +236,14 @@ ProgramNode* ModuleLoader::parseFile(const std::string& filePath)
     // Reset lexer line number
     yylineno = 1;
 
-    // Set up parser for new file
-    yyrestart(file);
-    yyin = file;
-
     // Parse the file
     parseHadError = false;
+    g_sourceFile = filePath.c_str();
+    g_targetArchForParse = targetArchOverride.c_str();
+    YY_BUFFER_STATE buffer = yy_scan_bytes(
+        filteredText.data(), static_cast<yy_size_t>(filteredText.size()));
     int result = yyparse();
-    fclose(file);
+    yy_delete_buffer(buffer);
 
     ProgramNode* parsedProgram = nullptr;
     if(result == 0 && !parseHadError && programRoot)

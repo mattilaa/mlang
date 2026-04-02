@@ -92,6 +92,38 @@ fn arch_sum(lhs: i64, rhs: i64) -> i64 {
 }
 ```
 
+## Conditional Regions
+
+For `#ifdef`-style source filtering, MLang supports raw conditional regions
+that are removed before parsing.
+
+Supported region tags:
+- `[windows] ... [/windows]`
+- `[posix] ... [/posix]`
+- `[linux] ... [/linux]`
+- `[macos] ... [/macos]`
+- `[x86-64] ... [/x86-64]`
+- `[aarch64] ... [/aarch64]`
+
+Example:
+
+```mla
+[windows]
+fn platform_name() -> str8 {
+    return "windows";
+}
+[/windows]
+
+[posix]
+fn platform_name() -> str8 {
+    return "posix";
+}
+[/posix]
+```
+
+Use these regions when non-matching code should be ignored completely by the
+compiler, for example with duplicate definitions or target-specific asm.
+
 ## Type Name Property (`.name`)
 
 Values expose a read-only synthetic `.name` property for logging static type

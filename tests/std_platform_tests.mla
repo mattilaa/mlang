@@ -5,6 +5,18 @@ use std::platform::*;
 use std::testing::verify_eq;
 use std::testing::verify_true;
 
+[windows]
+fn region_selected_platform_name() -> str8 {
+    return "windows";
+}
+[/windows]
+
+[posix]
+fn region_selected_platform_name() -> str8 {
+    return "posix";
+}
+[/posix]
+
 #[test]
 fn test_platform_macros_and_helpers_are_consistent() {
     static_assert!(windows!() || posix!());
@@ -49,5 +61,16 @@ fn test_platform_arch_name_matches_flags() {
         verify_eq(name, "x64");
     } else {
         verify_eq(name, "unknown");
+    }
+}
+
+#[test]
+fn test_platform_regions_select_only_matching_code() {
+    if macos!() {
+        verify_eq(region_selected_platform_name(), "posix");
+    } else if linux!() {
+        verify_eq(region_selected_platform_name(), "posix");
+    } else if windows!() {
+        verify_eq(region_selected_platform_name(), "windows");
     }
 }

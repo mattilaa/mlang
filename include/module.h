@@ -25,6 +25,7 @@ private:
     std::vector<std::string> searchPaths;
     std::map<std::string, ModuleInfo> modules;
     std::set<std::string> loadingStack; // For detecting circular imports
+    std::string targetArchOverride;
 
     // Parse a single file and return its AST
     ProgramNode* parseFile(const std::string& filePath);
@@ -68,6 +69,11 @@ public:
             searchPaths.push_back(basePath);
         else
             searchPaths[0] = basePath;
+    }
+
+    void setTargetArch(const std::string& arch)
+    {
+        targetArchOverride = arch;
     }
 
     // Get list of all loaded module names

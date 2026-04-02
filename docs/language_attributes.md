@@ -147,6 +147,43 @@ compiler. See:
 - `tests/arch_attr_inline_asm_tests.mla`
 - `tests/inline_asm_target_arch_tests.mla`
 
+## Conditional Regions
+
+For larger platform/arch-specific code snippets, MLang also supports raw
+conditional regions that are removed before parsing, closer to `#ifdef` in C/C++.
+
+Supported region tags:
+- `[windows] ... [/windows]`
+- `[posix] ... [/posix]`
+- `[linux] ... [/linux]`
+- `[macos] ... [/macos]`
+- `[x86-64] ... [/x86-64]`
+- `[aarch64] ... [/aarch64]`
+
+Example:
+
+```mla
+[windows]
+fn platform_name() -> str8 {
+    return "windows";
+}
+[/windows]
+
+[posix]
+fn platform_name() -> str8 {
+    return "posix";
+}
+[/posix]
+```
+
+Unlike ordinary `if` statements, non-matching regions are filtered out before
+the parser sees them, so duplicate definitions and target-specific code such as
+inline asm can live in separate regions safely.
+
+See:
+- `examples/platform_region_demo.mla`
+- `tests/std_platform_tests.mla`
+
 ## Adding a New Rust-like Attribute
 
 To add a new attribute such as `#[derive(Clone)]`, update these compiler stages:

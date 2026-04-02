@@ -49,7 +49,7 @@ If you are new to MLang, read these pages in this order:
   language?” answers.
 - [Language Syntax](language_syntax.md)
   Language features such as `switch`, exceptions, pipe syntax, inline asm,
-  lambdas/folds, and `bit`/`sizeof`.
+  conditional regions, lambdas/folds, and `bit`/`sizeof`.
 - [Language Attributes](language_attributes.md)
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`, and `#[inline]`.
 - [Stdlib Module API](stdlib_mlang_api.md)
@@ -124,6 +124,7 @@ Use this section as a map into the existing documentation.
   - exceptions
   - functional pipe `|>`
   - inline assembly
+  - conditional source regions
   - lambdas and folds
   - `bit` and `sizeof`
 

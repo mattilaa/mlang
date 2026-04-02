@@ -1,0 +1,34 @@
+mod std::platform;
+
+use std::platform::*;
+
+[windows]
+fn platform_message() -> str8 {
+    return "windows region selected";
+}
+[/windows]
+
+[posix]
+fn platform_message() -> str8 {
+    return "posix region selected";
+}
+[/posix]
+
+[x86-64]
+fn arch_message() -> str8 {
+    return "x86-64 region selected";
+}
+[/x86-64]
+
+[aarch64]
+fn arch_message() -> str8 {
+    return "aarch64 region selected";
+}
+[/aarch64]
+
+fn main() -> i32 {
+    println!("platform={} arch={}", family(), arch());
+    println!("{}", platform_message());
+    println!("{}", arch_message());
+    return 0;
+}
