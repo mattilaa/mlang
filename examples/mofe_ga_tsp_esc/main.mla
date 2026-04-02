@@ -183,6 +183,46 @@ fn parse_weekday_or_default(text: str8, fallback_day: i64) -> i64 {
     return fallback_day;
 }
 
+fn parse_i64_or_default(text: str8, fallback_value: i64) -> i64 {
+    let s: str8 = trim(text);
+    let n: i64 = len(s);
+    if n <= 0 {
+        return fallback_value;
+    }
+    var value: i64 = 0;
+    for i in 0..n {
+        let d: i64 = digit_value(sub(s, i, 1));
+        if d < 0 {
+            return fallback_value;
+        }
+        value = value * 10 + d;
+    }
+    return value;
+}
+
+fn clamp_tolerance_pct(v: i64) -> i64 {
+    return clamp_i64(v, 0, 100);
+}
+
+fn is_decimal_text(text: str8) -> bool {
+    let s: str8 = trim(text);
+    let n: i64 = len(s);
+    if n <= 0 {
+        return false;
+    }
+    for i in 0..n {
+        if digit_value(sub(s, i, 1)) < 0 {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn is_compact_flag(text: str8) -> bool {
+    let s: str8 = trim(text);
+    return eq(s, "compact") == 1 || eq(s, "--compact") == 1 || eq(s, "minimal") == 1 || eq(s, "--minimal") == 1;
+}
+
 fn weekday_name(day_idx: i64) -> str8 {
     if day_idx == 0 { return "Mon"; }
     if day_idx == 1 { return "Tue"; }
@@ -244,7 +284,7 @@ fn walked_meters(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>) 
     return total;
 }
 
-fn slope_effort_minutes(from_elev_m: i64, to_elev_m: i64, elapsed_minutes: i64, promille_x100: i64) -> i64 {
+fn slope_effort_minutes(from_elev_m: i64, to_elev_m: i64, elapsed_minutes: i64, promille_x100: i64, tolerance_pct: i64) -> i64 {
     let gain: i64 = to_elev_m - from_elev_m;
     let fatigue_stage: i64 =
         elapsed_minutes < 120 ? 1 :
@@ -253,26 +293,28 @@ fn slope_effort_minutes(from_elev_m: i64, to_elev_m: i64, elapsed_minutes: i64, 
     let alcohol_stage: i64 =
         promille_x100 < 20 ? 1 :
         promille_x100 < 40 ? 2 : 3;
+    let tolerance_scale: i64 = 140 - clamp_tolerance_pct(tolerance_pct);
     if gain > 0 {
-        return (gain * fatigue_stage * alcohol_stage + 4) / 5;
+        return (gain * fatigue_stage * alcohol_stage * tolerance_scale + 249) / 250;
     }
     let drop: i64 = -gain;
     if elapsed_minutes >= 180 {
-        let downhill_bonus: i64 = (drop * (fatigue_stage - 1 + alcohol_stage) + 11) / 12;
+        let downhill_bonus: i64 = (drop * (fatigue_stage - 1 + alcohol_stage) * tolerance_scale + 599) / 600;
         return downhill_bonus > 7 ? -7 : -downhill_bonus;
     }
     return 0;
 }
 
-fn opening_penalty(city: i64, current_minutes: i64, open_from: &list<i64>, close_at: &list<i64>) -> i64 {
+fn opening_penalty(city: i64, current_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, tolerance_pct: i64) -> i64 {
     let opens: i64 = open_from[city];
     let closes: i64 = close_at[city];
+    let tolerance_scale: i64 = 140 - clamp_tolerance_pct(tolerance_pct);
     if current_minutes < opens {
         let wait: i64 = opens - current_minutes;
-        return wait * 20;
+        return (wait * 20 * tolerance_scale + 49) / 50;
     }
     if current_minutes > closes {
-        return 500000 + (current_minutes - closes) * 400;
+        return 500000 + ((current_minutes - closes) * 400 * tolerance_scale + 49) / 50;
     }
     return 0;
 }
@@ -333,6 +375,75 @@ fn route_promille_x100_at_step(route: &list<i64>, lats_deg: &list<f64>, lons_deg
         if i >= capped_step {
             break;
         }
+    }
+    return promille_x100;
+}
+
+fn route_end_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>, start_minutes: i64,
+                     open_from: &list<i64>, elevations_m: &list<i64>, tolerance_pct: i64) -> i64 {
+    let n: i64 = route.len();
+    if n <= 0 {
+        return start_minutes;
+    }
+    var clock_minutes: i64 = adjusted_arrival(route[0], start_minutes, open_from) + visit_duration_minutes();
+    var last_clock_minutes: i64 = clock_minutes;
+    var promille_x100: i64 = 0;
+    promille_x100 += 20;
+    for i in 1..n {
+        let prev: i64 = route[i - 1];
+        let city: i64 = route[i];
+        clock_minutes += walk_time_minutes(lats_deg[prev], lons_deg[prev], lats_deg[city], lons_deg[city]);
+        promille_x100 = decay_promille_x100(promille_x100, clock_minutes - last_clock_minutes);
+        clock_minutes += slope_effort_minutes(elevations_m[prev], elevations_m[city], clock_minutes - start_minutes, promille_x100, tolerance_pct);
+        clock_minutes = adjusted_arrival(city, clock_minutes, open_from) + visit_duration_minutes();
+        last_clock_minutes = clock_minutes;
+    }
+    return clock_minutes;
+}
+
+fn route_promille_x100_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
+                                  drink_promilles_x100: &list<i64>, start_minutes: i64, open_from: &list<i64>,
+                                  elevations_m: &list<i64>, tolerance_pct: i64, current_minutes: i64) -> i64 {
+    let n: i64 = route.len();
+    if n <= 0 {
+        return 0;
+    }
+    let first: i64 = route[0];
+    var clock_minutes: i64 = start_minutes;
+    var promille_x100: i64 = drink_promilles_x100[first];
+    if current_minutes <= clock_minutes {
+        return promille_x100;
+    }
+
+    let first_leave: i64 = adjusted_arrival(first, clock_minutes, open_from) + visit_duration_minutes();
+    if current_minutes <= first_leave {
+        return decay_promille_x100(promille_x100, current_minutes - clock_minutes);
+    }
+    promille_x100 = decay_promille_x100(promille_x100, first_leave - clock_minutes);
+    clock_minutes = first_leave;
+
+    for i in 1..n {
+        let prev: i64 = route[i - 1];
+        let city: i64 = route[i];
+        let travel_minutes: i64 =
+            walk_time_minutes(lats_deg[prev], lons_deg[prev], lats_deg[city], lons_deg[city]) +
+            slope_effort_minutes(elevations_m[prev], elevations_m[city], clock_minutes - start_minutes, promille_x100, tolerance_pct);
+        let arrival_minutes: i64 = clock_minutes + travel_minutes;
+        if current_minutes <= arrival_minutes {
+            return decay_promille_x100(promille_x100, current_minutes - clock_minutes);
+        }
+        promille_x100 = decay_promille_x100(promille_x100, arrival_minutes - clock_minutes);
+        clock_minutes = adjusted_arrival(city, arrival_minutes, open_from);
+        promille_x100 += drink_promilles_x100[city];
+        if current_minutes <= clock_minutes {
+            return promille_x100;
+        }
+        let leave_minutes: i64 = clock_minutes + visit_duration_minutes();
+        if current_minutes <= leave_minutes {
+            return decay_promille_x100(promille_x100, current_minutes - clock_minutes);
+        }
+        promille_x100 = decay_promille_x100(promille_x100, leave_minutes - clock_minutes);
+        clock_minutes = leave_minutes;
     }
     return promille_x100;
 }
@@ -503,7 +614,7 @@ fn build_closings_for_day(day_idx: i64, city_count: i64) -> list<i64> {
 
 fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
               start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, elevations_m: &list<i64>,
-              drink_promilles_x100: &list<i64>, start_city: i64) -> i64 {
+              drink_promilles_x100: &list<i64>, start_city: i64, tolerance_pct: i64) -> i64 {
     let n: i64 = route.len();
     let city_n: i64 = min_i64(lats_deg.len(), lons_deg.len());
     if n <= 0 {
@@ -520,7 +631,7 @@ fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list
     if first < 0 || first >= city_n {
         return 1000000000;
     }
-    total += opening_penalty(first, clock_minutes, open_from, close_at);
+    total += opening_penalty(first, clock_minutes, open_from, close_at, tolerance_pct);
     promille_x100 += drink_promilles_x100[first];
     clock_minutes = adjusted_arrival(first, clock_minutes, open_from) + visit_duration_minutes();
     last_clock_minutes = clock_minutes;
@@ -540,8 +651,8 @@ fn route_cost(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list
         promille_x100 = decay_promille_x100(promille_x100, clock_minutes - last_clock_minutes);
         last_clock_minutes = clock_minutes;
         total += travel_minutes;
-        total += slope_effort_minutes(elevations_m[a], elevations_m[b], clock_minutes - start_minutes, promille_x100);
-        total += opening_penalty(b, clock_minutes, open_from, close_at);
+        total += slope_effort_minutes(elevations_m[a], elevations_m[b], clock_minutes - start_minutes, promille_x100, tolerance_pct);
+        total += opening_penalty(b, clock_minutes, open_from, close_at, tolerance_pct);
         promille_x100 += drink_promilles_x100[b];
         clock_minutes = adjusted_arrival(b, clock_minutes, open_from) + visit_duration_minutes();
         last_clock_minutes = clock_minutes;
@@ -971,7 +1082,7 @@ fn reverse_segment(route: &list<i64>, start: i64, end: i64) -> list<i64> {
 
 fn two_opt_improve(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: &list<f64>, lons_deg: &list<f64>,
                    start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, elevations_m: &list<i64>,
-                   drink_promilles_x100: &list<i64>, start_city: i64) -> list<i64> {
+                   drink_promilles_x100: &list<i64>, start_city: i64, tolerance_pct: i64) -> list<i64> {
     var cur: list<i64> = clone_i64_list(route);
     let n: i64 = cur.len();
     if n < 4 {
@@ -982,14 +1093,14 @@ fn two_opt_improve(route: &list<i64>, xs: &list<i64>, ys: &list<i64>, lats_deg: 
     while improved == 1 {
         improved = 0;
         let i_end: i64 = n - 2;
-        var cur_cost: i64 = route_cost(cur, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+        var cur_cost: i64 = route_cost(cur, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
 
         for i in 1..i_end {
             let j_start: i64 = i + 1;
             let j_end: i64 = n - 1;
             for j in j_start..j_end {
                 let cand: list<i64> = reverse_segment(cur, i, j);
-                let c: i64 = route_cost(cand, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+                let c: i64 = route_cost(cand, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
                 if c < cur_cost {
                     cur = cand;
                     cur_cost = c;
@@ -1047,7 +1158,7 @@ fn city_index_from_name(query: str8, city_names: &list<str8>) -> i64 {
 
 fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64>, lons_deg: &list<f64>,
                  start_minutes: i64, open_from: &list<i64>, close_at: &list<i64>, elevations_m: &list<i64>,
-                 drink_promilles_x100: &list<i64>) -> str8 {
+                 drink_promilles_x100: &list<i64>, tolerance_pct: i64) -> str8 {
     let builder: i64 = builder_new(512);
     var clock_minutes: i64 = start_minutes;
     var last_clock_minutes: i64 = start_minutes;
@@ -1063,7 +1174,7 @@ fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64
             clock_minutes += walk_time_minutes(lats_deg[prev], lons_deg[prev], lats_deg[city], lons_deg[city]);
             promille_x100 = decay_promille_x100(promille_x100, clock_minutes - last_clock_minutes);
             last_clock_minutes = clock_minutes;
-            clock_minutes += slope_effort_minutes(elevations_m[prev], elevations_m[city], clock_minutes - start_minutes, promille_x100);
+            clock_minutes += slope_effort_minutes(elevations_m[prev], elevations_m[city], clock_minutes - start_minutes, promille_x100, tolerance_pct);
         }
         clock_minutes = adjusted_arrival(city, clock_minutes, open_from);
         if i > 0 {
@@ -1078,6 +1189,36 @@ fn route_summary(route: &list<i64>, city_names: &list<str8>, lats_deg: &list<f64
         clock_minutes += visit_duration_minutes();
         last_clock_minutes = clock_minutes;
         if i >= 3 && n > 5 {
+            bput(builder, "  ...");
+            break;
+        }
+    }
+    let out: str8 = builder_take_string(builder);
+    builder_free(builder);
+    return out;
+}
+
+fn drink_plan_summary(route: &list<i64>, city_names: &list<str8>, drink_promilles_x100: &list<i64>, limit: i64) -> str8 {
+    let builder: i64 = builder_new(256);
+    bput(builder, "alcohol plan: ");
+    let n: i64 = route.len();
+    let max_items: i64 = limit > 0 ? limit : 4;
+    for i in 0..n {
+        let city: i64 = route[i];
+        if city < 0 || city >= city_names.len() {
+            continue;
+        }
+        if i > 0 {
+            bput(builder, "  ");
+        }
+        let drink_text: str8 = fmt_promille_x100(drink_promilles_x100[city]);
+        let short_name: str8 = sub(city_names[city], 0, min_i64(3, len(city_names[city])));
+        let item: str8 = format!("{}={}‰", short_name, drink_text);
+        bput(builder, item);
+        free(item);
+        free(short_name);
+        free(drink_text);
+        if i >= max_items && n > (max_items + 1) {
             bput(builder, "  ...");
             break;
         }
@@ -1157,7 +1298,19 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let close_at: list<i64> = build_closings_for_day(weekday_idx, city_count);
     let drink_promilles_x100: list<i64> = random_drink_promilles_x100(city_count);
     let start_minutes: i64 = parse_hhmm_or_default(time_arg, 18 * 60);
-    let requested_start_name: str8 = argc >= 4 ? args[3] : "";
+    var requested_start_name: str8 = "";
+    var tolerance_pct: i64 = 60;
+    var compact_mode: i32 = 0;
+    for i in 3..argc {
+        let arg: str8 = args[i];
+        if is_compact_flag(arg) {
+            compact_mode = 1;
+        } else if is_decimal_text(arg) && tolerance_pct == 60 {
+            tolerance_pct = clamp_tolerance_pct(parse_i64_or_default(arg, 60));
+        } else if len(requested_start_name) == 0 {
+            requested_start_name = arg;
+        }
+    }
     let parsed_start_city: i64 = city_index_from_name(requested_start_name, city_names);
     let start_city: i64 = parsed_start_city >= 0 ? parsed_start_city : range_i64(0, city_count - 1);
     let gps_xs_m: list<i64> = project_xs(lats_deg, lons_deg, 1.0);
@@ -1169,7 +1322,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var population: list<i64> = random_population_i64(pop_size, city_count, 0, city_count - 1);
     population = repair_population_with_start(population, pop_size, city_count, start_city);
     let initial_route: list<i64> = nearest_neighbor_route(start_city, city_count, lats_deg, lons_deg);
-    let random_cost: i64 = route_cost(initial_route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+    let random_cost: i64 = route_cost(initial_route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
     let random_meters: i64 = walked_meters(initial_route, lats_deg, lons_deg);
     var best_route: list<i64> = clone_i64_list(initial_route);
     var render_route: list<i64> = clone_i64_list(initial_route);
@@ -1224,14 +1377,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             var fitness: list<i64> = [];
             for p in 0..pop_size {
                 var route: list<i64> = get_genome(population, p, city_count);
-                var c: i64 = route_cost(route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+                var c: i64 = route_cost(route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
                 // Periodic local refinement on a subset of candidates.
                 if p < 8 {
                     let improved_r: list<i64> = rotate_route_to_start(
-                        two_opt_improve(route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city),
+                        two_opt_improve(route, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct),
                         start_city
                     );
-                    let improved_c: i64 = route_cost(improved_r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+                    let improved_c: i64 = route_cost(improved_r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
                     if improved_c < c {
                         route = improved_r;
                         c = improved_c;
@@ -1297,9 +1450,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let start_at_text: str8 = fmt_hhmm(start_minutes);
         let start_place_text: str8 = city_names[start_city];
         let best_meters_now: i64 = walked_meters(render_route, lats_deg, lons_deg);
-        let route_step_idx: i64 = route_n > 0 ? walker_step % route_n : 0;
-        let current_promille_x100: i64 = route_promille_x100_at_step(
-            render_route, lats_deg, lons_deg, drink_promilles_x100, start_minutes, route_step_idx
+        let crawl_end_minutes: i64 = route_end_minutes(render_route, lats_deg, lons_deg, start_minutes, open_from, elevations_m, tolerance_pct);
+        let crawl_span_minutes: i64 = max_i64(crawl_end_minutes - start_minutes, 1);
+        let crawl_clock_minutes: i64 = start_minutes + ((elapsed_ms / 250) % crawl_span_minutes);
+        let current_promille_x100: i64 = route_promille_x100_at_minutes(
+            render_route, lats_deg, lons_deg, drink_promilles_x100, start_minutes, open_from, elevations_m, tolerance_pct, crawl_clock_minutes
         );
         let current_promille_text: str8 = fmt_promille_x100(current_promille_x100);
         var route_preview_n: i64 = 4;
@@ -1314,31 +1469,34 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let builder: i64 = builder_new(65536);
         bput(builder, cursor(cmd_clear_screen()));
         bput(builder, cursor(cmd_home()));
-        bput_fullwidth_logo(builder, "M.O.F.E.", cols);
-        let l0: str8 = format!(
-            "M.O.F.E. {} crawl  q=quit  gen={}/{}  t={}ms  start={} @ {}  alcohol={}‰",
-            weekday_text, gen, generations_total, elapsed_ms, start_place_text, start_at_text, current_promille_text
-        );
-        bput_line_fit(builder, l0, cols - 2);
-        free(l0);
+        if compact_mode == 0 {
+            bput_fullwidth_logo(builder, "M.O.F.E.", cols);
+            let l0: str8 = format!(
+                "M.O.F.E. {} crawl  q=quit  gen={}/{}  t={}ms  start={} @ {}  tol={}  alcohol={}‰",
+                weekday_text, gen, generations_total, elapsed_ms, start_place_text, start_at_text, tolerance_pct, current_promille_text
+            );
+            bput_line_fit(builder, l0, cols - 2);
+            free(l0);
+            let from_name: str8 = salesman_from >= 0 ? city_names[salesman_from] : "?";
+            let to_name: str8 = salesman_to >= 0 ? city_names[salesman_to] : "?";
+            let from_lat: f64 = salesman_from >= 0 ? lats_deg[salesman_from] : 0.0;
+            let from_lon: f64 = salesman_from >= 0 ? lons_deg[salesman_from] : 0.0;
+            let to_lat: f64 = salesman_to >= 0 ? lats_deg[salesman_to] : 0.0;
+            let to_lon: f64 = salesman_to >= 0 ? lons_deg[salesman_to] : 0.0;
+            let from_elev: i64 = salesman_from >= 0 ? elevations_m[salesman_from] : 0;
+            let to_elev: i64 = salesman_to >= 0 ? elevations_m[salesman_to] : 0;
+            let l1: str8 = format!(
+                "score best={} random={}  walked={}m random={}m  gps {}({},{},{}m) -> {}({},{},{}m)",
+                best_cost, random_cost, best_meters_now, random_meters,
+                from_name, from_lat, from_lon, from_elev,
+                to_name, to_lat, to_lon, to_elev
+            );
+            bput_line_fit(builder, l1, cols - 2);
+            free(l1);
+        }
         free(start_at_text);
+        let alcohol_now_line: str8 = format!("alcohol now: {}‰", current_promille_text);
         free(current_promille_text);
-        let from_name: str8 = salesman_from >= 0 ? city_names[salesman_from] : "?";
-        let to_name: str8 = salesman_to >= 0 ? city_names[salesman_to] : "?";
-        let from_lat: f64 = salesman_from >= 0 ? lats_deg[salesman_from] : 0.0;
-        let from_lon: f64 = salesman_from >= 0 ? lons_deg[salesman_from] : 0.0;
-        let to_lat: f64 = salesman_to >= 0 ? lats_deg[salesman_to] : 0.0;
-        let to_lon: f64 = salesman_to >= 0 ? lons_deg[salesman_to] : 0.0;
-        let from_elev: i64 = salesman_from >= 0 ? elevations_m[salesman_from] : 0;
-        let to_elev: i64 = salesman_to >= 0 ? elevations_m[salesman_to] : 0;
-        let l1: str8 = format!(
-            "score best={} random={}  walked={}m random={}m  gps {}({},{},{}m) -> {}({},{},{}m)",
-            best_cost, random_cost, best_meters_now, random_meters,
-            from_name, from_lat, from_lon, from_elev,
-            to_name, to_lat, to_lon, to_elev
-        );
-        bput_line_fit(builder, l1, cols - 2);
-        free(l1);
         let path_builder: i64 = builder_new(1024);
         bput(path_builder, "path: ");
         let top_route_n: i64 = render_route.len();
@@ -1365,11 +1523,18 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         bput_line_fit(builder, path_line, cols - 2);
         free(path_line);
         builder_free(path_builder);
-        let schedule_line: str8 = route_summary(render_route, city_names, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100);
+        let schedule_line: str8 = route_summary(render_route, city_names, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, tolerance_pct);
         bput_line_fit(builder, schedule_line, cols - 2);
         free(schedule_line);
-        let l3: str8 = "legend: magenta=random  green=best  yellow=city  cyan=salesman  score=travel+wait+closed+slope fatigue";
-        bput_line_fit(builder, l3, cols - 2);
+        let alcohol_plan_line: str8 = drink_plan_summary(render_route, city_names, drink_promilles_x100, route_preview_n);
+        bput_line_fit(builder, alcohol_plan_line, cols - 2);
+        free(alcohol_plan_line);
+        bput_line_fit(builder, alcohol_now_line, cols - 2);
+        free(alcohol_now_line);
+        if compact_mode == 0 {
+            let l3: str8 = "legend: magenta=random  green=best  yellow=city  cyan=salesman  score=travel+wait+closed+slope fatigue";
+            bput_line_fit(builder, l3, cols - 2);
+        }
 
         let hline_g: str8 = acs_hline();
         for _i in 0..(w + 2) { bput(builder, hline_g); }
@@ -1486,21 +1651,21 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     var fitness: list<i64> = [];
     for p in 0..pop_size {
         let r: list<i64> = get_genome(population, p, city_count);
-        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
         let f: i64 = fitness_bias - c;
         fitness.push(f > 1 ? f : 1);
     }
     let bi: i64 = argmax_i64(fitness);
     if bi >= 0 {
         let r: list<i64> = get_genome(population, bi, city_count);
-        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city);
+        let c: i64 = route_cost(r, xs, ys, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, start_city, tolerance_pct);
         if c < best_cost {
             best_cost = c;
             best_route = r;
         }
     }
 
-    println!("final best cost={}", best_cost);
+    println!("final best cost={} tolerance={}", best_cost, tolerance_pct);
     println!("meters walked={}", walked_meters(best_route, lats_deg, lons_deg));
     print!("best path: ");
     let best_n: i64 = best_route.len();
@@ -1511,9 +1676,12 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         print!("{}", best_route[i]);
     }
     println!("");
-    let final_schedule: str8 = route_summary(best_route, city_names, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100);
+    let final_schedule: str8 = route_summary(best_route, city_names, lats_deg, lons_deg, start_minutes, open_from, close_at, elevations_m, drink_promilles_x100, tolerance_pct);
     println!("schedule: {}", final_schedule);
     free(final_schedule);
+    let final_alcohol_plan: str8 = drink_plan_summary(best_route, city_names, drink_promilles_x100, best_n);
+    println!("{}", final_alcohol_plan);
+    free(final_alcohol_plan);
     println!("{}done{}", fg(color_bright_black()), reset());
     sleep_ms(600);
 
