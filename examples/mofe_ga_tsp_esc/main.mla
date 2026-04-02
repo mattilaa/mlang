@@ -501,6 +501,116 @@ fn route_promille_x100_at_minutes(route: &list<i64>, lats_deg: &list<f64>, lons_
     return promille_x100;
 }
 
+fn venue_route_cell(w: i64, h: i64, route: &list<i64>, route_pos: i64, xs: &list<i64>, ys: &list<i64>) -> i64 {
+    let n: i64 = route.len();
+    if n <= 0 || route_pos < 0 || route_pos >= n {
+        return -1;
+    }
+    let city: i64 = route[route_pos];
+    let city_cell: i64 = idx_2d(xs[city], ys[city], w);
+    if route_pos > 0 {
+        let prev: i64 = route[route_pos - 1];
+        let incoming: list<i64> = build_path_hv(w, h, xs[prev], ys[prev], xs[city], ys[city]);
+        let in_n: i64 = incoming.len();
+        if in_n >= 2 {
+            return incoming[in_n - 2];
+        }
+    }
+    if route_pos + 1 < n {
+        let next: i64 = route[route_pos + 1];
+        let outgoing: list<i64> = build_path_hv(w, h, xs[city], ys[city], xs[next], ys[next]);
+        let out_n: i64 = outgoing.len();
+        if out_n >= 2 {
+            return outgoing[1];
+        }
+    }
+    return city_cell;
+}
+
+fn crawl_visual_state_at_minutes(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>,
+                                 lats_deg: &list<f64>, lons_deg: &list<f64>, drink_promilles_x100: &list<i64>,
+                                 start_minutes: i64, open_from: &list<i64>, elevations_m: &list<i64>,
+                                 tolerance_pct: i64, current_minutes: i64, start_promille_x100: i64,
+                                 avg_stay_minutes: i64) -> list<i64> {
+    var out: list<i64> = [-1, 0, -1, -1, 0];
+    let n: i64 = route.len();
+    if n <= 0 {
+        return out;
+    }
+
+    let first: i64 = route[0];
+    var promille_x100: i64 = start_promille_x100 + drink_promilles_x100[first];
+    var arrive_minutes: i64 = adjusted_arrival(first, start_minutes, open_from);
+    let first_cell: i64 = venue_route_cell(w, h, route, 0, xs, ys);
+    if current_minutes <= arrive_minutes {
+        return [first_cell, 1, first, first, 0];
+    }
+    let first_leave: i64 = arrive_minutes + avg_stay_minutes;
+    if current_minutes <= first_leave {
+        let pct: i64 = ((current_minutes - arrive_minutes) * 100) / max_i64(avg_stay_minutes, 1);
+        return [first_cell, 1, first, first, clamp_i64(pct, 0, 100)];
+    }
+    var clock_minutes: i64 = first_leave;
+
+    for i in 1..n {
+        let prev: i64 = route[i - 1];
+        let city: i64 = route[i];
+        let travel_minutes: i64 =
+            walk_time_minutes(lats_deg[prev], lons_deg[prev], lats_deg[city], lons_deg[city]) +
+            slope_effort_minutes(elevations_m[prev], elevations_m[city], clock_minutes - start_minutes, promille_x100, tolerance_pct);
+        let arrival_end: i64 = clock_minutes + max_i64(travel_minutes, 1);
+        if current_minutes <= arrival_end {
+            let from_cell: i64 = venue_route_cell(w, h, route, i - 1, xs, ys);
+            let to_cell: i64 = venue_route_cell(w, h, route, i, xs, ys);
+            let from_x: i64 = from_cell % w;
+            let from_y: i64 = from_cell / w;
+            let to_x: i64 = to_cell % w;
+            let to_y: i64 = to_cell / w;
+            let path: list<i64> = build_path_hv(w, h, from_x, from_y, to_x, to_y);
+            let pn: i64 = path.len();
+            let pi: i64 = pn <= 1 ? 0 : (((current_minutes - clock_minutes) * (pn - 1)) / max_i64(travel_minutes, 1));
+            let cell: i64 = path[clamp_i64(pi, 0, pn - 1)];
+            let pct: i64 = ((current_minutes - clock_minutes) * 100) / max_i64(travel_minutes, 1);
+            return [cell, 0, prev, city, clamp_i64(pct, 0, 100)];
+        }
+        promille_x100 = decay_promille_x100(promille_x100, arrival_end - clock_minutes);
+        arrive_minutes = adjusted_arrival(city, arrival_end, open_from);
+        if current_minutes <= arrive_minutes {
+            let city_cell: i64 = venue_route_cell(w, h, route, i, xs, ys);
+            return [city_cell, 1, city, city, 0];
+        }
+        promille_x100 += drink_promilles_x100[city];
+        let leave_minutes: i64 = arrive_minutes + avg_stay_minutes;
+        if current_minutes <= leave_minutes {
+            let city_cell: i64 = venue_route_cell(w, h, route, i, xs, ys);
+            let pct: i64 = ((current_minutes - arrive_minutes) * 100) / max_i64(avg_stay_minutes, 1);
+            return [city_cell, 1, city, city, clamp_i64(pct, 0, 100)];
+        }
+        clock_minutes = leave_minutes;
+    }
+
+    let last_city: i64 = route[n - 1];
+    return [venue_route_cell(w, h, route, n - 1, xs, ys), 1, last_city, last_city, 100];
+}
+
+fn progress_bar(width: i64, pct: i64) -> str8 {
+    let safe_w: i64 = clamp_i64(width, 4, 32);
+    let filled: i64 = (clamp_i64(pct, 0, 100) * safe_w) / 100;
+    let builder: i64 = builder_new(64);
+    bput(builder, "[");
+    for i in 0..safe_w {
+        if i < filled {
+            bput(builder, "=");
+        } else {
+            bput(builder, ".");
+        }
+    }
+    bput(builder, "]");
+    let out: str8 = builder_take_string(builder);
+    builder_free(builder);
+    return out;
+}
+
 fn opening_time_for(day_idx: i64, city: i64) -> i64 {
     if day_idx == 0 {
         if city == 0 { return 0; }
@@ -1563,21 +1673,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let points_best_v: list<i64> = route_to_vertical_points(w, h, render_route, xs, ys);
         let walk_points_best_n: i64 = walk_points_best.len();
         let walker_idx: i64 = walk_points_best_n > 0 ? walker_step % walk_points_best_n : -1;
-        let walker_cell: i64 = walk_points_best_n > 0 ? walk_points_best[walker_idx] : -1;
+        let path_walker_cell: i64 = walk_points_best_n > 0 ? walk_points_best[walker_idx] : -1;
         let route_n: i64 = render_route.len();
         let route_city_n: i64 = city_names.len();
-        var salesman_from: i64 = -1;
-        var salesman_to: i64 = -1;
-        if route_n > 0 {
-            let sf: i64 = render_route[walker_step % route_n];
-            let st: i64 = render_route[(walker_step + 1) % route_n];
-            if sf >= 0 && sf < route_city_n {
-                salesman_from = sf;
-            }
-            if st >= 0 && st < route_city_n {
-                salesman_to = st;
-            }
-        }
         walker_step += 1;
 
         let elapsed_ms: i64 = now_ms() - start_ms;
@@ -1590,6 +1688,18 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         let current_promille_x100: i64 = route_promille_x100_at_minutes(
             render_route, lats_deg, lons_deg, drink_promilles_x100, start_minutes, open_from, elevations_m, tolerance_pct, crawl_clock_minutes, start_promille_x100, avg_stay_minutes
         );
+        let visual_state: list<i64> = crawl_visual_state_at_minutes(
+            w, h, render_route, xs, ys, lats_deg, lons_deg, drink_promilles_x100,
+            start_minutes, open_from, elevations_m, tolerance_pct, crawl_clock_minutes,
+            start_promille_x100, avg_stay_minutes
+        );
+        let visual_walker_cell: i64 = visual_state[0];
+        let at_venue_now: i64 = visual_state[1];
+        let salesman_from: i64 = visual_state[2];
+        let salesman_to: i64 = visual_state[3];
+        let phase_progress_pct: i64 = visual_state[4];
+        let walker_cell: i64 =
+            path_walker_cell >= 0 ? path_walker_cell : visual_walker_cell;
         let current_promille_text: str8 = fmt_promille_x100(current_promille_x100);
         let crawl_clock_text: str8 = fmt_hhmm(crawl_clock_minutes);
         var route_preview_n: i64 = 4;
@@ -1632,6 +1742,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         free(start_at_text);
         let start_promille_text: str8 = fmt_promille_x100(start_promille_x100);
         let alcohol_now_line: str8 = format!("alcohol now: {}‰ @ {}  start={}‰  drinks/venue={} (1 drink={}‰ stay={}m)", current_promille_text, crawl_clock_text, start_promille_text, drinks_per_venue, promille_per_drink_x100, avg_stay_minutes);
+        let phase_bar: str8 = progress_bar(cols >= 120 ? 18 : 12, phase_progress_pct);
+        let phase_label_city: str8 =
+            salesman_to >= 0 && salesman_to < route_city_n ? city_names[salesman_to] : "?";
         free(current_promille_text);
         free(start_promille_text);
         free(crawl_clock_text);
@@ -1678,6 +1791,26 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         for _i in 0..(w + 2) { bput(builder, hline_g); }
         bput(builder, "\r\n");
 
+        let show_venue_progress: bool =
+            at_venue_now == 1 && salesman_to >= 0 && salesman_to < route_city_n;
+        let venue_progress_text: str8 =
+            show_venue_progress ?
+            format!("{} {}% {}d", phase_bar, phase_progress_pct, drinks_per_venue) :
+            "";
+        let walker_promille_text: str8 = format!("{}‰", fmt_promille_x100(current_promille_x100));
+        let venue_progress_len: i64 = len(venue_progress_text);
+        let walker_promille_len: i64 = len(walker_promille_text);
+        let walker_x: i64 = walker_cell >= 0 ? walker_cell % w : 0;
+        let walker_y: i64 = walker_cell >= 0 ? walker_cell / w : 0;
+        let venue_progress_y: i64 =
+            show_venue_progress ?
+            clamp_i64(walker_y + 1, 1, h - 2) : -1;
+        let venue_progress_x: i64 =
+            show_venue_progress ?
+            clamp_i64(walker_x + 2, 1, max_i64(w - venue_progress_len - 1, 1)) : -1;
+        let walker_promille_y: i64 = clamp_i64(walker_y - 1, 1, h - 2);
+        let walker_promille_x: i64 = clamp_i64(walker_x + 2, 1, max_i64(w - walker_promille_len - 1, 1));
+
         let v: str8 = acs_vline();
         for y in 0..h {
             bput(builder, v);
@@ -1720,6 +1853,15 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 let p0: bool = has_value(points_initial, i);
                 let p1: bool = has_value(points_best, i);
                 let moving_here: bool = i == walker_cell;
+                let venue_progress_here: bool =
+                    venue_progress_y >= 0 &&
+                    y == venue_progress_y &&
+                    x >= venue_progress_x &&
+                    x < (venue_progress_x + venue_progress_len);
+                let walker_promille_here: bool =
+                    y == walker_promille_y &&
+                    x >= walker_promille_x &&
+                    x < (walker_promille_x + walker_promille_len);
 
                 if label_here == 1 {
                     let ch: str8 = format!(
@@ -1733,6 +1875,20 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                     bput(builder, ch);
                     free(ch);
                     free(label_char);
+                } else if walker_promille_here {
+                    let pi: i64 = x - walker_promille_x;
+                    let pch0: str8 = sub(walker_promille_text, pi, 1);
+                    let pch: str8 = format!("{}{}{}{}", bold_on(), fg(color_bright_yellow()), pch0, reset());
+                    bput(builder, pch);
+                    free(pch);
+                    free(pch0);
+                } else if venue_progress_here {
+                    let pi: i64 = x - venue_progress_x;
+                    let pch0: str8 = sub(venue_progress_text, pi, 1);
+                    let pch: str8 = format!("{}{}{}{}", bold_on(), fg(color_bright_cyan()), pch0, reset());
+                    bput(builder, pch);
+                    free(pch);
+                    free(pch0);
                 } else if moving_here {
                     let gmv: str8 = route_cell_glyph(points_best_h, points_best_v, x, y, w, h);
                     let ch: str8 = format!(
@@ -1777,6 +1933,11 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
 
         for _i in 0..(w + 2) { bput(builder, hline_g); }
+        free(phase_bar);
+        if show_venue_progress {
+            free(venue_progress_text);
+        }
+        free(walker_promille_text);
         // Avoid trailing newline at bottom line to prevent terminal scroll.
 
         let frame: str8 = builder_take_string(builder);
