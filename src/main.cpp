@@ -793,6 +793,17 @@ static std::string shell_quote(std::string_view s)
     return out;
 }
 
+static bool is_linker_input_path(std::string_view arg)
+{
+    auto has_suffix = [arg](std::string_view suffix) {
+        return arg.size() >= suffix.size() &&
+               arg.substr(arg.size() - suffix.size()) == suffix;
+    };
+    return arg.size() > 2 &&
+           (has_suffix(".a") || has_suffix(".so") || has_suffix(".dylib") ||
+            has_suffix(".o"));
+}
+
 static std::optional<std::filesystem::path>
 find_mlang_pkg_frontend_source(const char* argv0)
 {
@@ -995,6 +1006,10 @@ static bool manifest_requires_cpp_pkg_frontend()
     if(content.find("lib_paths") != std::string::npos)
         return true;
     if(content.find("libs") != std::string::npos)
+        return true;
+    if(content.find("static_deps") != std::string::npos)
+        return true;
+    if(content.find("static_cpp_runtime") != std::string::npos)
         return true;
     return false;
 }
@@ -1476,7 +1491,18 @@ int main(int argc, char** argv)
         }
         else if(arg[0] != '-')
         {
-            inputFile = arg;
+            if(inputFile.empty())
+            {
+                inputFile = arg;
+            }
+            else if(is_linker_input_path(arg))
+            {
+                linkArgs.push_back(arg);
+            }
+            else
+            {
+                inputFile = arg;
+            }
         }
         else
         {

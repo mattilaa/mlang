@@ -691,6 +691,7 @@ lib_paths = ["vendor/lib"]
 libs = ["foo"]
 linker_flags = ["-Wl,-rpath,vendor/lib"]
 compiler_flags = ["-Wno-unwrap"]
+static_deps = true
 ```
 
 `[tool.mlang]` can be used to set package-build defaults for `mlang pkg build`.
@@ -703,6 +704,9 @@ Supported keys are:
 - `libs`: extra libraries, emitted as `-l...`.
 - `linker_flags`: raw linker-related flags forwarded to the compiler invocation.
 - `compiler_flags`: additional raw compiler flags forwarded during `pkg build`.
+- `static_deps`: link fetched package dependencies via discovered `.a` archives.
+- `static_cpp_runtime`: add `-static-libstdc++ -static-libgcc` during package
+  linking. This is mainly useful on GNU/Linux toolchains.
 
 For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
@@ -754,6 +758,8 @@ Workspace example:
 - `examples/package_manager_workspace_fetch`
   Demonstrates recursive workspace member discovery plus GitHub `git` and
   `tar.gz` source fetching in sibling subpackages.
+- `examples/package_manager_static_cjson`
+  Demonstrates static linking of a fetched `tar.gz` C dependency.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:

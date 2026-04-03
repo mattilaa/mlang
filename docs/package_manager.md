@@ -225,6 +225,8 @@ Supported keys:
 - `libs`
 - `linker_flags`
 - `compiler_flags`
+- `static_deps`
+- `static_cpp_runtime`
 
 Key details:
 
@@ -235,6 +237,10 @@ Key details:
 - `libs` are forwarded as `-l...`.
 - `linker_flags` are forwarded as raw flags during package builds.
 - `compiler_flags` are forwarded as raw compiler flags during package builds.
+- `static_deps` links fetched package dependencies via discovered `.a`
+  archives instead of dynamic `-l...` resolution.
+- `static_cpp_runtime` adds `-static-libstdc++ -static-libgcc` during package
+  linking. This is generally intended for GNU/Linux toolchains.
 
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
@@ -269,6 +275,8 @@ Workspace example in this repository:
 - `examples/package_manager_workspace_fetch`
   Demonstrates recursive workspace package discovery plus GitHub `git` and
   `tar.gz` dependency fetching.
+- `examples/package_manager_static_cjson`
+  Demonstrates static linking of a fetched `tar.gz` C dependency.
 
 ## See Also
 

@@ -180,6 +180,8 @@ struct BuildConfig
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
     std::vector<std::string> libs;
+    bool staticDeps = false;
+    bool staticCppRuntime = false;
 };
 
 static std::string unquote(std::string_view v);
@@ -204,6 +206,15 @@ static void append_toml_string_list_value(const std::string& value,
     std::string v = unquote(t);
     if(!v.empty())
         out.push_back(v);
+}
+
+static bool parse_toml_bool_value(const std::string& value)
+{
+    std::string t = trim(value);
+    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return t == "true" || t == "1" || t == "\"true\"";
 }
 
 static BuildConfig parse_build_config(const std::string& content)
@@ -254,6 +265,14 @@ static BuildConfig parse_build_config(const std::string& content)
         {
             append_toml_string_list_value(value, cfg.libs);
         }
+        else if(key == "static_deps")
+        {
+            cfg.staticDeps = parse_toml_bool_value(value);
+        }
+        else if(key == "static_cpp_runtime")
+        {
+            cfg.staticCppRuntime = parse_toml_bool_value(value);
+        }
     }
     return cfg;
 }
@@ -276,6 +295,7 @@ struct LinkFlags
 {
     std::vector<std::string> libDirs;
     std::vector<std::string> libs;
+    std::vector<std::string> staticArchives;
 };
 
 static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir,
@@ -540,7 +560,8 @@ static bool extract_lib_name(const std::filesystem::path& path,
 
 static void scan_lib_dir(const std::filesystem::path& dir,
                          std::unordered_set<std::string>& libDirs,
-                         std::unordered_set<std::string>& libs)
+                         std::unordered_set<std::string>& libs,
+                         std::unordered_set<std::string>& staticArchives)
 {
     if(!std::filesystem::exists(dir))
         return;
@@ -552,6 +573,8 @@ static void scan_lib_dir(const std::filesystem::path& dir,
         std::string libName;
         if(extract_lib_name(entry.path(), libName))
             libs.insert(libName);
+        if(entry.path().extension() == ".a")
+            staticArchives.insert(entry.path().string());
     }
 }
 
@@ -561,18 +584,21 @@ static LinkFlags collect_dep_link_flags(
 {
     std::unordered_set<std::string> libDirs;
     std::unordered_set<std::string> libs;
+    std::unordered_set<std::string> staticArchives;
     for(const auto& dep : deps)
     {
         std::filesystem::path path = dep_source_dir(depsDir, dep);
-        scan_lib_dir(path / "build" / "lib", libDirs, libs);
-        scan_lib_dir(path / "build", libDirs, libs);
-        scan_lib_dir(path / "lib", libDirs, libs);
+        scan_lib_dir(path / "build" / "lib", libDirs, libs, staticArchives);
+        scan_lib_dir(path / "build", libDirs, libs, staticArchives);
+        scan_lib_dir(path / "lib", libDirs, libs, staticArchives);
     }
     LinkFlags flags;
     flags.libDirs.assign(libDirs.begin(), libDirs.end());
     flags.libs.assign(libs.begin(), libs.end());
+    flags.staticArchives.assign(staticArchives.begin(), staticArchives.end());
     std::sort(flags.libDirs.begin(), flags.libDirs.end());
     std::sort(flags.libs.begin(), flags.libs.end());
+    std::sort(flags.staticArchives.begin(), flags.staticArchives.end());
     return flags;
 }
 
@@ -806,12 +832,32 @@ static int fetch_archive_dep(const DepSpec& dep,
     }
 
     std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
-    if(std::filesystem::exists(checkoutDir))
-        return 0;
+    std::error_code ec;
+    if(std::filesystem::exists(checkoutDir, ec))
+    {
+        bool hasEntries = false;
+        for(std::filesystem::directory_iterator it(checkoutDir, ec), end;
+            !ec && it != end; it.increment(ec))
+        {
+            hasEntries = true;
+            break;
+        }
+        if(!ec && hasEntries)
+            return 0;
+        std::filesystem::remove_all(checkoutDir, ec);
+        if(ec)
+        {
+            std::cerr << "Failed to reset partial archive checkout for '"
+                      << dep.name << "': " << ec.message() << "\n";
+            return 1;
+        }
+    }
 
     std::filesystem::create_directories(depsDir);
     std::filesystem::path archivePath = depsDir / (dep.name + ".tar.gz");
-    std::filesystem::create_directories(checkoutDir);
+    std::filesystem::path extractDir = depsDir / (dep.name + ".extracting");
+    std::filesystem::remove_all(extractDir, ec);
+    std::filesystem::create_directories(extractDir);
 
     std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                               " -o " + shell_quote(archivePath.string());
@@ -819,7 +865,7 @@ static int fetch_archive_dep(const DepSpec& dep,
         return 1;
 
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
-                             " -C " + shell_quote(checkoutDir.string());
+                             " -C " + shell_quote(extractDir.string());
     if(dep.stripComponents > 0)
     {
         extractCmd += " --strip-components=" +
@@ -827,6 +873,14 @@ static int fetch_archive_dep(const DepSpec& dep,
     }
     if(run_command(extractCmd) != 0)
         return 1;
+    std::filesystem::rename(extractDir, checkoutDir, ec);
+    if(ec)
+    {
+        std::cerr << "Failed to finalize archive checkout for '" << dep.name
+                  << "': " << ec.message() << "\n";
+        return 1;
+    }
+    std::filesystem::remove(archivePath, ec);
     return 0;
 }
 
@@ -1049,12 +1103,24 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         cmd += " -L" + shell_quote(dir);
     for(const auto& lib : buildConfig.libs)
         cmd += " -l" + shell_quote(lib);
-    for(const auto& dir : linkFlags.libDirs)
-        cmd += " -L" + shell_quote(dir);
-    for(const auto& lib : linkFlags.libs)
-        cmd += " -l" + shell_quote(lib);
-    for(const auto& dir : linkFlags.libDirs)
-        cmd += " -Wl,-rpath," + shell_quote(dir);
+    if(buildConfig.staticDeps)
+    {
+        for(const auto& archive : linkFlags.staticArchives)
+            cmd += " " + shell_quote(archive);
+    }
+    else
+    {
+        for(const auto& dir : linkFlags.libDirs)
+            cmd += " -L" + shell_quote(dir);
+        for(const auto& lib : linkFlags.libs)
+            cmd += " -l" + shell_quote(lib);
+        for(const auto& dir : linkFlags.libDirs)
+            cmd += " -Wl,-rpath," + shell_quote(dir);
+    }
+    if(buildConfig.staticCppRuntime)
+    {
+        cmd += " -static-libstdc++ -static-libgcc";
+    }
     for(const auto& flag : buildConfig.linkerFlags)
         cmd += " " + shell_quote(flag);
     for(const auto& flag : pkgFlags)

@@ -1,0 +1,24 @@
+mod cjson;
+
+use cjson::*;
+
+fn main() -> i32 {
+    let root: i64 = cJSON_Parse("{\"mode\":\"static\",\"answer\":123}");
+    if root == 0 {
+        eprintln!("cJSON_Parse failed");
+        return 1;
+    }
+
+    let mode: i64 = cJSON_GetObjectItemCaseSensitive(root, "mode");
+    let answer: i64 = cJSON_GetObjectItemCaseSensitive(root, "answer");
+    if mode == 0 || answer == 0 {
+        eprintln!("missing JSON fields");
+        cJSON_Delete(root);
+        return 1;
+    }
+
+    let value: f64 = cJSON_GetNumberValue(answer);
+    println!("static cjson demo answer={}", value);
+    cJSON_Delete(root);
+    return 0;
+}
