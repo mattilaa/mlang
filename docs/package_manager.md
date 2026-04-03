@@ -570,6 +570,121 @@ Each listed member is resolved relative to the root manifest. If the member is
 a directory, `mlang pkg fetch`, `mlang pkg build`, and `mlang pkg clean`
 recursively scan for child `mlang.toml` files beneath it.
 
+## Workspace And Subdirectory Layouts
+
+This topic shows how to organize a workspace root, nested package manifests,
+and fetched source subprojects.
+
+### Basic Workspace Tree
+
+```text
+my_workspace/
+├── mlang.toml
+└── packages/
+    ├── cli_app/
+    │   ├── mlang.toml
+    │   └── src/
+    │       └── main.mla
+    └── json_tool/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Workspace root manifest:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Subpackage manifest:
+
+```toml
+[package]
+name = "cli_app"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+opt_level = "O2"
+```
+
+Run from the workspace root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg clean
+```
+
+### Workspace With Fetched Subprojects
+
+Each discovered subpackage can fetch its own sources from GitHub or from a
+release archive URL.
+
+```text
+workspace_fetch/
+├── mlang.toml
+└── packages/
+    ├── git_cjson_demo/
+    │   ├── mlang.toml
+    │   └── src/
+    │       └── main.mla
+    └── tarball_cjson_demo/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Workspace root:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Git-backed subpackage:
+
+```toml
+[package]
+name = "git_cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+
+[c-dependencies]
+```
+
+Tarball-backed subpackage:
+
+```toml
+[package]
+name = "tarball_cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+
+[c-dependencies]
+```
+
+Run from the workspace root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+```
+
+See `examples/package_manager_workspace_fetch` for a complete working example.
+
 ## Example Workflow
 
 ```sh

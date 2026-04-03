@@ -883,6 +883,53 @@ Each listed member is treated as a directory root under the current project.
 for `mlang.toml` files under those roots and run package operations for each
 discovered subpackage.
 
+Directory tree example:
+
+```text
+my_workspace/
+├── mlang.toml
+└── packages/
+    ├── cli_app/
+    │   ├── mlang.toml
+    │   └── src/
+    │       └── main.mla
+    └── json_tool/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Workspace root manifest:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Subpackage manifest:
+
+```toml
+[package]
+name = "cli_app"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+opt_level = "O2"
+```
+
+Run from the workspace root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg clean
+```
+
 Source dependencies can now come from Git or from a `tar.gz` URL:
 
 ```toml
@@ -905,6 +952,77 @@ Supported source dependency keys are:
 
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `mlang pkg build`.
+
+## Package Workspaces And Fetched Subprojects
+
+This is the recommended layout when one repository contains several package
+subdirectories and each subpackage may fetch its own source dependencies.
+
+Combined tree:
+
+```text
+workspace_fetch/
+├── mlang.toml
+└── packages/
+    ├── git_cjson_demo/
+    │   ├── mlang.toml
+    │   └── src/
+    │       └── main.mla
+    └── tarball_cjson_demo/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Workspace root:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Git-backed subpackage:
+
+```toml
+[package]
+name = "git_cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+
+[c-dependencies]
+```
+
+Tarball-backed subpackage:
+
+```toml
+[package]
+name = "tarball_cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+
+[c-dependencies]
+```
+
+Run from the workspace root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+```
+
+See:
+- `examples/package_manager_workspace_fetch`
+- `examples/package_manager_workspace_fetch/README.md`
+
+That example shows one root `mlang.toml` discovering subpackages recursively,
+while one subpackage fetches from GitHub with `git = "..."` and another uses a
+released `tar.gz` source archive.
 
 Packages can also declare shell-driven custom tasks:
 
