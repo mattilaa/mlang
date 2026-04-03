@@ -1,4 +1,9 @@
+mod zlib;
+
+use zlib::*;
+
 fn main() -> i32 {
-    println!("inspect target built with target-scoped config");
+    let version: str8 = zlibVersion();
+    println!("inspect target built with tar.gz zlib={}", version);
     return 0;
 }

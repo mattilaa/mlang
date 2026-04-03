@@ -1,0 +1,1 @@
+extern pub fn zlibVersion() -> str8;

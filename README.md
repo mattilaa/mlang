@@ -825,7 +825,8 @@ Workspace example:
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
 - `examples/package_manager_multi_bins`
-  Demonstrates `[[bin]]` targets plus target-scoped build config overrides.
+  Demonstrates `[[bin]]` targets, target-scoped build config overrides, and
+  mixed GitHub `git` plus `tar.gz` source dependencies in one package.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:

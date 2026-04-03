@@ -324,7 +324,8 @@ Workspace example in this repository:
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
 - `examples/package_manager_multi_bins`
-  Demonstrates `[[bin]]` targets plus target-scoped config overrides.
+  Demonstrates `[[bin]]` targets, target-scoped config overrides, and mixed
+  GitHub `git` plus `tar.gz` source dependencies in one package.
 
 ## See Also
 

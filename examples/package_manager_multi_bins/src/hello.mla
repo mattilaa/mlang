@@ -1,4 +1,23 @@
+mod cjson;
+
+use cjson::*;
+
 fn main() -> i32 {
-    println!("hello from multi-bin package");
+    let root: i64 = cJSON_Parse("{\"example\":\"git\",\"value\":42}");
+    if root == 0 {
+        eprintln!("cJSON_Parse failed");
+        return 1;
+    }
+
+    let value: i64 = cJSON_GetObjectItemCaseSensitive(root, "value");
+    if value == 0 {
+        eprintln!("missing value");
+        cJSON_Delete(root);
+        return 1;
+    }
+
+    let number: f64 = cJSON_GetNumberValue(value);
+    println!("hello from multi-bin package git-value={}", number);
+    cJSON_Delete(root);
     return 0;
 }

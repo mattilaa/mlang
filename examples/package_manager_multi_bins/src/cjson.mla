@@ -1,0 +1,4 @@
+extern pub fn cJSON_Parse(text: str8) -> i64;
+extern pub fn cJSON_Delete(node: i64) -> void;
+extern pub fn cJSON_GetObjectItemCaseSensitive(obj: i64, key: str8) -> i64;
+extern pub fn cJSON_GetNumberValue(item: i64) -> f64;
