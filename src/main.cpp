@@ -1007,6 +1007,8 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("libs") != std::string::npos)
         return true;
+    if(content.find("min_mlang_version") != std::string::npos)
+        return true;
     if(content.find("static_deps") != std::string::npos)
         return true;
     if(content.find("static_cpp_runtime") != std::string::npos)

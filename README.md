@@ -685,6 +685,7 @@ curl = { pkg_config = "libcurl" }
 
 [tool.mlang]
 module_paths = ["."]
+min_mlang_version = "0.2.0"
 opt_level = "O2"
 target_arch = "x64"
 lib_paths = ["vendor/lib"]
@@ -698,6 +699,7 @@ static_deps = true
 Supported keys are:
 
 - `module_paths`: existing module search path support.
+- `min_mlang_version`: minimum `mlang` version required to build the package.
 - `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
 - `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
 - `lib_paths`: extra library search paths, emitted as `-L...`.
@@ -707,6 +709,9 @@ Supported keys are:
 - `static_deps`: link fetched package dependencies via discovered `.a` archives.
 - `static_cpp_runtime`: add `-static-libstdc++ -static-libgcc` during package
   linking. This is mainly useful on GNU/Linux toolchains.
+
+If `[tool.mlang].min_mlang_version` is set and the running compiler is older
+than that version, `mlang pkg build` fails before starting the build.
 
 For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.

@@ -9,4 +9,5 @@ cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.t
 [c-dependencies]
 
 [tool.mlang]
+min_mlang_version = "0.2.0"
 static_deps = true

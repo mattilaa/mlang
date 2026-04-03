@@ -219,6 +219,7 @@ This section provides package-build defaults for `mlang pkg build`.
 Supported keys:
 
 - `module_paths`
+- `min_mlang_version`
 - `opt_level`
 - `target_arch`
 - `lib_paths`
@@ -231,6 +232,8 @@ Supported keys:
 Key details:
 
 - `opt_level` accepts `O0`, `O1`, `O2`, `O3`, with or without a leading `-`.
+- `min_mlang_version` requires the running `mlang` version to be greater than
+  or equal to the declared value before `pkg build` proceeds.
 - `target_arch` accepts `x86`, `x86-64`, `x64`, `x86_64`, `amd64`,
   `aarch64`, and `arm64`.
 - `lib_paths` are forwarded as `-L...`.

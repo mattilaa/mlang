@@ -176,6 +176,7 @@ struct BuildConfig
 {
     std::string optLevel;
     std::string targetArch;
+    std::string minMlangVersion;
     std::vector<std::string> compilerFlags;
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
@@ -217,6 +218,74 @@ static bool parse_toml_bool_value(const std::string& value)
     return t == "true" || t == "1" || t == "\"true\"";
 }
 
+static std::optional<std::vector<int>>
+parse_semver_components(const std::string& versionText)
+{
+    std::string text = trim(versionText);
+    if(text.empty())
+        return std::nullopt;
+
+    std::vector<int> parts;
+    size_t start = 0;
+    while(start < text.size())
+    {
+        size_t end = text.find('.', start);
+        std::string part = end == std::string::npos
+                               ? text.substr(start)
+                               : text.substr(start, end - start);
+        if(part.empty())
+            return std::nullopt;
+
+        size_t digits = 0;
+        while(digits < part.size() &&
+              std::isdigit(static_cast<unsigned char>(part[digits])))
+        {
+            ++digits;
+        }
+        if(digits == 0)
+            return std::nullopt;
+        try
+        {
+            parts.push_back(std::stoi(part.substr(0, digits)));
+        }
+        catch(...)
+        {
+            return std::nullopt;
+        }
+
+        if(digits != part.size())
+        {
+            if(part[digits] != '-')
+                return std::nullopt;
+            break;
+        }
+        if(end == std::string::npos)
+            break;
+        start = end + 1;
+    }
+    return parts;
+}
+
+static int compare_semver(const std::string& lhs, const std::string& rhs)
+{
+    auto lhsParts = parse_semver_components(lhs);
+    auto rhsParts = parse_semver_components(rhs);
+    if(!lhsParts.has_value() || !rhsParts.has_value())
+        return 0;
+
+    const size_t n = std::max(lhsParts->size(), rhsParts->size());
+    for(size_t i = 0; i < n; ++i)
+    {
+        const int a = i < lhsParts->size() ? (*lhsParts)[i] : 0;
+        const int b = i < rhsParts->size() ? (*rhsParts)[i] : 0;
+        if(a < b)
+            return -1;
+        if(a > b)
+            return 1;
+    }
+    return 0;
+}
+
 static BuildConfig parse_build_config(const std::string& content)
 {
     std::istringstream in(content);
@@ -248,6 +317,10 @@ static BuildConfig parse_build_config(const std::string& content)
         else if(key == "target_arch")
         {
             cfg.targetArch = normalize_target_arch_name(unquote(value));
+        }
+        else if(key == "min_mlang_version")
+        {
+            cfg.minMlangVersion = unquote(value);
         }
         else if(key == "compiler_flags")
         {
@@ -1053,6 +1126,29 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
     BuildConfig buildConfig = parse_build_config(pkg.content);
+    if(!buildConfig.minMlangVersion.empty())
+    {
+        if(!parse_semver_components(buildConfig.minMlangVersion).has_value())
+        {
+            std::cerr << "Invalid [tool.mlang].min_mlang_version in "
+                      << pkg.manifestPath.string() << ": "
+                      << buildConfig.minMlangVersion << "\n";
+            return 1;
+        }
+        if(!parse_semver_components(MLANG_VERSION).has_value())
+        {
+            std::cerr << "Current mlang version is not semver-compatible: "
+                      << MLANG_VERSION << "\n";
+            return 1;
+        }
+        if(compare_semver(MLANG_VERSION, buildConfig.minMlangVersion) < 0)
+        {
+            std::cerr << "Package " << pkg.manifestPath.string()
+                      << " requires mlang >= " << buildConfig.minMlangVersion
+                      << ", but current version is " << MLANG_VERSION << "\n";
+            return 1;
+        }
+    }
     std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
     std::filesystem::create_directories(depsDir);
     for(const auto& dep : deps)
