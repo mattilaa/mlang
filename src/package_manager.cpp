@@ -2132,6 +2132,20 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
                               const std::string& optFlagOverride,
                               bool useNinja)
 {
+    std::string packageLabel = "app";
+    if(auto name = find_section_toml_string(pkg.content, "package", "name");
+       name.has_value() && !name->empty())
+    {
+        packageLabel = *name;
+    }
+    std::string entryError;
+    if(!ensure_package_entry_stub(pkg.manifestPath, pkg.content, packageLabel,
+                                  entryError))
+    {
+        std::cerr << entryError << "\n";
+        return 1;
+    }
+
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
     BuildConfig packageBuildConfig = parse_build_config(pkg.content);
