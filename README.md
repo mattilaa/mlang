@@ -136,6 +136,9 @@ MLANG_PKG_IMPL=mla ./build/mlang pkg init
 MLANG_PKG_IMPL=cpp ./build/mlang pkg init
 ```
 
+`mlang pkg init` now scaffolds both `mlang.toml` and `src/main.mla`, so a new
+package can be built immediately.
+
 Build and run:
 
 ```sh

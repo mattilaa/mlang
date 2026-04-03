@@ -2761,6 +2761,13 @@ int PackageManager::run(int argc, char** argv)
             << "entry = \"src/main.mla\"\n\n"
             << "[dependencies]\n\n"
             << "[c-dependencies]\n";
+
+        if(!write_text_file_if_missing(std::filesystem::path("src") / "main.mla",
+                                       package_stub_source(name)))
+        {
+            std::cerr << "Failed to write src/main.mla\n";
+            return 1;
+        }
         return 0;
     }
 

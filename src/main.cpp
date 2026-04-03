@@ -1042,6 +1042,8 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     namespace fs = std::filesystem;
     if(argc < 2 || std::string(argv[1]) != "pkg")
         return std::nullopt;
+    if(argc >= 3 && std::string(argv[2]) == "init")
+        return std::nullopt;
     if(argc >= 3 && std::string(argv[2]) == "add")
     {
         for(int i = 3; i < argc; ++i)

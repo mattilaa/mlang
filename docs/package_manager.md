@@ -27,7 +27,8 @@ MLANG_PKG_IMPL=cpp ./build/mlang pkg build
 
 ### `pkg init`
 
-Create a new `mlang.toml` manifest in the current directory:
+Create a new `mlang.toml` manifest in the current directory. `pkg init` also
+creates `src/main.mla` so the package can build immediately:
 
 ```sh
 ./build/mlang pkg init
@@ -44,6 +45,14 @@ entry = "src/main.mla"
 [dependencies]
 
 [c-dependencies]
+```
+
+Generated entry source:
+
+```mla
+fn main() -> void {
+    println!("app subproject scaffold ready");
+}
 ```
 
 ### `pkg add`
