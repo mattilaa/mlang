@@ -227,12 +227,48 @@ static bool toml_array_is_complete(std::string_view input)
     return depth == 0;
 }
 
+static bool toml_basic_string_is_complete(std::string_view input)
+{
+    std::string t = trim(input);
+    if(t.empty() || t.front() != '"')
+        return true;
+
+    bool escaped = false;
+    for(size_t i = 1; i < t.size(); ++i)
+    {
+        char c = t[i];
+        if(escaped)
+        {
+            escaped = false;
+            continue;
+        }
+        if(c == '\\')
+        {
+            escaped = true;
+            continue;
+        }
+        if(c == '"')
+            return i == t.size() - 1;
+    }
+    return false;
+}
+
+static bool toml_value_is_complete(std::string_view input)
+{
+    std::string t = trim(input);
+    if(t.empty())
+        return true;
+    if(t.front() == '[')
+        return toml_array_is_complete(t);
+    if(t.front() == '"')
+        return toml_basic_string_is_complete(t);
+    return true;
+}
+
 static std::string collect_multiline_toml_value(std::string value,
                                                 std::istream& in)
 {
-    if(value != "[" &&
-       (value.find('[') == std::string::npos ||
-        toml_array_is_complete(value)))
+    if(toml_value_is_complete(value))
     {
         return value;
     }
@@ -905,7 +941,28 @@ static std::string unquote(std::string_view v)
 {
     std::string t = trim(v);
     if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
-        return t.substr(1, t.size() - 2);
+    {
+        std::string inner = t.substr(1, t.size() - 2);
+        std::string out;
+        out.reserve(inner.size());
+        bool previousWasSpace = false;
+        for(char c : inner)
+        {
+            if(c == '\n' || c == '\r')
+                c = ' ';
+            if(c == ' ' || c == '\t')
+            {
+                if(previousWasSpace)
+                    continue;
+                previousWasSpace = true;
+                out.push_back(' ');
+                continue;
+            }
+            previousWasSpace = false;
+            out.push_back(c);
+        }
+        return trim(out);
+    }
     return t;
 }
 
