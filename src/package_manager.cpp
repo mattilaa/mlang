@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -212,6 +213,7 @@ struct BuildConfig
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
     std::vector<std::string> libs;
+    std::optional<bool> useNinja;
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
 };
@@ -278,6 +280,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
                         overrideCfg.libPaths.end());
     out.libs.insert(out.libs.end(), overrideCfg.libs.begin(),
                     overrideCfg.libs.end());
+    if(overrideCfg.useNinja.has_value())
+        out.useNinja = overrideCfg.useNinja;
     if(overrideCfg.staticDeps.has_value())
         out.staticDeps = overrideCfg.staticDeps;
     if(overrideCfg.staticCppRuntime.has_value())
@@ -467,6 +471,10 @@ static void parse_build_config_key_value(BuildConfig& cfg,
     else if(key == "libs")
     {
         append_toml_string_list_value(value, cfg.libs);
+    }
+    else if(key == "use_ninja" || key == "ninja")
+    {
+        cfg.useNinja = parse_toml_bool_value(value);
     }
     else if(key == "static_deps")
     {
@@ -1233,6 +1241,83 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
     return true;
 }
 
+static bool ensure_ninja_available()
+{
+    auto ninjaPath = run_command_capture("command -v ninja || command -v ninja-build");
+    if(ninjaPath.has_value() && !trim(*ninjaPath).empty())
+        return true;
+    std::cerr << "Ninja build requested, but neither 'ninja' nor 'ninja-build'"
+              << " was found in PATH.\n";
+    return false;
+}
+
+static bool validate_declared_libraries(const std::filesystem::path& manifestPath,
+                                        const std::string& targetName,
+                                        const BuildConfig& buildConfig,
+                                        const LinkFlags& linkFlags)
+{
+    if(buildConfig.libs.empty())
+        return true;
+
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path tempDir = fs::temp_directory_path(ec);
+    if(ec)
+        tempDir = fs::current_path();
+    const std::string uniqueId =
+        std::to_string(static_cast<unsigned long long>(std::time(nullptr))) +
+        "_" + std::to_string(static_cast<unsigned long long>(std::rand()));
+    fs::path srcPath = tempDir / ("mlang_pkg_libcheck_" + uniqueId + ".cpp");
+    fs::path binPath = tempDir / ("mlang_pkg_libcheck_" + uniqueId);
+
+    {
+        std::ofstream out(srcPath, std::ios::binary);
+        if(!out)
+        {
+            std::cerr << "Failed to create temporary file for library validation"
+                      << " while checking " << manifestPath.string() << "\n";
+            return false;
+        }
+        out << "int main(){return 0;}\n";
+    }
+
+    std::vector<std::string> searchDirs = buildConfig.libPaths;
+    searchDirs.insert(searchDirs.end(), linkFlags.libDirs.begin(),
+                      linkFlags.libDirs.end());
+
+    for(const auto& lib : buildConfig.libs)
+    {
+        std::string cmd = "c++ " + shell_quote(srcPath.string()) + " -o " +
+                          shell_quote(binPath.string());
+        for(const auto& dir : searchDirs)
+            cmd += " -L" + shell_quote(dir);
+        cmd += " -l" + shell_quote(lib) + " >/dev/null 2>&1";
+        int rc = std::system(cmd.c_str());
+        if(rc != 0)
+        {
+            std::cerr << "Declared library '-l" << lib
+                      << "' could not be linked";
+            if(!targetName.empty())
+                std::cerr << " for target '" << targetName << "'";
+            std::cerr << " in " << manifestPath.string();
+            if(!searchDirs.empty())
+            {
+                std::cerr << " using search paths:";
+                for(const auto& dir : searchDirs)
+                    std::cerr << " " << dir;
+            }
+            std::cerr << "\n";
+            std::filesystem::remove(srcPath, ec);
+            std::filesystem::remove(binPath, ec);
+            return false;
+        }
+    }
+
+    std::filesystem::remove(srcPath, ec);
+    std::filesystem::remove(binPath, ec);
+    return true;
+}
+
 static int validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
                                               const BuildConfig& buildConfig,
                                               const std::string& targetName)
@@ -1287,27 +1372,6 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
     BuildConfig packageBuildConfig = parse_build_config(pkg.content);
-    std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
-    std::filesystem::create_directories(depsDir);
-    for(const auto& dep : deps)
-    {
-        if(fetch_dep(dep, depsDir, /*updateExisting=*/false) != 0)
-            return 1;
-    }
-    for(const auto& dep : deps)
-    {
-        if(build_git_dep(dep, depsDir, useNinja) != 0)
-            return 1;
-    }
-
-    LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
-    std::vector<std::string> pkgFlags;
-    for(const auto& dep : cdeps)
-    {
-        if(!append_pkg_config_flags(dep, pkgFlags))
-            return 1;
-    }
-
     std::vector<BuildTarget> targets = parse_bin_targets(pkg.content);
     if(targets.empty())
     {
@@ -1325,6 +1389,43 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
             defaultTarget.entry = v.value();
         }
         targets.push_back(defaultTarget);
+    }
+
+    bool effectiveUseNinja = useNinja || packageBuildConfig.useNinja.value_or(false);
+    for(const auto& target : targets)
+    {
+        BuildConfig mergedConfig =
+            merge_build_config(packageBuildConfig, target.config);
+        if(mergedConfig.useNinja.value_or(false))
+            effectiveUseNinja = true;
+        if(validate_mlang_version_requirement(pkg.manifestPath, mergedConfig,
+                                              target.name) != 0)
+        {
+            return 1;
+        }
+    }
+    if(effectiveUseNinja && !ensure_ninja_available())
+        return 1;
+
+    std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
+    std::filesystem::create_directories(depsDir);
+    for(const auto& dep : deps)
+    {
+        if(fetch_dep(dep, depsDir, /*updateExisting=*/false) != 0)
+            return 1;
+    }
+    for(const auto& dep : deps)
+    {
+        if(build_git_dep(dep, depsDir, effectiveUseNinja) != 0)
+            return 1;
+    }
+
+    LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+    std::vector<std::string> pkgFlags;
+    for(const auto& dep : cdeps)
+    {
+        if(!append_pkg_config_flags(dep, pkgFlags))
+            return 1;
     }
 
     std::filesystem::create_directories(pkg.packageDir / "build");
@@ -1349,11 +1450,9 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 
         BuildConfig buildConfig =
             merge_build_config(packageBuildConfig, target.config);
-        if(validate_mlang_version_requirement(pkg.manifestPath, buildConfig,
-                                              target.name) != 0)
-        {
+        if(!validate_declared_libraries(pkg.manifestPath, target.name,
+                                        buildConfig, linkFlags))
             return 1;
-        }
 
         std::string optFlag = optFlagOverride;
         if(optFlag.empty())

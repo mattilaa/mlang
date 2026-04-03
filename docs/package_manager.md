@@ -222,6 +222,7 @@ Supported keys:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `use_ninja` / `ninja`
 - `lib_paths`
 - `libs`
 - `linker_flags`
@@ -236,6 +237,8 @@ Key details:
   or equal to the declared value before `pkg build` proceeds.
 - `target_arch` accepts `x86`, `x86-64`, `x64`, `x86_64`, `amd64`,
   `aarch64`, and `arm64`.
+- `use_ninja` requests Ninja for dependency builds and verifies that `ninja`
+  or `ninja-build` exists in `PATH` before dependency builds begin.
 - `lib_paths` are forwarded as `-L...`.
 - `libs` are forwarded as `-l...`.
 - `linker_flags` are forwarded as raw flags during package builds.
@@ -244,6 +247,8 @@ Key details:
   archives instead of dynamic `-l...` resolution.
 - `static_cpp_runtime` adds `-static-libstdc++ -static-libgcc` during package
   linking. This is generally intended for GNU/Linux toolchains.
+- libraries declared in `libs` are validated before the real package link step
+  so missing `-l...` entries fail early with a clearer error
 
 ### `[[bin]]`
 
@@ -269,6 +274,7 @@ Supported target-scoped keys inside `[[bin]]`:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `use_ninja`
 - `compiler_flags`
 - `linker_flags`
 - `lib_paths`

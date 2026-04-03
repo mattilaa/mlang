@@ -9,6 +9,7 @@ version = "0.1.0"
 [tool.mlang]
 min_mlang_version = "0.2.0"
 opt_level = "O2"
+use_ninja = true
 compiler_flags = ["-Wno-unwrap"]
 
 [[bin]]

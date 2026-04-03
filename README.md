@@ -688,6 +688,7 @@ module_paths = ["."]
 min_mlang_version = "0.2.0"
 opt_level = "O2"
 target_arch = "x64"
+use_ninja = true
 lib_paths = ["vendor/lib"]
 libs = ["foo"]
 linker_flags = ["-Wl,-rpath,vendor/lib"]
@@ -702,6 +703,8 @@ Supported keys are:
 - `min_mlang_version`: minimum `mlang` version required to build the package.
 - `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
 - `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
+- `use_ninja`: use the Ninja generator for dependency builds. `ninja = true`
+  is accepted as an alias.
 - `lib_paths`: extra library search paths, emitted as `-L...`.
 - `libs`: extra libraries, emitted as `-l...`.
 - `linker_flags`: raw linker-related flags forwarded to the compiler invocation.
@@ -713,6 +716,14 @@ Supported keys are:
 If `[tool.mlang].min_mlang_version` is set and the running compiler is older
 than that version, `mlang pkg build` fails before starting the build.
 
+If `use_ninja = true` is set, `mlang pkg build` verifies that `ninja` or
+`ninja-build` exists in `PATH` before dependency builds begin.
+
+Libraries declared in `[tool.mlang].libs` are also validated before the real
+package link step. If a declared `-l...` entry cannot be linked with the
+configured `lib_paths`, `mlang pkg build` fails early with the missing library
+name.
+
 Packages can also declare multiple executable targets:
 
 ```toml
@@ -722,6 +733,7 @@ version = "0.1.0"
 
 [tool.mlang]
 opt_level = "O2"
+use_ninja = true
 compiler_flags = ["-Wno-unwrap"]
 
 [[bin]]
@@ -743,6 +755,7 @@ Target-scoped config keys supported inside `[[bin]]` are:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `use_ninja`
 - `compiler_flags`
 - `linker_flags`
 - `lib_paths`
@@ -752,8 +765,8 @@ Target-scoped config keys supported inside `[[bin]]` are:
 
 Target-scoped values are merged with `[tool.mlang]` defaults:
 
-- scalar values such as `opt_level`, `target_arch`, and `min_mlang_version`
-  override the package default for that target
+- scalar values such as `opt_level`, `target_arch`, `min_mlang_version`, and
+  `use_ninja` override the package default for that target
 - list values such as `compiler_flags`, `linker_flags`, `lib_paths`, and `libs`
   are appended after the package defaults
 - boolean values such as `static_deps` and `static_cpp_runtime` override the

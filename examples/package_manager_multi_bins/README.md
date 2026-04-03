@@ -12,6 +12,7 @@ bin targets:
 [tool.mlang]
 min_mlang_version = "0.2.0"
 opt_level = "O2"
+use_ninja = true
 compiler_flags = ["-Wno-unwrap"]
 
 [[bin]]
@@ -33,6 +34,9 @@ linker_flags = ["-Wl,-dead_strip"]
 The `inspect` target overrides `opt_level` and adds an extra linker flag,
 while still inheriting package-level defaults such as `min_mlang_version` and
 `compiler_flags`.
+
+This example also enables `use_ninja = true` in `[tool.mlang]`, so `pkg build`
+checks that `ninja` exists before starting the build.
 
 ## Run
 
