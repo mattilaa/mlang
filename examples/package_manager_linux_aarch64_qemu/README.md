@@ -6,7 +6,7 @@ This example demonstrates two new package-manager capabilities:
 - shell-driven custom tasks via `[[task]]` and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
-`make`, creates a tiny initramfs, and boots it under QEMU.
+the configured make tool, creates a tiny initramfs, and boots it under QEMU.
 
 On macOS, the manifest prepends common Homebrew tool directories to `PATH` so
 newer Homebrew `make` and other tools can be used instead of `/usr/bin`.
@@ -20,11 +20,12 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 [[task]]
 name = "kernel-build"
 commands = [
-  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
-  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
 ]
 
 [tool.mlang]
+make_program = "gmake"
 path_entries = [
   "/opt/homebrew/opt/make/libexec/gnubin",
   "/usr/local/opt/make/libexec/gnubin",
@@ -42,6 +43,7 @@ commands = [
 ## Prereqs
 
 - `make`
+- `gmake` on macOS if Homebrew `make` is installed and `make_program = "gmake"`
 - `cpio`
 - `gzip`
 - `qemu-system-aarch64`
@@ -79,6 +81,10 @@ Or step-by-step:
 - `build = "none"` is important here because the Linux source tree is not built
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
+- `make_program = "gmake"` lets the package pick the Homebrew GNU Make binary
+  directly for tasks and built-in `build = "make"` dependency builds.
+- `{{make}}` expands to the configured make executable from
+  `[tool.mlang].make_program`.
 - `path_entries` in `mlang.toml` lets the package prepend Homebrew tool
   directories to `PATH`, which is useful on macOS when `/usr/bin/make` is too
   old for the kernel tree being built.

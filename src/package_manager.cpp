@@ -209,6 +209,7 @@ struct BuildConfig
     std::string optLevel;
     std::string targetArch;
     std::string minMlangVersion;
+    std::string makeProgram = "make";
     std::vector<std::string> pathEntries;
     std::vector<std::string> compilerFlags;
     std::vector<std::string> linkerFlags;
@@ -278,6 +279,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.targetArch = overrideCfg.targetArch;
     if(!overrideCfg.minMlangVersion.empty())
         out.minMlangVersion = overrideCfg.minMlangVersion;
+    if(!overrideCfg.makeProgram.empty())
+        out.makeProgram = overrideCfg.makeProgram;
     out.pathEntries.insert(out.pathEntries.end(), overrideCfg.pathEntries.begin(),
                            overrideCfg.pathEntries.end());
     out.compilerFlags.insert(out.compilerFlags.end(),
@@ -391,6 +394,19 @@ static BuildConfig parse_build_config(const std::string& content)
             continue;
         std::string key = trim(t.substr(0, eq));
         std::string value = trim(t.substr(eq + 1));
+        if(value == "[" ||
+           (value.find('[') != std::string::npos &&
+            value.find(']') == std::string::npos))
+        {
+            std::string extra;
+            while(std::getline(in, extra))
+            {
+                value += "\n";
+                value += trim(extra);
+                if(trim(extra).find(']') != std::string::npos)
+                    break;
+            }
+        }
         parse_build_config_key_value(cfg, key, value);
     }
     return cfg;
@@ -433,6 +449,19 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
             continue;
         std::string key = trim(t.substr(0, eq));
         std::string value = trim(t.substr(eq + 1));
+        if(value == "[" ||
+           (value.find('[') != std::string::npos &&
+            value.find(']') == std::string::npos))
+        {
+            std::string extra;
+            while(std::getline(in, extra))
+            {
+                value += "\n";
+                value += trim(extra);
+                if(trim(extra).find(']') != std::string::npos)
+                    break;
+            }
+        }
         if(key == "name")
         {
             current->name = unquote(value);
@@ -539,6 +568,10 @@ static void parse_build_config_key_value(BuildConfig& cfg,
     else if(key == "min_mlang_version")
     {
         cfg.minMlangVersion = unquote(value);
+    }
+    else if(key == "make_program")
+    {
+        cfg.makeProgram = unquote(value);
     }
     else if(key == "compiler_flags")
     {
@@ -1254,6 +1287,7 @@ static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
 static int build_git_dep(const DepSpec& dep,
                          const std::filesystem::path& depsDir,
                          bool useNinja,
+                         const std::string& makeProgram,
                          const std::vector<std::string>& pathEntries)
 {
     std::filesystem::path path = dep_source_dir(depsDir, dep);
@@ -1305,7 +1339,9 @@ static int build_git_dep(const DepSpec& dep,
     }
     if(dep.build == "make")
     {
-        std::string cmd = "make -C " + shell_quote(path.string());
+        std::string effectiveMake = makeProgram.empty() ? "make" : makeProgram;
+        std::string cmd = shell_quote(effectiveMake) + " -C " +
+                          shell_quote(path.string());
         return run_command_with_paths(cmd, pathEntries);
     }
 
@@ -1575,6 +1611,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     for(const auto& dep : deps)
     {
         if(build_git_dep(dep, depsDir, effectiveUseNinja,
+                         packageBuildConfig.makeProgram,
                          packageBuildConfig.pathEntries) != 0)
             return 1;
     }
@@ -1702,7 +1739,8 @@ static std::string replace_all(std::string text, const std::string& needle,
 }
 
 static std::string expand_task_text(const std::string& text,
-                                    const PackageManifest& pkg)
+                                    const PackageManifest& pkg,
+                                    const BuildConfig& buildConfig)
 {
     const std::filesystem::path buildDir = pkg.packageDir / "build";
     const std::filesystem::path depsDir = buildDir / "deps";
@@ -1711,6 +1749,9 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{manifest}}", pkg.manifestPath.string());
     out = replace_all(out, "{{build_dir}}", buildDir.string());
     out = replace_all(out, "{{deps_dir}}", depsDir.string());
+    out = replace_all(out, "{{make}}",
+                      buildConfig.makeProgram.empty() ? "make"
+                                                      : buildConfig.makeProgram);
     return out;
 }
 
@@ -1734,13 +1775,15 @@ static int run_task_for_manifest(const PackageManifest& pkg,
         std::filesystem::path workdir =
             task.workdir.empty() ? pkg.packageDir
                                  : std::filesystem::path(
-                                       expand_task_text(task.workdir, pkg));
+                                       expand_task_text(task.workdir, pkg,
+                                                        buildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
         for(const auto& command : task.commands)
         {
-            const std::string expanded = expand_task_text(command, pkg);
+            const std::string expanded =
+                expand_task_text(command, pkg, buildConfig);
             if(run_command_in_dir_with_paths(workdir, expanded,
                                              buildConfig.pathEntries) != 0)
             {

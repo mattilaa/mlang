@@ -705,6 +705,8 @@ Supported keys are:
 - `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
 - `path_entries`: directories prepended to `PATH` for pkg fetch/build/run.
   `bin_paths` is accepted as an alias.
+- `make_program`: make executable used by `build = "make"` dependencies and by
+  `[[task]]` commands through `{{make}}`.
 - `use_ninja`: use the Ninja generator for dependency builds. `ninja = true`
   is accepted as an alias.
 - `lib_paths`: extra library search paths, emitted as `-L...`.
@@ -725,6 +727,10 @@ If `path_entries` is set, those directories are prepended to `PATH` for
 dependency fetch/build commands, `pkg-config`, Ninja detection, final package
 linking, and `pkg run` tasks. This is useful on macOS when Homebrew tools
 should be preferred over `/usr/bin`.
+
+If `make_program` is set, `mlang pkg` uses that executable for built-in
+`build = "make"` dependency builds, and `[[task]]` commands can reference it as
+`{{make}}`.
 
 Libraries declared in `[tool.mlang].libs` are also validated before the real
 package link step. If a declared `-l...` entry cannot be linked with the
@@ -826,9 +832,12 @@ Packages can also declare shell-driven custom tasks:
 name = "kernel-build"
 workdir = "{{root}}"
 commands = [
-  "make -C {{deps_dir}}/linux ARCH=arm64 defconfig",
-  "make -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
 ]
+
+[tool.mlang]
+make_program = "gmake"
 ```
 
 Run a task with:
@@ -860,6 +869,7 @@ Task placeholders:
 - `{{manifest}}`
 - `{{build_dir}}`
 - `{{deps_dir}}`
+- `{{make}}`
 
 Example workflow with config-driven defaults:
 

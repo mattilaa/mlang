@@ -234,6 +234,7 @@ Supported keys:
 - `opt_level`
 - `target_arch`
 - `path_entries` / `bin_paths`
+- `make_program`
 - `use_ninja` / `ninja`
 - `lib_paths`
 - `libs`
@@ -252,6 +253,9 @@ Key details:
 - `path_entries` prepends directories to `PATH` for dependency fetch/build
   commands, `pkg-config`, Ninja detection, final package linking, and `pkg run`
   tasks. `bin_paths` is accepted as an alias.
+- `make_program` selects the make executable used for built-in
+  `build = "make"` dependency builds, and is exposed to `[[task]]` commands as
+  the `{{make}}` placeholder.
 - `use_ninja` requests Ninja for dependency builds and verifies that `ninja`
   or `ninja-build` exists in `PATH` before dependency builds begin.
 - `lib_paths` are forwarded as `-L...`.
@@ -313,9 +317,12 @@ Packages can define shell-driven tasks:
 name = "kernel-build"
 workdir = "{{root}}"
 commands = [
-  "make -C {{deps_dir}}/linux ARCH=arm64 defconfig",
-  "make -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
 ]
+
+[tool.mlang]
+make_program = "gmake"
 ```
 
 Run them with `./build/mlang pkg run <task>`.
@@ -343,6 +350,7 @@ Supported placeholders in `workdir` and commands:
 - `{{manifest}}`
 - `{{build_dir}}`
 - `{{deps_dir}}`
+- `{{make}}`
 
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.

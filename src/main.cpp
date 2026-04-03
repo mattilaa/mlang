@@ -1008,6 +1008,8 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("bin_paths") != std::string::npos)
         return true;
+    if(content.find("make_program") != std::string::npos)
+        return true;
     if(content.find("compiler_flags") != std::string::npos)
         return true;
     if(content.find("linker_flags") != std::string::npos)

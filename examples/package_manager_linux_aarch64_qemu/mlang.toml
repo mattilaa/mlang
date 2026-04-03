@@ -9,6 +9,7 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [tool.mlang]
 min_mlang_version = "0.2.0"
+make_program = "gmake"
 path_entries = [
   "/opt/homebrew/opt/make/libexec/gnubin",
   "/usr/local/opt/make/libexec/gnubin",
@@ -20,15 +21,15 @@ path_entries = [
 name = "kernel-defconfig"
 workdir = "{{root}}"
 commands = [
-  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig"
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig"
 ]
 
 [[task]]
 name = "kernel-build"
 workdir = "{{root}}"
 commands = [
-  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
-  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
 ]
 
 [[task]]
