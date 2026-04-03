@@ -38,6 +38,9 @@ Currently provided:
 - `std/hash.mla`: stable 64-bit hashing helpers
   (`hash_str`, `hash_str16`, `hash_i64`, `hash_bool`, `combine`, `to_hex`,
    and incremental `Hasher`).
+- `std/gps.mla`: latitude/longitude helpers for routing and TSP-style code
+  (`point`, `deg_to_rad`, `distance_m`, `project_points`, `project_xs`,
+   `project_ys`).
 - `std/platform.mla`: multiplatform detection helpers built on
   builtin macros (`windows!()`, `posix!()`, `linux!()`, `macos!()`,
   `x64!()`, `aarch64!()`).

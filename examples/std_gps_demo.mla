@@ -1,0 +1,22 @@
+mod std::gps;
+
+use std::gps::*;
+
+fn main() -> i32 {
+    let lats: list<f64> = [60.1699, 61.4978, 62.8924];
+    let lons: list<f64> = [24.9384, 23.7610, 27.6782];
+
+    let xs: list<i64> = project_xs(lats, lons, 1000.0);
+    let ys: list<i64> = project_ys(lats, lons, 1000.0);
+
+    println!("projected kilometers for GA/TSP:");
+    for i in 0..lats.len() {
+        println!("city={} x={} y={}", i, xs[i], ys[i]);
+    }
+
+    let seg01: i64 = distance_m(lats[0], lons[0], lats[1], lons[1]);
+    let seg12: i64 = distance_m(lats[1], lons[1], lats[2], lons[2]);
+    println!("segment_0_1_m={}", seg01);
+    println!("segment_1_2_m={}", seg12);
+    return 0;
+}
