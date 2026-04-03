@@ -1319,7 +1319,7 @@ static std::string relative_path_string(const std::filesystem::path& fromDir,
 
 static std::string package_stub_source(const std::string& depName)
 {
-    return "fn main() -> void {\n"
+    return "fn main() {\n"
            "    println!(\"" + depName +
            " subproject scaffold ready\");\n"
            "}\n";

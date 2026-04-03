@@ -50,7 +50,7 @@ entry = "src/main.mla"
 Generated entry source:
 
 ```mla
-fn main() -> void {
+fn main() {
     println!("app subproject scaffold ready");
 }
 ```
