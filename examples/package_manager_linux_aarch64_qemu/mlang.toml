@@ -9,6 +9,12 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [tool.mlang]
 min_mlang_version = "0.2.0"
+path_entries = [
+  "/opt/homebrew/opt/make/libexec/gnubin",
+  "/usr/local/opt/make/libexec/gnubin",
+  "/opt/homebrew/bin",
+  "/usr/local/bin"
+]
 
 [[task]]
 name = "kernel-defconfig"

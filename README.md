@@ -703,6 +703,8 @@ Supported keys are:
 - `min_mlang_version`: minimum `mlang` version required to build the package.
 - `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
 - `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
+- `path_entries`: directories prepended to `PATH` for pkg fetch/build/run.
+  `bin_paths` is accepted as an alias.
 - `use_ninja`: use the Ninja generator for dependency builds. `ninja = true`
   is accepted as an alias.
 - `lib_paths`: extra library search paths, emitted as `-L...`.
@@ -718,6 +720,11 @@ than that version, `mlang pkg build` fails before starting the build.
 
 If `use_ninja = true` is set, `mlang pkg build` verifies that `ninja` or
 `ninja-build` exists in `PATH` before dependency builds begin.
+
+If `path_entries` is set, those directories are prepended to `PATH` for
+dependency fetch/build commands, `pkg-config`, Ninja detection, final package
+linking, and `pkg run` tasks. This is useful on macOS when Homebrew tools
+should be preferred over `/usr/bin`.
 
 Libraries declared in `[tool.mlang].libs` are also validated before the real
 package link step. If a declared `-l...` entry cannot be linked with the
@@ -755,6 +762,7 @@ Target-scoped config keys supported inside `[[bin]]` are:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `path_entries`
 - `use_ninja`
 - `compiler_flags`
 - `linker_flags`
@@ -765,8 +773,9 @@ Target-scoped config keys supported inside `[[bin]]` are:
 
 Target-scoped values are merged with `[tool.mlang]` defaults:
 
-- scalar values such as `opt_level`, `target_arch`, `min_mlang_version`, and
-  `use_ninja` override the package default for that target
+- scalar values such as `opt_level`, `target_arch`, `min_mlang_version`,
+  `use_ninja`, and target-specific path settings override the package default
+  for that target
 - list values such as `compiler_flags`, `linker_flags`, `lib_paths`, and `libs`
   are appended after the package defaults
 - boolean values such as `static_deps` and `static_cpp_runtime` override the

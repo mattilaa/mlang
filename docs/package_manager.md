@@ -233,6 +233,7 @@ Supported keys:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `path_entries` / `bin_paths`
 - `use_ninja` / `ninja`
 - `lib_paths`
 - `libs`
@@ -248,6 +249,9 @@ Key details:
   or equal to the declared value before `pkg build` proceeds.
 - `target_arch` accepts `x86`, `x86-64`, `x64`, `x86_64`, `amd64`,
   `aarch64`, and `arm64`.
+- `path_entries` prepends directories to `PATH` for dependency fetch/build
+  commands, `pkg-config`, Ninja detection, final package linking, and `pkg run`
+  tasks. `bin_paths` is accepted as an alias.
 - `use_ninja` requests Ninja for dependency builds and verifies that `ninja`
   or `ninja-build` exists in `PATH` before dependency builds begin.
 - `lib_paths` are forwarded as `-L...`.
@@ -285,6 +289,7 @@ Supported target-scoped keys inside `[[bin]]`:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `path_entries`
 - `use_ninja`
 - `compiler_flags`
 - `linker_flags`

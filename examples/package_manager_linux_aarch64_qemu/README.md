@@ -8,6 +8,9 @@ This example demonstrates two new package-manager capabilities:
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 `make`, creates a tiny initramfs, and boots it under QEMU.
 
+On macOS, the manifest prepends common Homebrew tool directories to `PATH` so
+newer Homebrew `make` and other tools can be used instead of `/usr/bin`.
+
 ## Manifest highlights
 
 ```toml
@@ -19,6 +22,14 @@ name = "kernel-build"
 commands = [
   "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
   "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+]
+
+[tool.mlang]
+path_entries = [
+  "/opt/homebrew/opt/make/libexec/gnubin",
+  "/usr/local/opt/make/libexec/gnubin",
+  "/opt/homebrew/bin",
+  "/usr/local/bin"
 ]
 
 [[task]]
@@ -68,6 +79,9 @@ Or step-by-step:
 - `build = "none"` is important here because the Linux source tree is not built
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
+- `path_entries` in `mlang.toml` lets the package prepend Homebrew tool
+  directories to `PATH`, which is useful on macOS when `/usr/bin/make` is too
+  old for the kernel tree being built.
 - The `{{root}}`, `{{build_dir}}`, and `{{deps_dir}}` placeholders are
   expanded by `mlang pkg run` before the shell commands execute.
 - This example is intentionally task-driven. Its primary goal is orchestrating

@@ -209,6 +209,7 @@ struct BuildConfig
     std::string optLevel;
     std::string targetArch;
     std::string minMlangVersion;
+    std::vector<std::string> pathEntries;
     std::vector<std::string> compilerFlags;
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
@@ -277,6 +278,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.targetArch = overrideCfg.targetArch;
     if(!overrideCfg.minMlangVersion.empty())
         out.minMlangVersion = overrideCfg.minMlangVersion;
+    out.pathEntries.insert(out.pathEntries.end(), overrideCfg.pathEntries.begin(),
+                           overrideCfg.pathEntries.end());
     out.compilerFlags.insert(out.compilerFlags.end(),
                              overrideCfg.compilerFlags.begin(),
                              overrideCfg.compilerFlags.end());
@@ -540,6 +543,10 @@ static void parse_build_config_key_value(BuildConfig& cfg,
     else if(key == "compiler_flags")
     {
         append_toml_string_list_value(value, cfg.compilerFlags);
+    }
+    else if(key == "path_entries" || key == "bin_paths")
+    {
+        append_toml_string_list_value(value, cfg.pathEntries);
     }
     else if(key == "linker_flags")
     {
@@ -994,10 +1001,58 @@ static int run_command(const std::string& cmd)
     return std::system(cmd.c_str());
 }
 
+static std::string join_path_entries(const std::vector<std::string>& entries)
+{
+    std::string out;
+    for(const auto& entry : entries)
+    {
+        if(entry.empty())
+            continue;
+        if(!out.empty())
+            out += ":";
+        out += entry;
+    }
+    return out;
+}
+
+static std::string command_with_path_entries(const std::string& cmd,
+                                             const std::vector<std::string>& entries)
+{
+    const std::string joined = join_path_entries(entries);
+    if(joined.empty())
+        return cmd;
+
+    std::string currentPath;
+    if(const char* envPath = std::getenv("PATH"))
+        currentPath = envPath;
+    std::string fullPath = joined;
+    if(!currentPath.empty())
+    {
+        if(!fullPath.empty())
+            fullPath += ":";
+        fullPath += currentPath;
+    }
+    return "env PATH=" + shell_quote(fullPath) + " " + cmd;
+}
+
+static int run_command_with_paths(const std::string& cmd,
+                                  const std::vector<std::string>& entries)
+{
+    return run_command(command_with_path_entries(cmd, entries));
+}
+
 static int run_command_in_dir(const std::filesystem::path& dir,
                               const std::string& cmd)
 {
     return run_command("cd " + shell_quote(dir.string()) + " && " + cmd);
+}
+
+static int run_command_in_dir_with_paths(const std::filesystem::path& dir,
+                                         const std::string& cmd,
+                                         const std::vector<std::string>& entries)
+{
+    return run_command("cd " + shell_quote(dir.string()) + " && " +
+                       command_with_path_entries(cmd, entries));
 }
 
 static std::optional<std::string> run_command_capture(const std::string& cmd)
@@ -1014,6 +1069,13 @@ static std::optional<std::string> run_command_capture(const std::string& cmd)
     if(rc != 0)
         return std::nullopt;
     return out;
+}
+
+static std::optional<std::string>
+run_command_capture_with_paths(const std::string& cmd,
+                               const std::vector<std::string>& entries)
+{
+    return run_command_capture(command_with_path_entries(cmd, entries));
 }
 
 static std::vector<std::string> split_shell_tokens(std::string_view input)
@@ -1073,21 +1135,22 @@ static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir
 
 static int fetch_git_dep(const DepSpec& dep,
                          const std::filesystem::path& depsDir,
-                         bool updateExisting)
+                         bool updateExisting,
+                         const std::vector<std::string>& pathEntries)
 {
     std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
     {
         std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
                                shell_quote(path.string());
-        if(run_command(cloneCmd) != 0)
+        if(run_command_with_paths(cloneCmd, pathEntries) != 0)
             return 1;
     }
     else if(updateExisting)
     {
         std::string fetchCmd = "git -C " + shell_quote(path.string()) +
                                " fetch --all --tags";
-        if(run_command(fetchCmd) != 0)
+        if(run_command_with_paths(fetchCmd, pathEntries) != 0)
             return 1;
     }
 
@@ -1095,7 +1158,7 @@ static int fetch_git_dep(const DepSpec& dep,
     {
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " + shell_quote(dep.rev);
-        if(run_command(checkout) != 0)
+        if(run_command_with_paths(checkout, pathEntries) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
@@ -1103,14 +1166,15 @@ static int fetch_git_dep(const DepSpec& dep,
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " +
                                shell_quote("tags/" + dep.tag);
-        if(run_command(checkout) != 0)
+        if(run_command_with_paths(checkout, pathEntries) != 0)
             return 1;
     }
     return 0;
 }
 
 static int fetch_archive_dep(const DepSpec& dep,
-                             const std::filesystem::path& depsDir)
+                             const std::filesystem::path& depsDir,
+                             const std::vector<std::string>& pathEntries)
 {
     if(dep.url.empty())
         return 1;
@@ -1151,7 +1215,7 @@ static int fetch_archive_dep(const DepSpec& dep,
 
     std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                               " -o " + shell_quote(archivePath.string());
-    if(run_command(downloadCmd) != 0)
+    if(run_command_with_paths(downloadCmd, pathEntries) != 0)
         return 1;
 
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
@@ -1161,7 +1225,7 @@ static int fetch_archive_dep(const DepSpec& dep,
         extractCmd += " --strip-components=" +
                       std::to_string(dep.stripComponents);
     }
-    if(run_command(extractCmd) != 0)
+    if(run_command_with_paths(extractCmd, pathEntries) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
@@ -1175,12 +1239,13 @@ static int fetch_archive_dep(const DepSpec& dep,
 }
 
 static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
-                     bool updateExisting)
+                     bool updateExisting,
+                     const std::vector<std::string>& pathEntries)
 {
     if(!dep.git.empty())
-        return fetch_git_dep(dep, depsDir, updateExisting);
+        return fetch_git_dep(dep, depsDir, updateExisting, pathEntries);
     if(!dep.url.empty())
-        return fetch_archive_dep(dep, depsDir);
+        return fetch_archive_dep(dep, depsDir, pathEntries);
     std::cerr << "Dependency '" << dep.name
               << "' is missing a supported source (git/url)\n";
     return 1;
@@ -1188,7 +1253,8 @@ static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
 
 static int build_git_dep(const DepSpec& dep,
                          const std::filesystem::path& depsDir,
-                         bool useNinja)
+                         bool useNinja,
+                         const std::vector<std::string>& pathEntries)
 {
     std::filesystem::path path = dep_source_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
@@ -1216,11 +1282,11 @@ static int build_git_dep(const DepSpec& dep,
                     cfg += " -D" + arg;
             }
         }
-        if(run_command(cfg) != 0)
+        if(run_command_with_paths(cfg, pathEntries) != 0)
             return 1;
         std::string build =
             "cmake --build " + shell_quote(buildDir.string());
-        return run_command(build);
+        return run_command_with_paths(build, pathEntries);
     }
     if(dep.build == "meson")
     {
@@ -1230,17 +1296,17 @@ static int build_git_dep(const DepSpec& dep,
             std::string setup = "meson setup " +
                                 shell_quote(buildDir.string()) + " " +
                                 shell_quote(path.string());
-            if(run_command(setup) != 0)
+            if(run_command_with_paths(setup, pathEntries) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
-        return run_command(compile);
+        return run_command_with_paths(compile, pathEntries);
     }
     if(dep.build == "make")
     {
         std::string cmd = "make -C " + shell_quote(path.string());
-        return run_command(cmd);
+        return run_command_with_paths(cmd, pathEntries);
     }
 
     std::cerr << "Unknown build system: " << dep.build << "\n";
@@ -1309,12 +1375,13 @@ static std::vector<CDepSpec> parse_c_deps(const std::string& content)
 }
 
 static bool append_pkg_config_flags(const CDepSpec& dep,
-                                    std::vector<std::string>& outFlags)
+                                    std::vector<std::string>& outFlags,
+                                    const std::vector<std::string>& pathEntries)
 {
     if(!dep.usePkgConfig || dep.pkgConfig.empty())
         return true;
     std::string cmd = "pkg-config --cflags --libs " + dep.pkgConfig;
-    auto result = run_command_capture(cmd);
+    auto result = run_command_capture_with_paths(cmd, pathEntries);
     if(!result.has_value())
     {
         std::cerr << "pkg-config failed for: " << dep.pkgConfig << "\n";
@@ -1325,9 +1392,11 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
     return true;
 }
 
-static bool ensure_ninja_available()
+static bool ensure_ninja_available(const std::vector<std::string>& pathEntries)
 {
-    auto ninjaPath = run_command_capture("command -v ninja || command -v ninja-build");
+    auto ninjaPath =
+        run_command_capture_with_paths("command -v ninja || command -v ninja-build",
+                                       pathEntries);
     if(ninjaPath.has_value() && !trim(*ninjaPath).empty())
         return true;
     std::cerr << "Ninja build requested, but neither 'ninja' nor 'ninja-build'"
@@ -1376,6 +1445,7 @@ static bool validate_declared_libraries(const std::filesystem::path& manifestPat
         for(const auto& dir : searchDirs)
             cmd += " -L" + shell_quote(dir);
         cmd += " -l" + shell_quote(lib) + " >/dev/null 2>&1";
+        cmd = command_with_path_entries(cmd, buildConfig.pathEntries);
         int rc = std::system(cmd.c_str());
         if(rc != 0)
         {
@@ -1438,11 +1508,13 @@ static int validate_mlang_version_requirement(const std::filesystem::path& manif
 static int fetch_for_manifest(const PackageManifest& pkg)
 {
     auto deps = parse_source_deps(pkg.content);
+    BuildConfig buildConfig = parse_build_config(pkg.content);
     std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
     std::filesystem::create_directories(depsDir);
     for(const auto& dep : deps)
     {
-        if(fetch_dep(dep, depsDir, /*updateExisting=*/true) != 0)
+        if(fetch_dep(dep, depsDir, /*updateExisting=*/true,
+                     buildConfig.pathEntries) != 0)
             return 1;
     }
     std::cout << "Fetch completed for " << pkg.manifestPath.string() << ".\n";
@@ -1488,19 +1560,22 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
             return 1;
         }
     }
-    if(effectiveUseNinja && !ensure_ninja_available())
+    if(effectiveUseNinja &&
+       !ensure_ninja_available(packageBuildConfig.pathEntries))
         return 1;
 
     std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
     std::filesystem::create_directories(depsDir);
     for(const auto& dep : deps)
     {
-        if(fetch_dep(dep, depsDir, /*updateExisting=*/false) != 0)
+        if(fetch_dep(dep, depsDir, /*updateExisting=*/false,
+                     packageBuildConfig.pathEntries) != 0)
             return 1;
     }
     for(const auto& dep : deps)
     {
-        if(build_git_dep(dep, depsDir, effectiveUseNinja) != 0)
+        if(build_git_dep(dep, depsDir, effectiveUseNinja,
+                         packageBuildConfig.pathEntries) != 0)
             return 1;
     }
 
@@ -1508,7 +1583,8 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     std::vector<std::string> pkgFlags;
     for(const auto& dep : cdeps)
     {
-        if(!append_pkg_config_flags(dep, pkgFlags))
+        if(!append_pkg_config_flags(dep, pkgFlags,
+                                    packageBuildConfig.pathEntries))
             return 1;
     }
 
@@ -1577,7 +1653,8 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         for(const auto& flag : pkgFlags)
             cmd += " " + shell_quote(flag);
 
-        int rc = run_command_in_dir(pkg.packageDir, cmd);
+        int rc = run_command_in_dir_with_paths(pkg.packageDir, cmd,
+                                              buildConfig.pathEntries);
         if(rc != 0)
         {
             std::cerr << "Build failed for " << pkg.manifestPath.string();
@@ -1641,6 +1718,7 @@ static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName)
 {
     const auto tasks = parse_task_specs(pkg.content);
+    const BuildConfig buildConfig = parse_build_config(pkg.content);
     for(const auto& task : tasks)
     {
         if(task.name != taskName)
@@ -1663,7 +1741,8 @@ static int run_task_for_manifest(const PackageManifest& pkg,
         for(const auto& command : task.commands)
         {
             const std::string expanded = expand_task_text(command, pkg);
-            if(run_command_in_dir(workdir, expanded) != 0)
+            if(run_command_in_dir_with_paths(workdir, expanded,
+                                             buildConfig.pathEntries) != 0)
             {
                 std::cerr << "Task '" << taskName << "' failed for "
                           << pkg.manifestPath.string() << ".\n";
