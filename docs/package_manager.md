@@ -105,6 +105,14 @@ Current CLI options:
 The output binary or IR file is written under the package-local `build/`
 directory.
 
+### `pkg run`
+
+Run a custom package task declared with `[[task]]`:
+
+```sh
+./build/mlang pkg run kernel-build
+```
+
 ### `pkg clean`
 
 Remove the package-local artifact tree created by `fetch` and `build`:
@@ -188,6 +196,9 @@ Current supported build systems:
 - `make`
 
 If `build` is omitted, `cmake` is used.
+
+If `build = "none"` is set, the dependency is fetched but skipped by the
+built-in dependency builders during `pkg build`.
 
 Archive source example:
 
@@ -288,6 +299,36 @@ Merge behavior:
 - list values append after package defaults
 - explicit target booleans override package defaults
 
+### `[[task]]`
+
+Packages can define shell-driven tasks:
+
+```toml
+[[task]]
+name = "kernel-build"
+workdir = "{{root}}"
+commands = [
+  "make -C {{deps_dir}}/linux ARCH=arm64 defconfig",
+  "make -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+]
+```
+
+Run them with `./build/mlang pkg run <task>`.
+
+Supported task keys:
+
+- `name`
+- `workdir`
+- `command`
+- `commands`
+
+Supported placeholders in `workdir` and commands:
+
+- `{{root}}`
+- `{{manifest}}`
+- `{{build_dir}}`
+- `{{deps_dir}}`
+
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
 
@@ -326,6 +367,9 @@ Workspace example in this repository:
 - `examples/package_manager_multi_bins`
   Demonstrates `[[bin]]` targets, target-scoped config overrides, and mixed
   GitHub `git` plus `tar.gz` source dependencies in one package.
+- `examples/package_manager_linux_aarch64_qemu`
+  Demonstrates a fetch-only Linux kernel dependency plus `[[task]]` commands
+  for AArch64 kernel build and QEMU boot flow.
 
 ## See Also
 

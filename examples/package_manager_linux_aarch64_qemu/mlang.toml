@@ -1,0 +1,44 @@
+[package]
+name = "linux_aarch64_qemu"
+version = "0.1.0"
+
+[dependencies]
+linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none" }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+
+[[task]]
+name = "kernel-defconfig"
+workdir = "{{root}}"
+commands = [
+  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig"
+]
+
+[[task]]
+name = "kernel-build"
+workdir = "{{root}}"
+commands = [
+  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
+  "make -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+]
+
+[[task]]
+name = "initramfs"
+workdir = "{{root}}"
+commands = [
+  "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
+  "mkdir -p {{build_dir}}/initramfs",
+  "cp -R {{root}}/rootfs/. {{build_dir}}/initramfs/",
+  "chmod +x {{build_dir}}/initramfs/init",
+  "sh -c 'cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > {{build_dir}}/initramfs.cpio.gz'"
+]
+
+[[task]]
+name = "qemu-run"
+workdir = "{{root}}"
+commands = [
+  "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1024 -nographic -kernel {{deps_dir}}/linux/arch/arm64/boot/Image -initrd {{build_dir}}/initramfs.cpio.gz -append \"console=ttyAMA0 rdinit=/init\""
+]

@@ -83,6 +83,7 @@ void printUsage(const char* programName)
               << "  " << programName << " pkg fetch\n"
               << "  " << programName
               << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n"
+              << "  " << programName << " pkg run <task>\n"
               << "  " << programName << " pkg clean\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
@@ -997,6 +998,8 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("[[bin]]") != std::string::npos)
         return true;
+    if(content.find("[[task]]") != std::string::npos)
+        return true;
     if(content.find("opt_level") != std::string::npos)
         return true;
     if(content.find("target_arch") != std::string::npos)
@@ -1018,6 +1021,8 @@ static bool manifest_requires_cpp_pkg_frontend()
     if(content.find("static_deps") != std::string::npos)
         return true;
     if(content.find("static_cpp_runtime") != std::string::npos)
+        return true;
+    if(content.find("build = \"none\"") != std::string::npos)
         return true;
     return false;
 }

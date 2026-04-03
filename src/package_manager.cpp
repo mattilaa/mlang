@@ -225,6 +225,13 @@ struct BuildTarget
     BuildConfig config;
 };
 
+struct TaskSpec
+{
+    std::string name;
+    std::string workdir;
+    std::vector<std::string> commands;
+};
+
 static void parse_build_config_key_value(BuildConfig& cfg,
                                          const std::string& key,
                                          const std::string& value);
@@ -438,6 +445,80 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
     }
     flush_current();
     return targets;
+}
+
+static std::vector<TaskSpec> parse_task_specs(const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::vector<TaskSpec> tasks;
+    std::optional<TaskSpec> current;
+
+    auto flush_current = [&]() {
+        if(current.has_value())
+            tasks.push_back(*current);
+        current.reset();
+    };
+
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t == "[[task]]")
+        {
+            flush_current();
+            current = TaskSpec {};
+            continue;
+        }
+        if(t.front() == '[' && t.back() == ']')
+        {
+            flush_current();
+            continue;
+        }
+        if(!current.has_value())
+            continue;
+
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        std::string key = trim(t.substr(0, eq));
+        std::string value = trim(t.substr(eq + 1));
+        if(key == "name")
+        {
+            current->name = unquote(value);
+        }
+        else if(key == "workdir")
+        {
+            current->workdir = unquote(value);
+        }
+        else if(key == "command")
+        {
+            std::string v = unquote(value);
+            if(!v.empty())
+                current->commands.push_back(v);
+        }
+        else if(key == "commands")
+        {
+            std::string fullValue = value;
+            if(value == "[" ||
+               (value.find('[') != std::string::npos &&
+                value.find(']') == std::string::npos))
+            {
+                std::string extra;
+                while(std::getline(in, extra))
+                {
+                    fullValue += "\n";
+                    fullValue += trim(extra);
+                    if(trim(extra).find(']') != std::string::npos)
+                        break;
+                }
+            }
+            append_toml_string_list_value(fullValue, current->commands);
+        }
+    }
+    flush_current();
+    return tasks;
 }
 
 static void parse_build_config_key_value(BuildConfig& cfg,
@@ -1113,6 +1194,9 @@ static int build_git_dep(const DepSpec& dep,
     if(!std::filesystem::exists(path))
         return 1;
 
+    if(dep.build == "none" || dep.build == "skip")
+        return 0;
+
     if(dep.build == "cmake")
     {
         std::filesystem::path buildDir = path / "build";
@@ -1526,6 +1610,71 @@ static int clean_for_manifest(const PackageManifest& pkg)
     return 0;
 }
 
+static std::string replace_all(std::string text, const std::string& needle,
+                               const std::string& value)
+{
+    if(needle.empty())
+        return text;
+    size_t pos = 0;
+    while((pos = text.find(needle, pos)) != std::string::npos)
+    {
+        text.replace(pos, needle.size(), value);
+        pos += value.size();
+    }
+    return text;
+}
+
+static std::string expand_task_text(const std::string& text,
+                                    const PackageManifest& pkg)
+{
+    const std::filesystem::path buildDir = pkg.packageDir / "build";
+    const std::filesystem::path depsDir = buildDir / "deps";
+    std::string out = text;
+    out = replace_all(out, "{{root}}", pkg.packageDir.string());
+    out = replace_all(out, "{{manifest}}", pkg.manifestPath.string());
+    out = replace_all(out, "{{build_dir}}", buildDir.string());
+    out = replace_all(out, "{{deps_dir}}", depsDir.string());
+    return out;
+}
+
+static int run_task_for_manifest(const PackageManifest& pkg,
+                                 const std::string& taskName)
+{
+    const auto tasks = parse_task_specs(pkg.content);
+    for(const auto& task : tasks)
+    {
+        if(task.name != taskName)
+            continue;
+        if(task.commands.empty())
+        {
+            std::cerr << "Task '" << taskName << "' in "
+                      << pkg.manifestPath.string()
+                      << " has no commands.\n";
+            return 1;
+        }
+
+        std::filesystem::path workdir =
+            task.workdir.empty() ? pkg.packageDir
+                                 : std::filesystem::path(
+                                       expand_task_text(task.workdir, pkg));
+        if(!workdir.is_absolute())
+            workdir = pkg.packageDir / workdir;
+
+        for(const auto& command : task.commands)
+        {
+            const std::string expanded = expand_task_text(command, pkg);
+            if(run_command_in_dir(workdir, expanded) != 0)
+            {
+                std::cerr << "Task '" << taskName << "' failed for "
+                          << pkg.manifestPath.string() << ".\n";
+                return 1;
+            }
+        }
+        return 0;
+    }
+    return -1;
+}
+
 } // namespace
 
 int PackageManager::run(int argc, char** argv)
@@ -1533,7 +1682,7 @@ int PackageManager::run(int argc, char** argv)
     if(argc < 3)
     {
         std::cerr << "Usage: " << argv[0]
-                  << " pkg <init|add|fetch|build|clean>\n";
+                  << " pkg <init|add|fetch|build|run|clean>\n";
         return 1;
     }
 
@@ -1768,6 +1917,45 @@ int PackageManager::run(int argc, char** argv)
         {
             if(build_for_manifest(pkg, argv[0], optFlag, useNinja) != 0)
                 return 1;
+        }
+        return 0;
+    }
+
+    if(sub == "run")
+    {
+        if(argc < 4)
+        {
+            std::cerr << "Usage: " << argv[0] << " pkg run <task>\n";
+            return 1;
+        }
+        if(!std::filesystem::exists(manifestPath))
+        {
+            std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
+            return 1;
+        }
+
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
+        {
+            std::cerr << "No package manifests found for run.\n";
+            return 1;
+        }
+
+        const std::string taskName = argv[3];
+        bool found = false;
+        for(const auto& pkg : manifests)
+        {
+            int rc = run_task_for_manifest(pkg, taskName);
+            if(rc == -1)
+                continue;
+            found = true;
+            if(rc != 0)
+                return 1;
+        }
+        if(!found)
+        {
+            std::cerr << "Task not found: " << taskName << "\n";
+            return 1;
         }
         return 0;
     }

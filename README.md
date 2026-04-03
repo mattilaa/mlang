@@ -807,6 +807,41 @@ Supported source dependency keys are:
 - `subdir`
 - `strip_components`
 
+If `build = "none"` is set, the dependency is fetched but skipped by the
+built-in dependency builders during `mlang pkg build`.
+
+Packages can also declare shell-driven custom tasks:
+
+```toml
+[[task]]
+name = "kernel-build"
+workdir = "{{root}}"
+commands = [
+  "make -C {{deps_dir}}/linux ARCH=arm64 defconfig",
+  "make -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+]
+```
+
+Run a task with:
+
+```sh
+./build/mlang pkg run kernel-build
+```
+
+Supported `[[task]]` keys:
+
+- `name`
+- `workdir`
+- `command`
+- `commands`
+
+Task placeholders:
+
+- `{{root}}`
+- `{{manifest}}`
+- `{{build_dir}}`
+- `{{deps_dir}}`
+
 Example workflow with config-driven defaults:
 
 ```sh
@@ -827,6 +862,9 @@ Workspace example:
 - `examples/package_manager_multi_bins`
   Demonstrates `[[bin]]` targets, target-scoped build config overrides, and
   mixed GitHub `git` plus `tar.gz` source dependencies in one package.
+- `examples/package_manager_linux_aarch64_qemu`
+  Demonstrates a fetch-only Linux kernel dependency plus `[[task]]` commands
+  for AArch64 kernel build and QEMU boot flow.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:
