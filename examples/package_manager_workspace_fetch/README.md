@@ -24,6 +24,9 @@ discover package manifests recursively under `packages/`.
   `url = "...tar.gz"`
 
 Both packages build a small executable that parses a JSON string with cJSON.
+The `tarball_cjson_demo` package is a real runtime demo, not just a fetch-only
+fixture: it links against the archive-fetched cJSON library and uses it to
+parse JSON at runtime.
 
 ## Run
 
@@ -35,6 +38,12 @@ From this directory:
 ./packages/git_cjson_demo/build/git_cjson_demo
 ./packages/tarball_cjson_demo/build/tarball_cjson_demo
 ../../build/mlang pkg clean
+```
+
+Or run the helper script:
+
+```sh
+./run_demo.sh
 ```
 
 ## Notes
@@ -51,3 +60,7 @@ cjson = {
   build = "cmake"
 }
 ```
+
+- The tarball package executable prints a parsed value from JSON using the
+  archive-fetched cJSON build, so the fetch/build/run path is exercised
+  end-to-end.
