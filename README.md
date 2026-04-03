@@ -828,6 +828,16 @@ Run a task with:
 ./build/mlang pkg run kernel-build
 ```
 
+Linux AArch64 kernel example sequence:
+
+```sh
+cd examples/package_manager_linux_aarch64_qemu
+../../build/mlang pkg fetch
+../../build/mlang pkg run kernel-build
+../../build/mlang pkg run initramfs
+../../build/mlang pkg run qemu-run
+```
+
 Supported `[[task]]` keys:
 
 - `name`
