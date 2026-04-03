@@ -113,6 +113,15 @@ Run a custom package task declared with `[[task]]`:
 ./build/mlang pkg run kernel-build
 ```
 
+Tasks can model a small workflow graph with:
+
+- `depends_on`
+- `next`
+- `join_on`
+- `parallel`
+- `command` / `commands`
+- `shell` / `script`
+
 ### `pkg clean`
 
 Remove the package-local artifact tree created by `fetch` and `build`:
@@ -242,6 +251,82 @@ Supported keys:
 - `compiler_flags`
 - `static_deps`
 - `static_cpp_runtime`
+
+### `[[task]]`
+
+Custom tasks are executed with `mlang pkg run <task-name>`.
+
+Supported task keys:
+
+- `name`
+- `workdir`
+- `parallel`
+- `depends_on`
+- `next`
+- `join_on`
+- `env`
+- `command`
+- `commands`
+- `shell` / `script`
+
+Task semantics:
+
+- `depends_on` runs prerequisite tasks before the current task.
+- `next` launches named downstream tasks after the current task succeeds.
+- `join_on` waits for named tasks before the current task runs.
+- `parallel = true` allows multiple `depends_on` or `next` branches to run
+  concurrently.
+- `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
+  and runs it through `sh`.
+
+Host-specific overrides are supported with subtables such as:
+
+```toml
+[task.host.darwin]
+shell = [
+  "docker build -t my-image {{root}}"
+]
+```
+
+Example workflow graph:
+
+```toml
+[[task]]
+name = "workflow"
+parallel = true
+next = ["left", "right", "merge"]
+commands = [
+  "mkdir -p {{build_dir}}"
+]
+
+[[task]]
+name = "left"
+commands = [
+  "sh -c 'echo left > {{build_dir}}/left.txt'"
+]
+
+[[task]]
+name = "right"
+commands = [
+  "sh -c 'echo right > {{build_dir}}/right.txt'"
+]
+
+[[task]]
+name = "merge"
+join_on = ["left", "right"]
+commands = [
+  "sh -c 'cat {{build_dir}}/left.txt {{build_dir}}/right.txt > {{build_dir}}/joined.txt'"
+]
+```
+
+Running:
+
+```sh
+./build/mlang pkg run workflow
+```
+
+starts `left`, `right`, and `merge`. The `merge` task waits until both branch
+tasks are complete because of `join_on`.
 
 Key details:
 

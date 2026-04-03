@@ -152,6 +152,50 @@ Build and run:
 `mlang pkg clean` removes the package-local `build/` tree created by
 `fetch`/`build`.
 
+Custom task workflows can be declared in `mlang.toml` and run with:
+
+```sh
+./build/mlang pkg run <task-name>
+```
+
+Current task graph features:
+- `depends_on` for prerequisites
+- `next` for downstream jumps to named tasks
+- `join_on` for waiting on named tasks before continuing
+- `parallel = true` for concurrent prerequisite/downstream branches
+- `shell = [ ... ]` / `script = [ ... ]` for inline shell scripts stored under `build/task-scripts/`
+- `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
+
+A minimal workflow example:
+
+```toml
+[[task]]
+name = "workflow"
+parallel = true
+next = ["left", "right", "merge"]
+commands = ["mkdir -p {{build_dir}}"]
+
+[[task]]
+name = "left"
+commands = ["sh -c 'echo left > {{build_dir}}/left.txt'"]
+
+[[task]]
+name = "right"
+commands = ["sh -c 'echo right > {{build_dir}}/right.txt'"]
+
+[[task]]
+name = "merge"
+join_on = ["left", "right"]
+commands = ["sh -c 'cat {{build_dir}}/left.txt {{build_dir}}/right.txt > {{build_dir}}/joined.txt'"]
+```
+
+Run it from `examples/package_manager_task_graph`:
+
+```sh
+../../build/mlang pkg run workflow
+cat build/joined.txt
+```
+
 ## Stdlib Linking
 When using stdlib modules backed by native code (e.g. `std::math`), link
 against the stdlib library just like GCC/Clang:

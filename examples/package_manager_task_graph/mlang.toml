@@ -1,0 +1,39 @@
+[package]
+name = "task_graph_demo"
+version = "0.1.0"
+
+[dependencies]
+
+[c-dependencies]
+
+[[task]]
+name = "workflow"
+workdir = "{{root}}"
+parallel = true
+next = ["left", "right", "merge"]
+commands = [
+  "mkdir -p {{build_dir}}"
+]
+
+[[task]]
+name = "left"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'echo left > {{build_dir}}/left.txt'"
+]
+
+[[task]]
+name = "right"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'echo right > {{build_dir}}/right.txt'"
+]
+
+[[task]]
+name = "merge"
+workdir = "{{root}}"
+join_on = ["left", "right"]
+commands = [
+  "sh -c 'cat {{build_dir}}/left.txt {{build_dir}}/right.txt > {{build_dir}}/joined.txt'",
+  "echo joined task graph into {{build_dir}}/joined.txt"
+]

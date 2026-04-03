@@ -115,8 +115,16 @@ commands = [
 [[task]]
 name = "qemu-run"
 workdir = "{{root}}"
-parallel = true
-depends_on = ["kernel-build", "initramfs"]
+join_on = ["kernel-build", "initramfs"]
 commands = [
   "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1024 -nographic -kernel {{deps_dir}}/linux/arch/arm64/boot/Image -initrd {{build_dir}}/initramfs.cpio.gz -append \"console=ttyAMA0 rdinit=/init\""
+]
+
+[[task]]
+name = "boot-flow"
+workdir = "{{root}}"
+parallel = true
+next = ["kernel-build", "initramfs", "qemu-run"]
+commands = [
+  "sh -c 'echo Starting Linux AArch64 build and QEMU boot flow'"
 ]

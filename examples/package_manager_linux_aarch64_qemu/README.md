@@ -3,8 +3,8 @@
 This example demonstrates package-manager capabilities around:
 
 - fetch-only source dependencies with `build = "none"`
-- shell-driven custom tasks via `[[task]]`, `depends_on`, `parallel`, `shell`, and
-  `mlang pkg run`
+- shell-driven custom tasks via `[[task]]`, `depends_on`, `join_on`, `next`,
+  `parallel`, `shell`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, creates a tiny initramfs, and boots it under QEMU.
@@ -37,9 +37,13 @@ commands = [
 ]
 
 [[task]]
-name = "qemu-run"
+name = "boot-flow"
 parallel = true
-depends_on = ["kernel-build", "initramfs"]
+next = ["kernel-build", "initramfs", "qemu-run"]
+
+[[task]]
+name = "qemu-run"
+join_on = ["kernel-build", "initramfs"]
 
 [tool.mlang]
 make_program = "gmake"
@@ -98,12 +102,14 @@ From this directory:
 
 ```sh
 ../../build/mlang pkg fetch
-../../build/mlang pkg run qemu-run
+../../build/mlang pkg run boot-flow
 ```
 
-`qemu-run` now triggers `kernel-build` and `initramfs` through task
-dependencies. With `parallel = true`, those prerequisite tasks can run
-concurrently before QEMU starts.
+`boot-flow` fans out into `kernel-build`, `initramfs`, and `qemu-run`.
+Because `qemu-run` declares `join_on = ["kernel-build", "initramfs"]`, it
+waits until the kernel image and initramfs are both ready. With
+`parallel = true`, the independent branches can run concurrently before QEMU
+starts.
 
 To only compile the Linux kernel image for AArch64 without booting QEMU:
 
@@ -130,8 +136,13 @@ Or step-by-step:
   handlers.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as
   `toolchain-check` and `docker-image`.
+- `next = ["task-name"]` lets a task jump forward to named downstream tasks
+  after its own commands succeed.
+- `join_on = ["task-a", "task-b"]` lets a task wait for named tasks, which is
+  the clean way to join parallel branches.
 - `parallel = true` lets a task run its `depends_on` prerequisites
-  concurrently. The task's own `commands` or `shell` still run sequentially.
+  concurrently, and also allows multiple `next` tasks to run concurrently. The
+  task's own `commands` or `shell` still run sequentially.
 - `shell = [ ... ]` lets the manifest define an inline shell script directly in
   TOML instead of shelling out to helper files.
 - `[task.host.darwin]` and `[task.host.linux]` let the manifest keep Linux as
