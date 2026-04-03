@@ -55,14 +55,26 @@ next_phases = ["compile"]
 [[task]]
 name = "compile-left"
 phase = "compile"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c 'echo phase-left > {{build_dir}}/phase-left.txt'"
+]
 
 [[task]]
 name = "compile-right"
 phase = "compile"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c 'echo phase-right > {{build_dir}}/phase-right.txt'"
+]
 
 [[task]]
 name = "phase-link"
 phase_join_on = ["compile"]
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c 'cat {{build_dir}}/phase-left.txt {{build_dir}}/phase-right.txt > {{build_dir}}/phase-joined.txt'"
+]
 ```
 
 Run it with:

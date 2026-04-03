@@ -53,6 +53,7 @@ name = "compile-left"
 phase = "compile"
 workdir = "{{root}}"
 commands = [
+  "mkdir -p {{build_dir}}",
   "sh -c 'echo phase-left > {{build_dir}}/phase-left.txt'"
 ]
 
@@ -61,6 +62,7 @@ name = "compile-right"
 phase = "compile"
 workdir = "{{root}}"
 commands = [
+  "mkdir -p {{build_dir}}",
   "sh -c 'echo phase-right > {{build_dir}}/phase-right.txt'"
 ]
 
@@ -69,6 +71,7 @@ name = "phase-link"
 phase_join_on = ["compile"]
 workdir = "{{root}}"
 commands = [
+  "mkdir -p {{build_dir}}",
   "sh -c 'cat {{build_dir}}/phase-left.txt {{build_dir}}/phase-right.txt > {{build_dir}}/phase-joined.txt'",
   "echo joined phase graph into {{build_dir}}/phase-joined.txt"
 ]
