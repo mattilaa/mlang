@@ -7,6 +7,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -296,12 +297,18 @@ struct TaskSpec
 {
     std::string name;
     std::string workdir;
+    std::optional<bool> parallel;
+    std::vector<std::string> dependsOn;
     std::vector<std::string> env;
+    std::vector<std::string> shellLines;
     std::vector<std::string> commands;
     struct HostOverride
     {
         std::string workdir;
+        std::optional<bool> parallel;
+        std::vector<std::string> dependsOn;
         std::vector<std::string> env;
+        std::vector<std::string> shellLines;
         std::vector<std::string> commands;
     };
     std::map<std::string, HostOverride> hostOverrides;
@@ -590,6 +597,14 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 task.workdir = unquote(taskValue);
             }
+            else if(taskKey == "parallel")
+            {
+                task.parallel = parse_toml_bool_value(taskValue);
+            }
+            else if(taskKey == "depends_on")
+            {
+                append_toml_string_list_value(taskValue, task.dependsOn);
+            }
             else if(taskKey == "command")
             {
                 std::string v = unquote(taskValue);
@@ -599,6 +614,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             else if(taskKey == "env")
             {
                 append_toml_string_list_value(taskValue, task.env);
+            }
+            else if(taskKey == "script" || taskKey == "shell")
+            {
+                append_toml_string_list_value(taskValue, task.shellLines);
             }
             else if(taskKey == "commands")
             {
@@ -613,6 +632,14 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 ov.workdir = unquote(taskValue);
             }
+            else if(taskKey == "parallel")
+            {
+                ov.parallel = parse_toml_bool_value(taskValue);
+            }
+            else if(taskKey == "depends_on")
+            {
+                append_toml_string_list_value(taskValue, ov.dependsOn);
+            }
             else if(taskKey == "command")
             {
                 std::string v = unquote(taskValue);
@@ -622,6 +649,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             else if(taskKey == "env")
             {
                 append_toml_string_list_value(taskValue, ov.env);
+            }
+            else if(taskKey == "script" || taskKey == "shell")
+            {
+                append_toml_string_list_value(taskValue, ov.shellLines);
             }
             else if(taskKey == "commands")
             {
@@ -1860,12 +1891,79 @@ static std::string current_host_name()
 #endif
 }
 
-static int run_task_for_manifest(const PackageManifest& pkg,
-                                 const std::string& taskName)
+static std::optional<std::filesystem::path>
+write_task_script(const PackageManifest& pkg, const std::string& taskName,
+                  const std::vector<std::string>& shellLines,
+                  const BuildConfig& buildConfig)
+{
+    if(shellLines.empty())
+        return std::nullopt;
+
+    std::filesystem::path scriptDir = pkg.packageDir / "build" / "task-scripts";
+    std::error_code ec;
+    std::filesystem::create_directories(scriptDir, ec);
+    if(ec)
+    {
+        std::cerr << "Failed to create task script directory "
+                  << scriptDir.string() << ": " << ec.message() << "\n";
+        return std::nullopt;
+    }
+
+    std::string safeName = taskName;
+    for(char& c : safeName)
+    {
+        if(!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-'))
+            c = '_';
+    }
+
+    std::filesystem::path scriptPath = scriptDir / (safeName + ".sh");
+    std::ofstream out(scriptPath, std::ios::binary);
+    if(!out)
+    {
+        std::cerr << "Failed to write task script " << scriptPath.string()
+                  << "\n";
+        return std::nullopt;
+    }
+    out << "#!/bin/sh\nset -eu\n";
+    for(const auto& line : shellLines)
+        out << expand_task_text(line, pkg, buildConfig) << "\n";
+    out.close();
+
+    std::filesystem::permissions(
+        scriptPath,
+        std::filesystem::perms::owner_read |
+            std::filesystem::perms::owner_write |
+            std::filesystem::perms::owner_exec |
+            std::filesystem::perms::group_read |
+            std::filesystem::perms::group_exec |
+            std::filesystem::perms::others_read |
+            std::filesystem::perms::others_exec,
+        std::filesystem::perm_options::replace, ec);
+    if(ec)
+    {
+        std::cerr << "Failed to make task script executable "
+                  << scriptPath.string() << ": " << ec.message() << "\n";
+        return std::nullopt;
+    }
+    return scriptPath;
+}
+
+static int run_task_for_manifest_impl(const PackageManifest& pkg,
+                                      const std::string& taskName,
+                                      std::vector<std::string>& taskStack)
 {
     const auto tasks = parse_task_specs(pkg.content);
     const BuildConfig buildConfig = parse_build_config(pkg.content);
     const std::string hostName = current_host_name();
+
+    if(std::find(taskStack.begin(), taskStack.end(), taskName) !=
+       taskStack.end())
+    {
+        std::cerr << "Detected cyclic task dependency while running '"
+                  << taskName << "' in " << pkg.manifestPath.string() << "\n";
+        return 1;
+    }
+
     for(const auto& task : tasks)
     {
         if(task.name != taskName)
@@ -1881,6 +1979,19 @@ static int run_task_for_manifest(const PackageManifest& pkg,
                                 hostOverride->env.end());
         }
 
+        std::vector<std::string> effectiveShell =
+            (hostOverride && !hostOverride->shellLines.empty())
+                ? hostOverride->shellLines
+                : task.shellLines;
+
+        std::vector<std::string> effectiveDependsOn = task.dependsOn;
+        if(hostOverride)
+        {
+            effectiveDependsOn.insert(effectiveDependsOn.end(),
+                                      hostOverride->dependsOn.begin(),
+                                      hostOverride->dependsOn.end());
+        }
+
         std::vector<std::string> effectiveCommands =
             (hostOverride && !hostOverride->commands.empty())
                 ? hostOverride->commands
@@ -1890,13 +2001,60 @@ static int run_task_for_manifest(const PackageManifest& pkg,
             (hostOverride && !hostOverride->workdir.empty())
                 ? hostOverride->workdir
                 : task.workdir;
+        bool effectiveParallel =
+            hostOverride && hostOverride->parallel.has_value()
+                ? hostOverride->parallel.value()
+                : task.parallel.value_or(false);
 
-        if(effectiveCommands.empty())
+        if(effectiveCommands.empty() && effectiveShell.empty())
         {
             std::cerr << "Task '" << taskName << "' in "
                       << pkg.manifestPath.string()
-                      << " has no commands.\n";
+                      << " has no commands or script.\n";
             return 1;
+        }
+
+        taskStack.push_back(taskName);
+        if(effectiveParallel && effectiveDependsOn.size() > 1)
+        {
+            std::vector<std::future<int>> futures;
+            futures.reserve(effectiveDependsOn.size());
+            for(const auto& dep : effectiveDependsOn)
+            {
+                std::vector<std::string> childStack = taskStack;
+                futures.push_back(std::async(std::launch::async,
+                                             [&pkg, dep, childStack]() mutable {
+                                                 return run_task_for_manifest_impl(
+                                                     pkg, dep, childStack);
+                                             }));
+            }
+            for(size_t i = 0; i < effectiveDependsOn.size(); ++i)
+            {
+                if(futures[i].get() != 0)
+                {
+                    std::cerr << "Task '" << taskName
+                              << "' dependency '" << effectiveDependsOn[i]
+                              << "' failed for "
+                              << pkg.manifestPath.string() << ".\n";
+                    taskStack.pop_back();
+                    return 1;
+                }
+            }
+        }
+        else
+        {
+            for(const auto& dep : effectiveDependsOn)
+            {
+                if(run_task_for_manifest_impl(pkg, dep, taskStack) != 0)
+                {
+                    std::cerr << "Task '" << taskName
+                              << "' dependency '" << dep
+                              << "' failed for "
+                              << pkg.manifestPath.string() << ".\n";
+                    taskStack.pop_back();
+                    return 1;
+                }
+            }
         }
 
         std::filesystem::path workdir =
@@ -1906,6 +2064,19 @@ static int run_task_for_manifest(const PackageManifest& pkg,
                                                         buildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
+
+        if(!effectiveShell.empty())
+        {
+            auto scriptPathOpt =
+                write_task_script(pkg, taskName, effectiveShell, buildConfig);
+            if(!scriptPathOpt.has_value())
+            {
+                taskStack.pop_back();
+                return 1;
+            }
+            effectiveCommands.insert(effectiveCommands.begin(),
+                                     "sh " + shell_quote(scriptPathOpt->string()));
+        }
 
         for(const auto& command : effectiveCommands)
         {
@@ -1926,12 +2097,21 @@ static int run_task_for_manifest(const PackageManifest& pkg,
             {
                 std::cerr << "Task '" << taskName << "' failed for "
                           << pkg.manifestPath.string() << ".\n";
+                taskStack.pop_back();
                 return 1;
             }
         }
+        taskStack.pop_back();
         return 0;
     }
     return -1;
+}
+
+static int run_task_for_manifest(const PackageManifest& pkg,
+                                 const std::string& taskName)
+{
+    std::vector<std::string> taskStack;
+    return run_task_for_manifest_impl(pkg, taskName, taskStack);
 }
 
 } // namespace

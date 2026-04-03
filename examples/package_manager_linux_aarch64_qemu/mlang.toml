@@ -29,8 +29,30 @@ commands = [
 ]
 
 [task.host.darwin]
+shell = [
+  "if ! command -v docker >/dev/null 2>&1; then",
+  "  echo \"Missing required tool in PATH: docker\"",
+  "  echo \"On macOS install Docker Desktop or another Docker runtime.\"",
+  "  exit 1",
+  "fi",
+  "if ! docker info >/dev/null 2>&1; then",
+  "  echo \"Docker is installed but the daemon is not reachable.\"",
+  "  echo \"Start Docker Desktop or your Docker runtime and retry.\"",
+  "  exit 1",
+  "fi"
+]
+
+[[task]]
+name = "docker-image"
+workdir = "{{root}}"
 commands = [
-  "sh {{root}}/scripts/darwin_toolchain_check.sh"
+  "sh -c 'echo docker image build is only used on darwin hosts'"
+]
+
+[task.host.darwin]
+depends_on = ["toolchain-check"]
+shell = [
+  "docker build -t mlang-linux-kernel-aarch64-qemu:latest -f {{root}}/docker/kernel-build.Dockerfile {{root}}"
 ]
 
 [[task]]
@@ -41,20 +63,15 @@ commands = [
 ]
 
 [task.host.darwin]
-env = [
-  "LLVM=1",
-  "LLVM_IAS=1",
-  "HOSTCC=/opt/homebrew/opt/llvm/bin/clang",
-  "HOSTCXX=/opt/homebrew/opt/llvm/bin/clang++",
-  "CC=/opt/homebrew/opt/llvm/bin/clang",
-  "AR=/opt/homebrew/opt/llvm/bin/llvm-ar",
-  "NM=/opt/homebrew/opt/llvm/bin/llvm-nm",
-  "OBJCOPY=/opt/homebrew/opt/llvm/bin/llvm-objcopy",
-  "RANLIB=/opt/homebrew/opt/llvm/bin/llvm-ranlib",
-  "STRIP=/opt/homebrew/opt/llvm/bin/llvm-strip"
-]
-commands = [
-  "sh {{root}}/scripts/darwin_kernel_make.sh {{root}} {{build_dir}} {{deps_dir}} ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig"
+depends_on = ["docker-image"]
+shell = [
+  "docker run --rm \\",
+  "  -v {{root}}:/workspace \\",
+  "  -w /workspace/build/deps/linux \\",
+  "  -e HOME=/tmp/mlang-docker-home \\",
+  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
+  "  mlang-linux-kernel-aarch64-qemu:latest \\",
+  "  sh -lc 'make ARCH=arm64 defconfig'"
 ]
 
 [[task]]
@@ -66,21 +83,22 @@ commands = [
 ]
 
 [task.host.darwin]
-env = [
-  "LLVM=1",
-  "LLVM_IAS=1",
-  "HOSTCC=/opt/homebrew/opt/llvm/bin/clang",
-  "HOSTCXX=/opt/homebrew/opt/llvm/bin/clang++",
-  "CC=/opt/homebrew/opt/llvm/bin/clang",
-  "AR=/opt/homebrew/opt/llvm/bin/llvm-ar",
-  "NM=/opt/homebrew/opt/llvm/bin/llvm-nm",
-  "OBJCOPY=/opt/homebrew/opt/llvm/bin/llvm-objcopy",
-  "RANLIB=/opt/homebrew/opt/llvm/bin/llvm-ranlib",
-  "STRIP=/opt/homebrew/opt/llvm/bin/llvm-strip"
-]
-commands = [
-  "sh {{root}}/scripts/darwin_kernel_make.sh {{root}} {{build_dir}} {{deps_dir}} ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
-  "sh {{root}}/scripts/darwin_kernel_make.sh {{root}} {{build_dir}} {{deps_dir}} ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+depends_on = ["docker-image"]
+shell = [
+  "docker run --rm \\",
+  "  -v {{root}}:/workspace \\",
+  "  -w /workspace/build/deps/linux \\",
+  "  -e HOME=/tmp/mlang-docker-home \\",
+  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
+  "  mlang-linux-kernel-aarch64-qemu:latest \\",
+  "  sh -lc 'make ARCH=arm64 defconfig'",
+  "docker run --rm \\",
+  "  -v {{root}}:/workspace \\",
+  "  -w /workspace/build/deps/linux \\",
+  "  -e HOME=/tmp/mlang-docker-home \\",
+  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
+  "  mlang-linux-kernel-aarch64-qemu:latest \\",
+  "  sh -lc 'make ARCH=arm64 -j${JOBS:-4} Image'"
 ]
 
 [[task]]
@@ -97,6 +115,8 @@ commands = [
 [[task]]
 name = "qemu-run"
 workdir = "{{root}}"
+parallel = true
+depends_on = ["kernel-build", "initramfs"]
 commands = [
   "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1024 -nographic -kernel {{deps_dir}}/linux/arch/arm64/boot/Image -initrd {{build_dir}}/initramfs.cpio.gz -append \"console=ttyAMA0 rdinit=/init\""
 ]

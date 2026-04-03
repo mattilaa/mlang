@@ -1,18 +1,17 @@
 # Linux AArch64 QEMU Package Example
 
-This example demonstrates two new package-manager capabilities:
+This example demonstrates package-manager capabilities around:
 
 - fetch-only source dependencies with `build = "none"`
-- shell-driven custom tasks via `[[task]]`, `env`, and `mlang pkg run`
+- shell-driven custom tasks via `[[task]]`, `depends_on`, `parallel`, `shell`, and
+  `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, creates a tiny initramfs, and boots it under QEMU.
 
-Linux is the recommended host for this example. macOS support is best-effort
-and requires extra Homebrew host-tool setup for LLVM, `lld`, and `libelf`.
-
-On macOS, the manifest prepends common Homebrew tool directories to `PATH` so
-newer Homebrew `make` and other tools can be used instead of `/usr/bin`.
+Linux is the recommended host for this example. On macOS, the manifest uses a
+Darwin-specific task override that builds the kernel inside Docker instead of
+trying to compile Linux host tools natively.
 
 ## Manifest highlights
 
@@ -22,17 +21,25 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [[task]]
 name = "kernel-build"
+shell = [
+  "docker run --rm \\",
+  "  -v {{root}}:/workspace \\",
+  "  -w /workspace/build/deps/linux \\",
+  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
+  "  mlang-linux-kernel-aarch64-qemu:latest \\",
+  "  sh -lc 'make ARCH=arm64 -j${JOBS:-4} Image'"
+]
+
+[task.host.linux]
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
 ]
 
-[task.host.darwin]
-env = [
-  "LLVM=1",
-  "LLVM_IAS=1",
-  "CC=/opt/homebrew/opt/llvm/bin/clang"
-]
+[[task]]
+name = "qemu-run"
+parallel = true
+depends_on = ["kernel-build", "initramfs"]
 
 [tool.mlang]
 make_program = "gmake"
@@ -58,19 +65,19 @@ commands = [
 
 - `make`
 - `gmake` on macOS if Homebrew `make` is installed and `make_program = "gmake"`
-- Homebrew `llvm`
-- Homebrew `lld`
-- Homebrew `libelf`
+- Docker Desktop or another Docker runtime on macOS
 - `cpio`
 - `gzip`
 - `qemu-system-aarch64`
 - an AArch64-capable kernel toolchain
 
-On macOS, install the toolchain first:
+On macOS, install:
 
 ```sh
-brew install llvm lld libelf make qemu cpio
+brew install make qemu cpio
 ```
+
+and install/start Docker Desktop.
 
 On Debian/Ubuntu, install:
 
@@ -91,11 +98,12 @@ From this directory:
 
 ```sh
 ../../build/mlang pkg fetch
-../../build/mlang pkg run toolchain-check
-../../build/mlang pkg run kernel-build
-../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
+
+`qemu-run` now triggers `kernel-build` and `initramfs` through task
+dependencies. With `parallel = true`, those prerequisite tasks can run
+concurrently before QEMU starts.
 
 To only compile the Linux kernel image for AArch64 without booting QEMU:
 
@@ -120,32 +128,22 @@ Or step-by-step:
 - `build = "none"` is important here because the Linux source tree is not built
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
-- `make_program = "gmake"` lets the package pick the Homebrew GNU Make binary
-  directly for tasks and built-in `build = "make"` dependency builds.
-- `env = ["KEY=value"]` lets each task set toolchain variables such as
-  `LLVM=1`, `LLVM_IAS=1`, and `CC` without hardcoding them into every command.
-- `[task.host.darwin]` lets the manifest keep Linux as the simple default path
-  while adding a macOS-specific task override only where it is needed.
+- `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as
+  `toolchain-check` and `docker-image`.
+- `parallel = true` lets a task run its `depends_on` prerequisites
+  concurrently. The task's own `commands` or `shell` still run sequentially.
+- `shell = [ ... ]` lets the manifest define an inline shell script directly in
+  TOML instead of shelling out to helper files.
+- `[task.host.darwin]` and `[task.host.linux]` let the manifest keep Linux as
+  the simple default path while using Docker specifically on macOS.
 - `{{make}}` expands to the configured make executable from
   `[tool.mlang].make_program`.
 - `path_entries` in `mlang.toml` lets the package prepend Homebrew tool
   directories to `PATH`, which is useful on macOS when `/usr/bin/make` is too
   old for the kernel tree being built.
-- The kernel build works on macOS by running the Linux kernel in LLVM mode
-  (`LLVM=1`, `LLVM_IAS=1`) so it picks up Homebrew `clang` and `ld.lld`
-  instead of Apple `/usr/bin/ld`.
-- On macOS, the build tasks also resolve Homebrew `libelf`, export
-  `PKG_CONFIG_PATH`, add host include/library flags, and generate a local
-  `build/host-compat/elf.h` shim that maps the kernel's `<elf.h>` include to
-  Homebrew `libelf/sys_elf.h`.
-- `toolchain-check` fails early if the required Homebrew LLVM, `ld.lld`, or
-  `libelf` metadata is missing.
-- Even with those fixes, macOS remains best-effort. Linux is the more reliable
-  host for full kernel builds and future kernel version changes.
-- The current macOS path gets past the missing GNU Make, linker, and `elf.h`
-  failures, but Linux host tools such as `scripts/sorttable` can still hit ABI
-  mismatches against Homebrew `libelf`. Treat Linux as the supported host for
-  reproducible full-kernel builds.
+- On macOS, `toolchain-check` verifies Docker availability, `docker-image`
+  builds the Linux kernel builder image, and `kernel-build` runs inside that
+  container. This avoids the native macOS `libelf`/kernel-host-tool mismatch.
 - The `{{root}}`, `{{build_dir}}`, and `{{deps_dir}}` placeholders are
   expanded by `mlang pkg run` before the shell commands execute.
 - This example is intentionally task-driven. Its primary goal is orchestrating

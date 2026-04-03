@@ -851,9 +851,6 @@ Linux AArch64 kernel example sequence:
 ```sh
 cd examples/package_manager_linux_aarch64_qemu
 ../../build/mlang pkg fetch
-../../build/mlang pkg run toolchain-check
-../../build/mlang pkg run kernel-build
-../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
 
@@ -873,7 +870,10 @@ Supported `[[task]]` keys:
 
 - `name`
 - `workdir`
+- `parallel`
+- `depends_on`
 - `env`
+- `shell`
 - `command`
 - `commands`
 
@@ -886,7 +886,10 @@ Host-conditional task overrides:
 Override behavior:
 
 - override `workdir` replaces the base `workdir`
+- override `parallel` replaces the base `parallel`
+- override `depends_on` appends after the base `depends_on`
 - override `env` appends after the base `env`
+- override `shell` replaces the base inline shell script
 - override `command` / `commands` replace the base task commands
 
 Task placeholders:
@@ -901,9 +904,11 @@ The Linux kernel example uses:
 
 - `toolchain-check` to verify the required linker and LLVM tools exist before
   starting the kernel build
+- `docker-image` to build the Darwin-only Docker image used for kernel builds
 - `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
 - `initramfs` to pack the example initramfs
-- `qemu-run` to boot the resulting kernel under QEMU
+- `qemu-run` to boot the resulting kernel under QEMU after its prerequisites
+  complete, optionally in parallel
 
 Linux is the recommended host for that example. macOS support is best-effort
 and uses Homebrew `llvm`, `lld`, and `libelf` with extra host flags and an

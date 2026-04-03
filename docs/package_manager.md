@@ -316,16 +316,20 @@ Packages can define shell-driven tasks:
 [[task]]
 name = "kernel-build"
 workdir = "{{root}}"
+depends_on = ["docker-image"]
+shell = [
+  "docker run --rm \\",
+  "  -v {{root}}:/workspace \\",
+  "  -w /workspace/build/deps/linux \\",
+  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
+  "  mlang-linux-kernel-aarch64-qemu:latest \\",
+  "  sh -lc 'make ARCH=arm64 -j${JOBS:-4} Image'"
+]
+
+[task.host.linux]
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
-]
-
-[task.host.darwin]
-env = [
-  "LLVM=1",
-  "LLVM_IAS=1",
-  "CC=/opt/homebrew/opt/llvm/bin/clang"
 ]
 
 [tool.mlang]
@@ -339,9 +343,6 @@ Linux AArch64 kernel example sequence:
 ```sh
 cd examples/package_manager_linux_aarch64_qemu
 ../../build/mlang pkg fetch
-../../build/mlang pkg run toolchain-check
-../../build/mlang pkg run kernel-build
-../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
 
@@ -361,7 +362,10 @@ Supported task keys:
 
 - `name`
 - `workdir`
+- `parallel`
+- `depends_on`
 - `env`
+- `shell`
 - `command`
 - `commands`
 
@@ -374,7 +378,10 @@ Host-conditional task overrides:
 When a host override exists for the current host:
 
 - override `workdir` replaces the base `workdir`
+- override `parallel` replaces the base `parallel`
+- override `depends_on` appends after the base `depends_on`
 - override `env` appends after the base `env`
+- override `shell` replaces the base inline shell script
 - override `command` / `commands` replace the base task commands
 
 Supported placeholders in `workdir` and commands:
@@ -389,9 +396,11 @@ The Linux kernel example uses:
 
 - `toolchain-check` to fail early if required LLVM or `ld.lld` binaries are
   missing
+- `docker-image` to build the Darwin-only Linux kernel builder image
 - `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
 - `initramfs` to build the example initramfs archive
-- `qemu-run` to boot the generated image under QEMU
+- `qemu-run` to boot the generated image under QEMU after its prerequisites
+  complete, optionally in parallel
 
 Host guidance:
 
