@@ -162,6 +162,9 @@ Current task graph features:
 - `depends_on` for prerequisites
 - `next` for downstream jumps to named tasks
 - `join_on` for waiting on named tasks before continuing
+- `phase` for grouping tasks into named compile/build phases
+- `next_phases` for launching all tasks in a named phase
+- `phase_join_on` for waiting until all tasks in a phase complete
 - `parallel = true` for concurrent prerequisite/downstream branches
 - `shell = [ ... ]` / `script = [ ... ]` for inline shell scripts stored under `build/task-scripts/`
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
@@ -194,6 +197,29 @@ Run it from `examples/package_manager_task_graph`:
 ```sh
 ../../build/mlang pkg run workflow
 cat build/joined.txt
+```
+
+Phase-based barriers are also supported:
+
+```toml
+[[task]]
+name = "phase-workflow"
+parallel = true
+next = ["phase-link"]
+next_phases = ["compile"]
+
+[[task]]
+name = "compile-left"
+phase = "compile"
+
+[[task]]
+name = "compile-right"
+phase = "compile"
+
+[[task]]
+name = "phase-link"
+phase_join_on = ["compile"]
+commands = ["sh -c 'cat {{build_dir}}/phase-left.txt {{build_dir}}/phase-right.txt > {{build_dir}}/phase-joined.txt'"]
 ```
 
 ## Stdlib Linking

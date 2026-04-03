@@ -37,3 +37,38 @@ commands = [
   "sh -c 'cat {{build_dir}}/left.txt {{build_dir}}/right.txt > {{build_dir}}/joined.txt'",
   "echo joined task graph into {{build_dir}}/joined.txt"
 ]
+
+[[task]]
+name = "phase-workflow"
+workdir = "{{root}}"
+parallel = true
+next = ["phase-link"]
+next_phases = ["compile"]
+commands = [
+  "mkdir -p {{build_dir}}"
+]
+
+[[task]]
+name = "compile-left"
+phase = "compile"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'echo phase-left > {{build_dir}}/phase-left.txt'"
+]
+
+[[task]]
+name = "compile-right"
+phase = "compile"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'echo phase-right > {{build_dir}}/phase-right.txt'"
+]
+
+[[task]]
+name = "phase-link"
+phase_join_on = ["compile"]
+workdir = "{{root}}"
+commands = [
+  "sh -c 'cat {{build_dir}}/phase-left.txt {{build_dir}}/phase-right.txt > {{build_dir}}/phase-joined.txt'",
+  "echo joined phase graph into {{build_dir}}/phase-joined.txt"
+]

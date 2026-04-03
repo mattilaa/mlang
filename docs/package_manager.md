@@ -118,6 +118,9 @@ Tasks can model a small workflow graph with:
 - `depends_on`
 - `next`
 - `join_on`
+- `phase`
+- `next_phases`
+- `phase_join_on`
 - `parallel`
 - `command` / `commands`
 - `shell` / `script`
@@ -259,11 +262,15 @@ Custom tasks are executed with `mlang pkg run <task-name>`.
 Supported task keys:
 
 - `name`
+- `phase`
 - `workdir`
 - `parallel`
 - `depends_on`
+- `phase_depends_on`
 - `next`
+- `next_phases`
 - `join_on`
+- `phase_join_on`
 - `env`
 - `command`
 - `commands`
@@ -272,8 +279,11 @@ Supported task keys:
 Task semantics:
 
 - `depends_on` runs prerequisite tasks before the current task.
+- `phase_depends_on` waits for every task tagged with a named phase.
 - `next` launches named downstream tasks after the current task succeeds.
+- `next_phases` launches every task tagged with a named phase.
 - `join_on` waits for named tasks before the current task runs.
+- `phase_join_on` waits for every task tagged with a named phase.
 - `parallel = true` allows multiple `depends_on` or `next` branches to run
   concurrently.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
@@ -327,6 +337,37 @@ Running:
 
 starts `left`, `right`, and `merge`. The `merge` task waits until both branch
 tasks are complete because of `join_on`.
+
+Phase example:
+
+```toml
+[[task]]
+name = "phase-workflow"
+parallel = true
+next = ["phase-link"]
+next_phases = ["compile"]
+
+[[task]]
+name = "compile-left"
+phase = "compile"
+commands = [
+  "sh -c 'echo phase-left > {{build_dir}}/phase-left.txt'"
+]
+
+[[task]]
+name = "compile-right"
+phase = "compile"
+commands = [
+  "sh -c 'echo phase-right > {{build_dir}}/phase-right.txt'"
+]
+
+[[task]]
+name = "phase-link"
+phase_join_on = ["compile"]
+commands = [
+  "sh -c 'cat {{build_dir}}/phase-left.txt {{build_dir}}/phase-right.txt > {{build_dir}}/phase-joined.txt'"
+]
+```
 
 Key details:
 

@@ -298,21 +298,29 @@ struct BuildTarget
 struct TaskSpec
 {
     std::string name;
+    std::string phase;
     std::string workdir;
     std::optional<bool> parallel;
     std::vector<std::string> dependsOn;
+    std::vector<std::string> phaseDependsOn;
     std::vector<std::string> joinOn;
+    std::vector<std::string> phaseJoinOn;
     std::vector<std::string> nextTasks;
+    std::vector<std::string> nextPhases;
     std::vector<std::string> env;
     std::vector<std::string> shellLines;
     std::vector<std::string> commands;
     struct HostOverride
     {
+        std::string phase;
         std::string workdir;
         std::optional<bool> parallel;
         std::vector<std::string> dependsOn;
+        std::vector<std::string> phaseDependsOn;
         std::vector<std::string> joinOn;
+        std::vector<std::string> phaseJoinOn;
         std::vector<std::string> nextTasks;
+        std::vector<std::string> nextPhases;
         std::vector<std::string> env;
         std::vector<std::string> shellLines;
         std::vector<std::string> commands;
@@ -353,6 +361,46 @@ static bool parse_toml_bool_value(const std::string& value)
         return static_cast<char>(std::tolower(c));
     });
     return t == "true" || t == "1" || t == "\"true\"";
+}
+
+static void append_unique_strings(std::vector<std::string>& dst,
+                                  const std::vector<std::string>& src)
+{
+    for(const auto& value : src)
+    {
+        if(value.empty())
+            continue;
+        if(std::find(dst.begin(), dst.end(), value) == dst.end())
+            dst.push_back(value);
+    }
+}
+
+static std::vector<std::string>
+task_names_for_phases(const std::vector<TaskSpec>& tasks,
+                      const std::vector<std::string>& phases,
+                      const std::string& hostName)
+{
+    std::vector<std::string> names;
+    for(const auto& task : tasks)
+    {
+        std::string effectivePhase = task.phase;
+        auto hostIt = task.hostOverrides.find(hostName);
+        if(hostIt != task.hostOverrides.end() &&
+           !hostIt->second.phase.empty())
+        {
+            effectivePhase = hostIt->second.phase;
+        }
+        if(effectivePhase.empty())
+            continue;
+        if(std::find(phases.begin(), phases.end(), effectivePhase) ==
+           phases.end())
+        {
+            continue;
+        }
+        if(std::find(names.begin(), names.end(), task.name) == names.end())
+            names.push_back(task.name);
+    }
+    return names;
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -599,6 +647,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 task.name = unquote(taskValue);
             }
+            else if(taskKey == "phase")
+            {
+                task.phase = unquote(taskValue);
+            }
             else if(taskKey == "workdir")
             {
                 task.workdir = unquote(taskValue);
@@ -611,13 +663,25 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 append_toml_string_list_value(taskValue, task.dependsOn);
             }
+            else if(taskKey == "phase_depends_on")
+            {
+                append_toml_string_list_value(taskValue, task.phaseDependsOn);
+            }
             else if(taskKey == "join_on")
             {
                 append_toml_string_list_value(taskValue, task.joinOn);
             }
+            else if(taskKey == "phase_join_on")
+            {
+                append_toml_string_list_value(taskValue, task.phaseJoinOn);
+            }
             else if(taskKey == "next")
             {
                 append_toml_string_list_value(taskValue, task.nextTasks);
+            }
+            else if(taskKey == "next_phases")
+            {
+                append_toml_string_list_value(taskValue, task.nextPhases);
             }
             else if(taskKey == "command")
             {
@@ -642,7 +706,11 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         auto apply_override_kv = [&](TaskSpec::HostOverride& ov,
                                      const std::string& taskKey,
                                      const std::string& taskValue) {
-            if(taskKey == "workdir")
+            if(taskKey == "phase")
+            {
+                ov.phase = unquote(taskValue);
+            }
+            else if(taskKey == "workdir")
             {
                 ov.workdir = unquote(taskValue);
             }
@@ -654,13 +722,25 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 append_toml_string_list_value(taskValue, ov.dependsOn);
             }
+            else if(taskKey == "phase_depends_on")
+            {
+                append_toml_string_list_value(taskValue, ov.phaseDependsOn);
+            }
             else if(taskKey == "join_on")
             {
                 append_toml_string_list_value(taskValue, ov.joinOn);
             }
+            else if(taskKey == "phase_join_on")
+            {
+                append_toml_string_list_value(taskValue, ov.phaseJoinOn);
+            }
             else if(taskKey == "next")
             {
                 append_toml_string_list_value(taskValue, ov.nextTasks);
+            }
+            else if(taskKey == "next_phases")
+            {
+                append_toml_string_list_value(taskValue, ov.nextPhases);
             }
             else if(taskKey == "command")
             {
@@ -2037,6 +2117,18 @@ static int run_task_for_manifest_impl(
                                       hostOverride->dependsOn.begin(),
                                       hostOverride->dependsOn.end());
         }
+        std::vector<std::string> effectivePhaseDependsOn = task.phaseDependsOn;
+        if(hostOverride)
+        {
+            effectivePhaseDependsOn.insert(
+                effectivePhaseDependsOn.end(),
+                hostOverride->phaseDependsOn.begin(),
+                hostOverride->phaseDependsOn.end());
+        }
+        append_unique_strings(
+            effectiveDependsOn,
+            task_names_for_phases(tasks, effectivePhaseDependsOn, hostName));
+
         std::vector<std::string> effectiveJoinOn = task.joinOn;
         if(hostOverride)
         {
@@ -2044,6 +2136,17 @@ static int run_task_for_manifest_impl(
                                    hostOverride->joinOn.begin(),
                                    hostOverride->joinOn.end());
         }
+        std::vector<std::string> effectivePhaseJoinOn = task.phaseJoinOn;
+        if(hostOverride)
+        {
+            effectivePhaseJoinOn.insert(
+                effectivePhaseJoinOn.end(),
+                hostOverride->phaseJoinOn.begin(),
+                hostOverride->phaseJoinOn.end());
+        }
+        append_unique_strings(
+            effectiveJoinOn,
+            task_names_for_phases(tasks, effectivePhaseJoinOn, hostName));
         effectiveDependsOn.insert(effectiveDependsOn.end(),
                                   effectiveJoinOn.begin(),
                                   effectiveJoinOn.end());
@@ -2055,6 +2158,16 @@ static int run_task_for_manifest_impl(
                                  hostOverride->nextTasks.begin(),
                                  hostOverride->nextTasks.end());
         }
+        std::vector<std::string> effectiveNextPhases = task.nextPhases;
+        if(hostOverride)
+        {
+            effectiveNextPhases.insert(effectiveNextPhases.end(),
+                                       hostOverride->nextPhases.begin(),
+                                       hostOverride->nextPhases.end());
+        }
+        append_unique_strings(
+            effectiveNext,
+            task_names_for_phases(tasks, effectiveNextPhases, hostName));
 
         std::vector<std::string> effectiveCommands =
             (hostOverride && !hostOverride->commands.empty())
