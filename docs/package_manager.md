@@ -172,10 +172,14 @@ cjson = { git = "https://github.com/DaveGamble/cJSON.git", build = "cmake", cmak
 Currently supported dependency keys:
 
 - `git`
+- `url`
+- `archive`
 - `rev`
 - `tag`
 - `build`
 - `cmake_args`
+- `subdir`
+- `strip_components`
 
 Current supported build systems:
 
@@ -184,6 +188,17 @@ Current supported build systems:
 - `make`
 
 If `build` is omitted, `cmake` is used.
+
+Archive source example:
+
+```toml
+[dependencies]
+cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+```
+
+Current supported archive source type:
+
+- `tar.gz`
 
 ### `[c-dependencies]`
 
@@ -224,6 +239,20 @@ Key details:
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
 
+### `[workspace]`
+
+Workspace roots can declare recursive package discovery under selected
+subdirectories:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Each listed member is resolved relative to the root manifest. If the member is
+a directory, `mlang pkg fetch`, `mlang pkg build`, and `mlang pkg clean`
+recursively scan for child `mlang.toml` files beneath it.
+
 ## Example Workflow
 
 ```sh
@@ -234,6 +263,12 @@ An explicit CLI optimization flag such as `-O3` overrides
 ./build/mlang pkg build
 ./build/mlang pkg clean
 ```
+
+Workspace example in this repository:
+
+- `examples/package_manager_workspace_fetch`
+  Demonstrates recursive workspace package discovery plus GitHub `git` and
+  `tar.gz` dependency fetching.
 
 ## See Also
 

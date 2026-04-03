@@ -968,10 +968,43 @@ static std::optional<int> run_mlang_frontend(int argc, char** argv)
     return std::nullopt;
 }
 
+static bool manifest_requires_cpp_pkg_frontend()
+{
+    auto manifestOpt = find_manifest_path(std::filesystem::current_path());
+    if(!manifestOpt.has_value())
+        return false;
+
+    std::ifstream in(*manifestOpt, std::ios::binary);
+    if(!in)
+        return false;
+    std::string content((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+    if(content.empty())
+        return false;
+
+    if(content.find("[workspace]") != std::string::npos)
+        return true;
+    if(content.find("opt_level") != std::string::npos)
+        return true;
+    if(content.find("target_arch") != std::string::npos)
+        return true;
+    if(content.find("compiler_flags") != std::string::npos)
+        return true;
+    if(content.find("linker_flags") != std::string::npos)
+        return true;
+    if(content.find("lib_paths") != std::string::npos)
+        return true;
+    if(content.find("libs") != std::string::npos)
+        return true;
+    return false;
+}
+
 static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
 {
     namespace fs = std::filesystem;
     if(argc < 2 || std::string(argv[1]) != "pkg")
+        return std::nullopt;
+    if(manifest_requires_cpp_pkg_frontend())
         return std::nullopt;
 
     auto srcOpt = find_mlang_pkg_frontend_source(argv[0]);

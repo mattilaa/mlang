@@ -1,0 +1,23 @@
+mod cjson;
+
+use cjson::*;
+
+fn main() -> i32 {
+    let root: i64 = cJSON_Parse("{\"value\": 42}");
+    if root == 0 {
+        eprintln!("cJSON_Parse failed");
+        return 1;
+    }
+
+    let value: i64 = cJSON_GetObjectItemCaseSensitive(root, "value");
+    if value == 0 {
+        eprintln!("missing value");
+        cJSON_Delete(root);
+        return 1;
+    }
+
+    let number: f64 = cJSON_GetNumberValue(value);
+    println!("git workspace demo value={}", number);
+    cJSON_Delete(root);
+    return 0;
+}

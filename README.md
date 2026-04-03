@@ -707,6 +707,38 @@ Supported keys are:
 For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
 
+Workspace roots can also declare recursive package discovery:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Each listed member is treated as a directory root under the current project.
+`mlang pkg fetch`, `mlang pkg build`, and `mlang pkg clean` recursively scan
+for `mlang.toml` files under those roots and run package operations for each
+discovered subpackage.
+
+Source dependencies can now come from Git or from a `tar.gz` URL:
+
+```toml
+[dependencies]
+cjson_git = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+cjson_tar = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+```
+
+Supported source dependency keys are:
+
+- `git`
+- `url`
+- `archive`
+- `rev`
+- `tag`
+- `build`
+- `cmake_args`
+- `subdir`
+- `strip_components`
+
 Example workflow with config-driven defaults:
 
 ```sh
@@ -716,6 +748,12 @@ Example workflow with config-driven defaults:
 ./build/mlang pkg build -O3
 ./build/mlang pkg clean
 ```
+
+Workspace example:
+
+- `examples/package_manager_workspace_fetch`
+  Demonstrates recursive workspace member discovery plus GitHub `git` and
+  `tar.gz` source fetching in sibling subpackages.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:

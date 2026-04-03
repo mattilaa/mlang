@@ -262,10 +262,14 @@ struct DepSpec
 {
     std::string name;
     std::string git;
+    std::string url;
+    std::string archiveType;
     std::string rev;
     std::string tag;
     std::string build;
     std::string cmakeArgs;
+    std::string subdir;
+    int stripComponents = 1;
 };
 
 struct LinkFlags
@@ -273,6 +277,9 @@ struct LinkFlags
     std::vector<std::string> libDirs;
     std::vector<std::string> libs;
 };
+
+static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir,
+                                            const DepSpec& dep);
 
 static std::vector<std::string> split_csv(std::string_view input)
 {
@@ -352,7 +359,21 @@ static std::map<std::string, std::string> parse_inline_table(
     return kv;
 }
 
-static std::vector<DepSpec> parse_git_deps(const std::string& content)
+static int parse_int_or_default(const std::string& text, int fallback)
+{
+    if(text.empty())
+        return fallback;
+    try
+    {
+        return std::stoi(text);
+    }
+    catch(...)
+    {
+        return fallback;
+    }
+}
+
+static std::vector<DepSpec> parse_source_deps(const std::string& content)
 {
     std::istringstream in(content);
     std::string line;
@@ -380,11 +401,17 @@ static std::vector<DepSpec> parse_git_deps(const std::string& content)
             continue;
         auto kv = parse_inline_table(t);
         auto gitIt = kv.find("git");
-        if(gitIt == kv.end())
+        auto urlIt = kv.find("url");
+        if(gitIt == kv.end() && urlIt == kv.end())
             continue;
         DepSpec dep;
         dep.name = name;
-        dep.git = gitIt->second;
+        if(gitIt != kv.end())
+            dep.git = gitIt->second;
+        if(urlIt != kv.end())
+            dep.url = urlIt->second;
+        if(auto it = kv.find("archive"); it != kv.end())
+            dep.archiveType = it->second;
         if(auto it = kv.find("rev"); it != kv.end())
             dep.rev = it->second;
         if(auto it = kv.find("tag"); it != kv.end())
@@ -393,11 +420,98 @@ static std::vector<DepSpec> parse_git_deps(const std::string& content)
             dep.build = it->second;
         if(auto it = kv.find("cmake_args"); it != kv.end())
             dep.cmakeArgs = it->second;
+        if(auto it = kv.find("subdir"); it != kv.end())
+            dep.subdir = it->second;
+        if(auto it = kv.find("strip_components"); it != kv.end())
+            dep.stripComponents = parse_int_or_default(it->second, 1);
+        if(dep.archiveType.empty() && !dep.url.empty())
+        {
+            if(dep.url.size() >= 7 &&
+               dep.url.substr(dep.url.size() - 7) == ".tar.gz")
+                dep.archiveType = "tar.gz";
+            else if(dep.url.size() >= 4 &&
+                    dep.url.substr(dep.url.size() - 4) == ".tgz")
+                dep.archiveType = "tar.gz";
+        }
         if(dep.build.empty())
             dep.build = "cmake";
         deps.push_back(dep);
     }
     return deps;
+}
+
+static std::vector<std::string> parse_workspace_members(
+    const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::string section;
+    std::vector<std::string> out;
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t.front() == '[' && t.back() == ']')
+        {
+            section = t.substr(1, t.size() - 2);
+            continue;
+        }
+        if(section != "workspace")
+            continue;
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        std::string key = trim(t.substr(0, eq));
+        if(key != "members")
+            continue;
+        std::string value = trim(t.substr(eq + 1));
+        if(value.empty())
+            return out;
+        if(value.front() == '[' && value.back() == ']')
+        {
+            for(const auto& part : split_toml_array(
+                    value.substr(1, value.size() - 2)))
+            {
+                std::string v = unquote(part);
+                if(!v.empty())
+                    out.push_back(v);
+            }
+            return out;
+        }
+        std::string single = unquote(value);
+        if(!single.empty())
+            out.push_back(single);
+        return out;
+    }
+    return out;
+}
+
+static bool has_section(const std::string& content, const std::string& wanted)
+{
+    std::istringstream in(content);
+    std::string line;
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t == ("[" + wanted + "]"))
+            return true;
+    }
+    return false;
+}
+
+static std::string shell_quote(const std::string& s)
+{
+    std::string out = "'";
+    for(char c : s)
+    {
+        if(c == '\'')
+            out += "'\\''";
+        else
+            out.push_back(c);
+    }
+    out += "'";
+    return out;
 }
 
 static bool extract_lib_name(const std::filesystem::path& path,
@@ -449,7 +563,7 @@ static LinkFlags collect_dep_link_flags(
     std::unordered_set<std::string> libs;
     for(const auto& dep : deps)
     {
-        std::filesystem::path path = depsDir / dep.name;
+        std::filesystem::path path = dep_source_dir(depsDir, dep);
         scan_lib_dir(path / "build" / "lib", libDirs, libs);
         scan_lib_dir(path / "build", libDirs, libs);
         scan_lib_dir(path / "lib", libDirs, libs);
@@ -462,10 +576,112 @@ static LinkFlags collect_dep_link_flags(
     return flags;
 }
 
+struct PackageManifest
+{
+    std::filesystem::path manifestPath;
+    std::filesystem::path packageDir;
+    std::string content;
+};
+
+static std::vector<std::filesystem::path> discover_workspace_manifests(
+    const std::filesystem::path& manifestPath,
+    const std::string& content)
+{
+    namespace fs = std::filesystem;
+    std::vector<std::filesystem::path> out;
+    std::unordered_set<std::string> seen;
+
+    const fs::path rootDir = manifestPath.parent_path();
+    const auto members = parse_workspace_members(content);
+    for(const auto& member : members)
+    {
+        fs::path base = rootDir / member;
+        std::error_code ec;
+        if(fs::is_regular_file(base, ec))
+        {
+            fs::path candidate = base.filename() == "mlang.toml"
+                                     ? base
+                                     : (base / "mlang.toml");
+            if(fs::exists(candidate, ec))
+            {
+                std::string key = candidate.lexically_normal().string();
+                if(seen.insert(key).second)
+                    out.push_back(candidate);
+            }
+            continue;
+        }
+        if(!fs::is_directory(base, ec))
+            continue;
+
+        for(fs::recursive_directory_iterator it(base, ec), end; it != end;
+            it.increment(ec))
+        {
+            if(ec)
+                break;
+            const fs::path p = it->path();
+            if(it->is_directory(ec))
+            {
+                const std::string name = p.filename().string();
+                if(name == ".git" || name == "build" || name == "docs")
+                    it.disable_recursion_pending();
+                continue;
+            }
+            if(!it->is_regular_file(ec) || p.filename() != "mlang.toml")
+                continue;
+            std::string key = p.lexically_normal().string();
+            if(seen.insert(key).second)
+                out.push_back(p);
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+static std::vector<PackageManifest> collect_target_manifests(
+    const std::filesystem::path& manifestPath)
+{
+    namespace fs = std::filesystem;
+    std::vector<PackageManifest> out;
+    fs::path manifestAbs = fs::absolute(manifestPath);
+    std::ifstream in(manifestAbs, std::ios::binary);
+    if(!in)
+        return out;
+    std::string content((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+    if(content.empty())
+        return out;
+
+    if(has_section(content, "package"))
+    {
+        out.push_back(PackageManifest { manifestAbs, manifestAbs.parent_path(),
+                                        content });
+    }
+    for(const auto& child : discover_workspace_manifests(manifestAbs, content))
+    {
+        fs::path childAbs = fs::absolute(child);
+        std::ifstream childIn(childAbs, std::ios::binary);
+        if(!childIn)
+            continue;
+        std::string childContent((std::istreambuf_iterator<char>(childIn)),
+                                 std::istreambuf_iterator<char>());
+        if(childContent.empty() || !has_section(childContent, "package"))
+            continue;
+        out.push_back(PackageManifest { childAbs, childAbs.parent_path(),
+                                        childContent });
+    }
+    return out;
+}
+
 static int run_command(const std::string& cmd)
 {
     std::cout << cmd << std::endl;
     return std::system(cmd.c_str());
+}
+
+static int run_command_in_dir(const std::filesystem::path& dir,
+                              const std::string& cmd)
+{
+    return run_command("cd " + shell_quote(dir.string()) + " && " + cmd);
 }
 
 static std::optional<std::string> run_command_capture(const std::string& cmd)
@@ -524,52 +740,121 @@ static std::vector<std::string> split_shell_tokens(std::string_view input)
     return out;
 }
 
-static int fetch_git_dep(const DepSpec& dep,
-                         const std::filesystem::path& depsDir)
+static std::filesystem::path dep_checkout_dir(
+    const std::filesystem::path& depsDir, const DepSpec& dep)
 {
-    std::filesystem::path path = depsDir / dep.name;
+    return depsDir / dep.name;
+}
+
+static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir,
+                                            const DepSpec& dep)
+{
+    std::filesystem::path path = dep_checkout_dir(depsDir, dep);
+    if(!dep.subdir.empty())
+        path /= dep.subdir;
+    return path;
+}
+
+static int fetch_git_dep(const DepSpec& dep,
+                         const std::filesystem::path& depsDir,
+                         bool updateExisting)
+{
+    std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
     {
-        std::string cloneCmd = "git clone " + dep.git + " " + path.string();
+        std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
+                               shell_quote(path.string());
         if(run_command(cloneCmd) != 0)
             return 1;
     }
-    else
+    else if(updateExisting)
     {
-        std::string fetchCmd = "git -C " + path.string() + " fetch --all --tags";
+        std::string fetchCmd = "git -C " + shell_quote(path.string()) +
+                               " fetch --all --tags";
         if(run_command(fetchCmd) != 0)
             return 1;
     }
 
     if(!dep.rev.empty())
     {
-        std::string checkout = "git -C " + path.string() + " checkout " + dep.rev;
+        std::string checkout = "git -C " + shell_quote(path.string()) +
+                               " checkout " + shell_quote(dep.rev);
         if(run_command(checkout) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
     {
-        std::string checkout =
-            "git -C " + path.string() + " checkout tags/" + dep.tag;
+        std::string checkout = "git -C " + shell_quote(path.string()) +
+                               " checkout " +
+                               shell_quote("tags/" + dep.tag);
         if(run_command(checkout) != 0)
             return 1;
     }
     return 0;
 }
 
+static int fetch_archive_dep(const DepSpec& dep,
+                             const std::filesystem::path& depsDir)
+{
+    if(dep.url.empty())
+        return 1;
+    if(dep.archiveType != "tar.gz")
+    {
+        std::cerr << "Unsupported archive type for dependency '" << dep.name
+                  << "': " << dep.archiveType << "\n";
+        return 1;
+    }
+
+    std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
+    if(std::filesystem::exists(checkoutDir))
+        return 0;
+
+    std::filesystem::create_directories(depsDir);
+    std::filesystem::path archivePath = depsDir / (dep.name + ".tar.gz");
+    std::filesystem::create_directories(checkoutDir);
+
+    std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
+                              " -o " + shell_quote(archivePath.string());
+    if(run_command(downloadCmd) != 0)
+        return 1;
+
+    std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
+                             " -C " + shell_quote(checkoutDir.string());
+    if(dep.stripComponents > 0)
+    {
+        extractCmd += " --strip-components=" +
+                      std::to_string(dep.stripComponents);
+    }
+    if(run_command(extractCmd) != 0)
+        return 1;
+    return 0;
+}
+
+static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
+                     bool updateExisting)
+{
+    if(!dep.git.empty())
+        return fetch_git_dep(dep, depsDir, updateExisting);
+    if(!dep.url.empty())
+        return fetch_archive_dep(dep, depsDir);
+    std::cerr << "Dependency '" << dep.name
+              << "' is missing a supported source (git/url)\n";
+    return 1;
+}
+
 static int build_git_dep(const DepSpec& dep,
                          const std::filesystem::path& depsDir,
                          bool useNinja)
 {
-    std::filesystem::path path = depsDir / dep.name;
+    std::filesystem::path path = dep_source_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
         return 1;
 
     if(dep.build == "cmake")
     {
         std::filesystem::path buildDir = path / "build";
-        std::string cfg = "cmake -S " + path.string() + " -B " +
-                          buildDir.string();
+        std::string cfg = "cmake -S " + shell_quote(path.string()) + " -B " +
+                          shell_quote(buildDir.string());
         if(useNinja)
             cfg += " -G Ninja";
         if(!dep.cmakeArgs.empty())
@@ -586,7 +871,8 @@ static int build_git_dep(const DepSpec& dep,
         }
         if(run_command(cfg) != 0)
             return 1;
-        std::string build = "cmake --build " + buildDir.string();
+        std::string build =
+            "cmake --build " + shell_quote(buildDir.string());
         return run_command(build);
     }
     if(dep.build == "meson")
@@ -594,17 +880,19 @@ static int build_git_dep(const DepSpec& dep,
         std::filesystem::path buildDir = path / "build";
         if(!std::filesystem::exists(buildDir))
         {
-            std::string setup =
-                "meson setup " + buildDir.string() + " " + path.string();
+            std::string setup = "meson setup " +
+                                shell_quote(buildDir.string()) + " " +
+                                shell_quote(path.string());
             if(run_command(setup) != 0)
                 return 1;
         }
-        std::string compile = "meson compile -C " + buildDir.string();
+        std::string compile =
+            "meson compile -C " + shell_quote(buildDir.string());
         return run_command(compile);
     }
     if(dep.build == "make")
     {
-        std::string cmd = "make -C " + path.string();
+        std::string cmd = "make -C " + shell_quote(path.string());
         return run_command(cmd);
     }
 
@@ -690,6 +978,117 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
     return true;
 }
 
+static int fetch_for_manifest(const PackageManifest& pkg)
+{
+    auto deps = parse_source_deps(pkg.content);
+    std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
+    std::filesystem::create_directories(depsDir);
+    for(const auto& dep : deps)
+    {
+        if(fetch_dep(dep, depsDir, /*updateExisting=*/true) != 0)
+            return 1;
+    }
+    std::cout << "Fetch completed for " << pkg.manifestPath.string() << ".\n";
+    return 0;
+}
+
+static int build_for_manifest(const PackageManifest& pkg, const std::string& argv0,
+                              const std::string& optFlagOverride,
+                              bool useNinja)
+{
+    auto deps = parse_source_deps(pkg.content);
+    auto cdeps = parse_c_deps(pkg.content);
+    BuildConfig buildConfig = parse_build_config(pkg.content);
+    std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
+    std::filesystem::create_directories(depsDir);
+    for(const auto& dep : deps)
+    {
+        if(fetch_dep(dep, depsDir, /*updateExisting=*/false) != 0)
+            return 1;
+    }
+    for(const auto& dep : deps)
+    {
+        if(build_git_dep(dep, depsDir, useNinja) != 0)
+            return 1;
+    }
+
+    LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+    std::vector<std::string> pkgFlags;
+    for(const auto& dep : cdeps)
+    {
+        if(!append_pkg_config_flags(dep, pkgFlags))
+            return 1;
+    }
+
+    std::string entry = "src/main.mla";
+    if(auto v = find_toml_string(pkg.content, "entry"); v.has_value())
+        entry = v.value();
+    std::string name = "app";
+    if(auto v = find_toml_string(pkg.content, "name"); v.has_value())
+        name = v.value();
+
+    std::string optFlag = optFlagOverride;
+    if(optFlag.empty())
+        optFlag = buildConfig.optLevel;
+
+    std::filesystem::create_directories(pkg.packageDir / "build");
+    std::string output = "build/" + name;
+    std::string backend = argv0;
+    if(argv0.find('/') != std::string::npos)
+        backend = std::filesystem::absolute(argv0).string();
+
+    std::string cmd = shell_quote(backend) + " " + shell_quote(entry) +
+                      " -o " + shell_quote(output);
+    if(!buildConfig.targetArch.empty())
+        cmd += " --target-arch " + shell_quote(buildConfig.targetArch);
+    if(!optFlag.empty())
+        cmd += " " + optFlag;
+    for(const auto& flag : buildConfig.compilerFlags)
+        cmd += " " + shell_quote(flag);
+    for(const auto& dir : buildConfig.libPaths)
+        cmd += " -L" + shell_quote(dir);
+    for(const auto& lib : buildConfig.libs)
+        cmd += " -l" + shell_quote(lib);
+    for(const auto& dir : linkFlags.libDirs)
+        cmd += " -L" + shell_quote(dir);
+    for(const auto& lib : linkFlags.libs)
+        cmd += " -l" + shell_quote(lib);
+    for(const auto& dir : linkFlags.libDirs)
+        cmd += " -Wl,-rpath," + shell_quote(dir);
+    for(const auto& flag : buildConfig.linkerFlags)
+        cmd += " " + shell_quote(flag);
+    for(const auto& flag : pkgFlags)
+        cmd += " " + shell_quote(flag);
+
+    int rc = run_command_in_dir(pkg.packageDir, cmd);
+    if(rc != 0)
+    {
+        std::cerr << "Build failed for " << pkg.manifestPath.string() << ".\n";
+        return 1;
+    }
+    return 0;
+}
+
+static int clean_for_manifest(const PackageManifest& pkg)
+{
+    const std::filesystem::path buildDir = pkg.packageDir / "build";
+    if(!std::filesystem::exists(buildDir))
+    {
+        std::cout << "No artifacts to clean in " << buildDir.string() << "\n";
+        return 0;
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(buildDir, ec);
+    if(ec)
+    {
+        std::cerr << "Failed to clean " << buildDir.string() << ": "
+                  << ec.message() << "\n";
+        return 1;
+    }
+    std::cout << "Cleaned " << buildDir.string() << "\n";
+    return 0;
+}
+
 } // namespace
 
 int PackageManager::run(int argc, char** argv)
@@ -739,26 +1138,40 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Usage: " << argv[0]
                       << " pkg add <name> [--git URL] [--rev REV] [--tag TAG]\n"
                       << "       " << argv[0]
+                      << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+                      << "       " << argv[0]
                       << " pkg add <name> [--pkg-config NAME] [--system]\n";
             return 1;
         }
 
         std::string name = argv[3];
         std::string gitUrl;
+        std::string archiveUrl;
+        std::string archiveType;
         std::string rev;
         std::string tag;
+        std::string depSubdir;
         std::string pkgConfig;
         bool systemDep = false;
+        int stripComponents = 1;
 
         for(int i = 4; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--git" && i + 1 < argc)
                 gitUrl = argv[++i];
+            else if(arg == "--url" && i + 1 < argc)
+                archiveUrl = argv[++i];
+            else if(arg == "--archive" && i + 1 < argc)
+                archiveType = argv[++i];
             else if(arg == "--rev" && i + 1 < argc)
                 rev = argv[++i];
             else if(arg == "--tag" && i + 1 < argc)
                 tag = argv[++i];
+            else if(arg == "--subdir" && i + 1 < argc)
+                depSubdir = argv[++i];
+            else if(arg == "--strip-components" && i + 1 < argc)
+                stripComponents = parse_int_or_default(argv[++i], 1);
             else if(arg == "--pkg-config" && i + 1 < argc)
                 pkgConfig = argv[++i];
             else if(arg == "--system")
@@ -795,6 +1208,18 @@ int PackageManager::run(int argc, char** argv)
             else
                 line = name + " = { pkg_config = \"" + pkgConfig + "\" }";
         }
+        else if(!archiveUrl.empty())
+        {
+            line = name + " = { url = \"" + archiveUrl + "\"";
+            if(!archiveType.empty())
+                line += ", archive = \"" + archiveType + "\"";
+            if(stripComponents != 1)
+                line += ", strip_components = \"" +
+                        std::to_string(stripComponents) + "\"";
+            if(!depSubdir.empty())
+                line += ", subdir = \"" + depSubdir + "\"";
+            line += " }";
+        }
         else if(!gitUrl.empty())
         {
             line = name + " = { git = \"" + gitUrl + "\"";
@@ -802,6 +1227,8 @@ int PackageManager::run(int argc, char** argv)
                 line += ", rev = \"" + rev + "\"";
             if(!tag.empty())
                 line += ", tag = \"" + tag + "\"";
+            if(!depSubdir.empty())
+                line += ", subdir = \"" + depSubdir + "\"";
             line += " }";
         }
         else
@@ -841,16 +1268,17 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Failed to read mlang.toml\n";
             return 1;
         }
-        auto deps = parse_git_deps(content);
-        auto cdeps = parse_c_deps(content);
-        std::filesystem::path depsDir = std::filesystem::path("build") / "deps";
-        std::filesystem::create_directories(depsDir);
-        for(const auto& dep : deps)
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
         {
-            if(fetch_git_dep(dep, depsDir) != 0)
+            std::cerr << "No package manifests found for fetch.\n";
+            return 1;
+        }
+        for(const auto& pkg : manifests)
+        {
+            if(fetch_for_manifest(pkg) != 0)
                 return 1;
         }
-        std::cout << "Fetch completed.\n";
         return 0;
     }
 
@@ -893,91 +1321,48 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         }
 
-        auto deps = parse_git_deps(content);
-        auto cdeps = parse_c_deps(content);
-        BuildConfig buildConfig = parse_build_config(content);
-        std::filesystem::path depsDir = std::filesystem::path("build") / "deps";
-        std::filesystem::create_directories(depsDir);
-        for(const auto& dep : deps)
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
         {
-            if(fetch_git_dep(dep, depsDir) != 0)
-                return 1;
-        }
-        for(const auto& dep : deps)
-        {
-            if(build_git_dep(dep, depsDir, useNinja) != 0)
-                return 1;
-        }
-
-        LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
-        std::vector<std::string> pkgFlags;
-        for(const auto& dep : cdeps)
-        {
-            if(!append_pkg_config_flags(dep, pkgFlags))
-                return 1;
-        }
-
-        std::string entry = "src/main.mla";
-        if(auto v = find_toml_string(content, "entry"); v.has_value())
-            entry = v.value();
-        std::string name = "app";
-        if(auto v = find_toml_string(content, "name"); v.has_value())
-            name = v.value();
-        if(optFlag.empty())
-            optFlag = buildConfig.optLevel;
-
-        std::filesystem::create_directories("build");
-        std::string output = "build/" + name;
-
-        std::string cmd =
-            std::string(argv[0]) + " " + entry + " -o " + output;
-        if(!buildConfig.targetArch.empty())
-            cmd += " --target-arch " + buildConfig.targetArch;
-        if(!optFlag.empty())
-            cmd += " " + optFlag;
-        for(const auto& flag : buildConfig.compilerFlags)
-            cmd += " " + flag;
-        for(const auto& dir : buildConfig.libPaths)
-            cmd += " -L" + dir;
-        for(const auto& lib : buildConfig.libs)
-            cmd += " -l" + lib;
-        for(const auto& dir : linkFlags.libDirs)
-            cmd += " -L" + dir;
-        for(const auto& lib : linkFlags.libs)
-            cmd += " -l" + lib;
-        for(const auto& dir : linkFlags.libDirs)
-            cmd += " -Wl,-rpath," + dir;
-        for(const auto& flag : buildConfig.linkerFlags)
-            cmd += " " + flag;
-        for(const auto& flag : pkgFlags)
-            cmd += " " + flag;
-        int rc = std::system(cmd.c_str());
-        if(rc != 0)
-        {
-            std::cerr << "Build failed.\n";
+            std::cerr << "No package manifests found for build.\n";
             return 1;
+        }
+        for(const auto& pkg : manifests)
+        {
+            if(build_for_manifest(pkg, argv[0], optFlag, useNinja) != 0)
+                return 1;
         }
         return 0;
     }
 
     if(sub == "clean")
     {
-        const std::filesystem::path buildDir = "build";
-        if(!std::filesystem::exists(buildDir))
+        auto manifests = collect_target_manifests(manifestPath);
+        if(manifests.empty())
         {
-            std::cout << "No artifacts to clean in " << buildDir.string()
-                      << "\n";
+            const std::filesystem::path buildDir = "build";
+            if(!std::filesystem::exists(buildDir))
+            {
+                std::cout << "No artifacts to clean in " << buildDir.string()
+                          << "\n";
+                return 0;
+            }
+            std::error_code ec;
+            std::filesystem::remove_all(buildDir, ec);
+            if(ec)
+            {
+                std::cerr << "Failed to clean " << buildDir.string() << ": "
+                          << ec.message() << "\n";
+                return 1;
+            }
+            std::cout << "Cleaned " << buildDir.string() << "\n";
             return 0;
         }
-        std::error_code ec;
-        std::filesystem::remove_all(buildDir, ec);
-        if(ec)
+        for(const auto& pkg : manifests)
         {
-            std::cerr << "Failed to clean " << buildDir.string() << ": "
-                      << ec.message() << "\n";
-            return 1;
+            if(clean_for_manifest(pkg) != 0)
+                return 1;
         }
-        std::cout << "Cleaned " << buildDir.string() << "\n";
         return 0;
     }
 
