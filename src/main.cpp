@@ -79,7 +79,11 @@ void printUsage(const char* programName)
               << "  " << programName << " pkg add <name> [--git URL] [--rev "
                  "REV] [--tag TAG]\n"
               << "  " << programName
+              << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+              << "  " << programName
               << " pkg add <name> [--pkg-config NAME] [--system]\n"
+              << "  " << programName
+              << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
               << "  " << programName << " pkg fetch\n"
               << "  " << programName
               << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n"
@@ -1038,6 +1042,19 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     namespace fs = std::filesystem;
     if(argc < 2 || std::string(argv[1]) != "pkg")
         return std::nullopt;
+    if(argc >= 3 && std::string(argv[2]) == "add")
+    {
+        for(int i = 3; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--url" || arg == "--archive" ||
+               arg == "--strip-components" || arg == "--subdir" ||
+               arg == "--add-lib" || arg == "--project-dir")
+            {
+                return std::nullopt;
+            }
+        }
+    }
     if(manifest_requires_cpp_pkg_frontend())
         return std::nullopt;
 

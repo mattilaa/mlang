@@ -56,6 +56,13 @@ Git dependency:
 ./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
 ```
 
+Generate a complete subproject package automatically:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+./build/mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
+```
+
 Optional pinning:
 
 ```sh
@@ -68,6 +75,16 @@ System / pkg-config dependency:
 ```sh
 ./build/mlang pkg add curl --pkg-config libcurl
 ./build/mlang pkg add zlib --system
+```
+
+`--add-lib` creates a subproject under `packages/<name>/`, adds the dependency
+to that generated subproject manifest, creates `src/main.mla`, and ensures the
+root manifest contains `[workspace] members = ["packages"]`.
+
+Override the generated subproject location with:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
 ```
 
 ### `pkg fetch`
@@ -684,6 +701,69 @@ Run from the workspace root:
 ```
 
 See `examples/package_manager_workspace_fetch` for a complete working example.
+
+### Generate A Subproject With `pkg add --add-lib`
+
+You can generate the subdirectory tree instead of creating it manually.
+
+Start from a root manifest:
+
+```toml
+[package]
+name = "workspace_root"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+```
+
+Run:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+```
+
+Generated layout:
+
+```text
+.
+├── mlang.toml
+└── packages/
+    └── cjson/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Generated root manifest fragment:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Generated subproject manifest:
+
+```toml
+[package]
+name = "cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
+
+[c-dependencies]
+```
+
+Then build from the root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+```
 
 ## Example Workflow
 

@@ -24,6 +24,11 @@
 
 namespace {
 
+static std::vector<std::string> split_toml_array(std::string_view input);
+static std::string unquote(std::string_view v);
+static std::vector<std::string> parse_workspace_members(
+    const std::string& content);
+
 static std::string trim(std::string_view s)
 {
     size_t start = 0;
@@ -112,6 +117,107 @@ static bool add_dep_to_section(std::string& content,
     return true;
 }
 
+static bool append_unique_quoted_list_entry(std::string& content,
+                                            const std::string& section,
+                                            const std::string& key,
+                                            const std::string& value)
+{
+    std::istringstream in(content);
+    std::vector<std::string> lines;
+    std::string cur;
+    while(std::getline(in, cur))
+        lines.push_back(cur);
+
+    int sectionStart = -1;
+    int sectionEnd = static_cast<int>(lines.size());
+    int keyLine = -1;
+    for(size_t i = 0; i < lines.size(); ++i)
+    {
+        if(is_section_line(lines[i], section))
+        {
+            sectionStart = static_cast<int>(i);
+            for(size_t j = i + 1; j < lines.size(); ++j)
+            {
+                std::string t = trim(lines[j]);
+                if(!t.empty() && t[0] == '[')
+                {
+                    sectionEnd = static_cast<int>(j);
+                    break;
+                }
+                size_t eq = t.find('=');
+                if(eq == std::string::npos)
+                    continue;
+                if(trim(t.substr(0, eq)) == key)
+                    keyLine = static_cast<int>(j);
+            }
+            break;
+        }
+    }
+
+    std::vector<std::string> values;
+    if(section == "workspace" && key == "members")
+    {
+        values = parse_workspace_members(content);
+    }
+    else if(keyLine >= 0)
+    {
+        size_t eq = lines[keyLine].find('=');
+        if(eq != std::string::npos)
+        {
+            std::string raw = trim(lines[keyLine].substr(eq + 1));
+            if(!raw.empty() && raw.front() == '[' && raw.back() == ']')
+            {
+                for(const auto& part :
+                    split_toml_array(raw.substr(1, raw.size() - 2)))
+                {
+                    std::string item = unquote(part);
+                    if(!item.empty())
+                        values.push_back(item);
+                }
+            }
+        }
+    }
+
+    if(std::find(values.begin(), values.end(), value) != values.end())
+        return false;
+    values.push_back(value);
+
+    std::ostringstream arr;
+    arr << key << " = [";
+    for(size_t i = 0; i < values.size(); ++i)
+    {
+        if(i > 0)
+            arr << ", ";
+        arr << "\"" << values[i] << "\"";
+    }
+    arr << "]";
+
+    if(sectionStart >= 0)
+    {
+        if(keyLine >= 0)
+            lines[keyLine] = arr.str();
+        else
+            lines.insert(lines.begin() + sectionEnd, arr.str());
+    }
+    else
+    {
+        if(!lines.empty() && !lines.back().empty())
+            lines.push_back("");
+        lines.push_back("[" + section + "]");
+        lines.push_back(arr.str());
+    }
+
+    std::ostringstream out;
+    for(size_t i = 0; i < lines.size(); ++i)
+    {
+        out << lines[i];
+        if(i + 1 < lines.size())
+            out << "\n";
+    }
+    content = out.str();
+    return true;
+}
+
 static std::optional<std::string> find_toml_string(
     const std::string& content, const std::string& key)
 {
@@ -125,8 +231,6 @@ static std::optional<std::string> find_toml_string(
         return std::nullopt;
     return content.substr(pos, end - pos);
 }
-
-static std::string unquote(std::string_view v);
 
 static std::optional<std::string> find_section_toml_string(
     const std::string& content, const std::string& section,
@@ -1095,7 +1199,8 @@ static std::vector<std::string> parse_workspace_members(
         std::string key = trim(t.substr(0, eq));
         if(key != "members")
             continue;
-        std::string value = trim(t.substr(eq + 1));
+        std::string value =
+            collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
         if(value.empty())
             return out;
         if(value.front() == '[' && value.back() == ']')
@@ -1128,6 +1233,192 @@ static bool has_section(const std::string& content, const std::string& wanted)
             return true;
     }
     return false;
+}
+
+static std::string sanitize_package_name(std::string name)
+{
+    for(char& c : name)
+    {
+        if(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-')
+            continue;
+        c = '_';
+    }
+    if(name.empty())
+        name = "pkg";
+    return name;
+}
+
+static std::filesystem::path default_added_package_dir(const std::string& name)
+{
+    return std::filesystem::path("packages") / sanitize_package_name(name);
+}
+
+static bool write_text_file_if_missing(const std::filesystem::path& path,
+                                       const std::string& content)
+{
+    if(std::filesystem::exists(path))
+        return true;
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    std::ofstream out(path, std::ios::binary);
+    if(!out)
+        return false;
+    out << content;
+    return true;
+}
+
+static std::string make_dependency_manifest_line(const std::string& name,
+                                                 const std::string& gitUrl,
+                                                 const std::string& archiveUrl,
+                                                 const std::string& archiveType,
+                                                 const std::string& rev,
+                                                 const std::string& tag,
+                                                 const std::string& depSubdir,
+                                                 int stripComponents)
+{
+    std::string line;
+    if(!archiveUrl.empty())
+    {
+        line = name + " = { url = \"" + archiveUrl + "\"";
+        if(!archiveType.empty())
+            line += ", archive = \"" + archiveType + "\"";
+        if(stripComponents != 1)
+            line += ", strip_components = \"" +
+                    std::to_string(stripComponents) + "\"";
+        if(!depSubdir.empty())
+            line += ", subdir = \"" + depSubdir + "\"";
+        line += " }";
+    }
+    else if(!gitUrl.empty())
+    {
+        line = name + " = { git = \"" + gitUrl + "\"";
+        if(!rev.empty())
+            line += ", rev = \"" + rev + "\"";
+        if(!tag.empty())
+            line += ", tag = \"" + tag + "\"";
+        if(!depSubdir.empty())
+            line += ", subdir = \"" + depSubdir + "\"";
+        line += " }";
+    }
+    else
+    {
+        line = name + " = \"*\"";
+    }
+    return line;
+}
+
+static std::string relative_path_string(const std::filesystem::path& fromDir,
+                                        const std::filesystem::path& toPath)
+{
+    std::error_code ec;
+    std::filesystem::path rel = std::filesystem::relative(toPath, fromDir, ec);
+    if(ec)
+        return toPath.lexically_normal().string();
+    return rel.lexically_normal().string();
+}
+
+static std::string package_stub_source(const std::string& depName)
+{
+    return "fn main() -> void {\n"
+           "    println!(\"" + depName +
+           " subproject scaffold ready\");\n"
+           "}\n";
+}
+
+static bool ensure_package_entry_stub(const std::filesystem::path& manifestPath,
+                                      const std::string& manifestContent,
+                                      const std::string& label,
+                                      std::string& error)
+{
+    if(!has_section(manifestContent, "package"))
+        return true;
+
+    std::string entry = "src/main.mla";
+    if(auto entryOpt = find_section_toml_string(manifestContent, "package",
+                                                "entry");
+       entryOpt.has_value() && !entryOpt->empty())
+    {
+        entry = *entryOpt;
+    }
+
+    const std::filesystem::path entryPath = manifestPath.parent_path() / entry;
+    if(std::filesystem::exists(entryPath))
+        return true;
+    if(!write_text_file_if_missing(entryPath, package_stub_source(label)))
+    {
+        error = "Failed to write package entry source: " + entryPath.string();
+        return false;
+    }
+    return true;
+}
+
+static bool scaffold_added_package(const std::filesystem::path& rootManifestPath,
+                                   const std::filesystem::path& packageDir,
+                                   const std::string& packageName,
+                                   const std::string& depLine,
+                                   const std::string& depName,
+                                   std::string& error)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::create_directories(packageDir / "src", ec);
+    if(ec)
+    {
+        error = "Failed to create package directory: " + packageDir.string();
+        return false;
+    }
+
+    fs::path packageManifest = packageDir / "mlang.toml";
+    std::string packageContent;
+    if(fs::exists(packageManifest))
+    {
+        std::ifstream in(packageManifest, std::ios::binary);
+        packageContent.assign((std::istreambuf_iterator<char>(in)),
+                              std::istreambuf_iterator<char>());
+        if(packageContent.empty())
+        {
+            error = "Failed to read existing subproject manifest: " +
+                    packageManifest.string();
+            return false;
+        }
+    }
+    else
+    {
+        std::string entry =
+            relative_path_string(packageDir, packageDir / "src" / "main.mla");
+        packageContent = "[package]\n";
+        packageContent += "name = \"" + packageName + "\"\n";
+        packageContent += "version = \"" + std::string(MLANG_VERSION) + "\"\n";
+        packageContent += "entry = \"" + entry + "\"\n\n";
+        packageContent += "[dependencies]\n\n";
+        packageContent += "[c-dependencies]\n";
+    }
+
+    if(!has_section(packageContent, "package"))
+    {
+        error = "Subproject manifest is missing [package]: " +
+                packageManifest.string();
+        return false;
+    }
+    add_dep_to_section(packageContent, "dependencies", depName, depLine);
+
+    std::ofstream out(packageManifest, std::ios::binary | std::ios::trunc);
+    if(!out)
+    {
+        error = "Failed to write subproject manifest: " +
+                packageManifest.string();
+        return false;
+    }
+    out << packageContent;
+
+    if(!write_text_file_if_missing(packageDir / "src" / "main.mla",
+                                   package_stub_source(depName)))
+    {
+        error = "Failed to write subproject entry source: " +
+                (packageDir / "src" / "main.mla").string();
+        return false;
+    }
+    return true;
 }
 
 static std::string shell_quote(const std::string& s)
@@ -2482,7 +2773,9 @@ int PackageManager::run(int argc, char** argv)
                       << "       " << argv[0]
                       << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
                       << "       " << argv[0]
-                      << " pkg add <name> [--pkg-config NAME] [--system]\n";
+                      << " pkg add <name> [--pkg-config NAME] [--system]\n"
+                      << "       " << argv[0]
+                      << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n";
             return 1;
         }
 
@@ -2494,7 +2787,9 @@ int PackageManager::run(int argc, char** argv)
         std::string tag;
         std::string depSubdir;
         std::string pkgConfig;
+        std::string addLibProjectDir;
         bool systemDep = false;
+        bool addLib = false;
         int stripComponents = 1;
 
         for(int i = 4; i < argc; ++i)
@@ -2516,6 +2811,10 @@ int PackageManager::run(int argc, char** argv)
                 stripComponents = parse_int_or_default(argv[++i], 1);
             else if(arg == "--pkg-config" && i + 1 < argc)
                 pkgConfig = argv[++i];
+            else if(arg == "--project-dir" && i + 1 < argc)
+                addLibProjectDir = argv[++i];
+            else if(arg == "--add-lib")
+                addLib = true;
             else if(arg == "--system")
                 systemDep = true;
             else
@@ -2540,6 +2839,13 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         }
 
+        if(addLib && (systemDep || !pkgConfig.empty()))
+        {
+            std::cerr << "--add-lib currently supports Git or tarball source "
+                         "dependencies only.\n";
+            return 1;
+        }
+
         std::string section = "dependencies";
         std::string line;
         if(systemDep || !pkgConfig.empty())
@@ -2550,32 +2856,54 @@ int PackageManager::run(int argc, char** argv)
             else
                 line = name + " = { pkg_config = \"" + pkgConfig + "\" }";
         }
-        else if(!archiveUrl.empty())
-        {
-            line = name + " = { url = \"" + archiveUrl + "\"";
-            if(!archiveType.empty())
-                line += ", archive = \"" + archiveType + "\"";
-            if(stripComponents != 1)
-                line += ", strip_components = \"" +
-                        std::to_string(stripComponents) + "\"";
-            if(!depSubdir.empty())
-                line += ", subdir = \"" + depSubdir + "\"";
-            line += " }";
-        }
-        else if(!gitUrl.empty())
-        {
-            line = name + " = { git = \"" + gitUrl + "\"";
-            if(!rev.empty())
-                line += ", rev = \"" + rev + "\"";
-            if(!tag.empty())
-                line += ", tag = \"" + tag + "\"";
-            if(!depSubdir.empty())
-                line += ", subdir = \"" + depSubdir + "\"";
-            line += " }";
-        }
         else
         {
-            line = name + " = \"*\"";
+            line = make_dependency_manifest_line(name, gitUrl, archiveUrl,
+                                                 archiveType, rev, tag,
+                                                 depSubdir, stripComponents);
+        }
+
+        if(addLib)
+        {
+            namespace fs = std::filesystem;
+            fs::path rootDir = manifestPath.parent_path();
+            fs::path projectDir = addLibProjectDir.empty()
+                                      ? default_added_package_dir(name)
+                                      : fs::path(addLibProjectDir);
+            fs::path projectDirAbs = rootDir / projectDir;
+            std::string packageName = sanitize_package_name(name) + "_demo";
+            std::string error;
+            if(!scaffold_added_package(manifestPath, projectDirAbs, packageName,
+                                       line, name, error))
+            {
+                std::cerr << error << "\n";
+                return 1;
+            }
+            if(!ensure_package_entry_stub(manifestPath, content, "workspace_root",
+                                          error))
+            {
+                std::cerr << error << "\n";
+                return 1;
+            }
+
+            const fs::path memberRoot = projectDir.begin() == projectDir.end()
+                                            ? fs::path(".")
+                                            : *projectDir.begin();
+            append_unique_quoted_list_entry(content, "workspace", "members",
+                                            memberRoot.generic_string());
+
+            std::ofstream rootOut(manifestPath,
+                                  std::ios::binary | std::ios::trunc);
+            if(!rootOut)
+            {
+                std::cerr << "Failed to update root mlang.toml\n";
+                return 1;
+            }
+            rootOut << content;
+
+            std::cout << "Scaffolded subproject at "
+                      << projectDir.lexically_normal().string() << "\n";
+            return 0;
         }
 
         bool added = add_dep_to_section(content, section, name, line);

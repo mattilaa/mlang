@@ -149,6 +149,13 @@ Build and run:
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2 --ninja
 ```
 
+Generate a complete subproject package automatically:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+./build/mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
+```
+
 `mlang pkg clean` removes the package-local `build/` tree created by
 `fetch`/`build`.
 
@@ -953,6 +960,19 @@ Supported source dependency keys are:
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `mlang pkg build`.
 
+`pkg add --add-lib` can scaffold the workspace subproject automatically. It:
+
+- creates `packages/<name>/mlang.toml`
+- creates `packages/<name>/src/main.mla`
+- adds the fetched dependency to that generated subproject manifest
+- ensures the root manifest contains `[workspace] members = ["packages"]`
+
+Override the generated location with:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
+```
+
 ## Package Workspaces And Fetched Subprojects
 
 This is the recommended layout when one repository contains several package
@@ -1023,6 +1043,69 @@ See:
 That example shows one root `mlang.toml` discovering subpackages recursively,
 while one subpackage fetches from GitHub with `git = "..."` and another uses a
 released `tar.gz` source archive.
+
+### Generate A Subproject With `pkg add --add-lib`
+
+You can generate the directory tree instead of writing it by hand.
+
+Start from a root manifest:
+
+```toml
+[package]
+name = "workspace_root"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+```
+
+Run:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+```
+
+Generated layout:
+
+```text
+.
+├── mlang.toml
+└── packages/
+    └── cjson/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Generated root manifest fragment:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Generated subproject manifest:
+
+```toml
+[package]
+name = "cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
+
+[c-dependencies]
+```
+
+Then build from the root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+```
 
 Packages can also declare shell-driven custom tasks:
 
