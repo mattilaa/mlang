@@ -877,6 +877,18 @@ Supported `[[task]]` keys:
 - `command`
 - `commands`
 
+Host-conditional task overrides:
+
+- `[task.host.darwin]`
+- `[task.host.linux]`
+- `[task.host.windows]`
+
+Override behavior:
+
+- override `workdir` replaces the base `workdir`
+- override `env` appends after the base `env`
+- override `command` / `commands` replace the base task commands
+
 Task placeholders:
 
 - `{{root}}`

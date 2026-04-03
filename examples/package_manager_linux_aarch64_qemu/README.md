@@ -22,14 +22,16 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [[task]]
 name = "kernel-build"
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+]
+
+[task.host.darwin]
 env = [
   "LLVM=1",
   "LLVM_IAS=1",
   "CC=/opt/homebrew/opt/llvm/bin/clang"
-]
-commands = [
-  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
-  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
 ]
 
 [tool.mlang]
@@ -122,6 +124,8 @@ Or step-by-step:
   directly for tasks and built-in `build = "make"` dependency builds.
 - `env = ["KEY=value"]` lets each task set toolchain variables such as
   `LLVM=1`, `LLVM_IAS=1`, and `CC` without hardcoding them into every command.
+- `[task.host.darwin]` lets the manifest keep Linux as the simple default path
+  while adding a macOS-specific task override only where it is needed.
 - `{{make}}` expands to the configured make executable from
   `[tool.mlang].make_program`.
 - `path_entries` in `mlang.toml` lets the package prepend Homebrew tool

@@ -316,14 +316,16 @@ Packages can define shell-driven tasks:
 [[task]]
 name = "kernel-build"
 workdir = "{{root}}"
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+]
+
+[task.host.darwin]
 env = [
   "LLVM=1",
   "LLVM_IAS=1",
   "CC=/opt/homebrew/opt/llvm/bin/clang"
-]
-commands = [
-  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
-  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
 ]
 
 [tool.mlang]
@@ -362,6 +364,18 @@ Supported task keys:
 - `env`
 - `command`
 - `commands`
+
+Host-conditional task overrides:
+
+- `[task.host.darwin]`
+- `[task.host.linux]`
+- `[task.host.windows]`
+
+When a host override exists for the current host:
+
+- override `workdir` replaces the base `workdir`
+- override `env` appends after the base `env`
+- override `command` / `commands` replace the base task commands
 
 Supported placeholders in `workdir` and commands:
 

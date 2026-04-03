@@ -298,6 +298,13 @@ struct TaskSpec
     std::string workdir;
     std::vector<std::string> env;
     std::vector<std::string> commands;
+    struct HostOverride
+    {
+        std::string workdir;
+        std::vector<std::string> env;
+        std::vector<std::string> commands;
+    };
+    std::map<std::string, HostOverride> hostOverrides;
 };
 
 static void parse_build_config_key_value(BuildConfig& cfg,
@@ -525,11 +532,13 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
     std::string line;
     std::vector<TaskSpec> tasks;
     std::optional<TaskSpec> current;
+    std::string currentHostSection;
 
     auto flush_current = [&]() {
         if(current.has_value())
             tasks.push_back(*current);
         current.reset();
+        currentHostSection.clear();
     };
 
     while(std::getline(in, line))
@@ -545,6 +554,20 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         }
         if(t.front() == '[' && t.back() == ']')
         {
+            std::string section = t.substr(1, t.size() - 2);
+            if(current.has_value() &&
+               section.rfind("task.host.", 0) == 0 &&
+               section.size() > std::string("task.host.").size())
+            {
+                currentHostSection =
+                    section.substr(std::string("task.host.").size());
+                continue;
+            }
+            if(current.has_value() && section == "task")
+            {
+                currentHostSection.clear();
+                continue;
+            }
             flush_current();
             continue;
         }
@@ -555,30 +578,65 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         if(eq == std::string::npos)
             continue;
         std::string key = trim(t.substr(0, eq));
-        std::string value = trim(t.substr(eq + 1));
-        if(key == "name")
+        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+
+        auto apply_task_kv = [&](TaskSpec& task, const std::string& taskKey,
+                                 const std::string& taskValue) {
+            if(taskKey == "name")
+            {
+                task.name = unquote(taskValue);
+            }
+            else if(taskKey == "workdir")
+            {
+                task.workdir = unquote(taskValue);
+            }
+            else if(taskKey == "command")
+            {
+                std::string v = unquote(taskValue);
+                if(!v.empty())
+                    task.commands.push_back(v);
+            }
+            else if(taskKey == "env")
+            {
+                append_toml_string_list_value(taskValue, task.env);
+            }
+            else if(taskKey == "commands")
+            {
+                append_toml_string_list_value(taskValue, task.commands);
+            }
+        };
+
+        auto apply_override_kv = [&](TaskSpec::HostOverride& ov,
+                                     const std::string& taskKey,
+                                     const std::string& taskValue) {
+            if(taskKey == "workdir")
+            {
+                ov.workdir = unquote(taskValue);
+            }
+            else if(taskKey == "command")
+            {
+                std::string v = unquote(taskValue);
+                if(!v.empty())
+                    ov.commands.push_back(v);
+            }
+            else if(taskKey == "env")
+            {
+                append_toml_string_list_value(taskValue, ov.env);
+            }
+            else if(taskKey == "commands")
+            {
+                append_toml_string_list_value(taskValue, ov.commands);
+            }
+        };
+
+        if(!currentHostSection.empty())
         {
-            current->name = unquote(value);
+            apply_override_kv(current->hostOverrides[currentHostSection], key,
+                              value);
         }
-        else if(key == "workdir")
+        else
         {
-            current->workdir = unquote(value);
-        }
-        else if(key == "command")
-        {
-            std::string v = unquote(value);
-            if(!v.empty())
-                current->commands.push_back(v);
-        }
-        else if(key == "env")
-        {
-            std::string fullValue = collect_multiline_toml_value(value, in);
-            append_toml_string_list_value(fullValue, current->env);
-        }
-        else if(key == "commands")
-        {
-            std::string fullValue = collect_multiline_toml_value(value, in);
-            append_toml_string_list_value(fullValue, current->commands);
+            apply_task_kv(*current, key, value);
         }
     }
     flush_current();
@@ -1787,16 +1845,53 @@ static std::string expand_task_text(const std::string& text,
     return out;
 }
 
+static std::string current_host_name()
+{
+#if defined(__APPLE__)
+    return "darwin";
+#elif defined(__linux__)
+    return "linux";
+#elif defined(_WIN32)
+    return "windows";
+#elif defined(__FreeBSD__)
+    return "freebsd";
+#else
+    return "unknown";
+#endif
+}
+
 static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName)
 {
     const auto tasks = parse_task_specs(pkg.content);
     const BuildConfig buildConfig = parse_build_config(pkg.content);
+    const std::string hostName = current_host_name();
     for(const auto& task : tasks)
     {
         if(task.name != taskName)
             continue;
-        if(task.commands.empty())
+        auto hostIt = task.hostOverrides.find(hostName);
+        const TaskSpec::HostOverride* hostOverride =
+            hostIt == task.hostOverrides.end() ? nullptr : &hostIt->second;
+
+        std::vector<std::string> effectiveEnv = task.env;
+        if(hostOverride)
+        {
+            effectiveEnv.insert(effectiveEnv.end(), hostOverride->env.begin(),
+                                hostOverride->env.end());
+        }
+
+        std::vector<std::string> effectiveCommands =
+            (hostOverride && !hostOverride->commands.empty())
+                ? hostOverride->commands
+                : task.commands;
+
+        std::string effectiveWorkdir =
+            (hostOverride && !hostOverride->workdir.empty())
+                ? hostOverride->workdir
+                : task.workdir;
+
+        if(effectiveCommands.empty())
         {
             std::cerr << "Task '" << taskName << "' in "
                       << pkg.manifestPath.string()
@@ -1805,17 +1900,17 @@ static int run_task_for_manifest(const PackageManifest& pkg,
         }
 
         std::filesystem::path workdir =
-            task.workdir.empty() ? pkg.packageDir
+            effectiveWorkdir.empty() ? pkg.packageDir
                                  : std::filesystem::path(
-                                       expand_task_text(task.workdir, pkg,
+                                       expand_task_text(effectiveWorkdir, pkg,
                                                         buildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
-        for(const auto& command : task.commands)
+        for(const auto& command : effectiveCommands)
         {
             std::string envPrefix;
-            for(const auto& entry : task.env)
+            for(const auto& entry : effectiveEnv)
             {
                 const std::string expandedEnv =
                     expand_task_text(entry, pkg, buildConfig);
