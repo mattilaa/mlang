@@ -245,6 +245,43 @@ Key details:
 - `static_cpp_runtime` adds `-static-libstdc++ -static-libgcc` during package
   linking. This is generally intended for GNU/Linux toolchains.
 
+### `[[bin]]`
+
+Packages can declare multiple executable targets with `[[bin]]`:
+
+```toml
+[[bin]]
+name = "hello"
+entry = "src/hello.mla"
+
+[[bin]]
+name = "inspect"
+entry = "src/inspect.mla"
+opt_level = "O0"
+linker_flags = ["-Wl,-dead_strip"]
+```
+
+When `[[bin]]` targets are present, `mlang pkg build` builds each one into
+`build/<bin-name>`.
+
+Supported target-scoped keys inside `[[bin]]`:
+
+- `min_mlang_version`
+- `opt_level`
+- `target_arch`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
+
+Merge behavior:
+
+- scalar values override package defaults from `[tool.mlang]`
+- list values append after package defaults
+- explicit target booleans override package defaults
+
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
 
@@ -280,6 +317,8 @@ Workspace example in this repository:
   `tar.gz` dependency fetching.
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
+- `examples/package_manager_multi_bins`
+  Demonstrates `[[bin]]` targets plus target-scoped config overrides.
 
 ## See Also
 

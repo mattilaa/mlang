@@ -995,6 +995,8 @@ static bool manifest_requires_cpp_pkg_frontend()
 
     if(content.find("[workspace]") != std::string::npos)
         return true;
+    if(content.find("[[bin]]") != std::string::npos)
+        return true;
     if(content.find("opt_level") != std::string::npos)
         return true;
     if(content.find("target_arch") != std::string::npos)

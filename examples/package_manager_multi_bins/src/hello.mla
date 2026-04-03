@@ -1,0 +1,4 @@
+fn main() -> i32 {
+    println!("hello from multi-bin package");
+    return 0;
+}

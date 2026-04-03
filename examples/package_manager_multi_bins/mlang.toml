@@ -1,0 +1,22 @@
+[package]
+name = "multi_bin_demo"
+version = "0.1.0"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+opt_level = "O2"
+compiler_flags = ["-Wno-unwrap"]
+
+[[bin]]
+name = "hello"
+entry = "src/hello.mla"
+
+[[bin]]
+name = "inspect"
+entry = "src/inspect.mla"
+opt_level = "O0"
+linker_flags = ["-Wl,-dead_strip"]

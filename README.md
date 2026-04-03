@@ -713,6 +713,52 @@ Supported keys are:
 If `[tool.mlang].min_mlang_version` is set and the running compiler is older
 than that version, `mlang pkg build` fails before starting the build.
 
+Packages can also declare multiple executable targets:
+
+```toml
+[package]
+name = "multi_bin_demo"
+version = "0.1.0"
+
+[tool.mlang]
+opt_level = "O2"
+compiler_flags = ["-Wno-unwrap"]
+
+[[bin]]
+name = "hello"
+entry = "src/hello.mla"
+
+[[bin]]
+name = "inspect"
+entry = "src/inspect.mla"
+opt_level = "O0"
+linker_flags = ["-Wl,-dead_strip"]
+```
+
+When `[[bin]]` entries are present, `mlang pkg build` builds each executable
+into `build/<bin-name>`.
+
+Target-scoped config keys supported inside `[[bin]]` are:
+
+- `min_mlang_version`
+- `opt_level`
+- `target_arch`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
+
+Target-scoped values are merged with `[tool.mlang]` defaults:
+
+- scalar values such as `opt_level`, `target_arch`, and `min_mlang_version`
+  override the package default for that target
+- list values such as `compiler_flags`, `linker_flags`, `lib_paths`, and `libs`
+  are appended after the package defaults
+- boolean values such as `static_deps` and `static_cpp_runtime` override the
+  package default when explicitly set on the target
+
 For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
 
@@ -765,6 +811,8 @@ Workspace example:
   `tar.gz` source fetching in sibling subpackages.
 - `examples/package_manager_static_cjson`
   Demonstrates static linking of a fetched `tar.gz` C dependency.
+- `examples/package_manager_multi_bins`
+  Demonstrates `[[bin]]` targets plus target-scoped build config overrides.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:

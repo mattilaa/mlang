@@ -1,0 +1,4 @@
+fn main() -> i32 {
+    println!("inspect target built with target-scoped config");
+    return 0;
+}

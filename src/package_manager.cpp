@@ -122,6 +122,37 @@ static std::optional<std::string> find_toml_string(
     return content.substr(pos, end - pos);
 }
 
+static std::string unquote(std::string_view v);
+
+static std::optional<std::string> find_section_toml_string(
+    const std::string& content, const std::string& section,
+    const std::string& key)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::string currentSection;
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t.front() == '[' && t.back() == ']')
+        {
+            currentSection = t.substr(1, t.size() - 2);
+            continue;
+        }
+        if(currentSection != section)
+            continue;
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        if(trim(t.substr(0, eq)) != key)
+            continue;
+        return unquote(trim(t.substr(eq + 1)));
+    }
+    return std::nullopt;
+}
+
 static std::vector<std::string> split_toml_array(std::string_view input)
 {
     std::vector<std::string> out;
@@ -181,11 +212,20 @@ struct BuildConfig
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
     std::vector<std::string> libs;
-    bool staticDeps = false;
-    bool staticCppRuntime = false;
+    std::optional<bool> staticDeps;
+    std::optional<bool> staticCppRuntime;
 };
 
-static std::string unquote(std::string_view v);
+struct BuildTarget
+{
+    std::string name;
+    std::string entry;
+    BuildConfig config;
+};
+
+static void parse_build_config_key_value(BuildConfig& cfg,
+                                         const std::string& key,
+                                         const std::string& value);
 
 static void append_toml_string_list_value(const std::string& value,
                                           std::vector<std::string>& out)
@@ -216,6 +256,33 @@ static bool parse_toml_bool_value(const std::string& value)
         return static_cast<char>(std::tolower(c));
     });
     return t == "true" || t == "1" || t == "\"true\"";
+}
+
+static BuildConfig merge_build_config(const BuildConfig& base,
+                                      const BuildConfig& overrideCfg)
+{
+    BuildConfig out = base;
+    if(!overrideCfg.optLevel.empty())
+        out.optLevel = overrideCfg.optLevel;
+    if(!overrideCfg.targetArch.empty())
+        out.targetArch = overrideCfg.targetArch;
+    if(!overrideCfg.minMlangVersion.empty())
+        out.minMlangVersion = overrideCfg.minMlangVersion;
+    out.compilerFlags.insert(out.compilerFlags.end(),
+                             overrideCfg.compilerFlags.begin(),
+                             overrideCfg.compilerFlags.end());
+    out.linkerFlags.insert(out.linkerFlags.end(),
+                           overrideCfg.linkerFlags.begin(),
+                           overrideCfg.linkerFlags.end());
+    out.libPaths.insert(out.libPaths.end(), overrideCfg.libPaths.begin(),
+                        overrideCfg.libPaths.end());
+    out.libs.insert(out.libs.end(), overrideCfg.libs.begin(),
+                    overrideCfg.libs.end());
+    if(overrideCfg.staticDeps.has_value())
+        out.staticDeps = overrideCfg.staticDeps;
+    if(overrideCfg.staticCppRuntime.has_value())
+        out.staticCppRuntime = overrideCfg.staticCppRuntime;
+    return out;
 }
 
 static std::optional<std::vector<int>>
@@ -310,44 +377,105 @@ static BuildConfig parse_build_config(const std::string& content)
             continue;
         std::string key = trim(t.substr(0, eq));
         std::string value = trim(t.substr(eq + 1));
-        if(key == "opt_level")
-        {
-            cfg.optLevel = normalize_opt_level(unquote(value));
-        }
-        else if(key == "target_arch")
-        {
-            cfg.targetArch = normalize_target_arch_name(unquote(value));
-        }
-        else if(key == "min_mlang_version")
-        {
-            cfg.minMlangVersion = unquote(value);
-        }
-        else if(key == "compiler_flags")
-        {
-            append_toml_string_list_value(value, cfg.compilerFlags);
-        }
-        else if(key == "linker_flags")
-        {
-            append_toml_string_list_value(value, cfg.linkerFlags);
-        }
-        else if(key == "lib_paths")
-        {
-            append_toml_string_list_value(value, cfg.libPaths);
-        }
-        else if(key == "libs")
-        {
-            append_toml_string_list_value(value, cfg.libs);
-        }
-        else if(key == "static_deps")
-        {
-            cfg.staticDeps = parse_toml_bool_value(value);
-        }
-        else if(key == "static_cpp_runtime")
-        {
-            cfg.staticCppRuntime = parse_toml_bool_value(value);
-        }
+        parse_build_config_key_value(cfg, key, value);
     }
     return cfg;
+}
+
+static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::vector<BuildTarget> targets;
+    std::optional<BuildTarget> current;
+
+    auto flush_current = [&]() {
+        if(current.has_value())
+            targets.push_back(*current);
+        current.reset();
+    };
+
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t == "[[bin]]")
+        {
+            flush_current();
+            current = BuildTarget {};
+            continue;
+        }
+        if(t.front() == '[' && t.back() == ']')
+        {
+            flush_current();
+            continue;
+        }
+        if(!current.has_value())
+            continue;
+
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        std::string key = trim(t.substr(0, eq));
+        std::string value = trim(t.substr(eq + 1));
+        if(key == "name")
+        {
+            current->name = unquote(value);
+        }
+        else if(key == "entry")
+        {
+            current->entry = unquote(value);
+        }
+        else
+        {
+            parse_build_config_key_value(current->config, key, value);
+        }
+    }
+    flush_current();
+    return targets;
+}
+
+static void parse_build_config_key_value(BuildConfig& cfg,
+                                         const std::string& key,
+                                         const std::string& value)
+{
+    if(key == "opt_level")
+    {
+        cfg.optLevel = normalize_opt_level(unquote(value));
+    }
+    else if(key == "target_arch")
+    {
+        cfg.targetArch = normalize_target_arch_name(unquote(value));
+    }
+    else if(key == "min_mlang_version")
+    {
+        cfg.minMlangVersion = unquote(value);
+    }
+    else if(key == "compiler_flags")
+    {
+        append_toml_string_list_value(value, cfg.compilerFlags);
+    }
+    else if(key == "linker_flags")
+    {
+        append_toml_string_list_value(value, cfg.linkerFlags);
+    }
+    else if(key == "lib_paths")
+    {
+        append_toml_string_list_value(value, cfg.libPaths);
+    }
+    else if(key == "libs")
+    {
+        append_toml_string_list_value(value, cfg.libs);
+    }
+    else if(key == "static_deps")
+    {
+        cfg.staticDeps = parse_toml_bool_value(value);
+    }
+    else if(key == "static_cpp_runtime")
+    {
+        cfg.staticCppRuntime = parse_toml_bool_value(value);
+    }
 }
 
 struct DepSpec
@@ -1105,6 +1233,39 @@ static bool append_pkg_config_flags(const CDepSpec& dep,
     return true;
 }
 
+static int validate_mlang_version_requirement(const std::filesystem::path& manifestPath,
+                                              const BuildConfig& buildConfig,
+                                              const std::string& targetName)
+{
+    if(buildConfig.minMlangVersion.empty())
+        return 0;
+    if(!parse_semver_components(buildConfig.minMlangVersion).has_value())
+    {
+        std::cerr << "Invalid [tool.mlang].min_mlang_version";
+        if(!targetName.empty())
+            std::cerr << " for [[bin]] target '" << targetName << "'";
+        std::cerr << " in " << manifestPath.string() << ": "
+                  << buildConfig.minMlangVersion << "\n";
+        return 1;
+    }
+    if(!parse_semver_components(MLANG_VERSION).has_value())
+    {
+        std::cerr << "Current mlang version is not semver-compatible: "
+                  << MLANG_VERSION << "\n";
+        return 1;
+    }
+    if(compare_semver(MLANG_VERSION, buildConfig.minMlangVersion) < 0)
+    {
+        std::cerr << "Package " << manifestPath.string();
+        if(!targetName.empty())
+            std::cerr << " target '" << targetName << "'";
+        std::cerr << " requires mlang >= " << buildConfig.minMlangVersion
+                  << ", but current version is " << MLANG_VERSION << "\n";
+        return 1;
+    }
+    return 0;
+}
+
 static int fetch_for_manifest(const PackageManifest& pkg)
 {
     auto deps = parse_source_deps(pkg.content);
@@ -1125,30 +1286,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 {
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
-    BuildConfig buildConfig = parse_build_config(pkg.content);
-    if(!buildConfig.minMlangVersion.empty())
-    {
-        if(!parse_semver_components(buildConfig.minMlangVersion).has_value())
-        {
-            std::cerr << "Invalid [tool.mlang].min_mlang_version in "
-                      << pkg.manifestPath.string() << ": "
-                      << buildConfig.minMlangVersion << "\n";
-            return 1;
-        }
-        if(!parse_semver_components(MLANG_VERSION).has_value())
-        {
-            std::cerr << "Current mlang version is not semver-compatible: "
-                      << MLANG_VERSION << "\n";
-            return 1;
-        }
-        if(compare_semver(MLANG_VERSION, buildConfig.minMlangVersion) < 0)
-        {
-            std::cerr << "Package " << pkg.manifestPath.string()
-                      << " requires mlang >= " << buildConfig.minMlangVersion
-                      << ", but current version is " << MLANG_VERSION << "\n";
-            return 1;
-        }
-    }
+    BuildConfig packageBuildConfig = parse_build_config(pkg.content);
     std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
     std::filesystem::create_directories(depsDir);
     for(const auto& dep : deps)
@@ -1170,63 +1308,101 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
             return 1;
     }
 
-    std::string entry = "src/main.mla";
-    if(auto v = find_toml_string(pkg.content, "entry"); v.has_value())
-        entry = v.value();
-    std::string name = "app";
-    if(auto v = find_toml_string(pkg.content, "name"); v.has_value())
-        name = v.value();
-
-    std::string optFlag = optFlagOverride;
-    if(optFlag.empty())
-        optFlag = buildConfig.optLevel;
+    std::vector<BuildTarget> targets = parse_bin_targets(pkg.content);
+    if(targets.empty())
+    {
+        BuildTarget defaultTarget;
+        defaultTarget.name = "app";
+        if(auto v = find_section_toml_string(pkg.content, "package", "name");
+           v.has_value())
+        {
+            defaultTarget.name = v.value();
+        }
+        defaultTarget.entry = "src/main.mla";
+        if(auto v = find_section_toml_string(pkg.content, "package", "entry");
+           v.has_value())
+        {
+            defaultTarget.entry = v.value();
+        }
+        targets.push_back(defaultTarget);
+    }
 
     std::filesystem::create_directories(pkg.packageDir / "build");
-    std::string output = "build/" + name;
     std::string backend = argv0;
     if(argv0.find('/') != std::string::npos)
         backend = std::filesystem::absolute(argv0).string();
 
-    std::string cmd = shell_quote(backend) + " " + shell_quote(entry) +
-                      " -o " + shell_quote(output);
-    if(!buildConfig.targetArch.empty())
-        cmd += " --target-arch " + shell_quote(buildConfig.targetArch);
-    if(!optFlag.empty())
-        cmd += " " + optFlag;
-    for(const auto& flag : buildConfig.compilerFlags)
-        cmd += " " + shell_quote(flag);
-    for(const auto& dir : buildConfig.libPaths)
-        cmd += " -L" + shell_quote(dir);
-    for(const auto& lib : buildConfig.libs)
-        cmd += " -l" + shell_quote(lib);
-    if(buildConfig.staticDeps)
+    for(const auto& target : targets)
     {
-        for(const auto& archive : linkFlags.staticArchives)
-            cmd += " " + shell_quote(archive);
-    }
-    else
-    {
-        for(const auto& dir : linkFlags.libDirs)
-            cmd += " -L" + shell_quote(dir);
-        for(const auto& lib : linkFlags.libs)
-            cmd += " -l" + shell_quote(lib);
-        for(const auto& dir : linkFlags.libDirs)
-            cmd += " -Wl,-rpath," + shell_quote(dir);
-    }
-    if(buildConfig.staticCppRuntime)
-    {
-        cmd += " -static-libstdc++ -static-libgcc";
-    }
-    for(const auto& flag : buildConfig.linkerFlags)
-        cmd += " " + shell_quote(flag);
-    for(const auto& flag : pkgFlags)
-        cmd += " " + shell_quote(flag);
+        if(target.name.empty())
+        {
+            std::cerr << "Missing name in [[bin]] target for "
+                      << pkg.manifestPath.string() << "\n";
+            return 1;
+        }
+        if(target.entry.empty())
+        {
+            std::cerr << "Missing entry in [[bin]] target '" << target.name
+                      << "' for " << pkg.manifestPath.string() << "\n";
+            return 1;
+        }
 
-    int rc = run_command_in_dir(pkg.packageDir, cmd);
-    if(rc != 0)
-    {
-        std::cerr << "Build failed for " << pkg.manifestPath.string() << ".\n";
-        return 1;
+        BuildConfig buildConfig =
+            merge_build_config(packageBuildConfig, target.config);
+        if(validate_mlang_version_requirement(pkg.manifestPath, buildConfig,
+                                              target.name) != 0)
+        {
+            return 1;
+        }
+
+        std::string optFlag = optFlagOverride;
+        if(optFlag.empty())
+            optFlag = buildConfig.optLevel;
+
+        std::string output = "build/" + target.name;
+        std::string cmd = shell_quote(backend) + " " +
+                          shell_quote(target.entry) + " -o " +
+                          shell_quote(output);
+        if(!buildConfig.targetArch.empty())
+            cmd += " --target-arch " + shell_quote(buildConfig.targetArch);
+        if(!optFlag.empty())
+            cmd += " " + optFlag;
+        for(const auto& flag : buildConfig.compilerFlags)
+            cmd += " " + shell_quote(flag);
+        for(const auto& dir : buildConfig.libPaths)
+            cmd += " -L" + shell_quote(dir);
+        for(const auto& lib : buildConfig.libs)
+            cmd += " -l" + shell_quote(lib);
+        if(buildConfig.staticDeps.value_or(false))
+        {
+            for(const auto& archive : linkFlags.staticArchives)
+                cmd += " " + shell_quote(archive);
+        }
+        else
+        {
+            for(const auto& dir : linkFlags.libDirs)
+                cmd += " -L" + shell_quote(dir);
+            for(const auto& lib : linkFlags.libs)
+                cmd += " -l" + shell_quote(lib);
+            for(const auto& dir : linkFlags.libDirs)
+                cmd += " -Wl,-rpath," + shell_quote(dir);
+        }
+        if(buildConfig.staticCppRuntime.value_or(false))
+            cmd += " -static-libstdc++ -static-libgcc";
+        for(const auto& flag : buildConfig.linkerFlags)
+            cmd += " " + shell_quote(flag);
+        for(const auto& flag : pkgFlags)
+            cmd += " " + shell_quote(flag);
+
+        int rc = run_command_in_dir(pkg.packageDir, cmd);
+        if(rc != 0)
+        {
+            std::cerr << "Build failed for " << pkg.manifestPath.string();
+            if(!target.name.empty())
+                std::cerr << " target '" << target.name << "'";
+            std::cerr << ".\n";
+            return 1;
+        }
     }
     return 0;
 }
