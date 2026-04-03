@@ -122,6 +122,142 @@ static std::optional<std::string> find_toml_string(
     return content.substr(pos, end - pos);
 }
 
+static std::vector<std::string> split_toml_array(std::string_view input)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    bool in_quotes = false;
+    for(char c : input)
+    {
+        if(c == '"')
+        {
+            in_quotes = !in_quotes;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == ',' && !in_quotes)
+        {
+            out.push_back(trim(cur));
+            cur.clear();
+            continue;
+        }
+        cur.push_back(c);
+    }
+    if(!cur.empty())
+        out.push_back(trim(cur));
+    return out;
+}
+
+static std::string normalize_target_arch_name(const std::string& arch)
+{
+    if(arch == "x86" || arch == "i386" || arch == "i686")
+        return "x86";
+    if(arch == "x64" || arch == "x86_64" || arch == "amd64" ||
+       arch == "x86-64")
+        return "x64";
+    if(arch == "aarch64" || arch == "arm64")
+        return "aarch64";
+    return "";
+}
+
+static std::string normalize_opt_level(std::string opt)
+{
+    opt = trim(opt);
+    if(opt.empty())
+        return "";
+    if(opt[0] != '-')
+        opt = "-" + opt;
+    if(opt == "-O0" || opt == "-O1" || opt == "-O2" || opt == "-O3")
+        return opt;
+    return "";
+}
+
+struct BuildConfig
+{
+    std::string optLevel;
+    std::string targetArch;
+    std::vector<std::string> compilerFlags;
+    std::vector<std::string> linkerFlags;
+    std::vector<std::string> libPaths;
+    std::vector<std::string> libs;
+};
+
+static std::string unquote(std::string_view v);
+
+static void append_toml_string_list_value(const std::string& value,
+                                          std::vector<std::string>& out)
+{
+    std::string t = trim(value);
+    if(t.empty())
+        return;
+    if(t.front() == '[' && t.back() == ']')
+    {
+        for(const auto& part : split_toml_array(t.substr(1, t.size() - 2)))
+        {
+            std::string v = unquote(part);
+            if(!v.empty())
+                out.push_back(v);
+        }
+        return;
+    }
+
+    std::string v = unquote(t);
+    if(!v.empty())
+        out.push_back(v);
+}
+
+static BuildConfig parse_build_config(const std::string& content)
+{
+    std::istringstream in(content);
+    std::string line;
+    std::string section;
+    BuildConfig cfg;
+    while(std::getline(in, line))
+    {
+        std::string t = trim(line);
+        if(t.empty() || t[0] == '#')
+            continue;
+        if(t.front() == '[' && t.back() == ']')
+        {
+            section = t.substr(1, t.size() - 2);
+            continue;
+        }
+        if(section != "tool.mlang")
+            continue;
+
+        size_t eq = t.find('=');
+        if(eq == std::string::npos)
+            continue;
+        std::string key = trim(t.substr(0, eq));
+        std::string value = trim(t.substr(eq + 1));
+        if(key == "opt_level")
+        {
+            cfg.optLevel = normalize_opt_level(unquote(value));
+        }
+        else if(key == "target_arch")
+        {
+            cfg.targetArch = normalize_target_arch_name(unquote(value));
+        }
+        else if(key == "compiler_flags")
+        {
+            append_toml_string_list_value(value, cfg.compilerFlags);
+        }
+        else if(key == "linker_flags")
+        {
+            append_toml_string_list_value(value, cfg.linkerFlags);
+        }
+        else if(key == "lib_paths")
+        {
+            append_toml_string_list_value(value, cfg.libPaths);
+        }
+        else if(key == "libs")
+        {
+            append_toml_string_list_value(value, cfg.libs);
+        }
+    }
+    return cfg;
+}
+
 struct DepSpec
 {
     std::string name;
@@ -759,6 +895,7 @@ int PackageManager::run(int argc, char** argv)
 
         auto deps = parse_git_deps(content);
         auto cdeps = parse_c_deps(content);
+        BuildConfig buildConfig = parse_build_config(content);
         std::filesystem::path depsDir = std::filesystem::path("build") / "deps";
         std::filesystem::create_directories(depsDir);
         for(const auto& dep : deps)
@@ -786,20 +923,32 @@ int PackageManager::run(int argc, char** argv)
         std::string name = "app";
         if(auto v = find_toml_string(content, "name"); v.has_value())
             name = v.value();
+        if(optFlag.empty())
+            optFlag = buildConfig.optLevel;
 
         std::filesystem::create_directories("build");
         std::string output = "build/" + name;
 
         std::string cmd =
             std::string(argv[0]) + " " + entry + " -o " + output;
+        if(!buildConfig.targetArch.empty())
+            cmd += " --target-arch " + buildConfig.targetArch;
         if(!optFlag.empty())
             cmd += " " + optFlag;
+        for(const auto& flag : buildConfig.compilerFlags)
+            cmd += " " + flag;
+        for(const auto& dir : buildConfig.libPaths)
+            cmd += " -L" + dir;
+        for(const auto& lib : buildConfig.libs)
+            cmd += " -l" + lib;
         for(const auto& dir : linkFlags.libDirs)
             cmd += " -L" + dir;
         for(const auto& lib : linkFlags.libs)
             cmd += " -l" + lib;
         for(const auto& dir : linkFlags.libDirs)
             cmd += " -Wl,-rpath," + dir;
+        for(const auto& flag : buildConfig.linkerFlags)
+            cmd += " " + flag;
         for(const auto& flag : pkgFlags)
             cmd += " " + flag;
         int rc = std::system(cmd.c_str());

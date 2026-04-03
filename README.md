@@ -678,7 +678,30 @@ entry = "src/main.mla"
 
 [c-dependencies]
 curl = { pkg_config = "libcurl" }
+
+[tool.mlang]
+module_paths = ["."]
+opt_level = "O2"
+target_arch = "x64"
+lib_paths = ["vendor/lib"]
+libs = ["foo"]
+linker_flags = ["-Wl,-rpath,vendor/lib"]
+compiler_flags = ["-Wno-unwrap"]
 ```
+
+`[tool.mlang]` can be used to set package-build defaults for `mlang pkg build`.
+Supported keys are:
+
+- `module_paths`: existing module search path support.
+- `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
+- `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
+- `lib_paths`: extra library search paths, emitted as `-L...`.
+- `libs`: extra libraries, emitted as `-l...`.
+- `linker_flags`: raw linker-related flags forwarded to the compiler invocation.
+- `compiler_flags`: additional raw compiler flags forwarded during `pkg build`.
+
+For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
+`[tool.mlang].opt_level`.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:
