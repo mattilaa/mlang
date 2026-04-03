@@ -3,10 +3,20 @@
 `mlangpkg` is a Cargo-like package manager prototype written in Mlang.
 
 Goal:
-- Cargo-like project flow (`init`, `build`, `run`, `add`)
+- Cargo-like project flow (`init`, `build`, `run`, `add`, `clean`)
 - no CMake dependency
 - clear stdlib dependency surface so runtime features can be added
   incrementally
+
+## Commands
+
+- `init <name>`: create a new package skeleton.
+- `build [--release]`: compile `src/main.mla` into `.mlangpkg/target/<bin>`.
+- `run [--release] [-- ...]`: build package and then execute the artifact
+  once runtime forwarding is implemented.
+- `add <name> --path <dir>`: add a local path dependency to
+  `mlangpkg.toml`.
+- `clean`: delete package build artifacts under `.mlangpkg`.
 
 ## Layout
 

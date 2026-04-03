@@ -74,6 +74,7 @@ fn print_usage(program: str8) -> void {
     println!("  {} pkg add <name> [--pkg-config NAME] [--system]", program);
     println!("  {} pkg fetch", program);
     println!("  {} pkg build [-O0|-O1|-O2|-O3] [--ninja]", program);
+    println!("  {} pkg clean", program);
     println!("");
     println!("Testing:");
     println!("  {} --tests [path]", program);

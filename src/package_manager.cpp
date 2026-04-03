@@ -561,7 +561,7 @@ int PackageManager::run(int argc, char** argv)
     if(argc < 3)
     {
         std::cerr << "Usage: " << argv[0]
-                  << " pkg <init|add|fetch|build>\n";
+                  << " pkg <init|add|fetch|build|clean>\n";
         return 1;
     }
 
@@ -808,6 +808,27 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Build failed.\n";
             return 1;
         }
+        return 0;
+    }
+
+    if(sub == "clean")
+    {
+        const std::filesystem::path buildDir = "build";
+        if(!std::filesystem::exists(buildDir))
+        {
+            std::cout << "No artifacts to clean in " << buildDir.string()
+                      << "\n";
+            return 0;
+        }
+        std::error_code ec;
+        std::filesystem::remove_all(buildDir, ec);
+        if(ec)
+        {
+            std::cerr << "Failed to clean " << buildDir.string() << ": "
+                      << ec.message() << "\n";
+            return 1;
+        }
+        std::cout << "Cleaned " << buildDir.string() << "\n";
         return 0;
     }
 

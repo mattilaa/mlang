@@ -2,7 +2,7 @@
 /// \brief Native MLang implementation of package manager frontend/backend.
 ///
 /// Usage:
-///   mlang-pkg-mla [--backend <mlang_bin>] <init|add|fetch|build> [args...]
+///   mlang-pkg-mla [--backend <mlang_bin>] <init|add|fetch|build|clean> [args...]
 ///
 /// `--backend` selects the compiler binary used by `build` (default: `mlang`).
 
@@ -16,6 +16,7 @@ use std::compiler::version;
 use std::fs::cwd;
 use std::fs::file_exists;
 use std::fs::read_all_text;
+use std::fs::remove_tree;
 use std::fs::write_all_text;
 use std::process::Child;
 use std::process::ChildStdout;
@@ -68,6 +69,7 @@ fn print_usage() -> void {
     println!("  add <name> [--pkg-config NAME] [--system]");
     println!("  fetch");
     println!("  build [-O0|-O1|-O2|-O3] [--ninja]");
+    println!("  clean");
 }
 
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
@@ -935,6 +937,23 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
     return 0;
 }
 
+fn run_clean() -> i32 {
+    let build_dir: str8 = "build";
+    if (file_exists(build_dir) == 0) {
+        println!("No artifacts to clean in {}", build_dir);
+        return 0;
+    }
+
+    let rr: Result<i32, str8> = remove_tree(build_dir);
+    if (rr.is_err()) {
+        println!("Failed to clean {}", build_dir);
+        return 1;
+    }
+
+    println!("Cleaned {}", build_dir);
+    return 0;
+}
+
 fn main(argc: i32, args: list<str8>) -> i32 {
     var argv: list<str8> = [];
     for a in args {
@@ -990,6 +1009,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
     if (eq(sub, "build") == 1) {
         return run_build(argc, argv, idx, manifest, backend);
+    }
+    if (eq(sub, "clean") == 1) {
+        return run_clean();
     }
 
     println!("Unknown pkg subcommand: {}", sub);

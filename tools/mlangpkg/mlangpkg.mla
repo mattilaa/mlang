@@ -134,6 +134,10 @@ fn cmd_add(dep_name: str8, dep_path: str8) -> void {
 fn cmd_clean() -> void {
     let cwd = env_cwd();
     let build_dir = path_join(cwd, ".mlangpkg");
+    if fs_exists(build_dir) == 0 {
+        env_println(format!("mlangpkg: no artifacts to clean in {}", build_dir));
+        return;
+    }
     fs_remove_tree(build_dir);
     env_println(format!("cleaned {}", build_dir));
 }
