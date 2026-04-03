@@ -316,6 +316,11 @@ Packages can define shell-driven tasks:
 [[task]]
 name = "kernel-build"
 workdir = "{{root}}"
+env = [
+  "LLVM=1",
+  "LLVM_IAS=1",
+  "CC=/opt/homebrew/opt/llvm/bin/clang"
+]
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
@@ -332,15 +337,29 @@ Linux AArch64 kernel example sequence:
 ```sh
 cd examples/package_manager_linux_aarch64_qemu
 ../../build/mlang pkg fetch
+../../build/mlang pkg run toolchain-check
 ../../build/mlang pkg run kernel-build
 ../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
+```
+
+Linux AArch64 kernel example installation on macOS:
+
+```sh
+brew install llvm lld libelf make qemu cpio
+```
+
+Linux AArch64 kernel example installation on Debian/Ubuntu:
+
+```sh
+sudo apt-get install clang lld make qemu-system-arm cpio gzip gcc-aarch64-linux-gnu
 ```
 
 Supported task keys:
 
 - `name`
 - `workdir`
+- `env`
 - `command`
 - `commands`
 
@@ -351,6 +370,26 @@ Supported placeholders in `workdir` and commands:
 - `{{build_dir}}`
 - `{{deps_dir}}`
 - `{{make}}`
+
+The Linux kernel example uses:
+
+- `toolchain-check` to fail early if required LLVM or `ld.lld` binaries are
+  missing
+- `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
+- `initramfs` to build the example initramfs archive
+- `qemu-run` to boot the generated image under QEMU
+
+Host guidance:
+
+- Linux is the recommended host for this example.
+- macOS is supported on a best-effort basis with Homebrew `llvm`, `lld`,
+  `libelf`, `make`, `qemu`, and `cpio`.
+- On macOS, the example tasks enable the kernel's LLVM toolchain mode and add
+  Homebrew `libelf` include/library flags plus a generated `elf.h` shim for
+  host tools that expect Linux-style ELF headers.
+- Even with that setup, some kernel host utilities can still fail due to ABI
+  mismatches with Homebrew `libelf`, so Linux remains the supported host for
+  reproducible full-kernel builds.
 
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.

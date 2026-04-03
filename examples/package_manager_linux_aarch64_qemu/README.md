@@ -3,10 +3,13 @@
 This example demonstrates two new package-manager capabilities:
 
 - fetch-only source dependencies with `build = "none"`
-- shell-driven custom tasks via `[[task]]` and `mlang pkg run`
+- shell-driven custom tasks via `[[task]]`, `env`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, creates a tiny initramfs, and boots it under QEMU.
+
+Linux is the recommended host for this example. macOS support is best-effort
+and requires extra Homebrew host-tool setup for LLVM, `lld`, and `libelf`.
 
 On macOS, the manifest prepends common Homebrew tool directories to `PATH` so
 newer Homebrew `make` and other tools can be used instead of `/usr/bin`.
@@ -19,6 +22,11 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [[task]]
 name = "kernel-build"
+env = [
+  "LLVM=1",
+  "LLVM_IAS=1",
+  "CC=/opt/homebrew/opt/llvm/bin/clang"
+]
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
@@ -29,6 +37,10 @@ make_program = "gmake"
 path_entries = [
   "/opt/homebrew/opt/make/libexec/gnubin",
   "/usr/local/opt/make/libexec/gnubin",
+  "/opt/homebrew/opt/lld/bin",
+  "/usr/local/opt/lld/bin",
+  "/opt/homebrew/opt/llvm/bin",
+  "/usr/local/opt/llvm/bin",
   "/opt/homebrew/bin",
   "/usr/local/bin"
 ]
@@ -40,14 +52,29 @@ commands = [
 ]
 ```
 
-## Prereqs
+## Install
 
 - `make`
 - `gmake` on macOS if Homebrew `make` is installed and `make_program = "gmake"`
+- Homebrew `llvm`
+- Homebrew `lld`
+- Homebrew `libelf`
 - `cpio`
 - `gzip`
 - `qemu-system-aarch64`
 - an AArch64-capable kernel toolchain
+
+On macOS, install the toolchain first:
+
+```sh
+brew install llvm lld libelf make qemu cpio
+```
+
+On Debian/Ubuntu, install:
+
+```sh
+sudo apt-get install clang lld make qemu-system-arm cpio gzip gcc-aarch64-linux-gnu
+```
 
 On native AArch64 hosts, `CROSS_COMPILE` can usually be left empty.
 On x86_64 Linux hosts, set something like:
@@ -56,20 +83,30 @@ On x86_64 Linux hosts, set something like:
 export CROSS_COMPILE=aarch64-linux-gnu-
 ```
 
-## Run
+## Build And Run
 
 From this directory:
 
 ```sh
 ../../build/mlang pkg fetch
+../../build/mlang pkg run toolchain-check
 ../../build/mlang pkg run kernel-build
 ../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
 
+To only compile the Linux kernel image for AArch64 without booting QEMU:
+
+```sh
+../../build/mlang pkg fetch
+../../build/mlang pkg run toolchain-check
+../../build/mlang pkg run kernel-build
+```
+
 Or step-by-step:
 
 ```sh
+../../build/mlang pkg run toolchain-check
 ../../build/mlang pkg run kernel-defconfig
 ../../build/mlang pkg run kernel-build
 ../../build/mlang pkg run initramfs
@@ -83,11 +120,28 @@ Or step-by-step:
   handlers.
 - `make_program = "gmake"` lets the package pick the Homebrew GNU Make binary
   directly for tasks and built-in `build = "make"` dependency builds.
+- `env = ["KEY=value"]` lets each task set toolchain variables such as
+  `LLVM=1`, `LLVM_IAS=1`, and `CC` without hardcoding them into every command.
 - `{{make}}` expands to the configured make executable from
   `[tool.mlang].make_program`.
 - `path_entries` in `mlang.toml` lets the package prepend Homebrew tool
   directories to `PATH`, which is useful on macOS when `/usr/bin/make` is too
   old for the kernel tree being built.
+- The kernel build works on macOS by running the Linux kernel in LLVM mode
+  (`LLVM=1`, `LLVM_IAS=1`) so it picks up Homebrew `clang` and `ld.lld`
+  instead of Apple `/usr/bin/ld`.
+- On macOS, the build tasks also resolve Homebrew `libelf`, export
+  `PKG_CONFIG_PATH`, add host include/library flags, and generate a local
+  `build/host-compat/elf.h` shim that maps the kernel's `<elf.h>` include to
+  Homebrew `libelf/sys_elf.h`.
+- `toolchain-check` fails early if the required Homebrew LLVM, `ld.lld`, or
+  `libelf` metadata is missing.
+- Even with those fixes, macOS remains best-effort. Linux is the more reliable
+  host for full kernel builds and future kernel version changes.
+- The current macOS path gets past the missing GNU Make, linker, and `elf.h`
+  failures, but Linux host tools such as `scripts/sorttable` can still hit ABI
+  mismatches against Homebrew `libelf`. Treat Linux as the supported host for
+  reproducible full-kernel builds.
 - The `{{root}}`, `{{build_dir}}`, and `{{deps_dir}}` placeholders are
   expanded by `mlang pkg run` before the shell commands execute.
 - This example is intentionally task-driven. Its primary goal is orchestrating

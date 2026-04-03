@@ -180,6 +180,71 @@ static std::vector<std::string> split_toml_array(std::string_view input)
     return out;
 }
 
+static bool toml_array_is_complete(std::string_view input)
+{
+    int depth = 0;
+    bool in_quotes = false;
+    bool escaped = false;
+    for(char c : input)
+    {
+        if(in_quotes)
+        {
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                in_quotes = false;
+            continue;
+        }
+
+        if(c == '"')
+        {
+            in_quotes = true;
+            continue;
+        }
+        if(c == '[')
+        {
+            ++depth;
+            continue;
+        }
+        if(c == ']')
+        {
+            if(depth > 0)
+                --depth;
+            continue;
+        }
+    }
+    return depth == 0;
+}
+
+static std::string collect_multiline_toml_value(std::string value,
+                                                std::istream& in)
+{
+    if(value != "[" &&
+       (value.find('[') == std::string::npos ||
+        toml_array_is_complete(value)))
+    {
+        return value;
+    }
+
+    std::string extra;
+    while(std::getline(in, extra))
+    {
+        value += "\n";
+        value += trim(extra);
+        if(toml_array_is_complete(value))
+            break;
+    }
+    return value;
+}
+
 static std::string normalize_target_arch_name(const std::string& arch)
 {
     if(arch == "x86" || arch == "i386" || arch == "i686")
@@ -231,6 +296,7 @@ struct TaskSpec
 {
     std::string name;
     std::string workdir;
+    std::vector<std::string> env;
     std::vector<std::string> commands;
 };
 
@@ -393,20 +459,7 @@ static BuildConfig parse_build_config(const std::string& content)
         if(eq == std::string::npos)
             continue;
         std::string key = trim(t.substr(0, eq));
-        std::string value = trim(t.substr(eq + 1));
-        if(value == "[" ||
-           (value.find('[') != std::string::npos &&
-            value.find(']') == std::string::npos))
-        {
-            std::string extra;
-            while(std::getline(in, extra))
-            {
-                value += "\n";
-                value += trim(extra);
-                if(trim(extra).find(']') != std::string::npos)
-                    break;
-            }
-        }
+        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
         parse_build_config_key_value(cfg, key, value);
     }
     return cfg;
@@ -448,20 +501,7 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
         if(eq == std::string::npos)
             continue;
         std::string key = trim(t.substr(0, eq));
-        std::string value = trim(t.substr(eq + 1));
-        if(value == "[" ||
-           (value.find('[') != std::string::npos &&
-            value.find(']') == std::string::npos))
-        {
-            std::string extra;
-            while(std::getline(in, extra))
-            {
-                value += "\n";
-                value += trim(extra);
-                if(trim(extra).find(']') != std::string::npos)
-                    break;
-            }
-        }
+        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
         if(key == "name")
         {
             current->name = unquote(value);
@@ -530,22 +570,14 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             if(!v.empty())
                 current->commands.push_back(v);
         }
+        else if(key == "env")
+        {
+            std::string fullValue = collect_multiline_toml_value(value, in);
+            append_toml_string_list_value(fullValue, current->env);
+        }
         else if(key == "commands")
         {
-            std::string fullValue = value;
-            if(value == "[" ||
-               (value.find('[') != std::string::npos &&
-                value.find(']') == std::string::npos))
-            {
-                std::string extra;
-                while(std::getline(in, extra))
-                {
-                    fullValue += "\n";
-                    fullValue += trim(extra);
-                    if(trim(extra).find(']') != std::string::npos)
-                        break;
-                }
-            }
+            std::string fullValue = collect_multiline_toml_value(value, in);
             append_toml_string_list_value(fullValue, current->commands);
         }
     }
@@ -1782,8 +1814,18 @@ static int run_task_for_manifest(const PackageManifest& pkg,
 
         for(const auto& command : task.commands)
         {
-            const std::string expanded =
-                expand_task_text(command, pkg, buildConfig);
+            std::string envPrefix;
+            for(const auto& entry : task.env)
+            {
+                const std::string expandedEnv =
+                    expand_task_text(entry, pkg, buildConfig);
+                if(expandedEnv.empty())
+                    continue;
+                envPrefix += " " + shell_quote(expandedEnv);
+            }
+            std::string expanded = expand_task_text(command, pkg, buildConfig);
+            if(!envPrefix.empty())
+                expanded = "env" + envPrefix + " " + expanded;
             if(run_command_in_dir_with_paths(workdir, expanded,
                                              buildConfig.pathEntries) != 0)
             {
