@@ -144,9 +144,13 @@ Build and run:
 /tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
 /tmp/mlang-pkg-mla --backend ./build/mlang fetch
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2
+/tmp/mlang-pkg-mla --backend ./build/mlang clean
 # Optional for CMake-based deps:
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2 --ninja
 ```
+
+`mlang pkg clean` removes the package-local `build/` tree created by
+`fetch`/`build`.
 
 ## Stdlib Linking
 When using stdlib modules backed by native code (e.g. `std::math`), link
@@ -702,6 +706,16 @@ Supported keys are:
 
 For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.
+
+Example workflow with config-driven defaults:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+# Override only the optimization level from the CLI:
+./build/mlang pkg build -O3
+./build/mlang pkg clean
+```
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:

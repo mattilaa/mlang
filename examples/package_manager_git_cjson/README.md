@@ -27,7 +27,8 @@ stdout by default (since no custom write callback is provided).
 The `curl_easy_setopt` function is variadic, so the extern signature uses `...`.
 Common libcurl externs are collected in `curl.mla` and imported by `src/main.mla`.
 `mlang.toml` includes `module_paths = ["."]` so the module loader can find
-`curl.mla` from `src/main.mla`.
+`curl.mla` from `src/main.mla`. It also shows package build defaults in
+`[tool.mlang]`, including `opt_level` and `target_arch`.
 
 ## Prereqs
 - `mlang` on your PATH
@@ -69,7 +70,19 @@ mlang pkg build
 ./build/cjson_demo
 ./build/cjson_demo --url https://www.someplace.com
 ./build/cjson_demo --help
+mlang pkg clean
 ```
+
+This example currently sets these build defaults in `mlang.toml`:
+
+```toml
+[tool.mlang]
+module_paths = ["."]
+opt_level = "O2"
+target_arch = "aarch64"
+```
+
+`mlang pkg build -O3` still overrides `opt_level` from the manifest.
 
 ## Notes
 - You can pin a specific revision or tag in `mlang.toml` with `rev` or `tag`.

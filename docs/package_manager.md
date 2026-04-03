@@ -1,0 +1,244 @@
+# MLang Package Manager {#package_manager}
+
+This page documents the current `mlang pkg` workflow and the manifest keys used
+by package builds.
+
+## Overview
+
+`mlang pkg` is the package-manager entrypoint exposed by the main compiler
+frontend:
+
+```sh
+./build/mlang pkg <subcommand>
+```
+
+By default, `mlang pkg` prefers the MLang implementation in
+`tools/mlang-pkg-mla/main.mla` and falls back to the C++ implementation when
+needed.
+
+You can force backend selection with:
+
+```sh
+MLANG_PKG_IMPL=mla ./build/mlang pkg build
+MLANG_PKG_IMPL=cpp ./build/mlang pkg build
+```
+
+## Subcommands
+
+### `pkg init`
+
+Create a new `mlang.toml` manifest in the current directory:
+
+```sh
+./build/mlang pkg init
+```
+
+The generated manifest contains:
+
+```toml
+[package]
+name = "app"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+```
+
+### `pkg add`
+
+Add a dependency entry to `mlang.toml`.
+
+Git dependency:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
+```
+
+Optional pinning:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --tag v1.7.18
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --rev <commit>
+```
+
+System / pkg-config dependency:
+
+```sh
+./build/mlang pkg add curl --pkg-config libcurl
+./build/mlang pkg add zlib --system
+```
+
+### `pkg fetch`
+
+Clone or update git dependencies into the package-local `build/deps/` tree:
+
+```sh
+./build/mlang pkg fetch
+```
+
+For example, a dependency named `cjson` is fetched into:
+
+```text
+build/deps/cjson
+```
+
+### `pkg build`
+
+Build the package entry defined by `mlang.toml`:
+
+```sh
+./build/mlang pkg build
+./build/mlang pkg build -O3
+./build/mlang pkg build --ninja
+```
+
+Current CLI options:
+
+- `-O0`
+- `-O1`
+- `-O2`
+- `-O3`
+- `--ninja`
+
+The output binary or IR file is written under the package-local `build/`
+directory.
+
+### `pkg clean`
+
+Remove the package-local artifact tree created by `fetch` and `build`:
+
+```sh
+./build/mlang pkg clean
+```
+
+This removes:
+
+```text
+build/
+```
+
+## Manifest Layout
+
+Current package manifests use `mlang.toml`.
+
+Basic example:
+
+```toml
+[package]
+name = "curl_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+curl = { pkg_config = "libcurl" }
+
+[tool.mlang]
+module_paths = ["."]
+opt_level = "O2"
+target_arch = "x64"
+lib_paths = ["vendor/lib"]
+libs = ["foo"]
+linker_flags = ["-Wl,-rpath,vendor/lib"]
+compiler_flags = ["-Wno-unwrap"]
+```
+
+## Manifest Sections
+
+### `[package]`
+
+Supported keys currently used by `mlang pkg`:
+
+- `name`
+- `version`
+- `entry`
+
+`entry` defaults to `src/main.mla` when omitted.
+
+### `[dependencies]`
+
+Git-backed dependencies are declared as inline TOML tables.
+
+Example:
+
+```toml
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", build = "cmake", cmake_args = "BUILD_SHARED_LIBS=OFF;CJSON_BUILD_STATIC_LIBS=ON" }
+```
+
+Currently supported dependency keys:
+
+- `git`
+- `rev`
+- `tag`
+- `build`
+- `cmake_args`
+
+Current supported build systems:
+
+- `cmake`
+- `meson`
+- `make`
+
+If `build` is omitted, `cmake` is used.
+
+### `[c-dependencies]`
+
+System libraries are resolved through `pkg-config`.
+
+Examples:
+
+```toml
+[c-dependencies]
+curl = { pkg_config = "libcurl" }
+zlib = { system = true }
+```
+
+### `[tool.mlang]`
+
+This section provides package-build defaults for `mlang pkg build`.
+
+Supported keys:
+
+- `module_paths`
+- `opt_level`
+- `target_arch`
+- `lib_paths`
+- `libs`
+- `linker_flags`
+- `compiler_flags`
+
+Key details:
+
+- `opt_level` accepts `O0`, `O1`, `O2`, `O3`, with or without a leading `-`.
+- `target_arch` accepts `x86`, `x86-64`, `x64`, `x86_64`, `amd64`,
+  `aarch64`, and `arm64`.
+- `lib_paths` are forwarded as `-L...`.
+- `libs` are forwarded as `-l...`.
+- `linker_flags` are forwarded as raw flags during package builds.
+- `compiler_flags` are forwarded as raw compiler flags during package builds.
+
+An explicit CLI optimization flag such as `-O3` overrides
+`[tool.mlang].opt_level`.
+
+## Example Workflow
+
+```sh
+./build/mlang pkg init
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
+./build/mlang pkg add curl --pkg-config libcurl
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg clean
+```
+
+## See Also
+
+- [MLang Documentation Main Page](README.md)
+- [Quick Guide](quick_guide.md)
+- [Language Syntax](language_syntax.md)
+- root project `README.md`
+- `examples/package_manager_git_cjson/README.md`

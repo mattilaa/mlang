@@ -957,10 +957,15 @@ static std::optional<int> run_mlang_frontend(int argc, char** argv)
     int runRc = std::system(runCmd.c_str());
 
     if(runRc < 0)
-        return 1;
+        return std::nullopt;
     if(WIFEXITED(runRc))
-        return WEXITSTATUS(runRc);
-    return 1;
+    {
+        int code = WEXITSTATUS(runRc);
+        if(code == 0)
+            return 0;
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
@@ -988,10 +993,15 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     int runRc = std::system(runCmd.c_str());
 
     if(runRc < 0)
-        return 1;
+        return std::nullopt;
     if(WIFEXITED(runRc))
-        return WEXITSTATUS(runRc);
-    return 1;
+    {
+        int code = WEXITSTATUS(runRc);
+        if(code == 0)
+            return 0;
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 static int decode_system_exit_code(int rc)
