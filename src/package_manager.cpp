@@ -10,9 +10,11 @@
 #include <future>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <condition_variable>
 #include <unordered_set>
 #include <vector>
 
@@ -299,6 +301,8 @@ struct TaskSpec
     std::string workdir;
     std::optional<bool> parallel;
     std::vector<std::string> dependsOn;
+    std::vector<std::string> joinOn;
+    std::vector<std::string> nextTasks;
     std::vector<std::string> env;
     std::vector<std::string> shellLines;
     std::vector<std::string> commands;
@@ -307,6 +311,8 @@ struct TaskSpec
         std::string workdir;
         std::optional<bool> parallel;
         std::vector<std::string> dependsOn;
+        std::vector<std::string> joinOn;
+        std::vector<std::string> nextTasks;
         std::vector<std::string> env;
         std::vector<std::string> shellLines;
         std::vector<std::string> commands;
@@ -605,6 +611,14 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 append_toml_string_list_value(taskValue, task.dependsOn);
             }
+            else if(taskKey == "join_on")
+            {
+                append_toml_string_list_value(taskValue, task.joinOn);
+            }
+            else if(taskKey == "next")
+            {
+                append_toml_string_list_value(taskValue, task.nextTasks);
+            }
             else if(taskKey == "command")
             {
                 std::string v = unquote(taskValue);
@@ -639,6 +653,14 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             else if(taskKey == "depends_on")
             {
                 append_toml_string_list_value(taskValue, ov.dependsOn);
+            }
+            else if(taskKey == "join_on")
+            {
+                append_toml_string_list_value(taskValue, ov.joinOn);
+            }
+            else if(taskKey == "next")
+            {
+                append_toml_string_list_value(taskValue, ov.nextTasks);
             }
             else if(taskKey == "command")
             {
@@ -1891,6 +1913,19 @@ static std::string current_host_name()
 #endif
 }
 
+struct TaskRunState
+{
+    enum Status
+    {
+        not_started,
+        running,
+        succeeded,
+        failed
+    };
+
+    Status status = not_started;
+};
+
 static std::optional<std::filesystem::path>
 write_task_script(const PackageManifest& pkg, const std::string& taskName,
                   const std::vector<std::string>& shellLines,
@@ -1948,20 +1983,31 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
     return scriptPath;
 }
 
-static int run_task_for_manifest_impl(const PackageManifest& pkg,
-                                      const std::string& taskName,
-                                      std::vector<std::string>& taskStack)
+static int run_task_for_manifest_impl(
+    const PackageManifest& pkg, const std::vector<TaskSpec>& tasks,
+    const BuildConfig& buildConfig, const std::string& hostName,
+    std::map<std::string, TaskRunState>& taskStates, std::mutex& taskMutex,
+    std::condition_variable& taskCv, const std::string& taskName,
+    std::vector<std::string>& taskStack)
 {
-    const auto tasks = parse_task_specs(pkg.content);
-    const BuildConfig buildConfig = parse_build_config(pkg.content);
-    const std::string hostName = current_host_name();
-
     if(std::find(taskStack.begin(), taskStack.end(), taskName) !=
        taskStack.end())
     {
         std::cerr << "Detected cyclic task dependency while running '"
                   << taskName << "' in " << pkg.manifestPath.string() << "\n";
         return 1;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(taskMutex);
+        TaskRunState& state = taskStates[taskName];
+        while(state.status == TaskRunState::running)
+            taskCv.wait(lock);
+        if(state.status == TaskRunState::succeeded)
+            return 0;
+        if(state.status == TaskRunState::failed)
+            return 1;
+        state.status = TaskRunState::running;
     }
 
     for(const auto& task : tasks)
@@ -1990,6 +2036,24 @@ static int run_task_for_manifest_impl(const PackageManifest& pkg,
             effectiveDependsOn.insert(effectiveDependsOn.end(),
                                       hostOverride->dependsOn.begin(),
                                       hostOverride->dependsOn.end());
+        }
+        std::vector<std::string> effectiveJoinOn = task.joinOn;
+        if(hostOverride)
+        {
+            effectiveJoinOn.insert(effectiveJoinOn.end(),
+                                   hostOverride->joinOn.begin(),
+                                   hostOverride->joinOn.end());
+        }
+        effectiveDependsOn.insert(effectiveDependsOn.end(),
+                                  effectiveJoinOn.begin(),
+                                  effectiveJoinOn.end());
+
+        std::vector<std::string> effectiveNext = task.nextTasks;
+        if(hostOverride)
+        {
+            effectiveNext.insert(effectiveNext.end(),
+                                 hostOverride->nextTasks.begin(),
+                                 hostOverride->nextTasks.end());
         }
 
         std::vector<std::string> effectiveCommands =
@@ -2022,11 +2086,14 @@ static int run_task_for_manifest_impl(const PackageManifest& pkg,
             for(const auto& dep : effectiveDependsOn)
             {
                 std::vector<std::string> childStack = taskStack;
-                futures.push_back(std::async(std::launch::async,
-                                             [&pkg, dep, childStack]() mutable {
-                                                 return run_task_for_manifest_impl(
-                                                     pkg, dep, childStack);
-                                             }));
+                futures.push_back(std::async(
+                    std::launch::async,
+                    [&pkg, &tasks, &buildConfig, &hostName, &taskStates,
+                     &taskMutex, &taskCv, dep, childStack]() mutable {
+                        return run_task_for_manifest_impl(
+                            pkg, tasks, buildConfig, hostName, taskStates,
+                            taskMutex, taskCv, dep, childStack);
+                    }));
             }
             for(size_t i = 0; i < effectiveDependsOn.size(); ++i)
             {
@@ -2045,7 +2112,9 @@ static int run_task_for_manifest_impl(const PackageManifest& pkg,
         {
             for(const auto& dep : effectiveDependsOn)
             {
-                if(run_task_for_manifest_impl(pkg, dep, taskStack) != 0)
+                if(run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
+                                             taskStates, taskMutex, taskCv,
+                                             dep, taskStack) != 0)
                 {
                     std::cerr << "Task '" << taskName
                               << "' dependency '" << dep
@@ -2098,20 +2167,98 @@ static int run_task_for_manifest_impl(const PackageManifest& pkg,
                 std::cerr << "Task '" << taskName << "' failed for "
                           << pkg.manifestPath.string() << ".\n";
                 taskStack.pop_back();
+                {
+                    std::lock_guard<std::mutex> lock(taskMutex);
+                    taskStates[taskName].status = TaskRunState::failed;
+                }
+                taskCv.notify_all();
                 return 1;
             }
         }
+
+        if(effectiveParallel && effectiveNext.size() > 1)
+        {
+            std::vector<std::future<int>> futures;
+            futures.reserve(effectiveNext.size());
+            for(const auto& nextTask : effectiveNext)
+            {
+                std::vector<std::string> childStack = taskStack;
+                futures.push_back(std::async(
+                    std::launch::async,
+                    [&pkg, &tasks, &buildConfig, &hostName, &taskStates,
+                     &taskMutex, &taskCv, nextTask, childStack]() mutable {
+                        return run_task_for_manifest_impl(
+                            pkg, tasks, buildConfig, hostName, taskStates,
+                            taskMutex, taskCv, nextTask, childStack);
+                    }));
+            }
+            for(size_t i = 0; i < effectiveNext.size(); ++i)
+            {
+                if(futures[i].get() != 0)
+                {
+                    std::cerr << "Task '" << taskName << "' next task '"
+                              << effectiveNext[i] << "' failed for "
+                              << pkg.manifestPath.string() << ".\n";
+                    taskStack.pop_back();
+                    {
+                        std::lock_guard<std::mutex> lock(taskMutex);
+                        taskStates[taskName].status = TaskRunState::failed;
+                    }
+                    taskCv.notify_all();
+                    return 1;
+                }
+            }
+        }
+        else
+        {
+            for(const auto& nextTask : effectiveNext)
+            {
+                if(run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
+                                             taskStates, taskMutex, taskCv,
+                                             nextTask, taskStack) != 0)
+                {
+                    std::cerr << "Task '" << taskName << "' next task '"
+                              << nextTask << "' failed for "
+                              << pkg.manifestPath.string() << ".\n";
+                    taskStack.pop_back();
+                    {
+                        std::lock_guard<std::mutex> lock(taskMutex);
+                        taskStates[taskName].status = TaskRunState::failed;
+                    }
+                    taskCv.notify_all();
+                    return 1;
+                }
+            }
+        }
         taskStack.pop_back();
+        {
+            std::lock_guard<std::mutex> lock(taskMutex);
+            taskStates[taskName].status = TaskRunState::succeeded;
+        }
+        taskCv.notify_all();
         return 0;
     }
+    {
+        std::lock_guard<std::mutex> lock(taskMutex);
+        taskStates[taskName].status = TaskRunState::failed;
+    }
+    taskCv.notify_all();
     return -1;
 }
 
 static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName)
 {
+    const auto tasks = parse_task_specs(pkg.content);
+    const BuildConfig buildConfig = parse_build_config(pkg.content);
+    const std::string hostName = current_host_name();
+    std::map<std::string, TaskRunState> taskStates;
+    std::mutex taskMutex;
+    std::condition_variable taskCv;
     std::vector<std::string> taskStack;
-    return run_task_for_manifest_impl(pkg, taskName, taskStack);
+    return run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
+                                      taskStates, taskMutex, taskCv, taskName,
+                                      taskStack);
 }
 
 } // namespace
