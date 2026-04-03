@@ -401,20 +401,21 @@ Packages can define shell-driven tasks:
 [[task]]
 name = "kernel-build"
 workdir = "{{root}}"
-depends_on = ["docker-image"]
-shell = [
-  "docker run --rm \\",
-  "  -v {{root}}:/workspace \\",
-  "  -w /workspace/build/deps/linux \\",
-  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
-  "  mlang-linux-kernel-aarch64-qemu:latest \\",
-  "  sh -lc 'make ARCH=arm64 -j${JOBS:-4} Image'"
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
 ]
 
-[task.host.linux]
+[task.host.darwin]
+depends_on = ["darwin-native-prepare"]
+env = [
+  "HOSTCFLAGS=-Iscripts/macos-include -I/opt/homebrew/opt/libelf/include -I/usr/local/opt/libelf/include -Wno-error=incompatible-pointer-types",
+  "HOSTLDFLAGS=-L/opt/homebrew/opt/libelf/lib -L/usr/local/opt/libelf/lib",
+  "HOSTLDLIBS=-lelf"
+]
 commands = [
-  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
-  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 -j${JOBS:-4} Image"
 ]
 
 [tool.mlang]
@@ -428,13 +429,13 @@ Linux AArch64 kernel example sequence:
 ```sh
 cd examples/package_manager_linux_aarch64_qemu
 ../../build/mlang pkg fetch
-../../build/mlang pkg run qemu-run
+../../build/mlang pkg run boot-flow
 ```
 
 Linux AArch64 kernel example installation on macOS:
 
 ```sh
-brew install llvm lld libelf make qemu cpio
+brew install llvm lld libelf gnu-sed make qemu cpio
 ```
 
 Linux AArch64 kernel example installation on Debian/Ubuntu:
@@ -449,6 +450,8 @@ Supported task keys:
 - `workdir`
 - `parallel`
 - `depends_on`
+- `next`
+- `join_on`
 - `env`
 - `shell`
 - `command`
@@ -465,6 +468,8 @@ When a host override exists for the current host:
 - override `workdir` replaces the base `workdir`
 - override `parallel` replaces the base `parallel`
 - override `depends_on` appends after the base `depends_on`
+- override `join_on` appends after the base `join_on`
+- override `next` appends after the base `next`
 - override `env` appends after the base `env`
 - override `shell` replaces the base inline shell script
 - override `command` / `commands` replace the base task commands
@@ -479,9 +484,10 @@ Supported placeholders in `workdir` and commands:
 
 The Linux kernel example uses:
 
-- `toolchain-check` to fail early if required LLVM or `ld.lld` binaries are
-  missing
-- `docker-image` to build the Darwin-only Linux kernel builder image
+- `toolchain-check` to fail early if required LLVM, GNU `sed`, or `libelf`
+  pieces are missing
+- `darwin-native-prepare` to generate compatibility headers and patch
+  `scripts/mod/file2alias.c` for native Apple Silicon builds
 - `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
 - `initramfs` to build the example initramfs archive
 - `qemu-run` to boot the generated image under QEMU after its prerequisites
@@ -490,14 +496,18 @@ The Linux kernel example uses:
 Host guidance:
 
 - Linux is the recommended host for this example.
-- macOS is supported on a best-effort basis with Homebrew `llvm`, `lld`,
-  `libelf`, `make`, `qemu`, and `cpio`.
-- On macOS, the example tasks enable the kernel's LLVM toolchain mode and add
-  Homebrew `libelf` include/library flags plus a generated `elf.h` shim for
-  host tools that expect Linux-style ELF headers.
-- Even with that setup, some kernel host utilities can still fail due to ABI
-  mismatches with Homebrew `libelf`, so Linux remains the supported host for
-  reproducible full-kernel builds.
+- Apple Silicon macOS is supported through a native path based on
+  <https://seiya.me/blog/building-linux-on-macos-natively>.
+- That Darwin path expects Homebrew `llvm`, `lld`, `libelf`, `gnu-sed`,
+  `make`, `qemu`, and `cpio`.
+- On macOS, the example tasks enable the kernel's LLVM toolchain mode, add
+  Homebrew `libelf` include/library flags, generate `elf.h` and `byteswap.h`
+  compatibility headers, patch `scripts/mod/file2alias.c`, and relax
+  `-Wincompatible-pointer-types` for host tools to get past known Homebrew
+  `libelf` typedef mismatches in `scripts/sorttable`.
+- Linux remains the recommended host for reproducible full-kernel builds, but
+  the example now carries a native Apple Silicon path instead of requiring
+  Docker.
 
 An explicit CLI optimization flag such as `-O3` overrides
 `[tool.mlang].opt_level`.

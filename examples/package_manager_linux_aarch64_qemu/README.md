@@ -9,9 +9,11 @@ This example demonstrates package-manager capabilities around:
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, creates a tiny initramfs, and boots it under QEMU.
 
-Linux is the recommended host for this example. On macOS, the manifest uses a
-Darwin-specific task override that builds the kernel inside Docker instead of
-trying to compile Linux host tools natively.
+Linux is still the recommended host for this example. On Apple Silicon macOS,
+the manifest also provides a native Darwin path based on the ClangBuiltLinux
+workflow described at <https://seiya.me/blog/building-linux-on-macos-natively>.
+That path uses Homebrew LLVM, `libelf`, GNU `sed`, generated compatibility
+headers, and a small `file2alias.c` patch for kernel host tools.
 
 ## Manifest highlights
 
@@ -21,19 +23,21 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 
 [[task]]
 name = "kernel-build"
-shell = [
-  "docker run --rm \\",
-  "  -v {{root}}:/workspace \\",
-  "  -w /workspace/build/deps/linux \\",
-  "  -e CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-} \\",
-  "  mlang-linux-kernel-aarch64-qemu:latest \\",
-  "  sh -lc 'make ARCH=arm64 -j${JOBS:-4} Image'"
-]
-
-[task.host.linux]
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+]
+
+[task.host.darwin]
+depends_on = ["darwin-native-prepare"]
+env = [
+  "HOSTCFLAGS=-Iscripts/macos-include -I/opt/homebrew/opt/libelf/include -I/usr/local/opt/libelf/include -Wno-error=incompatible-pointer-types",
+  "HOSTLDFLAGS=-L/opt/homebrew/opt/libelf/lib -L/usr/local/opt/libelf/lib",
+  "HOSTLDLIBS=-lelf"
+]
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 -j${JOBS:-4} Image"
 ]
 
 [[task]]
@@ -48,6 +52,8 @@ join_on = ["kernel-build", "initramfs"]
 [tool.mlang]
 make_program = "gmake"
 path_entries = [
+  "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
+  "/usr/local/opt/gnu-sed/libexec/gnubin",
   "/opt/homebrew/opt/make/libexec/gnubin",
   "/usr/local/opt/make/libexec/gnubin",
   "/opt/homebrew/opt/lld/bin",
@@ -60,8 +66,8 @@ path_entries = [
 
 [[task]]
 name = "qemu-run"
-commands = [
-  "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1024 -nographic -kernel {{deps_dir}}/linux/arch/arm64/boot/Image -initrd {{build_dir}}/initramfs.cpio.gz -append \"console=ttyAMA0 rdinit=/init\""
+shell = [
+  "exec qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1024 -nographic -kernel {{deps_dir}}/linux/arch/arm64/boot/Image -initrd {{build_dir}}/initramfs.cpio.gz -append 'console=ttyAMA0 rdinit=/init'"
 ]
 ```
 
@@ -69,19 +75,18 @@ commands = [
 
 - `make`
 - `gmake` on macOS if Homebrew `make` is installed and `make_program = "gmake"`
-- Docker Desktop or another Docker runtime on macOS
+- GNU `sed` on macOS
+- `llvm`, `lld`, and `libelf` on macOS
 - `cpio`
 - `gzip`
 - `qemu-system-aarch64`
 - an AArch64-capable kernel toolchain
 
-On macOS, install:
+On Apple Silicon macOS, install:
 
 ```sh
-brew install make qemu cpio
+brew install llvm lld libelf gnu-sed make qemu cpio
 ```
-
-and install/start Docker Desktop.
 
 On Debian/Ubuntu, install:
 
@@ -135,7 +140,7 @@ Or step-by-step:
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as
-  `toolchain-check` and `docker-image`.
+  `toolchain-check` and `darwin-native-prepare`.
 - `next = ["task-name"]` lets a task jump forward to named downstream tasks
   after its own commands succeed.
 - `join_on = ["task-a", "task-b"]` lets a task wait for named tasks, which is
@@ -146,15 +151,24 @@ Or step-by-step:
 - `shell = [ ... ]` lets the manifest define an inline shell script directly in
   TOML instead of shelling out to helper files.
 - `[task.host.darwin]` and `[task.host.linux]` let the manifest keep Linux as
-  the simple default path while using Docker specifically on macOS.
+  the simple default path while using native Apple Silicon overrides on macOS.
 - `{{make}}` expands to the configured make executable from
   `[tool.mlang].make_program`.
 - `path_entries` in `mlang.toml` lets the package prepend Homebrew tool
   directories to `PATH`, which is useful on macOS when `/usr/bin/make` is too
   old for the kernel tree being built.
-- On macOS, `toolchain-check` verifies Docker availability, `docker-image`
-  builds the Linux kernel builder image, and `kernel-build` runs inside that
-  container. This avoids the native macOS `libelf`/kernel-host-tool mismatch.
+- On macOS, `toolchain-check` verifies that Homebrew LLVM, GNU `sed`, and
+  `libelf` are present. `darwin-native-prepare` then generates
+  `scripts/macos-include/elf.h`, `scripts/macos-include/byteswap.h`, and
+  applies the `file2alias.c` workaround before running the native kernel build
+  with `LLVM=1`. The Darwin host flags also add
+  `-Wno-error=incompatible-pointer-types` to get past known Homebrew
+  `libelf` typedef mismatches in kernel host tools such as `scripts/sorttable`.
+  If an earlier broken `file2alias.c` patch was already written into the fetched
+  kernel tree, rerun `../../build/mlang pkg run darwin-native-prepare` once to
+  repair it in place before retrying `kernel-build`.
+- This native Darwin path is based on the approach documented by Seiya Nuta:
+  <https://seiya.me/blog/building-linux-on-macos-natively>
 - The `{{root}}`, `{{build_dir}}`, and `{{deps_dir}}` placeholders are
   expanded by `mlang pkg run` before the shell commands execute.
 - This example is intentionally task-driven. Its primary goal is orchestrating
