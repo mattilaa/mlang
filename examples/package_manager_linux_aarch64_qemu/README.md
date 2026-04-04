@@ -174,11 +174,18 @@ Run the wider GNU userspace with:
 ../../build/mlang pkg run qemu-run --option userspace=gnu
 ```
 
-In GNU mode, the initramfs builder also writes `/root/.profile` and a small
-`/bin/start-gnu-shell` wrapper that exports `HOME=/root` and
-`TERM=xterm-256color` before launching `bash --login -i`, so the login shell
-gets a default `LS_COLORS` palette plus `ls`, `ll`, and `la` aliases with
-`--color=auto` enabled on the serial console.
+In GNU mode, the initramfs builder writes `/bin/guest-login` and starts QEMU at
+a real serial login prompt instead of dropping directly into a root shell. The
+default demo accounts are:
+
+- `admin` / `admin`
+- `user` / `user`
+- `root` / `root`
+
+The GNU login flow also writes a shared profile with `LS_COLORS`, `ls`, `ll`,
+and `la` aliases, then places that profile into `/root`, `/home/admin`, and
+`/home/user`. After a successful login, the session starts with the matching
+`HOME` value and changes into that user-specific home directory.
 
 The initramfs builder also seeds `/etc/passwd`, `/etc/group`, and
 `/etc/shadow`, then installs small helper commands so these work in both
@@ -190,24 +197,31 @@ BusyBox and GNU mode:
 - `sudo COMMAND ...`
 
 This `sudo` implementation is intentionally minimal: the demo boots straight
-into a root shell, so `sudo` simply re-executes the command when already root
-and prints a clear error if used from a non-root shell.
+into a constrained initramfs environment, so `sudo` simply re-executes the
+command when already root and otherwise forwards to `su root -c ...`.
 
 Example guest session:
 
 ```sh
+login: admin
+Password: admin
+pwd
+sudo ls --color=auto /
 addgroup demo
 adduser alice demo
 passwd alice
 grep '^alice:' /etc/passwd
 grep '^demo:' /etc/group
-sudo ls --color=auto /
+su alice
+pwd
 ```
 
-That creates a demo group, adds a user called `alice`, sets a password entry
-for that user in `/etc/shadow`, verifies the generated account records, and
-shows the minimal `sudo` wrapper re-executing a command from the default root
-shell.
+That logs into the GNU guest as the default admin user, verifies the session
+home directory, runs a root command through the minimal `sudo` wrapper, creates
+a demo group, adds a user called `alice`, sets a password entry for that user
+in `/etc/shadow`, verifies the generated account records, and finally shows how
+to switch into the newly created user account. `adduser` now creates
+`/home/<user>` automatically and populates a basic `.profile` there.
 
 Both commands automatically fetch the Linux source dependency first. In GNU
 mode, `gnu-userspace-fetch` also downloads and unpacks the official Ubuntu Base

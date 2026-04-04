@@ -166,24 +166,32 @@
  * \endcode
  *
  * The first command boots a minimal BusyBox shell. The second command overlays
- * an Ubuntu Base ARM64 rootfs and starts `bash` on the QEMU serial console.
- * Both modes fetch dependencies on demand, build the kernel image, pack the
- * initramfs, and then launch QEMU. The BusyBox applet links are created
- * explicitly during packing because the host may not be able to execute the
- * target-architecture BusyBox binary. Writing `/etc/inittab` lets BusyBox
- * `init` mount the basic pseudo filesystems and respawn either a BusyBox shell
- * or a GNU `bash` shell on `ttyAMA0`, depending on `userspace`.
+ * an Ubuntu Base ARM64 rootfs and starts a real GNU-mode serial login prompt
+ * on `ttyAMA0`. Both modes fetch dependencies on demand, build the kernel
+ * image, pack the initramfs, and then launch QEMU. The BusyBox applet links
+ * are created explicitly during packing because the host may not be able to
+ * execute the target-architecture BusyBox binary. Writing `/etc/inittab` lets
+ * BusyBox `init` mount the basic pseudo filesystems and respawn either a
+ * BusyBox shell or the GNU login wrapper, depending on `userspace`.
  *
- * The example initramfs also seeds `/etc/passwd`, `/etc/group`, and
- * `/etc/shadow`, then installs small helper commands for `addgroup`,
- * `adduser`, `passwd`, and `sudo`. A guest session can use them like:
+ * The GNU userspace path seeds demo accounts `admin/admin`, `user/user`, and
+ * `root/root`. The example initramfs also seeds `/etc/passwd`, `/etc/group`,
+ * and `/etc/shadow`, then installs small helper commands for `addgroup`,
+ * `adduser`, `passwd`, and `sudo`. `adduser` creates `/home/<user>` and a
+ * basic `.profile` so the guest can switch into that user cleanly. A guest
+ * session can use them like:
  * \code{.sh}
+ * login: admin
+ * Password: admin
+ * pwd
+ * sudo ls --color=auto /
  * addgroup demo
  * adduser alice demo
  * passwd alice
  * grep '^alice:' /etc/passwd
  * grep '^demo:' /etc/group
- * sudo ls --color=auto /
+ * su alice
+ * pwd
  * \endcode
  */
 class PackageManager
