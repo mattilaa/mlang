@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <iomanip>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -32,6 +34,8 @@ struct PackageManifest;
 static std::vector<std::string> split_toml_array(std::string_view input);
 static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
+static std::string format_task_elapsed(std::chrono::milliseconds elapsed);
+static std::string shorten_progress_description(const std::string& description);
 static std::vector<std::string> parse_workspace_members(
     const std::string& content);
 static std::string current_host_name();
@@ -1932,7 +1936,7 @@ class ProgressSpinner
             size_t idx = 0;
             while(!done_.load())
             {
-                std::cerr << '\r' << label_ << " " << frames[idx % 4]
+                std::cerr << "\r\033[2K" << label_ << " " << frames[idx % 4]
                           << std::flush;
                 idx++;
                 std::this_thread::sleep_for(std::chrono::milliseconds(120));
@@ -1952,10 +1956,9 @@ class ProgressSpinner
         done_.store(true);
         if(worker_.joinable())
             worker_.join();
-        std::cerr << '\r' << label_;
+        std::cerr << "\r\033[2K" << label_;
         if(!suffix.empty())
             std::cerr << " " << suffix;
-        std::cerr << "        ";
         if(hideCursor_)
             std::cerr << "\033[?25h";
         std::cerr << std::endl;
@@ -1975,9 +1978,31 @@ static int run_progress_command(const std::string& label,
                                 bool logCommand = true,
                                 bool logChildOutput = true)
 {
-    ProgressSpinner spinner(label);
+    const auto start = std::chrono::steady_clock::now();
+    ProgressSpinner spinner(shorten_progress_description(label));
     int rc = run_command(cmd, logCommand, logChildOutput);
-    spinner.stop(rc == 0 ? "[ok]" : "[failed]");
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+    std::string suffix;
+    if(label.size() > 4 && label.front() == '[' && label.find('/') != std::string::npos &&
+       label.find(']') != std::string::npos)
+    {
+        if(rc == 0)
+        {
+            const size_t close = label.find(']');
+            suffix = "Completed: " + trim(label.substr(close + 1)) + " - " +
+                     format_task_elapsed(elapsed);
+        }
+        else
+        {
+            suffix = "[failed]";
+        }
+    }
+    else
+    {
+        suffix = (rc == 0 ? "[ok]" : "[failed]");
+    }
+    spinner.stop(suffix);
     return rc;
 }
 
@@ -1988,9 +2013,23 @@ static int run_status_command(const std::string& label, const std::string& cmd,
 {
     if(useSpinner && !pkg_logs_active())
         return run_progress_command(label, cmd, logCommand, logChildOutput);
-    std::cerr << label << std::endl;
+    std::cerr << shorten_progress_description(label) << std::endl;
+    const auto start = std::chrono::steady_clock::now();
     int rc = run_command(cmd, logCommand, logChildOutput);
-    std::cerr << label << (rc == 0 ? " [ok]" : " [failed]") << std::endl;
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+    if(label.size() > 4 && label.front() == '[' && label.find('/') != std::string::npos &&
+       label.find(']') != std::string::npos && rc == 0)
+    {
+        const size_t close = label.find(']');
+        std::cerr << label.substr(0, close + 1) << " Completed: "
+                  << trim(label.substr(close + 1)) << " - "
+                  << format_task_elapsed(elapsed) << std::endl;
+    }
+    else
+    {
+        std::cerr << label << (rc == 0 ? " [ok]" : " [failed]") << std::endl;
+    }
     return rc;
 }
 
@@ -2168,6 +2207,80 @@ static std::filesystem::path dep_source_dir(const std::filesystem::path& depsDir
     return path;
 }
 
+struct ExecutionProgressState
+{
+    size_t totalSteps = 0;
+    std::atomic<size_t> nextStep { 1 };
+    bool active = false;
+};
+
+static ExecutionProgressState& current_execution_progress_state()
+{
+    static ExecutionProgressState state;
+    return state;
+}
+
+class ScopedExecutionProgressState
+{
+  public:
+    explicit ScopedExecutionProgressState(size_t totalSteps)
+    {
+        auto& current = current_execution_progress_state();
+        previousTotalSteps_ = current.totalSteps;
+        previousNextStep_ = current.nextStep.load();
+        previousActive_ = current.active;
+        current.totalSteps = totalSteps;
+        current.nextStep.store(1);
+        current.active = totalSteps > 0;
+    }
+
+    ~ScopedExecutionProgressState()
+    {
+        auto& current = current_execution_progress_state();
+        current.totalSteps = previousTotalSteps_;
+        current.nextStep.store(previousNextStep_);
+        current.active = previousActive_;
+    }
+
+  private:
+    size_t previousTotalSteps_ = 0;
+    size_t previousNextStep_ = 1;
+    bool previousActive_ = false;
+};
+
+static std::string reserve_execution_step_prefix()
+{
+    auto& state = current_execution_progress_state();
+    if(!state.active || state.totalSteps == 0)
+        return "[pkg]";
+    const size_t index = state.nextStep.fetch_add(1);
+    std::ostringstream out;
+    out << "[" << index << "/" << state.totalSteps << "]";
+    return out.str();
+}
+
+static std::string execution_step_label(const std::string& description)
+{
+    return reserve_execution_step_prefix() + " " + description;
+}
+
+static std::string shorten_progress_description(const std::string& description)
+{
+    constexpr size_t maxLen = 72;
+    if(description.size() <= maxLen)
+        return description;
+    return description.substr(0, maxLen - 3) + "...";
+}
+
+static size_t count_fetch_dep_steps(const DepSpec& dep,
+                                    const std::filesystem::path& depsDir,
+                                    bool updateExisting);
+static size_t count_build_dep_steps(const DepSpec& dep,
+                                    const std::filesystem::path& depsDir);
+static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
+                                         const std::string& hostName,
+                                         const std::vector<std::string>& roots);
+
 static int fetch_git_dep(const DepSpec& dep,
                          const std::filesystem::path& depsDir,
                          bool updateExisting,
@@ -2176,21 +2289,21 @@ static int fetch_git_dep(const DepSpec& dep,
     std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
     {
-        pkg_info_line("[pkg] Fetching git dependency '" + dep.name +
-                      "' from " + dep.git);
         std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
                                shell_quote(path.string());
-        if(run_status_command_with_paths("[pkg] git clone " + dep.name,
+        if(run_status_command_with_paths(
+               execution_step_label("Fetching git dependency '" + dep.name +
+                                    "' from " + dep.git),
                                          cloneCmd, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
     }
     else if(updateExisting)
     {
-        pkg_info_line("[pkg] Updating git dependency '" + dep.name + "'");
         std::string fetchCmd = "git -C " + shell_quote(path.string()) +
                                " fetch --all --tags";
-        if(run_status_command_with_paths("[pkg] git fetch " + dep.name,
+        if(run_status_command_with_paths(
+               execution_step_label("Updating git dependency '" + dep.name + "'"),
                                          fetchCmd, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
@@ -2198,22 +2311,23 @@ static int fetch_git_dep(const DepSpec& dep,
 
     if(!dep.rev.empty())
     {
-        pkg_info_line("[pkg] Checking out '" + dep.name + "' revision " +
-                      dep.rev);
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " + shell_quote(dep.rev);
-        if(run_status_command_with_paths("[pkg] git checkout " + dep.name,
+        if(run_status_command_with_paths(
+               execution_step_label("Checking out '" + dep.name +
+                                    "' revision " + dep.rev),
                                          checkout, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
     {
-        pkg_info_line("[pkg] Checking out '" + dep.name + "' tag " + dep.tag);
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " +
                                shell_quote("tags/" + dep.tag);
-        if(run_status_command_with_paths("[pkg] git checkout " + dep.name,
+        if(run_status_command_with_paths(
+               execution_step_label("Checking out '" + dep.name + "' tag " +
+                                    dep.tag),
                                          checkout, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
@@ -2262,17 +2376,16 @@ static int fetch_archive_dep(const DepSpec& dep,
     std::filesystem::remove_all(extractDir, ec);
     std::filesystem::create_directories(extractDir);
 
-    pkg_info_line("[pkg] Downloading archive dependency '" + dep.name +
-                  "' from " + dep.url);
     std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                               " -o " + shell_quote(archivePath.string());
-    if(run_status_command_with_paths("[pkg] download " + dep.name, downloadCmd,
+    if(run_status_command_with_paths(
+           execution_step_label("Downloading archive dependency '" + dep.name +
+                                "' from " + dep.url),
+                                     downloadCmd,
                                      pathEntries, dep.spinner, dep.spinner,
                                      dep.spinner) != 0)
         return 1;
 
-    pkg_info_line("[pkg] Unpacking " + archivePath.filename().string() +
-                  " into " + checkoutDir.string());
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
                              " -C " + shell_quote(extractDir.string());
     if(dep.stripComponents > 0)
@@ -2280,9 +2393,11 @@ static int fetch_archive_dep(const DepSpec& dep,
         extractCmd += " --strip-components=" +
                       std::to_string(dep.stripComponents);
     }
-    if(run_status_command_with_paths("[pkg] extract " + dep.name, extractCmd,
-                                     pathEntries, dep.spinner, dep.spinner,
-                                     dep.spinner) != 0)
+    if(run_status_command_with_paths(
+           execution_step_label("Unpacking " + archivePath.filename().string() +
+                                " into " + checkoutDir.string()),
+                                     extractCmd,
+                                     pathEntries, true, true, true) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
@@ -2324,8 +2439,6 @@ static int build_git_dep(const DepSpec& dep,
     if(dep.build == "cmake")
     {
         std::filesystem::path buildDir = path / "build";
-        pkg_info_line("[pkg] Configuring CMake dependency '" + dep.name +
-                      "' in " + buildDir.string());
         std::string cfg = "cmake -S " + shell_quote(path.string()) + " -B " +
                           shell_quote(buildDir.string());
         if(useNinja)
@@ -2342,14 +2455,16 @@ static int build_git_dep(const DepSpec& dep,
                     cfg += " -D" + arg;
             }
         }
-        if(run_status_command_with_paths("[pkg] cmake configure " + dep.name,
+        if(run_status_command_with_paths(
+               execution_step_label("Configuring CMake dependency '" + dep.name +
+                                    "' in " + buildDir.string()),
                                          cfg, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
         std::string build =
             "cmake --build " + shell_quote(buildDir.string());
-        pkg_info_line("[pkg] Building CMake dependency '" + dep.name + "'");
-        return run_status_command_with_paths("[pkg] cmake build " + dep.name,
+        return run_status_command_with_paths(
+            execution_step_label("Building CMake dependency '" + dep.name + "'"),
                                              build, pathEntries, dep.spinner,
                                              dep.spinner, dep.spinner);
     }
@@ -2358,20 +2473,21 @@ static int build_git_dep(const DepSpec& dep,
         std::filesystem::path buildDir = path / "build";
         if(!std::filesystem::exists(buildDir))
         {
-            pkg_info_line("[pkg] Configuring Meson dependency '" + dep.name +
-                          "' in " + buildDir.string());
             std::string setup = "meson setup " +
                                 shell_quote(buildDir.string()) + " " +
                                 shell_quote(path.string());
-            if(run_status_command_with_paths("[pkg] meson setup " + dep.name,
+            if(run_status_command_with_paths(
+                   execution_step_label("Configuring Meson dependency '" +
+                                        dep.name + "' in " +
+                                        buildDir.string()),
                                              setup, pathEntries, dep.spinner,
                                              dep.spinner, dep.spinner) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
-        pkg_info_line("[pkg] Building Meson dependency '" + dep.name + "'");
-        return run_status_command_with_paths("[pkg] meson compile " + dep.name,
+        return run_status_command_with_paths(
+            execution_step_label("Building Meson dependency '" + dep.name + "'"),
                                              compile, pathEntries, dep.spinner,
                                              dep.spinner, dep.spinner);
     }
@@ -2380,8 +2496,9 @@ static int build_git_dep(const DepSpec& dep,
         std::string effectiveMake = makeProgram.empty() ? "make" : makeProgram;
         std::string cmd = shell_quote(effectiveMake) + " -C " +
                           shell_quote(path.string());
-        pkg_info_line("[pkg] Building make dependency '" + dep.name + "'");
-        return run_status_command_with_paths("[pkg] make " + dep.name, cmd,
+        return run_status_command_with_paths(
+            execution_step_label("Building make dependency '" + dep.name + "'"),
+                                             cmd,
                                              pathEntries, dep.spinner,
                                              dep.spinner, dep.spinner);
     }
@@ -2590,6 +2707,19 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     auto deps = parse_source_deps(pkg.content);
     std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, buildConfig);
     std::filesystem::create_directories(depsDir);
+    const bool ownProgress = !current_execution_progress_state().active;
+    size_t totalSteps = 0;
+    if(ownProgress)
+    {
+        for(const auto& dep : deps)
+        {
+            totalSteps +=
+                count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/true);
+        }
+    }
+    std::optional<ScopedExecutionProgressState> scopedProgress;
+    if(ownProgress)
+        scopedProgress.emplace(totalSteps);
     for(const auto& dep : deps)
     {
         if(fetch_dep(dep, depsDir, /*updateExisting=*/true,
@@ -2651,6 +2781,17 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     }
 
     bool effectiveUseNinja = useNinja || packageBuildConfig.useNinja.value_or(false);
+    const auto tasks = parse_task_specs(pkg.content);
+    const std::string hostName = current_host_name();
+    std::vector<std::string> buildTaskRoots;
+    if(targets.empty())
+    {
+        buildTaskRoots =
+            task_names_for_phases(tasks, std::vector<std::string> { "build" },
+                                  hostName);
+        if(buildTaskRoots.empty() && task_list_contains_name(tasks, "build"))
+            buildTaskRoots.push_back("build");
+    }
     for(const auto& target : targets)
     {
         BuildConfig mergedConfig =
@@ -2669,6 +2810,16 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 
     std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, packageBuildConfig);
     std::filesystem::create_directories(depsDir);
+    size_t totalSteps = 0;
+    for(const auto& dep : deps)
+        totalSteps += count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/false);
+    for(const auto& dep : deps)
+        totalSteps += count_build_dep_steps(dep, depsDir);
+    if(!targets.empty())
+        totalSteps += targets.size();
+    else
+        totalSteps += count_reachable_task_steps(tasks, hostName, buildTaskRoots);
+    ScopedExecutionProgressState scopedProgress(totalSteps);
     for(const auto& dep : deps)
     {
         if(fetch_dep(dep, depsDir, /*updateExisting=*/false,
@@ -2694,22 +2845,15 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 
     if(targets.empty())
     {
-        const auto tasks = parse_task_specs(pkg.content);
-        const std::string hostName = current_host_name();
-        const auto buildTasks =
-            task_names_for_phases(tasks, std::vector<std::string> { "build" },
-                                  hostName);
-        if(!buildTasks.empty())
+        if(!buildTaskRoots.empty())
         {
-            for(const auto& taskName : buildTasks)
+            for(const auto& taskName : buildTaskRoots)
             {
                 if(run_task_for_manifest(pkg, taskName) != 0)
                     return 1;
             }
             return 0;
         }
-        if(task_list_contains_name(tasks, "build"))
-            return run_task_for_manifest(pkg, "build");
 
         pkg_error_line("No package entry, [[bin]] targets, or phase=\"build\" "
                        "tasks found for " + pkg.manifestPath.string());
@@ -2784,10 +2928,10 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         for(const auto& flag : pkgFlags)
             cmd += " " + shell_quote(flag);
 
-        pkg_info_line("[pkg] Compiling target '" + target.name + "' from " +
-                      target.entry + " -> " + output);
         int rc = run_status_command_in_dir_with_paths(
-            "[pkg] compile " + target.name, pkg.packageDir, cmd,
+            execution_step_label("Compiling target '" + target.name + "' from " +
+                                 target.entry + " -> " + output),
+            pkg.packageDir, cmd,
             buildConfig.pathEntries, true);
         if(rc != 0)
         {
@@ -2887,6 +3031,33 @@ struct TaskRunState
     Status status = not_started;
 };
 
+static std::string format_task_elapsed(
+    std::chrono::milliseconds elapsed)
+{
+    const auto totalMs = elapsed.count();
+    const long long hours = totalMs / (1000LL * 60LL * 60LL);
+    const long long minutes = (totalMs / (1000LL * 60LL)) % 60LL;
+    const long long seconds = (totalMs / 1000LL) % 60LL;
+    const long long milliseconds = totalMs % 1000LL;
+    std::ostringstream out;
+    out << "[" << std::setw(2) << std::setfill('0') << hours << "/"
+        << std::setw(2) << std::setfill('0') << minutes << "/"
+        << std::setw(2) << std::setfill('0') << seconds << "/"
+        << std::setw(3) << std::setfill('0') << milliseconds << "]";
+    return out.str();
+}
+
+static std::optional<TaskSpec> find_task_spec(const std::vector<TaskSpec>& tasks,
+                                              const std::string& taskName)
+{
+    for(const auto& task : tasks)
+    {
+        if(task.name == taskName)
+            return task;
+    }
+    return std::nullopt;
+}
+
 static std::optional<std::filesystem::path>
 write_task_script(const PackageManifest& pkg, const std::string& taskName,
                   const std::vector<std::string>& shellLines,
@@ -2943,6 +3114,148 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
         return std::nullopt;
     }
     return scriptPath;
+}
+
+static size_t count_fetch_dep_steps(const DepSpec& dep,
+                                    const std::filesystem::path& depsDir,
+                                    bool updateExisting)
+{
+    if(!dep.git.empty())
+    {
+        const std::filesystem::path path = dep_checkout_dir(depsDir, dep);
+        size_t steps = 0;
+        if(!std::filesystem::exists(path))
+            steps += 1;
+        else if(updateExisting)
+            steps += 1;
+        if(!dep.rev.empty() || !dep.tag.empty())
+            steps += 1;
+        return steps;
+    }
+
+    if(!dep.url.empty())
+    {
+        const std::filesystem::path checkoutDir = dep_checkout_dir(depsDir, dep);
+        std::error_code ec;
+        if(std::filesystem::exists(checkoutDir, ec))
+        {
+            bool hasEntries = false;
+            for(std::filesystem::directory_iterator it(checkoutDir, ec), end;
+                !ec && it != end; it.increment(ec))
+            {
+                hasEntries = true;
+                break;
+            }
+            if(!ec && hasEntries)
+                return 0;
+        }
+        return 2;
+    }
+
+    return 0;
+}
+
+static size_t count_build_dep_steps(const DepSpec& dep,
+                                    const std::filesystem::path& depsDir)
+{
+    const std::filesystem::path path = dep_source_dir(depsDir, dep);
+    if(!std::filesystem::exists(path))
+        return 0;
+    if(dep.build == "none" || dep.build == "skip")
+        return 0;
+    if(dep.build == "cmake")
+        return 2;
+    if(dep.build == "meson")
+    {
+        const std::filesystem::path buildDir = path / "build";
+        return std::filesystem::exists(buildDir) ? 1 : 2;
+    }
+    if(dep.build == "make")
+        return 1;
+    return 0;
+}
+
+static void collect_reachable_task_names(
+    const std::vector<TaskSpec>& tasks, const std::string& hostName,
+    const std::string& taskName, std::unordered_set<std::string>& visited)
+{
+    if(taskName.empty() || !visited.insert(taskName).second)
+        return;
+
+    const auto taskOpt = find_task_spec(tasks, taskName);
+    if(!taskOpt.has_value())
+        return;
+    const auto& task = *taskOpt;
+    auto hostIt = task.hostOverrides.find(hostName);
+    const TaskSpec::HostOverride* hostOverride =
+        hostIt == task.hostOverrides.end() ? nullptr : &hostIt->second;
+
+    std::vector<std::string> effectiveDependsOn = task.dependsOn;
+    if(hostOverride)
+    {
+        effectiveDependsOn.insert(effectiveDependsOn.end(),
+                                  hostOverride->dependsOn.begin(),
+                                  hostOverride->dependsOn.end());
+    }
+    std::vector<std::string> effectivePhaseDependsOn = task.phaseDependsOn;
+    if(hostOverride)
+    {
+        effectivePhaseDependsOn.insert(effectivePhaseDependsOn.end(),
+                                       hostOverride->phaseDependsOn.begin(),
+                                       hostOverride->phaseDependsOn.end());
+    }
+    append_unique_strings(
+        effectiveDependsOn,
+        task_names_for_phases(tasks, effectivePhaseDependsOn, hostName));
+
+    std::vector<std::string> effectiveJoinOn = task.joinOn;
+    if(hostOverride)
+    {
+        effectiveJoinOn.insert(effectiveJoinOn.end(), hostOverride->joinOn.begin(),
+                               hostOverride->joinOn.end());
+    }
+    std::vector<std::string> effectivePhaseJoinOn = task.phaseJoinOn;
+    if(hostOverride)
+    {
+        effectivePhaseJoinOn.insert(effectivePhaseJoinOn.end(),
+                                    hostOverride->phaseJoinOn.begin(),
+                                    hostOverride->phaseJoinOn.end());
+    }
+    append_unique_strings(
+        effectiveJoinOn,
+        task_names_for_phases(tasks, effectivePhaseJoinOn, hostName));
+    append_unique_strings(effectiveDependsOn, effectiveJoinOn);
+
+    std::vector<std::string> effectiveNext = task.nextTasks;
+    if(hostOverride)
+    {
+        effectiveNext.insert(effectiveNext.end(), hostOverride->nextTasks.begin(),
+                             hostOverride->nextTasks.end());
+    }
+    std::vector<std::string> effectiveNextPhases = task.nextPhases;
+    if(hostOverride)
+    {
+        effectiveNextPhases.insert(effectiveNextPhases.end(),
+                                   hostOverride->nextPhases.begin(),
+                                   hostOverride->nextPhases.end());
+    }
+    append_unique_strings(
+        effectiveNext, task_names_for_phases(tasks, effectiveNextPhases, hostName));
+
+    for(const auto& dep : effectiveDependsOn)
+        collect_reachable_task_names(tasks, hostName, dep, visited);
+    for(const auto& nextTask : effectiveNext)
+        collect_reachable_task_names(tasks, hostName, nextTask, visited);
+}
+
+static size_t count_reachable_task_steps(const std::vector<TaskSpec>& tasks,
+                                         const std::string& hostName,
+                                         const std::vector<std::string>& roots)
+{
+    std::unordered_set<std::string> visited;
+    for(const auto& root : roots)
+        collect_reachable_task_names(tasks, hostName, root, visited);
+    return visited.size();
 }
 
 static int run_task_for_manifest_impl(
@@ -3142,14 +3455,13 @@ static int run_task_for_manifest_impl(
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
-        std::string taskLine = "[pkg] Running task '" + taskName + "'";
-        if(workdir != pkg.packageDir)
-            taskLine += " in " + workdir.string();
-        pkg_task_print_line(taskLine);
-
-        if(!effectiveMessage.empty())
-            pkg_task_print_line(
-                expand_task_text(effectiveMessage, pkg, buildConfig));
+        const std::string taskDescription =
+            effectiveMessage.empty()
+                ? taskName
+                : expand_task_text(effectiveMessage, pkg, buildConfig);
+        const std::string taskPrefix = reserve_execution_step_prefix();
+        pkg_task_print_line(taskPrefix + " " + taskDescription);
+        const auto taskStart = std::chrono::steady_clock::now();
 
         if(!effectiveShell.empty())
         {
@@ -3249,6 +3561,10 @@ static int run_task_for_manifest_impl(
             }
         }
         taskStack.pop_back();
+        const auto taskElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - taskStart);
+        pkg_task_print_line(taskPrefix + " Completed: " + taskDescription +
+                            " - " + format_task_elapsed(taskElapsed));
         {
             std::lock_guard<std::mutex> lock(taskMutex);
             taskStates[taskName].status = TaskRunState::succeeded;
@@ -3272,6 +3588,13 @@ static int run_task_for_manifest(const PackageManifest& pkg,
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
     const std::string hostName = current_host_name();
+    const bool ownProgress = !current_execution_progress_state().active;
+    std::optional<ScopedExecutionProgressState> scopedProgress;
+    if(ownProgress)
+    {
+        scopedProgress.emplace(count_reachable_task_steps(
+            tasks, hostName, std::vector<std::string> { taskName }));
+    }
     std::map<std::string, TaskRunState> taskStates;
     std::mutex taskMutex;
     std::condition_variable taskCv;
@@ -3751,10 +4074,22 @@ int PackageManager::run(int argc, char** argv)
             {
                 ScopedPackageLogState scopedLogs(
                     make_package_log_state(pkg.packageDir, buildConfig));
-                if(fetch_for_manifest(pkg, buildConfig) != 0)
-                    return 1;
+                const auto deps = parse_source_deps(pkg.content);
                 const auto tasks = parse_task_specs(pkg.content);
                 const std::string hostName = current_host_name();
+                size_t totalSteps = 0;
+                const std::filesystem::path depsDir =
+                    package_deps_dir(pkg.packageDir, buildConfig);
+                for(const auto& dep : deps)
+                {
+                    totalSteps +=
+                        count_fetch_dep_steps(dep, depsDir, /*updateExisting=*/true);
+                }
+                totalSteps += count_reachable_task_steps(
+                    tasks, hostName, std::vector<std::string> { taskName });
+                ScopedExecutionProgressState scopedProgress(totalSteps);
+                if(fetch_for_manifest(pkg, buildConfig) != 0)
+                    return 1;
                 std::map<std::string, TaskRunState> taskStates;
                 std::mutex taskMutex;
                 std::condition_variable taskCv;
