@@ -179,6 +179,10 @@ Current task graph features:
 - `next_phases` for launching all tasks in a named phase
 - `phase_join_on` for waiting until all tasks in a phase complete
 - `parallel = true` for concurrent prerequisite/downstream branches
+- `inline_output = true` for a single live task status line with the task
+  number, spinner, and a truncated tail of the latest output line; the task
+  still ends with one final completion line in the form
+  `[n/N] task-name Completed, time HH:MM:SS:MS - description`
 - `shell = [ ... ]` / `script = [ ... ]` for inline shell scripts stored under `build/task-scripts/`
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
 

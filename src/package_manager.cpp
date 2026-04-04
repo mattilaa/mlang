@@ -13,6 +13,7 @@
 #include <iostream>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -20,6 +21,7 @@
 #include <thread>
 #include <unistd.h>
 #include <condition_variable>
+#include <sys/wait.h>
 #include <unordered_set>
 #include <vector>
 
@@ -36,6 +38,8 @@ static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
 static std::string format_task_elapsed(std::chrono::milliseconds elapsed);
 static std::string shorten_progress_description(const std::string& description);
+static std::string sanitize_progress_output(std::string text);
+static std::string shorten_progress_output(const std::string& text);
 static std::vector<std::string> parse_workspace_members(
     const std::string& content);
 static std::string current_host_name();
@@ -485,6 +489,7 @@ struct TaskSpec
     std::string workdir;
     std::optional<bool> parallel;
     std::optional<bool> logOutput;
+    std::optional<bool> inlineOutput;
     std::vector<std::string> dependsOn;
     std::vector<std::string> phaseDependsOn;
     std::vector<std::string> joinOn;
@@ -502,6 +507,7 @@ struct TaskSpec
         std::string workdir;
         std::optional<bool> parallel;
         std::optional<bool> logOutput;
+        std::optional<bool> inlineOutput;
         std::vector<std::string> dependsOn;
         std::vector<std::string> phaseDependsOn;
         std::vector<std::string> joinOn;
@@ -1003,6 +1009,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 task.logOutput = parse_toml_bool_value(taskValue);
             }
+            else if(taskKey == "inline_output")
+            {
+                task.inlineOutput = parse_toml_bool_value(taskValue);
+            }
             else if(taskKey == "depends_on")
             {
                 append_toml_string_list_value(taskValue, task.dependsOn);
@@ -1075,6 +1085,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             else if(taskKey == "log_output")
             {
                 ov.logOutput = parse_toml_bool_value(taskValue);
+            }
+            else if(taskKey == "inline_output")
+            {
+                ov.inlineOutput = parse_toml_bool_value(taskValue);
             }
             else if(taskKey == "depends_on")
             {
@@ -1936,7 +1950,15 @@ class ProgressSpinner
             size_t idx = 0;
             while(!done_.load())
             {
-                std::cerr << "\r\033[2K" << label_ << " " << frames[idx % 4]
+                std::string detail;
+                {
+                    std::lock_guard<std::mutex> lock(detailMutex_);
+                    detail = detail_;
+                }
+                std::cerr << "\r\033[2K" << label_;
+                if(!detail.empty())
+                    std::cerr << " " << shorten_progress_output(detail);
+                std::cerr << " " << frames[idx % 4]
                           << std::flush;
                 idx++;
                 std::this_thread::sleep_for(std::chrono::milliseconds(120));
@@ -1965,8 +1987,16 @@ class ProgressSpinner
         stopped_ = true;
     }
 
+    void set_detail(std::string detail)
+    {
+        std::lock_guard<std::mutex> lock(detailMutex_);
+        detail_ = sanitize_progress_output(std::move(detail));
+    }
+
   private:
     std::string label_;
+    std::string detail_;
+    std::mutex detailMutex_;
     std::atomic<bool> done_ { false };
     std::thread worker_;
     bool stopped_ = false;
@@ -2031,6 +2061,33 @@ static int run_status_command(const std::string& label, const std::string& cmd,
         std::cerr << label << (rc == 0 ? " [ok]" : " [failed]") << std::endl;
     }
     return rc;
+}
+
+static int stream_inline_output_command(ProgressSpinner& spinner,
+                                        const std::string& cmd,
+                                        bool logCommand = true,
+                                        bool logChildOutput = true)
+{
+    pkg_info_line(cmd, logCommand);
+    std::string fullCmd = cmd + " 2>&1";
+    FILE* pipe = popen(fullCmd.c_str(), "r");
+    if(!pipe)
+    {
+        return 1;
+    }
+
+    char buffer[512];
+    while(fgets(buffer, sizeof(buffer), pipe))
+    {
+        const std::string line = sanitize_progress_output(buffer);
+        if(line.empty())
+            continue;
+        spinner.set_detail(line);
+        if(logChildOutput)
+            append_log_line(current_package_log_state().stdoutLog, line);
+    }
+
+    return pclose(pipe);
 }
 
 static std::string join_path_entries(const std::vector<std::string>& entries)
@@ -2270,6 +2327,26 @@ static std::string shorten_progress_description(const std::string& description)
     if(description.size() <= maxLen)
         return description;
     return description.substr(0, maxLen - 3) + "...";
+}
+
+static std::string sanitize_progress_output(std::string text)
+{
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+    text.erase(std::remove(text.begin(), text.end(), '\n'), text.end());
+    for(char& c : text)
+    {
+        if(c == '\t')
+            c = ' ';
+    }
+    return trim(text);
+}
+
+static std::string shorten_progress_output(const std::string& text)
+{
+    constexpr size_t maxLen = 56;
+    if(text.size() <= maxLen)
+        return text;
+    return text.substr(0, maxLen - 3) + "...";
 }
 
 static size_t count_fetch_dep_steps(const DepSpec& dep,
@@ -3047,6 +3124,22 @@ static std::string format_task_elapsed(
     return out.str();
 }
 
+static std::string format_task_elapsed_compact(
+    std::chrono::milliseconds elapsed)
+{
+    const auto totalMs = elapsed.count();
+    const long long hours = totalMs / (1000LL * 60LL * 60LL);
+    const long long minutes = (totalMs / (1000LL * 60LL)) % 60LL;
+    const long long seconds = (totalMs / 1000LL) % 60LL;
+    const long long milliseconds = totalMs % 1000LL;
+    std::ostringstream out;
+    out << std::setw(2) << std::setfill('0') << hours << ":"
+        << std::setw(2) << std::setfill('0') << minutes << ":"
+        << std::setw(2) << std::setfill('0') << seconds << ":"
+        << std::setw(3) << std::setfill('0') << milliseconds;
+    return out.str();
+}
+
 static std::optional<TaskSpec> find_task_spec(const std::vector<TaskSpec>& tasks,
                                               const std::string& taskName)
 {
@@ -3390,6 +3483,10 @@ static int run_task_for_manifest_impl(
             hostOverride && hostOverride->logOutput.has_value()
                 ? hostOverride->logOutput.value()
                 : task.logOutput.value_or(true);
+        bool effectiveInlineOutput =
+            hostOverride && hostOverride->inlineOutput.has_value()
+                ? hostOverride->inlineOutput.value()
+                : task.inlineOutput.value_or(false);
 
         if(effectiveCommands.empty() && effectiveShell.empty())
         {
@@ -3462,6 +3559,12 @@ static int run_task_for_manifest_impl(
         const std::string taskPrefix = reserve_execution_step_prefix();
         pkg_task_print_line(taskPrefix + " " + taskDescription);
         const auto taskStart = std::chrono::steady_clock::now();
+        std::unique_ptr<ProgressSpinner> inlineSpinner;
+        if(effectiveInlineOutput && !pkg_logs_active())
+        {
+            inlineSpinner = std::make_unique<ProgressSpinner>(
+                taskPrefix + " " + shorten_progress_description(taskName));
+        }
 
         if(!effectiveShell.empty())
         {
@@ -3490,10 +3593,19 @@ static int run_task_for_manifest_impl(
             std::string expanded = expand_task_text(command, pkg, buildConfig);
             if(!envPrefix.empty())
                 expanded = "env" + envPrefix + " " + expanded;
-            if(run_command_in_dir_with_paths(workdir, expanded,
-                                             buildConfig.pathEntries, true,
-                                             effectiveLogOutput) != 0)
+            const std::string fullCommand =
+                "cd " + shell_quote(workdir.string()) + " && " +
+                command_with_path_entries(expanded, buildConfig.pathEntries);
+            const int rc = inlineSpinner
+                               ? stream_inline_output_command(
+                                     *inlineSpinner, fullCommand, false,
+                                     effectiveLogOutput)
+                               : run_command(fullCommand, true,
+                                             effectiveLogOutput);
+            if(rc != 0)
             {
+                if(inlineSpinner)
+                    inlineSpinner->stop("[failed]");
                 std::cerr << "Task '" << taskName << "' failed for "
                           << pkg.manifestPath.string() << ".\n";
                 taskStack.pop_back();
@@ -3563,8 +3675,12 @@ static int run_task_for_manifest_impl(
         taskStack.pop_back();
         const auto taskElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - taskStart);
-        pkg_task_print_line(taskPrefix + " Completed: " + taskDescription +
-                            " - " + format_task_elapsed(taskElapsed));
+        if(inlineSpinner)
+            inlineSpinner->stop("");
+        pkg_task_print_line(taskPrefix + " " + taskName +
+                            " Completed, time " +
+                            format_task_elapsed_compact(taskElapsed) + " - " +
+                            taskDescription);
         {
             std::lock_guard<std::mutex> lock(taskMutex);
             taskStates[taskName].status = TaskRunState::succeeded;

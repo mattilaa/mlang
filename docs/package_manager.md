@@ -410,6 +410,10 @@ Task semantics:
 - `print` writes a line directly to the console before the task runs.
 - `message` prints a status line before the task runs, which is useful for
   long-running task graphs. `print` is an alias for the same behavior.
+- `inline_output = true` keeps task command output on a single live status line
+  with the task number and spinner, showing a truncated tail of the latest
+  output line. The task still ends with one final completion line in the form
+  `[n/N] task-name Completed, time HH:MM:SS:MS - description`.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
   and runs it through `sh`.
 - `mlang pkg run <task>` honors task dependencies. If a task declares

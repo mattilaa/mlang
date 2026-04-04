@@ -217,6 +217,7 @@ commands = [
 name = "kernel-build"
 phase = "build"
 print = "[example] Building Linux arm64 kernel image into {{deps_dir}}/linux/arch/arm64/boot/Image"
+inline_output = true
 workdir = "{{root}}"
 depends_on = ["toolchain-check"]
 commands = [
