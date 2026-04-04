@@ -174,6 +174,12 @@ Run the wider GNU userspace with:
 ../../build/mlang pkg run qemu-run --option userspace=gnu
 ```
 
+In GNU mode, the initramfs builder also writes `/root/.profile` and a small
+`/bin/start-gnu-shell` wrapper that exports `HOME=/root` and
+`TERM=xterm-256color` before launching `bash --login -i`, so the login shell
+gets a default `LS_COLORS` palette plus `ls`, `ll`, and `la` aliases with
+`--color=auto` enabled on the serial console.
+
 Both commands automatically fetch the Linux source dependency first. In GNU
 mode, `gnu-userspace-fetch` also downloads and unpacks the official Ubuntu Base
 ARM64 rootfs on demand before the initramfs is packed. The example uses Ubuntu
