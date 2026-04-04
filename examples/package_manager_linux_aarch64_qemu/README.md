@@ -7,8 +7,9 @@ This example demonstrates package-manager capabilities around:
   `parallel`, `shell`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
-the configured make tool, generates a tiny initramfs directly from
-`mlang.toml`, and boots it under QEMU.
+the configured make tool, builds a tiny statically linked AArch64 init program,
+packs it into an initramfs directly from `mlang.toml`, and boots it under
+QEMU.
 The Linux dependency sets `spinner = false` so `curl` can display its own
 download progress bar cleanly during `pkg fetch`. Other package-manager
 operations keep the rolling spinner by default unless CLI log routing is
@@ -169,9 +170,13 @@ tasks first and only starts QEMU after both succeed.
 - `build = "none"` is important here because the Linux source tree is not built
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
-- `initramfs` is self-contained and creates a minimal `/init` script and basic
-  directory tree under `{{build_dir}}/initramfs`, so the example does not rely
-  on a checked-in `rootfs/` directory.
+- `initramfs` is self-contained and creates a minimal directory tree under
+  `{{build_dir}}/initramfs`, so the example does not rely on a checked-in
+  `rootfs/` directory.
+- `mininit-build` compiles [src/mininit.c](/Users/matti.laamanen/projects/mlang/examples/package_manager_linux_aarch64_qemu/src/mininit.c)
+  into a tiny static AArch64 `/init` binary. This avoids the earlier kernel
+  panic caused by packing only a shell script without a matching `/bin/sh`
+  inside the initramfs.
 - `log_output = false` can be set on an interactive task such as `qemu-run` to
   keep the child process on the console even when package logs are enabled.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as

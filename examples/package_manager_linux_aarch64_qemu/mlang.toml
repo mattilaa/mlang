@@ -255,20 +255,31 @@ commands = [
 name = "initramfs"
 print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
+depends_on = ["mininit-build"]
 shell = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
   "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
-  "cat > {{build_dir}}/initramfs/init <<'EOF'",
-  "#!/bin/sh",
-  "mount -t proc none /proc",
-  "mount -t sysfs none /sys",
-  "mount -t devtmpfs none /dev 2>/dev/null || true",
-  "echo 'mlang pkg Linux AArch64 QEMU example booted'",
-  "echo 'Kernel image and initramfs were generated from mlang.toml tasks.'",
-  "exec sh",
-  "EOF",
+  "cp {{build_dir}}/mininit {{build_dir}}/initramfs/init",
   "chmod +x {{build_dir}}/initramfs/init",
   "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz"
+]
+
+[[task]]
+name = "mininit-build"
+print = "[example] Building a tiny AArch64 init program for the initramfs"
+workdir = "{{root}}"
+depends_on = ["toolchain-check"]
+commands = [
+  "mkdir -p {{build_dir}}",
+  "clang --target=aarch64-linux-gnu -fuse-ld=lld -nostdlib -static -ffreestanding -fno-stack-protector -Wl,-e,_start -Wl,-z,max-page-size=4096 -O2 {{root}}/src/mininit.c -o {{build_dir}}/mininit"
+]
+
+[task.host.darwin]
+print = "[example] Building a tiny AArch64 init program with Homebrew LLVM"
+depends_on = ["toolchain-check"]
+commands = [
+  "mkdir -p {{build_dir}}",
+  "clang --target=aarch64-linux-gnu -fuse-ld=lld -nostdlib -static -ffreestanding -fno-stack-protector -Wl,-e,_start -Wl,-z,max-page-size=4096 -O2 {{root}}/src/mininit.c -o {{build_dir}}/mininit"
 ]
 
 [[task]]
