@@ -173,6 +173,18 @@
  * target-architecture BusyBox binary. Writing `/etc/inittab` lets BusyBox
  * `init` mount the basic pseudo filesystems and respawn either a BusyBox shell
  * or a GNU `bash` shell on `ttyAMA0`, depending on `userspace`.
+ *
+ * The example initramfs also seeds `/etc/passwd`, `/etc/group`, and
+ * `/etc/shadow`, then installs small helper commands for `addgroup`,
+ * `adduser`, `passwd`, and `sudo`. A guest session can use them like:
+ * \code{.sh}
+ * addgroup demo
+ * adduser alice demo
+ * passwd alice
+ * grep '^alice:' /etc/passwd
+ * grep '^demo:' /etc/group
+ * sudo ls --color=auto /
+ * \endcode
  */
 class PackageManager
 {

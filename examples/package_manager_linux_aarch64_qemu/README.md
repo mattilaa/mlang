@@ -180,6 +180,35 @@ In GNU mode, the initramfs builder also writes `/root/.profile` and a small
 gets a default `LS_COLORS` palette plus `ls`, `ll`, and `la` aliases with
 `--color=auto` enabled on the serial console.
 
+The initramfs builder also seeds `/etc/passwd`, `/etc/group`, and
+`/etc/shadow`, then installs small helper commands so these work in both
+BusyBox and GNU mode:
+
+- `addgroup GROUP [GID]`
+- `adduser USER [GROUP]`
+- `passwd [USER]`
+- `sudo COMMAND ...`
+
+This `sudo` implementation is intentionally minimal: the demo boots straight
+into a root shell, so `sudo` simply re-executes the command when already root
+and prints a clear error if used from a non-root shell.
+
+Example guest session:
+
+```sh
+addgroup demo
+adduser alice demo
+passwd alice
+grep '^alice:' /etc/passwd
+grep '^demo:' /etc/group
+sudo ls --color=auto /
+```
+
+That creates a demo group, adds a user called `alice`, sets a password entry
+for that user in `/etc/shadow`, verifies the generated account records, and
+shows the minimal `sudo` wrapper re-executing a command from the default root
+shell.
+
 Both commands automatically fetch the Linux source dependency first. In GNU
 mode, `gnu-userspace-fetch` also downloads and unpacks the official Ubuntu Base
 ARM64 rootfs on demand before the initramfs is packed. The example uses Ubuntu
