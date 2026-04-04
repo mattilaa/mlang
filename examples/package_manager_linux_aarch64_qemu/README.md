@@ -10,8 +10,9 @@ The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, generates a tiny initramfs directly from
 `mlang.toml`, and boots it under QEMU.
 The Linux dependency sets `spinner = false` so `curl` can display its own
-download progress bar cleanly during `pkg fetch` without writing transfer noise
-into the package log files.
+download progress bar cleanly during `pkg fetch`. Other package-manager
+operations keep the rolling spinner by default unless CLI log routing is
+enabled.
 
 Linux is still the recommended host for this example. On Apple Silicon macOS,
 the manifest also provides a native Darwin path based on the ClangBuiltLinux
@@ -120,9 +121,16 @@ From this directory:
 ../../build/mlang pkg run boot-flow
 ```
 
-That writes package logs under `/tmp/mlang-linux-aarch64-qemu/` while keeping
-task `print` lines visible on the console. To mirror task prints into the
-stdout log as well, add `--task-print-to-stdout-log`.
+By default, command output stays on the console even though this manifest
+declares log file paths. To actually write package logs under
+`/tmp/mlang-linux-aarch64-qemu/`, pass a pkg log flag such as `--stdout-log`,
+`--stderr-log`, `--warn-log`, `--log-dir`, or
+`--task-print-to-stdout-log`. Task `print` lines stay visible on the console,
+and `--task-print-to-stdout-log` also mirrors them into the stdout log.
+If you pass only `--log-dir`, pkg uses the default filenames
+`pkg.stdout.log`, `pkg.stderr.log`, and `pkg.warn.log` in that directory.
+The `qemu-run` task sets `log_output = false`, so QEMU's live serial output
+stays on the console instead of being redirected into the package log files.
 
 `boot-flow` fans out into `kernel-build`, `initramfs`, and `qemu-run`.
 Because `qemu-run` declares `join_on = ["kernel-build", "initramfs"]`, it
@@ -164,6 +172,8 @@ tasks first and only starts QEMU after both succeed.
 - `initramfs` is self-contained and creates a minimal `/init` script and basic
   directory tree under `{{build_dir}}/initramfs`, so the example does not rely
   on a checked-in `rootfs/` directory.
+- `log_output = false` can be set on an interactive task such as `qemu-run` to
+  keep the child process on the console even when package logs are enabled.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as
   `toolchain-check` and `darwin-native-prepare`.
 - `next = ["task-name"]` lets a task jump forward to named downstream tasks

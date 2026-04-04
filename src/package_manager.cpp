@@ -462,6 +462,7 @@ struct BuildConfig
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
     std::optional<bool> taskPrintToStdoutLog;
+    bool enableLogs = false;
 };
 
 struct BuildTarget
@@ -479,6 +480,7 @@ struct TaskSpec
     std::string phase;
     std::string workdir;
     std::optional<bool> parallel;
+    std::optional<bool> logOutput;
     std::vector<std::string> dependsOn;
     std::vector<std::string> phaseDependsOn;
     std::vector<std::string> joinOn;
@@ -495,6 +497,7 @@ struct TaskSpec
         std::string phase;
         std::string workdir;
         std::optional<bool> parallel;
+        std::optional<bool> logOutput;
         std::vector<std::string> dependsOn;
         std::vector<std::string> phaseDependsOn;
         std::vector<std::string> joinOn;
@@ -748,6 +751,7 @@ struct PackageLogState
     std::optional<std::filesystem::path> stderrLog;
     std::optional<std::filesystem::path> warnLog;
     bool taskPrintToStdoutLog = false;
+    bool logsEnabled = false;
 };
 
 static PackageLogState& current_package_log_state()
@@ -758,12 +762,14 @@ static PackageLogState& current_package_log_state()
 
 static std::optional<std::filesystem::path> resolve_log_path(
     const std::filesystem::path& packageDir, const BuildConfig& config,
-    const std::string& configured)
+    const std::string& configured, const char* defaultName = nullptr)
 {
-    if(configured.empty())
+    if(configured.empty() && defaultName == nullptr)
         return std::nullopt;
 
-    std::filesystem::path path(configured);
+    std::filesystem::path path =
+        configured.empty() ? std::filesystem::path(defaultName)
+                           : std::filesystem::path(configured);
     if(path.is_absolute())
         return path.lexically_normal();
 
@@ -776,11 +782,26 @@ static PackageLogState make_package_log_state(const std::filesystem::path& packa
                                               const BuildConfig& config)
 {
     PackageLogState state;
-    state.stdoutLog = resolve_log_path(packageDir, config, config.stdoutLog);
-    state.stderrLog = resolve_log_path(packageDir, config, config.stderrLog);
-    state.warnLog = resolve_log_path(packageDir, config, config.warnLog);
+    if(!config.enableLogs)
+        return state;
+
+    const char* defaultStdoutLog = config.logDir.empty() ? nullptr : "pkg.stdout.log";
+    const char* defaultStderrLog = config.logDir.empty() ? nullptr : "pkg.stderr.log";
+    const char* defaultWarnLog = config.logDir.empty() ? nullptr : "pkg.warn.log";
+    state.stdoutLog = resolve_log_path(packageDir, config, config.stdoutLog,
+                                       defaultStdoutLog);
+    state.stderrLog = resolve_log_path(packageDir, config, config.stderrLog,
+                                       defaultStderrLog);
+    state.warnLog = resolve_log_path(packageDir, config, config.warnLog,
+                                     defaultWarnLog);
     state.taskPrintToStdoutLog = config.taskPrintToStdoutLog.value_or(false);
+    state.logsEnabled = true;
     return state;
+}
+
+static bool pkg_logs_active()
+{
+    return current_package_log_state().logsEnabled;
 }
 
 static void append_log_line(const std::optional<std::filesystem::path>& path,
@@ -974,6 +995,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 task.parallel = parse_toml_bool_value(taskValue);
             }
+            else if(taskKey == "log_output")
+            {
+                task.logOutput = parse_toml_bool_value(taskValue);
+            }
             else if(taskKey == "depends_on")
             {
                 append_toml_string_list_value(taskValue, task.dependsOn);
@@ -1042,6 +1067,10 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             else if(taskKey == "parallel")
             {
                 ov.parallel = parse_toml_bool_value(taskValue);
+            }
+            else if(taskKey == "log_output")
+            {
+                ov.logOutput = parse_toml_bool_value(taskValue);
             }
             else if(taskKey == "depends_on")
             {
@@ -1957,7 +1986,7 @@ static int run_status_command(const std::string& label, const std::string& cmd,
                               bool logCommand = true,
                               bool logChildOutput = true)
 {
-    if(useSpinner)
+    if(useSpinner && !pkg_logs_active())
         return run_progress_command(label, cmd, logCommand, logChildOutput);
     std::cerr << label << std::endl;
     int rc = run_command(cmd, logCommand, logChildOutput);
@@ -2031,10 +2060,13 @@ static int run_command_in_dir(const std::filesystem::path& dir,
 
 static int run_command_in_dir_with_paths(const std::filesystem::path& dir,
                                          const std::string& cmd,
-                                         const std::vector<std::string>& entries)
+                                         const std::vector<std::string>& entries,
+                                         bool logCommand = true,
+                                         bool logChildOutput = true)
 {
     return run_command("cd " + shell_quote(dir.string()) + " && " +
-                       command_with_path_entries(cmd, entries));
+                           command_with_path_entries(cmd, entries),
+                       logCommand, logChildOutput);
 }
 
 static int run_progress_command_in_dir_with_paths(
@@ -3041,6 +3073,10 @@ static int run_task_for_manifest_impl(
             hostOverride && hostOverride->parallel.has_value()
                 ? hostOverride->parallel.value()
                 : task.parallel.value_or(false);
+        bool effectiveLogOutput =
+            hostOverride && hostOverride->logOutput.has_value()
+                ? hostOverride->logOutput.value()
+                : task.logOutput.value_or(true);
 
         if(effectiveCommands.empty() && effectiveShell.empty())
         {
@@ -3143,7 +3179,8 @@ static int run_task_for_manifest_impl(
             if(!envPrefix.empty())
                 expanded = "env" + envPrefix + " " + expanded;
             if(run_command_in_dir_with_paths(workdir, expanded,
-                                             buildConfig.pathEntries) != 0)
+                                             buildConfig.pathEntries, true,
+                                             effectiveLogOutput) != 0)
             {
                 std::cerr << "Task '" << taskName << "' failed for "
                           << pkg.manifestPath.string() << ".\n";
@@ -3258,6 +3295,11 @@ struct PkgCliOverrides
 static void apply_cli_overrides(BuildConfig& buildConfig,
                                 const PkgCliOverrides& overrides)
 {
+    const bool enableLogs = overrides.logDir.has_value() ||
+                            overrides.stdoutLog.has_value() ||
+                            overrides.stderrLog.has_value() ||
+                            overrides.warnLog.has_value() ||
+                            overrides.taskPrintToStdoutLog.has_value();
     if(overrides.buildDir.has_value())
         buildConfig.buildDir = *overrides.buildDir;
     if(overrides.depsDir.has_value())
@@ -3272,6 +3314,8 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.warnLog = *overrides.warnLog;
     if(overrides.taskPrintToStdoutLog.has_value())
         buildConfig.taskPrintToStdoutLog = *overrides.taskPrintToStdoutLog;
+    if(enableLogs)
+        buildConfig.enableLogs = true;
 }
 
 } // namespace
@@ -3701,13 +3745,14 @@ int PackageManager::run(int argc, char** argv)
         bool found = false;
         for(const auto& pkg : manifests)
         {
-            PackageManifest overriddenPkg = pkg;
             BuildConfig buildConfig = parse_build_config(pkg.content);
             apply_cli_overrides(buildConfig, overrides);
             int rc;
             {
                 ScopedPackageLogState scopedLogs(
                     make_package_log_state(pkg.packageDir, buildConfig));
+                if(fetch_for_manifest(pkg, buildConfig) != 0)
+                    return 1;
                 const auto tasks = parse_task_specs(pkg.content);
                 const std::string hostName = current_host_name();
                 std::map<std::string, TaskRunState> taskStates;

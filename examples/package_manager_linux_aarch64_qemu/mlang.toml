@@ -260,6 +260,7 @@ shell = [
 [[task]]
 name = "qemu-run"
 print = "[example] Booting the built kernel in QEMU"
+log_output = false
 workdir = "{{root}}"
 join_on = ["kernel-build", "initramfs"]
 shell = [

@@ -264,7 +264,8 @@ If `spinner = false` is set, the package manager does not show the rolling
 status cursor for that dependency's fetch/build steps. This is useful when the
 underlying tool already renders its own progress bar, such as `curl`. Built-in
 dependency commands with `spinner = false` also stay out of the stdout/stderr
-log files so transfer progress does not pollute package logs.
+log files so transfer progress does not pollute package logs. Other package
+operations keep the spinner by default unless CLI log routing is enabled.
 
 Archive source example:
 
@@ -328,8 +329,14 @@ Directory behavior:
 - If neither key is set, the default layout stays unchanged: build outputs go
   to `build/` and fetched dependencies live under `build/deps/`.
 - If `log_dir` is set, relative `stdout_log`, `stderr_log`, and `warn_log`
-  files are written under that directory. Without log settings, output stays on
-  the console as before.
+  files are resolved under that directory.
+- If logging is enabled and `log_dir` is set, any missing log filename falls
+  back to `pkg.stdout.log`, `pkg.stderr.log`, or `pkg.warn.log` inside that
+  directory.
+- Those log destinations are only activated when you pass a pkg log flag such
+  as `--log-dir`, `--stdout-log`, `--stderr-log`, `--warn-log`, or
+  `--task-print-to-stdout-log`.
+- Without those CLI flags, output stays on the console as before.
 - `stdout_log` captures package-manager info lines plus command stdout.
 - `stderr_log` captures command stderr plus package-manager error lines.
 - `warn_log` captures package-manager warning lines.
@@ -337,7 +344,8 @@ Directory behavior:
   when logs are enabled. Set `task_print_to_stdout_log = true` or pass
   `--task-print-to-stdout-log` to mirror them into the stdout log as well.
 - Rolling spinner/status lines are console-only and are not written to the log
-  files.
+  files. When CLI log routing is enabled, the rolling spinner falls back to
+  plain status lines.
 
 Example layout with separate outputs and a shared dependency cache:
 

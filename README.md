@@ -794,7 +794,8 @@ Source dependencies also accept `spinner = false` to disable the rolling
 status cursor for that dependency's fetch/build steps. This is useful when the
 underlying tool already has its own progress output, such as `curl`. Built-in
 dependency commands with `spinner = false` also stay out of the stdout/stderr
-log files so transfer progress does not pollute package logs.
+log files so transfer progress does not pollute package logs. Other package
+operations keep the spinner by default unless CLI log routing is enabled.
 
 `[tool.mlang]` can be used to set package-build defaults for `mlang pkg build`.
 Supported keys are:
@@ -850,9 +851,16 @@ cache such as `.pkg/deps` while building into separate directories like
 `build-debug` and `build-release`.
 
 If `log_dir` is set, relative `stdout_log`, `stderr_log`, and `warn_log` paths
-are resolved under that directory. Without log settings, package-manager and
-task output stays on the console as before. Rolling spinner/status lines are
-console-only and are not written to the log files.
+are resolved under that directory. Those log destinations are only activated
+when you pass a pkg log flag such as `--log-dir`, `--stdout-log`,
+`--stderr-log`, `--warn-log`, or `--task-print-to-stdout-log`. Without those
+CLI flags, package-manager and task output stays on the console as before.
+When logging is enabled and `log_dir` is set, any missing log filename falls
+back to `pkg.stdout.log`, `pkg.stderr.log`, or `pkg.warn.log` inside that
+directory.
+Rolling spinner/status lines are console-only, are not written to the log
+files, and the rolling spinner falls back to plain status lines while CLI log
+routing is enabled.
 
 If `make_program` is set, `mlang pkg` uses that executable for built-in
 `build = "make"` dependency builds, and `[[task]]` commands can reference it as
