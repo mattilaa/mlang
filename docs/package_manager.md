@@ -407,6 +407,11 @@ Supported task keys:
 - `message`
 - `phase`
 - `workdir`
+- `language`
+- `source`
+- `output`
+- `inputs`
+- `compile_only`
 - `parallel`
 - `depends_on`
 - `phase_depends_on`
@@ -418,6 +423,15 @@ Supported task keys:
 - `command`
 - `commands`
 - `shell` / `script`
+- `opt_level`
+- `target_arch`
+- `path_entries`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
 
 Task semantics:
 
@@ -436,6 +450,14 @@ Task semantics:
   with the task number and spinner, showing a truncated tail of the latest
   output line. The task still ends with one final completion line in the form
   `[n/N] task-name Completed, time HH:MM:SS:MS - description`.
+- `language = "mlang"`, `language = "c"`, and `language = "c++"` let a task
+  compile or link without spelling the compiler command by hand.
+- `source`, `output`, `inputs`, and `compile_only = true` drive declarative
+  task builds. When `language` is present, `mlang pkg` generates the compile or
+  link command and then runs any extra `commands` after it.
+- declarative task links reuse package dependency discovery, task-local `libs`,
+  `lib_paths`, `compiler_flags`, `linker_flags`, `static_deps`, and
+  `static_cpp_runtime`.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
   and runs it through `sh`.
 - `mlang pkg run <task>` honors task dependencies. If a task declares
@@ -444,6 +466,10 @@ Task semantics:
 - `mlang pkg run` does not implicitly fetch package dependencies. Run
   `mlang pkg fetch` first on a clean workspace if tasks expect files under
   `{{deps_dir}}`.
+- TOML list-valued task keys such as `inputs`, `libs`, `compiler_flags`,
+  `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
+  comma-separated arrays, and both `"double-quoted"` and `'single-quoted'`
+  string items are supported.
 
 Host-specific overrides are supported with subtables such as:
 

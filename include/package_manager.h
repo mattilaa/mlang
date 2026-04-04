@@ -12,6 +12,48 @@
  * instead of the default `mlang.toml`. Tasks may also opt into
  * `inline_output = true`, which keeps command output on a single live status
  * row with task numbering and a truncated tail of the latest output line.
+ * Declarative task builds are also supported via keys such as `language`,
+ * `source`, `output`, `inputs`, `compile_only`, `libs`, `lib_paths`,
+ * `compiler_flags`, and `linker_flags`.
+ *
+ * Example manifest excerpt:
+ * \code{.toml}
+ * [package]
+ * name = "multilang_demo"
+ * version = "0.1.0"
+ *
+ * [dependencies]
+ * miniaudio = { url = "https://github.com/mackron/miniaudio/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none" }
+ *
+ * [[task]]
+ * name = "compile-c-bridge"
+ * phase = "compile"
+ * language = "c"
+ * source = "src/player.c"
+ * output = "{{build_dir}}/obj/player.o"
+ * compile_only = true
+ * compiler_flags = [
+ *   "-std=c11",
+ *   "-O2",
+ *   "-I{{deps_dir}}/miniaudio",
+ * ]
+ *
+ * [[task]]
+ * name = "link-demo"
+ * phase = "build"
+ * language = "c++"
+ * output = "{{build_dir}}/demo"
+ * inputs = [
+ *   "{{build_dir}}/obj/main_mlang.o",
+ *   "{{build_dir}}/obj/player.o",
+ * ]
+ * libs = ["mlang_std"]
+ * \endcode
+ *
+ * Task array values such as `inputs`, `libs`, `compiler_flags`,
+ * `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
+ * comma-separated TOML arrays. Both `"double-quoted"` and `'single-quoted'`
+ * TOML strings are supported in these task fields.
  */
 class PackageManager
 {

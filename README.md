@@ -1217,13 +1217,31 @@ Supported `[[task]]` keys:
 - `name`
 - `print`
 - `message`
+- `phase`
 - `workdir`
+- `language`
+- `source`
+- `output`
+- `inputs`
+- `compile_only`
 - `parallel`
 - `depends_on`
+- `phase_depends_on`
 - `next`
+- `next_phases`
 - `join_on`
+- `phase_join_on`
 - `env`
-- `shell`
+- `shell` / `script`
+- `opt_level`
+- `target_arch`
+- `path_entries`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
 - `command`
 - `commands`
 
@@ -1245,6 +1263,18 @@ Override behavior:
 - override `env` appends after the base `env`
 - override `shell` replaces the base inline shell script
 - override `command` / `commands` replace the base task commands
+
+Declarative task builds are also supported. Set `language = "mlang"`,
+`"c"`, or `"c++"` together with `source`, `output`, `inputs`, and optionally
+`compile_only = true`, and `mlang pkg` generates the compiler or linker
+invocation for that task. Task-local `libs`, `lib_paths`, `compiler_flags`,
+`linker_flags`, `static_deps`, and `static_cpp_runtime` are applied to that
+generated build step, and any extra `commands` still run afterward.
+
+List-valued task keys such as `inputs`, `libs`, `compiler_flags`,
+`linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
+comma-separated TOML arrays, and both `"double-quoted"` and `'single-quoted'`
+string items are supported.
 
 Task placeholders:
 
