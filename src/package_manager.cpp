@@ -33,6 +33,7 @@
 namespace {
 
 struct PackageManifest;
+struct BuildConfig;
 
 static std::vector<std::string> split_toml_array(std::string_view input);
 static std::string unquote(std::string_view v);
@@ -46,6 +47,9 @@ static std::vector<std::string> parse_workspace_members(
 static std::string current_host_name();
 static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName);
+static int run_task_for_manifest(const PackageManifest& pkg,
+                                 const std::string& taskName,
+                                 const BuildConfig& buildConfig);
 static void append_toml_string_list_value_preserve(const std::string& value,
                                                    std::vector<std::string>& out);
 
@@ -3009,7 +3013,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         {
             for(const auto& taskName : buildTaskRoots)
             {
-                if(run_task_for_manifest(pkg, taskName) != 0)
+                if(run_task_for_manifest(pkg, taskName, packageBuildConfig) != 0)
                     return 1;
             }
             return 0;
@@ -3780,10 +3784,10 @@ static int run_task_for_manifest_impl(
 }
 
 static int run_task_for_manifest(const PackageManifest& pkg,
-                                 const std::string& taskName)
+                                 const std::string& taskName,
+                                 const BuildConfig& buildConfig)
 {
     const auto tasks = parse_task_specs(pkg.content);
-    const BuildConfig buildConfig = parse_build_config(pkg.content);
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
     const std::string hostName = current_host_name();
@@ -3801,6 +3805,12 @@ static int run_task_for_manifest(const PackageManifest& pkg,
     return run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
                                       taskStates, taskMutex, taskCv, taskName,
                                       taskStack);
+}
+
+static int run_task_for_manifest(const PackageManifest& pkg,
+                                 const std::string& taskName)
+{
+    return run_task_for_manifest(pkg, taskName, parse_build_config(pkg.content));
 }
 
 struct PkgCliOverrides

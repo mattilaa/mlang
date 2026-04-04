@@ -1,0 +1,24 @@
+extern fn puts(text: str8) -> i32;
+extern fn ml_audio_print_analysis(path: str8) -> i32;
+extern fn ml_audio_play_blocking(path: str8) -> i32;
+
+fn main() -> i32 {
+    let analysisSample: str8 = "build/generated/bassdrum_audiofile.wav";
+    let playbackSample: str8 = "samples/bassdrum.WAV";
+
+    puts("[mlang] Starting the multilanguage audio demo.");
+    puts("[mlang] Asking the C++ AudioFile bridge to inspect a normalized WAV copy.");
+    if ml_audio_print_analysis(analysisSample) != 0 {
+        puts("[mlang] Audio analysis failed.");
+        return 1;
+    }
+
+    puts("[mlang] Asking the C miniaudio bridge to play the original sample.");
+    if ml_audio_play_blocking(playbackSample) != 0 {
+        puts("[mlang] Audio playback failed.");
+        return 1;
+    }
+
+    puts("[mlang] Demo finished.");
+    return 0;
+}

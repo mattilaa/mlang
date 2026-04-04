@@ -1,0 +1,107 @@
+[package]
+name = "multilanguage_audio_demo"
+version = "0.1.0"
+
+[dependencies]
+miniaudio = { url = "https://github.com/mackron/miniaudio/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+audiofile = { url = "https://github.com/adamstark/AudioFile/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+[[task]]
+name = "toolchain-check"
+print = "[example] Checking MLang, C, C++, and archiver toolchains"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
+  "sh -c 'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "prepare-build-tree"
+print = "[example] Preparing build output directories"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}/obj {{build_dir}}/lib"
+]
+
+[[task]]
+name = "compile-mlang-main"
+phase = "compile"
+print = "[example] Compiling the MLang entrypoint to an object file"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+commands = [
+  "../../build/mlang src/main.mla -c -O2 -o {{build_dir}}/obj/main_mlang.o"
+]
+
+[[task]]
+name = "compile-c-miniaudio"
+phase = "compile"
+print = "[example] Compiling the C miniaudio playback bridge as a static archive"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+commands = [
+  "cc -std=c11 -O2 -I{{deps_dir}}/miniaudio -c src/miniaudio_player.c -o {{build_dir}}/obj/miniaudio_player.o",
+  "ar rcs {{build_dir}}/lib/libminiaudio_player.a {{build_dir}}/obj/miniaudio_player.o"
+]
+
+[[task]]
+name = "compile-cpp-audiofile"
+phase = "compile"
+print = "[example] Compiling the C++ AudioFile analysis bridge as a static archive"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+commands = [
+  "c++ -std=c++17 -O2 -I{{deps_dir}}/audiofile -c src/audiofile_reader.cpp -o {{build_dir}}/obj/audiofile_reader.o",
+  "ar rcs {{build_dir}}/lib/libaudiofile_reader.a {{build_dir}}/obj/audiofile_reader.o"
+]
+
+[[task]]
+name = "link-demo"
+phase = "build"
+print = "[example] Linking one final binary from MLang, C, and C++ objects"
+workdir = "{{root}}"
+depends_on = ["compile-mlang-main", "compile-c-miniaudio", "compile-cpp-audiofile"]
+commands = [
+  "sh -c 'case $(uname -s) in Darwin) c++ {{build_dir}}/obj/main_mlang.o {{build_dir}}/lib/libminiaudio_player.a {{build_dir}}/lib/libaudiofile_reader.a -L../../build -lmlang_std -framework CoreAudio -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreServices -o {{build_dir}}/multilanguage_audio_demo ;; Linux) c++ {{build_dir}}/obj/main_mlang.o {{build_dir}}/lib/libminiaudio_player.a {{build_dir}}/lib/libaudiofile_reader.a -L../../build -lmlang_std -lpthread -ldl -lm -o {{build_dir}}/multilanguage_audio_demo ;; *) echo Unsupported host for this example: $(uname -s); exit 1 ;; esac'"
+]
+
+[[task]]
+name = "prepare-audiofile-sample"
+print = "[example] Rewriting the sample into a plain PCM WAV for AudioFile"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+shell = [
+  "mkdir -p {{build_dir}}/generated",
+  "python3 - <<'PY'",
+  "import pathlib",
+  "import wave",
+  "src = pathlib.Path('samples/bassdrum.WAV')",
+  "dst = pathlib.Path('{{build_dir}}/generated/bassdrum_audiofile.wav')",
+  "dst.parent.mkdir(parents=True, exist_ok=True)",
+  "with wave.open(str(src), 'rb') as reader:",
+  "    params = reader.getparams()",
+  "    frames = reader.readframes(reader.getnframes())",
+  "with wave.open(str(dst), 'wb') as writer:",
+  "    writer.setnchannels(params.nchannels)",
+  "    writer.setsampwidth(params.sampwidth)",
+  "    writer.setframerate(params.framerate)",
+  "    writer.writeframes(frames)",
+  "PY"
+]
+
+[[task]]
+name = "play-sample"
+print = "[example] Running the final multilanguage audio binary"
+workdir = "{{root}}"
+join_on = ["link-demo", "prepare-audiofile-sample"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/multilanguage_audio_demo"
+]

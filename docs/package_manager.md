@@ -940,6 +940,10 @@ Workspace example in this repository:
 - `examples/package_manager_multi_bins`
   Demonstrates `[[bin]]` targets, target-scoped config overrides, and mixed
   GitHub `git` plus `tar.gz` source dependencies in one package.
+- `examples/package_manager_multilanguage_example`
+  Demonstrates a task-driven single-binary build that compiles MLang, C, and
+  C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and
+  links the results together.
 - `examples/package_manager_linux_aarch64_qemu`
   Demonstrates a fetch-only Linux kernel dependency plus `[[task]]` commands
   for AArch64 kernel build and QEMU boot flow.
