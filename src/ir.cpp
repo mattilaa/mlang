@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "module.h"
+#include <array>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -12,25 +13,169 @@
 #include <llvm/TargetParser/Triple.h>
 #include <unordered_map>
 
+namespace {
+
+enum class TargetArchAlias
+{
+    X86,
+    I386,
+    I686,
+    X64,
+    X86_64,
+    Amd64,
+    Aarch64,
+    Arm64,
+};
+
+enum class CanonicalTargetArch
+{
+    X86,
+    X64,
+    Aarch64,
+};
+
+enum class PrimitiveTypeAlias
+{
+    Bool,
+    Bit,
+    I32,
+    I8,
+    I16,
+    I64,
+    U8,
+    U16,
+    U32,
+    U64,
+    F32,
+    F64,
+    Str8,
+    Str16,
+};
+
+enum class OptLevelAlias
+{
+    O0,
+    Og,
+    O1,
+    O2,
+    O3,
+    Os,
+    Oz,
+};
+
+template <typename Enum, size_t N>
+static std::optional<Enum>
+find_enum_key(std::string_view key,
+              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+{
+    const auto it =
+        std::find_if(mappings.begin(), mappings.end(),
+                     [&](const auto& entry) { return entry.second == key; });
+    if(it == mappings.end())
+        return std::nullopt;
+    return it->first;
+}
+
+template <typename Enum, size_t N>
+static std::optional<std::string_view> find_enum_text(
+    Enum key, const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+{
+    const auto it =
+        std::find_if(mappings.begin(), mappings.end(),
+                     [&](const auto& entry) { return entry.first == key; });
+    if(it == mappings.end())
+        return std::nullopt;
+    return it->second;
+}
+
+static constexpr std::array<std::pair<TargetArchAlias, std::string_view>, 8>
+    kTargetArchAliases {{{ TargetArchAlias::X86, "x86" },
+                          { TargetArchAlias::I386, "i386" },
+                          { TargetArchAlias::I686, "i686" },
+                          { TargetArchAlias::X64, "x64" },
+                          { TargetArchAlias::X86_64, "x86_64" },
+                          { TargetArchAlias::Amd64, "amd64" },
+                          { TargetArchAlias::Aarch64, "aarch64" },
+                          { TargetArchAlias::Arm64, "arm64" } }};
+
+static constexpr std::array<
+    std::pair<CanonicalTargetArch, std::string_view>, 3>
+    kCanonicalTargetArchNames {{{ CanonicalTargetArch::X86, "x86" },
+                                 { CanonicalTargetArch::X64, "x64" },
+                                 { CanonicalTargetArch::Aarch64, "aarch64" } }};
+
+static constexpr std::array<
+    std::pair<CanonicalTargetArch, std::string_view>, 3>
+    kLlvmTargetArchNames {{{ CanonicalTargetArch::X86, "i386" },
+                            { CanonicalTargetArch::X64, "x86_64" },
+                            { CanonicalTargetArch::Aarch64, "aarch64" } }};
+
+static constexpr std::array<
+    std::pair<PrimitiveTypeAlias, std::string_view>, 14>
+    kPrimitiveTypeAliases {{{ PrimitiveTypeAlias::Bool, "bool" },
+                             { PrimitiveTypeAlias::Bit, "bit" },
+                             { PrimitiveTypeAlias::I32, "i32" },
+                             { PrimitiveTypeAlias::I8, "i8" },
+                             { PrimitiveTypeAlias::I16, "i16" },
+                             { PrimitiveTypeAlias::I64, "i64" },
+                             { PrimitiveTypeAlias::U8, "u8" },
+                             { PrimitiveTypeAlias::U16, "u16" },
+                             { PrimitiveTypeAlias::U32, "u32" },
+                             { PrimitiveTypeAlias::U64, "u64" },
+                             { PrimitiveTypeAlias::F32, "f32" },
+                             { PrimitiveTypeAlias::F64, "f64" },
+                             { PrimitiveTypeAlias::Str8, "str8" },
+                             { PrimitiveTypeAlias::Str16, "str16" } }};
+
+static constexpr std::array<std::pair<OptLevelAlias, std::string_view>, 7>
+    kOptLevelAliases {{{ OptLevelAlias::O0, "-O0" },
+                        { OptLevelAlias::Og, "-Og" },
+                        { OptLevelAlias::O1, "-O1" },
+                        { OptLevelAlias::O2, "-O2" },
+                        { OptLevelAlias::O3, "-O3" },
+                        { OptLevelAlias::Os, "-Os" },
+                        { OptLevelAlias::Oz, "-Oz" } }};
+
 static std::string normalize_target_arch_name(const std::string& arch)
 {
-    if(arch == "x86" || arch == "i386" || arch == "i686")
-        return "x86";
-    if(arch == "x64" || arch == "x86_64" || arch == "amd64")
-        return "x64";
-    if(arch == "aarch64" || arch == "arm64")
-        return "aarch64";
+    const auto archKey = find_enum_key(arch, kTargetArchAliases);
+    if(!archKey.has_value())
+        return "";
+
+    CanonicalTargetArch canonicalKey;
+    switch(*archKey)
+    {
+    case TargetArchAlias::X86:
+    case TargetArchAlias::I386:
+    case TargetArchAlias::I686:
+        canonicalKey = CanonicalTargetArch::X86;
+        break;
+    case TargetArchAlias::X64:
+    case TargetArchAlias::X86_64:
+    case TargetArchAlias::Amd64:
+        canonicalKey = CanonicalTargetArch::X64;
+        break;
+    case TargetArchAlias::Aarch64:
+    case TargetArchAlias::Arm64:
+        canonicalKey = CanonicalTargetArch::Aarch64;
+        break;
+    }
+
+    if(const auto text =
+           find_enum_text(canonicalKey, kCanonicalTargetArchNames);
+       text.has_value())
+        return std::string(*text);
     return "";
 }
 
 static std::string llvm_arch_name_for_target(const std::string& arch)
 {
-    if(arch == "x86")
-        return "i386";
-    if(arch == "x64")
-        return "x86_64";
-    if(arch == "aarch64")
-        return "aarch64";
+    const auto archKey = find_enum_key(arch, kCanonicalTargetArchNames);
+    if(!archKey.has_value())
+        return "";
+    if(const auto text = find_enum_text(*archKey, kLlvmTargetArchNames);
+       text.has_value())
+        return std::string(*text);
     return "";
 }
 
@@ -135,34 +280,41 @@ static std::string build_intermediate_object_path(const std::string& outputFile)
 static TypeNode* type_from_text(std::string t)
 {
     t = trim_copy(t);
-    if(t == "bool")
-        return new TypeNode(TypeNode::TYPE_BOOL);
-    if(t == "bit")
-        return new TypeNode(TypeNode::TYPE_BIT);
-    if(t == "i32")
-        return new TypeNode(TypeNode::TYPE_I32);
-    if(t == "i8")
-        return new TypeNode(TypeNode::TYPE_I8);
-    if(t == "i16")
-        return new TypeNode(TypeNode::TYPE_I16);
-    if(t == "i64")
-        return new TypeNode(TypeNode::TYPE_I64);
-    if(t == "u8")
-        return new TypeNode(TypeNode::TYPE_U8);
-    if(t == "u16")
-        return new TypeNode(TypeNode::TYPE_U16);
-    if(t == "u32")
-        return new TypeNode(TypeNode::TYPE_U32);
-    if(t == "u64")
-        return new TypeNode(TypeNode::TYPE_U64);
-    if(t == "f32")
-        return new TypeNode(TypeNode::TYPE_FLOAT);
-    if(t == "f64")
-        return new TypeNode(TypeNode::TYPE_DOUBLE);
-    if(t == "str8")
-        return new TypeNode(TypeNode::TYPE_STR8);
-    if(t == "str16")
-        return new TypeNode(TypeNode::TYPE_STR16);
+    if(const auto typeKey = find_enum_key(t, kPrimitiveTypeAliases);
+       typeKey.has_value())
+    {
+        switch(*typeKey)
+        {
+        case PrimitiveTypeAlias::Bool:
+            return new TypeNode(TypeNode::TYPE_BOOL);
+        case PrimitiveTypeAlias::Bit:
+            return new TypeNode(TypeNode::TYPE_BIT);
+        case PrimitiveTypeAlias::I32:
+            return new TypeNode(TypeNode::TYPE_I32);
+        case PrimitiveTypeAlias::I8:
+            return new TypeNode(TypeNode::TYPE_I8);
+        case PrimitiveTypeAlias::I16:
+            return new TypeNode(TypeNode::TYPE_I16);
+        case PrimitiveTypeAlias::I64:
+            return new TypeNode(TypeNode::TYPE_I64);
+        case PrimitiveTypeAlias::U8:
+            return new TypeNode(TypeNode::TYPE_U8);
+        case PrimitiveTypeAlias::U16:
+            return new TypeNode(TypeNode::TYPE_U16);
+        case PrimitiveTypeAlias::U32:
+            return new TypeNode(TypeNode::TYPE_U32);
+        case PrimitiveTypeAlias::U64:
+            return new TypeNode(TypeNode::TYPE_U64);
+        case PrimitiveTypeAlias::F32:
+            return new TypeNode(TypeNode::TYPE_FLOAT);
+        case PrimitiveTypeAlias::F64:
+            return new TypeNode(TypeNode::TYPE_DOUBLE);
+        case PrimitiveTypeAlias::Str8:
+            return new TypeNode(TypeNode::TYPE_STR8);
+        case PrimitiveTypeAlias::Str16:
+            return new TypeNode(TypeNode::TYPE_STR16);
+        }
+    }
 
     if(is_wrapped_generic(t, "list"))
     {
@@ -534,6 +686,8 @@ static bool containsExceptionControlFlow(ASTNode* node)
         return containsExceptionControlFlow(closure->body);
     return false;
 }
+
+} // namespace
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -22310,7 +22464,7 @@ void Backend::optimize(const std::string& levelName)
 {
     std::string level = levelName;
     if(level.empty())
-        level = "-O2";
+        level = std::string(kOptLevelAliases[3].second);
 
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
@@ -22329,41 +22483,43 @@ void Backend::optimize(const std::string& levelName)
     std::string normalized = level;
     if(!normalized.empty() && normalized[0] != '-')
         normalized = "-" + normalized;
-    if(normalized == "-Og")
+    const auto optKey = find_enum_key(normalized, kOptLevelAliases);
+    if(!optKey.has_value())
     {
+        normalized = std::string(kOptLevelAliases[3].second);
+    }
+
+    const auto normalizedText =
+        find_enum_text(optKey.value_or(OptLevelAlias::O2), kOptLevelAliases)
+            .value_or(kOptLevelAliases[3].second);
+    normalized = std::string(normalizedText);
+
+    switch(optKey.value_or(OptLevelAlias::O2))
+    {
+    case OptLevelAlias::Og:
         // LLVM does not expose a dedicated -Og pipeline here, so use O1 as the
         // closest debug-friendly preset.
         optLevel = llvm::OptimizationLevel::O1;
-    }
-    else if(normalized == "-O0")
-    {
+        break;
+    case OptLevelAlias::O0:
         optLevel = llvm::OptimizationLevel::O0;
         runPipeline = false;
-    }
-    else if(normalized == "-O1")
-    {
+        break;
+    case OptLevelAlias::O1:
         optLevel = llvm::OptimizationLevel::O1;
-    }
-    else if(normalized == "-O2")
-    {
+        break;
+    case OptLevelAlias::O2:
         optLevel = llvm::OptimizationLevel::O2;
-    }
-    else if(normalized == "-O3")
-    {
+        break;
+    case OptLevelAlias::O3:
         optLevel = llvm::OptimizationLevel::O3;
-    }
-    else if(normalized == "-Os")
-    {
+        break;
+    case OptLevelAlias::Os:
         optLevel = llvm::OptimizationLevel::Os;
-    }
-    else if(normalized == "-Oz")
-    {
+        break;
+    case OptLevelAlias::Oz:
         optLevel = llvm::OptimizationLevel::Oz;
-    }
-    else
-    {
-        normalized = "-O2";
-        optLevel = llvm::OptimizationLevel::O2;
+        break;
     }
 
     llvm::ModulePassManager MPM;
