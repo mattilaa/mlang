@@ -7,9 +7,9 @@ This example demonstrates package-manager capabilities around:
   `parallel`, `shell`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
-the configured make tool, builds a tiny statically linked AArch64 init program,
-downloads a prebuilt BusyBox userspace, packs both into an initramfs directly
-from `mlang.toml`, and boots into a BusyBox shell under QEMU.
+the configured make tool, downloads a prebuilt BusyBox userspace, packs it
+into an initramfs directly from `mlang.toml`, and boots through BusyBox
+`init` into a shell on the QEMU serial console.
 The Linux dependency sets `spinner = false` so `curl` can display its own
 download progress bar cleanly during `pkg fetch`. Other package-manager
 operations keep the rolling spinner by default unless CLI log routing is
@@ -164,7 +164,6 @@ Or step-by-step:
 ../../build/mlang pkg run toolchain-check
 ../../build/mlang pkg run kernel-defconfig
 ../../build/mlang pkg run kernel-build
-../../build/mlang pkg run busybox-fetch
 ../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
@@ -182,13 +181,11 @@ tasks first and only starts QEMU after both succeed.
 - `initramfs` is self-contained and creates a minimal directory tree under
   `{{build_dir}}/initramfs`, so the example does not rely on a checked-in
   `rootfs/` directory.
-- `mininit-build` compiles [src/mininit.c](/Users/matti.laamanen/projects/mlang/examples/package_manager_linux_aarch64_qemu/src/mininit.c)
-  into a tiny static AArch64 `/init` binary. `/init` then hands off to
-  `/bin/sh`, falling back to a built-in emergency console only if BusyBox
-  launch fails.
 - `busybox-fetch` downloads the prebuilt
   `busybox-armv8l` binary from BusyBox's multiarch musl builds and installs it
-  into the initramfs as `/bin/busybox` with `/bin/sh -> busybox`. This works
+  into the initramfs as `/bin/busybox`. The manifest then uses BusyBox as the
+  real `/init`, creates `/bin/sh` and other applet symlinks, and writes
+  `/etc/inittab` so BusyBox `init` respawns a shell on `ttyAMA0`. This works
   on the QEMU guest because the kernel reports 32-bit EL0 support during boot.
 - The resulting guest now boots to a BusyBox shell prompt on the serial
   console:

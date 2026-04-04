@@ -84,7 +84,7 @@
  * ]
  * \endcode
  *
- * Linux initramfs example:
+ * Linux initramfs example using BusyBox as the real `/init`:
  * \code{.toml}
  * [[task]]
  * name = "busybox-fetch"
@@ -96,19 +96,31 @@
  *
  * [[task]]
  * name = "initramfs"
- * depends_on = ["mininit-build", "busybox-fetch"]
+ * depends_on = ["busybox-fetch"]
  * shell = [
  *   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
- *   "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
- *   "cp {{build_dir}}/mininit {{build_dir}}/initramfs/init",
+ *   "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin",
  *   "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
- *   "cd {{build_dir}}/initramfs/bin && for applet in sh ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync; do ln -sf busybox $applet; done",
+ *   "# Use BusyBox as the real PID 1 init process and precreate applet links on the host.",
+ *   "cd {{build_dir}}/initramfs/bin && for applet in sh init ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync cttyhack; do ln -sf busybox $applet; done",
+ *   "ln -sf bin/busybox {{build_dir}}/initramfs/init",
+ *   "cat > {{build_dir}}/initramfs/etc/inittab <<'EOF'",
+ *   "::sysinit:/bin/mount -t proc proc /proc",
+ *   "::sysinit:/bin/mount -t sysfs sysfs /sys",
+ *   "::sysinit:/bin/mount -t devtmpfs devtmpfs /dev",
+ *   "::sysinit:/bin/mkdir -p /dev/pts",
+ *   "ttyAMA0::respawn:/bin/cttyhack /bin/sh",
+ *   "::ctrlaltdel:/bin/umount -a -r",
+ *   "::shutdown:/bin/umount -a -r",
+ *   "EOF",
  *   "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz",
  * ]
  * \endcode
  *
  * The BusyBox applet links are created explicitly during packing because the
  * host may not be able to execute the target-architecture BusyBox binary.
+ * Writing `/etc/inittab` lets BusyBox `init` mount the basic pseudo
+ * filesystems and respawn a shell on `ttyAMA0`.
  */
 class PackageManager
 {
