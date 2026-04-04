@@ -1,12 +1,50 @@
 #include "ast.h"
 #include "ast_handle_helpers.h"
 #include "parser.hpp"
+#include <array>
 #include <cctype>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
 
 namespace {
+
+enum class VariantKeyword
+{
+    Ok,
+    Err,
+    Some,
+    None,
+    Wildcard,
+};
+
+enum class VariantFamily
+{
+    Result,
+    Option,
+};
+
+static constexpr std::array<std::pair<VariantKeyword, std::string_view>, 5>
+    kVariantKeywords {{{ VariantKeyword::Ok, "Ok" },
+                       { VariantKeyword::Err, "Err" },
+                       { VariantKeyword::Some, "Some" },
+                       { VariantKeyword::None, "None" },
+                       { VariantKeyword::Wildcard, "_" } }};
+
+template <typename Enum, size_t N>
+static std::optional<Enum>
+find_enum_key(std::string_view key,
+              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+{
+    const auto it =
+        std::find_if(mappings.begin(), mappings.end(),
+                     [&](const auto& entry) { return entry.second == key; });
+    if(it == mappings.end())
+        return std::nullopt;
+    return it->first;
+}
 
 inline int64_t node_to_handle(ASTNode* node)
 {
@@ -517,9 +555,8 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
                                    ASTNode* args, int line)
 {
     std::string variantStr = variant ? variant : "";
-    bool isResult = (variantStr == "Ok" || variantStr == "Err");
-    bool isOption = (variantStr == "Some" || variantStr == "None");
-    if(!isResult && !isOption)
+    const auto variantKey = find_enum_key(variantStr, kVariantKeywords);
+    if(!variantKey.has_value() || *variantKey == VariantKeyword::Wildcard)
     {
         fprintf(stderr, "Error (line %d): generic function calls are not "
                         "supported\n",
@@ -527,11 +564,18 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
         return create_function_call_multi(variant, args, line);
     }
 
+    const bool isResult = *variantKey == VariantKeyword::Ok ||
+                          *variantKey == VariantKeyword::Err;
+    const bool isOption = *variantKey == VariantKeyword::Some ||
+                          *variantKey == VariantKeyword::None;
+    const VariantFamily family =
+        isResult ? VariantFamily::Result : VariantFamily::Option;
+
     ExpressionNode* valueExpr = nullptr;
     if(args)
     {
         auto* argList = static_cast<ArgumentListNode*>(args);
-        if(isOption && variantStr == "None")
+        if(*variantKey == VariantKeyword::None)
         {
             fprintf(stderr,
                     "Error (line %d): %s expects zero arguments\n",
@@ -545,12 +589,12 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
         {
             fprintf(stderr, "Error (line %d): %s expects %s arguments\n", line,
                     variantStr.c_str(),
-                    isOption && variantStr == "None" ? "zero" : "one");
+                    *variantKey == VariantKeyword::None ? "zero" : "one");
         }
     }
     else
     {
-        if(!(isOption && variantStr == "None"))
+        if(*variantKey != VariantKeyword::None)
         {
             fprintf(stderr,
                     "Error (line %d): %s expects one argument\n",
@@ -560,29 +604,30 @@ ASTNode* create_result_constructor_impl(char* variant, ASTNode* type_args,
 
     const char* flagField = isResult ? "is_ok" : "is_some";
     ASTNode* fields = create_struct_field_init_list(
-        strdup(flagField), create_bool_literal(variantStr == "Ok" ||
-                                               variantStr == "Some"));
+        strdup(flagField), create_bool_literal(*variantKey == VariantKeyword::Ok ||
+                                               *variantKey == VariantKeyword::Some));
 
     if(valueExpr)
     {
-        if(variantStr == "Ok")
+        if(*variantKey == VariantKeyword::Ok)
         {
             fields =
                 add_struct_field_init(fields, strdup("ok"), valueExpr);
         }
-        else if(variantStr == "Err")
+        else if(*variantKey == VariantKeyword::Err)
         {
             fields =
                 add_struct_field_init(fields, strdup("err"), valueExpr);
         }
-        else if(variantStr == "Some")
+        else if(*variantKey == VariantKeyword::Some)
         {
             fields =
                 add_struct_field_init(fields, strdup("value"), valueExpr);
         }
     }
 
-    return create_struct_literal(strdup(isResult ? "Result" : "Option"),
+    return create_struct_literal(
+        strdup(family == VariantFamily::Result ? "Result" : "Option"),
                                  type_args, fields, line);
 }
 
@@ -848,16 +893,28 @@ ASTNode* create_match_pattern_impl(char* name, char* binding, int line)
     std::string bindStr = binding ? binding : "";
 
     MatchPatternNode::PatternKind kind = MatchPatternNode::PATTERN_WILDCARD;
-    if(nameStr == "Ok")
-        kind = MatchPatternNode::PATTERN_OK;
-    else if(nameStr == "Err")
-        kind = MatchPatternNode::PATTERN_ERR;
-    else if(nameStr == "Some")
-        kind = MatchPatternNode::PATTERN_SOME;
-    else if(nameStr == "None")
-        kind = MatchPatternNode::PATTERN_NONE;
-    else if(nameStr == "_")
-        kind = MatchPatternNode::PATTERN_WILDCARD;
+    if(const auto variantKey = find_enum_key(nameStr, kVariantKeywords);
+       variantKey.has_value())
+    {
+        switch(*variantKey)
+        {
+        case VariantKeyword::Ok:
+            kind = MatchPatternNode::PATTERN_OK;
+            break;
+        case VariantKeyword::Err:
+            kind = MatchPatternNode::PATTERN_ERR;
+            break;
+        case VariantKeyword::Some:
+            kind = MatchPatternNode::PATTERN_SOME;
+            break;
+        case VariantKeyword::None:
+            kind = MatchPatternNode::PATTERN_NONE;
+            break;
+        case VariantKeyword::Wildcard:
+            kind = MatchPatternNode::PATTERN_WILDCARD;
+            break;
+        }
+    }
     else
     {
         fprintf(stderr,
