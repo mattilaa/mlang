@@ -790,6 +790,10 @@ compiler_flags = ["-Wno-unwrap"]
 static_deps = true
 ```
 
+Source dependencies also accept `spinner = false` to disable the rolling
+status cursor for that dependency's fetch/build steps. This is useful when the
+underlying tool already has its own progress output, such as `curl`.
+
 `[tool.mlang]` can be used to set package-build defaults for `mlang pkg build`.
 Supported keys are:
 

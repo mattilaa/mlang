@@ -259,11 +259,15 @@ If `build` is omitted, `cmake` is used.
 If `build = "none"` is set, the dependency is fetched but skipped by the
 built-in dependency builders during `pkg build`.
 
+If `spinner = false` is set, the package manager does not show the rolling
+status cursor for that dependency's fetch/build steps. This is useful when the
+underlying tool already renders its own progress bar, such as `curl`.
+
 Archive source example:
 
 ```toml
 [dependencies]
-cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake", spinner = false }
 ```
 
 Current supported archive source type:

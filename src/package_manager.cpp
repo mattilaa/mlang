@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <condition_variable>
 #include <unordered_set>
 #include <vector>
@@ -1073,6 +1074,7 @@ struct DepSpec
     std::string cmakeArgs;
     std::string subdir;
     int stripComponents = 1;
+    bool spinner = true;
 };
 
 struct LinkFlags
@@ -1279,6 +1281,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
             dep.subdir = it->second;
         if(auto it = kv.find("strip_components"); it != kv.end())
             dep.stripComponents = parse_int_or_default(it->second, 1);
+        if(auto it = kv.find("spinner"); it != kv.end())
+            dep.spinner = parse_toml_bool_value(it->second);
         if(dep.archiveType.empty() && !dep.url.empty())
         {
             if(dep.url.size() >= 7 &&
@@ -1747,6 +1751,9 @@ class ProgressSpinner
   public:
     explicit ProgressSpinner(std::string label) : label_(std::move(label))
     {
+        hideCursor_ = ::isatty(fileno(stderr)) != 0;
+        if(hideCursor_)
+            std::cerr << "\033[?25l" << std::flush;
         worker_ = std::thread([this]() {
             static constexpr char frames[] = { '|', '/', '-', '\\' };
             size_t idx = 0;
@@ -1775,7 +1782,10 @@ class ProgressSpinner
         std::cerr << '\r' << label_;
         if(!suffix.empty())
             std::cerr << " " << suffix;
-        std::cerr << "        " << std::endl;
+        std::cerr << "        ";
+        if(hideCursor_)
+            std::cerr << "\033[?25h";
+        std::cerr << std::endl;
         stopped_ = true;
     }
 
@@ -1784,6 +1794,7 @@ class ProgressSpinner
     std::atomic<bool> done_ { false };
     std::thread worker_;
     bool stopped_ = false;
+    bool hideCursor_ = false;
 };
 
 static int run_progress_command(const std::string& label,
@@ -1792,6 +1803,17 @@ static int run_progress_command(const std::string& label,
     ProgressSpinner spinner(label);
     int rc = run_command(cmd);
     spinner.stop(rc == 0 ? "[ok]" : "[failed]");
+    return rc;
+}
+
+static int run_status_command(const std::string& label, const std::string& cmd,
+                              bool useSpinner)
+{
+    if(useSpinner)
+        return run_progress_command(label, cmd);
+    std::cerr << label << std::endl;
+    int rc = run_command(cmd);
+    std::cerr << label << (rc == 0 ? " [ok]" : " [failed]") << std::endl;
     return rc;
 }
 
@@ -1842,6 +1864,15 @@ static int run_progress_command_with_paths(const std::string& label,
     return run_progress_command(label, command_with_path_entries(cmd, entries));
 }
 
+static int run_status_command_with_paths(const std::string& label,
+                                         const std::string& cmd,
+                                         const std::vector<std::string>& entries,
+                                         bool useSpinner)
+{
+    return run_status_command(label, command_with_path_entries(cmd, entries),
+                              useSpinner);
+}
+
 static int run_command_in_dir(const std::filesystem::path& dir,
                               const std::string& cmd)
 {
@@ -1863,6 +1894,17 @@ static int run_progress_command_in_dir_with_paths(
     return run_progress_command(label, "cd " + shell_quote(dir.string()) +
                                            " && " +
                                            command_with_path_entries(cmd, entries));
+}
+
+static int run_status_command_in_dir_with_paths(
+    const std::string& label, const std::filesystem::path& dir,
+    const std::string& cmd, const std::vector<std::string>& entries,
+    bool useSpinner)
+{
+    return run_status_command(label,
+                              "cd " + shell_quote(dir.string()) + " && " +
+                                  command_with_path_entries(cmd, entries),
+                              useSpinner);
 }
 
 static std::optional<std::string> run_command_capture(const std::string& cmd)
@@ -1955,8 +1997,9 @@ static int fetch_git_dep(const DepSpec& dep,
                   << "' from " << dep.git << "\n";
         std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
                                shell_quote(path.string());
-        if(run_progress_command_with_paths("[pkg] git clone " + dep.name,
-                                           cloneCmd, pathEntries) != 0)
+        if(run_status_command_with_paths("[pkg] git clone " + dep.name,
+                                         cloneCmd, pathEntries,
+                                         dep.spinner) != 0)
             return 1;
     }
     else if(updateExisting)
@@ -1964,8 +2007,9 @@ static int fetch_git_dep(const DepSpec& dep,
         std::cout << "[pkg] Updating git dependency '" << dep.name << "'\n";
         std::string fetchCmd = "git -C " + shell_quote(path.string()) +
                                " fetch --all --tags";
-        if(run_progress_command_with_paths("[pkg] git fetch " + dep.name,
-                                           fetchCmd, pathEntries) != 0)
+        if(run_status_command_with_paths("[pkg] git fetch " + dep.name,
+                                         fetchCmd, pathEntries,
+                                         dep.spinner) != 0)
             return 1;
     }
 
@@ -1975,8 +2019,9 @@ static int fetch_git_dep(const DepSpec& dep,
                   << dep.rev << "\n";
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " + shell_quote(dep.rev);
-        if(run_progress_command_with_paths("[pkg] git checkout " + dep.name,
-                                           checkout, pathEntries) != 0)
+        if(run_status_command_with_paths("[pkg] git checkout " + dep.name,
+                                         checkout, pathEntries,
+                                         dep.spinner) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
@@ -1986,8 +2031,9 @@ static int fetch_git_dep(const DepSpec& dep,
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " +
                                shell_quote("tags/" + dep.tag);
-        if(run_progress_command_with_paths("[pkg] git checkout " + dep.name,
-                                           checkout, pathEntries) != 0)
+        if(run_status_command_with_paths("[pkg] git checkout " + dep.name,
+                                         checkout, pathEntries,
+                                         dep.spinner) != 0)
             return 1;
     }
     return 0;
@@ -2038,8 +2084,8 @@ static int fetch_archive_dep(const DepSpec& dep,
               << "' from " << dep.url << "\n";
     std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                               " -o " + shell_quote(archivePath.string());
-    if(run_progress_command_with_paths("[pkg] download " + dep.name,
-                                       downloadCmd, pathEntries) != 0)
+    if(run_status_command_with_paths("[pkg] download " + dep.name, downloadCmd,
+                                     pathEntries, dep.spinner) != 0)
         return 1;
 
     std::cout << "[pkg] Unpacking " << archivePath.filename().string()
@@ -2051,8 +2097,8 @@ static int fetch_archive_dep(const DepSpec& dep,
         extractCmd += " --strip-components=" +
                       std::to_string(dep.stripComponents);
     }
-    if(run_progress_command_with_paths("[pkg] extract " + dep.name,
-                                       extractCmd, pathEntries) != 0)
+    if(run_status_command_with_paths("[pkg] extract " + dep.name, extractCmd,
+                                     pathEntries, dep.spinner) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
@@ -2112,14 +2158,16 @@ static int build_git_dep(const DepSpec& dep,
                     cfg += " -D" + arg;
             }
         }
-        if(run_progress_command_with_paths("[pkg] cmake configure " + dep.name,
-                                           cfg, pathEntries) != 0)
+        if(run_status_command_with_paths("[pkg] cmake configure " + dep.name,
+                                         cfg, pathEntries,
+                                         dep.spinner) != 0)
             return 1;
         std::string build =
             "cmake --build " + shell_quote(buildDir.string());
         std::cout << "[pkg] Building CMake dependency '" << dep.name << "'\n";
-        return run_progress_command_with_paths("[pkg] cmake build " + dep.name,
-                                               build, pathEntries);
+        return run_status_command_with_paths("[pkg] cmake build " + dep.name,
+                                             build, pathEntries,
+                                             dep.spinner);
     }
     if(dep.build == "meson")
     {
@@ -2131,15 +2179,17 @@ static int build_git_dep(const DepSpec& dep,
             std::string setup = "meson setup " +
                                 shell_quote(buildDir.string()) + " " +
                                 shell_quote(path.string());
-            if(run_progress_command_with_paths("[pkg] meson setup " + dep.name,
-                                               setup, pathEntries) != 0)
+            if(run_status_command_with_paths("[pkg] meson setup " + dep.name,
+                                             setup, pathEntries,
+                                             dep.spinner) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
         std::cout << "[pkg] Building Meson dependency '" << dep.name << "'\n";
-        return run_progress_command_with_paths("[pkg] meson compile " + dep.name,
-                                               compile, pathEntries);
+        return run_status_command_with_paths("[pkg] meson compile " + dep.name,
+                                             compile, pathEntries,
+                                             dep.spinner);
     }
     if(dep.build == "make")
     {
@@ -2147,8 +2197,8 @@ static int build_git_dep(const DepSpec& dep,
         std::string cmd = shell_quote(effectiveMake) + " -C " +
                           shell_quote(path.string());
         std::cout << "[pkg] Building make dependency '" << dep.name << "'\n";
-        return run_progress_command_with_paths("[pkg] make " + dep.name, cmd,
-                                               pathEntries);
+        return run_status_command_with_paths("[pkg] make " + dep.name, cmd,
+                                             pathEntries, dep.spinner);
     }
 
     std::cerr << "Unknown build system: " << dep.build << "\n";

@@ -3,7 +3,7 @@ name = "linux_aarch64_qemu"
 version = "0.1.0"
 
 [dependencies]
-linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none" }
+linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
 
 [c-dependencies]
 
@@ -237,12 +237,20 @@ commands = [
 name = "initramfs"
 print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
-commands = [
+shell = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
-  "mkdir -p {{build_dir}}/initramfs",
-  "cp -R {{root}}/rootfs/. {{build_dir}}/initramfs/",
+  "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
+  "cat > {{build_dir}}/initramfs/init <<'EOF'",
+  "#!/bin/sh",
+  "mount -t proc none /proc",
+  "mount -t sysfs none /sys",
+  "mount -t devtmpfs none /dev 2>/dev/null || true",
+  "echo 'mlang pkg Linux AArch64 QEMU example booted'",
+  "echo 'Kernel image and initramfs were generated from mlang.toml tasks.'",
+  "exec sh",
+  "EOF",
   "chmod +x {{build_dir}}/initramfs/init",
-  "sh -c 'cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > {{build_dir}}/initramfs.cpio.gz'"
+  "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz"
 ]
 
 [[task]]

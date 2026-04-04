@@ -7,7 +7,10 @@ This example demonstrates package-manager capabilities around:
   `parallel`, `shell`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
-the configured make tool, creates a tiny initramfs, and boots it under QEMU.
+the configured make tool, generates a tiny initramfs directly from
+`mlang.toml`, and boots it under QEMU.
+The Linux dependency sets `spinner = false` so `curl` can display its own
+download progress bar cleanly during `pkg fetch`.
 
 Linux is still the recommended host for this example. On Apple Silicon macOS,
 the manifest also provides a native Darwin path based on the ClangBuiltLinux
@@ -19,7 +22,7 @@ headers, and a small `file2alias.c` patch for kernel host tools.
 
 ```toml
 [dependencies]
-linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none" }
+linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
 
 [[task]]
 name = "kernel-build"
@@ -147,6 +150,9 @@ tasks first and only starts QEMU after both succeed.
 - `build = "none"` is important here because the Linux source tree is not built
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
+- `initramfs` is self-contained and creates a minimal `/init` script and basic
+  directory tree under `{{build_dir}}/initramfs`, so the example does not rely
+  on a checked-in `rootfs/` directory.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as
   `toolchain-check` and `darwin-native-prepare`.
 - `next = ["task-name"]` lets a task jump forward to named downstream tasks
