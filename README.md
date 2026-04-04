@@ -792,7 +792,9 @@ static_deps = true
 
 Source dependencies also accept `spinner = false` to disable the rolling
 status cursor for that dependency's fetch/build steps. This is useful when the
-underlying tool already has its own progress output, such as `curl`.
+underlying tool already has its own progress output, such as `curl`. Built-in
+dependency commands with `spinner = false` also stay out of the stdout/stderr
+log files so transfer progress does not pollute package logs.
 
 `[tool.mlang]` can be used to set package-build defaults for `mlang pkg build`.
 Supported keys are:
@@ -805,6 +807,12 @@ Supported keys are:
   stores generated task scripts. Defaults to `build`.
 - `deps_dir`: directory where `pkg fetch` stores sources and `pkg build`
   reuses dependency artifacts. Defaults to `<build_dir>/deps`.
+- `log_dir`: base directory for package-manager log files.
+- `stdout_log`: file that receives package-manager info lines and command
+  stdout.
+- `stderr_log`: file that receives package-manager error lines and command
+  stderr.
+- `warn_log`: file that receives package-manager warning lines.
 - `path_entries`: directories prepended to `PATH` for pkg fetch/build/run.
   `bin_paths` is accepted as an alias.
 - `make_program`: make executable used by `build = "make"` dependencies and by
@@ -818,6 +826,8 @@ Supported keys are:
 - `static_deps`: link fetched package dependencies via discovered `.a` archives.
 - `static_cpp_runtime`: add `-static-libstdc++ -static-libgcc` during package
   linking. This is mainly useful on GNU/Linux toolchains.
+- `task_print_to_stdout_log`: mirror task `print` / `message` lines into the
+  stdout log while keeping them visible on the console.
 
 If you do not set `build_dir`, `deps_dir`, or any CLI overrides, package
 behavior stays unchanged: `pkg build` writes outputs to `build/`, and
@@ -838,6 +848,11 @@ should be preferred over `/usr/bin`.
 they are already absolute. This lets one project share a single dependency
 cache such as `.pkg/deps` while building into separate directories like
 `build-debug` and `build-release`.
+
+If `log_dir` is set, relative `stdout_log`, `stderr_log`, and `warn_log` paths
+are resolved under that directory. Without log settings, package-manager and
+task output stays on the console as before. Rolling spinner/status lines are
+console-only and are not written to the log files.
 
 If `make_program` is set, `mlang pkg` uses that executable for built-in
 `build = "make"` dependency builds, and `[[task]]` commands can reference it as
@@ -1225,6 +1240,10 @@ progress visible without embedding `echo` in shell.
 run before the requested task body starts. `mlang pkg run` does not
 implicitly run `mlang pkg fetch`, so a clean workspace should fetch first if
 tasks expect sources under `{{deps_dir}}`.
+
+CLI overrides are available on `pkg fetch`, `pkg build`, `pkg run`, and
+`pkg clean`: `--log-dir DIR`, `--stdout-log FILE`, `--stderr-log FILE`,
+`--warn-log FILE`, and `--task-print-to-stdout-log`.
 
 The Linux kernel example uses:
 

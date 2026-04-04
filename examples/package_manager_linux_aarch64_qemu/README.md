@@ -10,7 +10,8 @@ The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, generates a tiny initramfs directly from
 `mlang.toml`, and boots it under QEMU.
 The Linux dependency sets `spinner = false` so `curl` can display its own
-download progress bar cleanly during `pkg fetch`.
+download progress bar cleanly during `pkg fetch` without writing transfer noise
+into the package log files.
 
 Linux is still the recommended host for this example. On Apple Silicon macOS,
 the manifest also provides a native Darwin path based on the ClangBuiltLinux
@@ -23,6 +24,12 @@ headers, and a small `file2alias.c` patch for kernel host tools.
 ```toml
 [dependencies]
 linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+
+[tool.mlang]
+log_dir = "/tmp/mlang-linux-aarch64-qemu"
+stdout_log = "pkg.stdout.log"
+stderr_log = "pkg.stderr.log"
+warn_log = "pkg.warn.log"
 
 [[task]]
 name = "kernel-build"
@@ -112,6 +119,10 @@ From this directory:
 ../../build/mlang pkg fetch
 ../../build/mlang pkg run boot-flow
 ```
+
+That writes package logs under `/tmp/mlang-linux-aarch64-qemu/` while keeping
+task `print` lines visible on the console. To mirror task prints into the
+stdout log as well, add `--task-print-to-stdout-log`.
 
 `boot-flow` fans out into `kernel-build`, `initramfs`, and `qemu-run`.
 Because `qemu-run` declares `join_on = ["kernel-build", "initramfs"]`, it

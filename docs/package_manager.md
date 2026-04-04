@@ -247,6 +247,7 @@ Currently supported dependency keys:
 - `cmake_args`
 - `subdir`
 - `strip_components`
+- `spinner`
 
 Current supported build systems:
 
@@ -261,7 +262,9 @@ built-in dependency builders during `pkg build`.
 
 If `spinner = false` is set, the package manager does not show the rolling
 status cursor for that dependency's fetch/build steps. This is useful when the
-underlying tool already renders its own progress bar, such as `curl`.
+underlying tool already renders its own progress bar, such as `curl`. Built-in
+dependency commands with `spinner = false` also stay out of the stdout/stderr
+log files so transfer progress does not pollute package logs.
 
 Archive source example:
 
@@ -298,6 +301,10 @@ Supported keys:
 - `target_arch`
 - `build_dir`
 - `deps_dir`
+- `log_dir`
+- `stdout_log`
+- `stderr_log`
+- `warn_log`
 - `path_entries` / `bin_paths`
 - `make_program`
 - `use_ninja` / `ninja`
@@ -307,6 +314,7 @@ Supported keys:
 - `compiler_flags`
 - `static_deps`
 - `static_cpp_runtime`
+- `task_print_to_stdout_log`
 
 Directory behavior:
 
@@ -319,6 +327,17 @@ Directory behavior:
   absolute.
 - If neither key is set, the default layout stays unchanged: build outputs go
   to `build/` and fetched dependencies live under `build/deps/`.
+- If `log_dir` is set, relative `stdout_log`, `stderr_log`, and `warn_log`
+  files are written under that directory. Without log settings, output stays on
+  the console as before.
+- `stdout_log` captures package-manager info lines plus command stdout.
+- `stderr_log` captures command stderr plus package-manager error lines.
+- `warn_log` captures package-manager warning lines.
+- Task `print` / `message` lines stay visible on the console by default even
+  when logs are enabled. Set `task_print_to_stdout_log = true` or pass
+  `--task-print-to-stdout-log` to mirror them into the stdout log as well.
+- Rolling spinner/status lines are console-only and are not written to the log
+  files.
 
 Example layout with separate outputs and a shared dependency cache:
 
@@ -326,6 +345,10 @@ Example layout with separate outputs and a shared dependency cache:
 [tool.mlang]
 build_dir = "build-debug"
 deps_dir = ".pkg/deps"
+log_dir = "/tmp/my-pkg-logs"
+stdout_log = "pkg.stdout.log"
+stderr_log = "pkg.stderr.log"
+warn_log = "pkg.warn.log"
 ```
 
 ```sh
@@ -340,6 +363,7 @@ This produces:
 .pkg/deps/            # fetched sources and built dependency artifacts
 build-debug/app       # default package binary
 build-release/app     # alternate output directory from CLI override
+/tmp/my-pkg-logs/     # package-manager stdout/stderr/warn logs
 ```
 
 ### `[[task]]`

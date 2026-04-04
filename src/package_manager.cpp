@@ -449,6 +449,10 @@ struct BuildConfig
     std::string makeProgram = "make";
     std::string buildDir;
     std::string depsDir;
+    std::string logDir;
+    std::string stdoutLog;
+    std::string stderrLog;
+    std::string warnLog;
     std::vector<std::string> pathEntries;
     std::vector<std::string> compilerFlags;
     std::vector<std::string> linkerFlags;
@@ -457,6 +461,7 @@ struct BuildConfig
     std::optional<bool> useNinja;
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
+    std::optional<bool> taskPrintToStdoutLog;
 };
 
 struct BuildTarget
@@ -735,6 +740,104 @@ static std::filesystem::path package_deps_dir(const std::filesystem::path& packa
     if(!config.depsDir.empty())
         return resolve_package_path(packageDir, config.depsDir, "build/deps");
     return (package_build_dir(packageDir, config) / "deps").lexically_normal();
+}
+
+struct PackageLogState
+{
+    std::optional<std::filesystem::path> stdoutLog;
+    std::optional<std::filesystem::path> stderrLog;
+    std::optional<std::filesystem::path> warnLog;
+    bool taskPrintToStdoutLog = false;
+};
+
+static PackageLogState& current_package_log_state()
+{
+    static PackageLogState state;
+    return state;
+}
+
+static std::optional<std::filesystem::path> resolve_log_path(
+    const std::filesystem::path& packageDir, const BuildConfig& config,
+    const std::string& configured)
+{
+    if(configured.empty())
+        return std::nullopt;
+
+    std::filesystem::path path(configured);
+    if(path.is_absolute())
+        return path.lexically_normal();
+
+    if(!config.logDir.empty())
+        return resolve_package_path(packageDir, config.logDir, ".") / path;
+    return (packageDir / path).lexically_normal();
+}
+
+static PackageLogState make_package_log_state(const std::filesystem::path& packageDir,
+                                              const BuildConfig& config)
+{
+    PackageLogState state;
+    state.stdoutLog = resolve_log_path(packageDir, config, config.stdoutLog);
+    state.stderrLog = resolve_log_path(packageDir, config, config.stderrLog);
+    state.warnLog = resolve_log_path(packageDir, config, config.warnLog);
+    state.taskPrintToStdoutLog = config.taskPrintToStdoutLog.value_or(false);
+    return state;
+}
+
+static void append_log_line(const std::optional<std::filesystem::path>& path,
+                            const std::string& text)
+{
+    if(!path.has_value())
+        return;
+    std::error_code ec;
+    if(path->has_parent_path())
+        std::filesystem::create_directories(path->parent_path(), ec);
+    std::ofstream out(*path, std::ios::app | std::ios::binary);
+    if(!out)
+        return;
+    out << text << "\n";
+}
+
+class ScopedPackageLogState
+{
+  public:
+    explicit ScopedPackageLogState(PackageLogState next) : previous_(current_package_log_state())
+    {
+        current_package_log_state() = std::move(next);
+    }
+
+    ~ScopedPackageLogState()
+    {
+        current_package_log_state() = previous_;
+    }
+
+  private:
+    PackageLogState previous_;
+};
+
+static void pkg_info_line(const std::string& text, bool logToStdout = true)
+{
+    std::cout << text << std::endl;
+    if(logToStdout)
+        append_log_line(current_package_log_state().stdoutLog, text);
+}
+
+static void pkg_warn_line(const std::string& text)
+{
+    std::cerr << text << std::endl;
+    append_log_line(current_package_log_state().warnLog, text);
+}
+
+static void pkg_error_line(const std::string& text)
+{
+    std::cerr << text << std::endl;
+    append_log_line(current_package_log_state().stderrLog, text);
+}
+
+static void pkg_task_print_line(const std::string& text)
+{
+    std::cout << text << std::endl;
+    if(current_package_log_state().taskPrintToStdoutLog)
+        append_log_line(current_package_log_state().stdoutLog, text);
 }
 
 static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
@@ -1028,6 +1131,22 @@ static void parse_build_config_key_value(BuildConfig& cfg,
     {
         cfg.depsDir = unquote(value);
     }
+    else if(key == "log_dir")
+    {
+        cfg.logDir = unquote(value);
+    }
+    else if(key == "stdout_log")
+    {
+        cfg.stdoutLog = unquote(value);
+    }
+    else if(key == "stderr_log")
+    {
+        cfg.stderrLog = unquote(value);
+    }
+    else if(key == "warn_log")
+    {
+        cfg.warnLog = unquote(value);
+    }
     else if(key == "compiler_flags")
     {
         append_toml_string_list_value(value, cfg.compilerFlags);
@@ -1059,6 +1178,10 @@ static void parse_build_config_key_value(BuildConfig& cfg,
     else if(key == "static_cpp_runtime")
     {
         cfg.staticCppRuntime = parse_toml_bool_value(value);
+    }
+    else if(key == "task_print_to_stdout_log")
+    {
+        cfg.taskPrintToStdoutLog = parse_toml_bool_value(value);
     }
 }
 
@@ -1740,10 +1863,31 @@ static std::vector<PackageManifest> collect_target_manifests(
     return out;
 }
 
-static int run_command(const std::string& cmd)
+static std::string command_with_log_redirection(const std::string& cmd,
+                                                bool logChildOutput)
 {
-    std::cout << cmd << std::endl;
-    return std::system(cmd.c_str());
+    if(!logChildOutput)
+        return cmd;
+
+    std::string full = cmd;
+    if(current_package_log_state().stdoutLog.has_value())
+    {
+        full += " >> " +
+                shell_quote(current_package_log_state().stdoutLog->string());
+    }
+    if(current_package_log_state().stderrLog.has_value())
+    {
+        full += " 2>> " +
+                shell_quote(current_package_log_state().stderrLog->string());
+    }
+    return full;
+}
+
+static int run_command(const std::string& cmd, bool logCommand = true,
+                       bool logChildOutput = true)
+{
+    pkg_info_line(cmd, logCommand);
+    return std::system(command_with_log_redirection(cmd, logChildOutput).c_str());
 }
 
 class ProgressSpinner
@@ -1798,21 +1942,25 @@ class ProgressSpinner
 };
 
 static int run_progress_command(const std::string& label,
-                                const std::string& cmd)
+                                const std::string& cmd,
+                                bool logCommand = true,
+                                bool logChildOutput = true)
 {
     ProgressSpinner spinner(label);
-    int rc = run_command(cmd);
+    int rc = run_command(cmd, logCommand, logChildOutput);
     spinner.stop(rc == 0 ? "[ok]" : "[failed]");
     return rc;
 }
 
 static int run_status_command(const std::string& label, const std::string& cmd,
-                              bool useSpinner)
+                              bool useSpinner,
+                              bool logCommand = true,
+                              bool logChildOutput = true)
 {
     if(useSpinner)
-        return run_progress_command(label, cmd);
+        return run_progress_command(label, cmd, logCommand, logChildOutput);
     std::cerr << label << std::endl;
-    int rc = run_command(cmd);
+    int rc = run_command(cmd, logCommand, logChildOutput);
     std::cerr << label << (rc == 0 ? " [ok]" : " [failed]") << std::endl;
     return rc;
 }
@@ -1867,10 +2015,12 @@ static int run_progress_command_with_paths(const std::string& label,
 static int run_status_command_with_paths(const std::string& label,
                                          const std::string& cmd,
                                          const std::vector<std::string>& entries,
-                                         bool useSpinner)
+                                         bool useSpinner,
+                                         bool logCommand = true,
+                                         bool logChildOutput = true)
 {
     return run_status_command(label, command_with_path_entries(cmd, entries),
-                              useSpinner);
+                              useSpinner, logCommand, logChildOutput);
 }
 
 static int run_command_in_dir(const std::filesystem::path& dir,
@@ -1899,12 +2049,13 @@ static int run_progress_command_in_dir_with_paths(
 static int run_status_command_in_dir_with_paths(
     const std::string& label, const std::filesystem::path& dir,
     const std::string& cmd, const std::vector<std::string>& entries,
-    bool useSpinner)
+    bool useSpinner, bool logCommand = true,
+    bool logChildOutput = true)
 {
     return run_status_command(label,
                               "cd " + shell_quote(dir.string()) + " && " +
                                   command_with_path_entries(cmd, entries),
-                              useSpinner);
+                              useSpinner, logCommand, logChildOutput);
 }
 
 static std::optional<std::string> run_command_capture(const std::string& cmd)
@@ -1993,47 +2144,46 @@ static int fetch_git_dep(const DepSpec& dep,
     std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
     {
-        std::cout << "[pkg] Fetching git dependency '" << dep.name
-                  << "' from " << dep.git << "\n";
+        pkg_info_line("[pkg] Fetching git dependency '" + dep.name +
+                      "' from " + dep.git);
         std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
                                shell_quote(path.string());
         if(run_status_command_with_paths("[pkg] git clone " + dep.name,
-                                         cloneCmd, pathEntries,
-                                         dep.spinner) != 0)
+                                         cloneCmd, pathEntries, dep.spinner,
+                                         dep.spinner, dep.spinner) != 0)
             return 1;
     }
     else if(updateExisting)
     {
-        std::cout << "[pkg] Updating git dependency '" << dep.name << "'\n";
+        pkg_info_line("[pkg] Updating git dependency '" + dep.name + "'");
         std::string fetchCmd = "git -C " + shell_quote(path.string()) +
                                " fetch --all --tags";
         if(run_status_command_with_paths("[pkg] git fetch " + dep.name,
-                                         fetchCmd, pathEntries,
-                                         dep.spinner) != 0)
+                                         fetchCmd, pathEntries, dep.spinner,
+                                         dep.spinner, dep.spinner) != 0)
             return 1;
     }
 
     if(!dep.rev.empty())
     {
-        std::cout << "[pkg] Checking out '" << dep.name << "' revision "
-                  << dep.rev << "\n";
+        pkg_info_line("[pkg] Checking out '" + dep.name + "' revision " +
+                      dep.rev);
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " + shell_quote(dep.rev);
         if(run_status_command_with_paths("[pkg] git checkout " + dep.name,
-                                         checkout, pathEntries,
-                                         dep.spinner) != 0)
+                                         checkout, pathEntries, dep.spinner,
+                                         dep.spinner, dep.spinner) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
     {
-        std::cout << "[pkg] Checking out '" << dep.name << "' tag "
-                  << dep.tag << "\n";
+        pkg_info_line("[pkg] Checking out '" + dep.name + "' tag " + dep.tag);
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " +
                                shell_quote("tags/" + dep.tag);
         if(run_status_command_with_paths("[pkg] git checkout " + dep.name,
-                                         checkout, pathEntries,
-                                         dep.spinner) != 0)
+                                         checkout, pathEntries, dep.spinner,
+                                         dep.spinner, dep.spinner) != 0)
             return 1;
     }
     return 0;
@@ -2047,8 +2197,8 @@ static int fetch_archive_dep(const DepSpec& dep,
         return 1;
     if(dep.archiveType != "tar.gz")
     {
-        std::cerr << "Unsupported archive type for dependency '" << dep.name
-                  << "': " << dep.archiveType << "\n";
+        pkg_error_line("Unsupported archive type for dependency '" + dep.name +
+                       "': " + dep.archiveType);
         return 1;
     }
 
@@ -2068,8 +2218,8 @@ static int fetch_archive_dep(const DepSpec& dep,
         std::filesystem::remove_all(checkoutDir, ec);
         if(ec)
         {
-            std::cerr << "Failed to reset partial archive checkout for '"
-                      << dep.name << "': " << ec.message() << "\n";
+            pkg_error_line("Failed to reset partial archive checkout for '" +
+                           dep.name + "': " + ec.message());
             return 1;
         }
     }
@@ -2080,16 +2230,17 @@ static int fetch_archive_dep(const DepSpec& dep,
     std::filesystem::remove_all(extractDir, ec);
     std::filesystem::create_directories(extractDir);
 
-    std::cout << "[pkg] Downloading archive dependency '" << dep.name
-              << "' from " << dep.url << "\n";
+    pkg_info_line("[pkg] Downloading archive dependency '" + dep.name +
+                  "' from " + dep.url);
     std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                               " -o " + shell_quote(archivePath.string());
     if(run_status_command_with_paths("[pkg] download " + dep.name, downloadCmd,
-                                     pathEntries, dep.spinner) != 0)
+                                     pathEntries, dep.spinner, dep.spinner,
+                                     dep.spinner) != 0)
         return 1;
 
-    std::cout << "[pkg] Unpacking " << archivePath.filename().string()
-              << " into " << checkoutDir.string() << "\n";
+    pkg_info_line("[pkg] Unpacking " + archivePath.filename().string() +
+                  " into " + checkoutDir.string());
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
                              " -C " + shell_quote(extractDir.string());
     if(dep.stripComponents > 0)
@@ -2098,13 +2249,14 @@ static int fetch_archive_dep(const DepSpec& dep,
                       std::to_string(dep.stripComponents);
     }
     if(run_status_command_with_paths("[pkg] extract " + dep.name, extractCmd,
-                                     pathEntries, dep.spinner) != 0)
+                                     pathEntries, dep.spinner, dep.spinner,
+                                     dep.spinner) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
     {
-        std::cerr << "Failed to finalize archive checkout for '" << dep.name
-                  << "': " << ec.message() << "\n";
+        pkg_error_line("Failed to finalize archive checkout for '" + dep.name +
+                       "': " + ec.message());
         return 1;
     }
     std::filesystem::remove(archivePath, ec);
@@ -2119,8 +2271,8 @@ static int fetch_dep(const DepSpec& dep, const std::filesystem::path& depsDir,
         return fetch_git_dep(dep, depsDir, updateExisting, pathEntries);
     if(!dep.url.empty())
         return fetch_archive_dep(dep, depsDir, pathEntries);
-    std::cerr << "Dependency '" << dep.name
-              << "' is missing a supported source (git/url)\n";
+    pkg_error_line("Dependency '" + dep.name +
+                   "' is missing a supported source (git/url)");
     return 1;
 }
 
@@ -2140,8 +2292,8 @@ static int build_git_dep(const DepSpec& dep,
     if(dep.build == "cmake")
     {
         std::filesystem::path buildDir = path / "build";
-        std::cout << "[pkg] Configuring CMake dependency '" << dep.name
-                  << "' in " << buildDir.string() << "\n";
+        pkg_info_line("[pkg] Configuring CMake dependency '" + dep.name +
+                      "' in " + buildDir.string());
         std::string cfg = "cmake -S " + shell_quote(path.string()) + " -B " +
                           shell_quote(buildDir.string());
         if(useNinja)
@@ -2159,49 +2311,50 @@ static int build_git_dep(const DepSpec& dep,
             }
         }
         if(run_status_command_with_paths("[pkg] cmake configure " + dep.name,
-                                         cfg, pathEntries,
-                                         dep.spinner) != 0)
+                                         cfg, pathEntries, dep.spinner,
+                                         dep.spinner, dep.spinner) != 0)
             return 1;
         std::string build =
             "cmake --build " + shell_quote(buildDir.string());
-        std::cout << "[pkg] Building CMake dependency '" << dep.name << "'\n";
+        pkg_info_line("[pkg] Building CMake dependency '" + dep.name + "'");
         return run_status_command_with_paths("[pkg] cmake build " + dep.name,
-                                             build, pathEntries,
-                                             dep.spinner);
+                                             build, pathEntries, dep.spinner,
+                                             dep.spinner, dep.spinner);
     }
     if(dep.build == "meson")
     {
         std::filesystem::path buildDir = path / "build";
         if(!std::filesystem::exists(buildDir))
         {
-            std::cout << "[pkg] Configuring Meson dependency '" << dep.name
-                      << "' in " << buildDir.string() << "\n";
+            pkg_info_line("[pkg] Configuring Meson dependency '" + dep.name +
+                          "' in " + buildDir.string());
             std::string setup = "meson setup " +
                                 shell_quote(buildDir.string()) + " " +
                                 shell_quote(path.string());
             if(run_status_command_with_paths("[pkg] meson setup " + dep.name,
-                                             setup, pathEntries,
-                                             dep.spinner) != 0)
+                                             setup, pathEntries, dep.spinner,
+                                             dep.spinner, dep.spinner) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
-        std::cout << "[pkg] Building Meson dependency '" << dep.name << "'\n";
+        pkg_info_line("[pkg] Building Meson dependency '" + dep.name + "'");
         return run_status_command_with_paths("[pkg] meson compile " + dep.name,
-                                             compile, pathEntries,
-                                             dep.spinner);
+                                             compile, pathEntries, dep.spinner,
+                                             dep.spinner, dep.spinner);
     }
     if(dep.build == "make")
     {
         std::string effectiveMake = makeProgram.empty() ? "make" : makeProgram;
         std::string cmd = shell_quote(effectiveMake) + " -C " +
                           shell_quote(path.string());
-        std::cout << "[pkg] Building make dependency '" << dep.name << "'\n";
+        pkg_info_line("[pkg] Building make dependency '" + dep.name + "'");
         return run_status_command_with_paths("[pkg] make " + dep.name, cmd,
-                                             pathEntries, dep.spinner);
+                                             pathEntries, dep.spinner,
+                                             dep.spinner, dep.spinner);
     }
 
-    std::cerr << "Unknown build system: " << dep.build << "\n";
+    pkg_error_line("Unknown build system: " + dep.build);
     return 1;
 }
 
@@ -2400,6 +2553,8 @@ static int validate_mlang_version_requirement(const std::filesystem::path& manif
 static int fetch_for_manifest(const PackageManifest& pkg,
                               const BuildConfig& buildConfig)
 {
+    ScopedPackageLogState scopedLogs(
+        make_package_log_state(pkg.packageDir, buildConfig));
     auto deps = parse_source_deps(pkg.content);
     std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, buildConfig);
     std::filesystem::create_directories(depsDir);
@@ -2409,7 +2564,7 @@ static int fetch_for_manifest(const PackageManifest& pkg,
                      buildConfig.pathEntries) != 0)
             return 1;
     }
-    std::cout << "Fetch completed for " << pkg.manifestPath.string() << ".\n";
+    pkg_info_line("Fetch completed for " + pkg.manifestPath.string() + ".");
     return 0;
 }
 
@@ -2418,6 +2573,8 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
                               bool useNinja,
                               const BuildConfig& packageBuildConfig)
 {
+    ScopedPackageLogState scopedLogs(
+        make_package_log_state(pkg.packageDir, packageBuildConfig));
     const auto packageEntry =
         find_section_toml_string(pkg.content, "package", "entry");
     const bool hasExplicitPackageEntry =
@@ -2436,7 +2593,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
        !ensure_package_entry_stub(pkg.manifestPath, pkg.content, packageLabel,
                                   entryError))
     {
-        std::cerr << entryError << "\n";
+        pkg_error_line(entryError);
         return 1;
     }
 
@@ -2522,9 +2679,8 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         if(task_list_contains_name(tasks, "build"))
             return run_task_for_manifest(pkg, "build");
 
-        std::cerr << "No package entry, [[bin]] targets, or phase=\"build\" "
-                     "tasks found for "
-                  << pkg.manifestPath.string() << "\n";
+        pkg_error_line("No package entry, [[bin]] targets, or phase=\"build\" "
+                       "tasks found for " + pkg.manifestPath.string());
         return 1;
     }
 
@@ -2539,14 +2695,14 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     {
         if(target.name.empty())
         {
-            std::cerr << "Missing name in [[bin]] target for "
-                      << pkg.manifestPath.string() << "\n";
+            pkg_error_line("Missing name in [[bin]] target for " +
+                           pkg.manifestPath.string());
             return 1;
         }
         if(target.entry.empty())
         {
-            std::cerr << "Missing entry in [[bin]] target '" << target.name
-                      << "' for " << pkg.manifestPath.string() << "\n";
+            pkg_error_line("Missing entry in [[bin]] target '" + target.name +
+                           "' for " + pkg.manifestPath.string());
             return 1;
         }
 
@@ -2596,17 +2752,18 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         for(const auto& flag : pkgFlags)
             cmd += " " + shell_quote(flag);
 
-        std::cout << "[pkg] Compiling target '" << target.name << "' from "
-                  << target.entry << " -> " << output << "\n";
-        int rc = run_progress_command_in_dir_with_paths(
+        pkg_info_line("[pkg] Compiling target '" + target.name + "' from " +
+                      target.entry + " -> " + output);
+        int rc = run_status_command_in_dir_with_paths(
             "[pkg] compile " + target.name, pkg.packageDir, cmd,
-            buildConfig.pathEntries);
+            buildConfig.pathEntries, true);
         if(rc != 0)
         {
-            std::cerr << "Build failed for " << pkg.manifestPath.string();
+            std::string message = "Build failed for " + pkg.manifestPath.string();
             if(!target.name.empty())
-                std::cerr << " target '" << target.name << "'";
-            std::cerr << ".\n";
+                message += " target '" + target.name + "'";
+            message += ".";
+            pkg_error_line(message);
             return 1;
         }
     }
@@ -2616,22 +2773,24 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 static int clean_for_manifest(const PackageManifest& pkg,
                               const BuildConfig& buildConfig)
 {
+    ScopedPackageLogState scopedLogs(
+        make_package_log_state(pkg.packageDir, buildConfig));
     const std::filesystem::path buildDir =
         package_build_dir(pkg.packageDir, buildConfig);
     if(!std::filesystem::exists(buildDir))
     {
-        std::cout << "No artifacts to clean in " << buildDir.string() << "\n";
+        pkg_warn_line("No artifacts to clean in " + buildDir.string());
         return 0;
     }
     std::error_code ec;
     std::filesystem::remove_all(buildDir, ec);
     if(ec)
     {
-        std::cerr << "Failed to clean " << buildDir.string() << ": "
-                  << ec.message() << "\n";
+        pkg_error_line("Failed to clean " + buildDir.string() + ": " +
+                       ec.message());
         return 1;
     }
-    std::cout << "Cleaned " << buildDir.string() << "\n";
+    pkg_info_line("Cleaned " + buildDir.string());
     return 0;
 }
 
@@ -2947,14 +3106,14 @@ static int run_task_for_manifest_impl(
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
 
-        std::cout << "[pkg] Running task '" << taskName << "'";
+        std::string taskLine = "[pkg] Running task '" + taskName + "'";
         if(workdir != pkg.packageDir)
-            std::cout << " in " << workdir.string();
-        std::cout << "\n";
+            taskLine += " in " + workdir.string();
+        pkg_task_print_line(taskLine);
 
         if(!effectiveMessage.empty())
-            std::cout << expand_task_text(effectiveMessage, pkg, buildConfig)
-                      << "\n";
+            pkg_task_print_line(
+                expand_task_text(effectiveMessage, pkg, buildConfig));
 
         if(!effectiveShell.empty())
         {
@@ -3073,6 +3232,8 @@ static int run_task_for_manifest(const PackageManifest& pkg,
 {
     const auto tasks = parse_task_specs(pkg.content);
     const BuildConfig buildConfig = parse_build_config(pkg.content);
+    ScopedPackageLogState scopedLogs(
+        make_package_log_state(pkg.packageDir, buildConfig));
     const std::string hostName = current_host_name();
     std::map<std::string, TaskRunState> taskStates;
     std::mutex taskMutex;
@@ -3081,6 +3242,36 @@ static int run_task_for_manifest(const PackageManifest& pkg,
     return run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
                                       taskStates, taskMutex, taskCv, taskName,
                                       taskStack);
+}
+
+struct PkgCliOverrides
+{
+    std::optional<std::string> buildDir;
+    std::optional<std::string> depsDir;
+    std::optional<std::string> logDir;
+    std::optional<std::string> stdoutLog;
+    std::optional<std::string> stderrLog;
+    std::optional<std::string> warnLog;
+    std::optional<bool> taskPrintToStdoutLog;
+};
+
+static void apply_cli_overrides(BuildConfig& buildConfig,
+                                const PkgCliOverrides& overrides)
+{
+    if(overrides.buildDir.has_value())
+        buildConfig.buildDir = *overrides.buildDir;
+    if(overrides.depsDir.has_value())
+        buildConfig.depsDir = *overrides.depsDir;
+    if(overrides.logDir.has_value())
+        buildConfig.logDir = *overrides.logDir;
+    if(overrides.stdoutLog.has_value())
+        buildConfig.stdoutLog = *overrides.stdoutLog;
+    if(overrides.stderrLog.has_value())
+        buildConfig.stderrLog = *overrides.stderrLog;
+    if(overrides.warnLog.has_value())
+        buildConfig.warnLog = *overrides.warnLog;
+    if(overrides.taskPrintToStdoutLog.has_value())
+        buildConfig.taskPrintToStdoutLog = *overrides.taskPrintToStdoutLog;
 }
 
 } // namespace
@@ -3293,24 +3484,46 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "fetch")
     {
-        std::optional<std::string> buildDirOverride;
-        std::optional<std::string> depsDirOverride;
+        PkgCliOverrides overrides;
         for(int i = 3; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--build-dir" && i + 1 < argc)
             {
-                buildDirOverride = argv[++i];
+                overrides.buildDir = argv[++i];
             }
             else if(arg == "--deps-dir" && i + 1 < argc)
             {
-                depsDirOverride = argv[++i];
+                overrides.depsDir = argv[++i];
+            }
+            else if(arg == "--log-dir" && i + 1 < argc)
+            {
+                overrides.logDir = argv[++i];
+            }
+            else if(arg == "--stdout-log" && i + 1 < argc)
+            {
+                overrides.stdoutLog = argv[++i];
+            }
+            else if(arg == "--stderr-log" && i + 1 < argc)
+            {
+                overrides.stderrLog = argv[++i];
+            }
+            else if(arg == "--warn-log" && i + 1 < argc)
+            {
+                overrides.warnLog = argv[++i];
+            }
+            else if(arg == "--task-print-to-stdout-log")
+            {
+                overrides.taskPrintToStdoutLog = true;
             }
             else
             {
                 std::cerr << "Unknown option for 'pkg fetch': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg fetch [--build-dir DIR] [--deps-dir DIR]\n";
+                          << " pkg fetch [--build-dir DIR] [--deps-dir DIR]"
+                          << " [--log-dir DIR] [--stdout-log FILE]"
+                          << " [--stderr-log FILE] [--warn-log FILE]"
+                          << " [--task-print-to-stdout-log]\n";
                 return 1;
             }
         }
@@ -3336,10 +3549,7 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
-            if(buildDirOverride.has_value())
-                buildConfig.buildDir = *buildDirOverride;
-            if(depsDirOverride.has_value())
-                buildConfig.depsDir = *depsDirOverride;
+            apply_cli_overrides(buildConfig, overrides);
             if(fetch_for_manifest(pkg, buildConfig) != 0)
                 return 1;
         }
@@ -3350,8 +3560,7 @@ int PackageManager::run(int argc, char** argv)
     {
         std::string optFlag;
         bool useNinja = false;
-        std::optional<std::string> buildDirOverride;
-        std::optional<std::string> depsDirOverride;
+        PkgCliOverrides overrides;
         for(int i = 3; i < argc; ++i)
         {
             std::string arg = argv[i];
@@ -3365,18 +3574,41 @@ int PackageManager::run(int argc, char** argv)
             }
             else if(arg == "--build-dir" && i + 1 < argc)
             {
-                buildDirOverride = argv[++i];
+                overrides.buildDir = argv[++i];
             }
             else if(arg == "--deps-dir" && i + 1 < argc)
             {
-                depsDirOverride = argv[++i];
+                overrides.depsDir = argv[++i];
+            }
+            else if(arg == "--log-dir" && i + 1 < argc)
+            {
+                overrides.logDir = argv[++i];
+            }
+            else if(arg == "--stdout-log" && i + 1 < argc)
+            {
+                overrides.stdoutLog = argv[++i];
+            }
+            else if(arg == "--stderr-log" && i + 1 < argc)
+            {
+                overrides.stderrLog = argv[++i];
+            }
+            else if(arg == "--warn-log" && i + 1 < argc)
+            {
+                overrides.warnLog = argv[++i];
+            }
+            else if(arg == "--task-print-to-stdout-log")
+            {
+                overrides.taskPrintToStdoutLog = true;
             }
             else
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
                           << " pkg build [-O0|-O1|-O2|-O3] [--ninja]"
-                          << " [--build-dir DIR] [--deps-dir DIR]\n";
+                          << " [--build-dir DIR] [--deps-dir DIR]"
+                          << " [--log-dir DIR] [--stdout-log FILE]"
+                          << " [--stderr-log FILE] [--warn-log FILE]"
+                          << " [--task-print-to-stdout-log]\n";
                 return 1;
             }
         }
@@ -3405,10 +3637,7 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
-            if(buildDirOverride.has_value())
-                buildConfig.buildDir = *buildDirOverride;
-            if(depsDirOverride.has_value())
-                buildConfig.depsDir = *depsDirOverride;
+            apply_cli_overrides(buildConfig, overrides);
             if(build_for_manifest(pkg, argv[0], optFlag, useNinja,
                                   buildConfig) != 0)
                 return 1;
@@ -3420,7 +3649,10 @@ int PackageManager::run(int argc, char** argv)
     {
         if(argc < 4)
         {
-            std::cerr << "Usage: " << argv[0] << " pkg run <task>\n";
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
+                      << " [--stderr-log FILE] [--warn-log FILE]"
+                      << " [--task-print-to-stdout-log]\n";
             return 1;
         }
         if(!std::filesystem::exists(manifestPath))
@@ -3437,10 +3669,55 @@ int PackageManager::run(int argc, char** argv)
         }
 
         const std::string taskName = argv[3];
+        PkgCliOverrides overrides;
+        for(int i = 4; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--log-dir" && i + 1 < argc)
+                overrides.logDir = argv[++i];
+            else if(arg == "--stdout-log" && i + 1 < argc)
+                overrides.stdoutLog = argv[++i];
+            else if(arg == "--stderr-log" && i + 1 < argc)
+                overrides.stderrLog = argv[++i];
+            else if(arg == "--warn-log" && i + 1 < argc)
+                overrides.warnLog = argv[++i];
+            else if(arg == "--task-print-to-stdout-log")
+                overrides.taskPrintToStdoutLog = true;
+            else if(arg == "--build-dir" && i + 1 < argc)
+                overrides.buildDir = argv[++i];
+            else if(arg == "--deps-dir" && i + 1 < argc)
+                overrides.depsDir = argv[++i];
+            else
+            {
+                std::cerr << "Unknown option for 'pkg run': " << arg << "\n"
+                          << "Usage: " << argv[0]
+                          << " pkg run <task> [--build-dir DIR] [--deps-dir DIR]"
+                          << " [--log-dir DIR] [--stdout-log FILE]"
+                          << " [--stderr-log FILE] [--warn-log FILE]"
+                          << " [--task-print-to-stdout-log]\n";
+                return 1;
+            }
+        }
         bool found = false;
         for(const auto& pkg : manifests)
         {
-            int rc = run_task_for_manifest(pkg, taskName);
+            PackageManifest overriddenPkg = pkg;
+            BuildConfig buildConfig = parse_build_config(pkg.content);
+            apply_cli_overrides(buildConfig, overrides);
+            int rc;
+            {
+                ScopedPackageLogState scopedLogs(
+                    make_package_log_state(pkg.packageDir, buildConfig));
+                const auto tasks = parse_task_specs(pkg.content);
+                const std::string hostName = current_host_name();
+                std::map<std::string, TaskRunState> taskStates;
+                std::mutex taskMutex;
+                std::condition_variable taskCv;
+                std::vector<std::string> taskStack;
+                rc = run_task_for_manifest_impl(pkg, tasks, buildConfig, hostName,
+                                                taskStates, taskMutex, taskCv,
+                                                taskName, taskStack);
+            }
             if(rc == -1)
                 continue;
             found = true;
@@ -3457,19 +3734,38 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "clean")
     {
-        std::optional<std::string> buildDirOverride;
-        std::optional<std::string> depsDirOverride;
+        PkgCliOverrides overrides;
         bool cleanDeps = false;
         for(int i = 3; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--build-dir" && i + 1 < argc)
             {
-                buildDirOverride = argv[++i];
+                overrides.buildDir = argv[++i];
             }
             else if(arg == "--deps-dir" && i + 1 < argc)
             {
-                depsDirOverride = argv[++i];
+                overrides.depsDir = argv[++i];
+            }
+            else if(arg == "--log-dir" && i + 1 < argc)
+            {
+                overrides.logDir = argv[++i];
+            }
+            else if(arg == "--stdout-log" && i + 1 < argc)
+            {
+                overrides.stdoutLog = argv[++i];
+            }
+            else if(arg == "--stderr-log" && i + 1 < argc)
+            {
+                overrides.stderrLog = argv[++i];
+            }
+            else if(arg == "--warn-log" && i + 1 < argc)
+            {
+                overrides.warnLog = argv[++i];
+            }
+            else if(arg == "--task-print-to-stdout-log")
+            {
+                overrides.taskPrintToStdoutLog = true;
             }
             else if(arg == "--deps")
             {
@@ -3480,7 +3776,9 @@ int PackageManager::run(int argc, char** argv)
                 std::cerr << "Unknown option for 'pkg clean': " << arg << "\n"
                           << "Usage: " << argv[0]
                           << " pkg clean [--build-dir DIR] [--deps-dir DIR]"
-                          << " [--deps]\n";
+                          << " [--log-dir DIR] [--stdout-log FILE]"
+                          << " [--stderr-log FILE] [--warn-log FILE]"
+                          << " [--task-print-to-stdout-log] [--deps]\n";
                 return 1;
             }
         }
@@ -3488,36 +3786,32 @@ int PackageManager::run(int argc, char** argv)
         if(manifests.empty())
         {
             BuildConfig buildConfig;
-            if(buildDirOverride.has_value())
-                buildConfig.buildDir = *buildDirOverride;
-            if(depsDirOverride.has_value())
-                buildConfig.depsDir = *depsDirOverride;
+            apply_cli_overrides(buildConfig, overrides);
+            ScopedPackageLogState scopedLogs(
+                make_package_log_state(std::filesystem::current_path(),
+                                       buildConfig));
             const std::filesystem::path buildDir =
                 package_build_dir(std::filesystem::current_path(), buildConfig);
             if(!std::filesystem::exists(buildDir))
             {
-                std::cout << "No artifacts to clean in " << buildDir.string()
-                          << "\n";
+                pkg_warn_line("No artifacts to clean in " + buildDir.string());
                 return 0;
             }
             std::error_code ec;
             std::filesystem::remove_all(buildDir, ec);
             if(ec)
             {
-                std::cerr << "Failed to clean " << buildDir.string() << ": "
-                          << ec.message() << "\n";
+                pkg_error_line("Failed to clean " + buildDir.string() + ": " +
+                               ec.message());
                 return 1;
             }
-            std::cout << "Cleaned " << buildDir.string() << "\n";
+            pkg_info_line("Cleaned " + buildDir.string());
             return 0;
         }
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
-            if(buildDirOverride.has_value())
-                buildConfig.buildDir = *buildDirOverride;
-            if(depsDirOverride.has_value())
-                buildConfig.depsDir = *depsDirOverride;
+            apply_cli_overrides(buildConfig, overrides);
             if(clean_for_manifest(pkg, buildConfig) != 0)
                 return 1;
             if(cleanDeps)
@@ -3528,21 +3822,23 @@ int PackageManager::run(int argc, char** argv)
                     package_build_dir(pkg.packageDir, buildConfig);
                 if(depsDir == buildDir || depsDir == buildDir / "deps")
                     continue;
+                ScopedPackageLogState scopedLogs(
+                    make_package_log_state(pkg.packageDir, buildConfig));
                 if(!std::filesystem::exists(depsDir))
                 {
-                    std::cout << "No fetched dependencies to clean in "
-                              << depsDir.string() << "\n";
+                    pkg_warn_line("No fetched dependencies to clean in " +
+                                  depsDir.string());
                     continue;
                 }
                 std::error_code ec;
                 std::filesystem::remove_all(depsDir, ec);
                 if(ec)
                 {
-                    std::cerr << "Failed to clean " << depsDir.string() << ": "
-                              << ec.message() << "\n";
+                    pkg_error_line("Failed to clean " + depsDir.string() +
+                                   ": " + ec.message());
                     return 1;
                 }
-                std::cout << "Cleaned " << depsDir.string() << "\n";
+                pkg_info_line("Cleaned " + depsDir.string());
             }
         }
         return 0;

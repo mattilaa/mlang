@@ -85,12 +85,13 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
               << "  " << programName
-              << " pkg fetch [--build-dir DIR] [--deps-dir DIR]\n"
+              << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
-              << " pkg build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR]\n"
-              << "  " << programName << " pkg run <task>\n"
+              << " pkg build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
-              << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--deps]\n"
+              << " pkg run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
+              << "  " << programName
+              << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"

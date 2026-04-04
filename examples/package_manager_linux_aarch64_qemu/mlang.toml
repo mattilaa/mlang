@@ -10,6 +10,10 @@ linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.g
 [tool.mlang]
 min_mlang_version = "0.2.0"
 make_program = "gmake"
+log_dir = "/tmp/mlang-linux-aarch64-qemu"
+stdout_log = "pkg.stdout.log"
+stderr_log = "pkg.stderr.log"
+warn_log = "pkg.warn.log"
 path_entries = [
   "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
   "/usr/local/opt/gnu-sed/libexec/gnubin",
