@@ -83,6 +83,32 @@
  *   ],
  * ]
  * \endcode
+ *
+ * Linux initramfs example:
+ * \code{.toml}
+ * [[task]]
+ * name = "busybox-fetch"
+ * commands = [
+ *   "mkdir -p {{build_dir}}",
+ *   "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
+ *   "chmod +x {{build_dir}}/busybox-armv8l",
+ * ]
+ *
+ * [[task]]
+ * name = "initramfs"
+ * depends_on = ["mininit-build", "busybox-fetch"]
+ * shell = [
+ *   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
+ *   "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
+ *   "cp {{build_dir}}/mininit {{build_dir}}/initramfs/init",
+ *   "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
+ *   "cd {{build_dir}}/initramfs/bin && for applet in sh ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync; do ln -sf busybox $applet; done",
+ *   "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz",
+ * ]
+ * \endcode
+ *
+ * The BusyBox applet links are created explicitly during packing because the
+ * host may not be able to execute the target-architecture BusyBox binary.
  */
 class PackageManager
 {

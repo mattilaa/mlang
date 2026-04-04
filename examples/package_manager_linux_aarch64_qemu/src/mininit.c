@@ -3,6 +3,7 @@ typedef long slong;
 
 #define SYS_READ 63
 #define SYS_WRITE 64
+#define SYS_EXECVE 221
 #define SYS_REBOOT 142
 
 #define LINUX_REBOOT_MAGIC1 0xfee1dead
@@ -44,6 +45,12 @@ static slong sys_write(slong fd, const void* buf, ulong len)
     return sys_call3(SYS_WRITE, fd, (slong)buf, (slong)len);
 }
 
+static slong sys_execve(const char* path, const char* const* argv,
+                        const char* const* envp)
+{
+    return sys_call3(SYS_EXECVE, (slong)path, (slong)argv, (slong)envp);
+}
+
 static slong sys_reboot(slong cmd)
 {
     return sys_call4(SYS_REBOOT, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
@@ -58,15 +65,9 @@ static ulong string_length(const char* text)
     return len;
 }
 
-static void write_fd(slong fd, const char* text)
-{
-    (void)sys_write(fd, text, string_length(text));
-}
-
 static void write_text(const char* text)
 {
-    write_fd(1, text);
-    write_fd(2, text);
+    (void)sys_write(1, text, string_length(text));
 }
 
 static int string_equals(const char* a, const char* b)
@@ -110,7 +111,7 @@ static void trim_line(char* line)
 static void print_help(void)
 {
     write_text(
-        "Available commands:\n"
+        "BusyBox shell launch failed. Fallback console commands:\n"
         "  help      Show this help\n"
         "  hello     Print the example banner\n"
         "  uname     Print a fixed kernel/userland description\n"
@@ -124,8 +125,7 @@ static void print_banner(void)
     write_text(
         "\n"
         "mlang pkg Linux AArch64 QEMU example booted\n"
-        "Tiny userspace console is running as /init\n"
-        "Type 'help' for built-in commands.\n");
+        "Starting BusyBox shell on the QEMU serial console.\n");
 }
 
 static void run_command(const char* line)
@@ -144,7 +144,7 @@ static void run_command(const char* line)
     }
     if(string_equals(line, "uname"))
     {
-        write_text("Linux mlang-example 6.x aarch64 minimal-userspace\n");
+        write_text("Linux mlang-example 6.x aarch64 busybox-fallback\n");
         return;
     }
     if(string_equals(line, "clear"))
@@ -179,11 +179,19 @@ static void run_command(const char* line)
 
 __attribute__((noreturn)) void _start(void)
 {
-    char line[128];
-    ulong cursor = 0;
+    static const char* shellArgv[] = { "/bin/sh", 0 };
+    static const char* shellEnvp[] = { "HOME=/", "PATH=/bin:/sbin", "TERM=vt100", 0 };
 
     print_banner();
+    (void)sys_execve("/bin/sh", shellArgv, shellEnvp);
+
+    write_text("BusyBox shell exec failed. Falling back to built-in console.\n");
+    print_help();
     write_text("\nconsole> ");
+
+    char line[128];
+    ulong cursor = 0;
+    line[0] = '\0';
 
     for(;;)
     {

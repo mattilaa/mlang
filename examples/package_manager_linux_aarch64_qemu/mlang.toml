@@ -255,12 +255,17 @@ commands = [
 name = "initramfs"
 print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
-depends_on = ["mininit-build"]
+depends_on = ["mininit-build", "busybox-fetch"]
 shell = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
-  "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
+  "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin",
   "cp {{build_dir}}/mininit {{build_dir}}/initramfs/init",
+  "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
+  "# The host cannot execute the AArch64 BusyBox binary during packing, so create the most useful applet symlinks manually.",
+  "cd {{build_dir}}/initramfs/bin && for applet in sh ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync; do ln -sf busybox $applet; done",
+  "ln -sf busybox {{build_dir}}/initramfs/bin/sh",
   "chmod +x {{build_dir}}/initramfs/init",
+  "chmod +x {{build_dir}}/initramfs/bin/busybox",
   "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz"
 ]
 
@@ -281,6 +286,19 @@ commands = [
   "mkdir -p {{build_dir}}",
   "clang --target=aarch64-linux-gnu -fuse-ld=lld -nostdlib -static -ffreestanding -fno-stack-protector -Wl,-e,_start -Wl,-z,max-page-size=4096 -O2 {{root}}/src/mininit.c -o {{build_dir}}/mininit"
 ]
+
+[[task]]
+name = "busybox-fetch"
+print = "[example] Downloading a prebuilt BusyBox userspace for the initramfs"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
+  "chmod +x {{build_dir}}/busybox-armv8l"
+]
+
+[task.host.darwin]
+print = "[example] Downloading the prebuilt BusyBox userspace for Darwin hosts"
 
 [[task]]
 name = "qemu-run"

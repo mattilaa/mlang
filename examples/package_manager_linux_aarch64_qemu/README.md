@@ -8,8 +8,8 @@ This example demonstrates package-manager capabilities around:
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
 the configured make tool, builds a tiny statically linked AArch64 init program,
-packs it into an initramfs directly from `mlang.toml`, and boots it under
-QEMU.
+downloads a prebuilt BusyBox userspace, packs both into an initramfs directly
+from `mlang.toml`, and boots into a BusyBox shell under QEMU.
 The Linux dependency sets `spinner = false` so `curl` can display its own
 download progress bar cleanly during `pkg fetch`. Other package-manager
 operations keep the rolling spinner by default unless CLI log routing is
@@ -56,6 +56,14 @@ commands = [
 name = "boot-flow"
 parallel = true
 next = ["kernel-build", "initramfs", "qemu-run"]
+
+[[task]]
+name = "busybox-fetch"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
+  "chmod +x {{build_dir}}/busybox-armv8l"
+]
 
 [[task]]
 name = "qemu-run"
@@ -156,6 +164,7 @@ Or step-by-step:
 ../../build/mlang pkg run toolchain-check
 ../../build/mlang pkg run kernel-defconfig
 ../../build/mlang pkg run kernel-build
+../../build/mlang pkg run busybox-fetch
 ../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
@@ -174,9 +183,18 @@ tasks first and only starts QEMU after both succeed.
   `{{build_dir}}/initramfs`, so the example does not rely on a checked-in
   `rootfs/` directory.
 - `mininit-build` compiles [src/mininit.c](/Users/matti.laamanen/projects/mlang/examples/package_manager_linux_aarch64_qemu/src/mininit.c)
-  into a tiny static AArch64 `/init` binary. This avoids the earlier kernel
-  panic caused by packing only a shell script without a matching `/bin/sh`
-  inside the initramfs.
+  into a tiny static AArch64 `/init` binary. `/init` then hands off to
+  `/bin/sh`, falling back to a built-in emergency console only if BusyBox
+  launch fails.
+- `busybox-fetch` downloads the prebuilt
+  `busybox-armv8l` binary from BusyBox's multiarch musl builds and installs it
+  into the initramfs as `/bin/busybox` with `/bin/sh -> busybox`. This works
+  on the QEMU guest because the kernel reports 32-bit EL0 support during boot.
+- The resulting guest now boots to a BusyBox shell prompt on the serial
+  console:
+  `/ #`
+- The tested BusyBox image does not include a `poweroff` applet, so exit QEMU
+  with the `Ctrl-a x` nographic shortcut when needed.
 - `log_output = false` can be set on an interactive task such as `qemu-run` to
   keep the child process on the console even when package logs are enabled.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as
