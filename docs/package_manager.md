@@ -98,10 +98,16 @@ Override the generated subproject location with:
 
 ### `pkg fetch`
 
-Clone or update git dependencies into the package-local `build/deps/` tree:
+Clone or update git dependencies into the configured dependency cache
+directory. By default this is `build/deps/`:
+
+If you do not set `build_dir`, `deps_dir`, or any CLI overrides, `pkg fetch`
+uses the legacy default layout and stores dependencies under `build/deps/`.
 
 ```sh
 ./build/mlang pkg fetch
+./build/mlang pkg fetch --deps-dir .pkg/deps
+./build/mlang pkg fetch --build-dir build-release
 ```
 
 For example, a dependency named `cjson` is fetched into:
@@ -118,6 +124,7 @@ Build the package entry defined by `mlang.toml`:
 ./build/mlang pkg build
 ./build/mlang pkg build -O3
 ./build/mlang pkg build --ninja
+./build/mlang pkg build --build-dir build-release --deps-dir .pkg/deps
 ```
 
 Current CLI options:
@@ -127,9 +134,15 @@ Current CLI options:
 - `-O2`
 - `-O3`
 - `--ninja`
+- `--build-dir DIR`
+- `--deps-dir DIR`
 
-The output binary or IR file is written under the package-local `build/`
-directory.
+The output binary or IR file is written under the configured build directory.
+By default this is `build/`.
+
+If you do not set `build_dir`, `deps_dir`, or any CLI overrides, `pkg build`
+keeps the legacy default layout: binaries go to `build/` and dependencies are
+read from `build/deps/`.
 
 ### `pkg run`
 
@@ -157,13 +170,19 @@ Remove the package-local artifact tree created by `fetch` and `build`:
 
 ```sh
 ./build/mlang pkg clean
+./build/mlang pkg clean --build-dir build-release
+./build/mlang pkg clean --deps
 ```
 
-This removes:
+By default this removes the configured build directory:
 
 ```text
 build/
 ```
+
+If `deps_dir` points outside the build directory, fetched dependencies are left
+in place so they can be reused across `build-debug`, `build-release`, or other
+output directories. Pass `--deps` to remove that separate dependency cache too.
 
 ## Manifest Layout
 
@@ -186,6 +205,8 @@ curl = { pkg_config = "libcurl" }
 module_paths = ["."]
 opt_level = "O2"
 target_arch = "x64"
+build_dir = "build-release"
+deps_dir = ".pkg/deps"
 lib_paths = ["vendor/lib"]
 libs = ["foo"]
 linker_flags = ["-Wl,-rpath,vendor/lib"]
@@ -271,6 +292,8 @@ Supported keys:
 - `min_mlang_version`
 - `opt_level`
 - `target_arch`
+- `build_dir`
+- `deps_dir`
 - `path_entries` / `bin_paths`
 - `make_program`
 - `use_ninja` / `ninja`
@@ -280,6 +303,40 @@ Supported keys:
 - `compiler_flags`
 - `static_deps`
 - `static_cpp_runtime`
+
+Directory behavior:
+
+- `build_dir` controls where `pkg build` writes final binaries and where
+  `pkg run` stores generated task scripts. The default is `build`.
+- `deps_dir` controls where `pkg fetch` stores fetched sources and where
+  `pkg build` looks for built dependency artifacts. The default is
+  `<build_dir>/deps`.
+- Both paths are resolved relative to the package root unless they are already
+  absolute.
+- If neither key is set, the default layout stays unchanged: build outputs go
+  to `build/` and fetched dependencies live under `build/deps/`.
+
+Example layout with separate outputs and a shared dependency cache:
+
+```toml
+[tool.mlang]
+build_dir = "build-debug"
+deps_dir = ".pkg/deps"
+```
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg build --build-dir build-release
+```
+
+This produces:
+
+```text
+.pkg/deps/            # fetched sources and built dependency artifacts
+build-debug/app       # default package binary
+build-release/app     # alternate output directory from CLI override
+```
 
 ### `[[task]]`
 
@@ -441,7 +498,7 @@ linker_flags = ["-Wl,-dead_strip"]
 ```
 
 When `[[bin]]` targets are present, `mlang pkg build` builds each one into
-`build/<bin-name>`.
+`<build_dir>/<bin-name>`.
 
 Supported target-scoped keys inside `[[bin]]`:
 
@@ -551,6 +608,9 @@ Supported placeholders in `workdir` and commands:
 - `{{build_dir}}`
 - `{{deps_dir}}`
 - `{{make}}`
+
+`{{build_dir}}` and `{{deps_dir}}` expand to the configured `[tool.mlang]`
+directories for that package.
 
 The Linux kernel example uses:
 

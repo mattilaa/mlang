@@ -147,7 +147,9 @@ Build and run:
 /tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
 /tmp/mlang-pkg-mla --backend ./build/mlang fetch
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2
+/tmp/mlang-pkg-mla --backend ./build/mlang build --build-dir build-release --deps-dir .pkg/deps
 /tmp/mlang-pkg-mla --backend ./build/mlang clean
+/tmp/mlang-pkg-mla --backend ./build/mlang clean --deps
 # Optional for CMake-based deps:
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2 --ninja
 ```
@@ -159,8 +161,9 @@ Generate a complete subproject package automatically:
 ./build/mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
 ```
 
-`mlang pkg clean` removes the package-local `build/` tree created by
-`fetch`/`build`.
+`mlang pkg clean` removes the configured build directory. When `deps_dir`
+points outside it, fetched dependencies are kept for reuse unless you pass
+`--deps`.
 
 Custom task workflows can be declared in `mlang.toml` and run with:
 
@@ -794,6 +797,10 @@ Supported keys are:
 - `min_mlang_version`: minimum `mlang` version required to build the package.
 - `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
 - `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
+- `build_dir`: directory where `pkg build` writes binaries and `pkg run`
+  stores generated task scripts. Defaults to `build`.
+- `deps_dir`: directory where `pkg fetch` stores sources and `pkg build`
+  reuses dependency artifacts. Defaults to `<build_dir>/deps`.
 - `path_entries`: directories prepended to `PATH` for pkg fetch/build/run.
   `bin_paths` is accepted as an alias.
 - `make_program`: make executable used by `build = "make"` dependencies and by
@@ -808,6 +815,10 @@ Supported keys are:
 - `static_cpp_runtime`: add `-static-libstdc++ -static-libgcc` during package
   linking. This is mainly useful on GNU/Linux toolchains.
 
+If you do not set `build_dir`, `deps_dir`, or any CLI overrides, package
+behavior stays unchanged: `pkg build` writes outputs to `build/`, and
+`pkg fetch` / `pkg build` use `build/deps/` for fetched dependencies.
+
 If `[tool.mlang].min_mlang_version` is set and the running compiler is older
 than that version, `mlang pkg build` fails before starting the build.
 
@@ -818,6 +829,11 @@ If `path_entries` is set, those directories are prepended to `PATH` for
 dependency fetch/build commands, `pkg-config`, Ninja detection, final package
 linking, and `pkg run` tasks. This is useful on macOS when Homebrew tools
 should be preferred over `/usr/bin`.
+
+`build_dir` and `deps_dir` are resolved relative to the package root unless
+they are already absolute. This lets one project share a single dependency
+cache such as `.pkg/deps` while building into separate directories like
+`build-debug` and `build-release`.
 
 If `make_program` is set, `mlang pkg` uses that executable for built-in
 `build = "make"` dependency builds, and `[[task]]` commands can reference it as
@@ -852,7 +868,7 @@ linker_flags = ["-Wl,-dead_strip"]
 ```
 
 When `[[bin]]` entries are present, `mlang pkg build` builds each executable
-into `build/<bin-name>`.
+into `<build_dir>/<bin-name>`.
 
 Target-scoped config keys supported inside `[[bin]]` are:
 
@@ -1188,6 +1204,9 @@ Task placeholders:
 - `{{build_dir}}`
 - `{{deps_dir}}`
 - `{{make}}`
+
+`{{build_dir}}` and `{{deps_dir}}` reflect the configured `[tool.mlang]`
+paths for that package.
 
 The Linux kernel example uses:
 

@@ -84,11 +84,13 @@ void printUsage(const char* programName)
               << " pkg add <name> [--pkg-config NAME] [--system]\n"
               << "  " << programName
               << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
-              << "  " << programName << " pkg fetch\n"
               << "  " << programName
-              << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n"
+              << " pkg fetch [--build-dir DIR] [--deps-dir DIR]\n"
+              << "  " << programName
+              << " pkg build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR]\n"
               << "  " << programName << " pkg run <task>\n"
-              << "  " << programName << " pkg clean\n"
+              << "  " << programName
+              << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--deps]\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -1032,6 +1034,10 @@ static bool manifest_requires_cpp_pkg_frontend()
         return true;
     if(content.find("static_cpp_runtime") != std::string::npos)
         return true;
+    if(content.find("build_dir") != std::string::npos)
+        return true;
+    if(content.find("deps_dir") != std::string::npos)
+        return true;
     if(content.find("build = \"none\"") != std::string::npos)
         return true;
     return false;
@@ -1055,6 +1061,17 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
             {
                 return std::nullopt;
             }
+        }
+    }
+    if(argc >= 3 &&
+       (std::string(argv[2]) == "fetch" || std::string(argv[2]) == "build" ||
+        std::string(argv[2]) == "clean"))
+    {
+        for(int i = 3; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--build-dir" || arg == "--deps-dir" || arg == "--deps")
+                return std::nullopt;
         }
     }
     if(manifest_requires_cpp_pkg_frontend())

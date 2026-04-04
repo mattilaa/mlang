@@ -418,6 +418,8 @@ struct BuildConfig
     std::string targetArch;
     std::string minMlangVersion;
     std::string makeProgram = "make";
+    std::string buildDir;
+    std::string depsDir;
     std::vector<std::string> pathEntries;
     std::vector<std::string> compilerFlags;
     std::vector<std::string> linkerFlags;
@@ -555,6 +557,10 @@ static BuildConfig merge_build_config(const BuildConfig& base,
         out.minMlangVersion = overrideCfg.minMlangVersion;
     if(!overrideCfg.makeProgram.empty())
         out.makeProgram = overrideCfg.makeProgram;
+    if(!overrideCfg.buildDir.empty())
+        out.buildDir = overrideCfg.buildDir;
+    if(!overrideCfg.depsDir.empty())
+        out.depsDir = overrideCfg.depsDir;
     out.pathEntries.insert(out.pathEntries.end(), overrideCfg.pathEntries.begin(),
                            overrideCfg.pathEntries.end());
     out.compilerFlags.insert(out.compilerFlags.end(),
@@ -671,6 +677,31 @@ static BuildConfig parse_build_config(const std::string& content)
         parse_build_config_key_value(cfg, key, value);
     }
     return cfg;
+}
+
+static std::filesystem::path resolve_package_path(
+    const std::filesystem::path& packageDir, const std::string& configured,
+    const std::filesystem::path& fallback)
+{
+    std::filesystem::path path =
+        configured.empty() ? fallback : std::filesystem::path(configured);
+    if(path.is_relative())
+        path = packageDir / path;
+    return path.lexically_normal();
+}
+
+static std::filesystem::path package_build_dir(const std::filesystem::path& packageDir,
+                                               const BuildConfig& config)
+{
+    return resolve_package_path(packageDir, config.buildDir, "build");
+}
+
+static std::filesystem::path package_deps_dir(const std::filesystem::path& packageDir,
+                                              const BuildConfig& config)
+{
+    if(!config.depsDir.empty())
+        return resolve_package_path(packageDir, config.depsDir, "build/deps");
+    return (package_build_dir(packageDir, config) / "deps").lexically_normal();
 }
 
 static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
@@ -935,6 +966,14 @@ static void parse_build_config_key_value(BuildConfig& cfg,
     else if(key == "make_program")
     {
         cfg.makeProgram = unquote(value);
+    }
+    else if(key == "build_dir")
+    {
+        cfg.buildDir = unquote(value);
+    }
+    else if(key == "deps_dir")
+    {
+        cfg.depsDir = unquote(value);
     }
     else if(key == "compiler_flags")
     {
@@ -2112,11 +2151,11 @@ static int validate_mlang_version_requirement(const std::filesystem::path& manif
     return 0;
 }
 
-static int fetch_for_manifest(const PackageManifest& pkg)
+static int fetch_for_manifest(const PackageManifest& pkg,
+                              const BuildConfig& buildConfig)
 {
     auto deps = parse_source_deps(pkg.content);
-    BuildConfig buildConfig = parse_build_config(pkg.content);
-    std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
+    std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, buildConfig);
     std::filesystem::create_directories(depsDir);
     for(const auto& dep : deps)
     {
@@ -2130,7 +2169,8 @@ static int fetch_for_manifest(const PackageManifest& pkg)
 
 static int build_for_manifest(const PackageManifest& pkg, const std::string& argv0,
                               const std::string& optFlagOverride,
-                              bool useNinja)
+                              bool useNinja,
+                              const BuildConfig& packageBuildConfig)
 {
     std::string packageLabel = "app";
     if(auto name = find_section_toml_string(pkg.content, "package", "name");
@@ -2148,7 +2188,6 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
 
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
-    BuildConfig packageBuildConfig = parse_build_config(pkg.content);
     std::vector<BuildTarget> targets = parse_bin_targets(pkg.content);
     if(targets.empty())
     {
@@ -2185,7 +2224,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
        !ensure_ninja_available(packageBuildConfig.pathEntries))
         return 1;
 
-    std::filesystem::path depsDir = pkg.packageDir / "build" / "deps";
+    std::filesystem::path depsDir = package_deps_dir(pkg.packageDir, packageBuildConfig);
     std::filesystem::create_directories(depsDir);
     for(const auto& dep : deps)
     {
@@ -2210,7 +2249,9 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
             return 1;
     }
 
-    std::filesystem::create_directories(pkg.packageDir / "build");
+    const std::filesystem::path buildDir =
+        package_build_dir(pkg.packageDir, packageBuildConfig);
+    std::filesystem::create_directories(buildDir);
     std::string backend = argv0;
     if(argv0.find('/') != std::string::npos)
         backend = std::filesystem::absolute(argv0).string();
@@ -2240,7 +2281,8 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         if(optFlag.empty())
             optFlag = buildConfig.optLevel;
 
-        std::string output = "build/" + target.name;
+        const std::filesystem::path outputPath = buildDir / target.name;
+        std::string output = outputPath.string();
         std::string cmd = shell_quote(backend) + " " +
                           shell_quote(target.entry) + " -o " +
                           shell_quote(output);
@@ -2289,9 +2331,11 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     return 0;
 }
 
-static int clean_for_manifest(const PackageManifest& pkg)
+static int clean_for_manifest(const PackageManifest& pkg,
+                              const BuildConfig& buildConfig)
 {
-    const std::filesystem::path buildDir = pkg.packageDir / "build";
+    const std::filesystem::path buildDir =
+        package_build_dir(pkg.packageDir, buildConfig);
     if(!std::filesystem::exists(buildDir))
     {
         std::cout << "No artifacts to clean in " << buildDir.string() << "\n";
@@ -2327,8 +2371,10 @@ static std::string expand_task_text(const std::string& text,
                                     const PackageManifest& pkg,
                                     const BuildConfig& buildConfig)
 {
-    const std::filesystem::path buildDir = pkg.packageDir / "build";
-    const std::filesystem::path depsDir = buildDir / "deps";
+    const std::filesystem::path buildDir =
+        package_build_dir(pkg.packageDir, buildConfig);
+    const std::filesystem::path depsDir =
+        package_deps_dir(pkg.packageDir, buildConfig);
     std::string out = text;
     out = replace_all(out, "{{root}}", pkg.packageDir.string());
     out = replace_all(out, "{{manifest}}", pkg.manifestPath.string());
@@ -2376,7 +2422,8 @@ write_task_script(const PackageManifest& pkg, const std::string& taskName,
     if(shellLines.empty())
         return std::nullopt;
 
-    std::filesystem::path scriptDir = pkg.packageDir / "build" / "task-scripts";
+    std::filesystem::path scriptDir =
+        package_build_dir(pkg.packageDir, buildConfig) / "task-scripts";
     std::error_code ec;
     std::filesystem::create_directories(scriptDir, ec);
     if(ec)
@@ -2946,6 +2993,27 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "fetch")
     {
+        std::optional<std::string> buildDirOverride;
+        std::optional<std::string> depsDirOverride;
+        for(int i = 3; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--build-dir" && i + 1 < argc)
+            {
+                buildDirOverride = argv[++i];
+            }
+            else if(arg == "--deps-dir" && i + 1 < argc)
+            {
+                depsDirOverride = argv[++i];
+            }
+            else
+            {
+                std::cerr << "Unknown option for 'pkg fetch': " << arg << "\n"
+                          << "Usage: " << argv[0]
+                          << " pkg fetch [--build-dir DIR] [--deps-dir DIR]\n";
+                return 1;
+            }
+        }
         if(!std::filesystem::exists(manifestPath))
         {
             std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
@@ -2967,7 +3035,12 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& pkg : manifests)
         {
-            if(fetch_for_manifest(pkg) != 0)
+            BuildConfig buildConfig = parse_build_config(pkg.content);
+            if(buildDirOverride.has_value())
+                buildConfig.buildDir = *buildDirOverride;
+            if(depsDirOverride.has_value())
+                buildConfig.depsDir = *depsDirOverride;
+            if(fetch_for_manifest(pkg, buildConfig) != 0)
                 return 1;
         }
         return 0;
@@ -2977,6 +3050,8 @@ int PackageManager::run(int argc, char** argv)
     {
         std::string optFlag;
         bool useNinja = false;
+        std::optional<std::string> buildDirOverride;
+        std::optional<std::string> depsDirOverride;
         for(int i = 3; i < argc; ++i)
         {
             std::string arg = argv[i];
@@ -2988,11 +3063,20 @@ int PackageManager::run(int argc, char** argv)
             {
                 useNinja = true;
             }
+            else if(arg == "--build-dir" && i + 1 < argc)
+            {
+                buildDirOverride = argv[++i];
+            }
+            else if(arg == "--deps-dir" && i + 1 < argc)
+            {
+                depsDirOverride = argv[++i];
+            }
             else
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n";
+                          << " pkg build [-O0|-O1|-O2|-O3] [--ninja]"
+                          << " [--build-dir DIR] [--deps-dir DIR]\n";
                 return 1;
             }
         }
@@ -3020,7 +3104,13 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& pkg : manifests)
         {
-            if(build_for_manifest(pkg, argv[0], optFlag, useNinja) != 0)
+            BuildConfig buildConfig = parse_build_config(pkg.content);
+            if(buildDirOverride.has_value())
+                buildConfig.buildDir = *buildDirOverride;
+            if(depsDirOverride.has_value())
+                buildConfig.depsDir = *depsDirOverride;
+            if(build_for_manifest(pkg, argv[0], optFlag, useNinja,
+                                  buildConfig) != 0)
                 return 1;
         }
         return 0;
@@ -3067,10 +3157,43 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "clean")
     {
+        std::optional<std::string> buildDirOverride;
+        std::optional<std::string> depsDirOverride;
+        bool cleanDeps = false;
+        for(int i = 3; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--build-dir" && i + 1 < argc)
+            {
+                buildDirOverride = argv[++i];
+            }
+            else if(arg == "--deps-dir" && i + 1 < argc)
+            {
+                depsDirOverride = argv[++i];
+            }
+            else if(arg == "--deps")
+            {
+                cleanDeps = true;
+            }
+            else
+            {
+                std::cerr << "Unknown option for 'pkg clean': " << arg << "\n"
+                          << "Usage: " << argv[0]
+                          << " pkg clean [--build-dir DIR] [--deps-dir DIR]"
+                          << " [--deps]\n";
+                return 1;
+            }
+        }
         auto manifests = collect_target_manifests(manifestPath);
         if(manifests.empty())
         {
-            const std::filesystem::path buildDir = "build";
+            BuildConfig buildConfig;
+            if(buildDirOverride.has_value())
+                buildConfig.buildDir = *buildDirOverride;
+            if(depsDirOverride.has_value())
+                buildConfig.depsDir = *depsDirOverride;
+            const std::filesystem::path buildDir =
+                package_build_dir(std::filesystem::current_path(), buildConfig);
             if(!std::filesystem::exists(buildDir))
             {
                 std::cout << "No artifacts to clean in " << buildDir.string()
@@ -3090,8 +3213,37 @@ int PackageManager::run(int argc, char** argv)
         }
         for(const auto& pkg : manifests)
         {
-            if(clean_for_manifest(pkg) != 0)
+            BuildConfig buildConfig = parse_build_config(pkg.content);
+            if(buildDirOverride.has_value())
+                buildConfig.buildDir = *buildDirOverride;
+            if(depsDirOverride.has_value())
+                buildConfig.depsDir = *depsDirOverride;
+            if(clean_for_manifest(pkg, buildConfig) != 0)
                 return 1;
+            if(cleanDeps)
+            {
+                const std::filesystem::path depsDir =
+                    package_deps_dir(pkg.packageDir, buildConfig);
+                const std::filesystem::path buildDir =
+                    package_build_dir(pkg.packageDir, buildConfig);
+                if(depsDir == buildDir || depsDir == buildDir / "deps")
+                    continue;
+                if(!std::filesystem::exists(depsDir))
+                {
+                    std::cout << "No fetched dependencies to clean in "
+                              << depsDir.string() << "\n";
+                    continue;
+                }
+                std::error_code ec;
+                std::filesystem::remove_all(depsDir, ec);
+                if(ec)
+                {
+                    std::cerr << "Failed to clean " << depsDir.string() << ": "
+                              << ec.message() << "\n";
+                    return 1;
+                }
+                std::cout << "Cleaned " << depsDir.string() << "\n";
+            }
         }
         return 0;
     }
