@@ -69,7 +69,7 @@ fn print_usage() -> void {
     println!("  [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]");
     println!("  [--config FILE] add <name> [--pkg-config NAME] [--system]");
     println!("  [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("  [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
     println!("  [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
     println!("  [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]");
 }
@@ -564,10 +564,13 @@ fn normalize_opt_level(opt: str8) -> str8 {
         return "";
     }
     if (eq(t, "O0") == 1) { return "-O0"; }
+    if (eq(t, "Og") == 1) { return "-Og"; }
     if (eq(t, "O1") == 1) { return "-O1"; }
     if (eq(t, "O2") == 1) { return "-O2"; }
     if (eq(t, "O3") == 1) { return "-O3"; }
-    if (eq(t, "-O0") == 1 || eq(t, "-O1") == 1 || eq(t, "-O2") == 1 || eq(t, "-O3") == 1) {
+    if (eq(t, "Os") == 1) { return "-Os"; }
+    if (eq(t, "Oz") == 1) { return "-Oz"; }
+    if (eq(t, "-O0") == 1 || eq(t, "-Og") == 1 || eq(t, "-O1") == 1 || eq(t, "-O2") == 1 || eq(t, "-O3") == 1 || eq(t, "-Os") == 1 || eq(t, "-Oz") == 1) {
         return t;
     }
     return "";
@@ -1030,7 +1033,7 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
     var i: i64 = start_idx + 1;
     while (i < n) {
         let arg: str8 = argv[i];
-        if (eq(arg, "-O0") == 1 || eq(arg, "-O1") == 1 || eq(arg, "-O2") == 1 || eq(arg, "-O3") == 1) {
+        if (eq(arg, "-O0") == 1 || eq(arg, "-Og") == 1 || eq(arg, "-O1") == 1 || eq(arg, "-O2") == 1 || eq(arg, "-O3") == 1 || eq(arg, "-Os") == 1 || eq(arg, "-Oz") == 1) {
             opt_flag = arg;
             i = i + 1;
             continue;
@@ -1041,7 +1044,7 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
             continue;
         }
         println!("Unknown option for 'pkg build': {}", arg);
-        println!("Usage: mlang-pkg-mla build [-O0|-O1|-O2|-O3] [--ninja]");
+        println!("Usage: mlang-pkg-mla build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]");
         return 1;
     }
 

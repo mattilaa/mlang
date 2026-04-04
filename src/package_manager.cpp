@@ -444,7 +444,8 @@ static std::string normalize_opt_level(std::string opt)
         return "";
     if(opt[0] != '-')
         opt = "-" + opt;
-    if(opt == "-O0" || opt == "-O1" || opt == "-O2" || opt == "-O3")
+    if(opt == "-O0" || opt == "-Og" || opt == "-O1" || opt == "-O2" ||
+       opt == "-O3" || opt == "-Os" || opt == "-Oz")
         return opt;
     return "";
 }
@@ -4087,7 +4088,9 @@ int PackageManager::run(int argc, char** argv)
         for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3")
+            if(arg == "-O0" || arg == "-Og" || arg == "-O1" ||
+               arg == "-O2" || arg == "-O3" || arg == "-Os" ||
+               arg == "-Oz")
             {
                 optFlag = arg;
             }
@@ -4127,7 +4130,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja]"
+                          << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]"
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"

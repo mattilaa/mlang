@@ -22306,10 +22306,11 @@ bool Backend::compileToExecutable(const std::string& outputFile,
     return linkExecutable(objectFile, outputFile, linkArgs);
 }
 
-void Backend::optimize(int level)
+void Backend::optimize(const std::string& levelName)
 {
-    if(level < 0 || level > 3)
-        level = 2;
+    std::string level = levelName;
+    if(level.empty())
+        level = "-O2";
 
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
@@ -22324,30 +22325,54 @@ void Backend::optimize(int level)
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
     llvm::OptimizationLevel optLevel;
-    switch(level)
+    bool runPipeline = true;
+    std::string normalized = level;
+    if(!normalized.empty() && normalized[0] != '-')
+        normalized = "-" + normalized;
+    if(normalized == "-Og")
     {
-    case 0:
-        optLevel = llvm::OptimizationLevel::O0;
-        break;
-    case 1:
+        // LLVM does not expose a dedicated -Og pipeline here, so use O1 as the
+        // closest debug-friendly preset.
         optLevel = llvm::OptimizationLevel::O1;
-        break;
-    case 2:
+    }
+    else if(normalized == "-O0")
+    {
+        optLevel = llvm::OptimizationLevel::O0;
+        runPipeline = false;
+    }
+    else if(normalized == "-O1")
+    {
+        optLevel = llvm::OptimizationLevel::O1;
+    }
+    else if(normalized == "-O2")
+    {
         optLevel = llvm::OptimizationLevel::O2;
-        break;
-    case 3:
+    }
+    else if(normalized == "-O3")
+    {
         optLevel = llvm::OptimizationLevel::O3;
-        break;
-    default:
+    }
+    else if(normalized == "-Os")
+    {
+        optLevel = llvm::OptimizationLevel::Os;
+    }
+    else if(normalized == "-Oz")
+    {
+        optLevel = llvm::OptimizationLevel::Oz;
+    }
+    else
+    {
+        normalized = "-O2";
         optLevel = llvm::OptimizationLevel::O2;
     }
 
     llvm::ModulePassManager MPM;
-    if(level > 0)
+    if(runPipeline)
     {
         MPM = PB.buildPerModuleDefaultPipeline(optLevel);
     }
 
     MPM.run(*module, MAM);
-    std::cout << "Optimization level O" << level << " applied" << std::endl;
+    std::cout << "Optimization level " << normalized << " applied"
+              << std::endl;
 }

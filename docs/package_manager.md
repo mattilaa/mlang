@@ -135,7 +135,10 @@ Build the package entry defined by the selected manifest:
 ```sh
 ./build/mlang pkg build
 ./build/mlang pkg --config arm64.toml build
+./build/mlang pkg build -Og
 ./build/mlang pkg build -O3
+./build/mlang pkg build -Os
+./build/mlang pkg build -Oz
 ./build/mlang pkg build --ninja
 ./build/mlang pkg build --build-dir build-release --deps-dir .pkg/deps
 ```
@@ -143,9 +146,12 @@ Build the package entry defined by the selected manifest:
 Current CLI options:
 
 - `-O0`
+- `-Og`
 - `-O1`
 - `-O2`
 - `-O3`
+- `-Os`
+- `-Oz`
 - `--ninja`
 - `--build-dir DIR`
 - `--deps-dir DIR`
@@ -531,7 +537,8 @@ commands = [
 
 Key details:
 
-- `opt_level` accepts `O0`, `O1`, `O2`, `O3`, with or without a leading `-`.
+- `opt_level` accepts `O0`, `Og`, `O1`, `O2`, `O3`, `Os`, `Oz`, with or
+  without a leading `-`.
 - `min_mlang_version` requires the running `mlang` version to be greater than
   or equal to the declared value before `pkg build` proceeds.
 - `target_arch` accepts `x86`, `x86-64`, `x64`, `x86_64`, `amd64`,
@@ -717,8 +724,8 @@ Host guidance:
   the example now carries a native Apple Silicon path instead of requiring
   Docker.
 
-An explicit CLI optimization flag such as `-O3` overrides
-`[tool.mlang].opt_level`.
+An explicit CLI optimization flag such as `-Og`, `-O3`, `-Os`, or `-Oz`
+overrides `[tool.mlang].opt_level`.
 
 ### `[workspace]`
 

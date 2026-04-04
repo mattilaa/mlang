@@ -59,9 +59,12 @@ void printUsage(const char* programName)
               << "  -emit-bc      Emit LLVM bitcode file (.bc)\n"
               << "  --target-arch <arch>  Set target arch: x86, x64, aarch64\n"
               << "  -O0           No optimization\n"
+              << "  -Og           Debug-friendly optimization\n"
               << "  -O1           Basic optimization\n"
               << "  -O2           Standard optimization (default)\n"
               << "  -O3           Aggressive optimization\n"
+              << "  -Os           Optimize for size\n"
+              << "  -Oz           Optimize for minimum size\n"
               << "  --no-tests    Skip compiling #[test] functions\n"
               << "  --tests       Compile and run #[test] for input path/file\n"
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
@@ -87,7 +90,7 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
-              << " pkg [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
+              << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
               << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
@@ -1399,14 +1402,15 @@ int main(int argc, char** argv)
     bool emitAssembly = false;
     bool emitLLVMIR = false;
     bool emitBitcode = false;
-    int optimizationLevel = 2;
+    std::string optimizationLevel = "-O2";
     if(const char* defaultOptEnv = std::getenv("MLANG_DEFAULT_OPT_LEVEL"))
     {
-        if(defaultOptEnv[0] >= '0' && defaultOptEnv[0] <= '3' &&
-           defaultOptEnv[1] == '\0')
-        {
-            optimizationLevel = defaultOptEnv[0] - '0';
-        }
+        std::string opt = defaultOptEnv;
+        if(!opt.empty() && opt[0] != '-')
+            opt = "-" + opt;
+        if(opt == "-O0" || opt == "-Og" || opt == "-O1" || opt == "-O2" ||
+           opt == "-O3" || opt == "-Os" || opt == "-Oz")
+            optimizationLevel = opt;
     }
     bool verbose = false;
     bool debugMode = false;
@@ -1481,21 +1485,11 @@ int main(int argc, char** argv)
         {
             linkArgs.push_back(arg);
         }
-        else if(arg == "-O0")
+        else if(arg == "-O0" || arg == "-Og" || arg == "-O1" ||
+                arg == "-O2" || arg == "-O3" || arg == "-Os" ||
+                arg == "-Oz")
         {
-            optimizationLevel = 0;
-        }
-        else if(arg == "-O1")
-        {
-            optimizationLevel = 1;
-        }
-        else if(arg == "-O2")
-        {
-            optimizationLevel = 2;
-        }
-        else if(arg == "-O3")
-        {
-            optimizationLevel = 3;
+            optimizationLevel = arg;
         }
         else if(arg == "-v")
         {
@@ -1864,11 +1858,11 @@ int main(int argc, char** argv)
             }
 
             // Apply optimizations
-            if(optimizationLevel > 0)
+            if(optimizationLevel != "-O0")
             {
                 if(verbose)
                 {
-                    std::cout << "Applying optimizations (O"
+                    std::cout << "Applying optimizations ("
                               << optimizationLevel << ")..." << std::endl;
                 }
                 backend.optimize(optimizationLevel);

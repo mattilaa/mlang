@@ -819,7 +819,8 @@ Supported keys are:
 
 - `module_paths`: existing module search path support.
 - `min_mlang_version`: minimum `mlang` version required to build the package.
-- `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
+- `opt_level`: `O0`, `Og`, `O1`, `O2`, `O3`, `Os`, or `Oz` (with or without
+  the leading `-`).
 - `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
 - `build_dir`: directory where `pkg build` writes binaries and `pkg run`
   stores generated task scripts. Defaults to `build`.
@@ -938,8 +939,8 @@ Target-scoped values are merged with `[tool.mlang]` defaults:
 - boolean values such as `static_deps` and `static_cpp_runtime` override the
   package default when explicitly set on the target
 
-For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
-`[tool.mlang].opt_level`.
+For `pkg build`, an explicit CLI optimization flag such as `-Og`, `-O3`,
+`-Os`, or `-Oz` overrides `[tool.mlang].opt_level`.
 
 Workspace roots can also declare recursive package discovery:
 
@@ -1307,6 +1308,9 @@ Example workflow with config-driven defaults:
 ./build/mlang pkg build
 # Override only the optimization level from the CLI:
 ./build/mlang pkg build -O3
+./build/mlang pkg build -Og
+./build/mlang pkg build -Os
+./build/mlang pkg build -Oz
 ./build/mlang pkg clean
 ```
 

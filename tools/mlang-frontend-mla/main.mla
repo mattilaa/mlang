@@ -53,9 +53,12 @@ fn print_usage(program: str8) -> void {
     println!("  -emit-bc      Emit LLVM bitcode file (.bc)");
     println!("  --target-arch <arch>  Set target arch: x86, x64, aarch64");
     println!("  -O0           No optimization");
+    println!("  -Og           Debug-friendly optimization");
     println!("  -O1           Basic optimization");
     println!("  -O2           Standard optimization (default)");
     println!("  -O3           Aggressive optimization");
+    println!("  -Os           Optimize for size");
+    println!("  -Oz           Optimize for minimum size");
     println!("  --no-tests    Skip compiling #[test] functions");
     println!("  --tests       Compile and run #[test] for input path/file");
     println!("  -Wno-colon-if Suppress warning for plain if/else-if with ':'");
@@ -75,7 +78,7 @@ fn print_usage(program: str8) -> void {
     println!("  {} pkg [--config FILE] add <name> [--pkg-config NAME] [--system]", program);
     println!("  {} pkg [--config FILE] add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]", program);
     println!("  {} pkg [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
-    println!("  {} pkg [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
+    println!("  {} pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
     println!("  {} pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
     println!("  {} pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]", program);
     println!("");
@@ -812,9 +815,12 @@ fn is_known_test_or_bench_flag(a: str8) -> i32 {
     if eq(a, "-emit-llvm") == 1 { return 1; }
     if eq(a, "-emit-bc") == 1 { return 1; }
     if eq(a, "-O0") == 1 { return 1; }
+    if eq(a, "-Og") == 1 { return 1; }
     if eq(a, "-O1") == 1 { return 1; }
     if eq(a, "-O2") == 1 { return 1; }
     if eq(a, "-O3") == 1 { return 1; }
+    if eq(a, "-Os") == 1 { return 1; }
+    if eq(a, "-Oz") == 1 { return 1; }
     if eq(a, "-v") == 1 { return 1; }
     if eq(a, "--debug") == 1 { return 1; }
     if eq(a, "--no-tests") == 1 { return 1; }

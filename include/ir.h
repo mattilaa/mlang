@@ -523,7 +523,7 @@ public:
     bool emitBitcode(const std::string& filename);
     bool compileToExecutable(const std::string& outputFile,
                              const std::vector<std::string>& linkArgs);
-    void optimize(int level);
+    void optimize(const std::string& level);
     std::string getTargetTriple() const
     {
         return targetTriple;
