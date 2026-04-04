@@ -1170,6 +1170,8 @@ sudo apt-get install clang lld make qemu-system-arm cpio gzip gcc-aarch64-linux-
 Supported `[[task]]` keys:
 
 - `name`
+- `print`
+- `message`
 - `workdir`
 - `parallel`
 - `depends_on`
@@ -1189,6 +1191,8 @@ Host-conditional task overrides:
 Override behavior:
 
 - override `workdir` replaces the base `workdir`
+- override `print` replaces the base `print`
+- override `message` replaces the base `message`
 - override `parallel` replaces the base `parallel`
 - override `depends_on` appends after the base `depends_on`
 - override `join_on` appends after the base `join_on`
@@ -1207,6 +1211,10 @@ Task placeholders:
 
 `{{build_dir}}` and `{{deps_dir}}` reflect the configured `[tool.mlang]`
 paths for that package.
+
+`print` writes a line directly to the console before a task runs. `message`
+is supported as an alias. This is useful for long task graphs and for making
+progress visible without embedding `echo` in shell.
 
 The Linux kernel example uses:
 

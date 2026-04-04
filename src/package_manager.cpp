@@ -1,6 +1,7 @@
 #include "package_manager.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdlib>
 #include <cstdio>
@@ -14,6 +15,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <condition_variable>
 #include <unordered_set>
 #include <vector>
@@ -466,6 +468,8 @@ struct BuildTarget
 struct TaskSpec
 {
     std::string name;
+    std::string message;
+    std::string print;
     std::string phase;
     std::string workdir;
     std::optional<bool> parallel;
@@ -480,6 +484,8 @@ struct TaskSpec
     std::vector<std::string> commands;
     struct HostOverride
     {
+        std::string message;
+        std::string print;
         std::string phase;
         std::string workdir;
         std::optional<bool> parallel;
@@ -844,6 +850,14 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             {
                 task.name = unquote(taskValue);
             }
+            else if(taskKey == "message")
+            {
+                task.message = unquote_preserve(taskValue);
+            }
+            else if(taskKey == "print")
+            {
+                task.print = unquote_preserve(taskValue);
+            }
             else if(taskKey == "phase")
             {
                 task.phase = unquote(taskValue);
@@ -905,7 +919,15 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         auto apply_override_kv = [&](TaskSpec::HostOverride& ov,
                                      const std::string& taskKey,
                                      const std::string& taskValue) {
-            if(taskKey == "phase")
+            if(taskKey == "message")
+            {
+                ov.message = unquote_preserve(taskValue);
+            }
+            else if(taskKey == "print")
+            {
+                ov.print = unquote_preserve(taskValue);
+            }
+            else if(taskKey == "phase")
             {
                 ov.phase = unquote(taskValue);
             }
@@ -1720,6 +1742,59 @@ static int run_command(const std::string& cmd)
     return std::system(cmd.c_str());
 }
 
+class ProgressSpinner
+{
+  public:
+    explicit ProgressSpinner(std::string label) : label_(std::move(label))
+    {
+        worker_ = std::thread([this]() {
+            static constexpr char frames[] = { '|', '/', '-', '\\' };
+            size_t idx = 0;
+            while(!done_.load())
+            {
+                std::cerr << '\r' << label_ << " " << frames[idx % 4]
+                          << std::flush;
+                idx++;
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+            }
+        });
+    }
+
+    ~ProgressSpinner()
+    {
+        stop();
+    }
+
+    void stop(const std::string& suffix = "")
+    {
+        if(stopped_)
+            return;
+        done_.store(true);
+        if(worker_.joinable())
+            worker_.join();
+        std::cerr << '\r' << label_;
+        if(!suffix.empty())
+            std::cerr << " " << suffix;
+        std::cerr << "        " << std::endl;
+        stopped_ = true;
+    }
+
+  private:
+    std::string label_;
+    std::atomic<bool> done_ { false };
+    std::thread worker_;
+    bool stopped_ = false;
+};
+
+static int run_progress_command(const std::string& label,
+                                const std::string& cmd)
+{
+    ProgressSpinner spinner(label);
+    int rc = run_command(cmd);
+    spinner.stop(rc == 0 ? "[ok]" : "[failed]");
+    return rc;
+}
+
 static std::string join_path_entries(const std::vector<std::string>& entries)
 {
     std::string out;
@@ -1760,6 +1835,13 @@ static int run_command_with_paths(const std::string& cmd,
     return run_command(command_with_path_entries(cmd, entries));
 }
 
+static int run_progress_command_with_paths(const std::string& label,
+                                           const std::string& cmd,
+                                           const std::vector<std::string>& entries)
+{
+    return run_progress_command(label, command_with_path_entries(cmd, entries));
+}
+
 static int run_command_in_dir(const std::filesystem::path& dir,
                               const std::string& cmd)
 {
@@ -1772,6 +1854,15 @@ static int run_command_in_dir_with_paths(const std::filesystem::path& dir,
 {
     return run_command("cd " + shell_quote(dir.string()) + " && " +
                        command_with_path_entries(cmd, entries));
+}
+
+static int run_progress_command_in_dir_with_paths(
+    const std::string& label, const std::filesystem::path& dir,
+    const std::string& cmd, const std::vector<std::string>& entries)
+{
+    return run_progress_command(label, "cd " + shell_quote(dir.string()) +
+                                           " && " +
+                                           command_with_path_entries(cmd, entries));
 }
 
 static std::optional<std::string> run_command_capture(const std::string& cmd)
@@ -1860,32 +1951,43 @@ static int fetch_git_dep(const DepSpec& dep,
     std::filesystem::path path = dep_checkout_dir(depsDir, dep);
     if(!std::filesystem::exists(path))
     {
+        std::cout << "[pkg] Fetching git dependency '" << dep.name
+                  << "' from " << dep.git << "\n";
         std::string cloneCmd = "git clone " + shell_quote(dep.git) + " " +
                                shell_quote(path.string());
-        if(run_command_with_paths(cloneCmd, pathEntries) != 0)
+        if(run_progress_command_with_paths("[pkg] git clone " + dep.name,
+                                           cloneCmd, pathEntries) != 0)
             return 1;
     }
     else if(updateExisting)
     {
+        std::cout << "[pkg] Updating git dependency '" << dep.name << "'\n";
         std::string fetchCmd = "git -C " + shell_quote(path.string()) +
                                " fetch --all --tags";
-        if(run_command_with_paths(fetchCmd, pathEntries) != 0)
+        if(run_progress_command_with_paths("[pkg] git fetch " + dep.name,
+                                           fetchCmd, pathEntries) != 0)
             return 1;
     }
 
     if(!dep.rev.empty())
     {
+        std::cout << "[pkg] Checking out '" << dep.name << "' revision "
+                  << dep.rev << "\n";
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " + shell_quote(dep.rev);
-        if(run_command_with_paths(checkout, pathEntries) != 0)
+        if(run_progress_command_with_paths("[pkg] git checkout " + dep.name,
+                                           checkout, pathEntries) != 0)
             return 1;
     }
     else if(!dep.tag.empty())
     {
+        std::cout << "[pkg] Checking out '" << dep.name << "' tag "
+                  << dep.tag << "\n";
         std::string checkout = "git -C " + shell_quote(path.string()) +
                                " checkout " +
                                shell_quote("tags/" + dep.tag);
-        if(run_command_with_paths(checkout, pathEntries) != 0)
+        if(run_progress_command_with_paths("[pkg] git checkout " + dep.name,
+                                           checkout, pathEntries) != 0)
             return 1;
     }
     return 0;
@@ -1932,11 +2034,16 @@ static int fetch_archive_dep(const DepSpec& dep,
     std::filesystem::remove_all(extractDir, ec);
     std::filesystem::create_directories(extractDir);
 
+    std::cout << "[pkg] Downloading archive dependency '" << dep.name
+              << "' from " << dep.url << "\n";
     std::string downloadCmd = "curl -L --fail " + shell_quote(dep.url) +
                               " -o " + shell_quote(archivePath.string());
-    if(run_command_with_paths(downloadCmd, pathEntries) != 0)
+    if(run_progress_command_with_paths("[pkg] download " + dep.name,
+                                       downloadCmd, pathEntries) != 0)
         return 1;
 
+    std::cout << "[pkg] Unpacking " << archivePath.filename().string()
+              << " into " << checkoutDir.string() << "\n";
     std::string extractCmd = "tar -xzf " + shell_quote(archivePath.string()) +
                              " -C " + shell_quote(extractDir.string());
     if(dep.stripComponents > 0)
@@ -1944,7 +2051,8 @@ static int fetch_archive_dep(const DepSpec& dep,
         extractCmd += " --strip-components=" +
                       std::to_string(dep.stripComponents);
     }
-    if(run_command_with_paths(extractCmd, pathEntries) != 0)
+    if(run_progress_command_with_paths("[pkg] extract " + dep.name,
+                                       extractCmd, pathEntries) != 0)
         return 1;
     std::filesystem::rename(extractDir, checkoutDir, ec);
     if(ec)
@@ -1986,6 +2094,8 @@ static int build_git_dep(const DepSpec& dep,
     if(dep.build == "cmake")
     {
         std::filesystem::path buildDir = path / "build";
+        std::cout << "[pkg] Configuring CMake dependency '" << dep.name
+                  << "' in " << buildDir.string() << "\n";
         std::string cfg = "cmake -S " + shell_quote(path.string()) + " -B " +
                           shell_quote(buildDir.string());
         if(useNinja)
@@ -2002,33 +2112,43 @@ static int build_git_dep(const DepSpec& dep,
                     cfg += " -D" + arg;
             }
         }
-        if(run_command_with_paths(cfg, pathEntries) != 0)
+        if(run_progress_command_with_paths("[pkg] cmake configure " + dep.name,
+                                           cfg, pathEntries) != 0)
             return 1;
         std::string build =
             "cmake --build " + shell_quote(buildDir.string());
-        return run_command_with_paths(build, pathEntries);
+        std::cout << "[pkg] Building CMake dependency '" << dep.name << "'\n";
+        return run_progress_command_with_paths("[pkg] cmake build " + dep.name,
+                                               build, pathEntries);
     }
     if(dep.build == "meson")
     {
         std::filesystem::path buildDir = path / "build";
         if(!std::filesystem::exists(buildDir))
         {
+            std::cout << "[pkg] Configuring Meson dependency '" << dep.name
+                      << "' in " << buildDir.string() << "\n";
             std::string setup = "meson setup " +
                                 shell_quote(buildDir.string()) + " " +
                                 shell_quote(path.string());
-            if(run_command_with_paths(setup, pathEntries) != 0)
+            if(run_progress_command_with_paths("[pkg] meson setup " + dep.name,
+                                               setup, pathEntries) != 0)
                 return 1;
         }
         std::string compile =
             "meson compile -C " + shell_quote(buildDir.string());
-        return run_command_with_paths(compile, pathEntries);
+        std::cout << "[pkg] Building Meson dependency '" << dep.name << "'\n";
+        return run_progress_command_with_paths("[pkg] meson compile " + dep.name,
+                                               compile, pathEntries);
     }
     if(dep.build == "make")
     {
         std::string effectiveMake = makeProgram.empty() ? "make" : makeProgram;
         std::string cmd = shell_quote(effectiveMake) + " -C " +
                           shell_quote(path.string());
-        return run_command_with_paths(cmd, pathEntries);
+        std::cout << "[pkg] Building make dependency '" << dep.name << "'\n";
+        return run_progress_command_with_paths("[pkg] make " + dep.name, cmd,
+                                               pathEntries);
     }
 
     std::cerr << "Unknown build system: " << dep.build << "\n";
@@ -2426,8 +2546,11 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         for(const auto& flag : pkgFlags)
             cmd += " " + shell_quote(flag);
 
-        int rc = run_command_in_dir_with_paths(pkg.packageDir, cmd,
-                                              buildConfig.pathEntries);
+        std::cout << "[pkg] Compiling target '" << target.name << "' from "
+                  << target.entry << " -> " << output << "\n";
+        int rc = run_progress_command_in_dir_with_paths(
+            "[pkg] compile " + target.name, pkg.packageDir, cmd,
+            buildConfig.pathEntries);
         if(rc != 0)
         {
             std::cerr << "Build failed for " << pkg.manifestPath.string();
@@ -2691,6 +2814,15 @@ static int run_task_for_manifest_impl(
             (hostOverride && !hostOverride->commands.empty())
                 ? hostOverride->commands
                 : task.commands;
+        const std::string effectiveMessage = [&]() -> std::string {
+            if(hostOverride && !hostOverride->print.empty())
+                return hostOverride->print;
+            if(hostOverride && !hostOverride->message.empty())
+                return hostOverride->message;
+            if(!task.print.empty())
+                return task.print;
+            return task.message;
+        }();
 
         std::string effectiveWorkdir =
             (hostOverride && !hostOverride->workdir.empty())
@@ -2764,6 +2896,15 @@ static int run_task_for_manifest_impl(
                                                         buildConfig));
         if(!workdir.is_absolute())
             workdir = pkg.packageDir / workdir;
+
+        std::cout << "[pkg] Running task '" << taskName << "'";
+        if(workdir != pkg.packageDir)
+            std::cout << " in " << workdir.string();
+        std::cout << "\n";
+
+        if(!effectiveMessage.empty())
+            std::cout << expand_task_text(effectiveMessage, pkg, buildConfig)
+                      << "\n";
 
         if(!effectiveShell.empty())
         {

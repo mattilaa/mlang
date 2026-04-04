@@ -25,6 +25,7 @@ path_entries = [
 
 [[task]]
 name = "toolchain-check"
+print = "[example] Checking required build tools in PATH"
 workdir = "{{root}}"
 commands = [
   "sh -c 'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'"
@@ -57,12 +58,14 @@ shell = [
 
 [[task]]
 name = "darwin-native-prepare"
+print = "[example] Darwin host detected, preparing native Linux kernel host-build compatibility files"
 workdir = "{{root}}"
 commands = [
   "sh -c 'echo native Darwin patching is only used on macOS hosts'"
 ]
 
 [task.host.darwin]
+print = "[example] Generating Darwin compatibility headers and patching scripts/mod/file2alias.c"
 depends_on = ["toolchain-check"]
 shell = [
   "LINUX_DIR={{deps_dir}}/linux",
@@ -188,12 +191,14 @@ shell = [
 
 [[task]]
 name = "kernel-defconfig"
+print = "[example] Generating Linux arm64 defconfig in {{deps_dir}}/linux"
 workdir = "{{root}}"
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig"
 ]
 
 [task.host.darwin]
+print = "[example] Generating Linux arm64 defconfig with LLVM toolchain on Darwin"
 depends_on = ["darwin-native-prepare"]
 env = [
   "HOSTCFLAGS=-Iscripts/macos-include -I/opt/homebrew/opt/libelf/include -I/usr/local/opt/libelf/include -Wno-error=incompatible-pointer-types",
@@ -207,6 +212,7 @@ commands = [
 [[task]]
 name = "kernel-build"
 phase = "build"
+print = "[example] Building Linux arm64 kernel image into {{deps_dir}}/linux/arch/arm64/boot/Image"
 workdir = "{{root}}"
 depends_on = ["toolchain-check"]
 commands = [
@@ -215,6 +221,7 @@ commands = [
 ]
 
 [task.host.darwin]
+print = "[example] Building Linux arm64 kernel image with LLVM toolchain on Darwin"
 depends_on = ["darwin-native-prepare"]
 env = [
   "HOSTCFLAGS=-Iscripts/macos-include -I/opt/homebrew/opt/libelf/include -I/usr/local/opt/libelf/include -Wno-error=incompatible-pointer-types",
@@ -228,6 +235,7 @@ commands = [
 
 [[task]]
 name = "initramfs"
+print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
 commands = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
@@ -239,6 +247,7 @@ commands = [
 
 [[task]]
 name = "qemu-run"
+print = "[example] Booting the built kernel in QEMU"
 workdir = "{{root}}"
 join_on = ["kernel-build", "initramfs"]
 shell = [
@@ -250,6 +259,7 @@ name = "boot-flow"
 workdir = "{{root}}"
 parallel = true
 next = ["kernel-build", "initramfs", "qemu-run"]
+print = "[example] Starting Linux AArch64 build and QEMU boot flow"
 commands = [
   "sh -c 'echo Starting Linux AArch64 build and QEMU boot flow'"
 ]

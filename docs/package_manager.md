@@ -345,6 +345,8 @@ Custom tasks are executed with `mlang pkg run <task-name>`.
 Supported task keys:
 
 - `name`
+- `print`
+- `message`
 - `phase`
 - `workdir`
 - `parallel`
@@ -369,6 +371,9 @@ Task semantics:
 - `phase_join_on` waits for every task tagged with a named phase.
 - `parallel = true` allows multiple `depends_on` or `next` branches to run
   concurrently.
+- `print` writes a line directly to the console before the task runs.
+- `message` prints a status line before the task runs, which is useful for
+  long-running task graphs. `print` is an alias for the same behavior.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
   and runs it through `sh`.
 
@@ -386,6 +391,7 @@ Example workflow graph:
 ```toml
 [[task]]
 name = "workflow"
+print = "Starting workflow in {{build_dir}}"
 parallel = true
 next = ["left", "right", "merge"]
 commands = [
@@ -574,6 +580,8 @@ sudo apt-get install clang lld make qemu-system-arm cpio gzip gcc-aarch64-linux-
 Supported task keys:
 
 - `name`
+- `print`
+- `message`
 - `workdir`
 - `parallel`
 - `depends_on`
@@ -593,6 +601,8 @@ Host-conditional task overrides:
 When a host override exists for the current host:
 
 - override `workdir` replaces the base `workdir`
+- override `print` replaces the base `print`
+- override `message` replaces the base `message`
 - override `parallel` replaces the base `parallel`
 - override `depends_on` appends after the base `depends_on`
 - override `join_on` appends after the base `join_on`
