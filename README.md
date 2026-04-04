@@ -1216,6 +1216,12 @@ paths for that package.
 is supported as an alias. This is useful for long task graphs and for making
 progress visible without embedding `echo` in shell.
 
+`mlang pkg run <task>` also honors task dependencies. If a task declares
+`depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
+run before the requested task body starts. `mlang pkg run` does not
+implicitly run `mlang pkg fetch`, so a clean workspace should fetch first if
+tasks expect sources under `{{deps_dir}}`.
+
 The Linux kernel example uses:
 
 - `toolchain-check` to verify the required LLVM, GNU `sed`, and `libelf`

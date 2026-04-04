@@ -129,12 +129,18 @@ maps to the `kernel-build` task.
 Or step-by-step:
 
 ```sh
+../../build/mlang pkg fetch
 ../../build/mlang pkg run toolchain-check
 ../../build/mlang pkg run kernel-defconfig
 ../../build/mlang pkg run kernel-build
 ../../build/mlang pkg run initramfs
 ../../build/mlang pkg run qemu-run
 ```
+
+Running `../../build/mlang pkg run qemu-run` directly also works after
+`pkg fetch`. Because `qemu-run` declares
+`join_on = ["kernel-build", "initramfs"]`, the package manager runs those
+tasks first and only starts QEMU after both succeed.
 
 ## Notes
 

@@ -376,6 +376,12 @@ Task semantics:
   long-running task graphs. `print` is an alias for the same behavior.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
   and runs it through `sh`.
+- `mlang pkg run <task>` honors task dependencies. If a task declares
+  `depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
+  are run before the requested task body starts.
+- `mlang pkg run` does not implicitly fetch package dependencies. Run
+  `mlang pkg fetch` first on a clean workspace if tasks expect files under
+  `{{deps_dir}}`.
 
 Host-specific overrides are supported with subtables such as:
 
@@ -426,6 +432,12 @@ Running:
 
 starts `left`, `right`, and `merge`. The `merge` task waits until both branch
 tasks are complete because of `join_on`.
+
+That same rule applies when running a later task directly. For example, if
+`qemu-run` has `join_on = ["kernel-build", "initramfs"]`, then
+`mlang pkg run qemu-run` first runs `kernel-build` and `initramfs`, then
+starts QEMU after they succeed. It still does not run `mlang pkg fetch`
+automatically, so a clean workspace must fetch dependencies first.
 
 Phase example:
 
