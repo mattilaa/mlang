@@ -263,13 +263,18 @@ commands = [
 name = "initramfs"
 print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
-depends_on = ["busybox-fetch", "gnu-userspace-fetch"]
+depends_on = ["busybox-fetch", "gnu-userspace-fetch", "gnu-vim-fetch"]
 shell = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
   "# In GNU mode, unpack the base rootfs first so distro-owned symlinks like /bin -> /usr/bin are preserved.",
   "if [ '{{option.userspace}}' = 'gnu' ]; then",
   "  mkdir -p {{build_dir}}/initramfs",
   "  cp -a {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/",
+  "  mkdir -p {{build_dir}}/initramfs/opt/nvim",
+  "  cp -a {{build_dir}}/nvim-linux-arm64/. {{build_dir}}/initramfs/opt/nvim/",
+  "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/nvim",
+  "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/vim",
+  "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/vi",
   "  # Use a login wrapper so GNU mode starts at a real non-root serial login prompt.",
   "  CONSOLE_CMD='/bin/cttyhack /bin/guest-login'",
   "  mkdir -p {{build_dir}}/initramfs/root {{build_dir}}/initramfs/home/admin {{build_dir}}/initramfs/home/user",
@@ -539,6 +544,50 @@ commands += [
 
 [task.host.darwin]
 print = "[example] Preparing the optional GNU userspace rootfs for Darwin hosts"
+
+[[task]]
+name = "gnu-vim-fetch"
+print = "[example] Preparing the optional GNU-mode vim editor when userspace=gnu"
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}"
+  ],
+  [
+    "sh",
+    "-c",
+    "if [ \"{{option.userspace}}\" != \"gnu\" ]; then echo GNU vim download skipped because userspace={{option.userspace}}.; exit 0; fi"
+  ],
+  [
+    "sh",
+    "-c",
+    "[ -f {{build_dir}}/nvim-linux-arm64.tar.gz ] || curl -L --fail https://github.com/neovim/neovim/releases/download/v0.11.3/nvim-linux-arm64.tar.gz -o {{build_dir}}/nvim-linux-arm64.tar.gz"
+  ],
+  [
+    "rm",
+    "-rf",
+    "{{build_dir}}/nvim-linux-arm64"
+  ],
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/nvim-linux-arm64"
+  ],
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/nvim-linux-arm64.tar.gz",
+    "-C",
+    "{{build_dir}}/nvim-linux-arm64",
+    "--strip-components",
+    "1"
+  ]
+]
+
+[task.host.darwin]
+print = "[example] Preparing the optional GNU-mode vim editor for Darwin hosts"
 
 [[task]]
 name = "qemu-run"

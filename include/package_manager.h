@@ -166,10 +166,11 @@
  * \endcode
  *
  * The first command boots a minimal BusyBox shell. The second command overlays
- * an Ubuntu Base ARM64 rootfs and starts a real GNU-mode serial login prompt
- * on `ttyAMA0`. Both modes fetch dependencies on demand, build the kernel
- * image, pack the initramfs, and then launch QEMU. The BusyBox applet links
- * are created explicitly during packing because the host may not be able to
+ * an Ubuntu Base ARM64 rootfs, stages the official Neovim ARM64 tarball as
+ * `nvim` / `vim` / `vi`, and starts a real GNU-mode serial login prompt on
+ * `ttyAMA0`. Both modes fetch dependencies on demand, build the kernel image,
+ * pack the initramfs, and then launch QEMU. The BusyBox applet links are
+ * created explicitly during packing because the host may not be able to
  * execute the target-architecture BusyBox binary. Writing `/etc/inittab` lets
  * BusyBox `init` mount the basic pseudo filesystems and respawn either a
  * BusyBox shell or the GNU login wrapper, depending on `userspace`.

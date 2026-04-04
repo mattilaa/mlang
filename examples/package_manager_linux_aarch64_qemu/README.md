@@ -12,7 +12,8 @@ directly from `mlang.toml`:
 
 - a minimal BusyBox userspace
 - a wider GNU-style userspace based on an Ubuntu Base ARM64 rootfs with
-  `bash` and the standard GNU/Linux userland tools shipped there
+  `bash`, the standard GNU/Linux userland tools shipped there, and a bundled
+  `vim` command backed by the official Neovim ARM64 release
 
 Both modes boot through BusyBox `init` on the QEMU serial console. The
 selected guest userspace comes from `[tool.mlang.options] userspace` and can be
@@ -224,10 +225,11 @@ to switch into the newly created user account. `adduser` now creates
 `/home/<user>` automatically and populates a basic `.profile` there.
 
 Both commands automatically fetch the Linux source dependency first. In GNU
-mode, `gnu-userspace-fetch` also downloads and unpacks the official Ubuntu Base
-ARM64 rootfs on demand before the initramfs is packed. The example uses Ubuntu
-Base here because its tarball extracts cleanly on case-insensitive macOS
-filesystems, unlike the Arch Linux ARM rootfs layout that hit terminfo
+mode, `gnu-userspace-fetch` downloads and unpacks the official Ubuntu Base
+ARM64 rootfs on demand, and `gnu-vim-fetch` downloads the official Neovim
+ARM64 tarball so the guest gets `nvim`, `vim`, and `vi` commands. The example
+uses Ubuntu Base here because its tarball extracts cleanly on case-insensitive
+macOS filesystems, unlike the Arch Linux ARM rootfs layout that hit terminfo
 hard-link collisions.
 
 By default, command output stays on the console even though this manifest
@@ -246,6 +248,12 @@ Because `qemu-run` declares `join_on = ["kernel-build", "initramfs"]`, it
 waits until the kernel image and initramfs are both ready. With
 `parallel = true`, the independent branches can run concurrently before QEMU
 starts.
+
+After logging into GNU mode, you can open the bundled editor with:
+
+```sh
+vim /etc/passwd
+```
 
 To only compile the Linux kernel image for AArch64 without booting QEMU:
 
