@@ -1,0 +1,279 @@
+[package]
+name = "linux_aarch64_qemu"
+version = "0.1.0"
+
+[dependencies]
+linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+make_program = "gmake"
+log_dir = "/tmp/mlang-linux-aarch64-qemu"
+stdout_log = "pkg.stdout.log"
+stderr_log = "pkg.stderr.log"
+warn_log = "pkg.warn.log"
+path_entries = [
+  "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
+  "/usr/local/opt/gnu-sed/libexec/gnubin",
+  "/opt/homebrew/opt/make/libexec/gnubin",
+  "/usr/local/opt/make/libexec/gnubin",
+  "/opt/homebrew/opt/lld/bin",
+  "/usr/local/opt/lld/bin",
+  "/opt/homebrew/opt/llvm/bin",
+  "/usr/local/opt/llvm/bin",
+  "/opt/homebrew/bin",
+  "/usr/local/bin"
+]
+
+[[task]]
+name = "toolchain-check"
+print = "[example] Checking required build tools in PATH"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'"
+]
+
+[task.host.darwin]
+shell = [
+  "for tool in {{make}} clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-ranlib llvm-strip; do",
+  "  if ! command -v $tool >/dev/null 2>&1; then",
+  "    echo Missing required tool in PATH: $tool",
+  "    echo On Apple Silicon macOS install: brew install llvm lld libelf gnu-sed make qemu cpio",
+  "    exit 1",
+  "  fi",
+  "done",
+  "if ! sed --version >/dev/null 2>&1; then",
+  "  echo GNU sed is required. Ensure Homebrew gnu-sed is installed and ahead of /usr/bin in path_entries.",
+  "  echo Install with: brew install gnu-sed",
+  "  exit 1",
+  "fi",
+  "if [ ! -d /opt/homebrew/opt/libelf/include ] && [ ! -d /usr/local/opt/libelf/include ]; then",
+  "  echo Homebrew libelf headers were not found under /opt/homebrew/opt/libelf or /usr/local/opt/libelf.",
+  "  echo Install with: brew install libelf",
+  "  exit 1",
+  "fi",
+  "if ! clang --version | grep -qi llvm; then",
+  "  echo clang in PATH is not the Homebrew LLVM clang. Check path_entries ordering in mlang.toml.",
+  "  exit 1",
+  "fi"
+]
+
+[[task]]
+name = "darwin-native-prepare"
+print = "[example] Darwin host detected, preparing native Linux kernel host-build compatibility files"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'echo native Darwin patching is only used on macOS hosts'"
+]
+
+[task.host.darwin]
+print = "[example] Generating Darwin compatibility headers and patching scripts/mod/file2alias.c"
+depends_on = ["toolchain-check"]
+shell = [
+  "LINUX_DIR={{deps_dir}}/linux",
+  "mkdir -p $LINUX_DIR/scripts/macos-include",
+  "cat > $LINUX_DIR/scripts/macos-include/elf.h <<'EOF'",
+  "#pragma once",
+  "#include <libelf/gelf.h>",
+  "#ifndef EM_ARM",
+  "#define EM_ARM 40",
+  "#endif",
+  "#ifndef EM_AARCH64",
+  "#define EM_AARCH64 183",
+  "#endif",
+  "#ifndef EM_XTENSA",
+  "#define EM_XTENSA 94",
+  "#endif",
+  "#ifndef EM_RISCV",
+  "#define EM_RISCV 243",
+  "#endif",
+  "#ifndef EM_LOONGARCH",
+  "#define EM_LOONGARCH 258",
+  "#endif",
+  "#define STT_SPARC_REGISTER 3",
+  "#define R_386_32 1",
+  "#define R_386_PC32 2",
+  "#define R_MIPS_HI16 5",
+  "#define R_MIPS_LO16 6",
+  "#define R_MIPS_26 4",
+  "#define R_MIPS_32 2",
+  "#define R_ARM_ABS32 2",
+  "#define R_ARM_REL32 3",
+  "#define R_ARM_PC24 1",
+  "#define R_ARM_CALL 28",
+  "#define R_ARM_JUMP24 29",
+  "#define R_ARM_THM_JUMP24 30",
+  "#define R_ARM_THM_PC22 10",
+  "#define R_ARM_MOVW_ABS_NC 43",
+  "#define R_ARM_MOVT_ABS 44",
+  "#define R_ARM_THM_MOVW_ABS_NC 47",
+  "#define R_ARM_THM_MOVT_ABS 48",
+  "#define R_ARM_THM_JUMP19 51",
+  "#define EF_ARM_EABI_MASK 0xFF000000",
+  "#define EF_ARM_EABI_VERSION(flags) ((flags) & EF_ARM_EABI_MASK)",
+  "#define EF_ARM_EABI_VER5 0x05000000",
+  "#define EF_ARM_ABI_FLOAT_SOFT 0x200",
+  "#define EF_ARM_ABI_FLOAT_HARD 0x400",
+  "#define R_AARCH64_ABS64 257",
+  "#define R_AARCH64_PREL64 260",
+  "EOF",
+  "cat > $LINUX_DIR/scripts/macos-include/byteswap.h <<'EOF'",
+  "#pragma once",
+  "#define bswap_16 __builtin_bswap16",
+  "#define bswap_32 __builtin_bswap32",
+  "#define bswap_64 __builtin_bswap64",
+  "EOF",
+  "cat > $LINUX_DIR/scripts/macos-include/endian.h <<'EOF'",
+  "#pragma once",
+  "#define __LITTLE_ENDIAN 1234",
+  "#define __BIG_ENDIAN 4321",
+  "#define __PDP_ENDIAN 3412",
+  "#define LITTLE_ENDIAN __LITTLE_ENDIAN",
+  "#define BIG_ENDIAN __BIG_ENDIAN",
+  "#define PDP_ENDIAN __PDP_ENDIAN",
+  "#define __BYTE_ORDER __BYTE_ORDER__",
+  "#define BYTE_ORDER __BYTE_ORDER__",
+  "#define __FLOAT_WORD_ORDER __BYTE_ORDER__",
+  "#define FLOAT_WORD_ORDER __BYTE_ORDER__",
+  "#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__",
+  "#define htobe16(x) __builtin_bswap16(x)",
+  "#define htole16(x) (x)",
+  "#define be16toh(x) __builtin_bswap16(x)",
+  "#define le16toh(x) (x)",
+  "#define htobe32(x) __builtin_bswap32(x)",
+  "#define htole32(x) (x)",
+  "#define be32toh(x) __builtin_bswap32(x)",
+  "#define le32toh(x) (x)",
+  "#define htobe64(x) __builtin_bswap64(x)",
+  "#define htole64(x) (x)",
+  "#define be64toh(x) __builtin_bswap64(x)",
+  "#define le64toh(x) (x)",
+  "#else",
+  "#define htobe16(x) (x)",
+  "#define htole16(x) __builtin_bswap16(x)",
+  "#define be16toh(x) (x)",
+  "#define le16toh(x) __builtin_bswap16(x)",
+  "#define htobe32(x) (x)",
+  "#define htole32(x) __builtin_bswap32(x)",
+  "#define be32toh(x) (x)",
+  "#define le32toh(x) __builtin_bswap32(x)",
+  "#define htobe64(x) (x)",
+  "#define htole64(x) __builtin_bswap64(x)",
+  "#define be64toh(x) (x)",
+  "#define le64toh(x) __builtin_bswap64(x)",
+  "#endif",
+  "EOF",
+  "FILE=$LINUX_DIR/scripts/mod/file2alias.c",
+  "python3 - <<'PY'",
+  "from pathlib import Path",
+  "path = Path(r'''{{deps_dir}}/linux/scripts/mod/file2alias.c''')",
+  "text = path.read_text()",
+  "marker = '#include \"devicetable-offsets.h\"'",
+  "prefix, sep, rest = text.partition(marker)",
+  "if not sep:",
+  "    raise SystemExit('failed to locate devicetable-offsets include in file2alias.c')",
+  "comment_end = prefix.find('*/')",
+  "if comment_end == -1:",
+  "    raise SystemExit('failed to locate leading comment in file2alias.c')",
+  "comment_block = prefix[:comment_end + 2]",
+  "fixed_prefix = [",
+  "    comment_block,",
+  "    '',",
+  "    '#define _UUID_T',",
+  "    '#define uuid_t int',",
+  "    '#include \"modpost.h\"',",
+  "    '#undef uuid_t',",
+  "    '#include \"devicetable-offsets.h\"',",
+  "    '',",
+  "]",
+  "text = chr(10).join(fixed_prefix) + rest",
+  "path.write_text(text)",
+  "PY"
+]
+
+[[task]]
+name = "kernel-defconfig"
+print = "[example] Generating Linux arm64 defconfig in {{deps_dir}}/linux"
+workdir = "{{root}}"
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig"
+]
+
+[task.host.darwin]
+print = "[example] Generating Linux arm64 defconfig with LLVM toolchain on Darwin"
+depends_on = ["darwin-native-prepare"]
+env = [
+  "HOSTCFLAGS=-Iscripts/macos-include -I/opt/homebrew/opt/libelf/include -I/usr/local/opt/libelf/include -Wno-error=incompatible-pointer-types",
+  "HOSTLDFLAGS=-L/opt/homebrew/opt/libelf/lib -L/usr/local/opt/libelf/lib",
+  "HOSTLDLIBS=-lelf"
+]
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 defconfig"
+]
+
+[[task]]
+name = "kernel-build"
+phase = "build"
+print = "[example] Building Linux arm64 kernel image into {{deps_dir}}/linux/arch/arm64/boot/Image"
+inline_output = true
+workdir = "{{root}}"
+depends_on = ["toolchain-check"]
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"
+]
+
+[task.host.darwin]
+print = "[example] Building Linux arm64 kernel image with LLVM toolchain on Darwin"
+depends_on = ["darwin-native-prepare"]
+env = [
+  "HOSTCFLAGS=-Iscripts/macos-include -I/opt/homebrew/opt/libelf/include -I/usr/local/opt/libelf/include -Wno-error=incompatible-pointer-types",
+  "HOSTLDFLAGS=-L/opt/homebrew/opt/libelf/lib -L/usr/local/opt/libelf/lib",
+  "HOSTLDLIBS=-lelf"
+]
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 LLVM=1 LLVM_IAS=1 -j${JOBS:-4} Image"
+]
+
+[[task]]
+name = "initramfs"
+print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
+workdir = "{{root}}"
+shell = [
+  "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
+  "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
+  "cat > {{build_dir}}/initramfs/init <<'EOF'",
+  "#!/bin/sh",
+  "mount -t proc none /proc",
+  "mount -t sysfs none /sys",
+  "mount -t devtmpfs none /dev 2>/dev/null || true",
+  "echo 'mlang pkg Linux AArch64 QEMU example booted'",
+  "echo 'Kernel image and initramfs were generated from mlang.toml tasks.'",
+  "exec sh",
+  "EOF",
+  "chmod +x {{build_dir}}/initramfs/init",
+  "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz"
+]
+
+[[task]]
+name = "qemu-run"
+print = "[example] Booting the built kernel in QEMU"
+log_output = false
+workdir = "{{root}}"
+join_on = ["kernel-build", "initramfs"]
+shell = [
+  "exec qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1024 -nographic -kernel {{deps_dir}}/linux/arch/arm64/boot/Image -initrd {{build_dir}}/initramfs.cpio.gz -append 'console=ttyAMA0 rdinit=/init'"
+]
+
+[[task]]
+name = "boot-flow"
+workdir = "{{root}}"
+parallel = true
+next = ["kernel-build", "initramfs", "qemu-run"]
+print = "[example] Starting Linux AArch64 build and QEMU boot flow"
+commands = [
+  "sh -c 'echo Starting Linux AArch64 build and QEMU boot flow'"
+]

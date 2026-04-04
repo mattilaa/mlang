@@ -69,11 +69,15 @@ fn print_usage(program: str8) -> void {
     println!("  -h, --help    Show this help message");
     println!("");
     println!("Package manager:");
-    println!("  {} pkg init", program);
-    println!("  {} pkg add <name> [--git URL] [--rev REV] [--tag TAG]", program);
-    println!("  {} pkg add <name> [--pkg-config NAME] [--system]", program);
-    println!("  {} pkg fetch", program);
-    println!("  {} pkg build [-O0|-O1|-O2|-O3] [--ninja]", program);
+    println!("  {} pkg [--config FILE] init", program);
+    println!("  {} pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]", program);
+    println!("  {} pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]", program);
+    println!("  {} pkg [--config FILE] add <name> [--pkg-config NAME] [--system]", program);
+    println!("  {} pkg [--config FILE] add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]", program);
+    println!("  {} pkg [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
+    println!("  {} pkg [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
+    println!("  {} pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]", program);
+    println!("  {} pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]", program);
     println!("");
     println!("Testing:");
     println!("  {} --tests [path]", program);
@@ -1096,8 +1100,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
                 pkg_args.push(passthrough[pi]);
             }
             let mla_rc: i32 = run_pkg_frontend_mla(st.backend, pkg_args);
-            if mla_rc >= 0 {
-                return mla_rc;
+            if mla_rc == 0 {
+                return 0;
             }
         }
         var passthrough_args: list<str8> = [];

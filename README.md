@@ -136,16 +136,131 @@ MLANG_PKG_IMPL=mla ./build/mlang pkg init
 MLANG_PKG_IMPL=cpp ./build/mlang pkg init
 ```
 
+`mlang pkg init` now scaffolds both `mlang.toml` and `src/main.mla`, so a new
+package can be built immediately.
+
+When one project root needs multiple package manifests, use `--config` before
+the subcommand to pick the active file for that invocation. This keeps the
+default `mlang.toml` behavior intact while allowing per-architecture manifests
+such as `arm64.toml` and `x64.toml` in the same directory:
+
+```sh
+./build/mlang pkg --config arm64.toml fetch
+./build/mlang pkg --config arm64.toml build
+./build/mlang pkg --config x64.toml build
+./build/mlang pkg --config qemu-aarch64.toml run qemu-run
+```
+
 Build and run:
 
 ```sh
 ./build/mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
 /tmp/mlang-pkg-mla --backend ./build/mlang init
+/tmp/mlang-pkg-mla --backend ./build/mlang --config arm64.toml build -O2
 /tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
 /tmp/mlang-pkg-mla --backend ./build/mlang fetch
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2
+/tmp/mlang-pkg-mla --backend ./build/mlang build --build-dir build-release --deps-dir .pkg/deps
+/tmp/mlang-pkg-mla --backend ./build/mlang clean
+/tmp/mlang-pkg-mla --backend ./build/mlang clean --deps
 # Optional for CMake-based deps:
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2 --ninja
+```
+
+Generate a complete subproject package automatically:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+./build/mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
+```
+
+`mlang pkg clean` removes the configured build directory. When `deps_dir`
+points outside it, fetched dependencies are kept for reuse unless you pass
+`--deps`.
+
+Custom task workflows can be declared in `mlang.toml` and run with:
+
+```sh
+./build/mlang pkg run <task-name>
+```
+
+Current task graph features:
+- `depends_on` for prerequisites
+- `next` for downstream jumps to named tasks
+- `join_on` for waiting on named tasks before continuing
+- `phase` for grouping tasks into named compile/build phases
+- `next_phases` for launching all tasks in a named phase
+- `phase_join_on` for waiting until all tasks in a phase complete
+- `parallel = true` for concurrent prerequisite/downstream branches
+- `inline_output = true` for a single live task status line with the task
+  number, spinner, and a truncated tail of the latest output line; the task
+  still ends with one final completion line in the form
+  `[n/N] task-name Completed, time HH:MM:SS:MS - description`
+- `shell = [ ... ]` / `script = [ ... ]` for inline shell scripts stored under `build/task-scripts/`
+- `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
+
+A minimal workflow example:
+
+```toml
+[[task]]
+name = "workflow"
+parallel = true
+next = ["left", "right", "merge"]
+commands = ["mkdir -p {{build_dir}}"]
+
+[[task]]
+name = "left"
+commands = ["sh -c 'echo left > {{build_dir}}/left.txt'"]
+
+[[task]]
+name = "right"
+commands = ["sh -c 'echo right > {{build_dir}}/right.txt'"]
+
+[[task]]
+name = "merge"
+join_on = ["left", "right"]
+commands = ["sh -c 'cat {{build_dir}}/left.txt {{build_dir}}/right.txt > {{build_dir}}/joined.txt'"]
+```
+
+Run it from `examples/package_manager_task_graph`:
+
+```sh
+../../build/mlang pkg run workflow
+cat build/joined.txt
+```
+
+Phase-based barriers are also supported:
+
+```toml
+[[task]]
+name = "phase-workflow"
+parallel = true
+next = ["phase-link"]
+next_phases = ["compile"]
+
+[[task]]
+name = "compile-left"
+phase = "compile"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c 'echo phase-left > {{build_dir}}/phase-left.txt'"
+]
+
+[[task]]
+name = "compile-right"
+phase = "compile"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c 'echo phase-right > {{build_dir}}/phase-right.txt'"
+]
+
+[[task]]
+name = "phase-link"
+phase_join_on = ["compile"]
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c 'cat {{build_dir}}/phase-left.txt {{build_dir}}/phase-right.txt > {{build_dir}}/phase-joined.txt'"
+]
 ```
 
 ## Stdlib Linking
@@ -678,7 +793,536 @@ entry = "src/main.mla"
 
 [c-dependencies]
 curl = { pkg_config = "libcurl" }
+
+[tool.mlang]
+module_paths = ["."]
+min_mlang_version = "0.2.0"
+opt_level = "O2"
+target_arch = "x64"
+use_ninja = true
+lib_paths = ["vendor/lib"]
+libs = ["foo"]
+linker_flags = ["-Wl,-rpath,vendor/lib"]
+compiler_flags = ["-Wno-unwrap"]
+static_deps = true
 ```
+
+Source dependencies also accept `spinner = false` to disable the rolling
+status cursor for that dependency's fetch/build steps. This is useful when the
+underlying tool already has its own progress output, such as `curl`. Built-in
+dependency commands with `spinner = false` also stay out of the stdout/stderr
+log files so transfer progress does not pollute package logs. Other package
+operations keep the spinner by default unless CLI log routing is enabled.
+
+`[tool.mlang]` can be used to set package-build defaults for `mlang pkg build`.
+Supported keys are:
+
+- `module_paths`: existing module search path support.
+- `min_mlang_version`: minimum `mlang` version required to build the package.
+- `opt_level`: `O0`, `O1`, `O2`, or `O3` (with or without the leading `-`).
+- `target_arch`: `x86`, `x86-64`, `x64`, `x86_64`, `amd64`, `aarch64`, or `arm64`.
+- `build_dir`: directory where `pkg build` writes binaries and `pkg run`
+  stores generated task scripts. Defaults to `build`.
+- `deps_dir`: directory where `pkg fetch` stores sources and `pkg build`
+  reuses dependency artifacts. Defaults to `<build_dir>/deps`.
+- `log_dir`: base directory for package-manager log files.
+- `stdout_log`: file that receives package-manager info lines and command
+  stdout.
+- `stderr_log`: file that receives package-manager error lines and command
+  stderr.
+- `warn_log`: file that receives package-manager warning lines.
+- `path_entries`: directories prepended to `PATH` for pkg fetch/build/run.
+  `bin_paths` is accepted as an alias.
+- `make_program`: make executable used by `build = "make"` dependencies and by
+  `[[task]]` commands through `{{make}}`.
+- `use_ninja`: use the Ninja generator for dependency builds. `ninja = true`
+  is accepted as an alias.
+- `lib_paths`: extra library search paths, emitted as `-L...`.
+- `libs`: extra libraries, emitted as `-l...`.
+- `linker_flags`: raw linker-related flags forwarded to the compiler invocation.
+- `compiler_flags`: additional raw compiler flags forwarded during `pkg build`.
+- `static_deps`: link fetched package dependencies via discovered `.a` archives.
+- `static_cpp_runtime`: add `-static-libstdc++ -static-libgcc` during package
+  linking. This is mainly useful on GNU/Linux toolchains.
+- `task_print_to_stdout_log`: mirror task `print` / `message` lines into the
+  stdout log while keeping them visible on the console.
+
+If you do not set `build_dir`, `deps_dir`, or any CLI overrides, package
+behavior stays unchanged: `pkg build` writes outputs to `build/`, and
+`pkg fetch` / `pkg build` use `build/deps/` for fetched dependencies.
+
+If `[tool.mlang].min_mlang_version` is set and the running compiler is older
+than that version, `mlang pkg build` fails before starting the build.
+
+If `use_ninja = true` is set, `mlang pkg build` verifies that `ninja` or
+`ninja-build` exists in `PATH` before dependency builds begin.
+
+If `path_entries` is set, those directories are prepended to `PATH` for
+dependency fetch/build commands, `pkg-config`, Ninja detection, final package
+linking, and `pkg run` tasks. This is useful on macOS when Homebrew tools
+should be preferred over `/usr/bin`.
+
+`build_dir` and `deps_dir` are resolved relative to the package root unless
+they are already absolute. This lets one project share a single dependency
+cache such as `.pkg/deps` while building into separate directories like
+`build-debug` and `build-release`.
+
+If `log_dir` is set, relative `stdout_log`, `stderr_log`, and `warn_log` paths
+are resolved under that directory. Those log destinations are only activated
+when you pass a pkg log flag such as `--log-dir`, `--stdout-log`,
+`--stderr-log`, `--warn-log`, or `--task-print-to-stdout-log`. Without those
+CLI flags, package-manager and task output stays on the console as before.
+When logging is enabled and `log_dir` is set, any missing log filename falls
+back to `pkg.stdout.log`, `pkg.stderr.log`, or `pkg.warn.log` inside that
+directory.
+Rolling spinner/status lines are console-only, are not written to the log
+files, and the rolling spinner falls back to plain status lines while CLI log
+routing is enabled.
+
+If `make_program` is set, `mlang pkg` uses that executable for built-in
+`build = "make"` dependency builds, and `[[task]]` commands can reference it as
+`{{make}}`.
+
+Libraries declared in `[tool.mlang].libs` are also validated before the real
+package link step. If a declared `-l...` entry cannot be linked with the
+configured `lib_paths`, `mlang pkg build` fails early with the missing library
+name.
+
+Packages can also declare multiple executable targets:
+
+```toml
+[package]
+name = "multi_bin_demo"
+version = "0.1.0"
+
+[tool.mlang]
+opt_level = "O2"
+use_ninja = true
+compiler_flags = ["-Wno-unwrap"]
+
+[[bin]]
+name = "hello"
+entry = "src/hello.mla"
+
+[[bin]]
+name = "inspect"
+entry = "src/inspect.mla"
+opt_level = "O0"
+linker_flags = ["-Wl,-dead_strip"]
+```
+
+When `[[bin]]` entries are present, `mlang pkg build` builds each executable
+into `<build_dir>/<bin-name>`.
+
+Target-scoped config keys supported inside `[[bin]]` are:
+
+- `min_mlang_version`
+- `opt_level`
+- `target_arch`
+- `path_entries`
+- `use_ninja`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
+
+Target-scoped values are merged with `[tool.mlang]` defaults:
+
+- scalar values such as `opt_level`, `target_arch`, `min_mlang_version`,
+  `use_ninja`, and target-specific path settings override the package default
+  for that target
+- list values such as `compiler_flags`, `linker_flags`, `lib_paths`, and `libs`
+  are appended after the package defaults
+- boolean values such as `static_deps` and `static_cpp_runtime` override the
+  package default when explicitly set on the target
+
+For `pkg build`, an explicit CLI optimization flag such as `-O3` overrides
+`[tool.mlang].opt_level`.
+
+Workspace roots can also declare recursive package discovery:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Each listed member is treated as a directory root under the current project.
+`mlang pkg fetch`, `mlang pkg build`, and `mlang pkg clean` recursively scan
+for `mlang.toml` files under those roots and run package operations for each
+discovered subpackage.
+
+Directory tree example:
+
+```text
+my_workspace/
+├── mlang.toml
+└── packages/
+    ├── cli_app/
+    │   ├── mlang.toml
+    │   └── src/
+    │       └── main.mla
+    └── json_tool/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Workspace root manifest:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Subpackage manifest:
+
+```toml
+[package]
+name = "cli_app"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+opt_level = "O2"
+```
+
+Run from the workspace root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg clean
+```
+
+Source dependencies can now come from Git or from a `tar.gz` URL:
+
+```toml
+[dependencies]
+cjson_git = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+cjson_tar = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+```
+
+Supported source dependency keys are:
+
+- `git`
+- `url`
+- `archive`
+- `rev`
+- `tag`
+- `build`
+- `cmake_args`
+- `subdir`
+- `strip_components`
+
+If `build = "none"` is set, the dependency is fetched but skipped by the
+built-in dependency builders during `mlang pkg build`.
+
+`pkg add --add-lib` can scaffold the workspace subproject automatically. It:
+
+- creates `packages/<name>/mlang.toml`
+- creates `packages/<name>/src/main.mla`
+- adds the fetched dependency to that generated subproject manifest
+- ensures the root manifest contains `[workspace] members = ["packages"]`
+
+Override the generated location with:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
+```
+
+## Package Workspaces And Fetched Subprojects
+
+This is the recommended layout when one repository contains several package
+subdirectories and each subpackage may fetch its own source dependencies.
+
+Combined tree:
+
+```text
+workspace_fetch/
+├── mlang.toml
+└── packages/
+    ├── git_cjson_demo/
+    │   ├── mlang.toml
+    │   └── src/
+    │       └── main.mla
+    └── tarball_cjson_demo/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Workspace root:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Git-backed subpackage:
+
+```toml
+[package]
+name = "git_cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git", tag = "v1.7.18", build = "cmake" }
+
+[c-dependencies]
+```
+
+Tarball-backed subpackage:
+
+```toml
+[package]
+name = "tarball_cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.tar.gz", archive = "tar.gz", strip_components = "1", build = "cmake" }
+
+[c-dependencies]
+```
+
+Run from the workspace root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+```
+
+See:
+- `examples/package_manager_workspace_fetch`
+- `examples/package_manager_workspace_fetch/README.md`
+
+That example shows one root `mlang.toml` discovering subpackages recursively,
+while one subpackage fetches from GitHub with `git = "..."` and another uses a
+released `tar.gz` source archive.
+
+### Generate A Subproject With `pkg add --add-lib`
+
+You can generate the directory tree instead of writing it by hand.
+
+Start from a root manifest:
+
+```toml
+[package]
+name = "workspace_root"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+```
+
+Run:
+
+```sh
+./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+```
+
+Generated layout:
+
+```text
+.
+├── mlang.toml
+└── packages/
+    └── cjson/
+        ├── mlang.toml
+        └── src/
+            └── main.mla
+```
+
+Generated root manifest fragment:
+
+```toml
+[workspace]
+members = ["packages"]
+```
+
+Generated subproject manifest:
+
+```toml
+[package]
+name = "cjson_demo"
+version = "0.1.0"
+entry = "src/main.mla"
+
+[dependencies]
+cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
+
+[c-dependencies]
+```
+
+Then build from the root:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+```
+
+Packages can also declare shell-driven custom tasks:
+
+```toml
+[[task]]
+name = "kernel-build"
+workdir = "{{root}}"
+commands = [
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 defconfig",
+  "{{make}} -C {{deps_dir}}/linux ARCH=arm64 -j${JOBS:-4} Image"
+]
+
+[tool.mlang]
+make_program = "gmake"
+```
+
+Run a task with:
+
+```sh
+./build/mlang pkg run kernel-build
+```
+
+Linux AArch64 kernel example sequence:
+
+```sh
+cd examples/package_manager_linux_aarch64_qemu
+../../build/mlang pkg fetch
+../../build/mlang pkg run boot-flow
+```
+
+Linux AArch64 kernel example installation on macOS:
+
+```sh
+brew install llvm lld libelf gnu-sed make qemu cpio
+```
+
+Linux AArch64 kernel example installation on Debian/Ubuntu:
+
+```sh
+sudo apt-get install clang lld make qemu-system-arm cpio gzip gcc-aarch64-linux-gnu
+```
+
+Supported `[[task]]` keys:
+
+- `name`
+- `print`
+- `message`
+- `workdir`
+- `parallel`
+- `depends_on`
+- `next`
+- `join_on`
+- `env`
+- `shell`
+- `command`
+- `commands`
+
+Host-conditional task overrides:
+
+- `[task.host.darwin]`
+- `[task.host.linux]`
+- `[task.host.windows]`
+
+Override behavior:
+
+- override `workdir` replaces the base `workdir`
+- override `print` replaces the base `print`
+- override `message` replaces the base `message`
+- override `parallel` replaces the base `parallel`
+- override `depends_on` appends after the base `depends_on`
+- override `join_on` appends after the base `join_on`
+- override `next` appends after the base `next`
+- override `env` appends after the base `env`
+- override `shell` replaces the base inline shell script
+- override `command` / `commands` replace the base task commands
+
+Task placeholders:
+
+- `{{root}}`
+- `{{manifest}}`
+- `{{build_dir}}`
+- `{{deps_dir}}`
+- `{{make}}`
+
+`{{build_dir}}` and `{{deps_dir}}` reflect the configured `[tool.mlang]`
+paths for that package.
+
+`print` writes a line directly to the console before a task runs. `message`
+is supported as an alias. This is useful for long task graphs and for making
+progress visible without embedding `echo` in shell.
+
+`mlang pkg run <task>` also honors task dependencies. If a task declares
+`depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
+run before the requested task body starts. `mlang pkg run` does not
+implicitly run `mlang pkg fetch`, so a clean workspace should fetch first if
+tasks expect sources under `{{deps_dir}}`.
+
+CLI overrides are available on `pkg fetch`, `pkg build`, `pkg run`, and
+`pkg clean`: `--log-dir DIR`, `--stdout-log FILE`, `--stderr-log FILE`,
+`--warn-log FILE`, and `--task-print-to-stdout-log`.
+
+`mlang pkg` also accepts `--config FILE` before the subcommand. Use it when a
+single project root keeps multiple manifests, for example:
+
+```sh
+./build/mlang pkg --config build-arm64.toml build
+./build/mlang pkg --config build-x64.toml build
+```
+
+If `--config` is omitted, the package manager still uses `mlang.toml`.
+
+The Linux kernel example uses:
+
+- `toolchain-check` to verify the required LLVM, GNU `sed`, and `libelf`
+  pieces exist before starting the kernel build
+- `darwin-native-prepare` to generate compatibility headers and patch
+  `scripts/mod/file2alias.c` for native Apple Silicon builds
+- `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
+- `initramfs` to pack the example initramfs
+- `qemu-run` to boot the resulting kernel under QEMU after its prerequisites
+  complete, optionally in parallel
+
+Linux is the recommended host for that example. macOS support is best-effort
+but now includes a native Apple Silicon path based on
+<https://seiya.me/blog/building-linux-on-macos-natively>. That path uses
+Homebrew `llvm`, `lld`, `libelf`, `gnu-sed`, and generated compatibility
+headers plus a small source patch in `scripts/mod/file2alias.c`, and it adds
+`-Wno-error=incompatible-pointer-types` for Darwin host tools to get past
+known Homebrew `libelf` typedef mismatches in `scripts/sorttable`. Linux is
+still the supported host for reproducible full-kernel builds.
+
+Example workflow with config-driven defaults:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+# Override only the optimization level from the CLI:
+./build/mlang pkg build -O3
+./build/mlang pkg clean
+```
+
+Workspace example:
+
+- `examples/package_manager_workspace_fetch`
+  Demonstrates recursive workspace member discovery plus GitHub `git` and
+  `tar.gz` source fetching in sibling subpackages.
+- `examples/package_manager_static_cjson`
+  Demonstrates static linking of a fetched `tar.gz` C dependency.
+- `examples/package_manager_multi_bins`
+  Demonstrates `[[bin]]` targets, target-scoped build config overrides, and
+  mixed GitHub `git` plus `tar.gz` source dependencies in one package.
+- `examples/package_manager_linux_aarch64_qemu`
+  Demonstrates a fetch-only Linux kernel dependency plus `[[task]]` commands
+  for AArch64 kernel build and QEMU boot flow.
 ### Inline asm target architecture
 
 Inline asm can be pinned to a target architecture directly in source:

@@ -75,14 +75,23 @@ void printUsage(const char* programName)
               << "  --version     Show version and exit\n"
               << "  -h, --help    Show this help message\n"
               << "\nPackage manager:\n"
-              << "  " << programName << " pkg init\n"
-              << "  " << programName << " pkg add <name> [--git URL] [--rev "
+              << "  " << programName << " pkg [--config FILE] init\n"
+              << "  " << programName << " pkg [--config FILE] add <name> [--git URL] [--rev "
                  "REV] [--tag TAG]\n"
               << "  " << programName
-              << " pkg add <name> [--pkg-config NAME] [--system]\n"
-              << "  " << programName << " pkg fetch\n"
+              << " pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
               << "  " << programName
-              << " pkg build [-O0|-O1|-O2|-O3] [--ninja]\n"
+              << " pkg [--config FILE] add <name> [--pkg-config NAME] [--system]\n"
+              << "  " << programName
+              << " pkg [--config FILE] add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
+              << "  " << programName
+              << " pkg [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
+              << "  " << programName
+              << " pkg [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
+              << "  " << programName
+              << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
+              << "  " << programName
+              << " pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -792,6 +801,17 @@ static std::string shell_quote(std::string_view s)
     return out;
 }
 
+static bool is_linker_input_path(std::string_view arg)
+{
+    auto has_suffix = [arg](std::string_view suffix) {
+        return arg.size() >= suffix.size() &&
+               arg.substr(arg.size() - suffix.size()) == suffix;
+    };
+    return arg.size() > 2 &&
+           (has_suffix(".a") || has_suffix(".so") || has_suffix(".dylib") ||
+            has_suffix(".o"));
+}
+
 static std::optional<std::filesystem::path>
 find_mlang_pkg_frontend_source(const char* argv0)
 {
@@ -956,16 +976,115 @@ static std::optional<int> run_mlang_frontend(int argc, char** argv)
     int runRc = std::system(runCmd.c_str());
 
     if(runRc < 0)
-        return 1;
+        return std::nullopt;
     if(WIFEXITED(runRc))
-        return WEXITSTATUS(runRc);
-    return 1;
+    {
+        int code = WEXITSTATUS(runRc);
+        if(code == 0)
+            return 0;
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+static bool manifest_requires_cpp_pkg_frontend()
+{
+    auto manifestOpt = find_manifest_path(std::filesystem::current_path());
+    if(!manifestOpt.has_value())
+        return false;
+
+    std::ifstream in(*manifestOpt, std::ios::binary);
+    if(!in)
+        return false;
+    std::string content((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+    if(content.empty())
+        return false;
+
+    if(content.find("[workspace]") != std::string::npos)
+        return true;
+    if(content.find("[[bin]]") != std::string::npos)
+        return true;
+    if(content.find("[[task]]") != std::string::npos)
+        return true;
+    if(content.find("opt_level") != std::string::npos)
+        return true;
+    if(content.find("target_arch") != std::string::npos)
+        return true;
+    if(content.find("path_entries") != std::string::npos)
+        return true;
+    if(content.find("bin_paths") != std::string::npos)
+        return true;
+    if(content.find("make_program") != std::string::npos)
+        return true;
+    if(content.find("compiler_flags") != std::string::npos)
+        return true;
+    if(content.find("linker_flags") != std::string::npos)
+        return true;
+    if(content.find("lib_paths") != std::string::npos)
+        return true;
+    if(content.find("libs") != std::string::npos)
+        return true;
+    if(content.find("use_ninja") != std::string::npos)
+        return true;
+    if(content.find("ninja") != std::string::npos)
+        return true;
+    if(content.find("min_mlang_version") != std::string::npos)
+        return true;
+    if(content.find("static_deps") != std::string::npos)
+        return true;
+    if(content.find("static_cpp_runtime") != std::string::npos)
+        return true;
+    if(content.find("build_dir") != std::string::npos)
+        return true;
+    if(content.find("deps_dir") != std::string::npos)
+        return true;
+    if(content.find("build = \"none\"") != std::string::npos)
+        return true;
+    return false;
 }
 
 static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
 {
     namespace fs = std::filesystem;
     if(argc < 2 || std::string(argv[1]) != "pkg")
+        return std::nullopt;
+    int subIndex = 2;
+    while(subIndex < argc)
+    {
+        std::string arg = argv[subIndex];
+        if(arg == "--config" || arg.rfind("--config=", 0) == 0)
+            return std::nullopt;
+        break;
+    }
+    if(argc >= subIndex + 1 && std::string(argv[subIndex]) == "init")
+        return std::nullopt;
+    if(argc >= subIndex + 1 && std::string(argv[subIndex]) == "add")
+    {
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--url" || arg == "--archive" ||
+               arg == "--strip-components" || arg == "--subdir" ||
+               arg == "--add-lib" || arg == "--project-dir")
+            {
+                return std::nullopt;
+            }
+        }
+    }
+    if(argc >= subIndex + 1 &&
+       (std::string(argv[subIndex]) == "fetch" ||
+        std::string(argv[subIndex]) == "build" ||
+        std::string(argv[subIndex]) == "clean"))
+    {
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--build-dir" || arg == "--deps-dir" || arg == "--deps")
+                return std::nullopt;
+        }
+    }
+    if(manifest_requires_cpp_pkg_frontend())
         return std::nullopt;
 
     auto srcOpt = find_mlang_pkg_frontend_source(argv[0]);
@@ -987,10 +1106,15 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
     int runRc = std::system(runCmd.c_str());
 
     if(runRc < 0)
-        return 1;
+        return std::nullopt;
     if(WIFEXITED(runRc))
-        return WEXITSTATUS(runRc);
-    return 1;
+    {
+        int code = WEXITSTATUS(runRc);
+        if(code == 0)
+            return 0;
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 static int decode_system_exit_code(int rc)
@@ -1432,7 +1556,18 @@ int main(int argc, char** argv)
         }
         else if(arg[0] != '-')
         {
-            inputFile = arg;
+            if(inputFile.empty())
+            {
+                inputFile = arg;
+            }
+            else if(is_linker_input_path(arg))
+            {
+                linkArgs.push_back(arg);
+            }
+            else
+            {
+                inputFile = arg;
+            }
         }
         else
         {

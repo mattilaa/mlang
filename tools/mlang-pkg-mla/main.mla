@@ -2,9 +2,10 @@
 /// \brief Native MLang implementation of package manager frontend/backend.
 ///
 /// Usage:
-///   mlang-pkg-mla [--backend <mlang_bin>] <init|add|fetch|build> [args...]
+///   mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>] <init|add|fetch|build|clean> [args...]
 ///
 /// `--backend` selects the compiler binary used by `build` (default: `mlang`).
+/// `--config` overrides the manifest path (default: `mlang.toml`).
 
 /// \cond INTERNAL_IMPORTS
 mod std::compiler;
@@ -16,6 +17,7 @@ use std::compiler::version;
 use std::fs::cwd;
 use std::fs::file_exists;
 use std::fs::read_all_text;
+use std::fs::remove_tree;
 use std::fs::write_all_text;
 use std::process::Child;
 use std::process::ChildStdout;
@@ -60,14 +62,16 @@ struct LinkFlags {
 
 fn print_usage() -> void {
     println!("Usage:");
-    println!("  mlang-pkg-mla [--backend <mlang_bin>] <subcommand> [args...]");
+    println!("  mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>] <subcommand> [args...]");
     println!("");
     println!("Subcommands:");
-    println!("  init");
-    println!("  add <name> [--git URL] [--rev REV] [--tag TAG]");
-    println!("  add <name> [--pkg-config NAME] [--system]");
-    println!("  fetch");
-    println!("  build [-O0|-O1|-O2|-O3] [--ninja]");
+    println!("  [--config FILE] init");
+    println!("  [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]");
+    println!("  [--config FILE] add <name> [--pkg-config NAME] [--system]");
+    println!("  [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]");
 }
 
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
@@ -359,7 +363,7 @@ fn parse_inline_table(line: str8) -> list<KV> {
     return out;
 }
 
-fn kv_get(kvs: list<KV>, key: str8) -> str8 {
+fn kv_get(kvs: &list<KV>, key: str8) -> str8 {
     for kv in kvs {
         if (eq(kv.key, key) == 1) {
             return kv.value;
@@ -506,6 +510,196 @@ fn split_shell_tokens(input: str8) -> list<str8> {
         out.push(cur);
     }
     return out;
+}
+
+fn split_toml_array(input: str8) -> list<str8> {
+    var out: list<str8> = [];
+    var cur: str8 = String::new();
+    var in_quotes: i32 = 0;
+    let n: i64 = len(input);
+    for i in 0..n {
+        let ch: str8 = sub(input, i, 1);
+        if (eq(ch, "\"") == 1) {
+            if (in_quotes == 1) {
+                in_quotes = 0;
+            } else {
+                in_quotes = 1;
+            }
+            cur = format!("{}{}", cur, ch);
+            continue;
+        }
+        if (eq(ch, ",") == 1 && in_quotes == 0) {
+            let item: str8 = trim(cur);
+            if (len(item) > 0) {
+                out.push(item);
+            }
+            cur = String::new();
+            continue;
+        }
+        cur = format!("{}{}", cur, ch);
+    }
+    let tail: str8 = trim(cur);
+    if (len(tail) > 0) {
+        out.push(tail);
+    }
+    return out;
+}
+
+fn normalize_target_arch_name(arch: str8) -> str8 {
+    if (eq(arch, "x86") == 1 || eq(arch, "i386") == 1 || eq(arch, "i686") == 1) {
+        return "x86";
+    }
+    if (eq(arch, "x64") == 1 || eq(arch, "x86_64") == 1 || eq(arch, "amd64") == 1 || eq(arch, "x86-64") == 1) {
+        return "x64";
+    }
+    if (eq(arch, "aarch64") == 1 || eq(arch, "arm64") == 1) {
+        return "aarch64";
+    }
+    return "";
+}
+
+fn normalize_opt_level(opt: str8) -> str8 {
+    let t: str8 = trim(opt);
+    if (len(t) == 0) {
+        return "";
+    }
+    if (eq(t, "O0") == 1) { return "-O0"; }
+    if (eq(t, "O1") == 1) { return "-O1"; }
+    if (eq(t, "O2") == 1) { return "-O2"; }
+    if (eq(t, "O3") == 1) { return "-O3"; }
+    if (eq(t, "-O0") == 1 || eq(t, "-O1") == 1 || eq(t, "-O2") == 1 || eq(t, "-O3") == 1) {
+        return t;
+    }
+    return "";
+}
+
+fn parse_tool_mlang_string(content: str8, wanted_key: str8) -> str8 {
+    let lines: list<str8> = split_lines(content);
+    var section: str8 = String::new();
+    for line in lines {
+        let t: str8 = trim(line);
+        if (len(t) == 0 || starts_with(t, "#") == 1) {
+            continue;
+        }
+        if (starts_with(t, "[") == 1 && ends_with(t, "]") == 1) {
+            section = sub(t, 1, len(t) - 2);
+            continue;
+        }
+        if (eq(section, "tool.mlang") == 0) {
+            continue;
+        }
+
+        let eqi: i64 = find(t, "=");
+        if (eqi < 0) {
+            continue;
+        }
+        let key: str8 = trim(sub(t, 0, eqi));
+        let value: str8 = trim(sub(t, eqi + 1, len(t) - eqi - 1));
+        if (eq(key, wanted_key) == 1) {
+            let out: str8 = unquote(value);
+            return format!("{}", out);
+        }
+    }
+    return "";
+}
+
+fn parse_tool_mlang_list(content: str8, wanted_key: str8) -> list<str8> {
+    var out: list<str8> = [];
+    let lines: list<str8> = split_lines(content);
+    var section: str8 = String::new();
+    var found: i32 = 0;
+    for line in lines {
+        let t: str8 = trim(line);
+        if (len(t) == 0 || starts_with(t, "#") == 1) {
+            continue;
+        }
+        if (starts_with(t, "[") == 1 && ends_with(t, "]") == 1) {
+            section = sub(t, 1, len(t) - 2);
+            continue;
+        }
+        if (eq(section, "tool.mlang") == 0) {
+            continue;
+        }
+
+        let eqi: i64 = find(t, "=");
+        if (eqi < 0) {
+            continue;
+        }
+        let key: str8 = trim(sub(t, 0, eqi));
+        if (eq(key, wanted_key) == 0) {
+            continue;
+        }
+        found = 1;
+        let value: str8 = trim(sub(t, eqi + 1, len(t) - eqi - 1));
+        if (len(value) == 0) {
+            break;
+        }
+        if (starts_with(value, "[") == 1 && ends_with(value, "]") == 1) {
+            let inner: str8 = sub(value, 1, len(value) - 2);
+            let parts: list<str8> = split_toml_array(inner);
+            for part in parts {
+                let item: str8 = unquote(part);
+                if (len(item) > 0) {
+                    out.push(format!("{}", item));
+                }
+            }
+            break;
+        }
+        let single: str8 = unquote(value);
+        if (len(single) > 0) {
+            out.push(format!("{}", single));
+        }
+        break;
+    }
+    if (found == 0) {
+        return [];
+    }
+    return out;
+}
+
+fn manifest_uses_build_config(content: str8) -> i32 {
+    if (contains(content, "[tool.mlang]") != 1) {
+        return 0;
+    }
+    if (contains(content, "opt_level") == 1) { return 1; }
+    if (contains(content, "target_arch") == 1) { return 1; }
+    if (contains(content, "compiler_flags") == 1) { return 1; }
+    if (contains(content, "linker_flags") == 1) { return 1; }
+    if (contains(content, "lib_paths") == 1) { return 1; }
+    if (contains(content, "libs") == 1) { return 1; }
+    if (contains(content, "build_dir") == 1) { return 1; }
+    if (contains(content, "deps_dir") == 1) { return 1; }
+    return 0;
+}
+
+fn has_pkg_dir_override_args(argv: list<str8>, start_idx: i64) -> i32 {
+    let n: i64 = argv.len();
+    var i: i64 = start_idx;
+    while (i < n) {
+        let arg: str8 = argv[i];
+        if (eq(arg, "--build-dir") == 1 || eq(arg, "--deps-dir") == 1 || eq(arg, "--deps") == 1) {
+            return 1;
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn delegate_pkg_to_cpp(backend: str8, sub: str8, argv: list<str8>, start_idx: i64) -> i32 {
+    var delegated_args: list<str8> = [
+        "MLANG_PKG_IMPL=cpp",
+        "MLANG_FRONTEND_IMPL=cpp",
+        backend,
+        "pkg",
+        sub
+    ];
+    let n: i64 = argv.len();
+    var i: i64 = start_idx;
+    while (i < n) {
+        delegated_args.push(argv[i]);
+        i = i + 1;
+    }
+    return run_inherit("env", delegated_args);
 }
 
 fn contains_string(items: list<str8>, needle: str8) -> i32 {
@@ -805,13 +999,16 @@ fn run_add(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8) -> 
     return 0;
 }
 
-fn run_fetch(manifest_path: str8) -> i32 {
+fn run_fetch(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str8) -> i32 {
     let rr: Result<str8, str8> = read_manifest(manifest_path);
     if (rr.is_err()) {
         println!("{}", rr.unwrap_err());
         return 1;
     }
     let content: str8 = rr.unwrap();
+    if (manifest_uses_build_config(content) == 1 || has_pkg_dir_override_args(argv, start_idx + 1) == 1) {
+        return delegate_pkg_to_cpp(backend, "fetch", argv, start_idx + 1);
+    }
     let deps: list<DepSpec> = parse_git_deps(content);
 
     if (ensure_deps_dir() != 0) {
@@ -854,8 +1051,17 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
         return 1;
     }
     let content: str8 = rr.unwrap();
+    if (manifest_uses_build_config(content) == 1 || has_pkg_dir_override_args(argv, start_idx + 1) == 1) {
+        return delegate_pkg_to_cpp(backend, "build", argv, start_idx + 1);
+    }
     let deps: list<DepSpec> = parse_git_deps(content);
     let cdeps: list<CDepSpec> = parse_c_deps(content);
+    let opt_level_cfg: str8 = normalize_opt_level(parse_tool_mlang_string(content, "opt_level"));
+    let target_arch_cfg: str8 = normalize_target_arch_name(parse_tool_mlang_string(content, "target_arch"));
+    let cfg_compiler_flags: list<str8> = parse_tool_mlang_list(content, "compiler_flags");
+    let cfg_linker_flags: list<str8> = parse_tool_mlang_list(content, "linker_flags");
+    let cfg_lib_paths: list<str8> = parse_tool_mlang_list(content, "lib_paths");
+    let cfg_libs: list<str8> = parse_tool_mlang_list(content, "libs");
 
     if (ensure_deps_dir() != 0) {
         return 1;
@@ -900,6 +1106,9 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
     if (len(name_cfg) > 0) {
         name = name_cfg;
     }
+    if (len(opt_flag) == 0 && len(opt_level_cfg) > 0) {
+        opt_flag = opt_level_cfg;
+    }
 
     if (run_inherit("mkdir", ["-p", "build"]) != 0) {
         return 1;
@@ -907,13 +1116,26 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
 
     let output: str8 = format!("build/{}", name);
     var cmd_args: list<str8> = [entry, "-o", output];
+    if (len(target_arch_cfg) > 0) {
+        cmd_args.push("--target-arch");
+        cmd_args.push(target_arch_cfg);
+    }
     if (len(opt_flag) > 0) {
         cmd_args.push(opt_flag);
+    }
+    for f in cfg_compiler_flags {
+        cmd_args.push(f);
     }
     let link_dirs: list<str8> = link_flags.lib_dirs;
     let link_libs: list<str8> = link_flags.libs;
     let pkg_flags_local: list<str8> = pkg_flags;
 
+    for d in cfg_lib_paths {
+        cmd_args.push(format!("-L{}", d));
+    }
+    for l in cfg_libs {
+        cmd_args.push(format!("-l{}", l));
+    }
     for d in link_dirs {
         cmd_args.push(format!("-L{}", d));
     }
@@ -922,6 +1144,9 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
     }
     for d in link_dirs {
         cmd_args.push(format!("-Wl,-rpath,{}", d));
+    }
+    for f in cfg_linker_flags {
+        cmd_args.push(f);
     }
     for f in pkg_flags_local {
         cmd_args.push(f);
@@ -932,6 +1157,33 @@ fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, b
         println!("Build failed.");
         return 1;
     }
+    return 0;
+}
+
+fn run_clean(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str8) -> i32 {
+    let rr: Result<str8, str8> = read_manifest(manifest_path);
+    if (rr.is_ok()) {
+        let content: str8 = rr.unwrap();
+        if (manifest_uses_build_config(content) == 1 || has_pkg_dir_override_args(argv, start_idx + 1) == 1) {
+            return delegate_pkg_to_cpp(backend, "clean", argv, start_idx + 1);
+        }
+    } else if (has_pkg_dir_override_args(argv, start_idx + 1) == 1) {
+        return delegate_pkg_to_cpp(backend, "clean", argv, start_idx + 1);
+    }
+
+    let build_dir: str8 = "build";
+    if (file_exists(build_dir) == 0) {
+        println!("No artifacts to clean in {}", build_dir);
+        return 0;
+    }
+
+    let rr: Result<i32, str8> = remove_tree(build_dir);
+    if (rr.is_err()) {
+        println!("Failed to clean {}", build_dir);
+        return 1;
+    }
+
+    println!("Cleaned {}", build_dir);
     return 0;
 }
 
@@ -947,6 +1199,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     var backend: str8 = "mlang";
+    var manifest: str8 = "mlang.toml";
     var idx: i64 = 1;
 
     if (argv.len() > 1 && eq(argv[1], "--backend") == 1) {
@@ -972,13 +1225,34 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
 
+    if (eq(argv[idx], "--config") == 1) {
+        if (idx + 1 >= argv.len()) {
+            println!("--config requires a manifest path");
+            print_usage();
+            return 1;
+        }
+        manifest = argv[idx + 1];
+        idx = idx + 2;
+    } else if (starts_with(argv[idx], "--config=") == 1) {
+        manifest = sub(argv[idx], 9, len(argv[idx]) - 9);
+        if (len(manifest) == 0) {
+            println!("--config requires a manifest path");
+            print_usage();
+            return 1;
+        }
+        idx = idx + 1;
+    }
+    if (idx >= argv.len()) {
+        print_usage();
+        return 1;
+    }
+
     let sub: str8 = argv[idx];
     if (eq(sub, "-h") == 1 || eq(sub, "--help") == 1) {
         print_usage();
         return 0;
     }
 
-    let manifest: str8 = "mlang.toml";
     if (eq(sub, "init") == 1) {
         return run_init(manifest);
     }
@@ -986,10 +1260,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return run_add(argc, argv, idx, manifest);
     }
     if (eq(sub, "fetch") == 1) {
-        return run_fetch(manifest);
+        return run_fetch(argv, idx, manifest, backend);
     }
     if (eq(sub, "build") == 1) {
         return run_build(argc, argv, idx, manifest, backend);
+    }
+    if (eq(sub, "clean") == 1) {
+        return run_clean(argv, idx, manifest, backend);
     }
 
     println!("Unknown pkg subcommand: {}", sub);

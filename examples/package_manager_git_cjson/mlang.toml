@@ -11,3 +11,5 @@ curl = { pkg_config = "libcurl" }
 
 [tool.mlang]
 module_paths = ["."]
+opt_level = "O2"
+target_arch = "aarch64"

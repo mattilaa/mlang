@@ -40,7 +40,8 @@ If you are new to MLang, read these pages in this order:
 1. [Quick Guide](quick_guide.md)
 2. [Language Syntax](language_syntax.md)
 3. [Language Attributes](language_attributes.md)
-4. [Stdlib Module API](stdlib_mlang_api.md)
+4. [Package Manager](package_manager.md)
+5. [Stdlib Module API](stdlib_mlang_api.md)
 
 ## Quick Links
 
@@ -54,6 +55,9 @@ If you are new to MLang, read these pages in this order:
   Attribute syntax such as `#[test]`, `#[derive(Debug)]`, and `#[inline]`.
 - [Stdlib Module API](stdlib_mlang_api.md)
   Module-by-module API documentation for the MLang standard library.
+- [Package Manager](package_manager.md)
+  `mlang pkg` workflow, subcommands, manifest layout, and package build
+  configuration keys.
 - [Ownership Model Notes](ownership_model.h)
   Current ownership and move/copy model notes used by the compiler.
 
@@ -182,5 +186,6 @@ The language is intentionally pragmatic rather than ideological.
 - [Quick Guide](quick_guide.md)
 - [Language Syntax](language_syntax.md)
 - [Language Attributes](language_attributes.md)
+- [Package Manager](package_manager.md)
 - [Stdlib Module API](stdlib_mlang_api.md)
 - root project `README.md` for build, test, and workflow commands
