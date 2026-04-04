@@ -48,12 +48,18 @@
  *   "{{build_dir}}/obj/player.o",
  * ]
  * libs = ["mlang_std"]
+ *
+ * # Comments are supported too.
+ * [tool.mlang]
+ * build_dir = "build-release" # End-of-line comments also work.
  * \endcode
  *
  * Task array values such as `inputs`, `libs`, `compiler_flags`,
  * `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
  * comma-separated TOML arrays. Both `"double-quoted"` and `'single-quoted'`
- * TOML strings are supported in these task fields.
+ * TOML strings are supported in these task fields. TOML `#` comments are
+ * supported on their own line and at the end of an assignment line as long as
+ * the `#` appears outside quoted string content.
  */
 class PackageManager
 {
