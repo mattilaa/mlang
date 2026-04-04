@@ -3764,18 +3764,55 @@ int PackageManager::run(int argc, char** argv)
     if(argc < 3)
     {
         std::cerr << "Usage: " << argv[0]
-                  << " pkg <init|add|fetch|build|run|clean>\n";
+                  << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n";
         return 1;
     }
 
-    std::string sub = argv[2];
     std::filesystem::path manifestPath = "mlang.toml";
+    int subIndex = 2;
+    while(subIndex < argc)
+    {
+        std::string arg = argv[subIndex];
+        if(arg == "--config")
+        {
+            if(subIndex + 1 >= argc)
+            {
+                std::cerr << "--config requires a manifest path\n";
+                return 1;
+            }
+            manifestPath = argv[subIndex + 1];
+            subIndex += 2;
+            continue;
+        }
+        if(arg.rfind("--config=", 0) == 0)
+        {
+            manifestPath = arg.substr(std::string("--config=").size());
+            if(manifestPath.empty())
+            {
+                std::cerr << "--config requires a manifest path\n";
+                return 1;
+            }
+            ++subIndex;
+            continue;
+        }
+        break;
+    }
+
+    if(subIndex >= argc)
+    {
+        std::cerr << "Usage: " << argv[0]
+                  << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n";
+        return 1;
+    }
+
+    std::string sub = argv[subIndex];
+    const std::string manifestLabel = manifestPath.string();
 
     if(sub == "init")
     {
         if(std::filesystem::exists(manifestPath))
         {
-            std::cerr << "mlang.toml already exists\n";
+            std::cerr << manifestLabel << " already exists\n";
             return 1;
         }
 
@@ -3787,7 +3824,7 @@ int PackageManager::run(int argc, char** argv)
         std::ofstream out(manifestPath, std::ios::binary);
         if(!out)
         {
-            std::cerr << "Failed to write mlang.toml\n";
+            std::cerr << "Failed to write " << manifestLabel << "\n";
             return 1;
         }
         out << "[package]\n"
@@ -3808,20 +3845,20 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "add")
     {
-        if(argc < 4)
+        if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg add <name> [--git URL] [--rev REV] [--tag TAG]\n"
+                      << " pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]\n"
                       << "       " << argv[0]
-                      << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+                      << " pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
                       << "       " << argv[0]
-                      << " pkg add <name> [--pkg-config NAME] [--system]\n"
+                      << " pkg [--config FILE] add <name> [--pkg-config NAME] [--system]\n"
                       << "       " << argv[0]
-                      << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n";
+                      << " pkg [--config FILE] add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n";
             return 1;
         }
 
-        std::string name = argv[3];
+        std::string name = argv[subIndex + 1];
         std::string gitUrl;
         std::string archiveUrl;
         std::string archiveType;
@@ -3834,7 +3871,7 @@ int PackageManager::run(int argc, char** argv)
         bool addLib = false;
         int stripComponents = 1;
 
-        for(int i = 4; i < argc; ++i)
+        for(int i = subIndex + 2; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--git" && i + 1 < argc)
@@ -3868,7 +3905,8 @@ int PackageManager::run(int argc, char** argv)
 
         if(!std::filesystem::exists(manifestPath))
         {
-            std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
+            std::cerr << manifestLabel
+                      << " not found. Run 'mlang pkg init' first.\n";
             return 1;
         }
 
@@ -3877,7 +3915,7 @@ int PackageManager::run(int argc, char** argv)
                             std::istreambuf_iterator<char>());
         if(content.empty())
         {
-            std::cerr << "Failed to read mlang.toml\n";
+            std::cerr << "Failed to read " << manifestLabel << "\n";
             return 1;
         }
 
@@ -3938,7 +3976,8 @@ int PackageManager::run(int argc, char** argv)
                                   std::ios::binary | std::ios::trunc);
             if(!rootOut)
             {
-                std::cerr << "Failed to update root mlang.toml\n";
+                std::cerr << "Failed to update root " << manifestLabel
+                          << "\n";
                 return 1;
             }
             rootOut << content;
@@ -3958,7 +3997,7 @@ int PackageManager::run(int argc, char** argv)
         std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
         if(!out)
         {
-            std::cerr << "Failed to update mlang.toml\n";
+            std::cerr << "Failed to update " << manifestLabel << "\n";
             return 1;
         }
         out << content;
@@ -3968,7 +4007,7 @@ int PackageManager::run(int argc, char** argv)
     if(sub == "fetch")
     {
         PkgCliOverrides overrides;
-        for(int i = 3; i < argc; ++i)
+        for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--build-dir" && i + 1 < argc)
@@ -4003,7 +4042,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg fetch': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg fetch [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log]\n";
@@ -4012,7 +4051,8 @@ int PackageManager::run(int argc, char** argv)
         }
         if(!std::filesystem::exists(manifestPath))
         {
-            std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
+            std::cerr << manifestLabel
+                      << " not found. Run 'mlang pkg init' first.\n";
             return 1;
         }
         std::ifstream in(manifestPath, std::ios::binary);
@@ -4020,7 +4060,7 @@ int PackageManager::run(int argc, char** argv)
                             std::istreambuf_iterator<char>());
         if(content.empty())
         {
-            std::cerr << "Failed to read mlang.toml\n";
+            std::cerr << "Failed to read " << manifestLabel << "\n";
             return 1;
         }
         auto manifests = collect_target_manifests(manifestPath);
@@ -4044,7 +4084,7 @@ int PackageManager::run(int argc, char** argv)
         std::string optFlag;
         bool useNinja = false;
         PkgCliOverrides overrides;
-        for(int i = 3; i < argc; ++i)
+        for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3")
@@ -4087,7 +4127,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg build': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg build [-O0|-O1|-O2|-O3] [--ninja]"
+                          << " pkg [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja]"
                           << " [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
@@ -4098,7 +4138,8 @@ int PackageManager::run(int argc, char** argv)
 
         if(!std::filesystem::exists(manifestPath))
         {
-            std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
+            std::cerr << manifestLabel
+                      << " not found. Run 'mlang pkg init' first.\n";
             return 1;
         }
 
@@ -4107,7 +4148,7 @@ int PackageManager::run(int argc, char** argv)
                             std::istreambuf_iterator<char>());
         if(content.empty())
         {
-            std::cerr << "Failed to read mlang.toml\n";
+            std::cerr << "Failed to read " << manifestLabel << "\n";
             return 1;
         }
 
@@ -4130,17 +4171,18 @@ int PackageManager::run(int argc, char** argv)
 
     if(sub == "run")
     {
-        if(argc < 4)
+        if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
+                      << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
                       << " [--task-print-to-stdout-log]\n";
             return 1;
         }
         if(!std::filesystem::exists(manifestPath))
         {
-            std::cerr << "mlang.toml not found. Run 'mlang pkg init' first.\n";
+            std::cerr << manifestLabel
+                      << " not found. Run 'mlang pkg init' first.\n";
             return 1;
         }
 
@@ -4151,9 +4193,9 @@ int PackageManager::run(int argc, char** argv)
             return 1;
         }
 
-        const std::string taskName = argv[3];
+        const std::string taskName = argv[subIndex + 1];
         PkgCliOverrides overrides;
-        for(int i = 4; i < argc; ++i)
+        for(int i = subIndex + 2; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--log-dir" && i + 1 < argc)
@@ -4174,7 +4216,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg run': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg run <task> [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log]\n";
@@ -4232,7 +4274,7 @@ int PackageManager::run(int argc, char** argv)
     {
         PkgCliOverrides overrides;
         bool cleanDeps = false;
-        for(int i = 3; i < argc; ++i)
+        for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
             if(arg == "--build-dir" && i + 1 < argc)
@@ -4271,7 +4313,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg clean': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg clean [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log] [--deps]\n";

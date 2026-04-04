@@ -10,6 +10,7 @@ frontend:
 
 ```sh
 ./build/mlang pkg <subcommand>
+./build/mlang pkg --config arm64.toml <subcommand>
 ```
 
 By default, `mlang pkg` prefers the MLang implementation in
@@ -23,15 +24,23 @@ MLANG_PKG_IMPL=mla ./build/mlang pkg build
 MLANG_PKG_IMPL=cpp ./build/mlang pkg build
 ```
 
+If `--config` is omitted, the package manager uses `mlang.toml`. Supplying
+`--config FILE` or `--config=FILE` before the subcommand lets one project root
+keep multiple manifests, such as separate files per CPU architecture or build
+workflow.
+
 ## Subcommands
 
 ### `pkg init`
 
-Create a new `mlang.toml` manifest in the current directory. `pkg init` also
+Create a new `mlang.toml` manifest in the current directory by default. When
+`--config FILE` is present, `pkg init` writes that manifest file instead.
+`pkg init` also
 creates `src/main.mla` so the package can build immediately:
 
 ```sh
 ./build/mlang pkg init
+./build/mlang pkg --config arm64.toml init
 ```
 
 The generated manifest contains:
@@ -57,12 +66,14 @@ fn main() {
 
 ### `pkg add`
 
-Add a dependency entry to `mlang.toml`.
+Add a dependency entry to the selected manifest file. Without `--config`, this
+is `mlang.toml`.
 
 Git dependency:
 
 ```sh
 ./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
+./build/mlang pkg --config arm64.toml add cjson --git https://github.com/DaveGamble/cJSON.git
 ```
 
 Generate a complete subproject package automatically:
@@ -106,6 +117,7 @@ uses the legacy default layout and stores dependencies under `build/deps/`.
 
 ```sh
 ./build/mlang pkg fetch
+./build/mlang pkg --config arm64.toml fetch
 ./build/mlang pkg fetch --deps-dir .pkg/deps
 ./build/mlang pkg fetch --build-dir build-release
 ```
@@ -118,10 +130,11 @@ build/deps/cjson
 
 ### `pkg build`
 
-Build the package entry defined by `mlang.toml`:
+Build the package entry defined by the selected manifest:
 
 ```sh
 ./build/mlang pkg build
+./build/mlang pkg --config arm64.toml build
 ./build/mlang pkg build -O3
 ./build/mlang pkg build --ninja
 ./build/mlang pkg build --build-dir build-release --deps-dir .pkg/deps
@@ -150,6 +163,7 @@ Run a custom package task declared with `[[task]]`:
 
 ```sh
 ./build/mlang pkg run kernel-build
+./build/mlang pkg --config qemu-aarch64.toml run qemu-run
 ```
 
 Tasks can model a small workflow graph with:
@@ -170,6 +184,7 @@ Remove the package-local artifact tree created by `fetch` and `build`:
 
 ```sh
 ./build/mlang pkg clean
+./build/mlang pkg --config arm64.toml clean
 ./build/mlang pkg clean --build-dir build-release
 ./build/mlang pkg clean --deps
 ```
@@ -186,7 +201,8 @@ output directories. Pass `--deps` to remove that separate dependency cache too.
 
 ## Manifest Layout
 
-Current package manifests use `mlang.toml`.
+Current package manifests use `mlang.toml` by default. `--config FILE` selects
+an alternate manifest for a single command invocation.
 
 Basic example:
 

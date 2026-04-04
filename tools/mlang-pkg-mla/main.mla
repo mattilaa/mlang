@@ -2,9 +2,10 @@
 /// \brief Native MLang implementation of package manager frontend/backend.
 ///
 /// Usage:
-///   mlang-pkg-mla [--backend <mlang_bin>] <init|add|fetch|build|clean> [args...]
+///   mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>] <init|add|fetch|build|clean> [args...]
 ///
 /// `--backend` selects the compiler binary used by `build` (default: `mlang`).
+/// `--config` overrides the manifest path (default: `mlang.toml`).
 
 /// \cond INTERNAL_IMPORTS
 mod std::compiler;
@@ -61,16 +62,16 @@ struct LinkFlags {
 
 fn print_usage() -> void {
     println!("Usage:");
-    println!("  mlang-pkg-mla [--backend <mlang_bin>] <subcommand> [args...]");
+    println!("  mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>] <subcommand> [args...]");
     println!("");
     println!("Subcommands:");
-    println!("  init");
-    println!("  add <name> [--git URL] [--rev REV] [--tag TAG]");
-    println!("  add <name> [--pkg-config NAME] [--system]");
-    println!("  fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("  build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("  run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("  clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]");
+    println!("  [--config FILE] init");
+    println!("  [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]");
+    println!("  [--config FILE] add <name> [--pkg-config NAME] [--system]");
+    println!("  [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] build [-O0|-O1|-O2|-O3] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("  [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]");
 }
 
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
@@ -1198,6 +1199,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     var backend: str8 = "mlang";
+    var manifest: str8 = "mlang.toml";
     var idx: i64 = 1;
 
     if (argv.len() > 1 && eq(argv[1], "--backend") == 1) {
@@ -1223,13 +1225,34 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return 1;
     }
 
+    if (eq(argv[idx], "--config") == 1) {
+        if (idx + 1 >= argv.len()) {
+            println!("--config requires a manifest path");
+            print_usage();
+            return 1;
+        }
+        manifest = argv[idx + 1];
+        idx = idx + 2;
+    } else if (starts_with(argv[idx], "--config=") == 1) {
+        manifest = sub(argv[idx], 9, len(argv[idx]) - 9);
+        if (len(manifest) == 0) {
+            println!("--config requires a manifest path");
+            print_usage();
+            return 1;
+        }
+        idx = idx + 1;
+    }
+    if (idx >= argv.len()) {
+        print_usage();
+        return 1;
+    }
+
     let sub: str8 = argv[idx];
     if (eq(sub, "-h") == 1 || eq(sub, "--help") == 1) {
         print_usage();
         return 0;
     }
 
-    let manifest: str8 = "mlang.toml";
     if (eq(sub, "init") == 1) {
         return run_init(manifest);
     }

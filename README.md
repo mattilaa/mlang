@@ -139,11 +139,24 @@ MLANG_PKG_IMPL=cpp ./build/mlang pkg init
 `mlang pkg init` now scaffolds both `mlang.toml` and `src/main.mla`, so a new
 package can be built immediately.
 
+When one project root needs multiple package manifests, use `--config` before
+the subcommand to pick the active file for that invocation. This keeps the
+default `mlang.toml` behavior intact while allowing per-architecture manifests
+such as `arm64.toml` and `x64.toml` in the same directory:
+
+```sh
+./build/mlang pkg --config arm64.toml fetch
+./build/mlang pkg --config arm64.toml build
+./build/mlang pkg --config x64.toml build
+./build/mlang pkg --config qemu-aarch64.toml run qemu-run
+```
+
 Build and run:
 
 ```sh
 ./build/mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
 /tmp/mlang-pkg-mla --backend ./build/mlang init
+/tmp/mlang-pkg-mla --backend ./build/mlang --config arm64.toml build -O2
 /tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
 /tmp/mlang-pkg-mla --backend ./build/mlang fetch
 /tmp/mlang-pkg-mla --backend ./build/mlang build -O2
@@ -1256,6 +1269,16 @@ tasks expect sources under `{{deps_dir}}`.
 CLI overrides are available on `pkg fetch`, `pkg build`, `pkg run`, and
 `pkg clean`: `--log-dir DIR`, `--stdout-log FILE`, `--stderr-log FILE`,
 `--warn-log FILE`, and `--task-print-to-stdout-log`.
+
+`mlang pkg` also accepts `--config FILE` before the subcommand. Use it when a
+single project root keeps multiple manifests, for example:
+
+```sh
+./build/mlang pkg --config build-arm64.toml build
+./build/mlang pkg --config build-x64.toml build
+```
+
+If `--config` is omitted, the package manager still uses `mlang.toml`.
 
 The Linux kernel example uses:
 
