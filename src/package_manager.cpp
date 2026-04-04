@@ -1,5 +1,6 @@
 #include "package_manager.h"
 
+#include <array>
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -47,6 +48,131 @@ static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName);
 static void append_toml_string_list_value_preserve(const std::string& value,
                                                    std::vector<std::string>& out);
+
+enum class TaskTomlKey
+{
+    Name,
+    Message,
+    Print,
+    Phase,
+    Workdir,
+    Parallel,
+    LogOutput,
+    InlineOutput,
+    DependsOn,
+    PhaseDependsOn,
+    JoinOn,
+    PhaseJoinOn,
+    Next,
+    NextPhases,
+    Command,
+    Env,
+    Script,
+    Shell,
+    Commands,
+};
+
+enum class TargetArchAlias
+{
+    X86,
+    I386,
+    I686,
+    X64,
+    X86_64,
+    Amd64,
+    X86Dash64,
+    Aarch64,
+    Arm64,
+};
+
+enum class TargetArchValue
+{
+    X86,
+    X64,
+    Aarch64,
+};
+
+enum class OptLevelAlias
+{
+    O0,
+    Og,
+    O1,
+    O2,
+    O3,
+    Os,
+    Oz,
+};
+
+template <typename Enum, size_t N>
+static std::optional<Enum>
+find_enum_key(std::string_view key,
+              const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+{
+    const auto it =
+        std::find_if(mappings.begin(), mappings.end(),
+                     [&](const auto& entry) { return entry.second == key; });
+    if(it == mappings.end())
+        return std::nullopt;
+    return it->first;
+}
+
+template <typename Enum, size_t N>
+static std::optional<std::string_view> find_enum_text(
+    Enum key, const std::array<std::pair<Enum, std::string_view>, N>& mappings)
+{
+    const auto it =
+        std::find_if(mappings.begin(), mappings.end(),
+                     [&](const auto& entry) { return entry.first == key; });
+    if(it == mappings.end())
+        return std::nullopt;
+    return it->second;
+}
+
+static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 19>
+    kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
+                    { TaskTomlKey::Message, "message" },
+                    { TaskTomlKey::Print, "print" },
+                    { TaskTomlKey::Phase, "phase" },
+                    { TaskTomlKey::Workdir, "workdir" },
+                    { TaskTomlKey::Parallel, "parallel" },
+                    { TaskTomlKey::LogOutput, "log_output" },
+                    { TaskTomlKey::InlineOutput, "inline_output" },
+                    { TaskTomlKey::DependsOn, "depends_on" },
+                    { TaskTomlKey::PhaseDependsOn, "phase_depends_on" },
+                    { TaskTomlKey::JoinOn, "join_on" },
+                    { TaskTomlKey::PhaseJoinOn, "phase_join_on" },
+                    { TaskTomlKey::Next, "next" },
+                    { TaskTomlKey::NextPhases, "next_phases" },
+                    { TaskTomlKey::Command, "command" },
+                    { TaskTomlKey::Env, "env" },
+                    { TaskTomlKey::Script, "script" },
+                    { TaskTomlKey::Shell, "shell" },
+                    { TaskTomlKey::Commands, "commands" } }};
+
+static constexpr std::array<std::pair<TargetArchAlias, std::string_view>, 9>
+    kTargetArchAliases {{{ TargetArchAlias::X86, "x86" },
+                          { TargetArchAlias::I386, "i386" },
+                          { TargetArchAlias::I686, "i686" },
+                          { TargetArchAlias::X64, "x64" },
+                          { TargetArchAlias::X86_64, "x86_64" },
+                          { TargetArchAlias::Amd64, "amd64" },
+                          { TargetArchAlias::X86Dash64, "x86-64" },
+                          { TargetArchAlias::Aarch64, "aarch64" },
+                          { TargetArchAlias::Arm64, "arm64" } }};
+
+static constexpr std::array<std::pair<TargetArchValue, std::string_view>, 3>
+    kTargetArchNames {{{ TargetArchValue::X86, "x86" },
+                        { TargetArchValue::X64, "x64" },
+                        { TargetArchValue::Aarch64, "aarch64" } }};
+
+static constexpr std::array<std::pair<OptLevelAlias, std::string_view>, 7>
+    kOptLevelAliases {{{ OptLevelAlias::O0, "-O0" },
+                        { OptLevelAlias::Og, "-Og" },
+                        { OptLevelAlias::O1, "-O1" },
+                        { OptLevelAlias::O2, "-O2" },
+                        { OptLevelAlias::O3, "-O3" },
+                        { OptLevelAlias::Os, "-Os" },
+                        { OptLevelAlias::Oz, "-Oz" } }};
 
 static std::string trim(std::string_view s)
 {
@@ -427,13 +553,33 @@ static std::string collect_multiline_toml_value(std::string value,
 
 static std::string normalize_target_arch_name(const std::string& arch)
 {
-    if(arch == "x86" || arch == "i386" || arch == "i686")
-        return "x86";
-    if(arch == "x64" || arch == "x86_64" || arch == "amd64" ||
-       arch == "x86-64")
-        return "x64";
-    if(arch == "aarch64" || arch == "arm64")
-        return "aarch64";
+    const auto archKey = find_enum_key(trim(arch), kTargetArchAliases);
+    if(!archKey.has_value())
+        return "";
+
+    TargetArchValue normalizedKey;
+    switch(*archKey)
+    {
+    case TargetArchAlias::X86:
+    case TargetArchAlias::I386:
+    case TargetArchAlias::I686:
+        normalizedKey = TargetArchValue::X86;
+        break;
+    case TargetArchAlias::X64:
+    case TargetArchAlias::X86_64:
+    case TargetArchAlias::Amd64:
+    case TargetArchAlias::X86Dash64:
+        normalizedKey = TargetArchValue::X64;
+        break;
+    case TargetArchAlias::Aarch64:
+    case TargetArchAlias::Arm64:
+        normalizedKey = TargetArchValue::Aarch64;
+        break;
+    }
+
+    if(const auto text = find_enum_text(normalizedKey, kTargetArchNames);
+       text.has_value())
+        return std::string(*text);
     return "";
 }
 
@@ -444,9 +590,13 @@ static std::string normalize_opt_level(std::string opt)
         return "";
     if(opt[0] != '-')
         opt = "-" + opt;
-    if(opt == "-O0" || opt == "-Og" || opt == "-O1" || opt == "-O2" ||
-       opt == "-O3" || opt == "-Os" || opt == "-Oz")
-        return opt;
+    if(const auto optKey = find_enum_key(opt, kOptLevelAliases);
+       optKey.has_value())
+    {
+        if(const auto text = find_enum_text(*optKey, kOptLevelAliases);
+           text.has_value())
+            return std::string(*text);
+    }
     return "";
 }
 
@@ -980,161 +1130,93 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         std::string key = trim(t.substr(0, eq));
         std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
 
-        auto apply_task_kv = [&](TaskSpec& task, const std::string& taskKey,
-                                 const std::string& taskValue) {
-            if(taskKey == "name")
+        auto apply_common_task_kv = [&](auto& target, TaskTomlKey taskKeyKind,
+                                        const std::string& taskValue) {
+            switch(taskKeyKind)
             {
-                task.name = unquote(taskValue);
-            }
-            else if(taskKey == "message")
-            {
-                task.message = unquote_preserve(taskValue);
-            }
-            else if(taskKey == "print")
-            {
-                task.print = unquote_preserve(taskValue);
-            }
-            else if(taskKey == "phase")
-            {
-                task.phase = unquote(taskValue);
-            }
-            else if(taskKey == "workdir")
-            {
-                task.workdir = unquote(taskValue);
-            }
-            else if(taskKey == "parallel")
-            {
-                task.parallel = parse_toml_bool_value(taskValue);
-            }
-            else if(taskKey == "log_output")
-            {
-                task.logOutput = parse_toml_bool_value(taskValue);
-            }
-            else if(taskKey == "inline_output")
-            {
-                task.inlineOutput = parse_toml_bool_value(taskValue);
-            }
-            else if(taskKey == "depends_on")
-            {
-                append_toml_string_list_value(taskValue, task.dependsOn);
-            }
-            else if(taskKey == "phase_depends_on")
-            {
-                append_toml_string_list_value(taskValue, task.phaseDependsOn);
-            }
-            else if(taskKey == "join_on")
-            {
-                append_toml_string_list_value(taskValue, task.joinOn);
-            }
-            else if(taskKey == "phase_join_on")
-            {
-                append_toml_string_list_value(taskValue, task.phaseJoinOn);
-            }
-            else if(taskKey == "next")
-            {
-                append_toml_string_list_value(taskValue, task.nextTasks);
-            }
-            else if(taskKey == "next_phases")
-            {
-                append_toml_string_list_value(taskValue, task.nextPhases);
-            }
-            else if(taskKey == "command")
-            {
+            case TaskTomlKey::Message:
+                target.message = unquote_preserve(taskValue);
+                break;
+            case TaskTomlKey::Print:
+                target.print = unquote_preserve(taskValue);
+                break;
+            case TaskTomlKey::Phase:
+                target.phase = unquote(taskValue);
+                break;
+            case TaskTomlKey::Workdir:
+                target.workdir = unquote(taskValue);
+                break;
+            case TaskTomlKey::Parallel:
+                target.parallel = parse_toml_bool_value(taskValue);
+                break;
+            case TaskTomlKey::LogOutput:
+                target.logOutput = parse_toml_bool_value(taskValue);
+                break;
+            case TaskTomlKey::InlineOutput:
+                target.inlineOutput = parse_toml_bool_value(taskValue);
+                break;
+            case TaskTomlKey::DependsOn:
+                append_toml_string_list_value(taskValue, target.dependsOn);
+                break;
+            case TaskTomlKey::PhaseDependsOn:
+                append_toml_string_list_value(taskValue,
+                                              target.phaseDependsOn);
+                break;
+            case TaskTomlKey::JoinOn:
+                append_toml_string_list_value(taskValue, target.joinOn);
+                break;
+            case TaskTomlKey::PhaseJoinOn:
+                append_toml_string_list_value(taskValue, target.phaseJoinOn);
+                break;
+            case TaskTomlKey::Next:
+                append_toml_string_list_value(taskValue, target.nextTasks);
+                break;
+            case TaskTomlKey::NextPhases:
+                append_toml_string_list_value(taskValue, target.nextPhases);
+                break;
+            case TaskTomlKey::Command: {
                 std::string v = unquote_preserve(taskValue);
                 if(!v.empty())
-                    task.commands.push_back(v);
+                    target.commands.push_back(v);
+                break;
             }
-            else if(taskKey == "env")
-            {
-                append_toml_string_list_value_preserve(taskValue, task.env);
-            }
-            else if(taskKey == "script" || taskKey == "shell")
-            {
+            case TaskTomlKey::Env:
+                append_toml_string_list_value_preserve(taskValue, target.env);
+                break;
+            case TaskTomlKey::Script:
+            case TaskTomlKey::Shell:
                 append_toml_string_list_value_preserve(taskValue,
-                                                       task.shellLines);
-            }
-            else if(taskKey == "commands")
-            {
+                                                       target.shellLines);
+                break;
+            case TaskTomlKey::Commands:
                 append_toml_string_list_value_preserve(taskValue,
-                                                       task.commands);
+                                                       target.commands);
+                break;
+            case TaskTomlKey::Name:
+                break;
             }
+        };
+
+        auto apply_task_kv = [&](TaskSpec& task, const std::string& taskKey,
+                                 const std::string& taskValue) {
+            const auto taskKeyKind = find_enum_key(taskKey, kTaskTomlKeys);
+            if(!taskKeyKind.has_value())
+                return;
+            if(*taskKeyKind == TaskTomlKey::Name)
+            {
+                task.name = unquote(taskValue);
+                return;
+            }
+            apply_common_task_kv(task, *taskKeyKind, taskValue);
         };
 
         auto apply_override_kv = [&](TaskSpec::HostOverride& ov,
                                      const std::string& taskKey,
                                      const std::string& taskValue) {
-            if(taskKey == "message")
-            {
-                ov.message = unquote_preserve(taskValue);
-            }
-            else if(taskKey == "print")
-            {
-                ov.print = unquote_preserve(taskValue);
-            }
-            else if(taskKey == "phase")
-            {
-                ov.phase = unquote(taskValue);
-            }
-            else if(taskKey == "workdir")
-            {
-                ov.workdir = unquote(taskValue);
-            }
-            else if(taskKey == "parallel")
-            {
-                ov.parallel = parse_toml_bool_value(taskValue);
-            }
-            else if(taskKey == "log_output")
-            {
-                ov.logOutput = parse_toml_bool_value(taskValue);
-            }
-            else if(taskKey == "inline_output")
-            {
-                ov.inlineOutput = parse_toml_bool_value(taskValue);
-            }
-            else if(taskKey == "depends_on")
-            {
-                append_toml_string_list_value(taskValue, ov.dependsOn);
-            }
-            else if(taskKey == "phase_depends_on")
-            {
-                append_toml_string_list_value(taskValue, ov.phaseDependsOn);
-            }
-            else if(taskKey == "join_on")
-            {
-                append_toml_string_list_value(taskValue, ov.joinOn);
-            }
-            else if(taskKey == "phase_join_on")
-            {
-                append_toml_string_list_value(taskValue, ov.phaseJoinOn);
-            }
-            else if(taskKey == "next")
-            {
-                append_toml_string_list_value(taskValue, ov.nextTasks);
-            }
-            else if(taskKey == "next_phases")
-            {
-                append_toml_string_list_value(taskValue, ov.nextPhases);
-            }
-            else if(taskKey == "command")
-            {
-                std::string v = unquote_preserve(taskValue);
-                if(!v.empty())
-                    ov.commands.push_back(v);
-            }
-            else if(taskKey == "env")
-            {
-                append_toml_string_list_value_preserve(taskValue, ov.env);
-            }
-            else if(taskKey == "script" || taskKey == "shell")
-            {
-                append_toml_string_list_value_preserve(taskValue,
-                                                       ov.shellLines);
-            }
-            else if(taskKey == "commands")
-            {
-                append_toml_string_list_value_preserve(taskValue,
-                                                       ov.commands);
-            }
+            const auto taskKeyKind = find_enum_key(taskKey, kTaskTomlKeys);
+            if(!taskKeyKind.has_value() || *taskKeyKind == TaskTomlKey::Name)
+                return;
+            apply_common_task_kv(ov, *taskKeyKind, taskValue);
         };
 
         if(!currentHostSection.empty())
