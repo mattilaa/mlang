@@ -16,6 +16,14 @@ log_dir = "/tmp/mlang-linux-aarch64-qemu"
 stdout_log = "pkg.stdout.log"
 stderr_log = "pkg.stderr.log"
 warn_log = "pkg.warn.log"
+
+[tool.mlang.options]
+# Select the guest userspace from the command line:
+#   ../../build/mlang pkg run qemu-run --option userspace=busybox
+#   ../../build/mlang pkg run qemu-run --option userspace=gnu
+userspace = "busybox"
+
+[tool.mlang]
 path_entries = [
   "/opt/homebrew/opt/gnu-sed/libexec/gnubin", # Prefer GNU sed when available
   "/usr/local/opt/gnu-sed/libexec/gnubin",
@@ -255,23 +263,39 @@ commands = [
 name = "initramfs"
 print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
-depends_on = ["busybox-fetch"]
+depends_on = ["busybox-fetch", "gnu-userspace-fetch"]
 shell = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
-  "# Create the minimal rootfs layout entirely from this manifest so the example stays self-contained.",
-  "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin",
+  "# In GNU mode, unpack the base rootfs first so distro-owned symlinks like /bin -> /usr/bin are preserved.",
+  "if [ '{{option.userspace}}' = 'gnu' ]; then",
+  "  mkdir -p {{build_dir}}/initramfs",
+  "  cp -a {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/",
+  "  CONSOLE_CMD='/bin/cttyhack /bin/bash --login'",
+  "  echo 'GNU userspace selected: Ubuntu Base ARM64 with bash and a wider GNU-style toolset.' > {{build_dir}}/initramfs/etc/mlang-userspace.txt",
+  "else",
+  "  mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/usr/bin",
+  "  CONSOLE_CMD='/bin/cttyhack /bin/sh'",
+  "  echo 'BusyBox userspace selected.' > {{build_dir}}/initramfs/etc/mlang-userspace.txt",
+  "fi",
+  "# Add the runtime directories that both userspaces need for boot.",
+  "mkdir -p {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
   "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
-  "# Use BusyBox itself as the real PID 1 init process and create applet symlinks on the host instead of executing the guest binary during packing.",
-  "cd {{build_dir}}/initramfs/bin && for applet in sh init ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync cttyhack; do ln -sf busybox $applet; done",
+  "# Use BusyBox itself as the real PID 1 init process. In BusyBox mode we also expose a broad set of applets as direct commands.",
+  "if [ '{{option.userspace}}' = 'gnu' ]; then",
+  "  cd {{build_dir}}/initramfs/bin && for applet in init cttyhack; do ln -sf busybox $applet; done",
+  "else",
+  "  cd {{build_dir}}/initramfs/bin && for applet in sh init ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync cttyhack awk sed find xargs sort cut tr wc tee df du free kill killall hexdump watch tar gzip gunzip; do ln -sf busybox $applet; done",
+  "fi",
   "# /init points at BusyBox, which reads /etc/inittab and starts the serial console shell on ttyAMA0.",
   "ln -sf bin/busybox {{build_dir}}/initramfs/init",
   "# Keep the boot flow readable in the manifest by writing the BusyBox init configuration inline.",
-  "cat > {{build_dir}}/initramfs/etc/inittab <<'EOF'",
+  "# Expand CONSOLE_CMD now so BusyBox init gets a concrete shell command in /etc/inittab.",
+  "cat > {{build_dir}}/initramfs/etc/inittab <<EOF",
   "::sysinit:/bin/mount -t proc proc /proc",
   "::sysinit:/bin/mount -t sysfs sysfs /sys",
   "::sysinit:/bin/mount -t devtmpfs devtmpfs /dev",
   "::sysinit:/bin/mkdir -p /dev/pts",
-  "ttyAMA0::respawn:/bin/cttyhack /bin/sh",
+  "ttyAMA0::respawn:$CONSOLE_CMD",
   "::ctrlaltdel:/bin/umount -a -r",
   "::shutdown:/bin/umount -a -r",
   "EOF",
@@ -293,8 +317,53 @@ commands = [
 print = "[example] Downloading the prebuilt BusyBox userspace for Darwin hosts"
 
 [[task]]
+name = "gnu-userspace-fetch"
+print = "[example] Preparing the optional GNU userspace rootfs when userspace=gnu"
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}"
+  ],
+  [
+    "sh",
+    "-c",
+    "if [ \"{{option.userspace}}\" != \"gnu\" ]; then echo GNU userspace download skipped because userspace={{option.userspace}}.; exit 0; fi"
+  ],
+  # Use Ubuntu Base because its rootfs tarball extracts cleanly on case-insensitive macOS filesystems.
+  [
+    "sh",
+    "-c",
+    "[ -f {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz"
+  ],
+]
+commands += [
+  [
+    "rm",
+    "-rf",
+    "{{build_dir}}/gnu-rootfs"
+  ],
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/gnu-rootfs"
+  ],
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz",
+    "-C",
+    "{{build_dir}}/gnu-rootfs"
+  ]
+]
+
+[task.host.darwin]
+print = "[example] Preparing the optional GNU userspace rootfs for Darwin hosts"
+
+[[task]]
 name = "qemu-run"
-print = "[example] Booting the built kernel in QEMU"
+print = "[example] Booting the built kernel in QEMU with {{option.userspace}} userspace"
 log_output = false
 workdir = "{{root}}"
 join_on = ["kernel-build", "initramfs"]

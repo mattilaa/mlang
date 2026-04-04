@@ -29,6 +29,11 @@ If `--config` is omitted, the package manager uses `mlang.toml`. Supplying
 keep multiple manifests, such as separate files per CPU architecture or build
 workflow.
 
+`mlang pkg run` also accepts `--option key=value` to override values declared
+under `[tool.mlang.options]`. Tasks can then read those values through
+`{{option.name}}` placeholders, which is useful for switching runtime modes
+without duplicating whole manifests.
+
 ## Subcommands
 
 ### `pkg init`
@@ -465,6 +470,8 @@ Task semantics:
 - `commands = [ [ "binary", "arg1" ], [ "other", "arg" ] ]` lets multiple
   commands be written as token arrays, and `commands += [ ... ]` appends more
   command entries later in the same task block.
+- `chmod = "644"` plus `chmod_path` / `chmod_paths` applies a recursive
+  permission fixup after the task succeeds.
 - `mlang pkg run <task>` honors task dependencies. If a task declares
   `depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
   are run before the requested task body starts.
@@ -763,9 +770,53 @@ Supported placeholders in `workdir` and commands:
 - `{{build_dir}}`
 - `{{deps_dir}}`
 - `{{make}}`
+- `{{option.<name>}}`
 
 `{{build_dir}}` and `{{deps_dir}}` expand to the configured `[tool.mlang]`
 directories for that package.
+`{{option.<name>}}` expands from `[tool.mlang.options]`, overridden by any
+`mlang pkg run --option name=value` CLI arguments.
+
+Runtime option example:
+
+```toml
+[tool.mlang.options]
+userspace = "busybox"
+
+[[task]]
+name = "qemu-run"
+print = "Booting QEMU with {{option.userspace}} userspace"
+```
+
+```sh
+./build/mlang pkg run qemu-run --option userspace=gnu
+```
+
+Permission-fixup example:
+
+```toml
+[[task]]
+name = "extract-src"
+commands = [
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/archive.tar.gz",
+    "-C",
+    "{{build_dir}}/src"
+  ]
+]
+chmod = "644"
+chmod_paths = [
+  "{{build_dir}}/src"
+]
+```
+
+`chmod` currently accepts octal modes such as `644` or `755`. The mode is
+applied recursively to regular files, while directories keep traverse bits so
+`chmod = "644"` remains usable for extracted source trees. For executable
+trees such as a guest rootfs, prefer a mode that preserves execute bits where
+needed.
 
 The Linux kernel example uses:
 
@@ -774,7 +825,10 @@ The Linux kernel example uses:
 - `darwin-native-prepare` to generate compatibility headers and patch
   `scripts/mod/file2alias.c` for native Apple Silicon builds
 - `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
-- `initramfs` to build the example initramfs archive
+- `busybox-fetch` for the minimal BusyBox userspace
+- `gnu-userspace-fetch` for the optional wider GNU userspace rootfs selected
+  with `mlang pkg run ... --option userspace=gnu`
+- `initramfs` to build the example initramfs archive for either userspace
 - `qemu-run` to boot the generated image under QEMU after its prerequisites
   complete, optionally in parallel
 

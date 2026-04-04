@@ -9,12 +9,17 @@
  * manifest dependency edges such as `depends_on`, `join_on`, and phase-based
  * scheduling. The pkg CLI also accepts `--config <file>` (or
  * `--config=<file>`) before the subcommand to target an alternate manifest
- * instead of the default `mlang.toml`. Tasks may also opt into
+ * instead of the default `mlang.toml`. `mlang pkg run` also accepts
+ * `--option key=value` overrides for values declared under
+ * `[tool.mlang.options]`, which are exposed to task text through placeholders
+ * such as `{{option.userspace}}`. Tasks may also opt into
  * `inline_output = true`, which keeps command output on a single live status
  * row with task numbering and a truncated tail of the latest output line.
  * Declarative task builds are also supported via keys such as `language`,
  * `source`, `output`, `inputs`, `compile_only`, `libs`, `lib_paths`,
- * `compiler_flags`, and `linker_flags`.
+ * `compiler_flags`, and `linker_flags`. Tasks may also request a recursive
+ * permission fixup after they complete with `chmod` plus `chmod_path` or
+ * `chmod_paths`.
  *
  * Example manifest excerpt:
  * \code{.toml}
@@ -52,6 +57,9 @@
  * # Comments are supported too.
  * [tool.mlang]
  * build_dir = "build-release" # End-of-line comments also work.
+ *
+ * [tool.mlang.options]
+ * userspace = "busybox"
  * \endcode
  *
  * Task array values such as `inputs`, `libs`, `compiler_flags`,
@@ -84,32 +92,65 @@
  * ]
  * \endcode
  *
- * Linux initramfs example using BusyBox as the real `/init`:
+ * Post-task chmod example:
  * \code{.toml}
+ * [[task]]
+ * name = "fix-source-perms"
+ * commands = [
+ *   [ "tar", "-xzf", "{{build_dir}}/archive.tar.gz", "-C", "{{build_dir}}/src" ],
+ * ]
+ * chmod = "644"
+ * chmod_paths = [
+ *   "{{build_dir}}/src",
+ * ]
+ * \endcode
+ *
+ * `chmod` currently accepts octal modes such as `644` or `755`. The mode is
+ * applied recursively to regular files, and directories keep traverse bits so
+ * a source tree remains usable after `chmod = "644"`.
+ *
+ * Linux initramfs example using BusyBox as the real `/init` while optionally
+ * overlaying a wider GNU userspace selected from the command line:
+ * \code{.toml}
+ * [tool.mlang.options]
+ * userspace = "busybox"
+ *
  * [[task]]
  * name = "busybox-fetch"
  * commands = [
- *   "mkdir -p {{build_dir}}",
- *   "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
- *   "chmod +x {{build_dir}}/busybox-armv8l",
+ *   [ "mkdir", "-p", "{{build_dir}}" ],
+ *   [ "sh", "-c", "[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l" ],
+ *   [ "chmod", "+x", "{{build_dir}}/busybox-armv8l" ],
+ * ]
+ *
+ * [[task]]
+ * name = "gnu-userspace-fetch"
+ * commands = [
+ *   [ "sh", "-c", "if [ \"{{option.userspace}}\" != \"gnu\" ]; then exit 0; fi" ],
+ *   [ "mkdir", "-p", "{{build_dir}}" ],
+ *   [ "sh", "-c", "[ -f {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz" ],
+ *   [ "rm", "-rf", "{{build_dir}}/gnu-rootfs" ],
+ *   [ "mkdir", "-p", "{{build_dir}}/gnu-rootfs" ],
+ *   [ "tar", "-xzf", "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz", "-C", "{{build_dir}}/gnu-rootfs" ],
  * ]
  *
  * [[task]]
  * name = "initramfs"
- * depends_on = ["busybox-fetch"]
+ * depends_on = ["busybox-fetch", "gnu-userspace-fetch"]
  * shell = [
  *   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
- *   "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin",
+ *   "if [ '{{option.userspace}}' = 'gnu' ]; then cp -a {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/; CONSOLE_CMD='/bin/cttyhack /bin/bash --login'; else mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/usr/bin; CONSOLE_CMD='/bin/cttyhack /bin/sh'; fi",
+ *   "mkdir -p {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
  *   "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
  *   "# Use BusyBox as the real PID 1 init process and precreate applet links on the host.",
- *   "cd {{build_dir}}/initramfs/bin && for applet in sh init ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync cttyhack; do ln -sf busybox $applet; done",
+ *   "cd {{build_dir}}/initramfs/bin && for applet in init cttyhack sh mount mkdir uname ls cat echo dmesg ps; do ln -sf busybox $applet; done",
  *   "ln -sf bin/busybox {{build_dir}}/initramfs/init",
- *   "cat > {{build_dir}}/initramfs/etc/inittab <<'EOF'",
+ *   "cat > {{build_dir}}/initramfs/etc/inittab <<EOF",
  *   "::sysinit:/bin/mount -t proc proc /proc",
  *   "::sysinit:/bin/mount -t sysfs sysfs /sys",
  *   "::sysinit:/bin/mount -t devtmpfs devtmpfs /dev",
  *   "::sysinit:/bin/mkdir -p /dev/pts",
- *   "ttyAMA0::respawn:/bin/cttyhack /bin/sh",
+ *   "ttyAMA0::respawn:$CONSOLE_CMD",
  *   "::ctrlaltdel:/bin/umount -a -r",
  *   "::shutdown:/bin/umount -a -r",
  *   "EOF",
@@ -117,10 +158,21 @@
  * ]
  * \endcode
  *
- * The BusyBox applet links are created explicitly during packing because the
- * host may not be able to execute the target-architecture BusyBox binary.
- * Writing `/etc/inittab` lets BusyBox `init` mount the basic pseudo
- * filesystems and respawn a shell on `ttyAMA0`.
+ * Build and run the example from
+ * `examples/package_manager_linux_aarch64_qemu/` with:
+ * \code{.sh}
+ * ../../build/mlang pkg run qemu-run --option userspace=busybox
+ * ../../build/mlang pkg run qemu-run --option userspace=gnu
+ * \endcode
+ *
+ * The first command boots a minimal BusyBox shell. The second command overlays
+ * an Ubuntu Base ARM64 rootfs and starts `bash` on the QEMU serial console.
+ * Both modes fetch dependencies on demand, build the kernel image, pack the
+ * initramfs, and then launch QEMU. The BusyBox applet links are created
+ * explicitly during packing because the host may not be able to execute the
+ * target-architecture BusyBox binary. Writing `/etc/inittab` lets BusyBox
+ * `init` mount the basic pseudo filesystems and respawn either a BusyBox shell
+ * or a GNU `bash` shell on `ttyAMA0`, depending on `userspace`.
  */
 class PackageManager
 {
@@ -133,6 +185,9 @@ public:
      *
      * The expected CLI shape is:
      * `mlang pkg [--config FILE] <subcommand> [args...]`.
+     * Runtime task invocations may additionally pass `--option key=value`
+     * after `run <task>` to override values declared under
+     * `[tool.mlang.options]`.
      *
      * \return Process-style exit code. Returns `0` on success and non-zero on
      *         failure.

@@ -178,6 +178,24 @@ Generate a complete subproject package automatically:
 points outside it, fetched dependencies are kept for reuse unless you pass
 `--deps`.
 
+Task-driven manifests can also declare runtime-selectable values under
+`[tool.mlang.options]`. Override them per invocation with
+`mlang pkg run ... --option key=value`, then reference them in task text via
+placeholders such as `{{option.userspace}}`:
+
+```toml
+[tool.mlang.options]
+userspace = "busybox"
+
+[[task]]
+name = "qemu-run"
+print = "Booting QEMU with {{option.userspace}} userspace"
+```
+
+```sh
+./build/mlang pkg run qemu-run --option userspace=gnu
+```
+
 Custom task workflows can be declared in `mlang.toml` and run with:
 
 ```sh
@@ -200,7 +218,35 @@ Current task graph features:
 - `command = [ "binary", "arg1", "arg2" ]` for one readable tokenized command
 - `commands = [ [ "binary", "arg1" ] ]` and `commands += [ ... ]` for
   multiline appended command lists
+- `chmod = "644"` plus `chmod_path` / `chmod_paths` for recursive permission
+  fixups after a task succeeds
+- `[tool.mlang.options]` plus `pkg run --option key=value` for manifest-driven
+  runtime mode switches such as alternate guest userspaces
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
+
+Permission-fixup example:
+
+```toml
+[[task]]
+name = "extract-src"
+commands = [
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/archive.tar.gz",
+    "-C",
+    "{{build_dir}}/src"
+  ]
+]
+chmod = "644"
+chmod_paths = [
+  "{{build_dir}}/src"
+]
+```
+
+`chmod` currently accepts octal modes such as `644` or `755`. The mode is
+applied recursively to files, and directories keep traverse bits so
+`chmod = "644"` still leaves an extracted source tree readable and enterable.
 
 A minimal workflow example:
 

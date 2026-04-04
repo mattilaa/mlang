@@ -87,6 +87,9 @@ enum class TaskTomlKey
     Script,
     Shell,
     Commands,
+    Chmod,
+    ChmodPath,
+    ChmodPaths,
     OptLevel,
     TargetArch,
     PathEntries,
@@ -171,7 +174,7 @@ enum class TaskLanguage
     Cpp,
 };
 
-static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 33>
+static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 36>
     kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
                     { TaskTomlKey::Message, "message" },
                     { TaskTomlKey::Print, "print" },
@@ -196,6 +199,9 @@ static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 33>
                     { TaskTomlKey::Script, "script" },
                     { TaskTomlKey::Shell, "shell" },
                     { TaskTomlKey::Commands, "commands" },
+                    { TaskTomlKey::Chmod, "chmod" },
+                    { TaskTomlKey::ChmodPath, "chmod_path" },
+                    { TaskTomlKey::ChmodPaths, "chmod_paths" },
                     { TaskTomlKey::OptLevel, "opt_level" },
                     { TaskTomlKey::TargetArch, "target_arch" },
                     { TaskTomlKey::PathEntries, "path_entries" },
@@ -884,6 +890,7 @@ struct BuildConfig
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
     std::vector<std::string> libs;
+    std::map<std::string, std::string> optionValues;
     std::optional<bool> useNinja;
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
@@ -913,6 +920,8 @@ struct TaskSpec
     std::optional<bool> parallel;
     std::optional<bool> logOutput;
     std::optional<bool> inlineOutput;
+    std::string chmodMode;
+    std::vector<std::string> chmodPaths;
     std::vector<std::string> dependsOn;
     std::vector<std::string> phaseDependsOn;
     std::vector<std::string> joinOn;
@@ -937,6 +946,8 @@ struct TaskSpec
         std::optional<bool> parallel;
         std::optional<bool> logOutput;
         std::optional<bool> inlineOutput;
+        std::string chmodMode;
+        std::vector<std::string> chmodPaths;
         std::vector<std::string> dependsOn;
         std::vector<std::string> phaseDependsOn;
         std::vector<std::string> joinOn;
@@ -1024,6 +1035,130 @@ static bool parse_toml_bool_value(const std::string& value)
     return t == "true" || t == "1" || t == "\"true\"";
 }
 
+static std::optional<unsigned int>
+parse_octal_permission_bits(const std::string& value)
+{
+    const std::string text = trim(unquote(value));
+    if(text.empty())
+        return std::nullopt;
+
+    unsigned int mode = 0;
+    for(char c : text)
+    {
+        if(c < '0' || c > '7')
+            return std::nullopt;
+        mode = (mode * 8u) + static_cast<unsigned int>(c - '0');
+    }
+    return mode;
+}
+
+static std::filesystem::perms
+directory_perms_from_file_mode(unsigned int mode)
+{
+    std::filesystem::perms perms = std::filesystem::perms::none;
+    auto add_if = [&](bool enabled, std::filesystem::perms bit) {
+        if(enabled)
+            perms |= bit;
+    };
+
+    const bool ownerRead = (mode & 0400u) != 0u;
+    const bool ownerWrite = (mode & 0200u) != 0u;
+    const bool ownerExec = (mode & 0100u) != 0u;
+    const bool groupRead = (mode & 0040u) != 0u;
+    const bool groupWrite = (mode & 0020u) != 0u;
+    const bool groupExec = (mode & 0010u) != 0u;
+    const bool othersRead = (mode & 0004u) != 0u;
+    const bool othersWrite = (mode & 0002u) != 0u;
+    const bool othersExec = (mode & 0001u) != 0u;
+
+    add_if(ownerRead, std::filesystem::perms::owner_read);
+    add_if(ownerWrite, std::filesystem::perms::owner_write);
+    add_if(ownerExec || ownerRead, std::filesystem::perms::owner_exec);
+    add_if(groupRead, std::filesystem::perms::group_read);
+    add_if(groupWrite, std::filesystem::perms::group_write);
+    add_if(groupExec || groupRead, std::filesystem::perms::group_exec);
+    add_if(othersRead, std::filesystem::perms::others_read);
+    add_if(othersWrite, std::filesystem::perms::others_write);
+    add_if(othersExec || othersRead, std::filesystem::perms::others_exec);
+    return perms;
+}
+
+static std::filesystem::perms file_perms_from_mode(unsigned int mode)
+{
+    std::filesystem::perms perms = std::filesystem::perms::none;
+    auto add_if = [&](bool enabled, std::filesystem::perms bit) {
+        if(enabled)
+            perms |= bit;
+    };
+    add_if((mode & 0400u) != 0u, std::filesystem::perms::owner_read);
+    add_if((mode & 0200u) != 0u, std::filesystem::perms::owner_write);
+    add_if((mode & 0100u) != 0u, std::filesystem::perms::owner_exec);
+    add_if((mode & 0040u) != 0u, std::filesystem::perms::group_read);
+    add_if((mode & 0020u) != 0u, std::filesystem::perms::group_write);
+    add_if((mode & 0010u) != 0u, std::filesystem::perms::group_exec);
+    add_if((mode & 0004u) != 0u, std::filesystem::perms::others_read);
+    add_if((mode & 0002u) != 0u, std::filesystem::perms::others_write);
+    add_if((mode & 0001u) != 0u, std::filesystem::perms::others_exec);
+    return perms;
+}
+
+static bool apply_recursive_permissions(
+    const std::filesystem::path& path, unsigned int mode, std::string& error)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if(!fs::exists(path, ec))
+    {
+        error = "chmod target does not exist: " + path.string();
+        return false;
+    }
+
+    const fs::perms filePerms = file_perms_from_mode(mode);
+    const fs::perms dirPerms = directory_perms_from_file_mode(mode);
+    auto apply_one = [&](const fs::path& current) -> bool {
+        std::error_code statusEc;
+        const fs::file_status status = fs::symlink_status(current, statusEc);
+        if(statusEc)
+        {
+            error = "Failed to read status for chmod target " +
+                    current.string() + ": " + statusEc.message();
+            return false;
+        }
+        if(fs::is_symlink(status))
+            return true;
+        const fs::perms perms =
+            fs::is_directory(status) ? dirPerms : filePerms;
+        std::error_code permsEc;
+        fs::permissions(current, perms, fs::perm_options::replace, permsEc);
+        if(permsEc)
+        {
+            error = "Failed to chmod " + current.string() + ": " +
+                    permsEc.message();
+            return false;
+        }
+        return true;
+    };
+
+    if(!apply_one(path))
+        return false;
+    if(!fs::is_directory(path, ec))
+        return true;
+
+    for(fs::recursive_directory_iterator it(path, ec), end; it != end;
+        it.increment(ec))
+    {
+        if(ec)
+        {
+            error = "Failed to walk chmod target " + path.string() + ": " +
+                    ec.message();
+            return false;
+        }
+        if(!apply_one(it->path()))
+            return false;
+    }
+    return true;
+}
+
 static void append_unique_strings(std::vector<std::string>& dst,
                                   const std::vector<std::string>& src)
 {
@@ -1094,6 +1229,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
                         overrideCfg.libPaths.end());
     out.libs.insert(out.libs.end(), overrideCfg.libs.begin(),
                     overrideCfg.libs.end());
+    for(const auto& [key, value] : overrideCfg.optionValues)
+        out.optionValues[key] = value;
     if(overrideCfg.useNinja.has_value())
         out.useNinja = overrideCfg.useNinja;
     if(overrideCfg.staticDeps.has_value())
@@ -1187,13 +1324,19 @@ static BuildConfig parse_build_config(const std::string& content)
             section = t.substr(1, t.size() - 2);
             continue;
         }
-        if(section != "tool.mlang")
-            continue;
-
         const auto assignment = parse_toml_assignment(t, in);
         if(!assignment.has_value())
             continue;
-        parse_build_config_key_value(cfg, assignment->key, assignment->value);
+        if(section == "tool.mlang")
+        {
+            parse_build_config_key_value(cfg, assignment->key,
+                                         assignment->value);
+        }
+        else if(section == "tool.mlang.options")
+        {
+            cfg.optionValues[assignment->key] =
+                unquote_preserve(assignment->value);
+        }
     }
     return cfg;
 }
@@ -1520,6 +1663,13 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 break;
             case TaskTomlKey::Commands:
                 append_toml_commands_value(taskValue, target.commands);
+                break;
+            case TaskTomlKey::Chmod:
+                target.chmodMode = unquote(taskValue);
+                break;
+            case TaskTomlKey::ChmodPath:
+            case TaskTomlKey::ChmodPaths:
+                append_toml_string_list_value(taskValue, target.chmodPaths);
                 break;
             case TaskTomlKey::OptLevel:
             case TaskTomlKey::TargetArch:
@@ -2484,11 +2634,8 @@ class ProgressSpinner
                     std::lock_guard<std::mutex> lock(detailMutex_);
                     detail = detail_;
                 }
-                std::cerr << "\r\033[2K" << label_;
-                if(!detail.empty())
-                    std::cerr << " " << shorten_progress_output(detail);
-                std::cerr << " " << frames[idx % 4]
-                          << std::flush;
+                std::cerr << "\r\033[2K"
+                          << live_line(frames[idx % 4], detail) << std::flush;
                 idx++;
                 std::this_thread::sleep_for(std::chrono::milliseconds(120));
             }
@@ -2523,6 +2670,34 @@ class ProgressSpinner
     }
 
   private:
+    std::string live_line(char frame, const std::string& detail) const
+    {
+        if(!label_.empty() && label_.front() == '[')
+        {
+            const size_t close = label_.find(']');
+            if(close != std::string::npos)
+            {
+                std::string out = label_.substr(0, close + 1);
+                out += " ";
+                out += frame;
+                const std::string rest = trim(label_.substr(close + 1));
+                if(!rest.empty())
+                    out += " " + rest;
+                if(!detail.empty())
+                    out += " " + shorten_progress_output(detail);
+                return out;
+            }
+        }
+
+        std::string out;
+        out += frame;
+        out += " ";
+        out += label_;
+        if(!detail.empty())
+            out += " " + shorten_progress_output(detail);
+        return out;
+    }
+
     std::string label_;
     std::string detail_;
     std::mutex detailMutex_;
@@ -3761,6 +3936,8 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{make}}",
                       buildConfig.makeProgram.empty() ? "make"
                                                       : buildConfig.makeProgram);
+    for(const auto& [key, value] : buildConfig.optionValues)
+        out = replace_all(out, "{{option." + key + "}}", value);
     return out;
 }
 
@@ -4194,6 +4371,17 @@ static int run_task_for_manifest_impl(
             hostOverride && hostOverride->inlineOutput.has_value()
                 ? hostOverride->inlineOutput.value()
                 : task.inlineOutput.value_or(false);
+        const std::string effectiveChmodMode =
+            (hostOverride && !hostOverride->chmodMode.empty())
+                ? hostOverride->chmodMode
+                : task.chmodMode;
+        std::vector<std::string> effectiveChmodPaths = task.chmodPaths;
+        if(hostOverride)
+        {
+            effectiveChmodPaths.insert(effectiveChmodPaths.end(),
+                                       hostOverride->chmodPaths.begin(),
+                                       hostOverride->chmodPaths.end());
+        }
         BuildConfig effectiveTaskBuildConfig =
             merge_build_config(buildConfig, task.buildConfig);
         if(hostOverride)
@@ -4378,6 +4566,57 @@ static int run_task_for_manifest_impl(
             }
         }
 
+        if(!effectiveChmodMode.empty())
+        {
+            const auto mode = parse_octal_permission_bits(effectiveChmodMode);
+            if(!mode.has_value())
+            {
+                std::cerr << "Task '" << taskName << "' in "
+                          << pkg.manifestPath.string()
+                          << " has invalid chmod mode '" << effectiveChmodMode
+                          << "'. Use an octal mode such as 644 or 755.\n";
+                taskStack.pop_back();
+                {
+                    std::lock_guard<std::mutex> lock(taskMutex);
+                    taskStates[taskName].status = TaskRunState::failed;
+                }
+                taskCv.notify_all();
+                return 1;
+            }
+            if(effectiveChmodPaths.empty())
+            {
+                std::cerr << "Task '" << taskName << "' in "
+                          << pkg.manifestPath.string()
+                          << " sets chmod but no chmod_path or chmod_paths.\n";
+                taskStack.pop_back();
+                {
+                    std::lock_guard<std::mutex> lock(taskMutex);
+                    taskStates[taskName].status = TaskRunState::failed;
+                }
+                taskCv.notify_all();
+                return 1;
+            }
+            for(const auto& chmodPathText : effectiveChmodPaths)
+            {
+                const std::filesystem::path chmodPath =
+                    expand_task_text(chmodPathText, pkg, buildConfig);
+                std::string chmodError;
+                if(!apply_recursive_permissions(chmodPath, *mode, chmodError))
+                {
+                    std::cerr << chmodError << "\n";
+                    std::cerr << "Task '" << taskName << "' failed for "
+                              << pkg.manifestPath.string() << ".\n";
+                    taskStack.pop_back();
+                    {
+                        std::lock_guard<std::mutex> lock(taskMutex);
+                        taskStates[taskName].status = TaskRunState::failed;
+                    }
+                    taskCv.notify_all();
+                    return 1;
+                }
+            }
+        }
+
         if(effectiveParallel && effectiveNext.size() > 1)
         {
             std::vector<std::future<int>> futures;
@@ -4495,6 +4734,7 @@ struct PkgCliOverrides
     std::optional<std::string> stderrLog;
     std::optional<std::string> warnLog;
     std::optional<bool> taskPrintToStdoutLog;
+    std::map<std::string, std::string> optionValues;
 };
 
 static void apply_cli_overrides(BuildConfig& buildConfig,
@@ -4519,8 +4759,22 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.warnLog = *overrides.warnLog;
     if(overrides.taskPrintToStdoutLog.has_value())
         buildConfig.taskPrintToStdoutLog = *overrides.taskPrintToStdoutLog;
+    for(const auto& [key, value] : overrides.optionValues)
+        buildConfig.optionValues[key] = value;
     if(enableLogs)
         buildConfig.enableLogs = true;
+}
+
+static bool parse_pkg_option_argument(const std::string& text,
+                                      std::string& key,
+                                      std::string& value)
+{
+    const size_t eq = text.find('=');
+    if(eq == std::string::npos)
+        return false;
+    key = trim(text.substr(0, eq));
+    value = trim(text.substr(eq + 1));
+    return !key.empty();
 }
 
 } // namespace
@@ -4949,7 +5203,8 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Usage: " << argv[0]
                       << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
-                      << " [--task-print-to-stdout-log]\n";
+                      << " [--task-print-to-stdout-log]"
+                      << " [--option KEY=VALUE]\n";
             return 1;
         }
         if(!std::filesystem::exists(manifestPath))
@@ -4985,6 +5240,29 @@ int PackageManager::run(int argc, char** argv)
                 overrides.buildDir = argv[++i];
             else if(arg == "--deps-dir" && i + 1 < argc)
                 overrides.depsDir = argv[++i];
+            else if(arg == "--option" && i + 1 < argc)
+            {
+                std::string key;
+                std::string value;
+                if(!parse_pkg_option_argument(argv[++i], key, value))
+                {
+                    std::cerr << "--option requires KEY=VALUE\n";
+                    return 1;
+                }
+                overrides.optionValues[key] = value;
+            }
+            else if(arg.rfind("--option=", 0) == 0)
+            {
+                std::string key;
+                std::string value;
+                if(!parse_pkg_option_argument(
+                       arg.substr(std::string("--option=").size()), key, value))
+                {
+                    std::cerr << "--option requires KEY=VALUE\n";
+                    return 1;
+                }
+                overrides.optionValues[key] = value;
+            }
             else
             {
                 std::cerr << "Unknown option for 'pkg run': " << arg << "\n"
@@ -4992,7 +5270,8 @@ int PackageManager::run(int argc, char** argv)
                           << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
-                          << " [--task-print-to-stdout-log]\n";
+                          << " [--task-print-to-stdout-log]"
+                          << " [--option KEY=VALUE]\n";
                 return 1;
             }
         }

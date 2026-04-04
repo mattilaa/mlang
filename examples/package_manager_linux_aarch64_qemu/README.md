@@ -7,9 +7,16 @@ This example demonstrates package-manager capabilities around:
   `parallel`, `shell`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
-the configured make tool, downloads a prebuilt BusyBox userspace, packs it
-into an initramfs directly from `mlang.toml`, and boots through BusyBox
-`init` into a shell on the QEMU serial console.
+the configured make tool, then packs one of two userspaces into the initramfs
+directly from `mlang.toml`:
+
+- a minimal BusyBox userspace
+- a wider GNU-style userspace based on an Ubuntu Base ARM64 rootfs with
+  `bash` and the standard GNU/Linux userland tools shipped there
+
+Both modes boot through BusyBox `init` on the QEMU serial console. The
+selected guest userspace comes from `[tool.mlang.options] userspace` and can be
+overridden from the CLI with `--option userspace=...`.
 The Linux dependency sets `spinner = false` so `curl` can display its own
 download progress bar cleanly during `pkg fetch`. Other package-manager
 operations keep the rolling spinner by default unless CLI log routing is
@@ -32,6 +39,9 @@ log_dir = "/tmp/mlang-linux-aarch64-qemu"
 stdout_log = "pkg.stdout.log"
 stderr_log = "pkg.stderr.log"
 warn_log = "pkg.warn.log"
+
+[tool.mlang.options]
+userspace = "busybox"
 
 [[task]]
 name = "kernel-build"
@@ -63,6 +73,28 @@ commands = [
   "mkdir -p {{build_dir}}",
   "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
   "chmod +x {{build_dir}}/busybox-armv8l"
+]
+
+[[task]]
+name = "gnu-userspace-fetch"
+commands = [
+  [
+    "sh",
+    "-c",
+    "if [ \"{{option.userspace}}\" != \"gnu\" ]; then exit 0; fi"
+  ],
+  [
+    "sh",
+    "-c",
+    "[ -f {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz"
+  ],
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz",
+    "-C",
+    "{{build_dir}}/gnu-rootfs"
+  ]
 ]
 
 [[task]]
@@ -130,6 +162,25 @@ From this directory:
 ../../build/mlang pkg run boot-flow
 ```
 
+Run the default BusyBox userspace explicitly with:
+
+```sh
+../../build/mlang pkg run qemu-run --option userspace=busybox
+```
+
+Run the wider GNU userspace with:
+
+```sh
+../../build/mlang pkg run qemu-run --option userspace=gnu
+```
+
+Both commands automatically fetch the Linux source dependency first. In GNU
+mode, `gnu-userspace-fetch` also downloads and unpacks the official Ubuntu Base
+ARM64 rootfs on demand before the initramfs is packed. The example uses Ubuntu
+Base here because its tarball extracts cleanly on case-insensitive macOS
+filesystems, unlike the Arch Linux ARM rootfs layout that hit terminfo
+hard-link collisions.
+
 By default, command output stays on the console even though this manifest
 declares log file paths. To actually write package logs under
 `/tmp/mlang-linux-aarch64-qemu/`, pass a pkg log flag such as `--stdout-log`,
@@ -184,12 +235,16 @@ tasks first and only starts QEMU after both succeed.
 - `busybox-fetch` downloads the prebuilt
   `busybox-armv8l` binary from BusyBox's multiarch musl builds and installs it
   into the initramfs as `/bin/busybox`. The manifest then uses BusyBox as the
-  real `/init`, creates `/bin/sh` and other applet symlinks, and writes
-  `/etc/inittab` so BusyBox `init` respawns a shell on `ttyAMA0`. This works
-  on the QEMU guest because the kernel reports 32-bit EL0 support during boot.
-- The resulting guest now boots to a BusyBox shell prompt on the serial
-  console:
-  `/ #`
+  real `/init`, creates `/bin/sh` and other applet symlinks for the BusyBox
+  mode, and writes `/etc/inittab` so BusyBox `init` respawns a shell on
+  `ttyAMA0`. This works on the QEMU guest because the kernel reports 32-bit
+  EL0 support during boot.
+- `gnu-userspace-fetch` optionally downloads an Ubuntu Base ARM64 rootfs
+  tarball when `userspace=gnu`. `initramfs` overlays that rootfs into the
+  generated image so the guest gets `/bin/bash` and a much wider GNU-style
+  userspace than the minimal BusyBox mode.
+- The resulting guest boots to `/ #` in BusyBox mode and to a GNU `bash`
+  login shell in GNU mode.
 - The tested BusyBox image does not include a `poweroff` applet, so exit QEMU
   with the `Ctrl-a x` nographic shortcut when needed.
 - `log_output = false` can be set on an interactive task such as `qemu-run` to
