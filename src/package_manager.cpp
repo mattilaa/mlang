@@ -24,10 +24,18 @@
 
 namespace {
 
+struct PackageManifest;
+
 static std::vector<std::string> split_toml_array(std::string_view input);
 static std::string unquote(std::string_view v);
+static std::string unquote_preserve(std::string_view v);
 static std::vector<std::string> parse_workspace_members(
     const std::string& content);
+static std::string current_host_name();
+static int run_task_for_manifest(const PackageManifest& pkg,
+                                 const std::string& taskName);
+static void append_toml_string_list_value_preserve(const std::string& value,
+                                                   std::vector<std::string>& out);
 
 static std::string trim(std::string_view s)
 {
@@ -266,11 +274,29 @@ static std::vector<std::string> split_toml_array(std::string_view input)
     std::vector<std::string> out;
     std::string cur;
     bool in_quotes = false;
+    bool escaped = false;
     for(char c : input)
     {
+        if(in_quotes)
+        {
+            cur.push_back(c);
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                in_quotes = false;
+            continue;
+        }
         if(c == '"')
         {
-            in_quotes = !in_quotes;
+            in_quotes = true;
             cur.push_back(c);
             continue;
         }
@@ -856,21 +882,23 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             }
             else if(taskKey == "command")
             {
-                std::string v = unquote(taskValue);
+                std::string v = unquote_preserve(taskValue);
                 if(!v.empty())
                     task.commands.push_back(v);
             }
             else if(taskKey == "env")
             {
-                append_toml_string_list_value(taskValue, task.env);
+                append_toml_string_list_value_preserve(taskValue, task.env);
             }
             else if(taskKey == "script" || taskKey == "shell")
             {
-                append_toml_string_list_value(taskValue, task.shellLines);
+                append_toml_string_list_value_preserve(taskValue,
+                                                       task.shellLines);
             }
             else if(taskKey == "commands")
             {
-                append_toml_string_list_value(taskValue, task.commands);
+                append_toml_string_list_value_preserve(taskValue,
+                                                       task.commands);
             }
         };
 
@@ -915,21 +943,23 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
             }
             else if(taskKey == "command")
             {
-                std::string v = unquote(taskValue);
+                std::string v = unquote_preserve(taskValue);
                 if(!v.empty())
                     ov.commands.push_back(v);
             }
             else if(taskKey == "env")
             {
-                append_toml_string_list_value(taskValue, ov.env);
+                append_toml_string_list_value_preserve(taskValue, ov.env);
             }
             else if(taskKey == "script" || taskKey == "shell")
             {
-                append_toml_string_list_value(taskValue, ov.shellLines);
+                append_toml_string_list_value_preserve(taskValue,
+                                                       ov.shellLines);
             }
             else if(taskKey == "commands")
             {
-                append_toml_string_list_value(taskValue, ov.commands);
+                append_toml_string_list_value_preserve(taskValue,
+                                                       ov.commands);
             }
         };
 
@@ -1107,6 +1137,36 @@ static std::string unquote(std::string_view v)
         return trim(out);
     }
     return t;
+}
+
+static std::string unquote_preserve(std::string_view v)
+{
+    std::string t = trim(v);
+    if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
+        return t.substr(1, t.size() - 2);
+    return t;
+}
+
+static void append_toml_string_list_value_preserve(const std::string& value,
+                                                   std::vector<std::string>& out)
+{
+    std::string t = trim(value);
+    if(t.empty())
+        return;
+    if(t.front() == '[' && t.back() == ']')
+    {
+        for(const auto& part : split_toml_array(t.substr(1, t.size() - 2)))
+        {
+            std::string v = unquote_preserve(part);
+            if(!v.empty())
+                out.push_back(v);
+        }
+        return;
+    }
+
+    std::string v = unquote_preserve(t);
+    if(!v.empty())
+        out.push_back(v);
 }
 
 static std::map<std::string, std::string> parse_inline_table(
@@ -1389,6 +1449,22 @@ static bool ensure_package_entry_stub(const std::filesystem::path& manifestPath,
         return false;
     }
     return true;
+}
+
+static bool manifest_declares_tasks(const std::string& manifestContent)
+{
+    return manifestContent.find("[[task]]") != std::string::npos;
+}
+
+static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
+                                    const std::string& taskName)
+{
+    for(const auto& task : tasks)
+    {
+        if(task.name == taskName)
+            return true;
+    }
+    return false;
 }
 
 static bool scaffold_added_package(const std::filesystem::path& rootManifestPath,
@@ -2172,6 +2248,13 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
                               bool useNinja,
                               const BuildConfig& packageBuildConfig)
 {
+    const auto packageEntry =
+        find_section_toml_string(pkg.content, "package", "entry");
+    const bool hasExplicitPackageEntry =
+        packageEntry.has_value() && !packageEntry->empty();
+    const bool taskOnlyPackage =
+        manifest_declares_tasks(pkg.content) && !hasExplicitPackageEntry;
+
     std::string packageLabel = "app";
     if(auto name = find_section_toml_string(pkg.content, "package", "name");
        name.has_value() && !name->empty())
@@ -2179,7 +2262,8 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         packageLabel = *name;
     }
     std::string entryError;
-    if(!ensure_package_entry_stub(pkg.manifestPath, pkg.content, packageLabel,
+    if(!taskOnlyPackage &&
+       !ensure_package_entry_stub(pkg.manifestPath, pkg.content, packageLabel,
                                   entryError))
     {
         std::cerr << entryError << "\n";
@@ -2189,7 +2273,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
     auto deps = parse_source_deps(pkg.content);
     auto cdeps = parse_c_deps(pkg.content);
     std::vector<BuildTarget> targets = parse_bin_targets(pkg.content);
-    if(targets.empty())
+    if(targets.empty() && !taskOnlyPackage)
     {
         BuildTarget defaultTarget;
         defaultTarget.name = "app";
@@ -2247,6 +2331,31 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         if(!append_pkg_config_flags(dep, pkgFlags,
                                     packageBuildConfig.pathEntries))
             return 1;
+    }
+
+    if(targets.empty())
+    {
+        const auto tasks = parse_task_specs(pkg.content);
+        const std::string hostName = current_host_name();
+        const auto buildTasks =
+            task_names_for_phases(tasks, std::vector<std::string> { "build" },
+                                  hostName);
+        if(!buildTasks.empty())
+        {
+            for(const auto& taskName : buildTasks)
+            {
+                if(run_task_for_manifest(pkg, taskName) != 0)
+                    return 1;
+            }
+            return 0;
+        }
+        if(task_list_contains_name(tasks, "build"))
+            return run_task_for_manifest(pkg, "build");
+
+        std::cerr << "No package entry, [[bin]] targets, or phase=\"build\" "
+                     "tasks found for "
+                  << pkg.manifestPath.string() << "\n";
+        return 1;
     }
 
     const std::filesystem::path buildDir =

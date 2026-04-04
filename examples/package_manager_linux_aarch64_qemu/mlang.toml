@@ -206,7 +206,9 @@ commands = [
 
 [[task]]
 name = "kernel-build"
+phase = "build"
 workdir = "{{root}}"
+depends_on = ["toolchain-check"]
 commands = [
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} defconfig",
   "{{make}} -C {{deps_dir}}/linux ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-} -j${JOBS:-4} Image"

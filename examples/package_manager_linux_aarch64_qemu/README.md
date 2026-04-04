@@ -120,9 +120,11 @@ To only compile the Linux kernel image for AArch64 without booting QEMU:
 
 ```sh
 ../../build/mlang pkg fetch
-../../build/mlang pkg run toolchain-check
-../../build/mlang pkg run kernel-build
+../../build/mlang pkg build
 ```
+
+For this example, `pkg build` runs tasks tagged with `phase = "build"`, which
+maps to the `kernel-build` task.
 
 Or step-by-step:
 
