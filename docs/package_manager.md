@@ -460,6 +460,11 @@ Task semantics:
   `static_cpp_runtime`.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
   and runs it through `sh`.
+- `command = [ "binary", "arg1", "arg2" ]` lets one command be written as a
+  token array instead of a single shell string.
+- `commands = [ [ "binary", "arg1" ], [ "other", "arg" ] ]` lets multiple
+  commands be written as token arrays, and `commands += [ ... ]` appends more
+  command entries later in the same task block.
 - `mlang pkg run <task>` honors task dependencies. If a task declares
   `depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
   are run before the requested task body starts.
@@ -468,8 +473,8 @@ Task semantics:
   `{{deps_dir}}`.
 - TOML list-valued task keys such as `inputs`, `libs`, `compiler_flags`,
   `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
-  comma-separated arrays, and both `"double-quoted"` and `'single-quoted'`
-  string items are supported.
+  comma-separated arrays, nested command token arrays, and `+=` append syntax.
+  Both `"double-quoted"` and `'single-quoted'` string items are supported.
 - `#` comments are supported both on their own line and at the end of a TOML
   assignment line, as long as the `#` is outside quoted string content.
 
@@ -495,6 +500,27 @@ Host-specific overrides are supported with subtables such as:
 [task.host.darwin]
 shell = [
   "docker build -t my-image {{root}}"
+]
+```
+
+Readable command example:
+
+```toml
+[[task]]
+name = "toolchain-check"
+commands = [
+  [
+    'sh',
+    '-c',
+    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+  ],
+]
+commands += [
+  [
+    'sh',
+    '-c',
+    'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done',
+  ],
 ]
 ```
 

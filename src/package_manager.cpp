@@ -36,8 +36,13 @@ struct PackageManifest;
 struct BuildConfig;
 
 static std::vector<std::string> split_toml_array(std::string_view input);
+static std::string shell_quote(const std::string& s);
 static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
+static void append_toml_command_value(const std::string& value,
+                                      std::vector<std::string>& out);
+static void append_toml_commands_value(const std::string& value,
+                                       std::vector<std::string>& out);
 static std::string format_task_elapsed(std::chrono::milliseconds elapsed);
 static std::string shorten_progress_description(const std::string& description);
 static std::string sanitize_progress_output(std::string text);
@@ -521,6 +526,7 @@ static std::vector<std::string> split_toml_array(std::string_view input)
 {
     std::vector<std::string> out;
     std::string cur;
+    int depth = 0;
     bool inDoubleQuotes = false;
     bool inSingleQuotes = false;
     bool escaped = false;
@@ -562,7 +568,20 @@ static std::vector<std::string> split_toml_array(std::string_view input)
             cur.push_back(c);
             continue;
         }
-        if(c == ',' && !inDoubleQuotes && !inSingleQuotes)
+        if(c == '[')
+        {
+            ++depth;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == ']')
+        {
+            if(depth > 0)
+                --depth;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == ',' && depth == 0 && !inDoubleQuotes && !inSingleQuotes)
         {
             out.push_back(trim(cur));
             cur.clear();
@@ -696,6 +715,70 @@ static std::string collect_multiline_toml_value(std::string value,
             break;
     }
     return value;
+}
+
+struct ParsedTomlAssignment
+{
+    std::string key;
+    std::string value;
+    bool append = false;
+};
+
+static std::optional<ParsedTomlAssignment> parse_toml_assignment(
+    const std::string& line, std::istream& in)
+{
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
+    bool escaped = false;
+    for(size_t i = 0; i < line.size(); ++i)
+    {
+        char c = line[i];
+        if(inDoubleQuotes)
+        {
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            if(c == '\'')
+                inSingleQuotes = false;
+            continue;
+        }
+        if(c == '"')
+        {
+            inDoubleQuotes = true;
+            continue;
+        }
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
+            continue;
+        }
+        if(c != '=')
+            continue;
+
+        ParsedTomlAssignment assignment;
+        assignment.append = i > 0 && line[i - 1] == '+';
+        const size_t keyEnd = assignment.append ? i - 1 : i;
+        assignment.key = trim(line.substr(0, keyEnd));
+        assignment.value =
+            collect_multiline_toml_value(trim(line.substr(i + 1)), in);
+        if(assignment.key.empty())
+            return std::nullopt;
+        return assignment;
+    }
+    return std::nullopt;
 }
 
 static std::string normalize_target_arch_name(const std::string& arch)
@@ -1107,12 +1190,10 @@ static BuildConfig parse_build_config(const std::string& content)
         if(section != "tool.mlang")
             continue;
 
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
-        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
-        parse_build_config_key_value(cfg, key, value);
+        parse_build_config_key_value(cfg, assignment->key, assignment->value);
     }
     return cfg;
 }
@@ -1290,11 +1371,11 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
         if(!current.has_value())
             continue;
 
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
-        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+        const std::string& key = assignment->key;
+        const std::string& value = assignment->value;
         if(key == "name")
         {
             current->name = unquote(value);
@@ -1360,11 +1441,11 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         if(!current.has_value())
             continue;
 
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
-        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+        const std::string& key = assignment->key;
+        const std::string& value = assignment->value;
 
         auto apply_common_task_kv = [&](auto& target, TaskTomlKey taskKeyKind,
                                         const std::string& taskValue) {
@@ -1426,9 +1507,7 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 append_toml_string_list_value(taskValue, target.nextPhases);
                 break;
             case TaskTomlKey::Command: {
-                std::string v = unquote_preserve(taskValue);
-                if(!v.empty())
-                    target.commands.push_back(v);
+                append_toml_command_value(taskValue, target.commands);
                 break;
             }
             case TaskTomlKey::Env:
@@ -1440,8 +1519,7 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                                                        target.shellLines);
                 break;
             case TaskTomlKey::Commands:
-                append_toml_string_list_value_preserve(taskValue,
-                                                       target.commands);
+                append_toml_commands_value(taskValue, target.commands);
                 break;
             case TaskTomlKey::OptLevel:
             case TaskTomlKey::TargetArch:
@@ -1730,6 +1808,69 @@ static std::string unquote_preserve(std::string_view v)
     return t;
 }
 
+static std::optional<std::string> parse_toml_command_tokens(
+    const std::string& value)
+{
+    std::string t = trim(value);
+    if(t.empty() || t.front() != '[' || t.back() != ']')
+        return std::nullopt;
+
+    const auto parts = split_toml_array(t.substr(1, t.size() - 2));
+    if(parts.empty())
+        return std::string();
+
+    std::string command;
+    for(const auto& part : parts)
+    {
+        std::string token = unquote_preserve(part);
+        if(token.empty())
+            continue;
+        if(!command.empty())
+            command += " ";
+        command += shell_quote(token);
+    }
+    return command;
+}
+
+static void append_toml_command_value(const std::string& value,
+                                      std::vector<std::string>& out)
+{
+    std::string t = trim(value);
+    if(t.empty())
+        return;
+
+    if(auto tokenized = parse_toml_command_tokens(t); tokenized.has_value())
+    {
+        if(!tokenized->empty())
+            out.push_back(*tokenized);
+        return;
+    }
+
+    std::string v = unquote_preserve(t);
+    if(!v.empty())
+        out.push_back(v);
+}
+
+static void append_toml_commands_value(const std::string& value,
+                                       std::vector<std::string>& out)
+{
+    std::string t = trim(value);
+    if(t.empty())
+        return;
+    if(t.front() == '[' && t.back() == ']')
+    {
+        for(const auto& part : split_toml_array(t.substr(1, t.size() - 2)))
+        {
+            if(part.empty())
+                continue;
+            append_toml_command_value(part, out);
+        }
+        return;
+    }
+
+    append_toml_command_value(t, out);
+}
+
 static void append_toml_string_list_value_preserve(const std::string& value,
                                                    std::vector<std::string>& out)
 {
@@ -1807,10 +1948,10 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
         }
         if(section != "dependencies" && section != "c-dependencies")
             continue;
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string name = trim(t.substr(0, eq));
+        std::string name = assignment->key;
         if(name.empty())
             continue;
         if(t.find('{') == std::string::npos)
@@ -1877,14 +2018,13 @@ static std::vector<std::string> parse_workspace_members(
         }
         if(section != "workspace")
             continue;
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
+        std::string key = assignment->key;
         if(key != "members")
             continue;
-        std::string value =
-            collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+        std::string value = assignment->value;
         if(value.empty())
             return out;
         if(value.front() == '[' && value.back() == ']')

@@ -34,7 +34,18 @@ name = "toolchain-check"
 print = "[example] Checking required build tools in PATH"
 workdir = "{{root}}"
 commands = [
-  "sh -c 'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'"
+  [
+    'sh',
+    '-c',
+    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'
+  ],
+]
+commands += [
+  [
+    'sh',
+    '-c',
+    'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'
+  ],
 ]
 
 [task.host.darwin]

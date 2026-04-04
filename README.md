@@ -197,6 +197,9 @@ Current task graph features:
   still ends with one final completion line in the form
   `[n/N] task-name Completed, time HH:MM:SS:MS - description`
 - `shell = [ ... ]` / `script = [ ... ]` for inline shell scripts stored under `build/task-scripts/`
+- `command = [ "binary", "arg1", "arg2" ]` for one readable tokenized command
+- `commands = [ [ "binary", "arg1" ] ]` and `commands += [ ... ]` for
+  multiline appended command lists
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
 
 A minimal workflow example:
@@ -227,6 +230,27 @@ Run it from `examples/package_manager_task_graph`:
 ```sh
 ../../build/mlang pkg run workflow
 cat build/joined.txt
+```
+
+Command lists can also be written in a more readable tokenized form:
+
+```toml
+[[task]]
+name = "toolchain-check"
+commands = [
+  [
+    'sh',
+    '-c',
+    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+  ],
+]
+commands += [
+  [
+    'sh',
+    '-c',
+    'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done',
+  ],
+]
 ```
 
 Phase-based barriers are also supported:

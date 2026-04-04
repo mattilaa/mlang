@@ -56,10 +56,33 @@
  *
  * Task array values such as `inputs`, `libs`, `compiler_flags`,
  * `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
- * comma-separated TOML arrays. Both `"double-quoted"` and `'single-quoted'`
- * TOML strings are supported in these task fields. TOML `#` comments are
- * supported on their own line and at the end of an assignment line as long as
- * the `#` appears outside quoted string content.
+ * comma-separated TOML arrays. `command` may also be written as a token array
+ * such as `["sh", "-c", "echo hi"]`, `commands` may contain nested token
+ * arrays, and `commands += [ ... ]` appends more command entries later in the
+ * same task block. Both `"double-quoted"` and `'single-quoted'` TOML strings
+ * are supported in these task fields. TOML `#` comments are supported on
+ * their own line and at the end of an assignment line as long as the `#`
+ * appears outside quoted string content.
+ *
+ * Command-token example:
+ * \code{.toml}
+ * [[task]]
+ * name = "toolchain-check"
+ * commands = [
+ *   [
+ *     'sh',
+ *     '-c',
+ *     'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+ *   ],
+ * ]
+ * commands += [
+ *   [
+ *     'sh',
+ *     '-c',
+ *     'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done',
+ *   ],
+ * ]
+ * \endcode
  */
 class PackageManager
 {
