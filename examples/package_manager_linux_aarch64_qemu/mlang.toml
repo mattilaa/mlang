@@ -1,21 +1,23 @@
 [package]
-name = "linux_aarch64_qemu"
+name = "linux_aarch64_qemu" # Package name used by the example
 version = "0.1.0"
 
 [dependencies]
-linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+# Fetch the Linux kernel source as a tarball and let curl show its own progress.
+linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false } # End-of-line comments are supported too
 
 [c-dependencies]
 
 [tool.mlang]
 min_mlang_version = "0.2.0"
 make_program = "gmake"
+# Full-line TOML comments work anywhere outside quoted strings.
 log_dir = "/tmp/mlang-linux-aarch64-qemu"
 stdout_log = "pkg.stdout.log"
 stderr_log = "pkg.stderr.log"
 warn_log = "pkg.warn.log"
 path_entries = [
-  "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
+  "/opt/homebrew/opt/gnu-sed/libexec/gnubin", # Prefer GNU sed when available
   "/usr/local/opt/gnu-sed/libexec/gnubin",
   "/opt/homebrew/opt/make/libexec/gnubin",
   "/usr/local/opt/make/libexec/gnubin",

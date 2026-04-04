@@ -470,6 +470,24 @@ Task semantics:
   `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
   comma-separated arrays, and both `"double-quoted"` and `'single-quoted'`
   string items are supported.
+- `#` comments are supported both on their own line and at the end of a TOML
+  assignment line, as long as the `#` is outside quoted string content.
+
+Comment example:
+
+```toml
+# Full-line comment
+[tool.mlang]
+build_dir = "build-release" # End-of-line comment
+
+[[task]]
+name = "example"
+language = 'c++' # Single-quoted values also support end-of-line comments
+inputs = [
+  'build/obj/main.o', # Comment after an item
+  'build/lib/libdemo.a',
+]
+```
 
 Host-specific overrides are supported with subtables such as:
 

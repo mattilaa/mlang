@@ -1276,6 +1276,9 @@ List-valued task keys such as `inputs`, `libs`, `compiler_flags`,
 comma-separated TOML arrays, and both `"double-quoted"` and `'single-quoted'`
 string items are supported.
 
+TOML `#` comments are also supported on their own line and at the end of an
+assignment line, as long as the `#` appears outside quoted string content.
+
 Task placeholders:
 
 - `{{root}}`

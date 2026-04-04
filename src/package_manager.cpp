@@ -251,16 +251,62 @@ static std::string trim(std::string_view s)
     return std::string(s.substr(start, end - start));
 }
 
+static std::string strip_toml_comment(std::string_view line)
+{
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
+    bool escaped = false;
+    for(size_t i = 0; i < line.size(); ++i)
+    {
+        const char c = line[i];
+        if(inDoubleQuotes)
+        {
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            if(c == '\'')
+                inSingleQuotes = false;
+            continue;
+        }
+        if(c == '"')
+        {
+            inDoubleQuotes = true;
+            continue;
+        }
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
+            continue;
+        }
+        if(c == '#')
+            return trim(line.substr(0, i));
+    }
+    return trim(line);
+}
+
 static bool is_section_line(const std::string& line,
                             const std::string& section)
 {
-    std::string t = trim(line);
+    std::string t = strip_toml_comment(line);
     return t == ("[" + section + "]");
 }
 
 static bool line_has_dep(const std::string& line, const std::string& name)
 {
-    std::string t = trim(line);
+    std::string t = strip_toml_comment(line);
     if(t.empty() || t[0] == '#')
         return false;
     if(t.rfind(name, 0) != 0)
@@ -451,8 +497,8 @@ static std::optional<std::string> find_section_toml_string(
     std::string currentSection;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -645,7 +691,7 @@ static std::string collect_multiline_toml_value(std::string value,
     while(std::getline(in, extra))
     {
         value += "\n";
-        value += trim(extra);
+        value += strip_toml_comment(extra);
         if(toml_array_is_complete(value))
             break;
     }
@@ -1050,8 +1096,8 @@ static BuildConfig parse_build_config(const std::string& content)
     BuildConfig cfg;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -1227,8 +1273,8 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
 
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t == "[[bin]]")
         {
@@ -1283,8 +1329,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
 
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t == "[[task]]")
         {
@@ -1751,8 +1797,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
     std::vector<DepSpec> deps;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -1821,8 +1867,8 @@ static std::vector<std::string> parse_workspace_members(
     std::vector<std::string> out;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -1866,7 +1912,7 @@ static bool has_section(const std::string& content, const std::string& wanted)
     std::string line;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
+        std::string t = strip_toml_comment(line);
         if(t == ("[" + wanted + "]"))
             return true;
     }
@@ -2955,8 +3001,8 @@ static std::vector<CDepSpec> parse_c_deps(const std::string& content)
     std::vector<CDepSpec> deps;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
