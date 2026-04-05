@@ -672,6 +672,7 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     const int use_ascii = glyph_mode == 5 ? 1 : 0;
     const int use_edge_ascii = glyph_mode == 6 ? 1 : 0;
     const int use_line_art = glyph_mode == 7 ? 1 : 0;
+    const int use_color_split = glyph_mode == 8 ? 1 : 0;
     int64_t src_x0 = 0;
     int64_t src_y0 = 0;
     int64_t src_w = img.width;
@@ -679,13 +680,15 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     compute_alpha_content_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
     compute_background_crop_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
     const int64_t x_sub =
-        (use_braille || use_quadrants || use_edge_ascii || use_line_art) ? 2
-                                                                         : 1;
+        (use_braille || use_quadrants || use_edge_ascii || use_line_art ||
+         use_color_split)
+            ? 2
+            : 1;
     const int64_t y_sub =
         use_braille ? 4
                     : (use_half_blocks ? 2
                                        : ((use_quadrants || use_edge_ascii ||
-                                           use_line_art)
+                                           use_line_art || use_color_split)
                                               ? 2
                                               : 1));
     const int64_t out_cols = columns;
@@ -721,7 +724,8 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
             uint8_t r1 = 0, g1 = 0, b1 = 0;
             sample_average_rgba(&img,
                                 (use_braille || use_quadrants ||
-                                 use_edge_ascii || use_line_art)
+                                 use_edge_ascii || use_line_art ||
+                                 use_color_split)
                                     ? x * 2
                                     : x,
                                 use_half_blocks ? y * 2
@@ -729,7 +733,8 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                                                        ? y * 4
                                                        : ((use_quadrants ||
                                                            use_edge_ascii ||
-                                                           use_line_art)
+                                                           use_line_art ||
+                                                           use_color_split)
                                                               ? y * 2
                                                               : y)),
                                 sample_w,
@@ -848,6 +853,141 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                 pos = append_text(out, estimate, pos,
                                   unicode_line_glyph_for_cell(tl, tr, bl, br,
                                                               avg_l));
+            }
+            else if(use_color_split)
+            {
+                /* Sample 2×2 sub-pixels and split the cell into two color groups
+                   along the dominant edge direction, assigning each group its own
+                   FG/BG color.  This gives proper color separation at boundaries
+                   (e.g. green fractal branch on black) using half/quadrant blocks:
+                     │  →  ▌ / ▐   (left vs right)
+                     ─  →  ▀ / ▄   (top vs bottom)
+                     ╲  →  ▚       (tl+br vs tr+bl)
+                     ╱  →  ▞       (tr+bl vs tl+br)
+                   Low-gradient cells fall back to density glyphs. */
+                uint8_t sub_r[2][2];
+                uint8_t sub_g[2][2];
+                uint8_t sub_b[2][2];
+                for(int dy = 0; dy < 2; ++dy)
+                    for(int dx = 0; dx < 2; ++dx)
+                        sample_average_rgba(&img, x * 2 + dx, y * 2 + dy,
+                                            sample_w, sample_h, fit_w, fit_h,
+                                            off_x, off_y, src_x0, src_y0,
+                                            src_w, src_h, &sub_r[dy][dx],
+                                            &sub_g[dy][dx], &sub_b[dy][dx]);
+
+                const uint8_t tl_l = luminance_u8(sub_r[0][0],sub_g[0][0],sub_b[0][0]);
+                const uint8_t tr_l = luminance_u8(sub_r[0][1],sub_g[0][1],sub_b[0][1]);
+                const uint8_t bl_l = luminance_u8(sub_r[1][0],sub_g[1][0],sub_b[1][0]);
+                const uint8_t br_l = luminance_u8(sub_r[1][1],sub_g[1][1],sub_b[1][1]);
+
+                const int gx = (int)tr_l + br_l - tl_l - bl_l;
+                const int gy = (int)bl_l + br_l - tl_l - tr_l;
+                const int d1 = (int)tl_l + br_l - tr_l - bl_l;
+                const int ax = gx < 0 ? -gx : gx;
+                const int ay = gy < 0 ? -gy : gy;
+                const int ad = d1 < 0 ? -d1 : d1;
+                const int best = ax > ay ? (ax > ad ? ax : ad)
+                                         : (ay > ad ? ay : ad);
+
+                uint8_t fg_r, fg_g, fg_b, bg_r, bg_g, bg_b;
+                const char* glyph;
+
+                if(best < 12)
+                {
+                    /* Uniform region — density glyph with avg color */
+                    const uint32_t sr = (uint32_t)sub_r[0][0] + sub_r[0][1]
+                                      + sub_r[1][0] + sub_r[1][1];
+                    const uint32_t sg = (uint32_t)sub_g[0][0] + sub_g[0][1]
+                                      + sub_g[1][0] + sub_g[1][1];
+                    const uint32_t sb = (uint32_t)sub_b[0][0] + sub_b[0][1]
+                                      + sub_b[1][0] + sub_b[1][1];
+                    fg_r = (uint8_t)(sr / 4u);
+                    fg_g = (uint8_t)(sg / 4u);
+                    fg_b = (uint8_t)(sb / 4u);
+                    bg_r = darken_u8(fg_r, 1, 5);
+                    bg_g = darken_u8(fg_g, 1, 5);
+                    bg_b = darken_u8(fg_b, 1, 5);
+                    glyph = density_glyph_for_luma(
+                        (uint8_t)((tl_l + tr_l + bl_l + br_l) / 4u));
+                }
+                else if(ax >= ay && ax >= ad)
+                {
+                    /* Horizontal gradient → vertical split (left | right) */
+                    const uint8_t l_r = (sub_r[0][0] + sub_r[1][0]) / 2u;
+                    const uint8_t l_g = (sub_g[0][0] + sub_g[1][0]) / 2u;
+                    const uint8_t l_b = (sub_b[0][0] + sub_b[1][0]) / 2u;
+                    const uint8_t r_r = (sub_r[0][1] + sub_r[1][1]) / 2u;
+                    const uint8_t r_g = (sub_g[0][1] + sub_g[1][1]) / 2u;
+                    const uint8_t r_b = (sub_b[0][1] + sub_b[1][1]) / 2u;
+                    if(gx >= 0)
+                    {
+                        /* right brighter → FG=right, ▐ fills right half */
+                        fg_r=r_r; fg_g=r_g; fg_b=r_b;
+                        bg_r=l_r; bg_g=l_g; bg_b=l_b;
+                        glyph = "▐";
+                    }
+                    else
+                    {
+                        /* left brighter → FG=left, ▌ fills left half */
+                        fg_r=l_r; fg_g=l_g; fg_b=l_b;
+                        bg_r=r_r; bg_g=r_g; bg_b=r_b;
+                        glyph = "▌";
+                    }
+                }
+                else if(ay >= ax && ay >= ad)
+                {
+                    /* Vertical gradient → horizontal split (top / bottom) */
+                    const uint8_t t_r = (sub_r[0][0] + sub_r[0][1]) / 2u;
+                    const uint8_t t_g = (sub_g[0][0] + sub_g[0][1]) / 2u;
+                    const uint8_t t_b = (sub_b[0][0] + sub_b[0][1]) / 2u;
+                    const uint8_t bo_r = (sub_r[1][0] + sub_r[1][1]) / 2u;
+                    const uint8_t bo_g = (sub_g[1][0] + sub_g[1][1]) / 2u;
+                    const uint8_t bo_b = (sub_b[1][0] + sub_b[1][1]) / 2u;
+                    if(gy <= 0)
+                    {
+                        /* top brighter → FG=top, ▀ fills upper half */
+                        fg_r=t_r; fg_g=t_g; fg_b=t_b;
+                        bg_r=bo_r; bg_g=bo_g; bg_b=bo_b;
+                        glyph = "▀";
+                    }
+                    else
+                    {
+                        /* bottom brighter → FG=bottom, ▄ fills lower half */
+                        fg_r=bo_r; fg_g=bo_g; fg_b=bo_b;
+                        bg_r=t_r; bg_g=t_g; bg_b=t_b;
+                        glyph = "▄";
+                    }
+                }
+                else
+                {
+                    /* Diagonal split using quadrant diagonal blocks:
+                       ▚ (U+259A) = upper-left + lower-right filled  (╲)
+                       ▞ (U+259E) = upper-right + lower-left filled  (╱) */
+                    const uint8_t a_r = (sub_r[0][0] + sub_r[1][1]) / 2u;
+                    const uint8_t a_g = (sub_g[0][0] + sub_g[1][1]) / 2u;
+                    const uint8_t a_b = (sub_b[0][0] + sub_b[1][1]) / 2u;
+                    const uint8_t c_r = (sub_r[0][1] + sub_r[1][0]) / 2u;
+                    const uint8_t c_g = (sub_g[0][1] + sub_g[1][0]) / 2u;
+                    const uint8_t c_b = (sub_b[0][1] + sub_b[1][0]) / 2u;
+                    if(d1 >= 0)
+                    {
+                        /* tl+br brighter → FG=a, ▚ fills tl+br corners */
+                        fg_r=a_r; fg_g=a_g; fg_b=a_b;
+                        bg_r=c_r; bg_g=c_g; bg_b=c_b;
+                        glyph = "▚";
+                    }
+                    else
+                    {
+                        /* tr+bl brighter → FG=c, ▞ fills tr+bl corners */
+                        fg_r=c_r; fg_g=c_g; fg_b=c_b;
+                        bg_r=a_r; bg_g=a_g; bg_b=a_b;
+                        glyph = "▞";
+                    }
+                }
+                pos = append_rgb_sgr(out, estimate, pos, 0, fg_r, fg_g, fg_b);
+                pos = append_rgb_sgr(out, estimate, pos, 1, bg_r, bg_g, bg_b);
+                pos = append_text(out, estimate, pos, glyph);
             }
             else if(use_braille)
             {
