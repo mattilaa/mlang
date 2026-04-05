@@ -736,6 +736,9 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                 uint8_t sub_g[2][2];
                 uint8_t sub_b[2][2];
                 uint8_t sub_l[2][2];
+                uint32_t sum_r = 0;
+                uint32_t sum_g = 0;
+                uint32_t sum_b = 0;
                 uint32_t sum_l = 0;
                 for(int dy = 0; dy < 2; ++dy)
                 {
@@ -748,13 +751,18 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                                             &sub_g[dy][dx], &sub_b[dy][dx]);
                         sub_l[dy][dx] = luminance_u8(sub_r[dy][dx], sub_g[dy][dx],
                                                      sub_b[dy][dx]);
+                        sum_r += sub_r[dy][dx];
+                        sum_g += sub_g[dy][dx];
+                        sum_b += sub_b[dy][dx];
                         sum_l += sub_l[dy][dx];
                     }
                 }
+                const uint8_t avg_r = (uint8_t)(sum_r / 4u);
+                const uint8_t avg_g = (uint8_t)(sum_g / 4u);
+                const uint8_t avg_b = (uint8_t)(sum_b / 4u);
                 const uint8_t avg_l = (uint8_t)(sum_l / 4u);
                 uint8_t bits = 0;
                 uint32_t fg_r = 0, fg_g = 0, fg_b = 0, fg_n = 0;
-                uint32_t bg_r = 0, bg_g = 0, bg_b = 0, bg_n = 0;
                 for(int dy = 0; dy < 2; ++dy)
                 {
                     for(int dx = 0; dx < 2; ++dx)
@@ -766,13 +774,6 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                             fg_g += sub_g[dy][dx];
                             fg_b += sub_b[dy][dx];
                             ++fg_n;
-                        }
-                        else
-                        {
-                            bg_r += sub_r[dy][dx];
-                            bg_g += sub_g[dy][dx];
-                            bg_b += sub_b[dy][dx];
-                            ++bg_n;
                         }
                     }
                 }
@@ -798,33 +799,17 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                     fg_g = sub_g[best_dy][best_dx];
                     fg_b = sub_b[best_dy][best_dx];
                     fg_n = 1;
-                    bg_r = bg_g = bg_b = 0;
-                    bg_n = 0;
-                    for(int dy = 0; dy < 2; ++dy)
-                    {
-                        for(int dx = 0; dx < 2; ++dx)
-                        {
-                            if(dx == best_dx && dy == best_dy)
-                                continue;
-                            bg_r += sub_r[dy][dx];
-                            bg_g += sub_g[dy][dx];
-                            bg_b += sub_b[dy][dx];
-                            ++bg_n;
-                        }
-                    }
                 }
                 if(fg_n == 0)
                     fg_n = 1;
-                if(bg_n == 0)
-                    bg_n = 1;
                 pos = append_rgb_sgr(out, estimate, pos, 0,
                                      (uint8_t)(fg_r / fg_n),
                                      (uint8_t)(fg_g / fg_n),
                                      (uint8_t)(fg_b / fg_n));
                 pos = append_rgb_sgr(out, estimate, pos, 1,
-                                     (uint8_t)(bg_r / bg_n),
-                                     (uint8_t)(bg_g / bg_n),
-                                     (uint8_t)(bg_b / bg_n));
+                                     avg_r,
+                                     avg_g,
+                                     avg_b);
                 pos = append_codepoint_utf8(out, estimate, pos,
                                             quadrant_codepoint_for_bits(bits));
             }
