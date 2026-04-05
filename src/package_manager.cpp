@@ -36,8 +36,13 @@ struct PackageManifest;
 struct BuildConfig;
 
 static std::vector<std::string> split_toml_array(std::string_view input);
+static std::string shell_quote(const std::string& s);
 static std::string unquote(std::string_view v);
 static std::string unquote_preserve(std::string_view v);
+static void append_toml_command_value(const std::string& value,
+                                      std::vector<std::string>& out);
+static void append_toml_commands_value(const std::string& value,
+                                       std::vector<std::string>& out);
 static std::string format_task_elapsed(std::chrono::milliseconds elapsed);
 static std::string shorten_progress_description(const std::string& description);
 static std::string sanitize_progress_output(std::string text);
@@ -45,6 +50,9 @@ static std::string shorten_progress_output(const std::string& text);
 static std::vector<std::string> parse_workspace_members(
     const std::string& content);
 static std::string current_host_name();
+static void append_toml_string_list_value(const std::string& value,
+                                          std::vector<std::string>& out);
+static bool parse_toml_bool_value(const std::string& value);
 static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName);
 static int run_task_for_manifest(const PackageManifest& pkg,
@@ -60,6 +68,11 @@ enum class TaskTomlKey
     Print,
     Phase,
     Workdir,
+    Language,
+    Source,
+    Output,
+    Inputs,
+    CompileOnly,
     Parallel,
     LogOutput,
     InlineOutput,
@@ -74,6 +87,18 @@ enum class TaskTomlKey
     Script,
     Shell,
     Commands,
+    Chmod,
+    ChmodPath,
+    ChmodPaths,
+    OptLevel,
+    TargetArch,
+    PathEntries,
+    CompilerFlags,
+    LinkerFlags,
+    LibPaths,
+    Libs,
+    StaticDeps,
+    StaticCppRuntime,
 };
 
 enum class TargetArchAlias
@@ -132,12 +157,34 @@ static std::optional<std::string_view> find_enum_text(
     return it->second;
 }
 
-static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 19>
+enum class TaskLanguageAlias
+{
+    Mlang,
+    C,
+    Cpp,
+    Cxx,
+    CPlusPlus,
+    CC,
+};
+
+enum class TaskLanguage
+{
+    Mlang,
+    C,
+    Cpp,
+};
+
+static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 36>
     kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
                     { TaskTomlKey::Message, "message" },
                     { TaskTomlKey::Print, "print" },
                     { TaskTomlKey::Phase, "phase" },
                     { TaskTomlKey::Workdir, "workdir" },
+                    { TaskTomlKey::Language, "language" },
+                    { TaskTomlKey::Source, "source" },
+                    { TaskTomlKey::Output, "output" },
+                    { TaskTomlKey::Inputs, "inputs" },
+                    { TaskTomlKey::CompileOnly, "compile_only" },
                     { TaskTomlKey::Parallel, "parallel" },
                     { TaskTomlKey::LogOutput, "log_output" },
                     { TaskTomlKey::InlineOutput, "inline_output" },
@@ -151,7 +198,32 @@ static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 19>
                     { TaskTomlKey::Env, "env" },
                     { TaskTomlKey::Script, "script" },
                     { TaskTomlKey::Shell, "shell" },
-                    { TaskTomlKey::Commands, "commands" } }};
+                    { TaskTomlKey::Commands, "commands" },
+                    { TaskTomlKey::Chmod, "chmod" },
+                    { TaskTomlKey::ChmodPath, "chmod_path" },
+                    { TaskTomlKey::ChmodPaths, "chmod_paths" },
+                    { TaskTomlKey::OptLevel, "opt_level" },
+                    { TaskTomlKey::TargetArch, "target_arch" },
+                    { TaskTomlKey::PathEntries, "path_entries" },
+                    { TaskTomlKey::CompilerFlags, "compiler_flags" },
+                    { TaskTomlKey::LinkerFlags, "linker_flags" },
+                    { TaskTomlKey::LibPaths, "lib_paths" },
+                    { TaskTomlKey::Libs, "libs" },
+                    { TaskTomlKey::StaticDeps, "static_deps" },
+                    { TaskTomlKey::StaticCppRuntime, "static_cpp_runtime" } }};
+
+static constexpr std::array<std::pair<TaskLanguageAlias, std::string_view>, 6>
+    kTaskLanguageAliases {{{ TaskLanguageAlias::Mlang, "mlang" },
+                            { TaskLanguageAlias::C, "c" },
+                            { TaskLanguageAlias::Cpp, "cpp" },
+                            { TaskLanguageAlias::Cxx, "cxx" },
+                            { TaskLanguageAlias::CPlusPlus, "c++" },
+                            { TaskLanguageAlias::CC, "cc" } }};
+
+static constexpr std::array<std::pair<TaskLanguage, std::string_view>, 3>
+    kTaskLanguageNames {{{ TaskLanguage::Mlang, "mlang" },
+                          { TaskLanguage::C, "c" },
+                          { TaskLanguage::Cpp, "c++" } }};
 
 static constexpr std::array<std::pair<TargetArchAlias, std::string_view>, 9>
     kTargetArchAliases {{{ TargetArchAlias::X86, "x86" },
@@ -190,16 +262,62 @@ static std::string trim(std::string_view s)
     return std::string(s.substr(start, end - start));
 }
 
+static std::string strip_toml_comment(std::string_view line)
+{
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
+    bool escaped = false;
+    for(size_t i = 0; i < line.size(); ++i)
+    {
+        const char c = line[i];
+        if(inDoubleQuotes)
+        {
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            if(c == '\'')
+                inSingleQuotes = false;
+            continue;
+        }
+        if(c == '"')
+        {
+            inDoubleQuotes = true;
+            continue;
+        }
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
+            continue;
+        }
+        if(c == '#')
+            return trim(line.substr(0, i));
+    }
+    return trim(line);
+}
+
 static bool is_section_line(const std::string& line,
                             const std::string& section)
 {
-    std::string t = trim(line);
+    std::string t = strip_toml_comment(line);
     return t == ("[" + section + "]");
 }
 
 static bool line_has_dep(const std::string& line, const std::string& name)
 {
-    std::string t = trim(line);
+    std::string t = strip_toml_comment(line);
     if(t.empty() || t[0] == '#')
         return false;
     if(t.rfind(name, 0) != 0)
@@ -390,8 +508,8 @@ static std::optional<std::string> find_section_toml_string(
     std::string currentSection;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -414,11 +532,13 @@ static std::vector<std::string> split_toml_array(std::string_view input)
 {
     std::vector<std::string> out;
     std::string cur;
-    bool in_quotes = false;
+    int depth = 0;
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
     bool escaped = false;
     for(char c : input)
     {
-        if(in_quotes)
+        if(inDoubleQuotes)
         {
             cur.push_back(c);
             if(escaped)
@@ -432,16 +552,42 @@ static std::vector<std::string> split_toml_array(std::string_view input)
                 continue;
             }
             if(c == '"')
-                in_quotes = false;
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            cur.push_back(c);
+            if(c == '\'')
+                inSingleQuotes = false;
             continue;
         }
         if(c == '"')
         {
-            in_quotes = true;
+            inDoubleQuotes = true;
             cur.push_back(c);
             continue;
         }
-        if(c == ',' && !in_quotes)
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == '[')
+        {
+            ++depth;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == ']')
+        {
+            if(depth > 0)
+                --depth;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == ',' && depth == 0 && !inDoubleQuotes && !inSingleQuotes)
         {
             out.push_back(trim(cur));
             cur.clear();
@@ -457,11 +603,12 @@ static std::vector<std::string> split_toml_array(std::string_view input)
 static bool toml_array_is_complete(std::string_view input)
 {
     int depth = 0;
-    bool in_quotes = false;
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
     bool escaped = false;
     for(char c : input)
     {
-        if(in_quotes)
+        if(inDoubleQuotes)
         {
             if(escaped)
             {
@@ -474,13 +621,24 @@ static bool toml_array_is_complete(std::string_view input)
                 continue;
             }
             if(c == '"')
-                in_quotes = false;
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            if(c == '\'')
+                inSingleQuotes = false;
             continue;
         }
 
         if(c == '"')
         {
-            in_quotes = true;
+            inDoubleQuotes = true;
+            continue;
+        }
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
             continue;
         }
         if(c == '[')
@@ -524,6 +682,14 @@ static bool toml_basic_string_is_complete(std::string_view input)
     return false;
 }
 
+static bool toml_literal_string_is_complete(std::string_view input)
+{
+    std::string t = trim(input);
+    if(t.empty() || t.front() != '\'')
+        return true;
+    return t.size() >= 2 && t.back() == '\'';
+}
+
 static bool toml_value_is_complete(std::string_view input)
 {
     std::string t = trim(input);
@@ -533,6 +699,8 @@ static bool toml_value_is_complete(std::string_view input)
         return toml_array_is_complete(t);
     if(t.front() == '"')
         return toml_basic_string_is_complete(t);
+    if(t.front() == '\'')
+        return toml_literal_string_is_complete(t);
     return true;
 }
 
@@ -548,11 +716,75 @@ static std::string collect_multiline_toml_value(std::string value,
     while(std::getline(in, extra))
     {
         value += "\n";
-        value += trim(extra);
+        value += strip_toml_comment(extra);
         if(toml_array_is_complete(value))
             break;
     }
     return value;
+}
+
+struct ParsedTomlAssignment
+{
+    std::string key;
+    std::string value;
+    bool append = false;
+};
+
+static std::optional<ParsedTomlAssignment> parse_toml_assignment(
+    const std::string& line, std::istream& in)
+{
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
+    bool escaped = false;
+    for(size_t i = 0; i < line.size(); ++i)
+    {
+        char c = line[i];
+        if(inDoubleQuotes)
+        {
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            if(c == '\'')
+                inSingleQuotes = false;
+            continue;
+        }
+        if(c == '"')
+        {
+            inDoubleQuotes = true;
+            continue;
+        }
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
+            continue;
+        }
+        if(c != '=')
+            continue;
+
+        ParsedTomlAssignment assignment;
+        assignment.append = i > 0 && line[i - 1] == '+';
+        const size_t keyEnd = assignment.append ? i - 1 : i;
+        assignment.key = trim(line.substr(0, keyEnd));
+        assignment.value =
+            collect_multiline_toml_value(trim(line.substr(i + 1)), in);
+        if(assignment.key.empty())
+            return std::nullopt;
+        return assignment;
+    }
+    return std::nullopt;
 }
 
 static std::string normalize_target_arch_name(const std::string& arch)
@@ -604,11 +836,48 @@ static std::string normalize_opt_level(std::string opt)
     return "";
 }
 
+static std::string normalize_task_language(std::string language)
+{
+    language = trim(language);
+    if(language.empty())
+        return "";
+    std::transform(language.begin(), language.end(), language.begin(),
+                   [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    const auto languageKey = find_enum_key(language, kTaskLanguageAliases);
+    if(!languageKey.has_value())
+        return "";
+
+    TaskLanguage normalizedKey;
+    switch(*languageKey)
+    {
+    case TaskLanguageAlias::Mlang:
+        normalizedKey = TaskLanguage::Mlang;
+        break;
+    case TaskLanguageAlias::C:
+    case TaskLanguageAlias::CC:
+        normalizedKey = TaskLanguage::C;
+        break;
+    case TaskLanguageAlias::Cpp:
+    case TaskLanguageAlias::Cxx:
+    case TaskLanguageAlias::CPlusPlus:
+        normalizedKey = TaskLanguage::Cpp;
+        break;
+    }
+
+    if(const auto text = find_enum_text(normalizedKey, kTaskLanguageNames);
+       text.has_value())
+        return std::string(*text);
+    return "";
+}
+
 struct BuildConfig
 {
     std::string optLevel;
     std::string targetArch;
     std::string minMlangVersion;
+    std::string compilerProgram;
     std::string makeProgram = "make";
     std::string buildDir;
     std::string depsDir;
@@ -621,6 +890,7 @@ struct BuildConfig
     std::vector<std::string> linkerFlags;
     std::vector<std::string> libPaths;
     std::vector<std::string> libs;
+    std::map<std::string, std::string> optionValues;
     std::optional<bool> useNinja;
     std::optional<bool> staticDeps;
     std::optional<bool> staticCppRuntime;
@@ -642,9 +912,16 @@ struct TaskSpec
     std::string print;
     std::string phase;
     std::string workdir;
+    std::string language;
+    std::string source;
+    std::string output;
+    std::vector<std::string> inputs;
+    std::optional<bool> compileOnly;
     std::optional<bool> parallel;
     std::optional<bool> logOutput;
     std::optional<bool> inlineOutput;
+    std::string chmodMode;
+    std::vector<std::string> chmodPaths;
     std::vector<std::string> dependsOn;
     std::vector<std::string> phaseDependsOn;
     std::vector<std::string> joinOn;
@@ -654,15 +931,23 @@ struct TaskSpec
     std::vector<std::string> env;
     std::vector<std::string> shellLines;
     std::vector<std::string> commands;
+    BuildConfig buildConfig;
     struct HostOverride
     {
         std::string message;
         std::string print;
         std::string phase;
         std::string workdir;
+        std::string language;
+        std::string source;
+        std::string output;
+        std::vector<std::string> inputs;
+        std::optional<bool> compileOnly;
         std::optional<bool> parallel;
         std::optional<bool> logOutput;
         std::optional<bool> inlineOutput;
+        std::string chmodMode;
+        std::vector<std::string> chmodPaths;
         std::vector<std::string> dependsOn;
         std::vector<std::string> phaseDependsOn;
         std::vector<std::string> joinOn;
@@ -672,6 +957,7 @@ struct TaskSpec
         std::vector<std::string> env;
         std::vector<std::string> shellLines;
         std::vector<std::string> commands;
+        BuildConfig buildConfig;
     };
     std::map<std::string, HostOverride> hostOverrides;
 };
@@ -679,6 +965,44 @@ struct TaskSpec
 static void parse_build_config_key_value(BuildConfig& cfg,
                                          const std::string& key,
                                          const std::string& value);
+
+static bool apply_task_build_config_key_value(BuildConfig& cfg,
+                                              TaskTomlKey taskKeyKind,
+                                              const std::string& value)
+{
+    switch(taskKeyKind)
+    {
+    case TaskTomlKey::OptLevel:
+        cfg.optLevel = normalize_opt_level(unquote(value));
+        return true;
+    case TaskTomlKey::TargetArch:
+        cfg.targetArch = normalize_target_arch_name(unquote(value));
+        return true;
+    case TaskTomlKey::PathEntries:
+        append_toml_string_list_value(value, cfg.pathEntries);
+        return true;
+    case TaskTomlKey::CompilerFlags:
+        append_toml_string_list_value(value, cfg.compilerFlags);
+        return true;
+    case TaskTomlKey::LinkerFlags:
+        append_toml_string_list_value(value, cfg.linkerFlags);
+        return true;
+    case TaskTomlKey::LibPaths:
+        append_toml_string_list_value(value, cfg.libPaths);
+        return true;
+    case TaskTomlKey::Libs:
+        append_toml_string_list_value(value, cfg.libs);
+        return true;
+    case TaskTomlKey::StaticDeps:
+        cfg.staticDeps = parse_toml_bool_value(value);
+        return true;
+    case TaskTomlKey::StaticCppRuntime:
+        cfg.staticCppRuntime = parse_toml_bool_value(value);
+        return true;
+    default:
+        return false;
+    }
+}
 
 static void append_toml_string_list_value(const std::string& value,
                                           std::vector<std::string>& out)
@@ -709,6 +1033,130 @@ static bool parse_toml_bool_value(const std::string& value)
         return static_cast<char>(std::tolower(c));
     });
     return t == "true" || t == "1" || t == "\"true\"";
+}
+
+static std::optional<unsigned int>
+parse_octal_permission_bits(const std::string& value)
+{
+    const std::string text = trim(unquote(value));
+    if(text.empty())
+        return std::nullopt;
+
+    unsigned int mode = 0;
+    for(char c : text)
+    {
+        if(c < '0' || c > '7')
+            return std::nullopt;
+        mode = (mode * 8u) + static_cast<unsigned int>(c - '0');
+    }
+    return mode;
+}
+
+static std::filesystem::perms
+directory_perms_from_file_mode(unsigned int mode)
+{
+    std::filesystem::perms perms = std::filesystem::perms::none;
+    auto add_if = [&](bool enabled, std::filesystem::perms bit) {
+        if(enabled)
+            perms |= bit;
+    };
+
+    const bool ownerRead = (mode & 0400u) != 0u;
+    const bool ownerWrite = (mode & 0200u) != 0u;
+    const bool ownerExec = (mode & 0100u) != 0u;
+    const bool groupRead = (mode & 0040u) != 0u;
+    const bool groupWrite = (mode & 0020u) != 0u;
+    const bool groupExec = (mode & 0010u) != 0u;
+    const bool othersRead = (mode & 0004u) != 0u;
+    const bool othersWrite = (mode & 0002u) != 0u;
+    const bool othersExec = (mode & 0001u) != 0u;
+
+    add_if(ownerRead, std::filesystem::perms::owner_read);
+    add_if(ownerWrite, std::filesystem::perms::owner_write);
+    add_if(ownerExec || ownerRead, std::filesystem::perms::owner_exec);
+    add_if(groupRead, std::filesystem::perms::group_read);
+    add_if(groupWrite, std::filesystem::perms::group_write);
+    add_if(groupExec || groupRead, std::filesystem::perms::group_exec);
+    add_if(othersRead, std::filesystem::perms::others_read);
+    add_if(othersWrite, std::filesystem::perms::others_write);
+    add_if(othersExec || othersRead, std::filesystem::perms::others_exec);
+    return perms;
+}
+
+static std::filesystem::perms file_perms_from_mode(unsigned int mode)
+{
+    std::filesystem::perms perms = std::filesystem::perms::none;
+    auto add_if = [&](bool enabled, std::filesystem::perms bit) {
+        if(enabled)
+            perms |= bit;
+    };
+    add_if((mode & 0400u) != 0u, std::filesystem::perms::owner_read);
+    add_if((mode & 0200u) != 0u, std::filesystem::perms::owner_write);
+    add_if((mode & 0100u) != 0u, std::filesystem::perms::owner_exec);
+    add_if((mode & 0040u) != 0u, std::filesystem::perms::group_read);
+    add_if((mode & 0020u) != 0u, std::filesystem::perms::group_write);
+    add_if((mode & 0010u) != 0u, std::filesystem::perms::group_exec);
+    add_if((mode & 0004u) != 0u, std::filesystem::perms::others_read);
+    add_if((mode & 0002u) != 0u, std::filesystem::perms::others_write);
+    add_if((mode & 0001u) != 0u, std::filesystem::perms::others_exec);
+    return perms;
+}
+
+static bool apply_recursive_permissions(
+    const std::filesystem::path& path, unsigned int mode, std::string& error)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if(!fs::exists(path, ec))
+    {
+        error = "chmod target does not exist: " + path.string();
+        return false;
+    }
+
+    const fs::perms filePerms = file_perms_from_mode(mode);
+    const fs::perms dirPerms = directory_perms_from_file_mode(mode);
+    auto apply_one = [&](const fs::path& current) -> bool {
+        std::error_code statusEc;
+        const fs::file_status status = fs::symlink_status(current, statusEc);
+        if(statusEc)
+        {
+            error = "Failed to read status for chmod target " +
+                    current.string() + ": " + statusEc.message();
+            return false;
+        }
+        if(fs::is_symlink(status))
+            return true;
+        const fs::perms perms =
+            fs::is_directory(status) ? dirPerms : filePerms;
+        std::error_code permsEc;
+        fs::permissions(current, perms, fs::perm_options::replace, permsEc);
+        if(permsEc)
+        {
+            error = "Failed to chmod " + current.string() + ": " +
+                    permsEc.message();
+            return false;
+        }
+        return true;
+    };
+
+    if(!apply_one(path))
+        return false;
+    if(!fs::is_directory(path, ec))
+        return true;
+
+    for(fs::recursive_directory_iterator it(path, ec), end; it != end;
+        it.increment(ec))
+    {
+        if(ec)
+        {
+            error = "Failed to walk chmod target " + path.string() + ": " +
+                    ec.message();
+            return false;
+        }
+        if(!apply_one(it->path()))
+            return false;
+    }
+    return true;
 }
 
 static void append_unique_strings(std::vector<std::string>& dst,
@@ -755,6 +1203,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
                                       const BuildConfig& overrideCfg)
 {
     BuildConfig out = base;
+    if(!overrideCfg.compilerProgram.empty())
+        out.compilerProgram = overrideCfg.compilerProgram;
     if(!overrideCfg.optLevel.empty())
         out.optLevel = overrideCfg.optLevel;
     if(!overrideCfg.targetArch.empty())
@@ -779,6 +1229,8 @@ static BuildConfig merge_build_config(const BuildConfig& base,
                         overrideCfg.libPaths.end());
     out.libs.insert(out.libs.end(), overrideCfg.libs.begin(),
                     overrideCfg.libs.end());
+    for(const auto& [key, value] : overrideCfg.optionValues)
+        out.optionValues[key] = value;
     if(overrideCfg.useNinja.has_value())
         out.useNinja = overrideCfg.useNinja;
     if(overrideCfg.staticDeps.has_value())
@@ -864,23 +1316,27 @@ static BuildConfig parse_build_config(const std::string& content)
     BuildConfig cfg;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
             section = t.substr(1, t.size() - 2);
             continue;
         }
-        if(section != "tool.mlang")
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
-            continue;
-        std::string key = trim(t.substr(0, eq));
-        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
-        parse_build_config_key_value(cfg, key, value);
+        if(section == "tool.mlang")
+        {
+            parse_build_config_key_value(cfg, assignment->key,
+                                         assignment->value);
+        }
+        else if(section == "tool.mlang.options")
+        {
+            cfg.optionValues[assignment->key] =
+                unquote_preserve(assignment->value);
+        }
     }
     return cfg;
 }
@@ -1041,8 +1497,8 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
 
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t == "[[bin]]")
         {
@@ -1058,11 +1514,11 @@ static std::vector<BuildTarget> parse_bin_targets(const std::string& content)
         if(!current.has_value())
             continue;
 
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
-        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+        const std::string& key = assignment->key;
+        const std::string& value = assignment->value;
         if(key == "name")
         {
             current->name = unquote(value);
@@ -1097,8 +1553,8 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
 
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t == "[[task]]")
         {
@@ -1128,11 +1584,11 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
         if(!current.has_value())
             continue;
 
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
-        std::string value = collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+        const std::string& key = assignment->key;
+        const std::string& value = assignment->value;
 
         auto apply_common_task_kv = [&](auto& target, TaskTomlKey taskKeyKind,
                                         const std::string& taskValue) {
@@ -1149,6 +1605,21 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 break;
             case TaskTomlKey::Workdir:
                 target.workdir = unquote(taskValue);
+                break;
+            case TaskTomlKey::Language:
+                target.language = normalize_task_language(unquote(taskValue));
+                break;
+            case TaskTomlKey::Source:
+                target.source = unquote(taskValue);
+                break;
+            case TaskTomlKey::Output:
+                target.output = unquote(taskValue);
+                break;
+            case TaskTomlKey::Inputs:
+                append_toml_string_list_value(taskValue, target.inputs);
+                break;
+            case TaskTomlKey::CompileOnly:
+                target.compileOnly = parse_toml_bool_value(taskValue);
                 break;
             case TaskTomlKey::Parallel:
                 target.parallel = parse_toml_bool_value(taskValue);
@@ -1179,9 +1650,7 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 append_toml_string_list_value(taskValue, target.nextPhases);
                 break;
             case TaskTomlKey::Command: {
-                std::string v = unquote_preserve(taskValue);
-                if(!v.empty())
-                    target.commands.push_back(v);
+                append_toml_command_value(taskValue, target.commands);
                 break;
             }
             case TaskTomlKey::Env:
@@ -1193,8 +1662,26 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                                                        target.shellLines);
                 break;
             case TaskTomlKey::Commands:
-                append_toml_string_list_value_preserve(taskValue,
-                                                       target.commands);
+                append_toml_commands_value(taskValue, target.commands);
+                break;
+            case TaskTomlKey::Chmod:
+                target.chmodMode = unquote(taskValue);
+                break;
+            case TaskTomlKey::ChmodPath:
+            case TaskTomlKey::ChmodPaths:
+                append_toml_string_list_value(taskValue, target.chmodPaths);
+                break;
+            case TaskTomlKey::OptLevel:
+            case TaskTomlKey::TargetArch:
+            case TaskTomlKey::PathEntries:
+            case TaskTomlKey::CompilerFlags:
+            case TaskTomlKey::LinkerFlags:
+            case TaskTomlKey::LibPaths:
+            case TaskTomlKey::Libs:
+            case TaskTomlKey::StaticDeps:
+            case TaskTomlKey::StaticCppRuntime:
+                apply_task_build_config_key_value(target.buildConfig,
+                                                  taskKeyKind, taskValue);
                 break;
             case TaskTomlKey::Name:
                 break;
@@ -1349,8 +1836,47 @@ static std::vector<std::string> split_csv(std::string_view input)
     std::vector<std::string> out;
     std::string cur;
     int depth = 0;
+    bool inDoubleQuotes = false;
+    bool inSingleQuotes = false;
+    bool escaped = false;
     for(char c : input)
     {
+        if(inDoubleQuotes)
+        {
+            cur.push_back(c);
+            if(escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if(c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if(c == '"')
+                inDoubleQuotes = false;
+            continue;
+        }
+        if(inSingleQuotes)
+        {
+            cur.push_back(c);
+            if(c == '\'')
+                inSingleQuotes = false;
+            continue;
+        }
+        if(c == '"')
+        {
+            inDoubleQuotes = true;
+            cur.push_back(c);
+            continue;
+        }
+        if(c == '\'')
+        {
+            inSingleQuotes = true;
+            cur.push_back(c);
+            continue;
+        }
         if(c == '{')
             ++depth;
         else if(c == '}')
@@ -1417,6 +1943,8 @@ static std::string unquote(std::string_view v)
         }
         return trim(out);
     }
+    if(t.size() >= 2 && t.front() == '\'' && t.back() == '\'')
+        return t.substr(1, t.size() - 2);
     return t;
 }
 
@@ -1425,7 +1953,72 @@ static std::string unquote_preserve(std::string_view v)
     std::string t = trim(v);
     if(t.size() >= 2 && t.front() == '"' && t.back() == '"')
         return t.substr(1, t.size() - 2);
+    if(t.size() >= 2 && t.front() == '\'' && t.back() == '\'')
+        return t.substr(1, t.size() - 2);
     return t;
+}
+
+static std::optional<std::string> parse_toml_command_tokens(
+    const std::string& value)
+{
+    std::string t = trim(value);
+    if(t.empty() || t.front() != '[' || t.back() != ']')
+        return std::nullopt;
+
+    const auto parts = split_toml_array(t.substr(1, t.size() - 2));
+    if(parts.empty())
+        return std::string();
+
+    std::string command;
+    for(const auto& part : parts)
+    {
+        std::string token = unquote_preserve(part);
+        if(token.empty())
+            continue;
+        if(!command.empty())
+            command += " ";
+        command += shell_quote(token);
+    }
+    return command;
+}
+
+static void append_toml_command_value(const std::string& value,
+                                      std::vector<std::string>& out)
+{
+    std::string t = trim(value);
+    if(t.empty())
+        return;
+
+    if(auto tokenized = parse_toml_command_tokens(t); tokenized.has_value())
+    {
+        if(!tokenized->empty())
+            out.push_back(*tokenized);
+        return;
+    }
+
+    std::string v = unquote_preserve(t);
+    if(!v.empty())
+        out.push_back(v);
+}
+
+static void append_toml_commands_value(const std::string& value,
+                                       std::vector<std::string>& out)
+{
+    std::string t = trim(value);
+    if(t.empty())
+        return;
+    if(t.front() == '[' && t.back() == ']')
+    {
+        for(const auto& part : split_toml_array(t.substr(1, t.size() - 2)))
+        {
+            if(part.empty())
+                continue;
+            append_toml_command_value(part, out);
+        }
+        return;
+    }
+
+    append_toml_command_value(t, out);
 }
 
 static void append_toml_string_list_value_preserve(const std::string& value,
@@ -1495,8 +2088,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
     std::vector<DepSpec> deps;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -1505,10 +2098,10 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
         }
         if(section != "dependencies" && section != "c-dependencies")
             continue;
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string name = trim(t.substr(0, eq));
+        std::string name = assignment->key;
         if(name.empty())
             continue;
         if(t.find('{') == std::string::npos)
@@ -1565,8 +2158,8 @@ static std::vector<std::string> parse_workspace_members(
     std::vector<std::string> out;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -1575,14 +2168,13 @@ static std::vector<std::string> parse_workspace_members(
         }
         if(section != "workspace")
             continue;
-        size_t eq = t.find('=');
-        if(eq == std::string::npos)
+        const auto assignment = parse_toml_assignment(t, in);
+        if(!assignment.has_value())
             continue;
-        std::string key = trim(t.substr(0, eq));
+        std::string key = assignment->key;
         if(key != "members")
             continue;
-        std::string value =
-            collect_multiline_toml_value(trim(t.substr(eq + 1)), in);
+        std::string value = assignment->value;
         if(value.empty())
             return out;
         if(value.front() == '[' && value.back() == ']')
@@ -1610,7 +2202,7 @@ static bool has_section(const std::string& content, const std::string& wanted)
     std::string line;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
+        std::string t = strip_toml_comment(line);
         if(t == ("[" + wanted + "]"))
             return true;
     }
@@ -2042,11 +2634,8 @@ class ProgressSpinner
                     std::lock_guard<std::mutex> lock(detailMutex_);
                     detail = detail_;
                 }
-                std::cerr << "\r\033[2K" << label_;
-                if(!detail.empty())
-                    std::cerr << " " << shorten_progress_output(detail);
-                std::cerr << " " << frames[idx % 4]
-                          << std::flush;
+                std::cerr << "\r\033[2K"
+                          << live_line(frames[idx % 4], detail) << std::flush;
                 idx++;
                 std::this_thread::sleep_for(std::chrono::milliseconds(120));
             }
@@ -2081,6 +2670,34 @@ class ProgressSpinner
     }
 
   private:
+    std::string live_line(char frame, const std::string& detail) const
+    {
+        if(!label_.empty() && label_.front() == '[')
+        {
+            const size_t close = label_.find(']');
+            if(close != std::string::npos)
+            {
+                std::string out = label_.substr(0, close + 1);
+                out += " ";
+                out += frame;
+                const std::string rest = trim(label_.substr(close + 1));
+                if(!rest.empty())
+                    out += " " + rest;
+                if(!detail.empty())
+                    out += " " + shorten_progress_output(detail);
+                return out;
+            }
+        }
+
+        std::string out;
+        out += frame;
+        out += " ";
+        out += label_;
+        if(!detail.empty())
+            out += " " + shorten_progress_output(detail);
+        return out;
+    }
+
     std::string label_;
     std::string detail_;
     std::mutex detailMutex_;
@@ -2334,6 +2951,19 @@ static std::vector<std::string> split_shell_tokens(std::string_view input)
     if(!cur.empty())
         out.push_back(cur);
     return out;
+}
+
+static void append_shell_fragment(std::string& cmd,
+                                  const std::string& fragment)
+{
+    const auto tokens = split_shell_tokens(fragment);
+    if(tokens.empty())
+    {
+        cmd += " " + shell_quote(fragment);
+        return;
+    }
+    for(const auto& token : tokens)
+        cmd += " " + shell_quote(token);
 }
 
 static std::filesystem::path dep_checkout_dir(
@@ -2686,8 +3316,8 @@ static std::vector<CDepSpec> parse_c_deps(const std::string& content)
     std::vector<CDepSpec> deps;
     while(std::getline(in, line))
     {
-        std::string t = trim(line);
-        if(t.empty() || t[0] == '#')
+        std::string t = strip_toml_comment(line);
+        if(t.empty())
             continue;
         if(t.front() == '[' && t.back() == ']')
         {
@@ -2894,6 +3524,148 @@ static int fetch_for_manifest(const PackageManifest& pkg,
     return 0;
 }
 
+static std::string default_task_compiler_for_language(
+    std::string_view language, const BuildConfig& buildConfig)
+{
+    if(language == "mlang")
+    {
+        if(!buildConfig.compilerProgram.empty())
+            return buildConfig.compilerProgram;
+        return "mlang";
+    }
+    if(language == "c")
+        return "cc";
+    if(language == "c++")
+        return "c++";
+    return "";
+}
+
+static std::optional<std::string> build_task_language_command(
+    const PackageManifest& pkg, const std::string& taskName,
+    const BuildConfig& taskBuildConfig, const std::string& language,
+    const std::string& source, const std::string& output,
+    const std::vector<std::string>& inputs, bool compileOnly,
+    const LinkFlags& linkFlags, const std::vector<std::string>& pkgFlags,
+    std::string& error)
+{
+    if(language.empty())
+        return std::nullopt;
+    if(output.empty())
+    {
+        error = "Task '" + taskName + "' in " + pkg.manifestPath.string() +
+                " is missing required 'output' for language-driven task execution.";
+        return std::nullopt;
+    }
+    if(source.empty() && inputs.empty())
+    {
+        error = "Task '" + taskName + "' in " + pkg.manifestPath.string() +
+                " needs 'source' or 'inputs' for language-driven task execution.";
+        return std::nullopt;
+    }
+
+    if(!compileOnly &&
+       !validate_declared_libraries(pkg.manifestPath, taskName, taskBuildConfig,
+                                    linkFlags))
+    {
+        error = "";
+        return std::nullopt;
+    }
+
+    const std::string compiler =
+        default_task_compiler_for_language(language, taskBuildConfig);
+    if(compiler.empty())
+    {
+        error = "Task '" + taskName + "' in " + pkg.manifestPath.string() +
+                " has unsupported language '" + language + "'.";
+        return std::nullopt;
+    }
+
+    std::string cmd = shell_quote(compiler);
+    if(language == "mlang")
+    {
+        if(!source.empty())
+            cmd += " " + shell_quote(source);
+        for(const auto& input : inputs)
+            cmd += " " + shell_quote(input);
+        cmd += " -o " + shell_quote(output);
+        if(compileOnly)
+            cmd += " -c";
+        if(!taskBuildConfig.targetArch.empty())
+            cmd += " --target-arch " + shell_quote(taskBuildConfig.targetArch);
+        const std::string optFlag = taskBuildConfig.optLevel;
+        if(!optFlag.empty())
+            cmd += " " + optFlag;
+        for(const auto& flag : taskBuildConfig.compilerFlags)
+            append_shell_fragment(cmd, flag);
+        if(!compileOnly)
+        {
+            for(const auto& dir : taskBuildConfig.libPaths)
+                cmd += " -L" + shell_quote(dir);
+            for(const auto& lib : taskBuildConfig.libs)
+                cmd += " -l" + shell_quote(lib);
+            if(taskBuildConfig.staticDeps.value_or(false))
+            {
+                for(const auto& archive : linkFlags.staticArchives)
+                    cmd += " " + shell_quote(archive);
+            }
+            else
+            {
+                for(const auto& dir : linkFlags.libDirs)
+                    cmd += " -L" + shell_quote(dir);
+                for(const auto& lib : linkFlags.libs)
+                    cmd += " -l" + shell_quote(lib);
+                for(const auto& dir : linkFlags.libDirs)
+                    cmd += " -Wl,-rpath," + shell_quote(dir);
+            }
+            if(taskBuildConfig.staticCppRuntime.value_or(false))
+                cmd += " -static-libstdc++ -static-libgcc";
+            for(const auto& flag : taskBuildConfig.linkerFlags)
+                append_shell_fragment(cmd, flag);
+            for(const auto& flag : pkgFlags)
+                cmd += " " + shell_quote(flag);
+        }
+        return cmd;
+    }
+
+    if(!source.empty())
+        cmd += " " + shell_quote(source);
+    for(const auto& input : inputs)
+        cmd += " " + shell_quote(input);
+    for(const auto& flag : taskBuildConfig.compilerFlags)
+        append_shell_fragment(cmd, flag);
+    if(compileOnly)
+        cmd += " -c";
+    cmd += " -o " + shell_quote(output);
+    if(!compileOnly)
+    {
+        for(const auto& dir : taskBuildConfig.libPaths)
+            cmd += " -L" + shell_quote(dir);
+        for(const auto& lib : taskBuildConfig.libs)
+            cmd += " -l" + shell_quote(lib);
+        if(taskBuildConfig.staticDeps.value_or(false))
+        {
+            for(const auto& archive : linkFlags.staticArchives)
+                cmd += " " + shell_quote(archive);
+        }
+        else
+        {
+            for(const auto& dir : linkFlags.libDirs)
+                cmd += " -L" + shell_quote(dir);
+            for(const auto& lib : linkFlags.libs)
+                cmd += " -l" + shell_quote(lib);
+            for(const auto& dir : linkFlags.libDirs)
+                cmd += " -Wl,-rpath," + shell_quote(dir);
+        }
+        if(language == "c++" && taskBuildConfig.staticCppRuntime.value_or(false))
+            cmd += " -static-libstdc++ -static-libgcc";
+        for(const auto& flag : taskBuildConfig.linkerFlags)
+            append_shell_fragment(cmd, flag);
+        for(const auto& flag : pkgFlags)
+            cmd += " " + shell_quote(flag);
+    }
+    return cmd;
+}
+
 static int build_for_manifest(const PackageManifest& pkg, const std::string& argv0,
                               const std::string& optFlagOverride,
                               bool useNinja,
@@ -3066,7 +3838,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         if(!optFlag.empty())
             cmd += " " + optFlag;
         for(const auto& flag : buildConfig.compilerFlags)
-            cmd += " " + shell_quote(flag);
+            append_shell_fragment(cmd, flag);
         for(const auto& dir : buildConfig.libPaths)
             cmd += " -L" + shell_quote(dir);
         for(const auto& lib : buildConfig.libs)
@@ -3088,7 +3860,7 @@ static int build_for_manifest(const PackageManifest& pkg, const std::string& arg
         if(buildConfig.staticCppRuntime.value_or(false))
             cmd += " -static-libstdc++ -static-libgcc";
         for(const auto& flag : buildConfig.linkerFlags)
-            cmd += " " + shell_quote(flag);
+            append_shell_fragment(cmd, flag);
         for(const auto& flag : pkgFlags)
             cmd += " " + shell_quote(flag);
 
@@ -3164,6 +3936,8 @@ static std::string expand_task_text(const std::string& text,
     out = replace_all(out, "{{make}}",
                       buildConfig.makeProgram.empty() ? "make"
                                                       : buildConfig.makeProgram);
+    for(const auto& [key, value] : buildConfig.optionValues)
+        out = replace_all(out, "{{option." + key + "}}", value);
     return out;
 }
 
@@ -3562,6 +4336,29 @@ static int run_task_for_manifest_impl(
             (hostOverride && !hostOverride->workdir.empty())
                 ? hostOverride->workdir
                 : task.workdir;
+        const std::string effectiveLanguage =
+            (hostOverride && !hostOverride->language.empty())
+                ? hostOverride->language
+                : task.language;
+        const std::string effectiveSource =
+            (hostOverride && !hostOverride->source.empty())
+                ? hostOverride->source
+                : task.source;
+        const std::string effectiveOutput =
+            (hostOverride && !hostOverride->output.empty())
+                ? hostOverride->output
+                : task.output;
+        std::vector<std::string> effectiveInputs = task.inputs;
+        if(hostOverride)
+        {
+            effectiveInputs.insert(effectiveInputs.end(),
+                                   hostOverride->inputs.begin(),
+                                   hostOverride->inputs.end());
+        }
+        bool effectiveCompileOnly =
+            hostOverride && hostOverride->compileOnly.has_value()
+                ? hostOverride->compileOnly.value()
+                : task.compileOnly.value_or(false);
         bool effectiveParallel =
             hostOverride && hostOverride->parallel.has_value()
                 ? hostOverride->parallel.value()
@@ -3574,13 +4371,23 @@ static int run_task_for_manifest_impl(
             hostOverride && hostOverride->inlineOutput.has_value()
                 ? hostOverride->inlineOutput.value()
                 : task.inlineOutput.value_or(false);
-
-        if(effectiveCommands.empty() && effectiveShell.empty())
+        const std::string effectiveChmodMode =
+            (hostOverride && !hostOverride->chmodMode.empty())
+                ? hostOverride->chmodMode
+                : task.chmodMode;
+        std::vector<std::string> effectiveChmodPaths = task.chmodPaths;
+        if(hostOverride)
         {
-            std::cerr << "Task '" << taskName << "' in "
-                      << pkg.manifestPath.string()
-                      << " has no commands or script.\n";
-            return 1;
+            effectiveChmodPaths.insert(effectiveChmodPaths.end(),
+                                       hostOverride->chmodPaths.begin(),
+                                       hostOverride->chmodPaths.end());
+        }
+        BuildConfig effectiveTaskBuildConfig =
+            merge_build_config(buildConfig, task.buildConfig);
+        if(hostOverride)
+        {
+            effectiveTaskBuildConfig = merge_build_config(
+                effectiveTaskBuildConfig, hostOverride->buildConfig);
         }
 
         taskStack.push_back(taskName);
@@ -3666,6 +4473,59 @@ static int run_task_for_manifest_impl(
                                      "sh " + shell_quote(scriptPathOpt->string()));
         }
 
+        if(!effectiveLanguage.empty())
+        {
+            const auto deps = parse_source_deps(pkg.content);
+            const auto cdeps = parse_c_deps(pkg.content);
+            const std::filesystem::path depsDir =
+                package_deps_dir(pkg.packageDir, buildConfig);
+            LinkFlags linkFlags = collect_dep_link_flags(deps, depsDir);
+            std::vector<std::string> pkgFlags;
+            for(const auto& dep : cdeps)
+            {
+                if(!append_pkg_config_flags(dep, pkgFlags,
+                                            effectiveTaskBuildConfig.pathEntries))
+                {
+                    taskStack.pop_back();
+                    return 1;
+                }
+            }
+            std::string generationError;
+            auto generatedCommand = build_task_language_command(
+                pkg, taskName, effectiveTaskBuildConfig, effectiveLanguage,
+                expand_task_text(effectiveSource, pkg, buildConfig),
+                expand_task_text(effectiveOutput, pkg, buildConfig),
+                [&]() {
+                    std::vector<std::string> expandedInputs;
+                    expandedInputs.reserve(effectiveInputs.size());
+                    for(const auto& input : effectiveInputs)
+                    {
+                        expandedInputs.push_back(
+                            expand_task_text(input, pkg, buildConfig));
+                    }
+                    return expandedInputs;
+                }(),
+                effectiveCompileOnly, linkFlags, pkgFlags, generationError);
+            if(!generatedCommand.has_value())
+            {
+                if(!generationError.empty())
+                    std::cerr << generationError << "\n";
+                taskStack.pop_back();
+                return 1;
+            }
+            effectiveCommands.insert(effectiveCommands.begin(),
+                                     *generatedCommand);
+        }
+
+        if(effectiveCommands.empty() && effectiveShell.empty())
+        {
+            std::cerr << "Task '" << taskName << "' in "
+                      << pkg.manifestPath.string()
+                      << " has no commands, script, or language-driven build configuration.\n";
+            taskStack.pop_back();
+            return 1;
+        }
+
         for(const auto& command : effectiveCommands)
         {
             std::string envPrefix;
@@ -3682,7 +4542,8 @@ static int run_task_for_manifest_impl(
                 expanded = "env" + envPrefix + " " + expanded;
             const std::string fullCommand =
                 "cd " + shell_quote(workdir.string()) + " && " +
-                command_with_path_entries(expanded, buildConfig.pathEntries);
+                command_with_path_entries(expanded,
+                                          effectiveTaskBuildConfig.pathEntries);
             const int rc = inlineSpinner
                                ? stream_inline_output_command(
                                      *inlineSpinner, fullCommand, false,
@@ -3702,6 +4563,57 @@ static int run_task_for_manifest_impl(
                 }
                 taskCv.notify_all();
                 return 1;
+            }
+        }
+
+        if(!effectiveChmodMode.empty())
+        {
+            const auto mode = parse_octal_permission_bits(effectiveChmodMode);
+            if(!mode.has_value())
+            {
+                std::cerr << "Task '" << taskName << "' in "
+                          << pkg.manifestPath.string()
+                          << " has invalid chmod mode '" << effectiveChmodMode
+                          << "'. Use an octal mode such as 644 or 755.\n";
+                taskStack.pop_back();
+                {
+                    std::lock_guard<std::mutex> lock(taskMutex);
+                    taskStates[taskName].status = TaskRunState::failed;
+                }
+                taskCv.notify_all();
+                return 1;
+            }
+            if(effectiveChmodPaths.empty())
+            {
+                std::cerr << "Task '" << taskName << "' in "
+                          << pkg.manifestPath.string()
+                          << " sets chmod but no chmod_path or chmod_paths.\n";
+                taskStack.pop_back();
+                {
+                    std::lock_guard<std::mutex> lock(taskMutex);
+                    taskStates[taskName].status = TaskRunState::failed;
+                }
+                taskCv.notify_all();
+                return 1;
+            }
+            for(const auto& chmodPathText : effectiveChmodPaths)
+            {
+                const std::filesystem::path chmodPath =
+                    expand_task_text(chmodPathText, pkg, buildConfig);
+                std::string chmodError;
+                if(!apply_recursive_permissions(chmodPath, *mode, chmodError))
+                {
+                    std::cerr << chmodError << "\n";
+                    std::cerr << "Task '" << taskName << "' failed for "
+                              << pkg.manifestPath.string() << ".\n";
+                    taskStack.pop_back();
+                    {
+                        std::lock_guard<std::mutex> lock(taskMutex);
+                        taskStates[taskName].status = TaskRunState::failed;
+                    }
+                    taskCv.notify_all();
+                    return 1;
+                }
             }
         }
 
@@ -3822,6 +4734,7 @@ struct PkgCliOverrides
     std::optional<std::string> stderrLog;
     std::optional<std::string> warnLog;
     std::optional<bool> taskPrintToStdoutLog;
+    std::map<std::string, std::string> optionValues;
 };
 
 static void apply_cli_overrides(BuildConfig& buildConfig,
@@ -3846,8 +4759,22 @@ static void apply_cli_overrides(BuildConfig& buildConfig,
         buildConfig.warnLog = *overrides.warnLog;
     if(overrides.taskPrintToStdoutLog.has_value())
         buildConfig.taskPrintToStdoutLog = *overrides.taskPrintToStdoutLog;
+    for(const auto& [key, value] : overrides.optionValues)
+        buildConfig.optionValues[key] = value;
     if(enableLogs)
         buildConfig.enableLogs = true;
+}
+
+static bool parse_pkg_option_argument(const std::string& text,
+                                      std::string& key,
+                                      std::string& value)
+{
+    const size_t eq = text.find('=');
+    if(eq == std::string::npos)
+        return false;
+    key = trim(text.substr(0, eq));
+    value = trim(text.substr(eq + 1));
+    return !key.empty();
 }
 
 } // namespace
@@ -3862,6 +4789,9 @@ int PackageManager::run(int argc, char** argv)
     }
 
     std::filesystem::path manifestPath = "mlang.toml";
+    std::string compilerProgram = argv[0] ? std::string(argv[0]) : "mlang";
+    if(!compilerProgram.empty() && compilerProgram.find('/') != std::string::npos)
+        compilerProgram = std::filesystem::absolute(compilerProgram).string();
     int subIndex = 2;
     while(subIndex < argc)
     {
@@ -4165,6 +5095,7 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
+            buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(fetch_for_manifest(pkg, buildConfig) != 0)
                 return 1;
@@ -4256,6 +5187,7 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
+            buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(build_for_manifest(pkg, argv[0], optFlag, useNinja,
                                   buildConfig) != 0)
@@ -4271,7 +5203,8 @@ int PackageManager::run(int argc, char** argv)
             std::cerr << "Usage: " << argv[0]
                       << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
-                      << " [--task-print-to-stdout-log]\n";
+                      << " [--task-print-to-stdout-log]"
+                      << " [--option KEY=VALUE]\n";
             return 1;
         }
         if(!std::filesystem::exists(manifestPath))
@@ -4307,6 +5240,29 @@ int PackageManager::run(int argc, char** argv)
                 overrides.buildDir = argv[++i];
             else if(arg == "--deps-dir" && i + 1 < argc)
                 overrides.depsDir = argv[++i];
+            else if(arg == "--option" && i + 1 < argc)
+            {
+                std::string key;
+                std::string value;
+                if(!parse_pkg_option_argument(argv[++i], key, value))
+                {
+                    std::cerr << "--option requires KEY=VALUE\n";
+                    return 1;
+                }
+                overrides.optionValues[key] = value;
+            }
+            else if(arg.rfind("--option=", 0) == 0)
+            {
+                std::string key;
+                std::string value;
+                if(!parse_pkg_option_argument(
+                       arg.substr(std::string("--option=").size()), key, value))
+                {
+                    std::cerr << "--option requires KEY=VALUE\n";
+                    return 1;
+                }
+                overrides.optionValues[key] = value;
+            }
             else
             {
                 std::cerr << "Unknown option for 'pkg run': " << arg << "\n"
@@ -4314,7 +5270,8 @@ int PackageManager::run(int argc, char** argv)
                           << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
-                          << " [--task-print-to-stdout-log]\n";
+                          << " [--task-print-to-stdout-log]"
+                          << " [--option KEY=VALUE]\n";
                 return 1;
             }
         }
@@ -4322,6 +5279,7 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
+            buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             int rc;
             {
@@ -4444,6 +5402,7 @@ int PackageManager::run(int argc, char** argv)
         for(const auto& pkg : manifests)
         {
             BuildConfig buildConfig = parse_build_config(pkg.content);
+            buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
             if(clean_for_manifest(pkg, buildConfig) != 0)
                 return 1;

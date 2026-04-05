@@ -178,6 +178,24 @@ Generate a complete subproject package automatically:
 points outside it, fetched dependencies are kept for reuse unless you pass
 `--deps`.
 
+Task-driven manifests can also declare runtime-selectable values under
+`[tool.mlang.options]`. Override them per invocation with
+`mlang pkg run ... --option key=value`, then reference them in task text via
+placeholders such as `{{option.userspace}}`:
+
+```toml
+[tool.mlang.options]
+userspace = "busybox"
+
+[[task]]
+name = "qemu-run"
+print = "Booting QEMU with {{option.userspace}} userspace"
+```
+
+```sh
+./build/mlang pkg run qemu-run --option userspace=gnu
+```
+
 Custom task workflows can be declared in `mlang.toml` and run with:
 
 ```sh
@@ -197,7 +215,38 @@ Current task graph features:
   still ends with one final completion line in the form
   `[n/N] task-name Completed, time HH:MM:SS:MS - description`
 - `shell = [ ... ]` / `script = [ ... ]` for inline shell scripts stored under `build/task-scripts/`
+- `command = [ "binary", "arg1", "arg2" ]` for one readable tokenized command
+- `commands = [ [ "binary", "arg1" ] ]` and `commands += [ ... ]` for
+  multiline appended command lists
+- `chmod = "644"` plus `chmod_path` / `chmod_paths` for recursive permission
+  fixups after a task succeeds
+- `[tool.mlang.options]` plus `pkg run --option key=value` for manifest-driven
+  runtime mode switches such as alternate guest userspaces
 - `[task.host.darwin]`, `[task.host.linux]`, `[task.host.windows]` for host-specific overrides
+
+Permission-fixup example:
+
+```toml
+[[task]]
+name = "extract-src"
+commands = [
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/archive.tar.gz",
+    "-C",
+    "{{build_dir}}/src"
+  ]
+]
+chmod = "644"
+chmod_paths = [
+  "{{build_dir}}/src"
+]
+```
+
+`chmod` currently accepts octal modes such as `644` or `755`. The mode is
+applied recursively to files, and directories keep traverse bits so
+`chmod = "644"` still leaves an extracted source tree readable and enterable.
 
 A minimal workflow example:
 
@@ -227,6 +276,27 @@ Run it from `examples/package_manager_task_graph`:
 ```sh
 ../../build/mlang pkg run workflow
 cat build/joined.txt
+```
+
+Command lists can also be written in a more readable tokenized form:
+
+```toml
+[[task]]
+name = "toolchain-check"
+commands = [
+  [
+    'sh',
+    '-c',
+    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+  ],
+]
+commands += [
+  [
+    'sh',
+    '-c',
+    'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done',
+  ],
+]
 ```
 
 Phase-based barriers are also supported:
@@ -1217,13 +1287,31 @@ Supported `[[task]]` keys:
 - `name`
 - `print`
 - `message`
+- `phase`
 - `workdir`
+- `language`
+- `source`
+- `output`
+- `inputs`
+- `compile_only`
 - `parallel`
 - `depends_on`
+- `phase_depends_on`
 - `next`
+- `next_phases`
 - `join_on`
+- `phase_join_on`
 - `env`
-- `shell`
+- `shell` / `script`
+- `opt_level`
+- `target_arch`
+- `path_entries`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
 - `command`
 - `commands`
 
@@ -1245,6 +1333,21 @@ Override behavior:
 - override `env` appends after the base `env`
 - override `shell` replaces the base inline shell script
 - override `command` / `commands` replace the base task commands
+
+Declarative task builds are also supported. Set `language = "mlang"`,
+`"c"`, or `"c++"` together with `source`, `output`, `inputs`, and optionally
+`compile_only = true`, and `mlang pkg` generates the compiler or linker
+invocation for that task. Task-local `libs`, `lib_paths`, `compiler_flags`,
+`linker_flags`, `static_deps`, and `static_cpp_runtime` are applied to that
+generated build step, and any extra `commands` still run afterward.
+
+List-valued task keys such as `inputs`, `libs`, `compiler_flags`,
+`linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
+comma-separated TOML arrays, and both `"double-quoted"` and `'single-quoted'`
+string items are supported.
+
+TOML `#` comments are also supported on their own line and at the end of an
+assignment line, as long as the `#` appears outside quoted string content.
 
 Task placeholders:
 

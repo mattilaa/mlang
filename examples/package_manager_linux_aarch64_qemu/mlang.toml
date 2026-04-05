@@ -1,21 +1,31 @@
 [package]
-name = "linux_aarch64_qemu"
+name = "linux_aarch64_qemu" # Package name used by the example
 version = "0.1.0"
 
 [dependencies]
-linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+# Fetch the Linux kernel source as a tarball and let curl show its own progress.
+linux = { url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.1.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false } # End-of-line comments are supported too
 
 [c-dependencies]
 
 [tool.mlang]
 min_mlang_version = "0.2.0"
 make_program = "gmake"
+# Full-line TOML comments work anywhere outside quoted strings.
 log_dir = "/tmp/mlang-linux-aarch64-qemu"
 stdout_log = "pkg.stdout.log"
 stderr_log = "pkg.stderr.log"
 warn_log = "pkg.warn.log"
+
+[tool.mlang.options]
+# Select the guest userspace from the command line:
+#   ../../build/mlang pkg run qemu-run --option userspace=busybox
+#   ../../build/mlang pkg run qemu-run --option userspace=gnu
+userspace = "busybox"
+
+[tool.mlang]
 path_entries = [
-  "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
+  "/opt/homebrew/opt/gnu-sed/libexec/gnubin", # Prefer GNU sed when available
   "/usr/local/opt/gnu-sed/libexec/gnubin",
   "/opt/homebrew/opt/make/libexec/gnubin",
   "/usr/local/opt/make/libexec/gnubin",
@@ -32,7 +42,18 @@ name = "toolchain-check"
 print = "[example] Checking required build tools in PATH"
 workdir = "{{root}}"
 commands = [
-  "sh -c 'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'"
+  [
+    'sh',
+    '-c',
+    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'
+  ],
+]
+commands += [
+  [
+    'sh',
+    '-c',
+    'if ! command -v {{make}} >/dev/null 2>&1; then echo Missing required tool in PATH: {{make}}; exit 1; fi'
+  ],
 ]
 
 [task.host.darwin]
@@ -242,25 +263,335 @@ commands = [
 name = "initramfs"
 print = "[example] Packing initramfs into {{build_dir}}/initramfs.cpio.gz"
 workdir = "{{root}}"
+depends_on = ["busybox-fetch", "gnu-userspace-fetch", "gnu-vim-fetch"]
 shell = [
   "rm -rf {{build_dir}}/initramfs {{build_dir}}/initramfs.cpio.gz",
-  "mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp",
-  "cat > {{build_dir}}/initramfs/init <<'EOF'",
-  "#!/bin/sh",
-  "mount -t proc none /proc",
-  "mount -t sysfs none /sys",
-  "mount -t devtmpfs none /dev 2>/dev/null || true",
-  "echo 'mlang pkg Linux AArch64 QEMU example booted'",
-  "echo 'Kernel image and initramfs were generated from mlang.toml tasks.'",
-  "exec sh",
+  "# In GNU mode, unpack the base rootfs first so distro-owned symlinks like /bin -> /usr/bin are preserved.",
+  "if [ '{{option.userspace}}' = 'gnu' ]; then",
+  "  mkdir -p {{build_dir}}/initramfs",
+  "  cp -a {{build_dir}}/gnu-rootfs/. {{build_dir}}/initramfs/",
+  "  mkdir -p {{build_dir}}/initramfs/opt/nvim",
+  "  cp -a {{build_dir}}/nvim-linux-arm64/. {{build_dir}}/initramfs/opt/nvim/",
+  "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/nvim",
+  "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/vim",
+  "  ln -sf /opt/nvim/bin/nvim {{build_dir}}/initramfs/usr/bin/vi",
+  "  # Use a login wrapper so GNU mode starts at a real non-root serial login prompt.",
+  "  CONSOLE_CMD='/bin/cttyhack /bin/guest-login'",
+  "  mkdir -p {{build_dir}}/initramfs/root {{build_dir}}/initramfs/home/admin {{build_dir}}/initramfs/home/user",
+  "  # Give GNU login shells a readable default color scheme for ls output on the QEMU serial console.",
+  "  cat > {{build_dir}}/initramfs/root/.profile <<'EOF'",
+  "export LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32'",
+  "alias ls='ls --color=auto'",
+  "alias ll='ls -alF --color=auto'",
+  "alias la='ls -A --color=auto'",
   "EOF",
-  "chmod +x {{build_dir}}/initramfs/init",
-  "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc | gzip -9 > ../initramfs.cpio.gz"
+  "  cp {{build_dir}}/initramfs/root/.profile {{build_dir}}/initramfs/home/admin/.profile",
+  "  cp {{build_dir}}/initramfs/root/.profile {{build_dir}}/initramfs/home/user/.profile",
+  "  cat > {{build_dir}}/initramfs/bin/guest-login <<'EOF'",
+  '#!/bin/sh',
+  'set -eu',
+  'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+  'TERM=${TERM:-xterm-256color}',
+  'while :; do',
+  "  printf 'login: '",
+  '  IFS= read -r name || exit 0',
+  '  [ -n "$name" ] || continue',
+  '  entry=$(grep "^${name}:" /etc/passwd | head -n1 || true)',
+  '  if [ -z "$entry" ]; then',
+  "    echo 'Login incorrect'",
+  '    continue',
+  '  fi',
+  "  printf 'Password: '",
+  '  IFS= read -r password || exit 0',
+  '  shadow=$(grep "^${name}:" /etc/shadow | head -n1 || true)',
+  '  expected=$(printf "%s" "$shadow" | cut -d: -f2)',
+  '  if [ -n "$expected" ] && [ "$password" != "$expected" ]; then',
+  "    echo 'Login incorrect'",
+  '    continue',
+  '  fi',
+  '  uid=$(printf "%s" "$entry" | cut -d: -f3)',
+  '  gid=$(printf "%s" "$entry" | cut -d: -f4)',
+  '  home=$(printf "%s" "$entry" | cut -d: -f6)',
+  '  shell=$(printf "%s" "$entry" | cut -d: -f7)',
+  '  [ -n "$home" ] || home=/',
+  '  [ -x "$shell" ] || shell=/bin/sh',
+  '  mkdir -p "$home"',
+  '  chown -R "$uid:$gid" "$home" 2>/dev/null || true',
+  '  cd "$home" 2>/dev/null || cd /',
+  '  exec /usr/bin/setpriv --reuid "$uid" --regid "$gid" --init-groups env -i HOME="$home" USER="$name" LOGNAME="$name" SHELL="$shell" TERM="$TERM" PATH="$PATH" "$shell" --login',
+  'done',
+  'EOF',
+  "  chmod +x {{build_dir}}/initramfs/bin/guest-login",
+  "  echo 'GNU userspace selected: Ubuntu Base ARM64 with a serial login prompt. Default users: admin/admin, user/user, root/root.' > {{build_dir}}/initramfs/etc/mlang-userspace.txt",
+  "else",
+  "  mkdir -p {{build_dir}}/initramfs/bin {{build_dir}}/initramfs/usr/bin",
+  "  CONSOLE_CMD='/bin/cttyhack /bin/sh'",
+  "  echo 'BusyBox userspace selected.' > {{build_dir}}/initramfs/etc/mlang-userspace.txt",
+  "fi",
+  "# Add the runtime directories that both userspaces need for boot.",
+  "mkdir -p {{build_dir}}/initramfs/dev {{build_dir}}/initramfs/etc {{build_dir}}/initramfs/proc {{build_dir}}/initramfs/sys {{build_dir}}/initramfs/tmp {{build_dir}}/initramfs/usr/bin {{build_dir}}/initramfs/usr/sbin",
+  "# Ensure the guest always has a baseline account database, even in the tiny BusyBox-only mode.",
+  "if [ ! -f {{build_dir}}/initramfs/etc/passwd ]; then printf 'root:x:0:0:root:/root:/bin/sh\\n' > {{build_dir}}/initramfs/etc/passwd; fi",
+  "if [ ! -f {{build_dir}}/initramfs/etc/group ]; then printf 'root:x:0:\\nusers:x:100:\\nadmin:x:101:admin\\n' > {{build_dir}}/initramfs/etc/group; fi",
+  "if [ ! -f {{build_dir}}/initramfs/etc/shadow ]; then printf 'root:root:10933:0:99999:7:::\\n' > {{build_dir}}/initramfs/etc/shadow; fi",
+  "if [ '{{option.userspace}}' = 'gnu' ]; then",
+  "  grep -q '^admin:' {{build_dir}}/initramfs/etc/group || printf '%s\n' 'admin:x:101:admin' >> {{build_dir}}/initramfs/etc/group",
+  "  grep -q '^admin:' {{build_dir}}/initramfs/etc/passwd || printf '%s\n' 'admin:x:1000:101:Administrator:/home/admin:/bin/bash' >> {{build_dir}}/initramfs/etc/passwd",
+  "  grep -q '^user:' {{build_dir}}/initramfs/etc/passwd || printf '%s\n' 'user:x:1001:100:Demo User:/home/user:/bin/bash' >> {{build_dir}}/initramfs/etc/passwd",
+  "  grep -q '^admin:' {{build_dir}}/initramfs/etc/shadow || printf '%s\n' 'admin:admin:10933:0:99999:7:::' >> {{build_dir}}/initramfs/etc/shadow",
+  "  grep -q '^user:' {{build_dir}}/initramfs/etc/shadow || printf '%s\n' 'user:user:10933:0:99999:7:::' >> {{build_dir}}/initramfs/etc/shadow",
+  "fi",
+  "chmod 644 {{build_dir}}/initramfs/etc/passwd {{build_dir}}/initramfs/etc/group",
+  "chmod 600 {{build_dir}}/initramfs/etc/shadow",
+  "cp {{build_dir}}/busybox-armv8l {{build_dir}}/initramfs/bin/busybox",
+  "# Provide small portable account-management helpers so adduser/addgroup/passwd/sudo work in both userspace modes.",
+  "cat > {{build_dir}}/initramfs/usr/sbin/addgroup <<'EOF'",
+  '#!/bin/sh',
+  'set -eu',
+  'name=${1:-}',
+  'gid=${2:-}',
+  'if [ -x /usr/sbin/groupadd ]; then',
+  '  if [ -z "$name" ]; then',
+  '    echo "usage: addgroup GROUP [GID]" >&2',
+  '    exit 1',
+  '  fi',
+  '  if [ -n "$gid" ]; then',
+  '    exec /usr/sbin/groupadd -g "$gid" "$name"',
+  '  fi',
+  '  exec /usr/sbin/groupadd "$name"',
+  'fi',
+  'if [ -z "$name" ]; then',
+  '  echo "usage: addgroup GROUP [GID]" >&2',
+  '  exit 1',
+  'fi',
+  'if grep -q "^${name}:" /etc/group; then',
+  '  echo "addgroup: group $name already exists" >&2',
+  '  exit 1',
+  'fi',
+  'if [ -z "$gid" ]; then',
+  "  gid=$(awk -F: 'BEGIN{max=999} {if($3+0>max) max=$3+0} END{print max+1}' /etc/group)",
+  'fi',
+  'printf "%s:x:%s\n" "$name" "$gid" >> /etc/group',
+  'printf "Created group %s with gid %s\n" "$name" "$gid"',
+  'EOF',
+  "chmod +x {{build_dir}}/initramfs/usr/sbin/addgroup",
+  "cat > {{build_dir}}/initramfs/usr/sbin/adduser <<'EOF'",
+  '#!/bin/sh',
+  'set -eu',
+  'name=${1:-}',
+  'group_name=${2:-users}',
+  'home=/home/$name',
+  'shell=/bin/sh',
+  'if [ -x /bin/bash ]; then',
+  '  shell=/bin/bash',
+  'fi',
+  'if [ -z "$name" ]; then',
+  '  echo "usage: adduser USER [GROUP]" >&2',
+  '  exit 1',
+  'fi',
+  'if [ -x /usr/sbin/useradd ]; then',
+  '  if ! grep -q "^${group_name}:" /etc/group; then',
+  '    /usr/sbin/addgroup "$group_name" >/dev/null',
+  '  fi',
+  '  /usr/sbin/useradd -m -d "$home" -s "$shell" -g "$group_name" "$name"',
+  '  if [ -d /etc/skel ]; then',
+  '    cp -a /etc/skel/. "$home"/ 2>/dev/null || true',
+  '  fi',
+  '  [ -f "$home/.profile" ] || printf "export HOME=%s\n" "$home" > "$home/.profile"',
+  '  printf "%s\n" "$name" | /usr/bin/passwd "$name"',
+  '  printf "Created user %s with home %s\n" "$name" "$home"',
+  '  exit 0',
+  'fi',
+  'if grep -q "^${name}:" /etc/passwd; then',
+  '  echo "adduser: user $name already exists" >&2',
+  '  exit 1',
+  'fi',
+  'if ! grep -q "^${group_name}:" /etc/group; then',
+  '  /usr/sbin/addgroup "$group_name" >/dev/null',
+  'fi',
+  'gid=$(grep "^${group_name}:" /etc/group | head -n1 | cut -d: -f3)',
+  "uid=$(awk -F: 'BEGIN{max=999} {if($3+0>max) max=$3+0} END{print max+1}' /etc/passwd)",
+  'mkdir -p "$home"',
+  'cp -a /etc/skel/. "$home"/ 2>/dev/null || true',
+  '[ -f "$home/.profile" ] || printf "export HOME=%s\n" "$home" > "$home/.profile"',
+  'chown -R "$uid:$gid" "$home" 2>/dev/null || true',
+  'printf "%s:x:%s:%s:%s:%s:%s\n" "$name" "$uid" "$gid" "$name" "$home" "$shell" >> /etc/passwd',
+  'printf "%s::10933:0:99999:7:::\n" "$name" >> /etc/shadow',
+  'printf "Created user %s uid %s gid %s home %s\n" "$name" "$uid" "$gid" "$home"',
+  'EOF',
+  "chmod +x {{build_dir}}/initramfs/usr/sbin/adduser",
+  "cat > {{build_dir}}/initramfs/usr/bin/passwd <<'EOF'",
+  '#!/bin/sh',
+  'set -eu',
+  'user=${1:-root}',
+  'if ! grep -q "^${user}:" /etc/passwd; then',
+  '  echo "passwd: unknown user $user" >&2',
+  '  exit 1',
+  'fi',
+  'printf "New password for %s: " "$user" >&2',
+  'IFS= read -r password',
+  'tmp=/etc/shadow.tmp',
+  'updated=0',
+  ': > "$tmp"',
+  'while IFS=: read -r name hash rest; do',
+  '  if [ "$name" = "$user" ]; then',
+  '    printf "%s:%s:%s\n" "$name" "$password" "$rest" >> "$tmp"',
+  '    updated=1',
+  '  else',
+  '    printf "%s:%s:%s\n" "$name" "$hash" "$rest" >> "$tmp"',
+  '  fi',
+  'done < /etc/shadow',
+  'if [ "$updated" -ne 1 ]; then',
+  '  echo "passwd: failed to update shadow entry for $user" >&2',
+  '  rm -f "$tmp"',
+  '  exit 1',
+  'fi',
+  'mv "$tmp" /etc/shadow',
+  'chmod 600 /etc/shadow',
+  'printf "Updated password for %s\n" "$user"',
+  'EOF',
+  "chmod +x {{build_dir}}/initramfs/usr/bin/passwd",
+  "cat > {{build_dir}}/initramfs/usr/bin/sudo <<'EOF'",
+  '#!/bin/sh',
+  'set -eu',
+  'if [ $# -eq 0 ]; then',
+  '  echo "usage: sudo COMMAND [ARGS...]" >&2',
+  '  exit 1',
+  'fi',
+  'if [ "$(id -u)" != "0" ]; then',
+  '  exec /bin/su root -c "$*"',
+  'fi',
+  'exec "$@"',
+  'EOF',
+  "chmod +x {{build_dir}}/initramfs/usr/bin/sudo",
+  "# Use BusyBox itself as the real PID 1 init process. In BusyBox mode we also expose a broad set of applets as direct commands.",
+  "if [ '{{option.userspace}}' = 'gnu' ]; then",
+  "  cd {{build_dir}}/initramfs/bin && for applet in init cttyhack; do ln -sf busybox $applet; done",
+  "else",
+  "  cd {{build_dir}}/initramfs/bin && for applet in sh init ls cat echo uname mount mkdir dmesg ps pwd sleep clear true false head tail grep env which cp mv rm ln chmod sync cttyhack awk sed find xargs sort cut tr wc tee df du free kill killall hexdump watch tar gzip gunzip; do ln -sf busybox $applet; done",
+  "fi",
+  "# /init points at BusyBox, which reads /etc/inittab and starts the serial console shell on ttyAMA0.",
+  "ln -sf bin/busybox {{build_dir}}/initramfs/init",
+  "# Keep the boot flow readable in the manifest by writing the BusyBox init configuration inline.",
+  "# Expand CONSOLE_CMD now so BusyBox init gets a concrete shell command in /etc/inittab.",
+  "cat > {{build_dir}}/initramfs/etc/inittab <<EOF",
+  "::sysinit:/bin/mount -t proc proc /proc",
+  "::sysinit:/bin/mount -t sysfs sysfs /sys",
+  "::sysinit:/bin/mount -t devtmpfs devtmpfs /dev",
+  "::sysinit:/bin/mkdir -p /dev/pts",
+  "ttyAMA0::respawn:$CONSOLE_CMD",
+  "::ctrlaltdel:/bin/umount -a -r",
+  "::shutdown:/bin/umount -a -r",
+  "EOF",
+  "chmod +x {{build_dir}}/initramfs/bin/busybox",
+  "cd {{build_dir}}/initramfs && find . -print | cpio -o -H newc -R 0:0 | gzip -9 > ../initramfs.cpio.gz"
 ]
 
 [[task]]
+name = "busybox-fetch"
+print = "[example] Downloading a prebuilt BusyBox userspace for the initramfs"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
+  "chmod +x {{build_dir}}/busybox-armv8l"
+]
+
+[task.host.darwin]
+print = "[example] Downloading the prebuilt BusyBox userspace for Darwin hosts"
+
+[[task]]
+name = "gnu-userspace-fetch"
+print = "[example] Preparing the optional GNU userspace rootfs when userspace=gnu"
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}"
+  ],
+  [
+    "sh",
+    "-c",
+    "if [ \"{{option.userspace}}\" != \"gnu\" ]; then echo GNU userspace download skipped because userspace={{option.userspace}}.; exit 0; fi"
+  ],
+  # Use Ubuntu Base because its rootfs tarball extracts cleanly on case-insensitive macOS filesystems.
+  [
+    "sh",
+    "-c",
+    "[ -f {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz"
+  ],
+]
+commands += [
+  [
+    "rm",
+    "-rf",
+    "{{build_dir}}/gnu-rootfs"
+  ],
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/gnu-rootfs"
+  ],
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz",
+    "-C",
+    "{{build_dir}}/gnu-rootfs"
+  ]
+]
+
+[task.host.darwin]
+print = "[example] Preparing the optional GNU userspace rootfs for Darwin hosts"
+
+[[task]]
+name = "gnu-vim-fetch"
+print = "[example] Preparing the optional GNU-mode vim editor when userspace=gnu"
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}"
+  ],
+  [
+    "sh",
+    "-c",
+    "if [ \"{{option.userspace}}\" != \"gnu\" ]; then echo GNU vim download skipped because userspace={{option.userspace}}.; exit 0; fi"
+  ],
+  [
+    "sh",
+    "-c",
+    "[ -f {{build_dir}}/nvim-linux-arm64.tar.gz ] || curl -L --fail https://github.com/neovim/neovim/releases/download/v0.11.3/nvim-linux-arm64.tar.gz -o {{build_dir}}/nvim-linux-arm64.tar.gz"
+  ],
+  [
+    "rm",
+    "-rf",
+    "{{build_dir}}/nvim-linux-arm64"
+  ],
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/nvim-linux-arm64"
+  ],
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/nvim-linux-arm64.tar.gz",
+    "-C",
+    "{{build_dir}}/nvim-linux-arm64",
+    "--strip-components",
+    "1"
+  ]
+]
+
+[task.host.darwin]
+print = "[example] Preparing the optional GNU-mode vim editor for Darwin hosts"
+
+[[task]]
 name = "qemu-run"
-print = "[example] Booting the built kernel in QEMU"
+print = "[example] Booting the built kernel in QEMU with {{option.userspace}} userspace"
 log_output = false
 workdir = "{{root}}"
 join_on = ["kernel-build", "initramfs"]

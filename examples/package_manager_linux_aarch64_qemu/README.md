@@ -7,8 +7,17 @@ This example demonstrates package-manager capabilities around:
   `parallel`, `shell`, and `mlang pkg run`
 
 The package fetches a Linux kernel tarball, builds an AArch64 kernel image with
-the configured make tool, generates a tiny initramfs directly from
-`mlang.toml`, and boots it under QEMU.
+the configured make tool, then packs one of two userspaces into the initramfs
+directly from `mlang.toml`:
+
+- a minimal BusyBox userspace
+- a wider GNU-style userspace based on an Ubuntu Base ARM64 rootfs with
+  `bash`, the standard GNU/Linux userland tools shipped there, and a bundled
+  `vim` command backed by the official Neovim ARM64 release
+
+Both modes boot through BusyBox `init` on the QEMU serial console. The
+selected guest userspace comes from `[tool.mlang.options] userspace` and can be
+overridden from the CLI with `--option userspace=...`.
 The Linux dependency sets `spinner = false` so `curl` can display its own
 download progress bar cleanly during `pkg fetch`. Other package-manager
 operations keep the rolling spinner by default unless CLI log routing is
@@ -31,6 +40,9 @@ log_dir = "/tmp/mlang-linux-aarch64-qemu"
 stdout_log = "pkg.stdout.log"
 stderr_log = "pkg.stderr.log"
 warn_log = "pkg.warn.log"
+
+[tool.mlang.options]
+userspace = "busybox"
 
 [[task]]
 name = "kernel-build"
@@ -55,6 +67,36 @@ commands = [
 name = "boot-flow"
 parallel = true
 next = ["kernel-build", "initramfs", "qemu-run"]
+
+[[task]]
+name = "busybox-fetch"
+commands = [
+  "mkdir -p {{build_dir}}",
+  "sh -c '[ -x {{build_dir}}/busybox-armv8l ] || curl -L --fail https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l -o {{build_dir}}/busybox-armv8l'",
+  "chmod +x {{build_dir}}/busybox-armv8l"
+]
+
+[[task]]
+name = "gnu-userspace-fetch"
+commands = [
+  [
+    "sh",
+    "-c",
+    "if [ \"{{option.userspace}}\" != \"gnu\" ]; then exit 0; fi"
+  ],
+  [
+    "sh",
+    "-c",
+    "[ -f {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz ] || curl -L --fail https://cdimage.ubuntu.com/ubuntu-base/releases/noble/release/ubuntu-base-24.04.3-base-arm64.tar.gz -o {{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz"
+  ],
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/ubuntu-base-24.04.3-base-arm64.tar.gz",
+    "-C",
+    "{{build_dir}}/gnu-rootfs"
+  ]
+]
 
 [[task]]
 name = "qemu-run"
@@ -121,6 +163,75 @@ From this directory:
 ../../build/mlang pkg run boot-flow
 ```
 
+Run the default BusyBox userspace explicitly with:
+
+```sh
+../../build/mlang pkg run qemu-run --option userspace=busybox
+```
+
+Run the wider GNU userspace with:
+
+```sh
+../../build/mlang pkg run qemu-run --option userspace=gnu
+```
+
+In GNU mode, the initramfs builder writes `/bin/guest-login` and starts QEMU at
+a real serial login prompt instead of dropping directly into a root shell. The
+default demo accounts are:
+
+- `admin` / `admin`
+- `user` / `user`
+- `root` / `root`
+
+The GNU login flow also writes a shared profile with `LS_COLORS`, `ls`, `ll`,
+and `la` aliases, then places that profile into `/root`, `/home/admin`, and
+`/home/user`. After a successful login, the session starts with the matching
+`HOME` value and changes into that user-specific home directory.
+
+The initramfs builder also seeds `/etc/passwd`, `/etc/group`, and
+`/etc/shadow`, then installs small helper commands so these work in both
+BusyBox and GNU mode:
+
+- `addgroup GROUP [GID]`
+- `adduser USER [GROUP]`
+- `passwd [USER]`
+- `sudo COMMAND ...`
+
+This `sudo` implementation is intentionally minimal: the demo boots straight
+into a constrained initramfs environment, so `sudo` simply re-executes the
+command when already root and otherwise forwards to `su root -c ...`.
+
+Example guest session:
+
+```sh
+login: admin
+Password: admin
+pwd
+sudo ls --color=auto /
+addgroup demo
+adduser alice demo
+passwd alice
+grep '^alice:' /etc/passwd
+grep '^demo:' /etc/group
+su alice
+pwd
+```
+
+That logs into the GNU guest as the default admin user, verifies the session
+home directory, runs a root command through the minimal `sudo` wrapper, creates
+a demo group, adds a user called `alice`, sets a password entry for that user
+in `/etc/shadow`, verifies the generated account records, and finally shows how
+to switch into the newly created user account. `adduser` now creates
+`/home/<user>` automatically and populates a basic `.profile` there.
+
+Both commands automatically fetch the Linux source dependency first. In GNU
+mode, `gnu-userspace-fetch` downloads and unpacks the official Ubuntu Base
+ARM64 rootfs on demand, and `gnu-vim-fetch` downloads the official Neovim
+ARM64 tarball so the guest gets `nvim`, `vim`, and `vi` commands. The example
+uses Ubuntu Base here because its tarball extracts cleanly on case-insensitive
+macOS filesystems, unlike the Arch Linux ARM rootfs layout that hit terminfo
+hard-link collisions.
+
 By default, command output stays on the console even though this manifest
 declares log file paths. To actually write package logs under
 `/tmp/mlang-linux-aarch64-qemu/`, pass a pkg log flag such as `--stdout-log`,
@@ -137,6 +248,12 @@ Because `qemu-run` declares `join_on = ["kernel-build", "initramfs"]`, it
 waits until the kernel image and initramfs are both ready. With
 `parallel = true`, the independent branches can run concurrently before QEMU
 starts.
+
+After logging into GNU mode, you can open the bundled editor with:
+
+```sh
+vim /etc/passwd
+```
 
 To only compile the Linux kernel image for AArch64 without booting QEMU:
 
@@ -169,9 +286,24 @@ tasks first and only starts QEMU after both succeed.
 - `build = "none"` is important here because the Linux source tree is not built
   by the package manager's built-in `cmake` / `meson` / `make` dependency
   handlers.
-- `initramfs` is self-contained and creates a minimal `/init` script and basic
-  directory tree under `{{build_dir}}/initramfs`, so the example does not rely
-  on a checked-in `rootfs/` directory.
+- `initramfs` is self-contained and creates a minimal directory tree under
+  `{{build_dir}}/initramfs`, so the example does not rely on a checked-in
+  `rootfs/` directory.
+- `busybox-fetch` downloads the prebuilt
+  `busybox-armv8l` binary from BusyBox's multiarch musl builds and installs it
+  into the initramfs as `/bin/busybox`. The manifest then uses BusyBox as the
+  real `/init`, creates `/bin/sh` and other applet symlinks for the BusyBox
+  mode, and writes `/etc/inittab` so BusyBox `init` respawns a shell on
+  `ttyAMA0`. This works on the QEMU guest because the kernel reports 32-bit
+  EL0 support during boot.
+- `gnu-userspace-fetch` optionally downloads an Ubuntu Base ARM64 rootfs
+  tarball when `userspace=gnu`. `initramfs` overlays that rootfs into the
+  generated image so the guest gets `/bin/bash` and a much wider GNU-style
+  userspace than the minimal BusyBox mode.
+- The resulting guest boots to `/ #` in BusyBox mode and to a GNU `bash`
+  login shell in GNU mode.
+- The tested BusyBox image does not include a `poweroff` applet, so exit QEMU
+  with the `Ctrl-a x` nographic shortcut when needed.
 - `log_output = false` can be set on an interactive task such as `qemu-run` to
   keep the child process on the console even when package logs are enabled.
 - `depends_on = ["task-name"]` lets a task sequence prerequisite tasks such as

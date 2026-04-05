@@ -29,6 +29,11 @@ If `--config` is omitted, the package manager uses `mlang.toml`. Supplying
 keep multiple manifests, such as separate files per CPU architecture or build
 workflow.
 
+`mlang pkg run` also accepts `--option key=value` to override values declared
+under `[tool.mlang.options]`. Tasks can then read those values through
+`{{option.name}}` placeholders, which is useful for switching runtime modes
+without duplicating whole manifests.
+
 ## Subcommands
 
 ### `pkg init`
@@ -407,6 +412,11 @@ Supported task keys:
 - `message`
 - `phase`
 - `workdir`
+- `language`
+- `source`
+- `output`
+- `inputs`
+- `compile_only`
 - `parallel`
 - `depends_on`
 - `phase_depends_on`
@@ -418,6 +428,15 @@ Supported task keys:
 - `command`
 - `commands`
 - `shell` / `script`
+- `opt_level`
+- `target_arch`
+- `path_entries`
+- `compiler_flags`
+- `linker_flags`
+- `lib_paths`
+- `libs`
+- `static_deps`
+- `static_cpp_runtime`
 
 Task semantics:
 
@@ -436,14 +455,51 @@ Task semantics:
   with the task number and spinner, showing a truncated tail of the latest
   output line. The task still ends with one final completion line in the form
   `[n/N] task-name Completed, time HH:MM:SS:MS - description`.
+- `language = "mlang"`, `language = "c"`, and `language = "c++"` let a task
+  compile or link without spelling the compiler command by hand.
+- `source`, `output`, `inputs`, and `compile_only = true` drive declarative
+  task builds. When `language` is present, `mlang pkg` generates the compile or
+  link command and then runs any extra `commands` after it.
+- declarative task links reuse package dependency discovery, task-local `libs`,
+  `lib_paths`, `compiler_flags`, `linker_flags`, `static_deps`, and
+  `static_cpp_runtime`.
 - `shell = [ ... ]` writes an inline shell script under `build/task-scripts/`
   and runs it through `sh`.
+- `command = [ "binary", "arg1", "arg2" ]` lets one command be written as a
+  token array instead of a single shell string.
+- `commands = [ [ "binary", "arg1" ], [ "other", "arg" ] ]` lets multiple
+  commands be written as token arrays, and `commands += [ ... ]` appends more
+  command entries later in the same task block.
+- `chmod = "644"` plus `chmod_path` / `chmod_paths` applies a recursive
+  permission fixup after the task succeeds.
 - `mlang pkg run <task>` honors task dependencies. If a task declares
   `depends_on`, `phase_depends_on`, `join_on`, or `phase_join_on`, those tasks
   are run before the requested task body starts.
 - `mlang pkg run` does not implicitly fetch package dependencies. Run
   `mlang pkg fetch` first on a clean workspace if tasks expect files under
   `{{deps_dir}}`.
+- TOML list-valued task keys such as `inputs`, `libs`, `compiler_flags`,
+  `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
+  comma-separated arrays, nested command token arrays, and `+=` append syntax.
+  Both `"double-quoted"` and `'single-quoted'` string items are supported.
+- `#` comments are supported both on their own line and at the end of a TOML
+  assignment line, as long as the `#` is outside quoted string content.
+
+Comment example:
+
+```toml
+# Full-line comment
+[tool.mlang]
+build_dir = "build-release" # End-of-line comment
+
+[[task]]
+name = "example"
+language = 'c++' # Single-quoted values also support end-of-line comments
+inputs = [
+  'build/obj/main.o', # Comment after an item
+  'build/lib/libdemo.a',
+]
+```
 
 Host-specific overrides are supported with subtables such as:
 
@@ -451,6 +507,27 @@ Host-specific overrides are supported with subtables such as:
 [task.host.darwin]
 shell = [
   "docker build -t my-image {{root}}"
+]
+```
+
+Readable command example:
+
+```toml
+[[task]]
+name = "toolchain-check"
+commands = [
+  [
+    'sh',
+    '-c',
+    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+  ],
+]
+commands += [
+  [
+    'sh',
+    '-c',
+    'for tool in cc c++ ar python3; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done',
+  ],
 ]
 ```
 
@@ -693,9 +770,53 @@ Supported placeholders in `workdir` and commands:
 - `{{build_dir}}`
 - `{{deps_dir}}`
 - `{{make}}`
+- `{{option.<name>}}`
 
 `{{build_dir}}` and `{{deps_dir}}` expand to the configured `[tool.mlang]`
 directories for that package.
+`{{option.<name>}}` expands from `[tool.mlang.options]`, overridden by any
+`mlang pkg run --option name=value` CLI arguments.
+
+Runtime option example:
+
+```toml
+[tool.mlang.options]
+userspace = "busybox"
+
+[[task]]
+name = "qemu-run"
+print = "Booting QEMU with {{option.userspace}} userspace"
+```
+
+```sh
+./build/mlang pkg run qemu-run --option userspace=gnu
+```
+
+Permission-fixup example:
+
+```toml
+[[task]]
+name = "extract-src"
+commands = [
+  [
+    "tar",
+    "-xzf",
+    "{{build_dir}}/archive.tar.gz",
+    "-C",
+    "{{build_dir}}/src"
+  ]
+]
+chmod = "644"
+chmod_paths = [
+  "{{build_dir}}/src"
+]
+```
+
+`chmod` currently accepts octal modes such as `644` or `755`. The mode is
+applied recursively to regular files, while directories keep traverse bits so
+`chmod = "644"` remains usable for extracted source trees. For executable
+trees such as a guest rootfs, prefer a mode that preserves execute bits where
+needed.
 
 The Linux kernel example uses:
 
@@ -704,7 +825,10 @@ The Linux kernel example uses:
 - `darwin-native-prepare` to generate compatibility headers and patch
   `scripts/mod/file2alias.c` for native Apple Silicon builds
 - `kernel-build` to run `defconfig` and build `arch/arm64/boot/Image`
-- `initramfs` to build the example initramfs archive
+- `busybox-fetch` for the minimal BusyBox userspace
+- `gnu-userspace-fetch` for the optional wider GNU userspace rootfs selected
+  with `mlang pkg run ... --option userspace=gnu`
+- `initramfs` to build the example initramfs archive for either userspace
 - `qemu-run` to boot the generated image under QEMU after its prerequisites
   complete, optionally in parallel
 

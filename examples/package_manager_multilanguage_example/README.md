@@ -3,7 +3,8 @@
 This example shows one `mlang pkg` project building a single binary from three
 languages in separate tasks:
 
-- `src/main.mla` is compiled by `mlang` into `build/obj/main_mlang.o`
+- `src/main.mla` is compiled by a declarative `language = 'mlang'` task into
+  `build/obj/main_mlang.o`
 - `src/miniaudio_player.c` is compiled by `cc` into
   `build/lib/libminiaudio_player.a`
 - `src/audiofile_reader.cpp` is compiled by `c++` into
@@ -67,3 +68,6 @@ Or run the already linked binary directly:
   launching the binary.
 - The example keeps all compilation in explicit tasks so the different
   languages and build phases are visible in `mlang.toml`.
+- The manifest intentionally uses multiline comma-separated arrays and both
+  single-quoted and double-quoted TOML strings for task fields such as
+  `inputs`, `libs`, `compiler_flags`, `linker_flags`, `commands`, and `shell`.
