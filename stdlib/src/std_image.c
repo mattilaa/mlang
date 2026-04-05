@@ -631,6 +631,24 @@ static uint32_t quadrant_codepoint_for_bits(uint8_t bits)
     return table[bits & 0x0Fu];
 }
 
+/* Sextant block codepoints (Unicode 13 "Symbols for Legacy Computing")
+   Layout — bit 0=tl, 1=tr, 2=ml, 3=mr, 4=bl, 5=br:
+     tl tr      bit0 bit1
+     ml mr  →   bit2 bit3
+     bl br      bit4 bit5
+   Patterns 1-60 map linearly to U+1FB00 + pattern - 1.
+   Patterns 61-62 (5/6 filled) have no dedicated codepoint; the caller
+   should apply the complement trick (invert bits, swap FG/BG) before
+   calling this function so the passed pattern is always 1-31.
+   Pattern 0 → space.  Pattern 63 → full block. */
+static uint32_t sextant_codepoint_for_bits(uint8_t bits)
+{
+    bits &= 0x3Fu;
+    if(bits == 0u) return 0x0020u;
+    if(bits == 0x3Fu) return 0x2588u;
+    return 0x1FB00u + (uint32_t)bits - 1u;
+}
+
 int64_t __mlang_std_image_probe_width(const char* path)
 {
     mlang_image_rgba_t img;
@@ -673,6 +691,7 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     const int use_edge_ascii = glyph_mode == 6 ? 1 : 0;
     const int use_line_art = glyph_mode == 7 ? 1 : 0;
     const int use_color_split = glyph_mode == 8 ? 1 : 0;
+    const int use_sextant = glyph_mode == 9 ? 1 : 0;
     int64_t src_x0 = 0;
     int64_t src_y0 = 0;
     int64_t src_w = img.width;
@@ -681,16 +700,19 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     compute_background_crop_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
     const int64_t x_sub =
         (use_braille || use_quadrants || use_edge_ascii || use_line_art ||
-         use_color_split)
+         use_color_split || use_sextant)
             ? 2
             : 1;
     const int64_t y_sub =
         use_braille ? 4
-                    : (use_half_blocks ? 2
-                                       : ((use_quadrants || use_edge_ascii ||
-                                           use_line_art || use_color_split)
-                                              ? 2
-                                              : 1));
+                    : (use_sextant ? 3
+                                   : (use_half_blocks ? 2
+                                                      : ((use_quadrants ||
+                                                          use_edge_ascii ||
+                                                          use_line_art ||
+                                                          use_color_split)
+                                                             ? 2
+                                                             : 1)));
     const int64_t out_cols = columns;
     int64_t out_rows =
         div_round_i64(out_cols * src_h * x_sub, src_w * y_sub);
@@ -725,18 +747,20 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
             sample_average_rgba(&img,
                                 (use_braille || use_quadrants ||
                                  use_edge_ascii || use_line_art ||
-                                 use_color_split)
+                                 use_color_split || use_sextant)
                                     ? x * 2
                                     : x,
                                 use_half_blocks ? y * 2
                                                 : (use_braille
                                                        ? y * 4
-                                                       : ((use_quadrants ||
-                                                           use_edge_ascii ||
-                                                           use_line_art ||
-                                                           use_color_split)
-                                                              ? y * 2
-                                                              : y)),
+                                                       : (use_sextant
+                                                              ? y * 3
+                                                              : ((use_quadrants ||
+                                                                  use_edge_ascii ||
+                                                                  use_line_art ||
+                                                                  use_color_split)
+                                                                     ? y * 2
+                                                                     : y))),
                                 sample_w,
                                 sample_h, fit_w, fit_h, off_x, off_y, src_x0,
                                 src_y0, src_w, src_h, &r0, &g0,
@@ -988,6 +1012,131 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                 pos = append_rgb_sgr(out, estimate, pos, 0, fg_r, fg_g, fg_b);
                 pos = append_rgb_sgr(out, estimate, pos, 1, bg_r, bg_g, bg_b);
                 pos = append_text(out, estimate, pos, glyph);
+            }
+            else if(use_sextant)
+            {
+                /* 2×3 sub-pixel grid using Unicode sextant blocks (U+1FB00+).
+                   Each of the 6 sub-pixels is classified as FG (bright) or BG
+                   (dark) relative to the cell average.  The 6-bit pattern
+                   selects the sextant codepoint; patterns > 31 use the
+                   complement with swapped FG/BG for full coverage without gaps.
+                   bit layout: bit0=tl, bit1=tr, bit2=ml, bit3=mr,
+                                bit4=bl, bit5=br */
+                uint8_t sub_r[3][2], sub_g[3][2], sub_b[3][2];
+                uint8_t sub_l[3][2];
+                uint32_t sum_r = 0, sum_g = 0, sum_b = 0, sum_l = 0;
+                for(int dy = 0; dy < 3; ++dy)
+                {
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        sample_average_rgba(&img, x * 2 + dx, y * 3 + dy,
+                                            sample_w, sample_h, fit_w, fit_h,
+                                            off_x, off_y, src_x0, src_y0,
+                                            src_w, src_h, &sub_r[dy][dx],
+                                            &sub_g[dy][dx], &sub_b[dy][dx]);
+                        sub_l[dy][dx] = luminance_u8(sub_r[dy][dx],
+                                                     sub_g[dy][dx],
+                                                     sub_b[dy][dx]);
+                        sum_r += sub_r[dy][dx];
+                        sum_g += sub_g[dy][dx];
+                        sum_b += sub_b[dy][dx];
+                        sum_l += sub_l[dy][dx];
+                    }
+                }
+                const uint8_t avg_r = (uint8_t)(sum_r / 6u);
+                const uint8_t avg_g = (uint8_t)(sum_g / 6u);
+                const uint8_t avg_b = (uint8_t)(sum_b / 6u);
+                const uint8_t avg_l = (uint8_t)(sum_l / 6u);
+
+                /* Classify each sub-pixel: bright (+8 hysteresis) → FG */
+                uint8_t bits = 0;
+                uint32_t fg_r = 0, fg_g = 0, fg_b = 0, fg_n = 0;
+                uint32_t bg_r = 0, bg_g = 0, bg_b = 0, bg_n = 0;
+                for(int dy = 0; dy < 3; ++dy)
+                {
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        if(sub_l[dy][dx] + 8u >= avg_l)
+                        {
+                            bits |= (uint8_t)(1u << (dy * 2 + dx));
+                            fg_r += sub_r[dy][dx];
+                            fg_g += sub_g[dy][dx];
+                            fg_b += sub_b[dy][dx];
+                            ++fg_n;
+                        }
+                        else
+                        {
+                            bg_r += sub_r[dy][dx];
+                            bg_g += sub_g[dy][dx];
+                            bg_b += sub_b[dy][dx];
+                            ++bg_n;
+                        }
+                    }
+                }
+                /* Ensure at least one pixel in each group when uniform */
+                if(bits == 0u && avg_l > 24u)
+                {
+                    uint8_t best_l = 0;
+                    int best_dy = 0, best_dx = 0;
+                    for(int dy = 0; dy < 3; ++dy)
+                        for(int dx = 0; dx < 2; ++dx)
+                            if(sub_l[dy][dx] >= best_l)
+                            {
+                                best_l = sub_l[dy][dx];
+                                best_dy = dy; best_dx = dx;
+                            }
+                    bits = (uint8_t)(1u << (best_dy * 2 + best_dx));
+                    fg_r = sub_r[best_dy][best_dx];
+                    fg_g = sub_g[best_dy][best_dx];
+                    fg_b = sub_b[best_dy][best_dx];
+                    fg_n = 1;
+                    bg_r = sum_r - fg_r;
+                    bg_g = sum_g - fg_g;
+                    bg_b = sum_b - fg_b;
+                    bg_n = 5;
+                }
+                if(fg_n == 0u) { fg_n = 1u; fg_r = sum_r/6u; fg_g = sum_g/6u; fg_b = sum_b/6u; }
+                if(bg_n == 0u) { bg_n = 1u; bg_r = sum_r/6u; bg_g = sum_g/6u; bg_b = sum_b/6u; }
+
+                uint8_t out_fg_r = (uint8_t)(fg_r/fg_n);
+                uint8_t out_fg_g = (uint8_t)(fg_g/fg_n);
+                uint8_t out_fg_b = (uint8_t)(fg_b/fg_n);
+                uint8_t out_bg_r = (uint8_t)(bg_r/bg_n);
+                uint8_t out_bg_g = (uint8_t)(bg_g/bg_n);
+                uint8_t out_bg_b = (uint8_t)(bg_b/bg_n);
+
+                /* Complement trick: patterns 32-62 have no sextant codepoint;
+                   invert bits and swap FG/BG for identical visual result */
+                if(bits > 31u && bits < 63u)
+                {
+                    bits = (~bits) & 0x3Fu;
+                    uint8_t tmp;
+                    tmp=out_fg_r; out_fg_r=out_bg_r; out_bg_r=tmp;
+                    tmp=out_fg_g; out_fg_g=out_bg_g; out_bg_g=tmp;
+                    tmp=out_fg_b; out_fg_b=out_bg_b; out_bg_b=tmp;
+                }
+
+                if(bits == 0u)
+                {
+                    /* Dark uniform cell — density fallback */
+                    pos = append_rgb_sgr(out, estimate, pos, 0,
+                                         avg_r, avg_g, avg_b);
+                    pos = append_rgb_sgr(out, estimate, pos, 1,
+                                         darken_u8(avg_r, 1, 5),
+                                         darken_u8(avg_g, 1, 5),
+                                         darken_u8(avg_b, 1, 5));
+                    pos = append_text(out, estimate, pos,
+                                      density_glyph_for_luma(avg_l));
+                }
+                else
+                {
+                    pos = append_rgb_sgr(out, estimate, pos, 0,
+                                         out_fg_r, out_fg_g, out_fg_b);
+                    pos = append_rgb_sgr(out, estimate, pos, 1,
+                                         out_bg_r, out_bg_g, out_bg_b);
+                    pos = append_codepoint_utf8(out, estimate, pos,
+                                                sextant_codepoint_for_bits(bits));
+                }
             }
             else if(use_braille)
             {

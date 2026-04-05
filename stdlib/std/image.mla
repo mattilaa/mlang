@@ -44,7 +44,8 @@ pub enum ImageGlyphMode : i32 {
     AsciiRamp = 5,
     EdgeAscii = 6,
     UnicodeLineArt = 7,
-    ColorSplitBlocks = 8
+    ColorSplitBlocks = 8,
+    SextantBlocks = 9
 };
 
 /// @brief Basic image metadata returned by `probe`.
