@@ -41,7 +41,8 @@ pub enum ImageGlyphMode : i32 {
     UnicodeDensity = 2,
     BrailleDots = 3,
     QuadrantBlocks = 4,
-    AsciiRamp = 5
+    AsciiRamp = 5,
+    EdgeAscii = 6
 };
 
 /// @brief Basic image metadata returned by `probe`.
@@ -88,6 +89,8 @@ pub fn render_truecolor(path: str8, columns: i64, rows: i64)
 /// background color clusters.
 /// `AsciiRamp` uses a terminal-safe ASCII luminance ramp for broad font
 /// compatibility.
+/// `EdgeAscii` chooses ASCII glyphs from local edge direction and contrast,
+/// which is useful for highly structured images such as fractals.
 pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
                                   glyph_mode: ImageGlyphMode)
     -> Result<str8, str8> {
