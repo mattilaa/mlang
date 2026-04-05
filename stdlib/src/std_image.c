@@ -159,6 +159,20 @@ static int64_t clamp_i64(int64_t v, int64_t lo, int64_t hi)
     return v;
 }
 
+static uint8_t luminance_u8(uint8_t r, uint8_t g, uint8_t b)
+{
+    return (uint8_t)((299u * (unsigned)r + 587u * (unsigned)g +
+                      114u * (unsigned)b) /
+                     1000u);
+}
+
+static uint8_t darken_u8(uint8_t c, uint8_t numer, uint8_t denom)
+{
+    if(denom == 0)
+        return c;
+    return (uint8_t)(((unsigned)c * (unsigned)numer) / (unsigned)denom);
+}
+
 static void fit_rect(int64_t src_w, int64_t src_h, int64_t dst_w, int64_t dst_h,
                      int64_t* fit_w, int64_t* fit_h, int64_t* off_x,
                      int64_t* off_y)
@@ -300,6 +314,34 @@ static size_t append_rgb_sgr(char* out, size_t cap, size_t pos, int is_bg,
     return pos;
 }
 
+static size_t append_braille_utf8(char* out, size_t cap, size_t pos,
+                                  uint8_t bits)
+{
+    if(!out || pos + 4 >= cap)
+        return pos;
+    uint32_t code = 0x2800u + (uint32_t)bits;
+    out[pos++] = (char)(0xE0u | ((code >> 12) & 0x0Fu));
+    out[pos++] = (char)(0x80u | ((code >> 6) & 0x3Fu));
+    out[pos++] = (char)(0x80u | (code & 0x3Fu));
+    out[pos] = '\0';
+    return pos;
+}
+
+static const char* density_glyph_for_luma(uint8_t luma)
+{
+    if(luma < 18)
+        return " ";
+    if(luma < 56)
+        return "·";
+    if(luma < 96)
+        return "░";
+    if(luma < 144)
+        return "▒";
+    if(luma < 208)
+        return "▓";
+    return "█";
+}
+
 int64_t __mlang_std_image_probe_width(const char* path)
 {
     mlang_image_rgba_t img;
@@ -334,8 +376,12 @@ char* __mlang_std_image_render_truecolor(const char* path, int64_t columns,
         return dup_cstr("");
 
     const int use_half_blocks = glyph_mode == 0 ? 1 : 0;
-    const int64_t sample_w = columns;
-    const int64_t sample_h = use_half_blocks ? rows * 2 : rows;
+    const int use_full_blocks = glyph_mode == 1 ? 1 : 0;
+    const int use_density = glyph_mode == 2 ? 1 : 0;
+    const int use_braille = glyph_mode == 3 ? 1 : 0;
+    const int64_t sample_w = use_braille ? columns * 2 : columns;
+    const int64_t sample_h =
+        use_braille ? rows * 4 : (use_half_blocks ? rows * 2 : rows);
 
     int64_t fit_w = 0;
     int64_t fit_h = 0;
@@ -361,7 +407,8 @@ char* __mlang_std_image_render_truecolor(const char* path, int64_t columns,
         {
             uint8_t r0 = 0, g0 = 0, b0 = 0;
             uint8_t r1 = 0, g1 = 0, b1 = 0;
-            sample_average_rgba(&img, x, use_half_blocks ? y * 2 : y, sample_w,
+            sample_average_rgba(&img, use_braille ? x * 2 : x,
+                                use_half_blocks ? y * 2 : (use_braille ? y * 4 : y), sample_w,
                                 sample_h, fit_w, fit_h, off_x, off_y, &r0, &g0,
                                 &b0);
             if(use_half_blocks)
@@ -372,10 +419,66 @@ char* __mlang_std_image_render_truecolor(const char* path, int64_t columns,
                 pos = append_rgb_sgr(out, estimate, pos, 1, r1, g1, b1);
                 pos = append_text(out, estimate, pos, "▀");
             }
-            else
+            else if(use_full_blocks)
             {
                 pos = append_rgb_sgr(out, estimate, pos, 0, r0, g0, b0);
                 pos = append_text(out, estimate, pos, "█");
+            }
+            else if(use_density)
+            {
+                const uint8_t luma = luminance_u8(r0, g0, b0);
+                pos = append_rgb_sgr(out, estimate, pos, 0, r0, g0, b0);
+                pos = append_rgb_sgr(out, estimate, pos, 1, darken_u8(r0, 1, 5),
+                                     darken_u8(g0, 1, 5), darken_u8(b0, 1, 5));
+                pos = append_text(out, estimate, pos, density_glyph_for_luma(luma));
+            }
+            else if(use_braille)
+            {
+                static const uint8_t bit_table[4][2] = {
+                    {0x01u, 0x08u}, {0x02u, 0x10u}, {0x04u, 0x20u}, {0x40u, 0x80u}};
+                uint8_t sub_r[4][2];
+                uint8_t sub_g[4][2];
+                uint8_t sub_b[4][2];
+                uint8_t sub_l[4][2];
+                uint32_t sum_r = 0;
+                uint32_t sum_g = 0;
+                uint32_t sum_b = 0;
+                uint32_t sum_l = 0;
+                for(int dy = 0; dy < 4; ++dy)
+                {
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        sample_average_rgba(&img, x * 2 + dx, y * 4 + dy,
+                                            sample_w, sample_h, fit_w, fit_h,
+                                            off_x, off_y, &sub_r[dy][dx],
+                                            &sub_g[dy][dx], &sub_b[dy][dx]);
+                        sub_l[dy][dx] = luminance_u8(sub_r[dy][dx], sub_g[dy][dx],
+                                                     sub_b[dy][dx]);
+                        sum_r += sub_r[dy][dx];
+                        sum_g += sub_g[dy][dx];
+                        sum_b += sub_b[dy][dx];
+                        sum_l += sub_l[dy][dx];
+                    }
+                }
+                const uint8_t avg_r = (uint8_t)(sum_r / 8u);
+                const uint8_t avg_g = (uint8_t)(sum_g / 8u);
+                const uint8_t avg_b = (uint8_t)(sum_b / 8u);
+                const uint8_t avg_l = (uint8_t)(sum_l / 8u);
+                uint8_t bits = 0;
+                for(int dy = 0; dy < 4; ++dy)
+                {
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        if(sub_l[dy][dx] + 10 >= avg_l)
+                            bits |= bit_table[dy][dx];
+                    }
+                }
+                if(bits == 0 && avg_l > 36)
+                    bits = 0x01u;
+                pos = append_rgb_sgr(out, estimate, pos, 0, avg_r, avg_g, avg_b);
+                pos = append_rgb_sgr(out, estimate, pos, 1, darken_u8(avg_r, 1, 6),
+                                     darken_u8(avg_g, 1, 6), darken_u8(avg_b, 1, 6));
+                pos = append_braille_utf8(out, estimate, pos, bits);
             }
         }
         pos = append_text(out, estimate, pos, "\x1b[0m\n");

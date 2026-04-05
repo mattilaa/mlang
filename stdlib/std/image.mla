@@ -37,7 +37,9 @@ extern pub fn __mlang_std_image_render_truecolor(path: str8, columns: i64,
 /// @brief Glyph packing mode used for terminal image rendering.
 pub enum ImageGlyphMode : i32 {
     UpperHalfBlocks = 0,
-    FullBlocks = 1
+    FullBlocks = 1,
+    UnicodeDensity = 2,
+    BrailleDots = 3
 };
 
 /// @brief Basic image metadata returned by `probe`.
@@ -76,6 +78,10 @@ pub fn render_truecolor(path: str8, columns: i64, rows: i64)
 /// `UpperHalfBlocks` uses a foreground color for the top pixel and a background
 /// color for the bottom pixel, giving two source rows per terminal row.
 /// `FullBlocks` renders one sampled color per cell using `█`.
+/// `UnicodeDensity` renders a truecolor foreground over a darkened background
+/// using a denser Unicode ramp.
+/// `BrailleDots` uses a 2x4 subcell braille pattern per terminal cell for
+/// higher geometric detail than block-only rendering.
 pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
                                   glyph_mode: ImageGlyphMode)
     -> Result<str8, str8> {
