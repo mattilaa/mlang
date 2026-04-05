@@ -1,0 +1,9 @@
+[package]
+name = "cjson_demo"
+version = "0.2.62"
+entry = "src/main.mla"
+
+[dependencies]
+
+cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
+[c-dependencies]

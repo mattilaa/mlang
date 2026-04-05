@@ -1,0 +1,8 @@
+[package]
+name = "package_manager_pinball_example"
+version = "0.2.73"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]

@@ -30,8 +30,8 @@
 extern pub fn __mlang_std_image_last_error() -> str8;
 extern pub fn __mlang_std_image_probe_width(path: str8) -> i64;
 extern pub fn __mlang_std_image_probe_height(path: str8) -> i64;
-extern pub fn __mlang_std_image_render_truecolor(path: str8, columns: i64,
-                                                 rows: i64, glyph_mode: i32)
+extern pub fn __mlang_std_image_render_truecolor(path: str8, columns: i32,
+                                                 rows: i32, glyph_mode: i32)
     -> str8;
 
 /// @brief Glyph packing mode used for terminal image rendering.
@@ -39,7 +39,9 @@ pub enum ImageGlyphMode : i32 {
     UpperHalfBlocks = 0,
     FullBlocks = 1,
     UnicodeDensity = 2,
-    BrailleDots = 3
+    BrailleDots = 3,
+    QuadrantBlocks = 4,
+    AsciiRamp = 5
 };
 
 /// @brief Basic image metadata returned by `probe`.
@@ -82,13 +84,18 @@ pub fn render_truecolor(path: str8, columns: i64, rows: i64)
 /// using a denser Unicode ramp.
 /// `BrailleDots` uses a 2x4 subcell braille pattern per terminal cell for
 /// higher geometric detail than block-only rendering.
+/// `QuadrantBlocks` uses a 2x2 quadrant glyph with separate foreground and
+/// background color clusters.
+/// `AsciiRamp` uses a terminal-safe ASCII luminance ramp for broad font
+/// compatibility.
 pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
                                   glyph_mode: ImageGlyphMode)
     -> Result<str8, str8> {
     if columns <= 0 || rows <= 0 {
         return Err<str8, str8>("std::image render_truecolor: columns and rows must be > 0");
     }
-    let out: str8 = __mlang_std_image_render_truecolor(path, columns, rows,
+    let out: str8 = __mlang_std_image_render_truecolor(path, i32(columns),
+                                                       i32(rows),
                                                        glyph_mode);
     if out == "" {
         return Err<str8, str8>(last_error());

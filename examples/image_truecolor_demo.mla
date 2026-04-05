@@ -17,7 +17,7 @@ extern fn atoi(s: str8) -> i32;
 fn main() -> i32 {
     let argv: list<str8> = args();
     if argv.len() < 2 {
-        println!("usage: ./build/mlang examples/image_truecolor_demo.mla <image-path> [cols] [rows] [half|full|density|braille]");
+        println!("usage: ./build/mlang examples/image_truecolor_demo.mla <image-path> [cols] [rows] [half|full|density|braille|quadrant|ascii]");
         return 1;
     }
 
@@ -39,6 +39,10 @@ fn main() -> i32 {
             mode = ImageGlyphMode::UnicodeDensity;
         } else if argv[4] == "braille" {
             mode = ImageGlyphMode::BrailleDots;
+        } else if argv[4] == "quadrant" {
+            mode = ImageGlyphMode::QuadrantBlocks;
+        } else if argv[4] == "ascii" {
+            mode = ImageGlyphMode::AsciiRamp;
         }
     }
 
