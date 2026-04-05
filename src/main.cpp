@@ -454,6 +454,20 @@ static void append_unique_link_arg(std::vector<std::string>& linkArgs,
     linkArgs.push_back(arg);
 }
 
+static void append_framework_link_args(std::vector<std::string>& linkArgs,
+                                       const std::string& framework)
+{
+    if(framework.empty())
+        return;
+    for(std::size_t i = 0; i + 1 < linkArgs.size(); ++i)
+    {
+        if(linkArgs[i] == "-framework" && linkArgs[i + 1] == framework)
+            return;
+    }
+    linkArgs.push_back("-framework");
+    linkArgs.push_back(framework);
+}
+
 static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
                                     std::string_view exePath)
 {
@@ -539,6 +553,12 @@ static void append_stdlib_link_args(std::vector<std::string>& linkArgs,
     append_unique_link_arg(linkArgs, MLANG_OPENSSL_CRYPTO_LIBRARY);
 #else
     append_unique_link_arg(linkArgs, "-lcrypto");
+#endif
+
+#ifdef __APPLE__
+    append_framework_link_args(linkArgs, "CoreFoundation");
+    append_framework_link_args(linkArgs, "CoreGraphics");
+    append_framework_link_args(linkArgs, "ImageIO");
 #endif
 }
 
@@ -931,6 +951,9 @@ static bool ensure_compiled_mla_tool(const char* argv0,
                   " -Wno-colon-if -Wno-colon-while -L " +
                   shell_quote(stdlibLibDir.string()) + " -lmlang_std -o " +
                   shell_quote(outBin.string());
+#ifdef __APPLE__
+    compileCmd += " -framework CoreFoundation -framework CoreGraphics -framework ImageIO";
+#endif
 
     int compileRc = std::system(compileCmd.c_str());
     std::error_code ecCheck;

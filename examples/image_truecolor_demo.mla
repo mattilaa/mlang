@@ -1,0 +1,62 @@
+mod std::env;
+mod std::image;
+mod std::io;
+mod std::term;
+
+use std::env::args;
+use std::image::ImageInfo;
+use std::image::ImageGlyphMode;
+use std::image::probe;
+use std::image::render_truecolor_with_mode;
+use std::io::stdout;
+use std::io::write;
+use std::term::stdout_size;
+
+extern fn atoi(s: str8) -> i32;
+
+fn main() -> i32 {
+    let argv: list<str8> = args();
+    if argv.len() < 2 {
+        println!("usage: ./build/mlang examples/image_truecolor_demo.mla <image-path> [cols] [rows] [full]");
+        return 1;
+    }
+
+    let image_path: str8 = argv[1];
+    let term = stdout_size();
+    var cols: i64 = term.cols - 2;
+    var rows: i64 = term.rows - 1;
+    if argv.len() > 2 {
+        cols = atoi(argv[2]);
+    }
+    if argv.len() > 3 {
+        rows = atoi(argv[3]);
+    }
+    var mode: ImageGlyphMode = ImageGlyphMode::UpperHalfBlocks;
+    if argv.len() > 4 {
+        if argv[4] == "full" {
+            mode = ImageGlyphMode::FullBlocks;
+        }
+    }
+
+    let info_r: Result<ImageInfo, str8> = probe(image_path);
+    if info_r.is_err(): {
+        println!("probe failed: {}", info_r.unwrap_err());
+        return 1;
+    }
+    let meta: ImageInfo = info_r.unwrap();
+    println!("rendering {} ({}x{}) -> {}x{} cells", image_path, meta.width,
+             meta.height, cols, rows);
+
+    let rendered_r: Result<str8, str8> = render_truecolor_with_mode(image_path,
+                                                                    cols,
+                                                                    rows,
+                                                                    mode);
+    if rendered_r.is_err(): {
+        println!("render failed: {}", rendered_r.unwrap_err());
+        return 1;
+    }
+
+    let rendered: str8 = rendered_r.unwrap();
+    let _ = write(stdout(), rendered);
+    return 0;
+}

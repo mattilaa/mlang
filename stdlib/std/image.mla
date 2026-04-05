@@ -1,0 +1,91 @@
+/// \file image.mla
+/// \brief Image probing and terminal truecolor rendering helpers for MLang (std::image).
+///
+/// This module provides a small stdlib surface for:
+/// - probing image dimensions
+/// - converting images into terminal-friendly truecolor glyph output
+///
+/// The current backend is implemented for macOS using the platform image
+/// decoder. Unsupported platforms return an error at runtime.
+///
+/// ## Quick example
+/// ```mlang
+/// mod std::image;
+///
+/// use std::image::ImageGlyphMode;
+///
+/// fn main() -> i32 {
+///     let rendered = std::image::render_truecolor_with_mode(
+///         "avengers.png", 80, 40, ImageGlyphMode::UpperHalfBlocks
+///     );
+///     if rendered.is_err(): {
+///         println!("render failed: {}", rendered.unwrap_err());
+///         return 1;
+///     }
+///     print!("{}", rendered.unwrap());
+///     return 0;
+/// }
+/// ```
+
+extern pub fn __mlang_std_image_last_error() -> str8;
+extern pub fn __mlang_std_image_probe_width(path: str8) -> i64;
+extern pub fn __mlang_std_image_probe_height(path: str8) -> i64;
+extern pub fn __mlang_std_image_render_truecolor(path: str8, columns: i64,
+                                                 rows: i64, glyph_mode: i32)
+    -> str8;
+
+/// @brief Glyph packing mode used for terminal image rendering.
+pub enum ImageGlyphMode : i32 {
+    UpperHalfBlocks = 0,
+    FullBlocks = 1
+};
+
+/// @brief Basic image metadata returned by `probe`.
+pub struct ImageInfo {
+    var width: i64;
+    var height: i64;
+};
+
+/// @brief Return the last backend image error string.
+pub fn last_error() -> str8 {
+    return __mlang_std_image_last_error();
+}
+
+/// @brief Probe image dimensions without rendering it.
+pub fn probe(path: str8) -> Result<ImageInfo, str8> {
+    let width: i64 = __mlang_std_image_probe_width(path);
+    let height: i64 = __mlang_std_image_probe_height(path);
+    if width <= 0 || height <= 0 {
+        return Err<ImageInfo, str8>(last_error());
+    }
+    return Ok<ImageInfo, str8>(ImageInfo { width: width, height: height });
+}
+
+/// @brief Render an image to a truecolor terminal string using upper-half blocks.
+///
+/// `columns` and `rows` are terminal cell counts, not source image pixels.
+/// Aspect ratio is preserved and the image is letterboxed if needed.
+pub fn render_truecolor(path: str8, columns: i64, rows: i64)
+    -> Result<str8, str8> {
+    return render_truecolor_with_mode(path, columns, rows,
+                                      ImageGlyphMode::UpperHalfBlocks);
+}
+
+/// @brief Render an image to a truecolor terminal string using the selected glyph mode.
+///
+/// `UpperHalfBlocks` uses a foreground color for the top pixel and a background
+/// color for the bottom pixel, giving two source rows per terminal row.
+/// `FullBlocks` renders one sampled color per cell using `█`.
+pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
+                                  glyph_mode: ImageGlyphMode)
+    -> Result<str8, str8> {
+    if columns <= 0 || rows <= 0 {
+        return Err<str8, str8>("std::image render_truecolor: columns and rows must be > 0");
+    }
+    let out: str8 = __mlang_std_image_render_truecolor(path, columns, rows,
+                                                       glyph_mode);
+    if out == "" {
+        return Err<str8, str8>(last_error());
+    }
+    return Ok<str8, str8>(out);
+}
