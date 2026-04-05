@@ -692,6 +692,7 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     const int use_line_art = glyph_mode == 7 ? 1 : 0;
     const int use_color_split = glyph_mode == 8 ? 1 : 0;
     const int use_sextant = glyph_mode == 9 ? 1 : 0;
+    const int use_braille_color = glyph_mode == 10 ? 1 : 0;
     int64_t src_x0 = 0;
     int64_t src_y0 = 0;
     int64_t src_w = img.width;
@@ -699,20 +700,20 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     compute_alpha_content_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
     compute_background_crop_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
     const int64_t x_sub =
-        (use_braille || use_quadrants || use_edge_ascii || use_line_art ||
-         use_color_split || use_sextant)
+        (use_braille || use_braille_color || use_quadrants || use_edge_ascii ||
+         use_line_art || use_color_split || use_sextant)
             ? 2
             : 1;
     const int64_t y_sub =
-        use_braille ? 4
-                    : (use_sextant ? 3
-                                   : (use_half_blocks ? 2
-                                                      : ((use_quadrants ||
-                                                          use_edge_ascii ||
-                                                          use_line_art ||
-                                                          use_color_split)
-                                                             ? 2
-                                                             : 1)));
+        (use_braille || use_braille_color) ? 4
+            : (use_sextant ? 3
+                           : (use_half_blocks ? 2
+                                              : ((use_quadrants ||
+                                                  use_edge_ascii ||
+                                                  use_line_art ||
+                                                  use_color_split)
+                                                     ? 2
+                                                     : 1)));
     const int64_t out_cols = columns;
     int64_t out_rows =
         div_round_i64(out_cols * src_h * x_sub, src_w * y_sub);
@@ -1136,6 +1137,101 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                                          out_bg_r, out_bg_g, out_bg_b);
                     pos = append_codepoint_utf8(out, estimate, pos,
                                                 sextant_codepoint_for_bits(bits));
+                }
+            }
+            else if(use_braille_color)
+            {
+                /* BrailleColor: 2×4 braille sub-pixels with proper per-group
+                   color.  FG = avg of bright dots, BG = avg of dark dots.
+                   Unlike the original BrailleDots mode this fully separates
+                   the two colors so e.g. a green/black boundary shows bright
+                   green dots on a true black background. */
+                static const uint8_t bit_table[4][2] = {
+                    {0x01u, 0x08u}, {0x02u, 0x10u},
+                    {0x04u, 0x20u}, {0x40u, 0x80u}};
+                uint8_t sub_r[4][2], sub_g[4][2], sub_b[4][2];
+                uint8_t sub_l[4][2];
+                uint32_t sum_r = 0, sum_g = 0, sum_b = 0, sum_l = 0;
+                for(int dy = 0; dy < 4; ++dy)
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        sample_average_rgba(&img, x * 2 + dx, y * 4 + dy,
+                                            sample_w, sample_h, fit_w, fit_h,
+                                            off_x, off_y, src_x0, src_y0,
+                                            src_w, src_h, &sub_r[dy][dx],
+                                            &sub_g[dy][dx], &sub_b[dy][dx]);
+                        sub_l[dy][dx] = luminance_u8(sub_r[dy][dx],
+                                                     sub_g[dy][dx],
+                                                     sub_b[dy][dx]);
+                        sum_r += sub_r[dy][dx]; sum_g += sub_g[dy][dx];
+                        sum_b += sub_b[dy][dx]; sum_l += sub_l[dy][dx];
+                    }
+                const uint8_t avg_r = (uint8_t)(sum_r / 8u);
+                const uint8_t avg_g = (uint8_t)(sum_g / 8u);
+                const uint8_t avg_b = (uint8_t)(sum_b / 8u);
+                const uint8_t avg_l = (uint8_t)(sum_l / 8u);
+
+                uint8_t bits = 0;
+                uint32_t fg_r=0, fg_g=0, fg_b=0, fg_n=0;
+                uint32_t bg_r=0, bg_g=0, bg_b=0, bg_n=0;
+                for(int dy = 0; dy < 4; ++dy)
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        if(sub_l[dy][dx] + 10u >= avg_l)
+                        {
+                            bits |= bit_table[dy][dx];
+                            fg_r += sub_r[dy][dx]; fg_g += sub_g[dy][dx];
+                            fg_b += sub_b[dy][dx]; ++fg_n;
+                        }
+                        else
+                        {
+                            bg_r += sub_r[dy][dx]; bg_g += sub_g[dy][dx];
+                            bg_b += sub_b[dy][dx]; ++bg_n;
+                        }
+                    }
+
+                /* For uniform bright cells, force the brightest dot into FG */
+                if(bits == 0u && avg_l > 28u)
+                {
+                    uint8_t best_l = 0;
+                    int bdy = 0, bdx = 0;
+                    for(int dy = 0; dy < 4; ++dy)
+                        for(int dx = 0; dx < 2; ++dx)
+                            if(sub_l[dy][dx] >= best_l)
+                            {
+                                best_l = sub_l[dy][dx];
+                                bdy = dy; bdx = dx;
+                            }
+                    bits = bit_table[bdy][bdx];
+                    fg_r = sub_r[bdy][bdx]; fg_g = sub_g[bdy][bdx];
+                    fg_b = sub_b[bdy][bdx]; fg_n = 1;
+                    bg_r = sum_r - fg_r; bg_g = sum_g - fg_g;
+                    bg_b = sum_b - fg_b; bg_n = 7;
+                }
+                if(fg_n == 0u)
+                {
+                    /* All dark — density fallback */
+                    pos = append_rgb_sgr(out, estimate, pos, 0,
+                                         avg_r, avg_g, avg_b);
+                    pos = append_rgb_sgr(out, estimate, pos, 1,
+                                         darken_u8(avg_r, 1, 5),
+                                         darken_u8(avg_g, 1, 5),
+                                         darken_u8(avg_b, 1, 5));
+                    pos = append_text(out, estimate, pos,
+                                      density_glyph_for_luma(avg_l));
+                }
+                else
+                {
+                    if(bg_n == 0u) { bg_n=1u; bg_r=sum_r/8u; bg_g=sum_g/8u; bg_b=sum_b/8u; }
+                    pos = append_rgb_sgr(out, estimate, pos, 0,
+                                         (uint8_t)(fg_r/fg_n),
+                                         (uint8_t)(fg_g/fg_n),
+                                         (uint8_t)(fg_b/fg_n));
+                    pos = append_rgb_sgr(out, estimate, pos, 1,
+                                         (uint8_t)(bg_r/bg_n),
+                                         (uint8_t)(bg_g/bg_n),
+                                         (uint8_t)(bg_b/bg_n));
+                    pos = append_braille_utf8(out, estimate, pos, bits);
                 }
             }
             else if(use_braille)
