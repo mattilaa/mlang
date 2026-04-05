@@ -42,7 +42,8 @@ pub enum ImageGlyphMode : i32 {
     BrailleDots = 3,
     QuadrantBlocks = 4,
     AsciiRamp = 5,
-    EdgeAscii = 6
+    EdgeAscii = 6,
+    UnicodeLineArt = 7
 };
 
 /// @brief Basic image metadata returned by `probe`.
@@ -91,6 +92,8 @@ pub fn render_truecolor(path: str8, columns: i64, rows: i64)
 /// compatibility.
 /// `EdgeAscii` chooses ASCII glyphs from local edge direction and contrast,
 /// which is useful for highly structured images such as fractals.
+/// `UnicodeLineArt` uses a denser Unicode contour set for structured images
+/// when the terminal font supports box and diagonal line glyphs well.
 pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
                                   glyph_mode: ImageGlyphMode)
     -> Result<str8, str8> {

@@ -590,6 +590,39 @@ static const char* edge_ascii_glyph_for_cell(uint8_t tl, uint8_t tr, uint8_t bl,
     return glyph;
 }
 
+static const char* unicode_line_glyph_for_cell(uint8_t tl, uint8_t tr,
+                                               uint8_t bl, uint8_t br,
+                                               uint8_t avg)
+{
+    const int gx = (int)tr + (int)br - (int)tl - (int)bl;
+    const int gy = (int)bl + (int)br - (int)tl - (int)tr;
+    /* d1 = tl+br - tr-bl; d2 = -d1 always, so both diagonals share the same
+       magnitude. Distinguish NW-SE (╲, d1>0) from NE-SW (╱, d1<0) by sign. */
+    const int d1 = (int)tl + (int)br - (int)tr - (int)bl;
+    int ax = gx < 0 ? -gx : gx;
+    int ay = gy < 0 ? -gy : gy;
+    int ad = d1 < 0 ? -d1 : d1;
+    int best = ax;
+    const char* glyph = "│";
+    if(ay > best)
+    {
+        best = ay;
+        glyph = "─";
+    }
+    if(ad > best)
+    {
+        best = ad;
+        glyph = d1 >= 0 ? "╲" : "╱";
+    }
+    if(best < 14)
+        return density_glyph_for_luma(avg);
+    if(best < 28)
+        return "·";
+    if(ax > 42 && ay > 42)
+        return "┼";
+    return glyph;
+}
+
 static uint32_t quadrant_codepoint_for_bits(uint8_t bits)
 {
     static const uint32_t table[16] = {
@@ -638,18 +671,23 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     const int use_quadrants = glyph_mode == 4 ? 1 : 0;
     const int use_ascii = glyph_mode == 5 ? 1 : 0;
     const int use_edge_ascii = glyph_mode == 6 ? 1 : 0;
+    const int use_line_art = glyph_mode == 7 ? 1 : 0;
     int64_t src_x0 = 0;
     int64_t src_y0 = 0;
     int64_t src_w = img.width;
     int64_t src_h = img.height;
     compute_alpha_content_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
     compute_background_crop_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
-    const int64_t x_sub = (use_braille || use_quadrants || use_edge_ascii) ? 2 : 1;
+    const int64_t x_sub =
+        (use_braille || use_quadrants || use_edge_ascii || use_line_art) ? 2
+                                                                         : 1;
     const int64_t y_sub =
         use_braille ? 4
                     : (use_half_blocks ? 2
-                                       : ((use_quadrants || use_edge_ascii) ? 2
-                                                                            : 1));
+                                       : ((use_quadrants || use_edge_ascii ||
+                                           use_line_art)
+                                              ? 2
+                                              : 1));
     const int64_t out_cols = columns;
     int64_t out_rows =
         div_round_i64(out_cols * src_h * x_sub, src_w * y_sub);
@@ -681,8 +719,20 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
         {
             uint8_t r0 = 0, g0 = 0, b0 = 0;
             uint8_t r1 = 0, g1 = 0, b1 = 0;
-            sample_average_rgba(&img, (use_braille || use_quadrants || use_edge_ascii) ? x * 2 : x,
-                                use_half_blocks ? y * 2 : (use_braille ? y * 4 : (use_quadrants ? y * 2 : y)), sample_w,
+            sample_average_rgba(&img,
+                                (use_braille || use_quadrants ||
+                                 use_edge_ascii || use_line_art)
+                                    ? x * 2
+                                    : x,
+                                use_half_blocks ? y * 2
+                                                : (use_braille
+                                                       ? y * 4
+                                                       : ((use_quadrants ||
+                                                           use_edge_ascii ||
+                                                           use_line_art)
+                                                              ? y * 2
+                                                              : y)),
+                                sample_w,
                                 sample_h, fit_w, fit_h, off_x, off_y, src_x0,
                                 src_y0, src_w, src_h, &r0, &g0,
                                 &b0);
@@ -756,6 +806,48 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                                      darken_u8(avg_b, 1, 6));
                 pos = append_text(out, estimate, pos,
                                   edge_ascii_glyph_for_cell(tl, tr, bl, br, avg_l));
+            }
+            else if(use_line_art)
+            {
+                uint8_t sub_r[2][2];
+                uint8_t sub_g[2][2];
+                uint8_t sub_b[2][2];
+                uint32_t sum_r = 0;
+                uint32_t sum_g = 0;
+                uint32_t sum_b = 0;
+                uint32_t sum_l = 0;
+                for(int dy = 0; dy < 2; ++dy)
+                {
+                    for(int dx = 0; dx < 2; ++dx)
+                    {
+                        sample_average_rgba(&img, x * 2 + dx, y * 2 + dy,
+                                            sample_w, sample_h, fit_w, fit_h,
+                                            off_x, off_y, src_x0, src_y0,
+                                            src_w, src_h, &sub_r[dy][dx],
+                                            &sub_g[dy][dx], &sub_b[dy][dx]);
+                        sum_r += sub_r[dy][dx];
+                        sum_g += sub_g[dy][dx];
+                        sum_b += sub_b[dy][dx];
+                        sum_l += luminance_u8(sub_r[dy][dx], sub_g[dy][dx],
+                                              sub_b[dy][dx]);
+                    }
+                }
+                const uint8_t avg_r = (uint8_t)(sum_r / 4u);
+                const uint8_t avg_g = (uint8_t)(sum_g / 4u);
+                const uint8_t avg_b = (uint8_t)(sum_b / 4u);
+                const uint8_t tl = luminance_u8(sub_r[0][0], sub_g[0][0], sub_b[0][0]);
+                const uint8_t tr = luminance_u8(sub_r[0][1], sub_g[0][1], sub_b[0][1]);
+                const uint8_t bl = luminance_u8(sub_r[1][0], sub_g[1][0], sub_b[1][0]);
+                const uint8_t br = luminance_u8(sub_r[1][1], sub_g[1][1], sub_b[1][1]);
+                const uint8_t avg_l = (uint8_t)(sum_l / 4u);
+                pos = append_rgb_sgr(out, estimate, pos, 0, avg_r, avg_g, avg_b);
+                pos = append_rgb_sgr(out, estimate, pos, 1,
+                                     darken_u8(avg_r, 1, 5),
+                                     darken_u8(avg_g, 1, 5),
+                                     darken_u8(avg_b, 1, 5));
+                pos = append_text(out, estimate, pos,
+                                  unicode_line_glyph_for_cell(tl, tr, bl, br,
+                                                              avg_l));
             }
             else if(use_braille)
             {
