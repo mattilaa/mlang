@@ -1,5 +1,6 @@
 mod std::ascii;
 mod std::esc;
+mod std::image;
 mod std::io;
 mod std::strbuf;
 mod std::term;
@@ -18,19 +19,20 @@ use std::esc::cmd_home;
 use std::esc::cmd_show;
 use std::esc::color_black;
 use std::esc::color_bright_black;
-use std::esc::color_bright_blue;
-use std::esc::color_bright_cyan;
-use std::esc::color_bright_green;
-use std::esc::color_bright_magenta;
-use std::esc::color_bright_red;
-use std::esc::color_bright_white;
 use std::esc::color_bright_yellow;
-use std::esc::color_white;
+use std::esc::color_bright_white;
+use std::esc::color_bright_red;
 use std::esc::cursor;
+use std::esc::cursor_pos;
 use std::esc::fg;
 use std::esc::fg_rgb;
 use std::esc::bg;
 use std::esc::reset;
+use std::image::ImageGlyphMode;
+use std::image::ImageInfo;
+use std::image::probe;
+use std::image::render_truecolor_crop;
+use std::image::render_truecolor_with_mode;
 use std::io::Stdin;
 use std::io::read_keycode_nonblocking;
 use std::io::stdin;
@@ -57,23 +59,13 @@ fn max_i64(a: i64, b: i64) -> i64 {
 }
 
 fn clamp_i64(v: i64, lo: i64, hi: i64) -> i64 {
-    if v < lo {
-        return lo;
-    }
-    if v > hi {
-        return hi;
-    }
+    if v < lo { return lo; }
+    if v > hi { return hi; }
     return v;
 }
 
 fn abs_i64(v: i64) -> i64 {
     return v < 0 ? -v : v;
-}
-
-fn append_repeat(builder: StringBuilder, ch: i32, count: i64) -> void {
-    for _ in 0..count {
-        let _ = builder_append_char(builder, ch);
-    }
 }
 
 fn append_text(builder: StringBuilder, text: str8) -> void {
@@ -84,171 +76,17 @@ fn in_bumper(ball_x: i64, ball_y: i64, cx: i64, cy: i64) -> i32 {
     return abs_i64(ball_x - cx) <= 1 && abs_i64(ball_y - cy) <= 1 ? 1 : 0;
 }
 
-fn append_styled(builder: StringBuilder, fg_code: str8, bg_code: str8,
-                 glyph: str8) -> void {
-    append_text(builder, fg_code);
-    append_text(builder, bg_code);
-    append_text(builder, glyph);
-    append_text(builder, reset());
-}
-
-fn build_frame(viewport_width: i64, viewport_height: i64,
-               view_x: i64, view_y: i64,
-               table_width: i64, table_height: i64, ball_x: i64, ball_y: i64,
-               left_active: i64, right_active: i64, launch_charge: i64,
-               score: i64, lives: i64, launched: i64,
-               bumper_a_x: i64, bumper_a_y: i64, bumper_b_x: i64, bumper_b_y: i64,
-               bumper_c_x: i64, bumper_c_y: i64) -> str8 {
-    let builder: StringBuilder = builder_new(viewport_width * viewport_height + 1024);
-    append_text(builder, cursor(cmd_home()));
-    append_text(builder, cursor(cmd_clear_screen()));
-
-    let header: str8 = format!(
-        "{}{}Avengers-style terminal pinball{}  score={}  lives={}  launch={}  camera=({}, {})  a/d flippers  space launch  q quit\n",
-        bold_on(), fg(color_bright_yellow()), reset(), score, lives, launch_charge, view_x, view_y
-    );
-    append_text(builder, header);
-
-    let info: str8 = launched == 0
-        ? format!("{}Portrait table with a live scrolling viewport. Hold space in the right shooter lane, then release.{}\n",
-                  fg(color_bright_black()), reset())
-        : format!("{}Yellow lanes, blue reactor core, orange slings, green flippers. Keep the ball above the drain.{}\n",
-                  fg(color_bright_black()), reset());
-    append_text(builder, info);
-
-    for row in 0..viewport_height {
-        for col in 0..viewport_width {
-            let x: i64 = view_x + col;
-            let y: i64 = view_y + row;
-            let left_wall: i64 = 0;
-            let right_wall: i64 = table_width - 1;
-            let top_wall: i64 = 0;
-            let bottom_wall: i64 = table_height - 1;
-            let shooter_lane_left: i64 = table_width - 8;
-            let left_orbit_x: i64 = 4;
-            let right_orbit_x: i64 = table_width - 10;
-            let top_lane_y: i64 = 5;
-            let reactor_x: i64 = table_width / 2;
-            let reactor_y: i64 = 15;
-            let lower_insert_y: i64 = table_height - 18;
-            let sling_y: i64 = table_height - 12;
-            let left_sling_left: i64 = 10;
-            let left_sling_right: i64 = 21;
-            let right_sling_left: i64 = table_width - 22;
-            let right_sling_right: i64 = table_width - 11;
-            let drain_y: i64 = table_height - 5;
-            let left_flipper_start: i64 = 18;
-            let left_flipper_end: i64 = 31;
-            let right_flipper_start: i64 = table_width - 32;
-            let right_flipper_end: i64 = table_width - 19;
-            let left_tip_start: i64 = left_flipper_end - 3;
-            let right_tip_end: i64 = right_flipper_start + 3;
-
-            let is_border: i64 = y == top_wall || y == bottom_wall || x == left_wall || x == right_wall ? 1 : 0;
-            let in_shooter_lane: i64 = x >= shooter_lane_left && x <= right_wall - 1 && y >= 2 && y <= table_height - 4 ? 1 : 0;
-            let on_shooter_divider: i64 = x == shooter_lane_left && y >= 2 && y <= table_height - 4 ? 1 : 0;
-            let in_left_orbit: i64 = x == left_orbit_x && y >= 4 && y <= table_height - 10 ? 1 : 0;
-            let in_right_orbit: i64 = x == right_orbit_x && y >= 4 && y <= table_height - 14 ? 1 : 0;
-            let in_top_lane: i64 = y == top_lane_y &&
-                                   ((x >= 10 && x <= 18) ||
-                                    (x >= 26 && x <= 45) ||
-                                    (x >= 53 && x <= table_width - 12)) ? 1 : 0;
-            let in_mid_bridge: i64 = y == 24 && x >= 16 && x <= table_width - 18 ? 1 : 0;
-            let in_reactor_ring: i64 = abs_i64(x - reactor_x) + abs_i64(y - reactor_y) <= 3 &&
-                                       abs_i64(x - reactor_x) + abs_i64(y - reactor_y) >= 2 ? 1 : 0;
-            let in_reactor_core: i64 = abs_i64(x - reactor_x) <= 1 && abs_i64(y - reactor_y) <= 1 ? 1 : 0;
-            let in_insert_row: i64 = y == lower_insert_y && x >= 14 && x <= table_width - 14 && (x - 14) % 4 == 0 ? 1 : 0;
-            let in_upper_insert_row: i64 = y == 10 && x >= 8 && x <= table_width - 12 && (x - 8) % 10 == 0 ? 1 : 0;
-            let in_left_sling: i64 = (y == sling_y && x >= left_sling_left + 2 && x <= left_sling_right) ||
-                                     (y == sling_y + 1 && x >= left_sling_left && x <= left_sling_right - 2) ? 1 : 0;
-            let in_right_sling: i64 = (y == sling_y && x >= right_sling_left && x <= right_sling_right - 2) ||
-                                      (y == sling_y + 1 && x >= right_sling_left + 2 && x <= right_sling_right) ? 1 : 0;
-            let in_left_flipper: i64 = y == drain_y && x >= left_flipper_start && x <= left_flipper_end ? 1 : 0;
-            let in_right_flipper: i64 = y == drain_y && x >= right_flipper_start && x <= right_flipper_end ? 1 : 0;
-            let in_left_tip: i64 = left_active == 1 && y == drain_y - 1 && x >= left_tip_start && x <= left_flipper_end + 1 ? 1 : 0;
-            let in_right_tip: i64 = right_active == 1 && y == drain_y - 1 && x >= right_flipper_start - 1 && x <= right_tip_end ? 1 : 0;
-            let in_drain: i64 = y == drain_y + 1 && x >= left_flipper_end + 2 && x <= right_flipper_start - 2 ? 1 : 0;
-            let in_ball: i64 = x == ball_x && y == ball_y ? 1 : 0;
-            let in_bumper_a: i64 = x == bumper_a_x && y == bumper_a_y ? 1 : 0;
-            let in_bumper_b: i64 = x == bumper_b_x && y == bumper_b_y ? 1 : 0;
-            let in_bumper_c: i64 = x == bumper_c_x && y == bumper_c_y ? 1 : 0;
-            let in_left_ramp: i64 = x == 12 + (y / 3) && y >= 8 && y <= 26 ? 1 : 0;
-            let in_right_ramp: i64 = x == table_width - 15 - (y / 4) && y >= 10 && y <= 27 ? 1 : 0;
-            let in_left_inlane: i64 = x == 11 && y >= table_height - 16 && y <= table_height - 7 ? 1 : 0;
-            let in_right_inlane: i64 = x == table_width - 12 && y >= table_height - 16 && y <= table_height - 7 ? 1 : 0;
-            let in_apron: i64 = y >= table_height - 4 ? 1 : 0;
-            let in_upper_art: i64 = y >= 7 && y <= 19 && x >= 8 && x <= table_width - 12 ? 1 : 0;
-            let in_lower_art: i64 = y >= 28 && y <= table_height - 8 && x >= 8 && x <= table_width - 9 ? 1 : 0;
-            let base_bg: str8 = bg_rgb(13, 16, 28);
-            let play_bg: str8 = in_apron == 1
-                ? bg_rgb(52, 44, 48)
-                : in_upper_art == 1
-                    ? bg_rgb(20, 34, 92)
-                    : in_lower_art == 1
-                        ? bg_rgb(42, 28, 86)
-                        : bg_rgb(18, 20, 32);
-
-            if in_ball == 1 {
-                append_text(builder, format!("{}{}{}{}{}",
-                    bold_on(), fg_rgb(255, 248, 208), bg_rgb(24, 24, 32),
-                    unicode_box_glyph(UnicodeBoxGlyph::Bullet), reset()));
-            } else if in_bumper_a == 1 || in_bumper_b == 1 || in_bumper_c == 1 {
-                append_text(builder, format!("{}{}{}{}{}",
-                    bold_on(), fg_rgb(255, 76, 76), bg_rgb(255, 200, 64),
-                    unicode_box_glyph(UnicodeBoxGlyph::FullBlock), reset()));
-            } else if in_reactor_core == 1 {
-                append_styled(builder, fg_rgb(255, 236, 92), bg_rgb(230, 86, 28),
-                              unicode_box_glyph(UnicodeBoxGlyph::FullBlock));
-            } else if in_reactor_ring == 1 {
-                append_styled(builder, fg_rgb(255, 212, 56), bg_rgb(54, 26, 112),
-                              unicode_box_glyph(UnicodeBoxGlyph::FullBlock));
-            } else if in_left_tip == 1 || in_right_tip == 1 {
-                append_styled(builder, fg_rgb(160, 255, 130), bg_rgb(28, 44, 26),
-                              unicode_box_glyph(UnicodeBoxGlyph::UpperHalfBlock));
-            } else if in_left_flipper == 1 || in_right_flipper == 1 {
-                append_styled(builder, fg_rgb(168, 246, 132), bg_rgb(34, 56, 34),
-                              unicode_box_glyph(UnicodeBoxGlyph::HeavyHorizontal));
-            } else if in_left_sling == 1 || in_right_sling == 1 {
-                append_styled(builder, fg_rgb(255, 164, 40), bg_rgb(164, 34, 28),
-                              unicode_box_glyph(UnicodeBoxGlyph::FullBlock));
-            } else if in_top_lane == 1 || in_mid_bridge == 1 {
-                append_styled(builder, fg_rgb(255, 228, 92), play_bg,
-                              unicode_box_glyph(UnicodeBoxGlyph::HeavyHorizontal));
-            } else if in_left_orbit == 1 || in_right_orbit == 1 || on_shooter_divider == 1 ||
-                      in_left_ramp == 1 || in_right_ramp == 1 ||
-                      in_left_inlane == 1 || in_right_inlane == 1 {
-                append_styled(builder, fg_rgb(182, 196, 212), base_bg,
-                              unicode_box_glyph(UnicodeBoxGlyph::LightVertical));
-            } else if in_insert_row == 1 || in_upper_insert_row == 1 {
-                append_styled(builder, fg_rgb(255, 228, 96), bg_rgb(98, 28, 118),
-                              unicode_box_glyph(UnicodeBoxGlyph::Bullet));
-            } else if is_border == 1 {
-                append_styled(builder, fg_rgb(255, 197, 39), bg_rgb(255, 197, 39),
-                              unicode_box_glyph(UnicodeBoxGlyph::FullBlock));
-            } else if in_shooter_lane == 1 {
-                append_styled(builder, fg_rgb(210, 210, 220), bg_rgb(56, 44, 22),
-                              unicode_box_glyph(UnicodeBoxGlyph::LightVertical));
-            } else if in_drain == 1 {
-                append_styled(builder, fg_rgb(12, 12, 18), bg_rgb(12, 12, 18), " ");
-            } else if y > 8 && y < 22 && x > 11 && x < table_width - 14 && (x + y * 2) % 13 == 0 {
-                append_styled(builder, fg_rgb(112, 236, 255), play_bg,
-                              unicode_box_glyph(UnicodeBoxGlyph::Dot));
-            } else if y > 30 && y < table_height - 8 && x > 8 && x < table_width - 9 &&
-                      (x + y) % 17 == 0 {
-                append_styled(builder, fg_rgb(255, 140, 140), play_bg,
-                              unicode_box_glyph(UnicodeBoxGlyph::Dot));
-            } else {
-                append_styled(builder, fg(color_bright_white()), play_bg, " ");
-            }
-        }
-        append_repeat(builder, 10, 1);
-    }
-
-    append_text(builder, format!(
-        "{}{}Legend:{} reactor core +25, green flippers save the ball, orange slings kick it back. table={}x{}{}\n",
-        fg(color_bright_black()), bg(color_black()), fg(color_bright_white()), table_width, table_height, reset()
-    ));
-    return builder_take_string(builder);
+/// Append cursor_pos + text if the position is inside the visible viewport.
+/// text is consumed (moved) — pass a fresh value each call.
+fn draw_at(builder: StringBuilder, ty: i64, tx: i64,
+           view_x: i64, view_y: i64, vp_w: i64, vp_h: i64,
+           text: str8) -> void {
+    let sc_row: i64 = ty - view_y + 3;
+    let sc_col: i64 = tx - view_x + 1;
+    if sc_row < 3 || sc_row > vp_h + 2 { return; }
+    if sc_col < 1 || sc_col > vp_w      { return; }
+    append_text(builder, cursor_pos(i32(sc_row), i32(sc_col)));
+    append_text(builder, text);
 }
 
 fn main() -> i32 {
@@ -262,19 +100,9 @@ fn main() -> i32 {
     let _ = write(stdout(), alt_screen_on());
     let _ = write(stdout(), cursor(cmd_hide()));
 
-    let table_width: i64 = 72;
+    /* ── table geometry ──────────────────────────────────────────── */
+    let table_width: i64  = 72;
     let table_height: i64 = 54;
-
-    var ball_x: i64 = 0;
-    var ball_y: i64 = 0;
-    var ball_dx: i64 = 0;
-    var ball_dy: i64 = 0;
-    var launch_charge: i64 = 0;
-    var launched: i64 = 0;
-    var left_flipper_ticks: i64 = 0;
-    var right_flipper_ticks: i64 = 0;
-    var score: i64 = 0;
-    var lives: i64 = 3;
 
     let bumper_a_x: i64 = 18;
     let bumper_a_y: i64 = 18;
@@ -283,58 +111,293 @@ fn main() -> i32 {
     let bumper_c_x: i64 = table_width - 19;
     let bumper_c_y: i64 = 21;
 
-    ball_x = table_width - 3;
-    ball_y = table_height - 3;
-    ball_dx = 0;
-    ball_dy = 0;
-    launch_charge = 0;
-    launched = 0;
+    let left_flipper_start: i64  = 18;
+    let left_flipper_end: i64    = 31;
+    let right_flipper_start: i64 = table_width - 32;
+    let right_flipper_end: i64   = table_width - 19;
+    let drain_y: i64             = table_height - 5;
+
+    /* ── probe Metallica background image ───────────────────────── */
+    var img_w: i64 = 433;
+    var img_h: i64 = 869;
+    let probe_r: Result<ImageInfo, str8> = probe("pics/metallica.jpg");
+    if probe_r.is_ok() {
+        let info: ImageInfo = probe_r.unwrap();
+        img_w = info.width;
+        img_h = info.height;
+    }
+
+    /* ── cached background ───────────────────────────────────────── */
+    var cached_bg: str8 = "";
+    var cached_vw: i64  = -1;
+    var cached_vh: i64  = -1;
+    var cached_vx: i64  = -1;
+    var cached_vy: i64  = -1;
+    var bg_valid: i32   = 0;
+
+    /* ── game state ──────────────────────────────────────────────── */
+    var ball_x: i64          = table_width - 3;
+    var ball_y: i64          = table_height - 3;
+    var ball_dx: i64         = 0;
+    var ball_dy: i64         = 0;
+    var launch_charge: i64   = 0;
+    var launched: i64        = 0;
+    var left_flipper_ticks: i64  = 0;
+    var right_flipper_ticks: i64 = 0;
+    var score: i64           = 0;
+    var lives: i64           = 3;
+    var bumper_a_lit: i64    = 0;
+    var bumper_b_lit: i64    = 0;
+    var bumper_c_lit: i64    = 0;
 
     var running: i32 = 1;
     while running == 1 {
         let term = stdout_size();
-        let viewport_width: i64 = clamp_i64(term.cols - 2, 20, table_width);
-        let viewport_height: i64 = clamp_i64(term.rows - 5, 10, table_height);
-        let margin_x: i64 = max_i64(6, viewport_width / 3);
-        let margin_y: i64 = max_i64(6, viewport_height / 3);
-        let view_x: i64 = clamp_i64(ball_x - margin_x, 0, max_i64(0, table_width - viewport_width));
-        let view_y: i64 = clamp_i64(ball_y - margin_y, 0, max_i64(0, table_height - viewport_height));
+        let vp_w: i64 = clamp_i64(term.cols - 2, 20, table_width);
+        let vp_h: i64 = clamp_i64(term.rows - 5, 10, table_height);
+        let margin_x: i64 = max_i64(6, vp_w / 3);
+        let margin_y: i64 = max_i64(6, vp_h / 3);
+        let view_x: i64 = clamp_i64(ball_x - margin_x, 0, max_i64(0, table_width  - vp_w));
+        let view_y: i64 = clamp_i64(ball_y - margin_y, 0, max_i64(0, table_height - vp_h));
 
         if launched == 0 {
             ball_x = table_width - 3;
             ball_y = table_height - 3;
         }
 
+        /* ── refresh background when viewport changes ────────────── */
+        if vp_w != cached_vw || vp_h != cached_vh || view_x != cached_vx || view_y != cached_vy {
+            if bg_valid == 1 {
+                free(cached_bg);
+                bg_valid = 0;
+                cached_bg = "";
+            }
+            let cx: i64 = view_x * img_w / table_width;
+            let cy: i64 = view_y * img_h / table_height;
+            let cw: i64 = max_i64(1, vp_w * img_w / table_width);
+            let ch: i64 = max_i64(1, vp_h * img_h / table_height);
+            let bg_r = render_truecolor_crop("pics/metallica.jpg", vp_w, vp_h,
+                                             ImageGlyphMode::ColorSplitBlocks,
+                                             cx, cy, cw, ch);
+            if bg_r.is_ok() {
+                cached_bg = bg_r.unwrap();
+                bg_valid  = 1;
+            }
+            cached_vw = vp_w;
+            cached_vh = vp_h;
+            cached_vx = view_x;
+            cached_vy = view_y;
+        }
+
+        /* ── too small ───────────────────────────────────────────── */
         if term.rows < 14 || term.cols < 24 {
             let tiny: str8 = format!(
-                "{}{}terminal too small for pinball starter (need at least 24x14, got {}x{}). press q to quit.{}",
-                cursor(cmd_home()), fg(color_bright_red()),
-                term.cols, term.rows, reset()
-            );
+                "{}{}terminal too small (need 24×14, got {}×{}). q to quit.{}",
+                cursor(cmd_home()), fg_rgb(255, 60, 60),
+                term.cols, term.rows, reset());
             let _ = write(stdout(), tiny);
             free(tiny);
         } else {
-            let frame: str8 = build_frame(
-                viewport_width, viewport_height, view_x, view_y, table_width, table_height,
-                ball_x, ball_y, left_flipper_ticks > 0 ? 1 : 0, right_flipper_ticks > 0 ? 1 : 0,
-                launch_charge, score, lives, launched,
-                bumper_a_x, bumper_a_y, bumper_b_x, bumper_b_y, bumper_c_x, bumper_c_y
-            );
-            let _ = write(stdout(), frame);
-            free(frame);
+            /* ── Part 1: clear + header (rows 1-2) ──────────────── */
+            let lf_label: str8 = left_flipper_ticks > 0
+                ? format!("{}[A]↑{}", fg_rgb(140, 255, 90), reset())
+                : format!("{}[A]↓{}", fg_rgb(50, 140, 40),  reset());
+            let rf_label: str8 = right_flipper_ticks > 0
+                ? format!("{}[D]↑{}", fg_rgb(140, 255, 90), reset())
+                : format!("{}[D]↓{}", fg_rgb(50, 140, 40),  reset());
+            let launch_hint: str8 = launch_charge > 0
+                ? format!(" {}charge:{}{}",
+                          fg_rgb(255, 200, 40), launch_charge, reset())
+                : "                 ";
+            let part1: str8 = format!(
+                "{}{}{}METALLICA PINBALL{}  score:{}{}{}  lives:{}  {}  {}  [space]=launch{}  [r]=reset  [q]=quit\n{}{} table {}×{}  ball ({},{})  view ({},{})  A/D flippers{}\n",
+                cursor(cmd_home()), cursor(cmd_clear_screen()),
+                bold_on(), reset(),
+                fg_rgb(255, 255, 100), score, reset(),
+                lives, lf_label, rf_label, launch_hint, reset(),
+                fg(color_bright_black()),
+                launched == 0 ? "Hold [space] charge, release to fire." : "",
+                table_width, table_height,
+                ball_x, ball_y, view_x, view_y, reset());
+            let _ = write(stdout(), part1);
+            free(part1);
+            free(lf_label);
+            free(rf_label);
+            free(launch_hint);
+
+            /* ── Part 2: background image at row 3 ──────────────── */
+            let _ = write(stdout(), cursor_pos(3, 1));
+            if bg_valid == 1 {
+                let _ = write(stdout(), cached_bg);
+            }
+
+            /* ── Part 3: overlay (cursor_pos per element) ────────── */
+            let sb: StringBuilder = builder_new(vp_w * 4 + 2048);
+
+            /* table border – top wall */
+            let top_row: i64 = 0 - view_y + 3;
+            if top_row >= 3 && top_row <= vp_h + 2 {
+                append_text(sb, cursor_pos(i32(top_row), 1));
+                for col in 0..vp_w {
+                    let tx: i64 = view_x + col;
+                    if tx >= 0 && tx < table_width {
+                        append_text(sb, format!("{}{}█{}", fg_rgb(200, 160, 40), bg_rgb(160, 120, 20), reset()));
+                    }
+                }
+            }
+            /* bottom wall */
+            let bot_row: i64 = table_height - 1 - view_y + 3;
+            if bot_row >= 3 && bot_row <= vp_h + 2 {
+                append_text(sb, cursor_pos(i32(bot_row), 1));
+                for col in 0..vp_w {
+                    let tx: i64 = view_x + col;
+                    if tx >= 0 && tx < table_width {
+                        append_text(sb, format!("{}{}█{}", fg_rgb(200, 160, 40), bg_rgb(160, 120, 20), reset()));
+                    }
+                }
+            }
+            /* left/right walls */
+            for row_i in 0..vp_h {
+                let ty: i64 = view_y + row_i;
+                if ty > 0 && ty < table_height - 1 {
+                    let sc_row: i64 = row_i + 3;
+                    let lsc: i64 = 0 - view_x + 1;
+                    if lsc >= 1 && lsc <= vp_w {
+                        append_text(sb, cursor_pos(i32(sc_row), i32(lsc)));
+                        append_text(sb, format!("{}{}█{}", fg_rgb(200, 160, 40), bg_rgb(160, 120, 20), reset()));
+                    }
+                    let rsc: i64 = table_width - 1 - view_x + 1;
+                    if rsc >= 1 && rsc <= vp_w {
+                        append_text(sb, cursor_pos(i32(sc_row), i32(rsc)));
+                        append_text(sb, format!("{}{}█{}", fg_rgb(200, 160, 40), bg_rgb(160, 120, 20), reset()));
+                    }
+                }
+            }
+
+            /* drain warning */
+            let drain_sc_row: i64 = drain_y + 1 - view_y + 3;
+            if drain_sc_row >= 3 && drain_sc_row <= vp_h + 2 {
+                var dx2: i64 = left_flipper_end + 2;
+                while dx2 <= right_flipper_start - 2 {
+                    let dsc: i64 = dx2 - view_x + 1;
+                    if dsc >= 1 && dsc <= vp_w {
+                        append_text(sb, cursor_pos(i32(drain_sc_row), i32(dsc)));
+                        append_text(sb, format!("{}{}▄{}", fg_rgb(200, 40, 20), bg_rgb(80, 10, 5), reset()));
+                    }
+                    dx2 = dx2 + 1;
+                }
+            }
+
+            /* bumpers */
+            let ba_str: str8 = bumper_a_lit > 0
+                ? format!("{}{}{}◉{}", bold_on(), fg_rgb(255, 255, 80), bg_rgb(220, 60, 0), reset())
+                : format!("{}{}◉{}", bold_on(), fg_rgb(255, 64, 64), reset());
+            draw_at(sb, bumper_a_y, bumper_a_x, view_x, view_y, vp_w, vp_h, ba_str);
+
+            let bb_str: str8 = bumper_b_lit > 0
+                ? format!("{}{}{}◉{}", bold_on(), fg_rgb(255, 255, 80), bg_rgb(220, 60, 0), reset())
+                : format!("{}{}◉{}", bold_on(), fg_rgb(255, 64, 64), reset());
+            draw_at(sb, bumper_b_y, bumper_b_x, view_x, view_y, vp_w, vp_h, bb_str);
+
+            let bc_str: str8 = bumper_c_lit > 0
+                ? format!("{}{}{}◉{}", bold_on(), fg_rgb(255, 255, 80), bg_rgb(220, 60, 0), reset())
+                : format!("{}{}◉{}", bold_on(), fg_rgb(255, 64, 64), reset());
+            draw_at(sb, bumper_c_y, bumper_c_x, view_x, view_y, vp_w, vp_h, bc_str);
+
+            /* flippers */
+            let flip_sc_row: i64 = drain_y - view_y + 3;
+            if flip_sc_row >= 3 && flip_sc_row <= vp_h + 2 {
+                var fx: i64 = left_flipper_start;
+                while fx <= left_flipper_end {
+                    let fsc: i64 = fx - view_x + 1;
+                    if fsc >= 1 && fsc <= vp_w {
+                        append_text(sb, cursor_pos(i32(flip_sc_row), i32(fsc)));
+                        if left_flipper_ticks > 0 {
+                            append_text(sb, format!("{}{}▬{}", bold_on(), fg_rgb(140, 255, 90), reset()));
+                        } else {
+                            append_text(sb, format!("{}{}▬{}", bold_on(), fg_rgb(50, 160, 40), reset()));
+                        }
+                    }
+                    fx = fx + 1;
+                }
+                fx = right_flipper_start;
+                while fx <= right_flipper_end {
+                    let fsc: i64 = fx - view_x + 1;
+                    if fsc >= 1 && fsc <= vp_w {
+                        append_text(sb, cursor_pos(i32(flip_sc_row), i32(fsc)));
+                        if right_flipper_ticks > 0 {
+                            append_text(sb, format!("{}{}▬{}", bold_on(), fg_rgb(140, 255, 90), reset()));
+                        } else {
+                            append_text(sb, format!("{}{}▬{}", bold_on(), fg_rgb(50, 160, 40), reset()));
+                        }
+                    }
+                    fx = fx + 1;
+                }
+                /* raised flipper tips */
+                if left_flipper_ticks > 0 {
+                    let tip_row: i64 = drain_y - 1 - view_y + 3;
+                    if tip_row >= 3 && tip_row <= vp_h + 2 {
+                        var tx2: i64 = left_flipper_end - 3;
+                        while tx2 <= left_flipper_end + 1 {
+                            let tsc: i64 = tx2 - view_x + 1;
+                            if tsc >= 1 && tsc <= vp_w {
+                                append_text(sb, cursor_pos(i32(tip_row), i32(tsc)));
+                                append_text(sb, format!("{}{}▲{}", bold_on(), fg_rgb(160, 255, 110), reset()));
+                            }
+                            tx2 = tx2 + 1;
+                        }
+                    }
+                }
+                if right_flipper_ticks > 0 {
+                    let tip_row: i64 = drain_y - 1 - view_y + 3;
+                    if tip_row >= 3 && tip_row <= vp_h + 2 {
+                        var tx2: i64 = right_flipper_start - 1;
+                        while tx2 <= right_flipper_start + 3 {
+                            let tsc: i64 = tx2 - view_x + 1;
+                            if tsc >= 1 && tsc <= vp_w {
+                                append_text(sb, cursor_pos(i32(tip_row), i32(tsc)));
+                                append_text(sb, format!("{}{}▲{}", bold_on(), fg_rgb(160, 255, 110), reset()));
+                            }
+                            tx2 = tx2 + 1;
+                        }
+                    }
+                }
+            }
+
+            /* ball */
+            let ball_sc_row: i64 = ball_y - view_y + 3;
+            let ball_sc_col: i64 = ball_x - view_x + 1;
+            if ball_sc_row >= 3 && ball_sc_row <= vp_h + 2
+               && ball_sc_col >= 1 && ball_sc_col <= vp_w {
+                append_text(sb, cursor_pos(i32(ball_sc_row), i32(ball_sc_col)));
+                append_text(sb, format!("{}{}●{}", bold_on(), fg_rgb(255, 248, 120), reset()));
+            }
+
+            /* legend */
+            let legend_row: i64 = vp_h + 3;
+            append_text(sb, cursor_pos(i32(legend_row), 1));
+            append_text(sb, format!(
+                "{}{}bumpers +25  A/D flippers  space=launch  drain=lose life{}",
+                fg(color_bright_black()), bg(color_black()), reset()));
+
+            let overlay: str8 = builder_take_string(sb);
+            let _ = write(stdout(), overlay);
+            free(overlay);
         }
 
+        /* ── input ───────────────────────────────────────────────── */
         let keycode: i32 = read_keycode_nonblocking(input);
         if keycode >= 0 {
-            if keycode == AsciiKey::LowerQ || keycode == AsciiKey::UpperQ || keycode == AsciiKey::Etx {
+            if keycode == AsciiKey::LowerQ || keycode == AsciiKey::UpperQ
+               || keycode == AsciiKey::Etx {
                 running = 0;
             } else if keycode == AsciiKey::LowerA || keycode == AsciiKey::UpperA {
-                left_flipper_ticks = 3;
+                left_flipper_ticks = 5;
             } else if keycode == AsciiKey::LowerD || keycode == AsciiKey::UpperD {
-                right_flipper_ticks = 3;
+                right_flipper_ticks = 5;
             } else if keycode == AsciiKey::Space {
                 if launched == 0 {
-                    launch_charge = min_i64(8, launch_charge + 1);
+                    launch_charge = min_i64(10, launch_charge + 1);
                 }
             } else if keycode == AsciiKey::LowerR || keycode == AsciiKey::UpperR {
                 score = 0;
@@ -349,85 +412,87 @@ fn main() -> i32 {
         } else if launched == 0 && launch_charge > 0 {
             launched = 1;
             ball_dx = -1;
-            ball_dy = -1;
+            ball_dy = -(1 + launch_charge / 3);
+            launch_charge = 0;
         }
 
-        if left_flipper_ticks > 0 {
-            left_flipper_ticks = left_flipper_ticks - 1;
-        }
-        if right_flipper_ticks > 0 {
-            right_flipper_ticks = right_flipper_ticks - 1;
-        }
+        if left_flipper_ticks  > 0 { left_flipper_ticks  = left_flipper_ticks  - 1; }
+        if right_flipper_ticks > 0 { right_flipper_ticks = right_flipper_ticks - 1; }
+        if bumper_a_lit > 0 { bumper_a_lit = bumper_a_lit - 1; }
+        if bumper_b_lit > 0 { bumper_b_lit = bumper_b_lit - 1; }
+        if bumper_c_lit > 0 { bumper_c_lit = bumper_c_lit - 1; }
 
+        /* ── physics ─────────────────────────────────────────────── */
         if launched == 1 {
             var next_x: i64 = ball_x + ball_dx;
             var next_y: i64 = ball_y + ball_dy;
-            let wall_left: i64 = 1;
-            let wall_right: i64 = table_width - 2;
-            let wall_top: i64 = 1;
+            let wall_left: i64   = 1;
+            let wall_right: i64  = table_width - 2;
+            let wall_top: i64    = 1;
             let wall_bottom: i64 = table_height - 2;
 
-            if next_x <= wall_left {
-                next_x = wall_left;
-                ball_dx = 1;
-            }
-            if next_x >= wall_right {
-                next_x = wall_right;
-                ball_dx = -1;
-            }
-            if next_y <= wall_top {
-                next_y = wall_top;
-                ball_dy = 1;
+            if next_x <= wall_left  { next_x = wall_left;  ball_dx =  1; }
+            if next_x >= wall_right { next_x = wall_right; ball_dx = -1; }
+            if next_y <= wall_top   { next_y = wall_top;   ball_dy =  1; }
+
+            /* gentle gravity */
+            if ball_dy < 3 && (ball_y % 3 == 0) {
+                ball_dy = ball_dy + 1;
             }
 
-            if in_bumper(next_x, next_y, bumper_a_x, bumper_a_y) {
+            /* bumper hits */
+            if in_bumper(next_x, next_y, bumper_a_x, bumper_a_y) == 1 {
                 score = score + 25;
+                bumper_a_lit = 3;
                 ball_dx = ball_x < bumper_a_x ? -1 : 1;
-                ball_dy = -ball_dy;
+                ball_dy = -2;
                 next_x = ball_x + ball_dx;
                 next_y = ball_y + ball_dy;
             }
-            if in_bumper(next_x, next_y, bumper_b_x, bumper_b_y) {
+            if in_bumper(next_x, next_y, bumper_b_x, bumper_b_y) == 1 {
                 score = score + 25;
+                bumper_b_lit = 3;
                 ball_dx = ball_x < bumper_b_x ? -1 : 1;
-                ball_dy = -ball_dy;
+                ball_dy = -2;
                 next_x = ball_x + ball_dx;
                 next_y = ball_y + ball_dy;
             }
-            if in_bumper(next_x, next_y, bumper_c_x, bumper_c_y) {
+            if in_bumper(next_x, next_y, bumper_c_x, bumper_c_y) == 1 {
                 score = score + 25;
+                bumper_c_lit = 3;
                 ball_dx = ball_x < bumper_c_x ? -1 : 1;
-                ball_dy = -ball_dy;
+                ball_dy = -2;
                 next_x = ball_x + ball_dx;
                 next_y = ball_y + ball_dy;
             }
 
-            let left_flipper_start: i64 = 18;
-            let left_flipper_end: i64 = 31;
-            let right_flipper_start: i64 = table_width - 32;
-            let right_flipper_end: i64 = table_width - 19;
-            let flipper_y: i64 = table_height - 5;
-            if next_y >= flipper_y - 2 {
-                if left_flipper_ticks > 0 && next_x >= left_flipper_start - 2 && next_x <= left_flipper_end + 2 {
+            /* flipper catches */
+            if next_y >= drain_y - 2 {
+                if left_flipper_ticks > 0
+                   && next_x >= left_flipper_start - 2
+                   && next_x <= left_flipper_end + 2 {
                     score = score + 5;
                     ball_dx = -1;
-                    ball_dy = -2;
+                    ball_dy = -3;
                     next_x = ball_x + ball_dx;
-                    next_y = flipper_y - 3;
-                } else if right_flipper_ticks > 0 && next_x >= right_flipper_start - 2 && next_x <= right_flipper_end + 2 {
+                    next_y = drain_y - 3;
+                } else if right_flipper_ticks > 0
+                          && next_x >= right_flipper_start - 2
+                          && next_x <= right_flipper_end + 2 {
                     score = score + 5;
                     ball_dx = 1;
-                    ball_dy = -2;
+                    ball_dy = -3;
                     next_x = ball_x + ball_dx;
-                    next_y = flipper_y - 3;
+                    next_y = drain_y - 3;
                 }
             }
 
+            /* drain */
             if next_y >= wall_bottom {
                 lives = lives - 1;
                 if lives <= 0 {
-                    score = 0;
                     lives = 3;
+                    score = 0;
                 }
                 ball_x = table_width - 3;
                 ball_y = table_height - 3;
@@ -445,6 +510,11 @@ fn main() -> i32 {
         }
 
         sleep_ms(40);
+    }
+
+    /* cleanup */
+    if bg_valid == 1 {
+        free(cached_bg);
     }
 
     let _ = write(stdout(), reset());

@@ -33,6 +33,11 @@ extern pub fn __mlang_std_image_probe_height(path: str8) -> i64;
 extern pub fn __mlang_std_image_render_truecolor(path: str8, columns: i32,
                                                  rows: i32, glyph_mode: i32)
     -> str8;
+extern pub fn __mlang_std_image_render_truecolor_crop(path: str8, columns: i32,
+                                                      rows: i32, glyph_mode: i32,
+                                                      crop_x: i32, crop_y: i32,
+                                                      crop_w: i32, crop_h: i32)
+    -> str8;
 
 /// @brief Glyph packing mode used for terminal image rendering.
 pub enum ImageGlyphMode : i32 {
@@ -78,6 +83,36 @@ pub fn render_truecolor(path: str8, columns: i64, rows: i64)
     -> Result<str8, str8> {
     return render_truecolor_with_mode(path, columns, rows,
                                       ImageGlyphMode::UpperHalfBlocks);
+}
+
+/// @brief Render a pixel-crop region of an image to an exact columns×rows terminal string.
+///
+/// Unlike `render_truecolor_with_mode`, this function:
+/// - Does not preserve aspect ratio — the crop is stretched to fill exactly
+///   `columns` × `rows` terminal cells.
+/// - Skips automatic border/transparency detection.
+/// - Is intended for scrollable viewport backgrounds where `crop_x/y/w/h`
+///   are updated each frame based on the current camera position.
+///
+/// `crop_x`, `crop_y`, `crop_w`, `crop_h` are in source image pixels.
+pub fn render_truecolor_crop(path: str8, columns: i64, rows: i64,
+                              glyph_mode: ImageGlyphMode,
+                              crop_x: i64, crop_y: i64,
+                              crop_w: i64, crop_h: i64)
+    -> Result<str8, str8> {
+    if columns <= 0 || rows <= 0 {
+        return Err<str8, str8>("std::image render_truecolor_crop: columns and rows must be > 0");
+    }
+    if crop_w <= 0 || crop_h <= 0 {
+        return Err<str8, str8>("std::image render_truecolor_crop: crop dimensions must be > 0");
+    }
+    let out: str8 = __mlang_std_image_render_truecolor_crop(
+        path, i32(columns), i32(rows), glyph_mode,
+        i32(crop_x), i32(crop_y), i32(crop_w), i32(crop_h));
+    if out == "" {
+        return Err<str8, str8>(last_error());
+    }
+    return Ok<str8, str8>(out);
 }
 
 /// @brief Render an image to a truecolor terminal string using the selected glyph mode.

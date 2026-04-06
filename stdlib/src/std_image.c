@@ -669,15 +669,17 @@ int64_t __mlang_std_image_probe_height(const char* path)
     return height;
 }
 
-char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
-                                         int32_t rows, int32_t glyph_mode)
+/* render_truecolor_impl: shared body for all public render entry points.
+ * crop_w > 0  → use explicit (crop_x0, crop_y0, crop_w, crop_h) instead of
+ *               auto-detecting content bounds.
+ * exact_rows  → if non-zero, use it as the output row count instead of
+ *               computing from the aspect ratio. */
+static char* render_truecolor_impl(const char* path, int32_t columns,
+                                    int32_t glyph_mode,
+                                    int64_t crop_x0, int64_t crop_y0,
+                                    int64_t crop_w,  int64_t crop_h,
+                                    int32_t exact_rows)
 {
-    if(columns <= 0 || rows <= 0)
-    {
-        set_error("std::image: columns and rows must be > 0");
-        return dup_cstr("");
-    }
-
     mlang_image_rgba_t img;
     if(!load_image_rgba(path, &img))
         return dup_cstr("");
@@ -693,12 +695,24 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     const int use_color_split = glyph_mode == 8 ? 1 : 0;
     const int use_sextant = glyph_mode == 9 ? 1 : 0;
     const int use_braille_color = glyph_mode == 10 ? 1 : 0;
-    int64_t src_x0 = 0;
-    int64_t src_y0 = 0;
-    int64_t src_w = img.width;
-    int64_t src_h = img.height;
-    compute_alpha_content_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
-    compute_background_crop_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
+    int64_t src_x0, src_y0, src_w, src_h;
+    if(crop_w > 0)
+    {
+        /* Explicit viewport crop — skip auto border detection */
+        src_x0 = clamp_i64(crop_x0, 0, img.width  - 1);
+        src_y0 = clamp_i64(crop_y0, 0, img.height - 1);
+        src_w  = clamp_i64(crop_w,  1, img.width  - src_x0);
+        src_h  = clamp_i64(crop_h,  1, img.height - src_y0);
+    }
+    else
+    {
+        src_x0 = 0;
+        src_y0 = 0;
+        src_w  = img.width;
+        src_h  = img.height;
+        compute_alpha_content_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
+        compute_background_crop_bounds(&img, &src_x0, &src_y0, &src_w, &src_h);
+    }
     const int64_t x_sub =
         (use_braille || use_braille_color || use_quadrants || use_edge_ascii ||
          use_line_art || use_color_split || use_sextant)
@@ -715,11 +729,11 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
                                                      ? 2
                                                      : 1)));
     const int64_t out_cols = columns;
-    int64_t out_rows =
-        div_round_i64(out_cols * src_h * x_sub, src_w * y_sub);
+    int64_t out_rows = exact_rows > 0
+        ? (int64_t)exact_rows
+        : div_round_i64(out_cols * src_h * x_sub, src_w * y_sub);
     if(out_rows < 1)
         out_rows = 1;
-    (void)rows;
     const int64_t sample_w = out_cols * x_sub;
     const int64_t sample_h = out_rows * y_sub;
     const int64_t fit_w = sample_w;
@@ -1376,4 +1390,37 @@ char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
     pos = append_text(out, estimate, pos, "\x1b[0m");
     free_image_rgba(&img);
     return out;
+}
+
+/* Public entry point — aspect-ratio-preserving, auto content-crop */
+char* __mlang_std_image_render_truecolor(const char* path, int32_t columns,
+                                         int32_t rows, int32_t glyph_mode)
+{
+    if(columns <= 0 || rows <= 0)
+    {
+        set_error("std::image: columns and rows must be > 0");
+        return dup_cstr("");
+    }
+    return render_truecolor_impl(path, columns, glyph_mode, 0, 0, 0, 0, 0);
+}
+
+/* Public entry point — exact output dimensions, explicit pixel crop region.
+ * crop_x, crop_y, crop_w, crop_h are in source image pixels.
+ * The crop region is scaled to fill exactly (columns × rows) terminal cells.
+ * Use this for scrollable viewport backgrounds. */
+char* __mlang_std_image_render_truecolor_crop(const char* path,
+                                               int32_t columns, int32_t rows,
+                                               int32_t glyph_mode,
+                                               int32_t crop_x, int32_t crop_y,
+                                               int32_t crop_w, int32_t crop_h)
+{
+    if(columns <= 0 || rows <= 0 || crop_w <= 0 || crop_h <= 0)
+    {
+        set_error("std::image: columns, rows and crop dimensions must be > 0");
+        return dup_cstr("");
+    }
+    return render_truecolor_impl(path, columns, glyph_mode,
+                                  (int64_t)crop_x, (int64_t)crop_y,
+                                  (int64_t)crop_w, (int64_t)crop_h,
+                                  rows);
 }
