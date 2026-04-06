@@ -128,7 +128,7 @@ fn main() -> i32 {
     }
 
     /* ── cached background ───────────────────────────────────────── */
-    var cached_bg: str8 = "";
+    var cached_bg: str8 = format!("");
     var cached_vw: i64  = -1;
     var cached_vh: i64  = -1;
     var cached_vx: i64  = -1;
@@ -170,7 +170,7 @@ fn main() -> i32 {
             if bg_valid == 1 {
                 free(cached_bg);
                 bg_valid = 0;
-                cached_bg = "";
+                cached_bg = format!("");
             }
             let cx: i64 = view_x * img_w / table_width;
             let cy: i64 = view_y * img_h / table_height;
@@ -208,7 +208,7 @@ fn main() -> i32 {
             let launch_hint: str8 = launch_charge > 0
                 ? format!(" {}charge:{}{}",
                           fg_rgb(255, 200, 40), launch_charge, reset())
-                : "                 ";
+                : format!("                 ");
             let part1: str8 = format!(
                 "{}{}{}METALLICA PINBALL{}  score:{}{}{}  lives:{}  {}  {}  [space]=launch{}  [r]=reset  [q]=quit\n{}{} table {}×{}  ball ({},{})  view ({},{})  A/D flippers{}\n",
                 cursor(cmd_home()), cursor(cmd_clear_screen()),
