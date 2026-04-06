@@ -657,9 +657,9 @@ if $run_unit_tests; then
   log_info "running unit tests"
   if [[ -n "$test_target" ]]; then
     if [[ "$color_logs" == "never" ]]; then
-      run_checked_command "mlang tests ($test_target)" env NO_COLOR=1 CLICOLOR=0 "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
+      run_checked_command "mlang tests ($test_target)" env NO_COLOR=1 CLICOLOR=0 ${asan_runtime_env[@]+"${asan_runtime_env[@]}"} MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
     else
-      run_checked_command "mlang tests ($test_target)" env "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
+      run_checked_command "mlang tests ($test_target)" env ${asan_runtime_env[@]+"${asan_runtime_env[@]}"} MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test "$test_target"
     fi
   else
     ctest_env=(
@@ -677,6 +677,17 @@ if $run_unit_tests; then
         MLANG_DEFAULT_OPT_LEVEL=0
         ASAN_OPTIONS="$ASAN_OPTIONS"
       )
+    else
+      # Explicitly clear flags so a stale cmake cache from a prior
+      # --asan run does not leak sanitizer symbols into the build.
+      ctest_env+=(
+        TEST_CMAKE_BUILD_TYPE=Release
+        TEST_C_FLAGS=""
+        TEST_CXX_FLAGS=""
+        TEST_EXE_LINKER_FLAGS=""
+        TEST_SHARED_LINKER_FLAGS=""
+        TEST_MODULE_LINKER_FLAGS=""
+      )
     fi
     # C++/ctest suite
     if [[ "$color_logs" == "never" ]]; then
@@ -686,9 +697,9 @@ if $run_unit_tests; then
     fi
     # MLang test suite (*.mla under tests/)
     if [[ "$color_logs" == "never" ]]; then
-      run_checked_command "mlang tests (tests)" env NO_COLOR=1 CLICOLOR=0 "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
+      run_checked_command "mlang tests (tests)" env NO_COLOR=1 CLICOLOR=0 ${asan_runtime_env[@]+"${asan_runtime_env[@]}"} MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
     else
-      run_checked_command "mlang tests (tests)" env "${asan_runtime_env[@]}" MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
+      run_checked_command "mlang tests (tests)" env ${asan_runtime_env[@]+"${asan_runtime_env[@]}"} MLANG_ARTIFACT_DIR="$artifacts_dir/cpp" PATH=".:${PATH}" "$build_dir/mlang" test tests
     fi
   fi
 fi
@@ -719,7 +730,7 @@ if $run_robot_tests; then
       PYTHONUNBUFFERED=1 \
       NO_COLOR=1 \
       CLICOLOR=0 \
-      "${asan_runtime_env[@]}" \
+      ${asan_runtime_env[@]+"${asan_runtime_env[@]}"} \
       ./tests/run_examples_robot.sh
   else
     run_checked_command "robot tests" env \
@@ -732,7 +743,7 @@ if $run_robot_tests; then
       MLANG_BIN="$PWD/$build_dir/mlang" \
       ROBOT_CONSOLE_COLORS=ansi \
       PYTHONUNBUFFERED=1 \
-      "${asan_runtime_env[@]}" \
+      ${asan_runtime_env[@]+"${asan_runtime_env[@]}"} \
       ./tests/run_examples_robot.sh
   fi
 fi
