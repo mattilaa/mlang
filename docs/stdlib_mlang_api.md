@@ -34,6 +34,7 @@ mod std::timer;
 mod std::fs;
 mod std::hash;
 mod std::gps;
+mod std::image;
 mod std::platform;
 mod std::strbuf;
 mod std::bytes;
@@ -77,6 +78,7 @@ The source-of-truth implementation files are:
 - `stdlib/std/strbuf.mla`
 - `stdlib/std/hash.mla`
 - `stdlib/std/gps.mla`
+- `stdlib/std/image.mla`
 - `stdlib/std/platform.mla`
 - `stdlib/std/bytes.mla`
 - `stdlib/std/serde.mla`
@@ -1591,3 +1593,188 @@ if windows!() {
     println!("posix path");
 }
 ```
+
+## std::image
+
+Module file: `stdlib/std/image.mla`
+
+Probing and terminal truecolor rendering for image files.  The backend
+uses the platform image decoder (CoreGraphics on macOS) and returns an
+error on unsupported platforms.  Rendered output is a self-contained
+`str8` of ANSI truecolor escape sequences ready to write directly to a
+terminal; each row is terminated with a newline and a SGR reset.
+
+### Types
+
+#### `ImageGlyphMode`
+
+Selects how source pixels are packed into terminal character cells.
+Higher modes subdivide each cell into more sub-pixels and require the
+terminal font to contain the corresponding Unicode glyphs.
+
+| Value | Name | Sub-pixels | Notes |
+|-------|------|-----------|-------|
+| `0` | `UpperHalfBlocks` | 1×2 | `▀` — one FG (top) + one BG (bottom) per cell; very wide terminal support |
+| `1` | `FullBlocks` | 1×1 | `█` — one sampled color per cell |
+| `2` | `UnicodeDensity` | 1×1 | density Unicode ramp with darkened BG tint |
+| `3` | `BrailleDots` | 2×4 | braille patterns U+2800–U+28FF; average color |
+| `4` | `QuadrantBlocks` | 2×2 | quadrant glyphs with per-group color split |
+| `5` | `AsciiRamp` | 1×1 | ASCII luminance ramp — broadest font compatibility |
+| `6` | `EdgeAscii` | 2×2 | ASCII glyphs selected by local edge direction |
+| `7` | `UnicodeLineArt` | 2×2 | Unicode box/line glyphs for structured images |
+| `8` | `ColorSplitBlocks` | 2×2 | direction-aware half-block split with separate FG/BG colors |
+| `9` | `SextantBlocks` | 2×3 | Unicode sextant blocks U+1FB00–U+1FB3B; 6 sub-pixels per cell |
+| `10` | `BrailleColor` | 2×4 | braille patterns with proper per-group FG/BG color averaging |
+
+```mla
+pub enum ImageGlyphMode : i32 {
+    UpperHalfBlocks = 0,
+    FullBlocks      = 1,
+    UnicodeDensity  = 2,
+    BrailleDots     = 3,
+    QuadrantBlocks  = 4,
+    AsciiRamp       = 5,
+    EdgeAscii       = 6,
+    UnicodeLineArt  = 7,
+    ColorSplitBlocks = 8,
+    SextantBlocks   = 9,
+    BrailleColor    = 10
+};
+```
+
+#### `ImageInfo`
+
+Basic image metadata returned by `probe`.
+
+```mla
+pub struct ImageInfo {
+    var width:  i64;
+    var height: i64;
+};
+```
+
+### API
+
+- `last_error() -> str8`
+  Return the last backend error string.  Useful when a call has already
+  returned an `Err` and you want to read the raw message separately.
+
+- `probe(path: str8) -> Result<ImageInfo, str8>`
+  Decode only the image header to retrieve dimensions.  Does not
+  load pixel data.  Returns `Err` with a description on failure.
+
+- `render_truecolor(path: str8, columns: i64, rows: i64) -> Result<str8, str8>`
+  Render `path` to a truecolor terminal string using
+  `ImageGlyphMode::UpperHalfBlocks`.  `columns` and `rows` are terminal
+  cell counts, not source image pixels.  Aspect ratio is preserved;
+  the image is letterboxed if the cell ratio does not match the source.
+
+- `render_truecolor_with_mode(path: str8, columns: i64, rows: i64, glyph_mode: ImageGlyphMode) -> Result<str8, str8>`
+  Same as `render_truecolor` but lets you choose the glyph packing mode.
+  Returns `Err("... columns and rows must be > 0")` when either dimension
+  is zero or negative.
+
+### Examples
+
+#### Minimal render
+
+```mla
+mod std::image;
+mod std::term;
+use std::image::ImageGlyphMode;
+use std::image::render_truecolor_with_mode;
+use std::term::stdout_size;
+
+fn main() -> i32 {
+    let term = stdout_size();
+    let result = render_truecolor_with_mode(
+        "photo.png",
+        term.cols - 2,
+        term.rows - 1,
+        ImageGlyphMode::UpperHalfBlocks
+    );
+    if result.is_err() {
+        println!("render failed: {}", result.unwrap_err());
+        return 1;
+    }
+    print!("{}", result.unwrap());
+    return 0;
+}
+```
+
+#### Probe dimensions before rendering
+
+```mla
+mod std::image;
+use std::image::ImageInfo;
+use std::image::probe;
+use std::image::render_truecolor_with_mode;
+use std::image::ImageGlyphMode;
+
+fn main() -> i32 {
+    let info_r = probe("fractal.png");
+    if info_r.is_err() {
+        println!("probe failed: {}", info_r.unwrap_err());
+        return 1;
+    }
+    let info: ImageInfo = info_r.unwrap();
+    println!("image is {}x{} px", info.width, info.height);
+
+    let rendered = render_truecolor_with_mode(
+        "fractal.png", 120, 40, ImageGlyphMode::BrailleColor
+    );
+    if rendered.is_err() {
+        println!("render failed: {}", rendered.unwrap_err());
+        return 1;
+    }
+    print!("{}", rendered.unwrap());
+    return 0;
+}
+```
+
+#### Choosing a mode at runtime
+
+```mla
+mod std::image;
+use std::image::ImageGlyphMode;
+use std::image::render_truecolor_with_mode;
+
+fn mode_from_arg(arg: str8) -> ImageGlyphMode {
+    if arg == "full"         { return ImageGlyphMode::FullBlocks; }
+    if arg == "density"      { return ImageGlyphMode::UnicodeDensity; }
+    if arg == "braille"      { return ImageGlyphMode::BrailleDots; }
+    if arg == "quadrant"     { return ImageGlyphMode::QuadrantBlocks; }
+    if arg == "ascii"        { return ImageGlyphMode::AsciiRamp; }
+    if arg == "edge"         { return ImageGlyphMode::EdgeAscii; }
+    if arg == "line"         { return ImageGlyphMode::UnicodeLineArt; }
+    if arg == "split"        { return ImageGlyphMode::ColorSplitBlocks; }
+    if arg == "sextant"      { return ImageGlyphMode::SextantBlocks; }
+    if arg == "braille_color" { return ImageGlyphMode::BrailleColor; }
+    return ImageGlyphMode::UpperHalfBlocks;
+}
+
+fn main() -> i32 {
+    let mode: ImageGlyphMode = mode_from_arg("sextant");
+    let r = render_truecolor_with_mode("image.png", 80, 24, mode);
+    if r.is_err() {
+        println!("error: {}", r.unwrap_err());
+        return 1;
+    }
+    print!("{}", r.unwrap());
+    return 0;
+}
+```
+
+### Notes
+
+- The output string includes a final `\033[0m` SGR reset so surrounding
+  terminal text is not affected by the last cell's color.
+- `columns` controls horizontal resolution directly; `rows` is a hint
+  for the aspect-ratio calculation.  The actual number of output rows
+  may differ slightly due to integer rounding.
+- `BrailleColor` and `SextantBlocks` produce the highest effective
+  resolution (8 and 6 sub-pixels per cell respectively) but require a
+  terminal font that contains the full Braille and Unicode 13 sextant
+  block ranges.
+- The macOS backend decodes PNG, JPEG, HEIC, and any format supported
+  by `ImageIO`.  On other platforms every call currently returns `Err`.

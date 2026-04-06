@@ -153,6 +153,7 @@ Use this section as a map into the existing documentation.
   - process execution
   - networking
   - threading and synchronization
+  - terminal truecolor image rendering (`std::image`)
   - `Vec`, `BitSet`, `span`, `sed`, and more
 
 ### Practical Examples
@@ -167,6 +168,7 @@ Relevant example files in the repository:
 - `examples/c_lib_file_io_demo.mla`
 - `examples/c_lib_text_parse_demo.mla`
 - `examples/platform_inline_asm_demo.mla`
+- `examples/image_truecolor_demo.mla`
 
 ## Design Direction
 
