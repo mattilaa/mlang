@@ -1,0 +1,148 @@
+/// \file image.mla
+/// \brief Image probing and terminal truecolor rendering helpers for MLang (std::image).
+///
+/// This module provides a small stdlib surface for:
+/// - probing image dimensions
+/// - converting images into terminal-friendly truecolor glyph output
+///
+/// The current backend is implemented for macOS using the platform image
+/// decoder. Unsupported platforms return an error at runtime.
+///
+/// ## Quick example
+/// ```mlang
+/// mod std::image;
+///
+/// use std::image::ImageGlyphMode;
+///
+/// fn main() -> i32 {
+///     let rendered = std::image::render_truecolor_with_mode(
+///         "avengers.png", 80, 40, ImageGlyphMode::UpperHalfBlocks
+///     );
+///     if rendered.is_err(): {
+///         println!("render failed: {}", rendered.unwrap_err());
+///         return 1;
+///     }
+///     print!("{}", rendered.unwrap());
+///     return 0;
+/// }
+/// ```
+
+extern pub fn __mlang_std_image_last_error() -> str8;
+extern pub fn __mlang_std_image_probe_width(path: str8) -> i64;
+extern pub fn __mlang_std_image_probe_height(path: str8) -> i64;
+extern pub fn __mlang_std_image_render_truecolor(path: str8, columns: i32,
+                                                 rows: i32, glyph_mode: i32)
+    -> str8;
+extern pub fn __mlang_std_image_render_truecolor_crop(path: str8, columns: i32,
+                                                      rows: i32, glyph_mode: i32,
+                                                      crop_x: i32, crop_y: i32,
+                                                      crop_w: i32, crop_h: i32)
+    -> str8;
+
+/// @brief Glyph packing mode used for terminal image rendering.
+pub enum ImageGlyphMode : i32 {
+    UpperHalfBlocks = 0,
+    FullBlocks = 1,
+    UnicodeDensity = 2,
+    BrailleDots = 3,
+    QuadrantBlocks = 4,
+    AsciiRamp = 5,
+    EdgeAscii = 6,
+    UnicodeLineArt = 7,
+    ColorSplitBlocks = 8,
+    SextantBlocks = 9,
+    BrailleColor = 10
+};
+
+/// @brief Basic image metadata returned by `probe`.
+pub struct ImageInfo {
+    var width: i64;
+    var height: i64;
+};
+
+/// @brief Return the last backend image error string.
+pub fn last_error() -> str8 {
+    return __mlang_std_image_last_error();
+}
+
+/// @brief Probe image dimensions without rendering it.
+pub fn probe(path: str8) -> Result<ImageInfo, str8> {
+    let width: i64 = __mlang_std_image_probe_width(path);
+    let height: i64 = __mlang_std_image_probe_height(path);
+    if width <= 0 || height <= 0 {
+        return Err<ImageInfo, str8>(last_error());
+    }
+    return Ok<ImageInfo, str8>(ImageInfo { width: width, height: height });
+}
+
+/// @brief Render an image to a truecolor terminal string using upper-half blocks.
+///
+/// `columns` and `rows` are terminal cell counts, not source image pixels.
+/// Aspect ratio is preserved and the image is letterboxed if needed.
+pub fn render_truecolor(path: str8, columns: i64, rows: i64)
+    -> Result<str8, str8> {
+    return render_truecolor_with_mode(path, columns, rows,
+                                      ImageGlyphMode::UpperHalfBlocks);
+}
+
+/// @brief Render a pixel-crop region of an image to an exact columns×rows terminal string.
+///
+/// Unlike `render_truecolor_with_mode`, this function:
+/// - Does not preserve aspect ratio — the crop is stretched to fill exactly
+///   `columns` × `rows` terminal cells.
+/// - Skips automatic border/transparency detection.
+/// - Is intended for scrollable viewport backgrounds where `crop_x/y/w/h`
+///   are updated each frame based on the current camera position.
+///
+/// `crop_x`, `crop_y`, `crop_w`, `crop_h` are in source image pixels.
+pub fn render_truecolor_crop(path: str8, columns: i64, rows: i64,
+                              glyph_mode: ImageGlyphMode,
+                              crop_x: i64, crop_y: i64,
+                              crop_w: i64, crop_h: i64)
+    -> Result<str8, str8> {
+    if columns <= 0 || rows <= 0 {
+        return Err<str8, str8>("std::image render_truecolor_crop: columns and rows must be > 0");
+    }
+    if crop_w <= 0 || crop_h <= 0 {
+        return Err<str8, str8>("std::image render_truecolor_crop: crop dimensions must be > 0");
+    }
+    let out: str8 = __mlang_std_image_render_truecolor_crop(
+        path, i32(columns), i32(rows), glyph_mode,
+        i32(crop_x), i32(crop_y), i32(crop_w), i32(crop_h));
+    if out == "" {
+        return Err<str8, str8>(last_error());
+    }
+    return Ok<str8, str8>(out);
+}
+
+/// @brief Render an image to a truecolor terminal string using the selected glyph mode.
+///
+/// `UpperHalfBlocks` uses a foreground color for the top pixel and a background
+/// color for the bottom pixel, giving two source rows per terminal row.
+/// `FullBlocks` renders one sampled color per cell using `█`.
+/// `UnicodeDensity` renders a truecolor foreground over a darkened background
+/// using a denser Unicode ramp.
+/// `BrailleDots` uses a 2x4 subcell braille pattern per terminal cell for
+/// higher geometric detail than block-only rendering.
+/// `QuadrantBlocks` uses a 2x2 quadrant glyph with separate foreground and
+/// background color clusters.
+/// `AsciiRamp` uses a terminal-safe ASCII luminance ramp for broad font
+/// compatibility.
+/// `EdgeAscii` chooses ASCII glyphs from local edge direction and contrast,
+/// which is useful for highly structured images such as fractals.
+/// `UnicodeLineArt` uses a denser Unicode contour set for structured images
+/// when the terminal font supports box and diagonal line glyphs well.
+pub fn render_truecolor_with_mode(path: str8, columns: i64, rows: i64,
+                                  glyph_mode: ImageGlyphMode)
+    -> Result<str8, str8> {
+    if columns <= 0 || rows <= 0 {
+        return Err<str8, str8>("std::image render_truecolor: columns and rows must be > 0");
+    }
+    let out: str8 = __mlang_std_image_render_truecolor(path, i32(columns),
+                                                       i32(rows),
+                                                       glyph_mode);
+    if out == "" {
+        return Err<str8, str8>(last_error());
+    }
+    return Ok<str8, str8>(out);
+}

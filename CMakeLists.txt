@@ -257,6 +257,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_bench.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_testing.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_exceptions.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_image.c
 )
 add_dependencies(mlang_std ParserTarget LexerTarget)
 target_include_directories(mlang_std PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -265,6 +266,16 @@ target_include_directories(mlang_std PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(mlang_std PROPERTIES OUTPUT_NAME "mlang_std")
 target_compile_definitions(mlang_std PRIVATE MLANG_VERSION="${PROJECT_VERSION}")
 target_link_libraries(mlang_std PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+if(APPLE)
+    find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+    find_library(COREGRAPHICS_FRAMEWORK CoreGraphics)
+    find_library(IMAGEIO_FRAMEWORK ImageIO)
+    target_link_libraries(mlang_std PUBLIC
+        ${COREFOUNDATION_FRAMEWORK}
+        ${COREGRAPHICS_FRAMEWORK}
+        ${IMAGEIO_FRAMEWORK}
+    )
+endif()
 
 # RapidJSON for std::json backend (header-only).
 include(FetchContent)

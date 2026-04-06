@@ -89,6 +89,12 @@ Currently provided:
 - `std/term.mla`: terminal capability + termios helpers
   (`stdin/stdout/stderr` tty detection, size, color level/truecolor, and
   stdin raw mode enable/restore, plus `supports_ansi()` convenience check).
+- `std/image.mla`: image probing and terminal image rendering helpers
+  (`probe`, `render_truecolor`, `render_truecolor_with_mode`) for converting
+  decoded images into truecolor terminal glyph output with a caller-selected
+  terminal cell resolution. Includes block, density, edge-aware ASCII,
+  Unicode line-art, ASCII ramp, quadrant, and braille-oriented glyph modes for
+  different detail levels and terminal compatibility tradeoffs.
 - `std/fs.mla`: filesystem helpers including current directory inspection and
   mutation (`cwd`, `parent_dir`, `mkdir_p`, `remove_tree`, `chdir`), file I/O,
   buffered line reading, recursive globbing, and whole-file text helpers.
