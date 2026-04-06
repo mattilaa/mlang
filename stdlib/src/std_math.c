@@ -153,6 +153,15 @@ double __mlang_std_math_clamp_f64(double x, double low, double high)
     return x;
 }
 
+int64_t __mlang_std_math_clamp_i64(int64_t x, int64_t low, int64_t high)
+{
+    if(x < low)
+        return low;
+    if(x > high)
+        return high;
+    return x;
+}
+
 int32_t __mlang_std_math_pow_i32(int32_t a, int32_t b)
 {
     int32_t result = 1;

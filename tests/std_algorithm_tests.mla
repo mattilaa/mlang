@@ -35,6 +35,7 @@ use std::algorithm::ranges::remove_i64;
 use std::algorithm::ranges::take_i64;
 use std::algorithm::ranges::unique_i64;
 use std::algorithm::ranges::unique_stable_i64;
+use std::algorithm::ranges::clamp_i64;
 use std::algorithm::rand::next_u64;
 use std::algorithm::rand::range_i64;
 use std::algorithm::rand::seed;
@@ -168,6 +169,27 @@ fn test_algorithm_ranges_find_count_contains_remove_take_drop() {
 
     let drop4: list<i64> = drop_i64(data, 4);
     verify(drop4.len() == 2 && drop4[0] == 8 && drop4[1] == 6);
+}
+
+#[test]
+fn test_algorithm_ranges_clamp() {
+    let data: list<i64> = [-5, 0, 3, 10, 15, 100];
+    let clamped: list<i64> = clamp_i64(data, 0, 10);
+    verify(clamped.len() == 6);
+    verify(clamped[0] == 0);
+    verify(clamped[1] == 0);
+    verify(clamped[2] == 3);
+    verify(clamped[3] == 10);
+    verify(clamped[4] == 10);
+    verify(clamped[5] == 10);
+
+    let empty: list<i64> = [];
+    let ce: list<i64> = clamp_i64(empty, 0, 5);
+    verify(ce.len() == 0);
+
+    let single: list<i64> = [42];
+    let cs: list<i64> = clamp_i64(single, 50, 100);
+    verify(cs.len() == 1 && cs[0] == 50);
 }
 
 #[test]

@@ -124,4 +124,22 @@ pub fn unique_stable_i64(data: &list<i64>) -> list<i64> {
     return out;
 }
 
+/// @brief Clamp every element to [low, high] and return the result list.
+/// @ingroup algorithm_ranges
+pub fn clamp_i64(data: &list<i64>, low: i64, high: i64) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = data.len();
+    for i in 0..n {
+        let v: i64 = data[i];
+        if v < low {
+            out.push(low);
+        } else if v > high {
+            out.push(high);
+        } else {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
 /// @}

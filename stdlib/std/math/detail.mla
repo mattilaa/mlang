@@ -30,6 +30,7 @@ extern fn __mlang_std_math_max_f64(a: f64, b: f64) -> f64;
 extern fn __mlang_std_math_clamp_i32(x: i32, low: i32, high: i32) -> i32;
 extern fn __mlang_std_math_clamp_f32(x: f32, low: f32, high: f32) -> f32;
 extern fn __mlang_std_math_clamp_f64(x: f64, low: f64, high: f64) -> f64;
+extern fn __mlang_std_math_clamp_i64(x: i64, low: i64, high: i64) -> i64;
 extern fn __mlang_std_math_pow_i32(a: i32, b: i32) -> i32;
 extern fn __mlang_std_math_pow_f32(a: f32, b: f32) -> f32;
 extern fn __mlang_std_math_pow_f64(a: f64, b: f64) -> f64;

@@ -216,6 +216,15 @@ pub fn clamp(x: f64, low: f64, high: f64) -> f64 {
     return __mlang_std_math_clamp_f64(x, low, high);
 }
 
+/// @brief Clamp a value to [low, high].
+/// @param x x value.
+/// @param low low value.
+/// @param high high value.
+/// @return Clamp a value to [low, high].
+pub fn clamp(x: i64, low: i64, high: i64) -> i64 {
+    return __mlang_std_math_clamp_i64(x, low, high);
+}
+
 /// @brief Power function (x^y).
 /// @param a a value.
 /// @param b b value.
