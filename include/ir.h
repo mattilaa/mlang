@@ -37,42 +37,102 @@ public:
     {
         return hasError;
     }
+    /// \brief Enable or disable test mode.
+    ///
+    /// When enabled, the compiler collects \c #[test] functions and generates
+    /// a synthetic \c main() that invokes them (see generateTestMain()).
+    ///
+    /// \see \ref test_sample.mla — unit test example
+    /// \see \ref mlang_attributes.mla — \c #[test] combined with \c #[derive(Debug)]
+    /// \see \ref testing_mock_example.mla — mock-based testing with \c std::testing
     void setTestMode(bool enabled)
     {
         testMode = enabled;
     }
+
+    /// \brief Control whether \c #[test] functions are compiled.
+    ///
+    /// When set to \c false (via \c --no-tests), test-attributed functions are
+    /// excluded from code generation entirely.  Only meaningful when
+    /// \c testMode is \c false; in test mode tests are always included.
     void setIncludeTests(bool enabled)
     {
         includeTests = enabled;
     }
+
+    /// \brief Enable benchmark mode.
+    ///
+    /// When enabled the compiler generates a benchmark harness
+    /// (see generateBenchmarkMain()) instead of the regular test harness.
+    ///
+    /// \see \ref bench_stdlib.mla — benchmark example
     void setBenchmarkMode(bool enabled)
     {
         benchmarkMode = enabled;
     }
+
+    /// \brief Set the number of timed iterations for benchmarks.
+    /// \param value  Positive iteration count (clamped to 1 minimum).
     void setBenchmarkIterations(int value)
     {
         benchmarkIterations = value > 0 ? value : 100000;
     }
+
+    /// \brief Set the number of warm-up iterations before benchmark timing.
+    /// \param value  Non-negative warm-up count (clamped to 0 minimum).
     void setBenchmarkWarmupIterations(int value)
     {
         benchmarkWarmupIterations = value >= 0 ? value : 10000;
     }
+
+    /// \brief Set the source file path used for deriving the default test
+    ///        suite name.
     void setSourceFile(const std::string& file)
     {
         sourceFileName = file;
     }
+
+    /// \brief Enable or disable the warning for plain \c if/else-if with
+    ///        colon syntax.
     void setWarnPlainColonIf(bool enabled)
     {
         warnPlainColonIf = enabled;
     }
+
+    /// \brief Enable or disable the warning for plain \c while with colon
+    ///        syntax.
     void setWarnPlainColonWhile(bool enabled)
     {
         warnPlainColonWhile = enabled;
     }
+
+    /// \brief Enable or disable the warning for \c Result.unwrap() usage.
     void setWarnResultUnwrap(bool enabled)
     {
         warnResultUnwrap = enabled;
     }
+
+    /// \brief Set a substring filter for test execution.
+    ///
+    /// When non-empty, only \c #[test] functions whose display name
+    /// (\c suite.case) or raw function name contains \p filter as a
+    /// substring will be included in the generated test harness.
+    ///
+    /// \param filter  Substring to match against test names.  An empty
+    ///                string disables filtering (all tests run).
+    ///
+    /// \par Example
+    /// \code
+    ///   mlang test tests/test_sample.mla --filter "addition"
+    /// \endcode
+    ///
+    /// \see \ref test_sample.mla — unit test example (good for trying \c --filter)
+    void setTestFilter(const std::string& filter)
+    {
+        testFilter = filter;
+    }
+
+    /// \brief Attach the module loader used for resolving \c mod imports.
     void setModuleLoader(ModuleLoader* loader)
     {
         moduleLoader = loader;
@@ -140,16 +200,21 @@ private:
     std::set<std::string> debugStructs;
     bool hasError;
     bool debugEnabled;
-    bool testMode = false;
-    bool benchmarkMode = false;
-    int benchmarkIterations = 100000;
-    int benchmarkWarmupIterations = 10000;
-    bool includeTests = true;
+    bool testMode = false;             ///< Compile and run \c #[test] functions.
+    bool benchmarkMode = false;        ///< Generate benchmark harness instead of test harness.
+    int benchmarkIterations = 100000;  ///< Number of timed benchmark iterations.
+    int benchmarkWarmupIterations = 10000; ///< Number of warm-up iterations before timing.
+    bool includeTests = true;          ///< Whether to compile \c #[test] functions at all.
     int unsafeDepth = 0;
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
-    std::string sourceFileName;
+    std::string sourceFileName;        ///< Source file path for default suite name derivation.
+    /// \brief Substring filter for selecting individual tests.
+    ///
+    /// Matched against both the display name (\c suite.case) and the raw
+    /// function name.  Empty means no filtering (all tests run).
+    std::string testFilter;
 
     // Visibility tracking for functions
     // Maps function signature key -> (isPublic, sourceModule)
@@ -271,7 +336,30 @@ private:
     std::string
     getOrCreateMonomorphizedStruct(const std::string& genericName,
                                    const std::vector<TypeNode*>& typeArgs);
+    /// \brief Generate a synthetic \c main() that runs every collected
+    ///        \c #[test] function and reports results.
+    ///
+    /// Tests are reported as \c suite.case where the suite name is derived
+    /// from the source file and the case name from the function name.
+    /// When \c testFilter is non-empty, only tests whose display name or
+    /// raw function name contains the filter substring are emitted.
+    ///
+    /// \param tests  The list of \c #[test]-attributed functions to run.
+    ///
+    /// \see \ref test_sample.mla — unit test example
+    /// \see \ref mlang_attributes.mla — \c #[test] with \c #[derive(Debug)]
+    /// \see \ref testing_mock_example.mla — mock-based testing
     void generateTestMain(const std::vector<FunctionDefNode*>& tests);
+
+    /// \brief Generate a synthetic \c main() that benchmarks every collected
+    ///        \c #[test] function.
+    ///
+    /// Each function is first warmed up for \c benchmarkWarmupIterations
+    /// iterations, then timed over \c benchmarkIterations iterations.
+    ///
+    /// \param tests  The list of \c #[test]-attributed functions to benchmark.
+    ///
+    /// \see \ref bench_stdlib.mla — benchmark example
     void generateBenchmarkMain(const std::vector<FunctionDefNode*>& tests);
     void buildTypeAliasTable(ProgramNode* program);
     void resolveTypeAliasesInProgram(ProgramNode* program);

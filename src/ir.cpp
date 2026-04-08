@@ -1031,6 +1031,13 @@ static std::string displayTypeName(TypeNode* type)
     return "unknown";
 }
 
+/// \brief Normalize a module path into a dotted test suite name.
+///
+/// Replaces path separators, colons, hyphens, and spaces with dots,
+/// collapses consecutive dots, and strips leading/trailing dots.
+/// Returns \c "Main" for empty input.
+///
+/// \see \ref test_sample.mla — suite name derived from filename stem
 static std::string normalizeTestSuiteName(std::string name)
 {
     if(name.empty())
@@ -1063,6 +1070,13 @@ static bool isBitFieldTypeNode(TypeNode* type)
     return false;
 }
 
+/// \brief Derive a default test suite name from the source file path.
+///
+/// Extracts the filename stem and passes it through
+/// normalizeTestSuiteName().  Returns \c "Main" for the special
+/// \c __mlang_test_root file or when the path is empty.
+///
+/// \see \ref test_sample.mla — produces suite name \c "test_sample"
 static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
 {
     if(sourceFileName.empty())
@@ -1075,6 +1089,12 @@ static std::string defaultSuiteFromSourceFile(const std::string& sourceFileName)
     return normalizeTestSuiteName(stem);
 }
 
+/// \brief Convert a raw test function name into a human-readable case name.
+///
+/// Strips a leading \c test_ prefix (if present) and replaces underscores
+/// with spaces.  For example, \c test_result_ok becomes \c "result ok".
+///
+/// \see \ref test_sample.mla — contains \c test_addition and \c test_result_ok
 static std::string humanizeTestCaseName(std::string name)
 {
     if(name.rfind("test_", 0) == 0)
@@ -5606,18 +5626,23 @@ void CodeGenerator::generateTestMain(const std::vector<FunctionDefNode*>& tests)
         if(!callee)
             continue;
 
-        llvm::Value* totalCur =
-            builder.CreateLoad(i32Type, totalTests, "tests.cur");
-        llvm::Value* totalNext = builder.CreateAdd(
-            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
-        builder.CreateStore(totalNext, totalTests);
-
         std::string suiteName =
             !testFn->sourceModule.empty()
                 ? normalizeTestSuiteName(testFn->sourceModule)
                 : defaultSuite;
         std::string displayName =
             suiteName + "." + humanizeTestCaseName(testFn->name);
+
+        if(!testFilter.empty() &&
+           displayName.find(testFilter) == std::string::npos &&
+           testFn->name.find(testFilter) == std::string::npos)
+            continue;
+
+        llvm::Value* totalCur =
+            builder.CreateLoad(i32Type, totalTests, "tests.cur");
+        llvm::Value* totalNext = builder.CreateAdd(
+            totalCur, llvm::ConstantInt::get(i32Type, 1), "tests.next");
+        builder.CreateStore(totalNext, totalTests);
         llvm::Value* testName = make_cstr(displayName, "test.name");
         llvm::Value* testIndex = totalNext;
         builder.CreateCall(setCurrentTestFunc,

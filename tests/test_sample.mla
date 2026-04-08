@@ -1,3 +1,13 @@
+/// \file test_sample.mla
+/// \brief Unit test example for \c mlang \c test.
+///
+/// Demonstrates basic \c #[test] functions using \c std::testing::verify.
+/// Run with:
+/// \code
+///   mlang test tests/test_sample.mla -L ~/.local/lib -lmlang_std
+///   mlang test tests/test_sample.mla --filter "addition" -L ~/.local/lib -lmlang_std
+/// \endcode
+
 mod std::testing;
 
 use std::testing::verify;

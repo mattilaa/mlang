@@ -1,3 +1,13 @@
+/// \file bench_stdlib.mla
+/// \brief Benchmark example for \c mlang \c bench.
+///
+/// Demonstrates \c #[test] functions executed as benchmarks with timed
+/// iteration loops.  Run with:
+/// \code
+///   mlang bench tests/bench_stdlib.mla -L ~/.local/lib -lmlang_std
+///   mlang bench tests/bench_stdlib.mla --bench-iters 50000 -L ~/.local/lib -lmlang_std
+/// \endcode
+
 mod std::testing;
 mod std::unordered;
 mod std::bench;

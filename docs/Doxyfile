@@ -5,10 +5,12 @@ GENERATE_LATEX = NO
 QUIET = YES
 WARN_IF_UNDOCUMENTED = NO
 WARN_IF_DOC_ERROR = NO
-INPUT = docs/stdlib_mlang_api.md docs/language_attributes.md docs/language_syntax.md docs/quick_guide.md docs/package_manager.md docs/README.md stdlib/std stdlib/src tools/mlang-frontend-mla/main.mla tools/mlang-pkg-mla/main.mla
+INPUT = docs/stdlib_mlang_api.md docs/language_attributes.md docs/language_syntax.md docs/quick_guide.md docs/package_manager.md docs/README.md stdlib/std stdlib/src tools/mlang-frontend-mla/main.mla tools/mlang-pkg-mla/main.mla tests/test_sample.mla tests/bench_stdlib.mla examples/mlang_attributes.mla examples/testing_mock_example.mla
 FILE_PATTERNS = *.h *.c *.md *.mla
 EXTENSION_MAPPING = mla=C++
 RECURSIVE = YES
 USE_MDFILE_AS_MAINPAGE = docs/README.md
 EXTRACT_ALL = YES
 EXCLUDE_SYMBOLS = __mlang_*
+EXAMPLE_PATH = tests examples
+EXAMPLE_PATTERNS = *.mla

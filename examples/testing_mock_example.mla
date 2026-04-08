@@ -1,3 +1,12 @@
+/// \file testing_mock_example.mla
+/// \brief Mock-based testing example using \c std::testing.
+///
+/// Demonstrates the mock API (\c mock_new, \c mock_expect_call,
+/// \c mock_verify) for verifying call expectations.  Run with:
+/// \code
+///   mlang examples/testing_mock_example.mla -L ~/.local/lib -lmlang_std
+/// \endcode
+
 mod std::testing;
 
 use std::testing::*;

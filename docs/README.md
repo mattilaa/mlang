@@ -138,8 +138,12 @@ Use this section as a map into the existing documentation.
   Covers:
   - `#[test]`
   - `mlang bench`
+  - `--filter` for running individual tests
   - `#[derive(Debug)]`
   - `#[inline]`, `#[inline(always)]`, `#[inline(never)]`
+- Example files:
+  - [`tests/test_sample.mla`](../../../tests/test_sample.mla) — unit test example
+  - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
 
 ### Standard Library
 
@@ -159,16 +163,20 @@ Use this section as a map into the existing documentation.
 ### Practical Examples
 
 Relevant example files in the repository:
-- `examples/std_span_demo.mla`
-- `examples/exceptions_try_catch_demo.mla`
-- `examples/switch_demo.mla`
-- `examples/enum_string_hex_demo.mla`
-- `examples/pipe_operator_demo.mla`
-- `examples/bit_packed_struct_demo.mla`
-- `examples/c_lib_file_io_demo.mla`
-- `examples/c_lib_text_parse_demo.mla`
-- `examples/platform_inline_asm_demo.mla`
-- `examples/image_truecolor_demo.mla`
+- [`examples/std_span_demo.mla`](../../../examples/std_span_demo.mla)
+- [`examples/exceptions_try_catch_demo.mla`](../../../examples/exceptions_try_catch_demo.mla)
+- [`examples/switch_demo.mla`](../../../examples/switch_demo.mla)
+- [`examples/enum_string_hex_demo.mla`](../../../examples/enum_string_hex_demo.mla)
+- [`examples/pipe_operator_demo.mla`](../../../examples/pipe_operator_demo.mla)
+- [`examples/bit_packed_struct_demo.mla`](../../../examples/bit_packed_struct_demo.mla)
+- [`examples/c_lib_file_io_demo.mla`](../../../examples/c_lib_file_io_demo.mla)
+- [`examples/c_lib_text_parse_demo.mla`](../../../examples/c_lib_text_parse_demo.mla)
+- [`examples/platform_inline_asm_demo.mla`](../../../examples/platform_inline_asm_demo.mla)
+- [`examples/image_truecolor_demo.mla`](../../../examples/image_truecolor_demo.mla)
+- [`tests/test_sample.mla`](../../../tests/test_sample.mla) — unit test example
+- [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
+- [`examples/mlang_attributes.mla`](../../../examples/mlang_attributes.mla) — `#[test]` and `#[derive(Debug)]` in one file
+- [`examples/testing_mock_example.mla`](../../../examples/testing_mock_example.mla) — mock-based testing with `std::testing`
 
 ## Design Direction
 

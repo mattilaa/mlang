@@ -67,6 +67,7 @@ void printUsage(const char* programName)
               << "  -Oz           Optimize for minimum size\n"
               << "  --no-tests    Skip compiling #[test] functions\n"
               << "  --tests       Compile and run #[test] for input path/file\n"
+              << "  --filter <name> Run only tests matching <name> (substring match)\n"
               << "  -Wno-colon-if Suppress warning for plain if/else-if with ':'\n"
               << "  -Wno-colon-while Suppress warning for plain while with ':'\n"
               << "  -Wno-unwrap Suppress warning for Result.unwrap() usage\n"
@@ -98,6 +99,7 @@ void printUsage(const char* programName)
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
+              << "  " << programName << " test [path] --filter <name>\n"
               << "  " << programName << " run tests\n"
               << "\nBenchmarking:\n"
               << "  " << programName << " bench [path]\n"
@@ -1238,13 +1240,42 @@ static int run_command_with_dated_output(const std::string& cmd)
     return decode_system_exit_code(rc);
 }
 
+/// \brief Scan a directory for test (or benchmark) files and execute each as
+///        a separate subprocess.
+///
+/// Discovers \c *_tests.mla / \c test_*.mla files (or \c bench_*.mla in
+/// benchmark mode), invokes \c mlang on each one, and reports per-suite
+/// pass/fail results.  The optional \p testFilterStr is forwarded to each
+/// subprocess via \c --filter so that individual tests can be selected even
+/// in directory mode.
+///
+/// \param argv0           Path to the mlang binary (for re-invocation).
+/// \param inPath          Directory to scan for test files.
+/// \param benchmarkMode   If \c true, scan for benchmark files instead.
+/// \param runTests        If \c false, compile but do not execute.
+/// \param benchIterations Number of timed benchmark iterations.
+/// \param benchWarmup     Number of warm-up iterations before timing.
+/// \param warnPlainColonIf  Whether to warn on plain colon-if syntax.
+/// \param warnPlainColonWhile Whether to warn on plain colon-while syntax.
+/// \param linkArgs        Additional linker arguments forwarded to each run.
+/// \param targetArch      Optional target architecture override.
+/// \param testFilterStr   Substring filter for individual test selection.
+///
+/// \return Exit code: 0 on success, 1 if any suite failed, or \c std::nullopt
+///         on internal error.
+///
+/// \see \ref test_sample.mla — unit test example
+/// \see \ref bench_stdlib.mla — benchmark example
+/// \see \ref mlang_attributes.mla — \c #[test] with \c #[derive(Debug)]
+/// \see \ref testing_mock_example.mla — mock-based testing
 static std::optional<int>
 run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
                         bool benchmarkMode, bool runTests, int benchIterations,
                         int benchWarmup, bool warnPlainColonIf,
                         bool warnPlainColonWhile,
                         const std::vector<std::string>& linkArgs,
-                        const std::string& targetArch)
+                        const std::string& targetArch,
+                        const std::string& testFilterStr)
 {
     std::error_code tec;
     std::vector<std::filesystem::path> files;
@@ -1318,6 +1349,8 @@ run_test_directory_mode(const char* argv0, const std::filesystem::path& inPath,
             if(!warnPlainColonWhile)
                 cmd += " -Wno-colon-while";
         }
+        if(!testFilterStr.empty())
+            cmd += " --filter " + shell_quote(testFilterStr);
         for(const auto& la : linkArgs)
             cmd += " " + shell_quote(la);
         if(!targetArch.empty())
@@ -1388,6 +1421,7 @@ int main(int argc, char** argv)
     bool includeTests = true;
     int benchIterations = 100000;
     int benchWarmup = 10000;
+    std::string testFilterStr;
     int argStart = 1;
 
     if(std::string(argv[1]) == "test")
@@ -1547,6 +1581,10 @@ int main(int argc, char** argv)
         {
             runTests = false;
         }
+        else if(arg == "--filter" && i + 1 < argc && testMode)
+        {
+            testFilterStr = argv[++i];
+        }
         else if(arg == "--bench-iters" && i + 1 < argc && testMode)
         {
             try
@@ -1646,7 +1684,7 @@ int main(int argc, char** argv)
                                               runTests, benchIterations,
                                               benchWarmup, warnPlainColonIf,
                                               warnPlainColonWhile, linkArgs,
-                                              targetArch);
+                                              targetArch, testFilterStr);
             if(rc.has_value())
                 return *rc;
             return 1;
@@ -1845,6 +1883,8 @@ int main(int argc, char** argv)
         generator.setModuleLoader(moduleLoader.get());
         if(!testMode)
             generator.setIncludeTests(includeTests);
+        if(!testFilterStr.empty())
+            generator.setTestFilter(testFilterStr);
 
         // Generate LLVM IR
         if(auto* program = dynamic_cast<ProgramNode*>(programRoot))

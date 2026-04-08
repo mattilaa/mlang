@@ -43,9 +43,61 @@ Rules:
 - In test mode, `main` is not allowed (tests get a generated runner entrypoint).
 - In benchmark mode, the same `#[test]` functions are executed in timed loops.
 
-Benchmark runner flags:
-- `--bench-iters N` measured iterations per benchmark
-- `--bench-warmup N` warmup iterations before timing
+### Running tests
+
+Run all tests in a single file:
+
+```sh
+mlang test tests/test_sample.mla -L ~/.local/lib -lmlang_std
+```
+
+Run all test suites in a directory:
+
+```sh
+mlang test tests/ -L ~/.local/lib -lmlang_std
+```
+
+### Filtering individual tests
+
+Use `--filter <name>` to run only tests whose display name (`suite.case`) or
+raw function name contains the given substring:
+
+```sh
+# Run only the "addition" test
+mlang test tests/test_sample.mla --filter "addition"
+
+# Filter by the raw function name
+mlang test tests/test_sample.mla --filter "test_result_ok"
+
+# Filter by the full display name (suite.case)
+mlang test tests/test_sample.mla --filter "test_sample.result ok"
+```
+
+The filter is also forwarded in directory mode, so it works across all suites:
+
+```sh
+mlang test tests/ --filter "addition" -L ~/.local/lib -lmlang_std
+```
+
+### Test naming
+
+Each test is reported as `suite.case`:
+- **Suite name**: derived from the source filename stem (e.g.
+  `std_math_tests.mla` → `std_math_tests`). Path separators, colons, hyphens,
+  and spaces are replaced with dots.
+- **Case name**: derived from the function name. A leading `test_` prefix is
+  stripped and underscores are replaced with spaces (e.g. `test_result_ok` →
+  `result ok`).
+
+### Other test flags
+
+- `--no-run` compile tests but do not execute them.
+- `--no-tests` (outside test mode) skip compiling `#[test]` functions entirely.
+
+### Benchmark runner flags
+
+- `--bench-iters N` measured iterations per benchmark (default: 100 000).
+- `--bench-warmup N` warmup iterations before timing (default: 10 000).
 
 Example:
 
@@ -73,6 +125,10 @@ fn bench_counter() -> i32 {
     return 0;
 }
 ```
+
+See:
+- [`tests/test_sample.mla`](../../../tests/test_sample.mla) — basic unit test example
+- [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
 
 ## `#[inline]`
 
