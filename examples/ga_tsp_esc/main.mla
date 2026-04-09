@@ -318,43 +318,15 @@ fn build_path_vh(w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64
     return path;
 }
 
-fn overlap_score(existing: &list<i64>, candidate: &list<i64>) -> i64 {
-    var score: i64 = 0;
-    let n: i64 = candidate.len();
-    for i in 0..n {
-        if has_value(existing, candidate[i]) {
-            score += 2;
-        }
-        if i > 0 && candidate[i] == candidate[i - 1] {
-            score += 1;
-        }
+fn draw_segment(w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
+    // Build each route segment independently, then append it in route_to_points().
+    // This avoids repeatedly replacing the growing point list while rendering.
+    let dx: i64 = iabs(x1 - x0);
+    let dy: i64 = iabs(y1 - y0);
+    if dx >= dy {
+        return build_path_hv(w, h, x0, y0, x1, y1);
     }
-    return score;
-}
-
-fn draw_segment(points: &list<i64>, w: i64, h: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> list<i64> {
-
-    let hv: list<i64> = build_path_hv(w, h, x0, y0, x1, y1);
-    let vh: list<i64> = build_path_vh(w, h, x0, y0, x1, y1);
-    let use_hv: bool = overlap_score(points, hv) <= overlap_score(points, vh);
-
-    var out: list<i64> = [];
-    let pn: i64 = points.len();
-    for i in 0..pn {
-        out.push(points[i]);
-    }
-    if use_hv {
-        let cn_hv: i64 = hv.len();
-        for i in 0..cn_hv {
-            out.push(hv[i]);
-        }
-    } else {
-        let cn_vh: i64 = vh.len();
-        for i in 0..cn_vh {
-            out.push(vh[i]);
-        }
-    }
-    return out;
+    return build_path_vh(w, h, x0, y0, x1, y1);
 }
 
 fn route_to_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<i64>) -> list<i64> {
@@ -370,7 +342,11 @@ fn route_to_points(w: i64, h: i64, route: &list<i64>, xs: &list<i64>, ys: &list<
         if a < 0 || a >= city_n || b < 0 || b >= city_n {
             continue;
         }
-        out = draw_segment(out, w, h, xs[a], ys[a], xs[b], ys[b]);
+        let seg: list<i64> = draw_segment(w, h, xs[a], ys[a], xs[b], ys[b]);
+        let sn: i64 = seg.len();
+        for j in 0..sn {
+            out.push(seg[j]);
+        }
     }
     return out;
 }
@@ -660,7 +636,7 @@ fn main() -> i32 {
         walker_step += 1;
 
         let elapsed_ms: i64 = now_ms() - start_ms;
-        let route_preview_n: i64 = cols >= 130 ? 8 : (cols >= 110 ? 6 : (cols >= 90 ? 5 : 4));
+        let route_preview_n: i64 = cols >= 130 ? 8 : cols >= 110 ? 6 : cols >= 90 ? 5 : 4;
 
         let builder: i64 = builder_new(65536);
         bput(builder, cursor(cmd_clear_screen()));
