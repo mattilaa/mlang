@@ -22,6 +22,9 @@ Currently provided:
   Use `expect_*` when a test should continue after a failed check (non-fatal),
   and `verify_*` when a failed check should abort the test immediately (fatal).
 - `std/thread.mla`: thread/concurrency helpers (join/mutex/atomic wrappers).
+- `std/concurrent.mla`: higher-level concurrency coordination helpers
+  (`WaitGroup` for cross-thread joining and `OrderedGate` for deterministic
+  turn-based task ordering).
 - `std/io.mla`: stdin/stdout helpers with synchronization support
   (`stdin()`, `stdout()`, `lock(stdout())`, `write_sync`, `writeln_sync`)
   and scope-exit destructor for `StdoutLock`.

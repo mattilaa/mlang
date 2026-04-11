@@ -1,0 +1,296 @@
+/// \file concurrent.mla
+/// \brief Higher-level concurrency helpers built on std::sync + std::thread.
+/// \defgroup std_concurrent std::concurrent
+/// \brief Higher-level coordination primitives for multithreaded MLang code.
+///
+/// Provides:
+/// - `WaitGroup` for cross-thread join/wait coordination
+/// - `OrderedGate` for deterministic turn-based task ordering
+///
+/// Typical usage:
+/// ```mlang
+/// mod std::concurrent;
+/// mod std::thread;
+///
+/// use std::concurrent::OrderedGate;
+/// use std::concurrent::WaitGroup;
+/// use std::thread::join;
+///
+/// fn worker(turn: i64, gate: OrderedGate, wg: WaitGroup) -> i32 {
+///     let _ = gate.wait_for(turn);
+///     println!("task {} running", turn);
+///     let _ = gate.advance();
+///     let _ = wg.done();
+///     return 0;
+/// }
+/// ```
+///
+/// `WaitGroup` is useful when many worker threads must signal completion back
+/// to one coordinator thread. `OrderedGate` is useful when threads may start
+/// concurrently but must enter a critical execution phase in a deterministic
+/// logical order.
+
+mod std::sync;
+mod std::thread;
+
+use std::sync::Condvar;
+use std::sync::Mutex;
+use std::thread::atomic_add_value;
+use std::thread::atomic_free_handle;
+use std::thread::atomic_load_value;
+use std::thread::atomic_new;
+use std::thread::atomic_store_value;
+
+/// @brief Cooperative completion counter shared across threads.
+/// @ingroup std_concurrent
+///
+/// A `WaitGroup` starts with an integer task count. Worker threads call
+/// `done()` when finished, and a coordinator thread calls `wait()` to block
+/// until the count reaches zero.
+///
+/// This mirrors the common "join many tasks with one waiter" pattern without
+/// requiring the coordinator to join each worker before it can continue.
+pub struct WaitGroup {
+    var mutex_handle: i64;
+    var cond_handle: i64;
+    var count: Handle<Atomic64>;
+};
+
+/// @brief Deterministic turn gate for ordered thread progress.
+/// @ingroup std_concurrent
+///
+/// An `OrderedGate` maintains a current turn number. Threads call `wait_for()`
+/// with their assigned turn and block until it becomes active. The active
+/// thread then calls `advance()` or `set()` to release the next turn.
+///
+/// This is useful for demos, tests, or staged pipelines where concurrency is
+/// desired but externally visible ordering must remain stable.
+pub struct OrderedGate {
+    var mutex_handle: i64;
+    var cond_handle: i64;
+    var turn: Handle<Atomic64>;
+};
+
+impl WaitGroup {
+    /// @brief Create a wait group with an initial task count.
+    /// @ingroup std_concurrent
+    /// @param initial Initial number of unfinished tasks. Must be >= 0.
+    /// @return `Ok(WaitGroup)` on success, otherwise an error string.
+    pub fn new(initial: i64) -> Result<WaitGroup, str8> {
+        if initial < 0 {
+            return Err<WaitGroup, str8>("std::concurrent::WaitGroup::new: initial must be >= 0");
+        }
+        let mr: Result<Mutex, str8> = Mutex::new();
+        if mr.is_err(): {
+            return Err<WaitGroup, str8>(mr.unwrap_err());
+        }
+        let cr: Result<Condvar, str8> = Condvar::new();
+        if cr.is_err(): {
+            let m0: Mutex = mr.unwrap();
+            m0.close();
+            return Err<WaitGroup, str8>(cr.unwrap_err());
+        }
+        let m1: Mutex = mr.unwrap();
+        let c1: Condvar = cr.unwrap();
+        return Ok<WaitGroup, str8>(WaitGroup {
+            mutex_handle: m1.handle,
+            cond_handle: c1.handle,
+            count: atomic_new(initial)
+        });
+    }
+
+    /// @brief Adjust the unfinished task count by `delta`.
+    /// @ingroup std_concurrent
+    /// @param delta Count adjustment. Negative values are allowed.
+    /// @return Updated count on success, or an error if the count would go negative.
+    ///
+    /// When the resulting count becomes zero, all waiters are notified.
+    pub fn add(self: WaitGroup, delta: i64) -> Result<i64, str8> {
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let lr: Result<i32, str8> = m.lock();
+        if lr.is_err(): {
+            return Err<i64, str8>(lr.unwrap_err());
+        }
+        let cur: i64 = atomic_load_value(self.count);
+        let next: i64 = cur + delta;
+        if next < 0 {
+            let _ = m.unlock();
+            return Err<i64, str8>("std::concurrent::WaitGroup::add: count would become negative");
+        }
+        let _ = atomic_store_value(self.count, next);
+        if next == 0 {
+            let nr: Result<i32, str8> = c.notify_all();
+            let ur: Result<i32, str8> = m.unlock();
+            if nr.is_err(): { return Err<i64, str8>(nr.unwrap_err()); }
+            if ur.is_err(): { return Err<i64, str8>(ur.unwrap_err()); }
+            return Ok<i64, str8>(0);
+        }
+        let ur2: Result<i32, str8> = m.unlock();
+        if ur2.is_err(): {
+            return Err<i64, str8>(ur2.unwrap_err());
+        }
+        return Ok<i64, str8>(next);
+    }
+
+    /// @brief Mark one task complete.
+    /// @ingroup std_concurrent
+    /// @return Updated count on success.
+    pub fn done(self: WaitGroup) -> Result<i64, str8> {
+        return self.add(-1);
+    }
+
+    /// @brief Block until the count reaches zero.
+    /// @ingroup std_concurrent
+    /// @return `Ok(0)` when all tasks are complete, otherwise an error string.
+    pub fn wait(self: WaitGroup) -> Result<i32, str8> {
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let lr: Result<i32, str8> = m.lock();
+        if lr.is_err(): {
+            return Err<i32, str8>(lr.unwrap_err());
+        }
+        while atomic_load_value(self.count) > 0 {
+            let wr: Result<i32, str8> = c.wait(m);
+            if wr.is_err(): {
+                let _ = m.unlock();
+                return Err<i32, str8>(wr.unwrap_err());
+            }
+        }
+        let ur: Result<i32, str8> = m.unlock();
+        if ur.is_err(): {
+            return Err<i32, str8>(ur.unwrap_err());
+        }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Return the current count.
+    /// @ingroup std_concurrent
+    /// @return Current unfinished task count.
+    pub fn count(self: WaitGroup) -> i64 {
+        return atomic_load_value(self.count);
+    }
+
+    /// @brief Free owned synchronization resources.
+    /// @ingroup std_concurrent
+    /// @return `0` on success, otherwise backend close error code.
+    ///
+    /// Call this after all participating threads are finished and no further
+    /// `WaitGroup` operations will occur.
+    pub fn close(self: WaitGroup) -> i32 {
+        atomic_free_handle(self.count);
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let rc1: i32 = c.close();
+        let rc2: i32 = m.close();
+        return rc1 != 0 ? rc1 : rc2;
+    }
+}
+
+impl OrderedGate {
+    /// @brief Create a gate whose first runnable turn is `start_turn`.
+    /// @ingroup std_concurrent
+    /// @param start_turn Initial active turn number.
+    /// @return `Ok(OrderedGate)` on success, otherwise an error string.
+    pub fn new(start_turn: i64) -> Result<OrderedGate, str8> {
+        let mr: Result<Mutex, str8> = Mutex::new();
+        if mr.is_err(): {
+            return Err<OrderedGate, str8>(mr.unwrap_err());
+        }
+        let cr: Result<Condvar, str8> = Condvar::new();
+        if cr.is_err(): {
+            let m0: Mutex = mr.unwrap();
+            m0.close();
+            return Err<OrderedGate, str8>(cr.unwrap_err());
+        }
+        let m1: Mutex = mr.unwrap();
+        let c1: Condvar = cr.unwrap();
+        return Ok<OrderedGate, str8>(OrderedGate {
+            mutex_handle: m1.handle,
+            cond_handle: c1.handle,
+            turn: atomic_new(start_turn)
+        });
+    }
+
+    /// @brief Wait until `turn` becomes the active turn.
+    /// @ingroup std_concurrent
+    /// @param turn Required logical turn number for the caller.
+    /// @return `Ok(0)` when the requested turn is active.
+    pub fn wait_for(self: OrderedGate, turn: i64) -> Result<i32, str8> {
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let lr: Result<i32, str8> = m.lock();
+        if lr.is_err(): {
+            return Err<i32, str8>(lr.unwrap_err());
+        }
+        while atomic_load_value(self.turn) != turn {
+            let wr: Result<i32, str8> = c.wait(m);
+            if wr.is_err(): {
+                let _ = m.unlock();
+                return Err<i32, str8>(wr.unwrap_err());
+            }
+        }
+        let ur: Result<i32, str8> = m.unlock();
+        if ur.is_err(): {
+            return Err<i32, str8>(ur.unwrap_err());
+        }
+        return Ok<i32, str8>(0);
+    }
+
+    /// @brief Set the current turn to `turn` and wake all waiters.
+    /// @ingroup std_concurrent
+    /// @param turn New active turn number.
+    /// @return The new active turn on success.
+    pub fn set(self: OrderedGate, turn: i64) -> Result<i64, str8> {
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let lr: Result<i32, str8> = m.lock();
+        if lr.is_err(): {
+            return Err<i64, str8>(lr.unwrap_err());
+        }
+        let _ = atomic_store_value(self.turn, turn);
+        let nr: Result<i32, str8> = c.notify_all();
+        let ur: Result<i32, str8> = m.unlock();
+        if nr.is_err(): { return Err<i64, str8>(nr.unwrap_err()); }
+        if ur.is_err(): { return Err<i64, str8>(ur.unwrap_err()); }
+        return Ok<i64, str8>(turn);
+    }
+
+    /// @brief Advance to the next turn and wake all waiters.
+    /// @ingroup std_concurrent
+    /// @return The newly active turn on success.
+    pub fn advance(self: OrderedGate) -> Result<i64, str8> {
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let lr: Result<i32, str8> = m.lock();
+        if lr.is_err(): {
+            return Err<i64, str8>(lr.unwrap_err());
+        }
+        let prev: i64 = atomic_add_value(self.turn, 1);
+        let next: i64 = prev + 1;
+        let nr: Result<i32, str8> = c.notify_all();
+        let ur: Result<i32, str8> = m.unlock();
+        if nr.is_err(): { return Err<i64, str8>(nr.unwrap_err()); }
+        if ur.is_err(): { return Err<i64, str8>(ur.unwrap_err()); }
+        return Ok<i64, str8>(next);
+    }
+
+    /// @brief Read the currently active turn.
+    /// @ingroup std_concurrent
+    /// @return Current turn number.
+    pub fn current(self: OrderedGate) -> i64 {
+        return atomic_load_value(self.turn);
+    }
+
+    /// @brief Free owned synchronization resources.
+    /// @ingroup std_concurrent
+    /// @return `0` on success, otherwise backend close error code.
+    pub fn close(self: OrderedGate) -> i32 {
+        atomic_free_handle(self.turn);
+        let c: Condvar = Condvar { handle: self.cond_handle };
+        let m: Mutex = Mutex { handle: self.mutex_handle };
+        let rc1: i32 = c.close();
+        let rc2: i32 = m.close();
+        return rc1 != 0 ? rc1 : rc2;
+    }
+}

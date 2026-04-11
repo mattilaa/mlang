@@ -1,0 +1,146 @@
+mod std::concurrent;
+mod std::thread;
+mod std::time;
+
+use std::concurrent::OrderedGate;
+use std::concurrent::WaitGroup;
+use std::thread::join;
+use std::time::sleep_ms;
+
+fn gate_mutex_slot(value: i64, write: i32) -> i64 {
+    static var slot: i64 = 0;
+    if write != 0 {
+        slot = value;
+    }
+    return slot;
+}
+
+fn gate_cond_slot(value: i64, write: i32) -> i64 {
+    static var slot: i64 = 0;
+    if write != 0 {
+        slot = value;
+    }
+    return slot;
+}
+
+fn gate_turn_slot(value: i64, write: i32) -> i64 {
+    static var slot: i64 = 0;
+    if write != 0 {
+        slot = value;
+    }
+    return slot;
+}
+
+fn wait_mutex_slot(value: i64, write: i32) -> i64 {
+    static var slot: i64 = 0;
+    if write != 0 {
+        slot = value;
+    }
+    return slot;
+}
+
+fn wait_cond_slot(value: i64, write: i32) -> i64 {
+    static var slot: i64 = 0;
+    if write != 0 {
+        slot = value;
+    }
+    return slot;
+}
+
+fn wait_count_slot(value: i64, write: i32) -> i64 {
+    static var slot: i64 = 0;
+    if write != 0 {
+        slot = value;
+    }
+    return slot;
+}
+
+fn set_demo_gate(mutex_handle: i64, cond_handle: i64, turn: i64) -> void {
+    let _ = gate_mutex_slot(mutex_handle, 1);
+    let _ = gate_cond_slot(cond_handle, 1);
+    let _ = gate_turn_slot(turn, 1);
+}
+
+fn demo_gate() -> OrderedGate {
+    let turn: Handle<Atomic64> = gate_turn_slot(0, 0);
+    return OrderedGate {
+        mutex_handle: gate_mutex_slot(0, 0),
+        cond_handle: gate_cond_slot(0, 0),
+        turn: turn
+    };
+}
+
+fn set_demo_wait_group(mutex_handle: i64, cond_handle: i64, count: i64) -> void {
+    let _ = wait_mutex_slot(mutex_handle, 1);
+    let _ = wait_cond_slot(cond_handle, 1);
+    let _ = wait_count_slot(count, 1);
+}
+
+fn demo_wait_group() -> WaitGroup {
+    let count: Handle<Atomic64> = wait_count_slot(0, 0);
+    return WaitGroup {
+        mutex_handle: wait_mutex_slot(0, 0),
+        cond_handle: wait_cond_slot(0, 0),
+        count: count
+    };
+}
+
+fn ordered_worker(turn: i64, delay_ms: i64) -> i32 {
+    println!("worker {} spawned", turn);
+    sleep_ms(delay_ms);
+    let wr: Result<i32, str8> = demo_gate().wait_for(turn);
+    if wr.is_err(): {
+        println!("worker {} wait_for error: {}", turn, wr.unwrap_err());
+        let _ = demo_wait_group().done();
+        return 1;
+    }
+    println!("worker {} running in ordered slot {}", turn, turn);
+    let ar: Result<i64, str8> = demo_gate().advance();
+    if ar.is_err(): {
+        println!("worker {} advance error: {}", turn, ar.unwrap_err());
+        let _ = demo_wait_group().done();
+        return 1;
+    }
+    let _ = demo_wait_group().done();
+    return 0;
+}
+
+fn main() -> i32 {
+    let gr: Result<OrderedGate, str8> = OrderedGate::new(0);
+    let wr: Result<WaitGroup, str8> = WaitGroup::new(3);
+    if gr.is_err() || wr.is_err(): {
+        println!("std::concurrent setup failed");
+        return 1;
+    }
+
+    let gate0: OrderedGate = gr.unwrap();
+    let wg0: WaitGroup = wr.unwrap();
+    let gate_mutex: i64 = gate0.mutex_handle;
+    let gate_cond: i64 = gate0.cond_handle;
+    let gate_turn: i64 = gate0.turn;
+    let wg_mutex: i64 = wg0.mutex_handle;
+    let wg_cond: i64 = wg0.cond_handle;
+    let wg_count: i64 = wg0.count;
+    set_demo_gate(gate_mutex, gate_cond, gate_turn);
+    set_demo_wait_group(wg_mutex, wg_cond, wg_count);
+
+    let h1: Handle<Thread> = thread_spawn(ordered_worker, 2, 5);
+    let h2: Handle<Thread> = thread_spawn(ordered_worker, 0, 25);
+    let h3: Handle<Thread> = thread_spawn(ordered_worker, 1, 10);
+
+    let wait_r: Result<i32, str8> = demo_wait_group().wait();
+    if wait_r.is_err(): {
+        println!("wait group error: {}", wait_r.unwrap_err());
+    } else {
+        println!("all ordered tasks completed");
+    }
+
+    let rc1: i32 = join(h1);
+    let rc2: i32 = join(h2);
+    let rc3: i32 = join(h3);
+    println!("join statuses: {}, {}, {}", rc1, rc2, rc3);
+
+    let _ = demo_gate().close();
+    let _ = demo_wait_group().close();
+    return rc1 != 0 || rc2 != 0 || rc3 != 0 ? 1 : 0;
+}
