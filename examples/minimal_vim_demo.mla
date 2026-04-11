@@ -404,7 +404,7 @@ fn mode_label(mode: i32) -> str8 {
 }
 
 fn help_text() -> str8 {
-    return "NORMAL: hjkl i a o O x dd gg G  COMMAND: :w :q :q! :wq :e path :bn :bp";
+    return "NORMAL: hjkl w b 0 $ i a o O x dd gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
 }
 
 fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
@@ -449,7 +449,7 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
     } else if pending_normal == 2 {
         pending_mark = " d";
     }
-    let header_raw: str8 = format!(" {}   [{}]{} ", filename, mode_label(mode), pending_mark);
+    let header_raw: str8 = format!(" [{}]{} ", mode_label(mode), pending_mark);
     let header_fit: str8 = fit_right(header_raw, cols, " ");
     let _ = builder_append(b, format!("{}{}{}{}\r\n", fg(color_black()), bg_rgb(244, 244, 238), header_fit, reset()));
 
@@ -886,6 +886,34 @@ fn main() -> i32 {
             if keycode == 1002 { current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); pending_normal = 0; continue; }
             if keycode == 1003 { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); pending_normal = 0; continue; }
             if keycode == 1004 { current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1); pending_normal = 0; continue; }
+            if keycode == AsciiKey::Backspace {
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                active_tab = active_tab == 0 ? (tab_names.len() - 1) : (active_tab - 1);
+                current_filename = clone(tab_names[active_tab]);
+                current_lines = split_text_lines(tab_texts[active_tab]);
+                current_cursor_row = tab_cursor_rows[active_tab];
+                current_cursor_col = tab_cursor_cols[active_tab];
+                current_scroll_row = tab_scroll_rows[active_tab];
+                current_scroll_col = tab_scroll_cols[active_tab];
+                current_dirty = tab_dirty[active_tab];
+                pending_normal = 0;
+                status = format!("Tab {}", current_filename);
+                continue;
+            }
+            if keycode == AsciiKey::Ff {
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                active_tab = active_tab + 1 >= tab_names.len() ? 0 : (active_tab + 1);
+                current_filename = clone(tab_names[active_tab]);
+                current_lines = split_text_lines(tab_texts[active_tab]);
+                current_cursor_row = tab_cursor_rows[active_tab];
+                current_cursor_col = tab_cursor_cols[active_tab];
+                current_scroll_row = tab_scroll_rows[active_tab];
+                current_scroll_col = tab_scroll_cols[active_tab];
+                current_dirty = tab_dirty[active_tab];
+                pending_normal = 0;
+                status = format!("Tab {}", current_filename);
+                continue;
+            }
             if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(help_text()); continue; }
             if keycode == AsciiKey::Colon { mode = 2; pending_normal = 0; command_input = clone(""); continue; }
 
