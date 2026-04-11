@@ -407,6 +407,16 @@ fn help_text() -> str8 {
     return "NORMAL: hjkl i a o O x dd gg G  COMMAND: :w :q :q! :wq :e path :bn :bp";
 }
 
+fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
+    let left_len: i64 = len(left_text);
+    let right_len: i64 = len(right_text);
+    if left_len + right_len >= cols {
+        return sub(fit_right(left_text, cols, " "), 0, cols);
+    }
+    let gap: i64 = cols - left_len - right_len;
+    return concat(concat(left_text, repeat(" ", gap)), right_text);
+}
+
 fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i64>, active_tab: i64,
                 filename: str8, lines: &list<str8>, cursor_row: i64, cursor_col: i64,
                 scroll_row: i64, scroll_col: i64, mode: i32, status: str8,
@@ -459,8 +469,9 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
         r = r + 1;
     }
 
-    let prompt_text: str8 = mode == 2 ? format!(":{}", command_input) : format!(" {} ", status);
-    let prompt_fit: str8 = sub(fit_right(prompt_text, cols, " "), 0, cols);
+    let prompt_left: str8 = mode == 2 ? format!(":{}", command_input) : format!(" {} ", status);
+    let prompt_right: str8 = format!("{}:{}", cursor_col + 1, cursor_row + 1);
+    let prompt_fit: str8 = sub(footer_line(cols, prompt_left, prompt_right), 0, cols);
     let _ = builder_append(b, format!("\r\n{}{}{}{}", fg(color_black()), bg_rgb(210, 210, 202), prompt_fit, reset()));
 
     if mode == 2 {
@@ -756,27 +767,28 @@ fn main() -> i32 {
                     if starts_with(cmd, "e ") == 1 {
                         let path: str8 = sub(cmd, 2, len(cmd) - 2);
                         let rr2: Result<list<str8>, str8> = open_file_into_buffer(path);
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_names.push(clone(path));
                         if rr2.is_err() {
-                            status = format!("Open failed: {}", rr2.unwrap_err());
+                            tab_texts.push(clone(""));
+                            status = format!("New file {}", path);
                         } else {
-                            tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
-                            tab_names.push(clone(path));
                             tab_texts.push(join_lines(rr2.unwrap()));
-                            tab_dirty.push(0);
-                            tab_cursor_rows.push(0);
-                            tab_cursor_cols.push(0);
-                            tab_scroll_rows.push(0);
-                            tab_scroll_cols.push(0);
-                            active_tab = tab_names.len() - 1;
-                            current_filename = clone(tab_names[active_tab]);
-                            current_lines = split_text_lines(tab_texts[active_tab]);
-                            current_cursor_row = 0;
-                            current_cursor_col = 0;
-                            current_scroll_row = 0;
-                            current_scroll_col = 0;
-                            current_dirty = 0;
-                            status = format!("Opened {}", current_filename);
+                            status = format!("Opened {}", path);
                         }
+                        tab_dirty.push(0);
+                        tab_cursor_rows.push(0);
+                        tab_cursor_cols.push(0);
+                        tab_scroll_rows.push(0);
+                        tab_scroll_cols.push(0);
+                        active_tab = tab_names.len() - 1;
+                        current_filename = clone(tab_names[active_tab]);
+                        current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_cursor_row = 0;
+                        current_cursor_col = 0;
+                        current_scroll_row = 0;
+                        current_scroll_col = 0;
+                        current_dirty = 0;
                         continue;
                     }
                     status = format!("Unknown command: {}", cmd);
