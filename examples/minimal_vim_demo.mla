@@ -10,6 +10,7 @@ mod std::time;
 use std::ascii::AsciiKey;
 use std::env::args;
 use std::esc::bg_rgb;
+use std::esc::acs_vline;
 use std::esc::bold_on;
 use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
@@ -68,6 +69,16 @@ fn clamp_i64(v: i64, lo: i64, hi: i64) -> i64 {
         return hi;
     }
     return v;
+}
+
+fn digits_i64(v: i64) -> i64 {
+    var n: i64 = v <= 0 ? 1 : v;
+    var digits: i64 = 0;
+    while n > 0 {
+        digits = digits + 1;
+        n = n / 10;
+    }
+    return digits;
 }
 
 fn printable_ascii(keycode: i32) -> i32 {
@@ -474,6 +485,9 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
                 scroll_row: i64, scroll_col: i64, mode: i32, status: str8,
                 command_input: str8, blink_visible: i32, pending_normal: i32) -> str8 {
     let editor_rows: i64 = max_i64(1, rows - 3);
+    let gutter_digits: i64 = digits_i64(lines.len());
+    let gutter_width: i64 = gutter_digits + 3;
+    let code_cols: i64 = max_i64(1, cols - gutter_width);
     let b: StringBuilder = builder_new(4096);
     let _ = builder_append(b, cursor(cmd_home()));
     let _ = builder_append(b, cursor(cmd_clear_screen()));
@@ -506,12 +520,14 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
     var r: i64 = 0;
     while r < editor_rows {
         let line_idx: i64 = scroll_row + r;
-        var line_out: str8 = "";
+        let gutter_pipe: str8 = acs_vline();
+        var line_no: str8 = repeat(" ", gutter_digits);
+        var code_view: str8 = repeat(" ", code_cols);
         if line_idx < lines.len() {
-            line_out = fit_right(sub(lines[line_idx], scroll_col, cols), cols, " ");
-        } else {
-            line_out = repeat(" ", cols);
+            line_no = fit_right(format!("{}", line_idx + 1), gutter_digits, " ");
+            code_view = fit_right(sub(lines[line_idx], scroll_col, code_cols), code_cols, " ");
         }
+        let line_out: str8 = format!("{}{} {}", line_no, gutter_pipe, code_view);
         let _ = builder_append(b, format!("{}{}{}{}", fg(color_white()), bg_rgb(8, 24, 92), line_out, reset()));
         if r + 1 < editor_rows {
             let _ = builder_append(b, "\r\n");
@@ -532,7 +548,7 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
         let _ = builder_append(b, cursor_pos(rows, min_i64(cols, 2 + len(command_input))));
     } else {
         let cy: i64 = clamp_i64(2 + (cursor_row - scroll_row), 2, rows - 2);
-        let cx: i64 = clamp_i64(1 + (cursor_col - scroll_col), 1, cols);
+        let cx: i64 = clamp_i64(1 + gutter_width + (cursor_col - scroll_col), 1 + gutter_width, cols);
         let _ = builder_append(b, cursor_pos(cy, cx));
         if blink_visible == 1 {
             var cell: str8 = " ";
@@ -566,7 +582,7 @@ fn main() -> i32 {
     var tab_scroll_rows: list<i64> = [];
     var tab_scroll_cols: list<i64> = [];
     var active_tab: i64 = 0;
-    var status: str8 = clone(help_text());
+    var status: str8 = clone("");
     var command_input: str8 = clone("");
     var mode: i32 = 0;
     var pending_normal: i32 = 0;
@@ -600,7 +616,7 @@ fn main() -> i32 {
             status = format!("New file {}", path);
         }
     } else {
-        status = clone("Landing page. Use :e somefile.txt to open or create a file");
+        status = clone("Use :e somefile.txt to open or create a file");
     }
 
     tab_names.push(clone(current_filename));
@@ -623,7 +639,10 @@ fn main() -> i32 {
         let rows: i64 = max_i64(8, ts.rows);
         let cols: i64 = max_i64(30, ts.cols);
         let editor_rows: i64 = max_i64(1, rows - 3);
-        let scroll_pair: list<i64> = update_scroll(current_cursor_row, current_cursor_col, editor_rows, cols, current_scroll_row, current_scroll_col);
+        let gutter_digits: i64 = digits_i64(current_lines.len());
+        let gutter_width: i64 = gutter_digits + 3;
+        let code_cols: i64 = max_i64(1, cols - gutter_width);
+        let scroll_pair: list<i64> = update_scroll(current_cursor_row, current_cursor_col, editor_rows, code_cols, current_scroll_row, current_scroll_col);
         current_scroll_row = scroll_pair[0];
         current_scroll_col = scroll_pair[1];
 
@@ -669,7 +688,7 @@ fn main() -> i32 {
                 if keycode == AsciiKey::Esc {
                     mode = 0;
                     command_input = clone("");
-                    status = clone(help_text());
+                    status = clone("");
                     continue;
                 }
                 if keycode == AsciiKey::Backspace || keycode == AsciiKey::Del || keycode == 127 {
@@ -926,7 +945,7 @@ fn main() -> i32 {
                     mode = 0;
                     pending_normal = 0;
                     current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1);
-                    status = clone(help_text());
+                    status = clone("");
                     continue;
                 }
                 if keycode == 1001 { current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); continue; }
@@ -1066,7 +1085,7 @@ fn main() -> i32 {
                 status = format!("Tab {}", display_filename(current_filename));
                 continue;
             }
-            if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(help_text()); continue; }
+            if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(""); continue; }
             if keycode == AsciiKey::Colon { mode = 2; pending_normal = 0; command_input = clone(""); continue; }
             if keycode == AsciiKey::LowerU {
                 let undo_pair: list<str8> = pop_snapshot_text(current_undo_text);
@@ -1094,6 +1113,28 @@ fn main() -> i32 {
                     current_dirty = recompute_dirty(current_lines, current_saved_text);
                     status = clone("Redo");
                 }
+                continue;
+            }
+            if keycode == AsciiKey::Nak {
+                let page_step_up: i64 = max_i64(1, editor_rows / 2);
+                current_cursor_row = current_cursor_row - page_step_up;
+                if current_cursor_row < 0 {
+                    current_cursor_row = 0;
+                }
+                current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                pending_normal = 0;
+                status = clone("Page up");
+                continue;
+            }
+            if keycode == AsciiKey::Eot {
+                let page_step_down: i64 = max_i64(1, editor_rows / 2);
+                current_cursor_row = current_cursor_row + page_step_down;
+                if current_cursor_row >= current_lines.len() {
+                    current_cursor_row = current_lines.len() - 1;
+                }
+                current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                pending_normal = 0;
+                status = clone("Page down");
                 continue;
             }
 
