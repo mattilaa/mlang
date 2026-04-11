@@ -404,7 +404,7 @@ fn mode_label(mode: i32) -> str8 {
 }
 
 fn help_text() -> str8 {
-    return "NORMAL: hjkl w b 0 $ i a o O x dd gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
+    return "NORMAL: hjkl w b 0 $ i a A s o O x dd gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
 }
 
 fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
@@ -432,16 +432,17 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
     for(i, name) in tab_names.enumerate() {
         let label: str8 = tab_label(name, tab_dirty[i]);
         if i == active_tab {
-            let _ = builder_append(tab_builder, format!("{}{}{}{}{}", fg(color_white()), bg_rgb(32, 52, 120), bold_on(), label, reset()));
+            let marked: str8 = format!("|{}", label);
+            let _ = builder_append(tab_builder, format!("{}{}{}{}{}", fg(color_black()), bg_rgb(228, 228, 220), bold_on(), marked, reset()));
         } else {
-            let _ = builder_append(tab_builder, format!("{}{}{}{}", fg(color_black()), bg_rgb(228, 228, 220), label, reset()));
+            let _ = builder_append(tab_builder, format!("{}{}{}{}", fg(color_white()), bg_rgb(32, 52, 120), label, reset()));
         }
     }
-    let _ = builder_append(tab_builder, bg_rgb(228, 228, 220));
     let tabs_raw: str8 = builder_take_string(tab_builder);
     builder_free(tab_builder);
-    let tabs_fit: str8 = fit_right(tabs_raw, cols, " ");
-    let _ = builder_append(b, format!("{}{}{}{}\r\n", fg(color_black()), bg_rgb(228, 228, 220), tabs_fit, reset()));
+    let tabs_pad: str8 = fit_right("", max_i64(0, cols - len(tabs_raw)), " ");
+    let _ = builder_append(b, tabs_raw);
+    let _ = builder_append(b, format!("{}{}{}{}\r\n", fg_rgb(210, 210, 210), bg_rgb(38, 38, 38), tabs_pad, reset()));
 
     var pending_mark: str8 = "";
     if pending_normal == 1 {
@@ -449,9 +450,6 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
     } else if pending_normal == 2 {
         pending_mark = " d";
     }
-    let header_raw: str8 = format!(" [{}]{} ", mode_label(mode), pending_mark);
-    let header_fit: str8 = fit_right(header_raw, cols, " ");
-    let _ = builder_append(b, format!("{}{}{}{}\r\n", fg(color_black()), bg_rgb(244, 244, 238), header_fit, reset()));
 
     var r: i64 = 0;
     while r < editor_rows {
@@ -469,15 +467,19 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
         r = r + 1;
     }
 
-    let prompt_left: str8 = mode == 2 ? format!(":{}", command_input) : format!(" {} ", status);
-    let prompt_right: str8 = format!("{}:{}", cursor_col + 1, cursor_row + 1);
-    let prompt_fit: str8 = sub(footer_line(cols, prompt_left, prompt_right), 0, cols);
-    let _ = builder_append(b, format!("\r\n{}{}{}{}", fg(color_black()), bg_rgb(210, 210, 202), prompt_fit, reset()));
+    let modeline_left: str8 = format!(" {} {}{} ", mode_label(mode), filename, pending_mark);
+    let modeline_right: str8 = format!("{}:{}", cursor_col + 1, cursor_row + 1);
+    let modeline_fit: str8 = sub(footer_line(cols, modeline_left, modeline_right), 0, cols);
+    let _ = builder_append(b, format!("\r\n{}{}{}{}", fg(color_black()), bg_rgb(210, 210, 202), modeline_fit, reset()));
+
+    let prompt_left: str8 = mode == 2 ? format!(":{}", command_input) : format!(" {}", status);
+    let prompt_fit: str8 = sub(fit_right(prompt_left, cols, " "), 0, cols);
+    let _ = builder_append(b, format!("\r\n{}{}{}{}", fg_rgb(214, 214, 214), bg_rgb(8, 24, 92), prompt_fit, reset()));
 
     if mode == 2 {
         let _ = builder_append(b, cursor_pos(rows, min_i64(cols, 2 + len(command_input))));
     } else {
-        let cy: i64 = clamp_i64(3 + (cursor_row - scroll_row), 3, rows - 1);
+        let cy: i64 = clamp_i64(2 + (cursor_row - scroll_row), 2, rows - 2);
         let cx: i64 = clamp_i64(1 + (cursor_col - scroll_col), 1, cols);
         let _ = builder_append(b, cursor_pos(cy, cx));
         if blink_visible == 1 {
@@ -960,6 +962,20 @@ fn main() -> i32 {
             if keycode == AsciiKey::Dollar { current_cursor_col = len(current_lines[current_cursor_row]); continue; }
             if keycode == AsciiKey::LowerI { mode = 1; status = clone("-- INSERT --"); continue; }
             if keycode == AsciiKey::LowerA { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); mode = 1; status = clone("-- INSERT --"); continue; }
+            if keycode == AsciiKey::UpperA { current_cursor_col = len(current_lines[current_cursor_row]); mode = 1; status = clone("-- INSERT --"); continue; }
+            if keycode == AsciiKey::LowerS {
+                let cur_len_s: i64 = len(current_lines[current_cursor_row]);
+                if current_cursor_col < cur_len_s {
+                    let left_s: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
+                    let right_s: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len_s - current_cursor_col - 1);
+                    current_lines = replace_line(current_lines, current_cursor_row, concat(left_s, right_s));
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                }
+                mode = 1;
+                status = clone("-- INSERT --");
+                continue;
+            }
             if keycode == AsciiKey::LowerO {
                 current_lines = insert_line_after(current_lines, current_cursor_row, clone(""));
                 current_cursor_row = current_cursor_row + 1;
