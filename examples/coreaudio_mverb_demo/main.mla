@@ -107,14 +107,14 @@ fn preset_plate() -> ReverbConfig {
 fn preset_gated() -> ReverbConfig {
     return ReverbConfig {
         preset_name: "gated",
-        mix: 0.40f,
-        early_mix: 0.74f,
-        size: 0.64f,
-        decay: 0.30f,
-        damping: 0.22f,
-        bandwidth: 0.97f,
-        density: 0.84f,
-        predelay_ms: 18.0f,
+        mix: 0.28f,
+        early_mix: 0.18f,
+        size: 0.34f,
+        decay: 0.16f,
+        damping: 0.38f,
+        bandwidth: 0.78f,
+        density: 0.42f,
+        predelay_ms: 12.0f,
         gain: 1.0f,
         gate_mode: 1
     };

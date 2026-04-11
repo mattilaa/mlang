@@ -108,10 +108,10 @@ static int64_t tap_frames(float base_ms, float size, int64_t sample_rate)
 
 static float gate_gain(float level)
 {
-    float opened = (level - 0.015f) * 32.0f;
+    float opened = (level - 0.030f) * 40.0f;
     if(opened < 0.0f) return 0.0f;
-    if(opened > 1.0f) return 1.0f;
-    return opened;
+    if(opened > 1.0f) opened = 1.0f;
+    return opened * opened;
 }
 
 static float sample_stereo_i64(const int64_t* samples, int64_t sample_count, int64_t frame_index, int64_t channel)
@@ -164,7 +164,7 @@ mlang_list_t coreaudio_process_reverb_i64(mlang_list_t samples, int64_t sample_r
 
     float bw_coef = 0.04f + (bandwidth * 0.50f);
     float damp_coef = 0.02f + ((1.0f - damping) * 0.18f);
-    float decay_gain = 0.18f + (decay * 0.67f);
+    float decay_gain = 0.16f + (decay * 0.60f);
     float dense_gain = 0.06f + (density * 0.26f);
 
     float bw_l = 0.0f;
@@ -172,6 +172,9 @@ mlang_list_t coreaudio_process_reverb_i64(mlang_list_t samples, int64_t sample_r
     float damp_l = 0.0f;
     float damp_r = 0.0f;
     float gate_env = 0.0f;
+    float early_damp_l = 0.0f;
+    float early_damp_r = 0.0f;
+    float gate_hold = 0.0f;
 
     int64_t sample_count = samples.size;
     int64_t* in = (int64_t*)samples.data;
@@ -196,6 +199,15 @@ mlang_list_t coreaudio_process_reverb_i64(mlang_list_t samples, int64_t sample_r
             (0.23f * sample_stereo_i64(in, sample_count, i - predelay - e2, 0)) +
             (0.17f * sample_stereo_i64(in, sample_count, i - predelay - e3, 1)) +
             (0.09f * sample_stereo_i64(in, sample_count, i - predelay - e4, 0));
+
+        if(gate_mode != 0)
+        {
+            float early_damp_coef = 0.05f + (damping * 0.22f);
+            early_damp_l = early_damp_l + (early_damp_coef * (early_l - early_damp_l));
+            early_damp_r = early_damp_r + (early_damp_coef * (early_r - early_damp_r));
+            early_l = (0.35f * early_l) + (0.65f * early_damp_l);
+            early_r = (0.35f * early_r) + (0.65f * early_damp_r);
+        }
 
         float fb_l =
             (0.31f * sample_stereo_i64(history, sample_count, i - l1, 0)) +
@@ -226,15 +238,34 @@ mlang_list_t coreaudio_process_reverb_i64(mlang_list_t samples, int64_t sample_r
         damp_r = damp_r + (damp_coef * (tail_in_r - damp_r));
 
         float source_level = fabsf(bw_l) > fabsf(bw_r) ? fabsf(bw_l) : fabsf(bw_r);
-        gate_env = (gate_env * 0.996f) + (source_level * 0.08f);
+        if(gate_mode != 0)
+        {
+            float attack_env = (gate_env * 0.90f) + (source_level * 0.26f);
+            if(attack_env > gate_env)
+                gate_env = attack_env;
+            else
+                gate_env = (gate_env * 0.994f) + (source_level * 0.03f);
+
+            if(source_level > 0.05f)
+                gate_hold = 1.0f;
+            else
+                gate_hold *= 0.975f;
+        }
+        else
+        {
+            gate_env = (gate_env * 0.996f) + (source_level * 0.08f);
+        }
 
         float late_l = damp_l;
         float late_r = damp_r;
         if(gate_mode != 0)
         {
-            float gate = gate_gain(gate_env);
-            late_l *= gate;
-            late_r *= gate;
+            float sustain = gate_env;
+            if(gate_hold > sustain)
+                sustain = gate_hold;
+            float gate = gate_gain(sustain);
+            late_l *= gate * 0.78f;
+            late_r *= gate * 0.78f;
         }
 
         float wet_l = (early_mix * early_l) + ((1.0f - early_mix) * late_l);
