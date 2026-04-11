@@ -238,6 +238,11 @@ fn join_lines(lines: &list<str8>) -> str8 {
     return out;
 }
 
+fn join_lines_for_save(lines: &list<str8>) -> str8 {
+    let body: str8 = join_lines(lines);
+    return len(body) == 0 ? clone("") : concat(body, "\n");
+}
+
 fn replace_line(lines: &list<str8>, row: i64, new_line: str8) -> list<str8> {
     var out: list<str8> = [];
     for(i, line) in lines.enumerate() {
@@ -435,8 +440,13 @@ fn recompute_dirty(lines: &list<str8>, saved_text: str8) -> i64 {
     return eq(current_text, saved_text) == 1 ? 0 : 1;
 }
 
+fn display_filename(filename: str8) -> str8 {
+    return len(filename) == 0 ? "[No Name]" : filename;
+}
+
 fn tab_label(filename: str8, dirty: i64) -> str8 {
-    return dirty == 1 ? format!(" {}* ", filename) : format!(" {} ", filename);
+    let shown: str8 = display_filename(filename);
+    return dirty == 1 ? format!(" {}* ", shown) : format!(" {} ", shown);
 }
 
 fn mode_label(mode: i32) -> str8 {
@@ -509,7 +519,7 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
         r = r + 1;
     }
 
-    let modeline_left: str8 = format!(" {} {}{} ", mode_label(mode), filename, pending_mark);
+    let modeline_left: str8 = format!(" {} {}{} ", mode_label(mode), display_filename(filename), pending_mark);
     let modeline_right: str8 = format!("{}:{}", cursor_col + 1, cursor_row + 1);
     let modeline_fit: str8 = sub(footer_line(cols, modeline_left, modeline_right), 0, cols);
     let _ = builder_append(b, format!("\r\n{}{}{}{}", fg(color_black()), bg_rgb(210, 210, 202), modeline_fit, reset()));
@@ -564,7 +574,7 @@ fn main() -> i32 {
     var skip_lf_after_cr: i32 = 0;
     var blink_tick: i64 = 0;
 
-    var current_filename: str8 = clone("untitled.txt");
+    var current_filename: str8 = clone("");
     var current_lines: list<str8> = [];
     current_lines.push(clone(""));
     var current_cursor_row: i64 = 0;
@@ -577,45 +587,32 @@ fn main() -> i32 {
     var current_dirty: i64 = 0;
 
     if argv.len() > 1 {
-        var first_loaded: i32 = 0;
-        var i: i64 = 1;
-        while i < argv.len() {
-            let path: str8 = argv[i];
-            let rr: Result<list<str8>, str8> = open_file_into_buffer(path);
-            if rr.is_ok() {
-                let text0: str8 = join_lines(rr.unwrap());
-                tab_names.push(clone(path));
-                tab_texts.push(text0);
-                tab_saved_texts.push(clone(text0));
-                tab_undo_texts.push(clone(""));
-                tab_redo_texts.push(clone(""));
-                tab_dirty.push(0);
-                tab_cursor_rows.push(0);
-                tab_cursor_cols.push(0);
-                tab_scroll_rows.push(0);
-                tab_scroll_cols.push(0);
-                if first_loaded == 0 {
-                    current_filename = clone(path);
-                    current_lines = split_text_lines(tab_texts[0]);
-                    current_saved_text = clone(tab_saved_texts[0]);
-                    first_loaded = 1;
-                }
-            }
-            i = i + 1;
+        let path: str8 = argv[1];
+        let rr: Result<list<str8>, str8> = open_file_into_buffer(path);
+        current_filename = clone(path);
+        if rr.is_ok() {
+            let text0: str8 = join_lines(rr.unwrap());
+            current_lines = split_text_lines(text0);
+            current_saved_text = clone(text0);
+        } else {
+            current_lines = split_text_lines("");
+            current_saved_text = clone("");
+            status = format!("New file {}", path);
         }
+    } else {
+        status = clone("Landing page. Use :e somefile.txt to open or create a file");
     }
-    if tab_names.len() == 0 {
-        tab_names.push(clone(current_filename));
-        tab_texts.push(clone(""));
-        tab_saved_texts.push(clone(""));
-        tab_undo_texts.push(clone(""));
-        tab_redo_texts.push(clone(""));
-        tab_dirty.push(0);
-        tab_cursor_rows.push(0);
-        tab_cursor_cols.push(0);
-        tab_scroll_rows.push(0);
-        tab_scroll_cols.push(0);
-    }
+
+    tab_names.push(clone(current_filename));
+    tab_texts.push(join_lines(current_lines));
+    tab_saved_texts.push(clone(current_saved_text));
+    tab_undo_texts.push(clone(""));
+    tab_redo_texts.push(clone(""));
+    tab_dirty.push(0);
+    tab_cursor_rows.push(0);
+    tab_cursor_cols.push(0);
+    tab_scroll_rows.push(0);
+    tab_scroll_cols.push(0);
 
     let input: Stdin = stdin();
     let _ = stdin_enable_raw();
@@ -689,7 +686,11 @@ fn main() -> i32 {
                     command_input = clone("");
 
                     if eq(cmd, "w") == 1 {
-                        let text: str8 = join_lines(current_lines);
+                        if len(current_filename) == 0 {
+                            status = clone("No file name. Use :e somefile.txt");
+                            continue;
+                        }
+                        let text: str8 = join_lines_for_save(current_lines);
                         let wr: Result<i32, str8> = write_all_text(current_filename, text);
                         if wr.is_err() {
                             status = format!("Write failed: {}", wr.unwrap_err());
@@ -820,7 +821,11 @@ fn main() -> i32 {
                         continue;
                     }
                     if eq(cmd, "wq") == 1 {
-                        let text2: str8 = join_lines(current_lines);
+                        if len(current_filename) == 0 {
+                            status = clone("No file name. Use :e somefile.txt");
+                            continue;
+                        }
+                        let text2: str8 = join_lines_for_save(current_lines);
                         let wr2: Result<i32, str8> = write_all_text(current_filename, text2);
                         if wr2.is_err() {
                             status = format!("Write failed: {}", wr2.unwrap_err());
@@ -845,7 +850,7 @@ fn main() -> i32 {
                         current_scroll_row = tab_scroll_rows[active_tab];
                         current_scroll_col = tab_scroll_cols[active_tab];
                         current_dirty = tab_dirty[active_tab];
-                        status = format!("Tab {}", current_filename);
+                        status = format!("Tab {}", display_filename(current_filename));
                         continue;
                     }
                     if eq(cmd, "bp") == 1 {
@@ -864,7 +869,7 @@ fn main() -> i32 {
                         current_scroll_row = tab_scroll_rows[active_tab];
                         current_scroll_col = tab_scroll_cols[active_tab];
                         current_dirty = tab_dirty[active_tab];
-                        status = format!("Tab {}", current_filename);
+                        status = format!("Tab {}", display_filename(current_filename));
                         continue;
                     }
                     if starts_with(cmd, "e ") == 1 {
@@ -1038,7 +1043,7 @@ fn main() -> i32 {
                 current_scroll_col = tab_scroll_cols[active_tab];
                 current_dirty = tab_dirty[active_tab];
                 pending_normal = 0;
-                status = format!("Tab {}", current_filename);
+                status = format!("Tab {}", display_filename(current_filename));
                 continue;
             }
             if keycode == AsciiKey::Ff {
@@ -1058,7 +1063,7 @@ fn main() -> i32 {
                 current_scroll_col = tab_scroll_cols[active_tab];
                 current_dirty = tab_dirty[active_tab];
                 pending_normal = 0;
-                status = format!("Tab {}", current_filename);
+                status = format!("Tab {}", display_filename(current_filename));
                 continue;
             }
             if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(help_text()); continue; }
@@ -1220,6 +1225,6 @@ fn main() -> i32 {
     let _ = write(stdout(), cursor(cmd_show()));
     let _ = write(stdout(), cursor_color_reset());
     let _ = write(stdout(), alt_screen_off_real());
-    let _ = write(stdout(), "\r\n");
+    let _ = write(stdout(), "\n");
     return 0;
 }
