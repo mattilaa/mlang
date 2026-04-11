@@ -486,7 +486,7 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
                 command_input: str8, blink_visible: i32, pending_normal: i32) -> str8 {
     let editor_rows: i64 = max_i64(1, rows - 3);
     let gutter_digits: i64 = digits_i64(lines.len());
-    let gutter_width: i64 = gutter_digits + 3;
+    let gutter_width: i64 = gutter_digits + 2;
     let code_cols: i64 = max_i64(1, cols - gutter_width);
     let b: StringBuilder = builder_new(4096);
     let _ = builder_append(b, cursor(cmd_home()));
@@ -640,7 +640,7 @@ fn main() -> i32 {
         let cols: i64 = max_i64(30, ts.cols);
         let editor_rows: i64 = max_i64(1, rows - 3);
         let gutter_digits: i64 = digits_i64(current_lines.len());
-        let gutter_width: i64 = gutter_digits + 3;
+        let gutter_width: i64 = gutter_digits + 2;
         let code_cols: i64 = max_i64(1, cols - gutter_width);
         let scroll_pair: list<i64> = update_scroll(current_cursor_row, current_cursor_col, editor_rows, code_cols, current_scroll_row, current_scroll_col);
         current_scroll_row = scroll_pair[0];
@@ -709,16 +709,17 @@ fn main() -> i32 {
                             status = clone("No file name. Use :e somefile.txt");
                             continue;
                         }
+                        let body: str8 = join_lines(current_lines);
                         let text: str8 = join_lines_for_save(current_lines);
                         let wr: Result<i32, str8> = write_all_text(current_filename, text);
                         if wr.is_err() {
                             status = format!("Write failed: {}", wr.unwrap_err());
                         } else {
-                            current_saved_text = clone(text);
+                            current_saved_text = clone(body);
                             current_undo_text = clone("");
                             current_redo_text = clone("");
                             current_dirty = 0;
-                            tab_texts = replace_str8_at(tab_texts, active_tab, text);
+                            tab_texts = replace_str8_at(tab_texts, active_tab, body);
                             tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
                             tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(""));
                             tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(""));
@@ -1269,3 +1270,5 @@ fn main() -> i32 {
     let _ = write(stdout(), "\n");
     return 0;
 }
+
+
