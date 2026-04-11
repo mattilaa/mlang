@@ -1,0 +1,282 @@
+mod std::env;
+mod std::math;
+mod std::strbuf;
+
+use std::env::HelpOption;
+use std::env::args;
+use std::env::eprintln;
+use std::env::println;
+use std::env::render_help;
+use std::env::wants_help;
+use std::math::abs;
+use std::math::clamp;
+use std::strbuf::eq;
+use std::strbuf::len;
+use std::strbuf::starts_with;
+use std::strbuf::sub;
+
+extern fn coreaudio_decode_file_i64(path: str8) -> list<i64>;
+extern fn coreaudio_decoded_sample_rate() -> i64;
+extern fn coreaudio_parse_f32(s: str8) -> f32;
+extern fn coreaudio_last_error() -> str8;
+extern fn coreaudio_process_reverb_i64(samples: list<i64>, sample_rate: i64,
+                                       mix: f32, early_mix: f32, size: f32,
+                                       decay: f32, damping: f32, bandwidth: f32,
+                                       density: f32, predelay_ms: f32,
+                                       gain: f32, gate_mode: i32) -> list<i64>;
+extern fn coreaudio_play_interleaved_i64(samples: list<i64>, sample_rate: i64) -> i32;
+
+struct ReverbConfig {
+    var preset_name: str8;
+    var mix: f32;
+    var early_mix: f32;
+    var size: f32;
+    var decay: f32;
+    var damping: f32;
+    var bandwidth: f32;
+    var density: f32;
+    var predelay_ms: f32;
+    var gain: f32;
+    var gate_mode: i32;
+};
+
+fn clamp01(x: f32) -> f32 { return clamp(x, 0.0f, 1.0f); }
+
+fn parse_f32(s: str8, fallback: f32) -> f32 {
+    if s == "" {
+        return fallback;
+    }
+    return coreaudio_parse_f32(s);
+}
+
+fn parse_named_value(arg: &str8, prefix: &str8) -> str8 {
+    if starts_with(arg, prefix) == 0 {
+        return "";
+    }
+    return sub(arg, len(prefix), len(arg) - len(prefix));
+}
+
+fn preset_hall() -> ReverbConfig {
+    return ReverbConfig {
+        preset_name: "hall",
+        mix: 0.38f,
+        early_mix: 0.34f,
+        size: 0.92f,
+        decay: 0.84f,
+        damping: 0.66f,
+        bandwidth: 0.84f,
+        density: 0.78f,
+        predelay_ms: 26.0f,
+        gain: 1.0f,
+        gate_mode: 0
+    };
+}
+
+fn preset_room() -> ReverbConfig {
+    return ReverbConfig {
+        preset_name: "room",
+        mix: 0.24f,
+        early_mix: 0.60f,
+        size: 0.48f,
+        decay: 0.50f,
+        damping: 0.55f,
+        bandwidth: 0.86f,
+        density: 0.46f,
+        predelay_ms: 7.0f,
+        gain: 1.0f,
+        gate_mode: 0
+    };
+}
+
+fn preset_plate() -> ReverbConfig {
+    return ReverbConfig {
+        preset_name: "plate",
+        mix: 0.30f,
+        early_mix: 0.22f,
+        size: 0.74f,
+        decay: 0.76f,
+        damping: 0.34f,
+        bandwidth: 0.95f,
+        density: 0.90f,
+        predelay_ms: 11.0f,
+        gain: 1.0f,
+        gate_mode: 0
+    };
+}
+
+fn preset_gated() -> ReverbConfig {
+    return ReverbConfig {
+        preset_name: "gated",
+        mix: 0.40f,
+        early_mix: 0.74f,
+        size: 0.64f,
+        decay: 0.30f,
+        damping: 0.22f,
+        bandwidth: 0.97f,
+        density: 0.84f,
+        predelay_ms: 18.0f,
+        gain: 1.0f,
+        gate_mode: 1
+    };
+}
+
+fn preset_ambient() -> ReverbConfig {
+    return ReverbConfig {
+        preset_name: "ambient",
+        mix: 0.50f,
+        early_mix: 0.16f,
+        size: 1.0f,
+        decay: 0.93f,
+        damping: 0.74f,
+        bandwidth: 0.80f,
+        density: 0.86f,
+        predelay_ms: 42.0f,
+        gain: 1.0f,
+        gate_mode: 0
+    };
+}
+
+fn preset_for_name(name: str8) -> ReverbConfig {
+    if eq(name, "room") == 1 {
+        return preset_room();
+    }
+    if eq(name, "plate") == 1 {
+        return preset_plate();
+    }
+    if eq(name, "gated") == 1 {
+        return preset_gated();
+    }
+    if eq(name, "ambient") == 1 {
+        return preset_ambient();
+    }
+    return preset_hall();
+}
+
+fn build_help(program: str8) -> str8 {
+    var options: list<HelpOption> = [];
+    options.push(HelpOption::new("help", "h", "Show this help and exit."));
+    options.push(HelpOption::with_default("preset=NAME", "", "hall", "Choose a preset: hall, room, plate, gated, ambient."));
+    options.push(HelpOption::with_default("mix=VALUE", "", "preset", "Wet/dry mix override in range 0.0..1.0."));
+    options.push(HelpOption::with_default("early-mix=VALUE", "", "preset", "Blend between early reflections and late tail in range 0.0..1.0."));
+    options.push(HelpOption::with_default("size=VALUE", "", "preset", "Virtual room size in range 0.0..1.0."));
+    options.push(HelpOption::with_default("decay=VALUE", "", "preset", "Tail feedback amount in range 0.0..1.0."));
+    options.push(HelpOption::with_default("damping=VALUE", "", "preset", "High-frequency damping in range 0.0..1.0."));
+    options.push(HelpOption::with_default("bandwidth=VALUE", "", "preset", "Input bandwidth in range 0.0..1.0."));
+    options.push(HelpOption::with_default("density=VALUE", "", "preset", "Tail density in range 0.0..1.0."));
+    options.push(HelpOption::with_default("predelay-ms=VALUE", "", "preset", "Predelay in milliseconds."));
+    options.push(HelpOption::with_default("gain=VALUE", "", "1.0", "Input gain before the reverb stage."));
+
+    let overview: str8 =
+        "Offline CoreAudio file player with an MLang stereo reverb inspired by "
+        + "the MVerb parameter model. The first non-option argument is the input file path.";
+
+    var text: str8 = render_help(program + " <audio-file>", overview, options, 100);
+    text = text + "\nPresets:\n";
+    text = text + "  hall    balanced long hall\n";
+    text = text + "  room    short reflective room\n";
+    text = text + "  plate   bright dense plate\n";
+    text = text + "  gated   1980s-style short gated tail\n";
+    text = text + "  ambient very long dark wash\n";
+    text = text + "\nExamples:\n";
+    text = text + format!("  {} ./examples/fft_example/illusion.wav\n", program);
+    text = text + format!("  {} song.wav --preset=gated --mix=0.45 --predelay-ms=22\n", program);
+    text = text + format!("  {} voice.aif --preset=plate --damping=0.25 --bandwidth=0.98\n", program);
+    text = text + "\nSupported input formats are whatever ExtAudioFile/CoreAudio can decode on macOS.\n";
+    return text;
+}
+
+fn print_config(cfg: &ReverbConfig, sample_rate: i64, frames: i64) -> void {
+    println!(format!(
+        "preset={} mix={} early_mix={} size={} decay={} damping={} bandwidth={} density={} predelay_ms={} gain={} sr={} frames={}",
+        cfg.preset_name, cfg.mix, cfg.early_mix, cfg.size, cfg.decay, cfg.damping,
+        cfg.bandwidth, cfg.density, cfg.predelay_ms, cfg.gain, sample_rate, frames
+    ));
+}
+
+fn main() -> i32 {
+    let argv: list<str8> = args();
+    let program: str8 = argv.len() > 0 ? argv[0] : "mverb_coreaudio_demo";
+    var want_help: i32 = 0;
+    for i in 1..argv.len() {
+        if eq(argv[i], "-h") == 1 || eq(argv[i], "--help") == 1 {
+            want_help = 1;
+        }
+    }
+    if want_help != 0 || argv.len() <= 1 {
+        println!(build_help(program));
+        return argv.len() <= 1 ? 1 : 0;
+    }
+
+    var input_path: str8 = "";
+    var cfg: ReverbConfig = preset_hall();
+
+    for i in 1..argv.len() {
+        let arg: str8 = argv[i];
+        let preset_name: str8 = parse_named_value(arg, "--preset=");
+        if preset_name != "" {
+            cfg = preset_for_name(preset_name);
+        } else if parse_named_value(arg, "--mix=") != "" {
+            cfg.mix = clamp01(parse_f32(parse_named_value(arg, "--mix="), cfg.mix));
+        } else if parse_named_value(arg, "--early-mix=") != "" {
+            cfg.early_mix = clamp01(parse_f32(parse_named_value(arg, "--early-mix="), cfg.early_mix));
+        } else if parse_named_value(arg, "--size=") != "" {
+            cfg.size = clamp01(parse_f32(parse_named_value(arg, "--size="), cfg.size));
+        } else if parse_named_value(arg, "--decay=") != "" {
+            cfg.decay = clamp01(parse_f32(parse_named_value(arg, "--decay="), cfg.decay));
+        } else if parse_named_value(arg, "--damping=") != "" {
+            cfg.damping = clamp01(parse_f32(parse_named_value(arg, "--damping="), cfg.damping));
+        } else if parse_named_value(arg, "--bandwidth=") != "" {
+            cfg.bandwidth = clamp01(parse_f32(parse_named_value(arg, "--bandwidth="), cfg.bandwidth));
+        } else if parse_named_value(arg, "--density=") != "" {
+            cfg.density = clamp01(parse_f32(parse_named_value(arg, "--density="), cfg.density));
+        } else if parse_named_value(arg, "--predelay-ms=") != "" {
+            cfg.predelay_ms = clamp(parse_f32(parse_named_value(arg, "--predelay-ms="), cfg.predelay_ms), 0.0f, 250.0f);
+        } else if parse_named_value(arg, "--gain=") != "" {
+            cfg.gain = clamp(parse_f32(parse_named_value(arg, "--gain="), cfg.gain), 0.0f, 4.0f);
+        } else if starts_with(arg, "--") == 1 {
+            eprintln!(format!("unknown option: {}", arg));
+            eprintln!("use --help for usage");
+            return 1;
+        } else if input_path == "" {
+            input_path = arg;
+        } else {
+            eprintln!(format!("unexpected argument: {}", arg));
+            return 1;
+        }
+    }
+
+    if input_path == "" {
+        eprintln!("missing input file");
+        eprintln!("use --help for usage");
+        return 1;
+    }
+
+    let decoded: list<i64> = coreaudio_decode_file_i64(input_path);
+    if decoded.len() <= 0 {
+        eprintln!(format!("decode failed: {}", coreaudio_last_error()));
+        return 1;
+    }
+
+    let sample_rate: i64 = coreaudio_decoded_sample_rate();
+    let frames: i64 = decoded.len() / 2;
+    let decoded_len: i64 = decoded.len();
+    print_config(cfg, sample_rate, frames);
+
+    let processed: list<i64> =
+        coreaudio_process_reverb_i64(decoded, sample_rate, cfg.mix, cfg.early_mix,
+                                     cfg.size, cfg.decay, cfg.damping,
+                                     cfg.bandwidth, cfg.density,
+                                     cfg.predelay_ms, cfg.gain, cfg.gate_mode);
+    if processed.len() != decoded_len {
+        eprintln!("processing failed");
+        return 1;
+    }
+
+    let play_rc: i32 = coreaudio_play_interleaved_i64(processed, sample_rate);
+    if play_rc != 0 {
+        eprintln!(format!("playback failed: {}", coreaudio_last_error()));
+        return 1;
+    }
+
+    return 0;
+}
