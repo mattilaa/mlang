@@ -123,6 +123,43 @@ fn append_char_to_owned(src: str8, k: i32) -> str8 {
     return out;
 }
 
+fn stack_separator() -> str8 {
+    return "\x1e";
+}
+
+fn push_snapshot_text(stack_text: str8, snapshot: str8) -> str8 {
+    if len(stack_text) == 0 {
+        return snapshot;
+    }
+    return concat(concat(stack_text, stack_separator()), snapshot);
+}
+
+fn pop_snapshot_text(stack_text: str8) -> list<str8> {
+    var out: list<str8> = [];
+    let n: i64 = len(stack_text);
+    if n == 0 {
+        out.push(clone(""));
+        out.push(clone(""));
+        return out;
+    }
+    var i: i64 = n - 1;
+    while i >= 0 {
+        let ch: str8 = sub(stack_text, i, 1);
+        if eq(ch, stack_separator()) == 1 {
+            out.push(sub(stack_text, 0, i));
+            out.push(sub(stack_text, i + 1, n - i - 1));
+            return out;
+        }
+        if i == 0 {
+            break;
+        }
+        i = i - 1;
+    }
+    out.push(clone(""));
+    out.push(clone(stack_text));
+    return out;
+}
+
 fn esc_prefixed(suffix: str8) -> str8 {
     let b: StringBuilder = builder_new(len(suffix) + 4);
     let _ = builder_append_char(b, 27);
@@ -393,6 +430,11 @@ fn replace_i64_at(values: &list<i64>, idx: i64, value: i64) -> list<i64> {
     return out;
 }
 
+fn recompute_dirty(lines: &list<str8>, saved_text: str8) -> i64 {
+    let current_text: str8 = join_lines(lines);
+    return eq(current_text, saved_text) == 1 ? 0 : 1;
+}
+
 fn tab_label(filename: str8, dirty: i64) -> str8 {
     return dirty == 1 ? format!(" {}* ", filename) : format!(" {} ", filename);
 }
@@ -404,7 +446,7 @@ fn mode_label(mode: i32) -> str8 {
 }
 
 fn help_text() -> str8 {
-    return "NORMAL: hjkl w b 0 $ i a A s o O x dd gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
+    return "NORMAL: hjkl w b 0 $ i a A s o O x dd u Ctrl-R gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
 }
 
 fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
@@ -505,6 +547,9 @@ fn main() -> i32 {
     let argv: list<str8> = args();
     var tab_names: list<str8> = [];
     var tab_texts: list<str8> = [];
+    var tab_saved_texts: list<str8> = [];
+    var tab_undo_texts: list<str8> = [];
+    var tab_redo_texts: list<str8> = [];
     var tab_dirty: list<i64> = [];
     var tab_cursor_rows: list<i64> = [];
     var tab_cursor_cols: list<i64> = [];
@@ -526,6 +571,9 @@ fn main() -> i32 {
     var current_cursor_col: i64 = 0;
     var current_scroll_row: i64 = 0;
     var current_scroll_col: i64 = 0;
+    var current_saved_text: str8 = clone("");
+    var current_undo_text: str8 = clone("");
+    var current_redo_text: str8 = clone("");
     var current_dirty: i64 = 0;
 
     if argv.len() > 1 {
@@ -538,6 +586,9 @@ fn main() -> i32 {
                 let text0: str8 = join_lines(rr.unwrap());
                 tab_names.push(clone(path));
                 tab_texts.push(text0);
+                tab_saved_texts.push(clone(text0));
+                tab_undo_texts.push(clone(""));
+                tab_redo_texts.push(clone(""));
                 tab_dirty.push(0);
                 tab_cursor_rows.push(0);
                 tab_cursor_cols.push(0);
@@ -546,6 +597,7 @@ fn main() -> i32 {
                 if first_loaded == 0 {
                     current_filename = clone(path);
                     current_lines = split_text_lines(tab_texts[0]);
+                    current_saved_text = clone(tab_saved_texts[0]);
                     first_loaded = 1;
                 }
             }
@@ -555,6 +607,9 @@ fn main() -> i32 {
     if tab_names.len() == 0 {
         tab_names.push(clone(current_filename));
         tab_texts.push(clone(""));
+        tab_saved_texts.push(clone(""));
+        tab_undo_texts.push(clone(""));
+        tab_redo_texts.push(clone(""));
         tab_dirty.push(0);
         tab_cursor_rows.push(0);
         tab_cursor_cols.push(0);
@@ -575,11 +630,15 @@ fn main() -> i32 {
         current_scroll_row = scroll_pair[0];
         current_scroll_col = scroll_pair[1];
 
+        current_dirty = recompute_dirty(current_lines, current_saved_text);
         tab_dirty = replace_i64_at(tab_dirty, active_tab, current_dirty);
         tab_cursor_rows = replace_i64_at(tab_cursor_rows, active_tab, current_cursor_row);
         tab_cursor_cols = replace_i64_at(tab_cursor_cols, active_tab, current_cursor_col);
         tab_scroll_rows = replace_i64_at(tab_scroll_rows, active_tab, current_scroll_row);
         tab_scroll_cols = replace_i64_at(tab_scroll_cols, active_tab, current_scroll_col);
+        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, current_saved_text);
+        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, current_undo_text);
+        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, current_redo_text);
 
         let blink_visible: i32 = ((blink_tick / 18) % 2) == 0 ? 1 : 0;
         let frame: str8 = render_frame(cols, rows, tab_names, tab_dirty, active_tab, current_filename,
@@ -635,8 +694,14 @@ fn main() -> i32 {
                         if wr.is_err() {
                             status = format!("Write failed: {}", wr.unwrap_err());
                         } else {
+                            current_saved_text = clone(text);
+                            current_undo_text = clone("");
+                            current_redo_text = clone("");
                             current_dirty = 0;
                             tab_texts = replace_str8_at(tab_texts, active_tab, text);
+                            tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                            tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(""));
+                            tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(""));
                             tab_dirty = replace_i64_at(tab_dirty, active_tab, 0);
                             status = format!("Written {}", current_filename);
                         }
@@ -653,6 +718,9 @@ fn main() -> i32 {
                             let next_tab: i64 = active_tab == 0 ? 0 : (active_tab - 1);
                             var next_names: list<str8> = [];
                             var next_texts: list<str8> = [];
+                            var next_saved_texts: list<str8> = [];
+                            var next_undo_texts: list<str8> = [];
+                            var next_redo_texts: list<str8> = [];
                             var next_dirty: list<i64> = [];
                             var next_rows: list<i64> = [];
                             var next_cols: list<i64> = [];
@@ -662,6 +730,9 @@ fn main() -> i32 {
                                 if i != active_tab {
                                     next_names.push(clone(name));
                                     next_texts.push(clone(tab_texts[i]));
+                                    next_saved_texts.push(clone(tab_saved_texts[i]));
+                                    next_undo_texts.push(clone(tab_undo_texts[i]));
+                                    next_redo_texts.push(clone(tab_redo_texts[i]));
                                     next_dirty.push(tab_dirty[i]);
                                     next_rows.push(tab_cursor_rows[i]);
                                     next_cols.push(tab_cursor_cols[i]);
@@ -671,6 +742,9 @@ fn main() -> i32 {
                             }
                             tab_names = next_names;
                             tab_texts = next_texts;
+                            tab_saved_texts = next_saved_texts;
+                            tab_undo_texts = next_undo_texts;
+                            tab_redo_texts = next_redo_texts;
                             tab_dirty = next_dirty;
                             tab_cursor_rows = next_rows;
                             tab_cursor_cols = next_cols;
@@ -679,6 +753,9 @@ fn main() -> i32 {
                             active_tab = next_tab >= tab_names.len() ? (tab_names.len() - 1) : next_tab;
                             current_filename = clone(tab_names[active_tab]);
                             current_lines = split_text_lines(tab_texts[active_tab]);
+                            current_saved_text = clone(tab_saved_texts[active_tab]);
+                            current_undo_text = clone(tab_undo_texts[active_tab]);
+                            current_redo_text = clone(tab_redo_texts[active_tab]);
                             current_cursor_row = tab_cursor_rows[active_tab];
                             current_cursor_col = tab_cursor_cols[active_tab];
                             current_scroll_row = tab_scroll_rows[active_tab];
@@ -695,6 +772,9 @@ fn main() -> i32 {
                             let next_tab2: i64 = active_tab == 0 ? 0 : (active_tab - 1);
                             var force_names: list<str8> = [];
                             var force_texts: list<str8> = [];
+                            var force_saved_texts: list<str8> = [];
+                            var force_undo_texts: list<str8> = [];
+                            var force_redo_texts: list<str8> = [];
                             var force_dirty: list<i64> = [];
                             var force_rows: list<i64> = [];
                             var force_cols: list<i64> = [];
@@ -704,6 +784,9 @@ fn main() -> i32 {
                                 if i != active_tab {
                                     force_names.push(clone(name));
                                     force_texts.push(clone(tab_texts[i]));
+                                    force_saved_texts.push(clone(tab_saved_texts[i]));
+                                    force_undo_texts.push(clone(tab_undo_texts[i]));
+                                    force_redo_texts.push(clone(tab_redo_texts[i]));
                                     force_dirty.push(tab_dirty[i]);
                                     force_rows.push(tab_cursor_rows[i]);
                                     force_cols.push(tab_cursor_cols[i]);
@@ -713,6 +796,9 @@ fn main() -> i32 {
                             }
                             tab_names = force_names;
                             tab_texts = force_texts;
+                            tab_saved_texts = force_saved_texts;
+                            tab_undo_texts = force_undo_texts;
+                            tab_redo_texts = force_redo_texts;
                             tab_dirty = force_dirty;
                             tab_cursor_rows = force_rows;
                             tab_cursor_cols = force_cols;
@@ -721,6 +807,9 @@ fn main() -> i32 {
                             active_tab = next_tab2 >= tab_names.len() ? (tab_names.len() - 1) : next_tab2;
                             current_filename = clone(tab_names[active_tab]);
                             current_lines = split_text_lines(tab_texts[active_tab]);
+                            current_saved_text = clone(tab_saved_texts[active_tab]);
+                            current_undo_text = clone(tab_undo_texts[active_tab]);
+                            current_redo_text = clone(tab_redo_texts[active_tab]);
                             current_cursor_row = tab_cursor_rows[active_tab];
                             current_cursor_col = tab_cursor_cols[active_tab];
                             current_scroll_row = tab_scroll_rows[active_tab];
@@ -742,9 +831,15 @@ fn main() -> i32 {
                     }
                     if eq(cmd, "bn") == 1 {
                         tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                         active_tab = active_tab + 1 >= tab_names.len() ? 0 : (active_tab + 1);
                         current_filename = clone(tab_names[active_tab]);
                         current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone(tab_saved_texts[active_tab]);
+                        current_undo_text = clone(tab_undo_texts[active_tab]);
+                        current_redo_text = clone(tab_redo_texts[active_tab]);
                         current_cursor_row = tab_cursor_rows[active_tab];
                         current_cursor_col = tab_cursor_cols[active_tab];
                         current_scroll_row = tab_scroll_rows[active_tab];
@@ -755,9 +850,15 @@ fn main() -> i32 {
                     }
                     if eq(cmd, "bp") == 1 {
                         tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                         active_tab = active_tab == 0 ? (tab_names.len() - 1) : (active_tab - 1);
                         current_filename = clone(tab_names[active_tab]);
                         current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone(tab_saved_texts[active_tab]);
+                        current_undo_text = clone(tab_undo_texts[active_tab]);
+                        current_redo_text = clone(tab_redo_texts[active_tab]);
                         current_cursor_row = tab_cursor_rows[active_tab];
                         current_cursor_col = tab_cursor_cols[active_tab];
                         current_scroll_row = tab_scroll_rows[active_tab];
@@ -770,12 +871,22 @@ fn main() -> i32 {
                         let path: str8 = sub(cmd, 2, len(cmd) - 2);
                         let rr2: Result<list<str8>, str8> = open_file_into_buffer(path);
                         tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                         tab_names.push(clone(path));
                         if rr2.is_err() {
                             tab_texts.push(clone(""));
+                            tab_saved_texts.push(clone(""));
+                            tab_undo_texts.push(clone(""));
+                            tab_redo_texts.push(clone(""));
                             status = format!("New file {}", path);
                         } else {
-                            tab_texts.push(join_lines(rr2.unwrap()));
+                            let opened_text: str8 = join_lines(rr2.unwrap());
+                            tab_texts.push(clone(opened_text));
+                            tab_saved_texts.push(clone(opened_text));
+                            tab_undo_texts.push(clone(""));
+                            tab_redo_texts.push(clone(""));
                             status = format!("Opened {}", path);
                         }
                         tab_dirty.push(0);
@@ -786,6 +897,9 @@ fn main() -> i32 {
                         active_tab = tab_names.len() - 1;
                         current_filename = clone(tab_names[active_tab]);
                         current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone(tab_saved_texts[active_tab]);
+                        current_undo_text = clone(tab_undo_texts[active_tab]);
+                        current_redo_text = clone(tab_redo_texts[active_tab]);
                         current_cursor_row = 0;
                         current_cursor_col = 0;
                         current_scroll_row = 0;
@@ -816,6 +930,9 @@ fn main() -> i32 {
                 if keycode == 1004 { current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1); continue; }
                 if keycode == AsciiKey::Cr || keycode == AsciiKey::Lf {
                     skip_lf_after_cr = keycode == AsciiKey::Cr ? 1 : 0;
+                    let before_text: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text);
+                    current_redo_text = clone("");
                     let current: str8 = current_lines[current_cursor_row];
                     let left: str8 = sub(current, 0, current_cursor_col);
                     let right: str8 = sub(current, current_cursor_col, len(current) - current_cursor_col);
@@ -828,13 +945,18 @@ fn main() -> i32 {
                     continue;
                 }
                 if keycode == AsciiKey::Backspace || keycode == AsciiKey::Del || keycode == 127 {
+                    let before_text2: str8 = join_lines(current_lines);
                     if current_cursor_col > 0 {
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text2);
+                        current_redo_text = clone("");
                         let current2: str8 = current_lines[current_cursor_row];
                         let left2: str8 = sub(current2, 0, current_cursor_col - 1);
                         let right2: str8 = sub(current2, current_cursor_col, len(current2) - current_cursor_col);
                         current_lines = replace_line(current_lines, current_cursor_row, concat(left2, right2));
                         current_cursor_col = current_cursor_col - 1;
                     } else if current_cursor_row > 0 {
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text2);
+                        current_redo_text = clone("");
                         let merged: str8 = concat(current_lines[current_cursor_row - 1], current_lines[current_cursor_row]);
                         let tmp: list<str8> = replace_line(current_lines, current_cursor_row - 1, merged);
                         current_lines = remove_line(tmp, current_cursor_row);
@@ -846,12 +968,17 @@ fn main() -> i32 {
                     continue;
                 }
                 if keycode == 1005 {
+                    let before_text3: str8 = join_lines(current_lines);
                     let cur_len: i64 = len(current_lines[current_cursor_row]);
                     if current_cursor_col < cur_len {
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text3);
+                        current_redo_text = clone("");
                         let left3: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
                         let right3: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len - current_cursor_col - 1);
                         current_lines = replace_line(current_lines, current_cursor_row, concat(left3, right3));
                     } else if current_cursor_row + 1 < current_lines.len() {
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text3);
+                        current_redo_text = clone("");
                         let merged2: str8 = concat(current_lines[current_cursor_row], current_lines[current_cursor_row + 1]);
                         let tmp2: list<str8> = replace_line(current_lines, current_cursor_row, merged2);
                         current_lines = remove_line(tmp2, current_cursor_row + 1);
@@ -861,6 +988,9 @@ fn main() -> i32 {
                     continue;
                 }
                 if keycode == AsciiKey::Tab {
+                    let before_text4: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text4);
+                    current_redo_text = clone("");
                     var t: i32 = 0;
                     while t < 4 {
                         let left4: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
@@ -874,6 +1004,9 @@ fn main() -> i32 {
                     continue;
                 }
                 if printable_ascii(keycode) == 1 {
+                    let before_text5: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text5);
+                    current_redo_text = clone("");
                     let left5: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
                     let right5: str8 = sub(current_lines[current_cursor_row], current_cursor_col, len(current_lines[current_cursor_row]) - current_cursor_col);
                     current_lines = replace_line(current_lines, current_cursor_row, concat(append_char_to_owned(left5, keycode), right5));
@@ -890,9 +1023,15 @@ fn main() -> i32 {
             if keycode == 1004 { current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1); pending_normal = 0; continue; }
             if keycode == AsciiKey::Backspace {
                 tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                 active_tab = active_tab == 0 ? (tab_names.len() - 1) : (active_tab - 1);
                 current_filename = clone(tab_names[active_tab]);
                 current_lines = split_text_lines(tab_texts[active_tab]);
+                current_saved_text = clone(tab_saved_texts[active_tab]);
+                current_undo_text = clone(tab_undo_texts[active_tab]);
+                current_redo_text = clone(tab_redo_texts[active_tab]);
                 current_cursor_row = tab_cursor_rows[active_tab];
                 current_cursor_col = tab_cursor_cols[active_tab];
                 current_scroll_row = tab_scroll_rows[active_tab];
@@ -904,9 +1043,15 @@ fn main() -> i32 {
             }
             if keycode == AsciiKey::Ff {
                 tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                 active_tab = active_tab + 1 >= tab_names.len() ? 0 : (active_tab + 1);
                 current_filename = clone(tab_names[active_tab]);
                 current_lines = split_text_lines(tab_texts[active_tab]);
+                current_saved_text = clone(tab_saved_texts[active_tab]);
+                current_undo_text = clone(tab_undo_texts[active_tab]);
+                current_redo_text = clone(tab_redo_texts[active_tab]);
                 current_cursor_row = tab_cursor_rows[active_tab];
                 current_cursor_col = tab_cursor_cols[active_tab];
                 current_scroll_row = tab_scroll_rows[active_tab];
@@ -918,6 +1063,34 @@ fn main() -> i32 {
             }
             if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(help_text()); continue; }
             if keycode == AsciiKey::Colon { mode = 2; pending_normal = 0; command_input = clone(""); continue; }
+            if keycode == AsciiKey::LowerU {
+                let undo_pair: list<str8> = pop_snapshot_text(current_undo_text);
+                if len(undo_pair[1]) > 0 || len(current_undo_text) > 0 {
+                    let current_text_u: str8 = join_lines(current_lines);
+                    current_redo_text = push_snapshot_text(current_redo_text, current_text_u);
+                    current_undo_text = undo_pair[0];
+                    current_lines = split_text_lines(undo_pair[1]);
+                    current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    status = clone("Undo");
+                }
+                continue;
+            }
+            if keycode == AsciiKey::Dc2 {
+                let redo_pair: list<str8> = pop_snapshot_text(current_redo_text);
+                if len(redo_pair[1]) > 0 || len(current_redo_text) > 0 {
+                    let current_text_r: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, current_text_r);
+                    current_redo_text = redo_pair[0];
+                    current_lines = split_text_lines(redo_pair[1]);
+                    current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    status = clone("Redo");
+                }
+                continue;
+            }
 
             if pending_normal == 1 {
                 pending_normal = 0;
@@ -932,6 +1105,9 @@ fn main() -> i32 {
             } else if pending_normal == 2 {
                 pending_normal = 0;
                 if keycode == AsciiKey::LowerD {
+                    let before_text6: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text6);
+                    current_redo_text = clone("");
                     current_lines = remove_line(current_lines, current_cursor_row);
                     current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
                     current_cursor_col = clamp_i64(0, 0, len(current_lines[current_cursor_row]));
@@ -964,8 +1140,11 @@ fn main() -> i32 {
             if keycode == AsciiKey::LowerA { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); mode = 1; status = clone("-- INSERT --"); continue; }
             if keycode == AsciiKey::UpperA { current_cursor_col = len(current_lines[current_cursor_row]); mode = 1; status = clone("-- INSERT --"); continue; }
             if keycode == AsciiKey::LowerS {
+                let before_text7: str8 = join_lines(current_lines);
                 let cur_len_s: i64 = len(current_lines[current_cursor_row]);
                 if current_cursor_col < cur_len_s {
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text7);
+                    current_redo_text = clone("");
                     let left_s: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
                     let right_s: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len_s - current_cursor_col - 1);
                     current_lines = replace_line(current_lines, current_cursor_row, concat(left_s, right_s));
@@ -977,6 +1156,9 @@ fn main() -> i32 {
                 continue;
             }
             if keycode == AsciiKey::LowerO {
+                let before_text8: str8 = join_lines(current_lines);
+                current_undo_text = push_snapshot_text(current_undo_text, before_text8);
+                current_redo_text = clone("");
                 current_lines = insert_line_after(current_lines, current_cursor_row, clone(""));
                 current_cursor_row = current_cursor_row + 1;
                 current_cursor_col = 0;
@@ -987,6 +1169,9 @@ fn main() -> i32 {
                 continue;
             }
             if keycode == AsciiKey::UpperO {
+                let before_text9: str8 = join_lines(current_lines);
+                current_undo_text = push_snapshot_text(current_undo_text, before_text9);
+                current_redo_text = clone("");
                 current_lines = insert_line_before(current_lines, current_cursor_row, clone(""));
                 current_cursor_col = 0;
                 current_dirty = 1;
@@ -996,12 +1181,17 @@ fn main() -> i32 {
                 continue;
             }
             if keycode == AsciiKey::LowerX || keycode == 1005 {
+                let before_text10: str8 = join_lines(current_lines);
                 let cur_len2: i64 = len(current_lines[current_cursor_row]);
                 if current_cursor_col < cur_len2 {
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text10);
+                    current_redo_text = clone("");
                     let left6: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
                     let right6: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len2 - current_cursor_col - 1);
                     current_lines = replace_line(current_lines, current_cursor_row, concat(left6, right6));
                 } else if current_cursor_row + 1 < current_lines.len() {
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text10);
+                    current_redo_text = clone("");
                     let merged3: str8 = concat(current_lines[current_cursor_row], current_lines[current_cursor_row + 1]);
                     let tmp3: list<str8> = replace_line(current_lines, current_cursor_row, merged3);
                     current_lines = remove_line(tmp3, current_cursor_row + 1);
