@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "diagnostics.h"
 #include "ir.h"
 #include "module.h"
 #include "package_manager.h"
@@ -1774,7 +1775,8 @@ int main(int argc, char** argv)
         yy_delete_buffer(parseBuffer);
         if(parseResult != 0 || parseHadError)
         {
-            std::cerr << "Parsing failed." << std::endl;
+            std::cerr << "Parsing failed. See previous diagnostics and "
+                      << mlang::diag::docs_page() << "." << std::endl;
             return 1;
         }
 
@@ -1899,7 +1901,9 @@ int main(int argc, char** argv)
             // Check for semantic errors
             if(generator.hadError())
             {
-                std::cerr << "Compilation failed due to errors." << std::endl;
+                std::cerr << "Compilation failed due to errors. See previous "
+                             "diagnostics and "
+                          << mlang::diag::docs_page() << "." << std::endl;
                 delete programRoot;
                 return 1;
             }

@@ -384,6 +384,9 @@ The generated site mirrors the Markdown sources under `docs/`, stdlib sources
 (`tools/mlang-frontend-mla/main.mla`, `tools/mlang-pkg-mla/main.mla`). Open
 `docs/out/index.html` in a browser after running the command.
 
+Compiler diagnostic reference lives in `docs/compiler_diagnostics.md` and is
+published in the generated site as `docs/out/html/compiler_diagnostics.html`.
+
 ## AddressSanitizer Verification
 After a clean workspace, run the helper script that configures an AddressSanitizer build and runs the unit and robot test suites under ASan:
 

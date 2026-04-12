@@ -1,10 +1,12 @@
 %{
 #include "parser.hpp"
+#include "diagnostics.h"
 #include <string.h>
 #include <cctype>
 #include <string>
 
 extern bool parseHadError;
+extern const char* g_sourceFile;
 
 int yycolumn = 1;       // current column (end of last-consumed token)
 int yycolumn_token = 1; // column at start of the current token
@@ -326,5 +328,13 @@ static int is_try_question_context()
 "||"            { return PIPE_PIPE; }
 "|>"            { return PIPE_GT; }
 "|"             { return PIPE; }
-.               { printf("Unexpected character: %s\n", yytext); parseHadError = true; }
+.               {
+                    parseHadError = true;
+                    const int col = yycolumn_token > 0 ? yycolumn_token : 1;
+                    const std::string msg =
+                        "unexpected character: '" + std::string(yytext) + "'";
+                    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile,
+                            yylineno, col,
+                            mlang::diag::format_message_with_code("MLANG-E1100", msg).c_str());
+                }
 %%

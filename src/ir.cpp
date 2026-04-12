@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "diagnostics.h"
 #include "module.h"
 #include <array>
 #include <cctype>
@@ -15381,13 +15382,8 @@ void CodeGenerator::reportError(int line, int col, const std::string& message)
 {
     const std::string& file =
         sourceFileName.empty() ? std::string("<input>") : sourceFileName;
-    if(line > 0 && col > 0)
-        std::cerr << file << ":" << line << ":" << col << ": error: " << message
-                  << std::endl;
-    else if(line > 0)
-        std::cerr << file << ":" << line << ": error: " << message << std::endl;
-    else
-        std::cerr << file << ": error: " << message << std::endl;
+    mlang::diag::print_diagnostic_location(std::cerr, file, line, col, "error");
+    std::cerr << mlang::diag::format_error_message(message) << std::endl;
     hasError = true;
 }
 
@@ -15395,14 +15391,9 @@ void CodeGenerator::reportWarning(int line, int col, const std::string& message)
 {
     const std::string& file =
         sourceFileName.empty() ? std::string("<input>") : sourceFileName;
-    if(line > 0 && col > 0)
-        std::cerr << file << ":" << line << ":" << col
-                  << ": warning: " << message << std::endl;
-    else if(line > 0)
-        std::cerr << file << ":" << line << ": warning: " << message
-                  << std::endl;
-    else
-        std::cerr << file << ": warning: " << message << std::endl;
+    mlang::diag::print_diagnostic_location(std::cerr, file, line, col,
+                                           "warning");
+    std::cerr << mlang::diag::format_warning_message(message) << std::endl;
 }
 
 void CodeGenerator::enterCleanupScope()
