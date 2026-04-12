@@ -1,0 +1,95 @@
+# Compiler Diagnostics
+
+MLang compiler diagnostics now carry stable reference codes in the style:
+
+- `MLANG-E1001` for errors
+- `MLANG-W0001` for warnings
+
+Diagnostics print the code inline and point back to this documentation page.
+
+Example:
+
+```text
+examples/demo.mla:12:8: error: [MLANG-E2001] unknown variable: 'value' [see docs: compiler_diagnostics.html (MLANG-E2001)]
+```
+
+## Syntax Errors
+
+### `MLANG-E1001`
+Expected an identifier but the parser found a reserved keyword instead.
+
+### `MLANG-E1002`
+Unexpected closing `)` during parsing.
+
+### `MLANG-E1003`
+Unexpected closing `]` during parsing.
+
+### `MLANG-E1004`
+Parser suspects a missing closing `)` before `;`.
+
+### `MLANG-E1005`
+Parser suspects a missing closing `)` before `}`.
+
+### `MLANG-E1006`
+Unexpected end of file while parsing, typically caused by an unclosed delimiter.
+
+### `MLANG-E1007`
+Unexpected `,`, often caused by a missing expression before or after the comma.
+
+### `MLANG-E1100`
+Unexpected character produced by the lexer before parsing could continue.
+
+### `MLANG-E1999`
+Generic parse-phase syntax error that does not yet have a more specific code.
+
+## Semantic Errors
+
+### `MLANG-E2001`
+Unknown variable or identifier lookup failure.
+
+### `MLANG-E2002`
+Type mismatch between expected and actual values.
+
+### `MLANG-E2003`
+Unknown struct type or missing struct definition.
+
+### `MLANG-E2004`
+Unknown method call target.
+
+### `MLANG-E2005`
+Compile-time arithmetic error such as division or modulo by zero.
+
+### `MLANG-E2006`
+Ownership or borrowing violation, including moved-value use and invalid borrow operations.
+
+### `MLANG-E2007`
+Invalid `match` structure or incompatible `match` arm typing.
+
+### `MLANG-E2999`
+Generic semantic/codegen error that does not yet have a narrower code.
+
+### `MLANG-E9000`
+Internal compiler error. This indicates a compiler bug rather than a user-code mistake.
+
+## Warnings
+
+### `MLANG-W0001`
+Discouraged plain `if` / `else-if` colon syntax.
+
+### `MLANG-W0002`
+Discouraged plain `while` colon syntax.
+
+### `MLANG-W0003`
+`Result.unwrap()` may panic and should usually be replaced with safer handling.
+
+### `MLANG-W0004`
+Empty block warning.
+
+### `MLANG-W9999`
+Generic warning without a narrower code yet.
+
+## Notes For Contributors
+
+- Prefer assigning a specific `MLANG-E...` or `MLANG-W...` code when adding a new common diagnostic.
+- Reuse an existing code only when the meaning matches the documented description.
+- If a diagnostic is still generic, document the fallback bucket here first and narrow it later.

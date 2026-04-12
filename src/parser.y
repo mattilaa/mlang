@@ -5,6 +5,7 @@
 #include <vector>
 #include "ast.h"
 #include "ast_handle_helpers.h"
+#include "diagnostics.h"
 
 ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
@@ -2137,55 +2138,76 @@ void yyerror(const char* s) {
     int col = yycolumn_token > 0 ? yycolumn_token : 1;
     if(is_reserved_type_keyword(yytext))
     {
+        const std::string msg =
+            "expected identifier, found keyword '" + std::string(yytext) + "'";
         fprintf(stderr,
-                "%s:%d:%d: error: expected identifier, found keyword '%s'\n",
-                g_sourceFile, yylineno, col, yytext);
+                "%s:%d:%d: error: %s\n",
+                g_sourceFile, yylineno, col,
+                mlang::diag::format_message_with_code("MLANG-E1001", msg).c_str());
         return;
     }
     if(s && strstr(s, "syntax error") != NULL)
     {
         if(yytext && strcmp(yytext, ")") == 0)
         {
+            const std::string msg = "syntax error (parse phase): unexpected ')'";
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error (parse phase): unexpected ')'\n",
-                    g_sourceFile, yylineno, col);
+                    "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno, col,
+                    mlang::diag::format_message_with_code("MLANG-E1002", msg).c_str());
             return;
         }
         if(yytext && strcmp(yytext, "]") == 0)
         {
+            const std::string msg = "syntax error (parse phase): unexpected ']'";
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error (parse phase): unexpected ']'\n",
-                    g_sourceFile, yylineno, col);
+                    "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno, col,
+                    mlang::diag::format_message_with_code("MLANG-E1003", msg).c_str());
             return;
         }
         if(yytext && strcmp(yytext, ";") == 0)
         {
+            const std::string msg =
+                "syntax error: possible missing closing ')' before ';'";
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error: possible missing closing ')' before ';'\n",
-                    g_sourceFile, yylineno, col);
+                    "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno, col,
+                    mlang::diag::format_message_with_code("MLANG-E1004", msg).c_str());
             return;
         }
         if(yytext && strcmp(yytext, "}") == 0)
         {
+            const std::string msg =
+                "syntax error: possible missing closing ')' before '}'";
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error: possible missing closing ')' before '}'\n",
-                    g_sourceFile, yylineno, col);
+                    "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno, col,
+                    mlang::diag::format_message_with_code("MLANG-E1005", msg).c_str());
             return;
         }
         if(!yytext || yytext[0] == '\0')
         {
+            const std::string msg =
+                "syntax error: unexpected end of file (possible missing ')' )";
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error: unexpected end of file (possible missing ')' )\n",
-                    g_sourceFile, yylineno, col);
+                    "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno, col,
+                    mlang::diag::format_message_with_code("MLANG-E1006", msg).c_str());
             return;
         }
         if(yytext && strcmp(yytext, ",") == 0)
         {
+            const std::string msg =
+                "syntax error: unexpected ',' (possible missing expression before or after ',')";
             fprintf(stderr,
-                    "%s:%d:%d: error: syntax error: unexpected ',' (possible missing expression before or after ',')\n",
-                    g_sourceFile, yylineno, col);
+                    "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno, col,
+                    mlang::diag::format_message_with_code("MLANG-E1007", msg).c_str());
             return;
         }
     }
-    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, yylineno, col, s);
+    const std::string msg = s ? std::string(s) : std::string("syntax error");
+    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, yylineno, col,
+            mlang::diag::format_message_with_code("MLANG-E1999", msg).c_str());
 }
