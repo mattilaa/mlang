@@ -390,6 +390,133 @@ fn move_word_backward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> l
     return out2;
 }
 
+fn move_word_end(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_word_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            while col + 1 < n && is_word_sep_at(line, col + 1) == 0 {
+                col = col + 1;
+            }
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
+fn is_bigword_sep_at(text: str8, idx: i64) -> i32 {
+    if idx < 0 || idx >= len(text) {
+        return 1;
+    }
+    let ch: str8 = sub(text, idx, 1);
+    return eq(ch, " ") == 1 || eq(ch, "\t") == 1 ? 1 : 0;
+}
+
+fn move_bigword_forward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_bigword_sep_at(line, col) == 0 {
+            col = col + 1;
+        }
+        while col < n && is_bigword_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
+fn move_bigword_backward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row >= 0 {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        if col > n {
+            col = n;
+        }
+        if col > 0 {
+            col = col - 1;
+        } else if row > 0 {
+            row = row - 1;
+            col = len(lines[row]);
+            continue;
+        } else {
+            break;
+        }
+        while col > 0 && is_bigword_sep_at(line, col) == 1 {
+            col = col - 1;
+        }
+        while col > 0 && is_bigword_sep_at(line, col - 1) == 0 {
+            col = col - 1;
+        }
+        var out: list<i64> = [];
+        out.push(row);
+        out.push(col);
+        return out;
+    }
+    var out2: list<i64> = [];
+    out2.push(0);
+    out2.push(0);
+    return out2;
+}
+
+fn move_bigword_end(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_bigword_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            while col + 1 < n && is_bigword_sep_at(line, col + 1) == 0 {
+                col = col + 1;
+            }
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
 fn parse_key(input: Stdin) -> i32 {
     let keycode: i32 = read_keycode_nonblocking(input);
     if keycode != AsciiKey::Esc {
@@ -596,7 +723,58 @@ fn recompute_dirty(lines: &list<str8>, saved_text: str8) -> i64 {
 }
 
 fn display_filename(filename: str8) -> str8 {
+    if eq(filename, "__MLANG_HELP__") == 1 {
+        return "[Help]";
+    }
     return len(filename) == 0 ? "[No Name]" : filename;
+}
+
+fn is_help_buffer(filename: str8) -> i32 {
+    return eq(filename, "__MLANG_HELP__") == 1 ? 1 : 0;
+}
+
+fn help_buffer_lines() -> list<str8> {
+    var out: list<str8> = [];
+    out.push("MLang Minimal Vim Demo Help");
+    out.push("");
+    out.push("Navigation");
+    out.push("  h j k l      Move cursor");
+    out.push("  w b e        Word motions");
+    out.push("  W B E        WORD motions");
+    out.push("  0 $          Start/end of line");
+    out.push("  gg G         Top/bottom of file");
+    out.push("  Ctrl-U/D     Half-page up/down");
+    out.push("  Ctrl-H/L     Previous/next buffer");
+    out.push("");
+    out.push("Modes");
+    out.push("  i            Insert before cursor");
+    out.push("  a            Insert after cursor");
+    out.push("  A            Insert at end of line");
+    out.push("  s            Substitute character and insert");
+    out.push("  v            Visual mode");
+    out.push("  V            Visual line mode");
+    out.push("  Esc          Return to normal mode");
+    out.push("");
+    out.push("Edit");
+    out.push("  x            Delete character");
+    out.push("  dd           Delete line");
+    out.push("  u            Undo");
+    out.push("  Ctrl-R       Redo");
+    out.push("  yy           Yank line");
+    out.push("  p            Paste");
+    out.push("");
+    out.push("Commands");
+    out.push("  :e <file>    Open or create file");
+    out.push("  :w           Write file");
+    out.push("  :q           Quit current buffer");
+    out.push("  :q!          Force quit current buffer");
+    out.push("  :wq          Write and quit");
+    out.push("  :bn / :bp    Next / previous buffer");
+    out.push("  :help        Open this help view");
+    out.push("");
+    out.push("Help view");
+    out.push("  q            Return to previous editor buffer");
+    return out;
 }
 
 fn tab_label(filename: str8, dirty: i64) -> str8 {
@@ -613,7 +791,7 @@ fn mode_label(mode: i32) -> str8 {
 }
 
 fn help_text() -> str8 {
-    return "NORMAL: hjkl w b 0 $ i a A s o O x dd u Ctrl-R gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
+    return "NORMAL: hjkl w b e W B E 0 $ i a A s o O x dd u Ctrl-R gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
 }
 
 fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
@@ -768,6 +946,7 @@ fn main() -> i32 {
     var current_yank_kind: i32 = 0;
     var visual_anchor_row: i64 = 0;
     var visual_anchor_col: i64 = 0;
+    var help_return_tab: i64 = -1;
 
     if argv.len() > 1 {
         let path: str8 = argv[1];
@@ -1060,6 +1239,36 @@ fn main() -> i32 {
                         status = format!("Tab {}", display_filename(current_filename));
                         continue;
                     }
+                    if eq(cmd, "help") == 1 {
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                        help_return_tab = active_tab;
+                        tab_names.push("__MLANG_HELP__");
+                        tab_texts.push(join_lines(help_buffer_lines()));
+                        tab_saved_texts.push(clone(""));
+                        tab_undo_texts.push(clone(""));
+                        tab_redo_texts.push(clone(""));
+                        tab_dirty.push(0);
+                        tab_cursor_rows.push(0);
+                        tab_cursor_cols.push(0);
+                        tab_scroll_rows.push(0);
+                        tab_scroll_cols.push(0);
+                        active_tab = tab_names.len() - 1;
+                        current_filename = clone(tab_names[active_tab]);
+                        current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone("");
+                        current_undo_text = clone("");
+                        current_redo_text = clone("");
+                        current_cursor_row = 0;
+                        current_cursor_col = 0;
+                        current_scroll_row = 0;
+                        current_scroll_col = 0;
+                        current_dirty = 0;
+                        status = clone("Help");
+                        continue;
+                    }
                     if starts_with(cmd, "e ") == 1 {
                         let path: str8 = sub(cmd, 2, len(cmd) - 2);
                         let rr2: Result<list<str8>, str8> = open_file_into_buffer(path);
@@ -1241,10 +1450,34 @@ fn main() -> i32 {
                     current_cursor_col = next_wv[1];
                     continue;
                 }
+                if keycode == AsciiKey::UpperW {
+                    let next_Wv: list<i64> = move_bigword_forward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_Wv[0];
+                    current_cursor_col = next_Wv[1];
+                    continue;
+                }
                 if keycode == AsciiKey::LowerB {
                     let next_bv: list<i64> = move_word_backward(current_lines, current_cursor_row, current_cursor_col);
                     current_cursor_row = next_bv[0];
                     current_cursor_col = next_bv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::LowerE {
+                    let next_ev: list<i64> = move_word_end(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_ev[0];
+                    current_cursor_col = next_ev[1];
+                    continue;
+                }
+                if keycode == AsciiKey::UpperB {
+                    let next_Bv: list<i64> = move_bigword_backward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_Bv[0];
+                    current_cursor_col = next_Bv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::UpperE {
+                    let next_Ev: list<i64> = move_bigword_end(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_Ev[0];
+                    current_cursor_col = next_Ev[1];
                     continue;
                 }
                 if keycode == AsciiKey::LowerY {
@@ -1308,6 +1541,71 @@ fn main() -> i32 {
             }
             if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(""); continue; }
             if keycode == AsciiKey::Colon { mode = 2; pending_normal = 0; command_input = clone(""); continue; }
+            if is_help_buffer(current_filename) == 1 && keycode == AsciiKey::LowerQ {
+                var help_names: list<str8> = [];
+                var help_texts2: list<str8> = [];
+                var help_saved2: list<str8> = [];
+                var help_undo2: list<str8> = [];
+                var help_redo2: list<str8> = [];
+                var help_dirty2: list<i64> = [];
+                var help_rows2: list<i64> = [];
+                var help_cols2: list<i64> = [];
+                var help_srows2: list<i64> = [];
+                var help_scols2: list<i64> = [];
+                for(i, name) in tab_names.enumerate() {
+                    if i != active_tab {
+                        help_names.push(clone(name));
+                        help_texts2.push(clone(tab_texts[i]));
+                        help_saved2.push(clone(tab_saved_texts[i]));
+                        help_undo2.push(clone(tab_undo_texts[i]));
+                        help_redo2.push(clone(tab_redo_texts[i]));
+                        help_dirty2.push(tab_dirty[i]);
+                        help_rows2.push(tab_cursor_rows[i]);
+                        help_cols2.push(tab_cursor_cols[i]);
+                        help_srows2.push(tab_scroll_rows[i]);
+                        help_scols2.push(tab_scroll_cols[i]);
+                    }
+                }
+                tab_names = help_names;
+                tab_texts = help_texts2;
+                tab_saved_texts = help_saved2;
+                tab_undo_texts = help_undo2;
+                tab_redo_texts = help_redo2;
+                tab_dirty = help_dirty2;
+                tab_cursor_rows = help_rows2;
+                tab_cursor_cols = help_cols2;
+                tab_scroll_rows = help_srows2;
+                tab_scroll_cols = help_scols2;
+                if tab_names.len() <= 0 {
+                    active_tab = 0;
+                    current_filename = clone("");
+                    current_lines = split_text_lines("");
+                    current_saved_text = clone("");
+                    current_undo_text = clone("");
+                    current_redo_text = clone("");
+                    current_cursor_row = 0;
+                    current_cursor_col = 0;
+                    current_scroll_row = 0;
+                    current_scroll_col = 0;
+                    current_dirty = 0;
+                } else {
+                    active_tab = help_return_tab < 0 ? 0 : clamp_i64(help_return_tab, 0, tab_names.len() - 1);
+                    current_filename = clone(tab_names[active_tab]);
+                    current_lines = split_text_lines(tab_texts[active_tab]);
+                    current_saved_text = clone(tab_saved_texts[active_tab]);
+                    current_undo_text = clone(tab_undo_texts[active_tab]);
+                    current_redo_text = clone(tab_redo_texts[active_tab]);
+                    current_cursor_row = tab_cursor_rows[active_tab];
+                    current_cursor_col = tab_cursor_cols[active_tab];
+                    current_scroll_row = tab_scroll_rows[active_tab];
+                    current_scroll_col = tab_scroll_cols[active_tab];
+                    current_dirty = tab_dirty[active_tab];
+                }
+                help_return_tab = -1;
+                status = clone("");
+                pending_normal = 0;
+                continue;
+            }
             if keycode == AsciiKey::LowerU {
                 let undo_pair: list<str8> = pop_snapshot_text(current_undo_text);
                 if len(undo_pair[1]) > 0 || len(current_undo_text) > 0 {
@@ -1417,10 +1715,34 @@ fn main() -> i32 {
                 current_cursor_col = next_w[1];
                 continue;
             }
+            if keycode == AsciiKey::UpperW {
+                let next_W: list<i64> = move_bigword_forward(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_W[0];
+                current_cursor_col = next_W[1];
+                continue;
+            }
             if keycode == AsciiKey::LowerB {
                 let next_b: list<i64> = move_word_backward(current_lines, current_cursor_row, current_cursor_col);
                 current_cursor_row = next_b[0];
                 current_cursor_col = next_b[1];
+                continue;
+            }
+            if keycode == AsciiKey::LowerE {
+                let next_e: list<i64> = move_word_end(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_e[0];
+                current_cursor_col = next_e[1];
+                continue;
+            }
+            if keycode == AsciiKey::UpperB {
+                let next_B: list<i64> = move_bigword_backward(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_B[0];
+                current_cursor_col = next_B[1];
+                continue;
+            }
+            if keycode == AsciiKey::UpperE {
+                let next_E: list<i64> = move_bigword_end(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_E[0];
+                current_cursor_col = next_E[1];
                 continue;
             }
             if keycode == AsciiKey::Digit0 { current_cursor_col = 0; continue; }
