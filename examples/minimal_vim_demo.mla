@@ -90,39 +90,38 @@ fn is_word_sep_at(text: str8, idx: i64) -> i32 {
         return 1;
     }
     let ch: str8 = sub(text, idx, 1);
-    if eq(ch, " ") == 1 { return 1; }
-    if eq(ch, "\t") == 1 { return 1; }
-    if eq(ch, ".") == 1 { return 1; }
-    if eq(ch, ",") == 1 { return 1; }
-    if eq(ch, ";") == 1 { return 1; }
-    if eq(ch, ":") == 1 { return 1; }
-    if eq(ch, "(") == 1 { return 1; }
-    if eq(ch, ")") == 1 { return 1; }
-    if eq(ch, "[") == 1 { return 1; }
-    if eq(ch, "]") == 1 { return 1; }
-    if eq(ch, "{") == 1 { return 1; }
-    if eq(ch, "}") == 1 { return 1; }
-    if eq(ch, "<") == 1 { return 1; }
-    if eq(ch, ">") == 1 { return 1; }
-    if eq(ch, "/") == 1 { return 1; }
-    if eq(ch, "\\") == 1 { return 1; }
-    if eq(ch, "'") == 1 { return 1; }
-    if eq(ch, "\"") == 1 { return 1; }
-    if eq(ch, "+") == 1 { return 1; }
-    if eq(ch, "-") == 1 { return 1; }
-    if eq(ch, "*") == 1 { return 1; }
-    if eq(ch, "=") == 1 { return 1; }
-    if eq(ch, "!") == 1 { return 1; }
-    if eq(ch, "?") == 1 { return 1; }
-    if eq(ch, "&") == 1 { return 1; }
-    if eq(ch, "|") == 1 { return 1; }
-    if eq(ch, "@") == 1 { return 1; }
-    if eq(ch, "#") == 1 { return 1; }
-    if eq(ch, "$") == 1 { return 1; }
-    if eq(ch, "%") == 1 { return 1; }
-    if eq(ch, "^") == 1 { return 1; }
-    if eq(ch, "~") == 1 { return 1; }
-    return 0;
+    return eq(ch, " ") == 1 ||
+           eq(ch, "\t") == 1 ||
+           eq(ch, ".") == 1 ||
+           eq(ch, ",") == 1 ||
+           eq(ch, ";") == 1 ||
+           eq(ch, ":") == 1 ||
+           eq(ch, "(") == 1 ||
+           eq(ch, ")") == 1 ||
+           eq(ch, "[") == 1 ||
+           eq(ch, "]") == 1 ||
+           eq(ch, "{") == 1 ||
+           eq(ch, "}") == 1 ||
+           eq(ch, "<") == 1 ||
+           eq(ch, ">") == 1 ||
+           eq(ch, "/") == 1 ||
+           eq(ch, "\\") == 1 ||
+           eq(ch, "'") == 1 ||
+           eq(ch, "\"") == 1 ||
+           eq(ch, "+") == 1 ||
+           eq(ch, "-") == 1 ||
+           eq(ch, "*") == 1 ||
+           eq(ch, "=") == 1 ||
+           eq(ch, "!") == 1 ||
+           eq(ch, "?") == 1 ||
+           eq(ch, "&") == 1 ||
+           eq(ch, "|") == 1 ||
+           eq(ch, "@") == 1 ||
+           eq(ch, "#") == 1 ||
+           eq(ch, "$") == 1 ||
+           eq(ch, "%") == 1 ||
+           eq(ch, "^") == 1 ||
+           eq(ch, "~") == 1 ? 1 : 0;
 }
 
 fn append_char_to_owned(src: str8, k: i32) -> str8 {
@@ -139,9 +138,6 @@ fn stack_separator() -> str8 {
 }
 
 fn push_snapshot_text(stack_text: str8, snapshot: str8) -> str8 {
-    if len(stack_text) == 0 {
-        return snapshot;
-    }
     return concat(concat(stack_text, stack_separator()), snapshot);
 }
 
@@ -446,6 +442,154 @@ fn replace_i64_at(values: &list<i64>, idx: i64, value: i64) -> list<i64> {
     return out;
 }
 
+fn pos_leq(row_a: i64, col_a: i64, row_b: i64, col_b: i64) -> i32 {
+    if row_a < row_b {
+        return 1;
+    }
+    if row_a > row_b {
+        return 0;
+    }
+    return col_a <= col_b ? 1 : 0;
+}
+
+fn selection_bounds(anchor_row: i64, anchor_col: i64, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var out: list<i64> = [];
+    if pos_leq(anchor_row, anchor_col, cursor_row, cursor_col) == 1 {
+        out.push(anchor_row);
+        out.push(anchor_col);
+        out.push(cursor_row);
+        out.push(cursor_col);
+        return out;
+    }
+    out.push(cursor_row);
+    out.push(cursor_col);
+    out.push(anchor_row);
+    out.push(anchor_col);
+    return out;
+}
+
+fn is_selected_cell(sel_mode: i32, anchor_row: i64, anchor_col: i64, cursor_row: i64, cursor_col: i64,
+                    row: i64, col: i64) -> i32 {
+    if sel_mode == 4 {
+        let top: i64 = min_i64(anchor_row, cursor_row);
+        let bot: i64 = max_i64(anchor_row, cursor_row);
+        return row >= top && row <= bot ? 1 : 0;
+    }
+    if sel_mode != 3 {
+        return 0;
+    }
+    let bounds: list<i64> = selection_bounds(anchor_row, anchor_col, cursor_row, cursor_col);
+    let start_row: i64 = bounds[0];
+    let start_col: i64 = bounds[1];
+    let end_row: i64 = bounds[2];
+    let end_col: i64 = bounds[3];
+    if row < start_row || row > end_row {
+        return 0;
+    }
+    if start_row == end_row {
+        return col >= start_col && col <= end_col ? 1 : 0;
+    }
+    if row == start_row {
+        return col >= start_col ? 1 : 0;
+    }
+    if row == end_row {
+        return col <= end_col ? 1 : 0;
+    }
+    return 1;
+}
+
+fn insert_lines_after_many(lines: &list<str8>, row: i64, extra_lines: &list<str8>) -> list<str8> {
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        out.push(clone(line));
+        if i == row {
+            for(_, extra) in extra_lines.enumerate() {
+                out.push(clone(extra));
+            }
+        }
+    }
+    if lines.len() == 0 {
+        for(_, extra2) in extra_lines.enumerate() {
+            out.push(clone(extra2));
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn yank_charwise(lines: &list<str8>, anchor_row: i64, anchor_col: i64, cursor_row: i64, cursor_col: i64) -> str8 {
+    let bounds: list<i64> = selection_bounds(anchor_row, anchor_col, cursor_row, cursor_col);
+    let start_row: i64 = bounds[0];
+    let start_col: i64 = bounds[1];
+    let end_row: i64 = bounds[2];
+    let end_col: i64 = bounds[3];
+    let b: StringBuilder = builder_new(256);
+    var row: i64 = start_row;
+    while row <= end_row {
+        let line: str8 = row < lines.len() ? lines[row] : "";
+        if row == start_row && row == end_row {
+            let _ = builder_append(b, sub(line, start_col, end_col - start_col + 1));
+        } else if row == start_row {
+            let _ = builder_append(b, sub(line, start_col, len(line) - start_col));
+            let _ = builder_append(b, "\n");
+        } else if row == end_row {
+            let _ = builder_append(b, sub(line, 0, end_col + 1));
+        } else {
+            let _ = builder_append(b, line);
+            let _ = builder_append(b, "\n");
+        }
+        row = row + 1;
+    }
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn yank_linewise(lines: &list<str8>, start_row: i64, end_row: i64) -> str8 {
+    let top: i64 = min_i64(start_row, end_row);
+    let bot: i64 = max_i64(start_row, end_row);
+    let b: StringBuilder = builder_new(256);
+    var row: i64 = top;
+    while row <= bot {
+        if row < lines.len() {
+            let _ = builder_append(b, lines[row]);
+        }
+        if row < bot {
+            let _ = builder_append(b, "\n");
+        }
+        row = row + 1;
+    }
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn insert_charwise_text(lines: &list<str8>, row: i64, col: i64, text: str8) -> list<str8> {
+    let current: str8 = lines[row];
+    let left: str8 = sub(current, 0, col);
+    let right: str8 = sub(current, col, len(current) - col);
+    let parts: list<str8> = split_text_lines(text);
+    if parts.len() <= 1 {
+        return replace_line(lines, row, concat(concat(left, parts[0]), right));
+    }
+    let first: str8 = concat(left, parts[0]);
+    let last_idx: i64 = parts.len() - 1;
+    let last: str8 = concat(parts[last_idx], right);
+    let replaced: list<str8> = replace_line(lines, row, first);
+    var out: list<str8> = [];
+    for(i, line2) in replaced.enumerate() {
+        out.push(clone(line2));
+        if i == row {
+            var j: i64 = 1;
+            while j < last_idx {
+                out.push(clone(parts[j]));
+                j = j + 1;
+            }
+            out.push(last);
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
 fn recompute_dirty(lines: &list<str8>, saved_text: str8) -> i64 {
     let current_text: str8 = join_lines(lines);
     return eq(current_text, saved_text) == 1 ? 0 : 1;
@@ -463,6 +607,8 @@ fn tab_label(filename: str8, dirty: i64) -> str8 {
 fn mode_label(mode: i32) -> str8 {
     if mode == 1 { return "INSERT"; }
     if mode == 2 { return "COMMAND"; }
+    if mode == 3 { return "VISUAL"; }
+    if mode == 4 { return "V-LINE"; }
     return "NORMAL";
 }
 
@@ -483,7 +629,8 @@ fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
 fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i64>, active_tab: i64,
                 filename: str8, lines: &list<str8>, cursor_row: i64, cursor_col: i64,
                 scroll_row: i64, scroll_col: i64, mode: i32, status: str8,
-                command_input: str8, blink_visible: i32, pending_normal: i32) -> str8 {
+                command_input: str8, blink_visible: i32, pending_normal: i32,
+                visual_anchor_row: i64, visual_anchor_col: i64) -> str8 {
     let editor_rows: i64 = max_i64(1, rows - 3);
     let gutter_digits: i64 = digits_i64(lines.len());
     let gutter_width: i64 = gutter_digits + 2;
@@ -515,6 +662,8 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
         pending_mark = " g";
     } else if pending_normal == 2 {
         pending_mark = " d";
+    } else if pending_normal == 3 {
+        pending_mark = " y";
     }
 
     var r: i64 = 0;
@@ -522,13 +671,27 @@ fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i
         let line_idx: i64 = scroll_row + r;
         let gutter_pipe: str8 = acs_vline();
         var line_no: str8 = repeat(" ", gutter_digits);
-        var code_view: str8 = repeat(" ", code_cols);
         if line_idx < lines.len() {
             line_no = fit_right(format!("{}", line_idx + 1), gutter_digits, " ");
-            code_view = fit_right(sub(lines[line_idx], scroll_col, code_cols), code_cols, " ");
         }
-        let line_out: str8 = format!("{}{} {}", line_no, gutter_pipe, code_view);
-        let _ = builder_append(b, format!("{}{}{}{}", fg(color_white()), bg_rgb(8, 24, 92), line_out, reset()));
+        let _ = builder_append(b, format!("{}{}{}{} ", fg(color_white()), bg_rgb(8, 24, 92), line_no, gutter_pipe));
+        var c: i64 = 0;
+        while c < code_cols {
+            let abs_col: i64 = scroll_col + c;
+            var cell: str8 = " ";
+            if line_idx < lines.len() && abs_col < len(lines[line_idx]) {
+                cell = sub(lines[line_idx], abs_col, 1);
+            }
+            let selected: i32 = is_selected_cell(mode, visual_anchor_row, visual_anchor_col, cursor_row, cursor_col,
+                                                 line_idx, abs_col);
+            if selected == 1 {
+                let _ = builder_append(b, format!("{}{}{}", fg(color_white()), bg_rgb(28, 52, 136), cell));
+            } else {
+                let _ = builder_append(b, format!("{}{}{}", fg(color_white()), bg_rgb(8, 24, 92), cell));
+            }
+            c = c + 1;
+        }
+        let _ = builder_append(b, reset());
         if r + 1 < editor_rows {
             let _ = builder_append(b, "\r\n");
         }
@@ -601,6 +764,10 @@ fn main() -> i32 {
     var current_undo_text: str8 = clone("");
     var current_redo_text: str8 = clone("");
     var current_dirty: i64 = 0;
+    var current_yank_text: str8 = clone("");
+    var current_yank_kind: i32 = 0;
+    var visual_anchor_row: i64 = 0;
+    var visual_anchor_col: i64 = 0;
 
     if argv.len() > 1 {
         let path: str8 = argv[1];
@@ -660,7 +827,8 @@ fn main() -> i32 {
         let frame: str8 = render_frame(cols, rows, tab_names, tab_dirty, active_tab, current_filename,
                                        current_lines, current_cursor_row, current_cursor_col,
                                        current_scroll_row, current_scroll_col, mode, status,
-                                       command_input, blink_visible, pending_normal);
+                                       command_input, blink_visible, pending_normal,
+                                       visual_anchor_row, visual_anchor_col);
         let _ = write(stdout(), frame);
 
         while 1 {
@@ -1042,6 +1210,58 @@ fn main() -> i32 {
                 continue;
             }
 
+            if mode == 3 || mode == 4 {
+                if keycode == AsciiKey::Esc {
+                    mode = 0;
+                    pending_normal = 0;
+                    status = clone("");
+                    continue;
+                }
+                if keycode == 1001 || keycode == AsciiKey::LowerK {
+                    current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    continue;
+                }
+                if keycode == 1002 || keycode == AsciiKey::LowerJ {
+                    current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    continue;
+                }
+                if keycode == 1003 || keycode == AsciiKey::LowerL {
+                    current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1);
+                    continue;
+                }
+                if keycode == 1004 || keycode == AsciiKey::LowerH {
+                    current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1);
+                    continue;
+                }
+                if keycode == AsciiKey::LowerW {
+                    let next_wv: list<i64> = move_word_forward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_wv[0];
+                    current_cursor_col = next_wv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::LowerB {
+                    let next_bv: list<i64> = move_word_backward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_bv[0];
+                    current_cursor_col = next_bv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::LowerY {
+                    if mode == 3 {
+                        current_yank_text = yank_charwise(current_lines, visual_anchor_row, visual_anchor_col, current_cursor_row, current_cursor_col);
+                        current_yank_kind = 1;
+                    } else {
+                        current_yank_text = yank_linewise(current_lines, visual_anchor_row, current_cursor_row);
+                        current_yank_kind = 2;
+                    }
+                    mode = 0;
+                    status = clone("Yanked");
+                    continue;
+                }
+                continue;
+            }
+
             if keycode == 1001 { current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); pending_normal = 0; continue; }
             if keycode == 1002 { current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); pending_normal = 0; continue; }
             if keycode == 1003 { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); pending_normal = 0; continue; }
@@ -1098,6 +1318,10 @@ fn main() -> i32 {
                     current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
                     current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
                     current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    tab_dirty = replace_i64_at(tab_dirty, active_tab, current_dirty);
+                    tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                    tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                     status = clone("Undo");
                 }
                 continue;
@@ -1112,6 +1336,10 @@ fn main() -> i32 {
                     current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
                     current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
                     current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    tab_dirty = replace_i64_at(tab_dirty, active_tab, current_dirty);
+                    tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                    tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
                     status = clone("Redo");
                 }
                 continue;
@@ -1136,6 +1364,20 @@ fn main() -> i32 {
                 current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
                 pending_normal = 0;
                 status = clone("Page down");
+                continue;
+            }
+            if keycode == AsciiKey::LowerV {
+                mode = 3;
+                visual_anchor_row = current_cursor_row;
+                visual_anchor_col = current_cursor_col;
+                status = clone("-- VISUAL --");
+                continue;
+            }
+            if keycode == AsciiKey::UpperV {
+                mode = 4;
+                visual_anchor_row = current_cursor_row;
+                visual_anchor_col = 0;
+                status = clone("-- V-LINE --");
                 continue;
             }
 
@@ -1249,6 +1491,46 @@ fn main() -> i32 {
                 continue;
             }
             if keycode == AsciiKey::LowerD { pending_normal = 2; continue; }
+            if pending_normal == 3 {
+                pending_normal = 0;
+                if keycode == AsciiKey::LowerY {
+                    current_yank_text = yank_linewise(current_lines, current_cursor_row, current_cursor_row);
+                    current_yank_kind = 2;
+                    status = clone("Yanked line");
+                    continue;
+                }
+            }
+            if keycode == AsciiKey::LowerY {
+                pending_normal = 3;
+                continue;
+            }
+            if keycode == AsciiKey::LowerP {
+                if current_yank_kind == 2 {
+                    let before_text11: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text11);
+                    current_redo_text = clone("");
+                    let yank_lines: list<str8> = split_text_lines(current_yank_text);
+                    current_lines = insert_lines_after_many(current_lines, current_cursor_row, yank_lines);
+                    current_cursor_row = min_i64(current_cursor_row + 1, current_lines.len() - 1);
+                    current_cursor_col = 0;
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    status = clone("Pasted");
+                    continue;
+                }
+                if current_yank_kind == 1 {
+                    let before_text12: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text12);
+                    current_redo_text = clone("");
+                    let paste_col: i64 = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1);
+                    current_lines = insert_charwise_text(current_lines, current_cursor_row, paste_col, current_yank_text);
+                    current_cursor_col = paste_col;
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    status = clone("Pasted");
+                    continue;
+                }
+            }
             if keycode == AsciiKey::LowerG { pending_normal = 1; continue; }
             if keycode == AsciiKey::UpperG {
                 current_cursor_row = current_lines.len() - 1;
@@ -1270,5 +1552,3 @@ fn main() -> i32 {
     let _ = write(stdout(), "\n");
     return 0;
 }
-
-
