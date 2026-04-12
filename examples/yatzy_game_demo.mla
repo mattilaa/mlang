@@ -1,0 +1,898 @@
+mod std::ascii;
+mod std::esc;
+mod std::io;
+mod std::rand;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use std::ascii::AsciiKey;
+use std::esc::acs_hline;
+use std::esc::acs_llcorner;
+use std::esc::acs_lrcorner;
+use std::esc::acs_ttee;
+use std::esc::acs_ulcorner;
+use std::esc::acs_urcorner;
+use std::esc::acs_vline;
+use std::esc::bg_rgb;
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::cursor_pos;
+use std::esc::fg;
+use std::esc::fg_rgb;
+use std::esc::inverse_on;
+use std::esc::reset;
+use std::esc::color_black;
+use std::esc::color_white;
+use std::io::Stdin;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::rand::range_i64;
+use std::rand::seed_auto;
+use std::strbuf::StringBuilder;
+use std::strbuf::builder_append;
+use std::strbuf::builder_append_char;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+use std::strbuf::clone;
+use std::strbuf::concat;
+use std::strbuf::eq;
+use std::strbuf::fit_right;
+use std::strbuf::len;
+use std::strbuf::repeat;
+use std::strbuf::sub;
+use std::term::TermSize;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::now_ms;
+use std::time::sleep_ms;
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a : b;
+}
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a : b;
+}
+
+fn clamp_i64(v: i64, lo: i64, hi: i64) -> i64 {
+    if v < lo {
+        return lo;
+    }
+    if v > hi {
+        return hi;
+    }
+    return v;
+}
+
+fn esc_prefixed(suffix: str8) -> str8 {
+    let b: StringBuilder = builder_new(len(suffix) + 4);
+    let _ = builder_append_char(b, 27);
+    let _ = builder_append(b, suffix);
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn alt_screen_on_real() -> str8 {
+    return esc_prefixed("[?1049h");
+}
+
+fn alt_screen_off_real() -> str8 {
+    return esc_prefixed("[?1049l");
+}
+
+fn replace_i64_at(values: &list<i64>, idx: i64, value: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for(i, item) in values.enumerate() {
+        out.push(i == idx ? value : item);
+    }
+    return out;
+}
+
+fn zeros_i64(count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    var i: i64 = 0;
+    while i < count {
+        out.push(0);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn negative_ones_i64(count: i64) -> list<i64> {
+    var out: list<i64> = [];
+    var i: i64 = 0;
+    while i < count {
+        out.push(-1);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn category_count() -> i64 {
+    return 15;
+}
+
+fn category_name(idx: i64) -> str8 {
+    if idx == 0 { return "Ones"; }
+    if idx == 1 { return "Twos"; }
+    if idx == 2 { return "Threes"; }
+    if idx == 3 { return "Fours"; }
+    if idx == 4 { return "Fives"; }
+    if idx == 5 { return "Sixes"; }
+    if idx == 6 { return "One Pair"; }
+    if idx == 7 { return "Two Pairs"; }
+    if idx == 8 { return "Three Kind"; }
+    if idx == 9 { return "Four Kind"; }
+    if idx == 10 { return "Full House"; }
+    if idx == 11 { return "Small Straight"; }
+    if idx == 12 { return "Large Straight"; }
+    if idx == 13 { return "Chance"; }
+    return "Yatzy";
+}
+
+fn dice_total(dice: &list<i64>) -> i64 {
+    var total: i64 = 0;
+    for(_, d) in dice.enumerate() {
+        total = total + d;
+    }
+    return total;
+}
+
+fn dice_counts(dice: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    var i: i64 = 0;
+    while i < 7 {
+        out.push(0);
+        i = i + 1;
+    }
+    for(_, d) in dice.enumerate() {
+        if d >= 1 && d <= 6 {
+            out = replace_i64_at(out, d, out[d] + 1);
+        }
+    }
+    return out;
+}
+
+fn upper_sum(scores: &list<i64>) -> i64 {
+    var total: i64 = 0;
+    var i: i64 = 0;
+    while i < 6 {
+        if scores[i] >= 0 {
+            total = total + scores[i];
+        }
+        i = i + 1;
+    }
+    return total;
+}
+
+fn upper_bonus(scores: &list<i64>) -> i64 {
+    return upper_sum(scores) >= 63 ? 50 : 0;
+}
+
+fn final_total(scores: &list<i64>) -> i64 {
+    var total: i64 = upper_bonus(scores);
+    for(_, s) in scores.enumerate() {
+        if s >= 0 {
+            total = total + s;
+        }
+    }
+    return total;
+}
+
+fn all_scored(scores: &list<i64>) -> i32 {
+    for(_, s) in scores.enumerate() {
+        if s < 0 {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+fn count_face(dice: &list<i64>, face: i64) -> i64 {
+    var out: i64 = 0;
+    for(_, d) in dice.enumerate() {
+        if d == face {
+            out = out + 1;
+        }
+    }
+    return out;
+}
+
+fn score_preview(idx: i64, dice: &list<i64>) -> i64 {
+    let counts: list<i64> = dice_counts(dice);
+    if idx >= 0 && idx <= 5 {
+        let face: i64 = idx + 1;
+        return counts[face] * face;
+    }
+    if idx == 6 {
+        var face1: i64 = 6;
+        while face1 >= 1 {
+            if counts[face1] >= 2 {
+                return face1 * 2;
+            }
+            face1 = face1 - 1;
+        }
+        return 0;
+    }
+    if idx == 7 {
+        var first: i64 = 0;
+        var second: i64 = 0;
+        var face2: i64 = 6;
+        while face2 >= 1 {
+            if counts[face2] >= 2 {
+                if first == 0 {
+                    first = face2;
+                } else if second == 0 {
+                    second = face2;
+                }
+            }
+            face2 = face2 - 1;
+        }
+        return first > 0 && second > 0 ? (first * 2 + second * 2) : 0;
+    }
+    if idx == 8 {
+        var face3: i64 = 6;
+        while face3 >= 1 {
+            if counts[face3] >= 3 {
+                return dice_total(dice);
+            }
+            face3 = face3 - 1;
+        }
+        return 0;
+    }
+    if idx == 9 {
+        var face4: i64 = 6;
+        while face4 >= 1 {
+            if counts[face4] >= 4 {
+                return dice_total(dice);
+            }
+            face4 = face4 - 1;
+        }
+        return 0;
+    }
+    if idx == 10 {
+        var has_three: i32 = 0;
+        var has_two: i32 = 0;
+        var face5: i64 = 1;
+        while face5 <= 6 {
+            if counts[face5] == 3 {
+                has_three = 1;
+            }
+            if counts[face5] == 2 {
+                has_two = 1;
+            }
+            face5 = face5 + 1;
+        }
+        return has_three == 1 && has_two == 1 ? dice_total(dice) : 0;
+    }
+    if idx == 11 {
+        return counts[1] == 1 && counts[2] == 1 && counts[3] == 1 &&
+               counts[4] == 1 && counts[5] == 1 ? 15 : 0;
+    }
+    if idx == 12 {
+        return counts[2] == 1 && counts[3] == 1 && counts[4] == 1 &&
+               counts[5] == 1 && counts[6] == 1 ? 20 : 0;
+    }
+    if idx == 13 {
+        return dice_total(dice);
+    }
+    var face6: i64 = 1;
+    while face6 <= 6 {
+        if counts[face6] == 5 {
+            return 50;
+        }
+        face6 = face6 + 1;
+    }
+    return 0;
+}
+
+fn roll_available_dice(dice: &list<i64>, held: &list<i64>) -> list<i64> {
+    var out: list<i64> = [];
+    for(i, d) in dice.enumerate() {
+        if held[i] == 1 {
+            out.push(d);
+        } else {
+            out.push(range_i64(1, 6));
+        }
+    }
+    return out;
+}
+
+fn hold_label(held: i64) -> str8 {
+    return held == 1 ? "HELD" : "FREE";
+}
+
+fn die_has_pip(face: i64, row: i64, col: i64) -> i32 {
+    if face == 1 {
+        return row == 1 && col == 1 ? 1 : 0;
+    }
+    if face == 2 {
+        return (row == 0 && col == 0) || (row == 2 && col == 2) ? 1 : 0;
+    }
+    if face == 3 {
+        return (row == 0 && col == 0) || (row == 1 && col == 1) || (row == 2 && col == 2) ? 1 : 0;
+    }
+    if face == 4 {
+        return (row == 0 && col == 0) || (row == 0 && col == 2) ||
+               (row == 2 && col == 0) || (row == 2 && col == 2) ? 1 : 0;
+    }
+    if face == 5 {
+        return (row == 0 && col == 0) || (row == 0 && col == 2) ||
+               (row == 1 && col == 1) || (row == 2 && col == 0) ||
+               (row == 2 && col == 2) ? 1 : 0;
+    }
+    return (row == 0 && col == 0) || (row == 0 && col == 2) ||
+           (row == 1 && col == 0) || (row == 1 && col == 2) ||
+           (row == 2 && col == 0) || (row == 2 && col == 2) ? 1 : 0;
+}
+
+fn die_phase(rolling: i32, anim_tick: i64, die_idx: i64, face: i64) -> i64 {
+    if rolling == 0 {
+        return 0;
+    }
+    return ((anim_tick / 2) + die_idx + face) % 6;
+}
+
+fn die_visible_face(face: i64, rolling: i32, phase: i64, die_idx: i64) -> i64 {
+    if rolling == 0 {
+        return face;
+    }
+    return ((face + phase + die_idx + 1) % 6) + 1;
+}
+
+fn die_neighbor_face(face: i64, step: i64) -> i64 {
+    return ((face + step - 1) % 6) + 1;
+}
+
+fn die_anim_dx(rolling: i32, anim_tick: i64, die_idx: i64, face: i64) -> i64 {
+    if rolling == 0 {
+        return 0;
+    }
+    let phase: i64 = (anim_tick + die_idx * 3 + face) % 8;
+    if phase == 0 { return -2; }
+    if phase == 1 { return -1; }
+    if phase == 2 { return 1; }
+    if phase == 3 { return 2; }
+    if phase == 4 { return 1; }
+    if phase == 5 { return -1; }
+    return 0;
+}
+
+fn die_anim_dy(rolling: i32, anim_tick: i64, die_idx: i64, face: i64) -> i64 {
+    if rolling == 0 {
+        return 0;
+    }
+    let phase: i64 = (anim_tick + die_idx * 5 + face) % 10;
+    if phase == 0 || phase == 5 {
+        return -2;
+    }
+    if phase == 1 || phase == 4 || phase == 6 || phase == 9 {
+        return -1;
+    }
+    return 0;
+}
+
+fn die_front_bg(held: i64, rolling: i32) -> str8 {
+    if held == 1 {
+        return bg_rgb(248, 238, 206);
+    }
+    if rolling == 1 {
+        return bg_rgb(244, 246, 250);
+    }
+    return bg_rgb(250, 250, 252);
+}
+
+fn die_front_fg(held: i64, rolling: i32) -> str8 {
+    return fg_rgb(8, 8, 12);
+}
+
+fn die_top_bg(held: i64, rolling: i32) -> str8 {
+    if held == 1 {
+        return bg_rgb(255, 247, 222);
+    }
+    if rolling == 1 {
+        return bg_rgb(255, 255, 255);
+    }
+    return bg_rgb(255, 255, 255);
+}
+
+fn die_side_bg(held: i64, rolling: i32) -> str8 {
+    if held == 1 {
+        return bg_rgb(226, 220, 206);
+    }
+    if rolling == 1 {
+        return bg_rgb(226, 230, 238);
+    }
+    return bg_rgb(232, 234, 240);
+}
+
+fn die_shadow_bg(held: i64) -> str8 {
+    return held == 1 ? bg_rgb(84, 76, 52) : bg_rgb(28, 40, 82);
+}
+
+fn die_has_big_pip(face: i64, row: i64, col: i64) -> i32 {
+    if face == 1 {
+        return row == 2 && col == 2 ? 1 : 0;
+    }
+    if face == 2 {
+        return (row == 0 && col == 0) || (row == 4 && col == 4) ? 1 : 0;
+    }
+    if face == 3 {
+        return (row == 0 && col == 0) || (row == 2 && col == 2) ||
+               (row == 4 && col == 4) ? 1 : 0;
+    }
+    if face == 4 {
+        return (row == 0 && col == 0) || (row == 0 && col == 4) ||
+               (row == 4 && col == 0) || (row == 4 && col == 4) ? 1 : 0;
+    }
+    if face == 5 {
+        return (row == 0 && col == 0) || (row == 0 && col == 4) ||
+               (row == 2 && col == 2) || (row == 4 && col == 0) ||
+               (row == 4 && col == 4) ? 1 : 0;
+    }
+    return (row == 0 && col == 0) || (row == 0 && col == 4) ||
+           (row == 2 && col == 0) || (row == 2 && col == 4) ||
+           (row == 4 && col == 0) || (row == 4 && col == 4) ? 1 : 0;
+}
+
+fn die_big_row(face: i64, row: i64, held: i64, rolling: i32) -> str8 {
+    let pip_fg: str8 = die_front_fg(held, rolling);
+    let pip0: str8 = die_has_big_pip(face, row, 0) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    let pip1: str8 = die_has_big_pip(face, row, 1) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    let pip2: str8 = die_has_big_pip(face, row, 2) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    let pip3: str8 = die_has_big_pip(face, row, 3) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    let pip4: str8 = die_has_big_pip(face, row, 4) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    return format!("{}{}{}{}{}", pip0, pip1, pip2, pip3, pip4);
+}
+
+fn die_small_row(face: i64, row: i64, held: i64, rolling: i32) -> str8 {
+    let pip_fg: str8 = die_front_fg(held, rolling);
+    let pip0: str8 = die_has_pip(face, row, 0) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    let pip1: str8 = die_has_pip(face, row, 1) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    let pip2: str8 = die_has_pip(face, row, 2) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+    return format!("{}{}{}", pip0, pip1, pip2);
+}
+
+fn die_front_row(face: i64, row: i64, held: i64, rolling: i32) -> str8 {
+    let pip_fg: str8 = die_front_fg(held, rolling);
+    var out: str8 = clone("");
+    var col: i64 = 0;
+    while col < 7 {
+        if col == 0 || col == 6 {
+            out = concat(out, " ");
+        } else {
+            let pip_col: i64 = col - 1;
+            let ch: str8 = die_has_big_pip(face, row, pip_col) == 1 ? format!("{}{}{}", pip_fg, "●", reset()) : " ";
+            out = concat(out, ch);
+        }
+        col = col + 1;
+    }
+    return out;
+}
+
+fn draw_die_pose_wide(builder: StringBuilder, x: i64, y: i64, face: i64, held: i64,
+                      rolling: i32) -> void {
+    let top_face: i64 = die_neighbor_face(face, 2);
+    let side_face: i64 = die_neighbor_face(face, 4);
+    let top_bg: str8 = die_top_bg(held, rolling);
+    let front_bg: str8 = die_front_bg(held, rolling);
+    let side_bg: str8 = die_side_bg(held, rolling);
+    let shadow_bg: str8 = die_shadow_bg(held);
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y, x + 2), fg_rgb(255, 255, 255),
+                                            top_bg, " ▄▄▄▄▄▄▄ ", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 1), fg_rgb(252, 252, 255),
+                                            top_bg, "▄███████▄", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2, x + 2), fg_rgb(246, 246, 250),
+                                            top_bg, "▀███████▀", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 10), fg_rgb(198, 204, 214),
+                                            side_bg, "▐▌", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 4), top_bg,
+                                            die_small_row(top_face, 0, held, rolling), "", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2, x + 5), top_bg,
+                                            die_small_row(top_face, 1, held, rolling), "", reset()));
+    var row: i64 = 0;
+    while row < 5 {
+        let pip_row: str8 = die_front_row(face, row, held, rolling);
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x), fg_rgb(222, 228, 238),
+                                                front_bg, "▐", reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}", cursor_pos(y + 2 + row, x + 1),
+                                                front_bg, pip_row, reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 8), fg_rgb(222, 228, 238),
+                                                front_bg, "▌", reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 9), fg_rgb(198, 204, 214),
+                                                side_bg, "▐▌", reset()));
+        if row >= 1 && row <= 3 {
+            let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 9),
+                                                    side_bg, die_small_row(side_face, row - 1, held, rolling),
+                                                    "", reset()));
+        }
+        row = row + 1;
+    }
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 7, x + 1), fg_rgb(214, 220, 232),
+                                            front_bg, " ▀▀▀▀▀▀▀ ", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 8, x + 3), shadow_bg,
+                                            fg_rgb(44, 56, 86), "▄▄▄▄▄▄▄▄", reset()));
+}
+
+fn draw_die_pose_right(builder: StringBuilder, x: i64, y: i64, face: i64, held: i64,
+                       rolling: i32) -> void {
+    let top_face: i64 = die_neighbor_face(face, 3);
+    let side_face: i64 = die_neighbor_face(face, 5);
+    let top_bg: str8 = die_top_bg(held, rolling);
+    let front_bg: str8 = die_front_bg(held, rolling);
+    let side_bg: str8 = die_side_bg(held, rolling);
+    let shadow_bg: str8 = die_shadow_bg(held);
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y, x + 4), fg_rgb(255, 255, 255),
+                                            top_bg, " ▄▄▄▄▄ ", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 3), fg_rgb(250, 250, 252),
+                                            top_bg, "▄█████▄", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2, x + 4), fg_rgb(246, 246, 250),
+                                            top_bg, "▀█████▀", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 10), fg_rgb(198, 204, 214),
+                                            side_bg, "▐", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 5), top_bg,
+                                            die_small_row(top_face, 0, held, rolling), "", reset()));
+    var row: i64 = 0;
+    while row < 5 {
+        let pip_row: str8 = die_front_row(face, row, held, rolling);
+        let center: str8 = sub(pip_row, 2, 3);
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 2), fg_rgb(222, 228, 238),
+                                                front_bg, "▐", reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}", cursor_pos(y + 2 + row, x + 3),
+                                                front_bg, center, reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 7), fg_rgb(222, 228, 238),
+                                                front_bg, "▌", reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 8), fg_rgb(198, 204, 214),
+                                                side_bg, "▐▌", reset()));
+        if row >= 1 && row <= 3 {
+            let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 8),
+                                                    side_bg, die_small_row(side_face, row - 1, held, rolling),
+                                                    "", reset()));
+        }
+        row = row + 1;
+    }
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 7, x + 3), fg_rgb(214, 220, 232),
+                                            front_bg, " ▀▀▀▀▀ ", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 8, x + 5), shadow_bg,
+                                            fg_rgb(44, 56, 86), "▄▄▄▄▄▄", reset()));
+}
+
+fn draw_die_pose_left(builder: StringBuilder, x: i64, y: i64, face: i64, held: i64,
+                      rolling: i32) -> void {
+    let top_face: i64 = die_neighbor_face(face, 1);
+    let side_face: i64 = die_neighbor_face(face, 6);
+    let top_bg: str8 = die_top_bg(held, rolling);
+    let front_bg: str8 = die_front_bg(held, rolling);
+    let side_bg: str8 = die_side_bg(held, rolling);
+    let shadow_bg: str8 = die_shadow_bg(held);
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y, x + 1), fg_rgb(255, 255, 255),
+                                            top_bg, " ▄▄▄▄▄ ", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x), fg_rgb(250, 250, 252),
+                                            top_bg, "▄█████▄", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2, x + 1), fg_rgb(246, 246, 250),
+                                            top_bg, "▀█████▀", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 7), fg_rgb(198, 204, 214),
+                                            side_bg, "▐", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 1, x + 2), top_bg,
+                                            die_small_row(top_face, 0, held, rolling), "", reset()));
+    var row: i64 = 0;
+    while row < 5 {
+        let pip_row: str8 = die_front_row(face, row, held, rolling);
+        let center: str8 = sub(pip_row, 2, 3);
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x), fg_rgb(222, 228, 238),
+                                                front_bg, "▐", reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}", cursor_pos(y + 2 + row, x + 1),
+                                                front_bg, center, reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 5), fg_rgb(222, 228, 238),
+                                                front_bg, "▌", reset()));
+        let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 6), fg_rgb(198, 204, 214),
+                                                side_bg, "▐▌", reset()));
+        if row >= 1 && row <= 3 {
+            let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 2 + row, x + 6),
+                                                    side_bg, die_small_row(side_face, row - 1, held, rolling),
+                                                    "", reset()));
+        }
+        row = row + 1;
+    }
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 7, x + 1), fg_rgb(214, 220, 232),
+                                            front_bg, " ▀▀▀▀▀ ", reset()));
+    let _ = builder_append(builder, format!("{}{}{}{}{}", cursor_pos(y + 8, x + 2), shadow_bg,
+                                            fg_rgb(44, 56, 86), "▄▄▄▄▄▄", reset()));
+}
+
+fn draw_die(builder: StringBuilder, x: i64, y: i64, face: i64, held: i64, rolling: i32,
+            phase: i64) -> void {
+    let title: str8 = held == 1 ? " HOLD " : " ROLL ";
+    let shown_face: i64 = die_visible_face(face, rolling, phase, x + y);
+    var y0: i64 = y;
+    if phase == 1 || phase == 4 {
+        y0 = y - 1;
+    } else if phase == 2 || phase == 5 {
+        y0 = y + 1;
+    }
+
+    if phase == 1 || phase == 4 {
+        draw_die_pose_right(builder, x, y0, shown_face, held, rolling);
+    } else if phase == 2 || phase == 5 {
+        draw_die_pose_left(builder, x, y0, shown_face, held, rolling);
+    } else {
+        draw_die_pose_wide(builder, x, y0, shown_face, held, rolling);
+    }
+
+    let label: str8 = format!("{}{}{}{}{}", cursor_pos(y0 + 10, x + 2), fg(color_black()),
+                              bg_rgb(218, 212, 186), title, reset());
+    let _ = builder_append(builder, label);
+}
+
+fn render_hline(builder: StringBuilder, x: i64, y: i64, width: i64) -> void {
+    let h: str8 = acs_hline();
+    let _ = builder_append(builder, format!("{}{}", cursor_pos(y, x), repeat(h, width)));
+}
+
+fn render_frame(cols: i64, rows: i64, scores: &list<i64>, selected_row: i64, dice: &list<i64>,
+                held: &list<i64>, rolls_used: i64, rolling: i32, status: str8,
+                blink_visible: i32, anim_tick: i64) -> str8 {
+    let b: StringBuilder = builder_new(8192);
+    let _ = builder_append(b, cursor(cmd_home()));
+    let _ = builder_append(b, cursor(cmd_clear_screen()));
+    let _ = builder_append(b, cursor(cmd_hide()));
+
+    let title: str8 = "MLang Yatzy";
+    let subtitle: str8 = "r roll   1-5 hold   arrows move   enter score   n new   q quit";
+    let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(1, 2), fg_rgb(255, 224, 112), bold_on(), title, reset()));
+    let _ = builder_append(b, format!("{}{}{}{}", cursor_pos(2, 2), fg_rgb(180, 205, 232), subtitle, reset()));
+
+    let table_x: i64 = 2;
+    let table_y: i64 = 4;
+    let table_w: i64 = 34;
+    let inner_w: i64 = table_w - 2;
+    let split_col: i64 = table_x + 22;
+    let top: str8 = format!("{}{}{}{}", cursor_pos(table_y, table_x), acs_ulcorner(), repeat(acs_hline(), table_w - 2), acs_urcorner());
+    let _ = builder_append(b, top);
+    let header_left: str8 = fit_right(" Category", 20, " ");
+    let header_right: str8 = fit_right("Score ", 10, " ");
+    let _ = builder_append(b, format!("{}{}{}{}{}{}{}", cursor_pos(table_y + 1, table_x), acs_vline(),
+                                      fg_rgb(240, 220, 140), header_left, reset(), header_right, acs_vline()));
+    let mid: str8 = format!("{}{}{}{}{}{}", cursor_pos(table_y + 2, table_x), acs_vline(), repeat(" ", 20), acs_vline(), repeat(" ", 10), acs_vline());
+    let _ = builder_append(b, mid);
+    let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(table_y + 2, table_x), acs_ltee(), repeat(acs_hline(), 20), acs_ttee(), repeat(acs_hline(), 10)));
+    let _ = builder_append(b, acs_rtee());
+
+    var row: i64 = 0;
+    while row < category_count() {
+        let y: i64 = table_y + 3 + row;
+        let used: i32 = scores[row] >= 0 ? 1 : 0;
+        let preview: i64 = used == 1 ? scores[row] : score_preview(row, dice);
+        let base_bg: str8 = used == 1 ? bg_rgb(34, 78, 48) : bg_rgb(18, 28, 54);
+        let fg_cat: str8 = used == 1 ? fg_rgb(202, 232, 196) : fg_rgb(232, 234, 242);
+        let fg_score: str8 = used == 1 ? fg_rgb(242, 242, 200) : fg_rgb(250, 210, 120);
+        let row_mark: i32 = row == selected_row ? 1 : 0;
+        let row_name: str8 = fit_right(format!(" {}", category_name(row)), 20, " ");
+        let score_text: str8 = fit_right(format!("{}", preview), 6, " ");
+        let score_cell: str8 = fit_right(score_text, 10, " ");
+        let row_prefix: str8 = row_mark == 1 ? format!("{}{}{}{}", fg(color_black()), bg_rgb(248, 228, 140), bold_on(), "") :
+                                              format!("{}{}{}", fg_cat, base_bg, "");
+        let score_prefix: str8 = row_mark == 1 ? format!("{}{}{}{}", fg(color_black()), bg_rgb(248, 228, 140), bold_on(), "") :
+                                                format!("{}{}{}", fg_score, base_bg, "");
+        let _ = builder_append(b, format!("{}{}{}{}{}{}{}{}{}", cursor_pos(y, table_x), fg_rgb(214, 214, 214), base_bg, acs_vline(),
+                                          row_prefix, row_name, reset(), score_prefix, ""));
+        let _ = builder_append(b, format!("{}{}{}{}", score_cell, reset(), bg_rgb(18, 28, 54), acs_vline()));
+        row = row + 1;
+    }
+
+    let bottom_y: i64 = table_y + 3 + category_count();
+    let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(bottom_y, table_x), acs_ltee(), repeat(acs_hline(), 20), acs_ttee(), repeat(acs_hline(), 10)));
+    let _ = builder_append(b, acs_rtee());
+    let upper_line: str8 = fit_right(format!(" Upper / Bonus"), 20, " ");
+    let upper_score: str8 = fit_right(format!("{}/{}", upper_sum(scores), upper_bonus(scores)), 10, " ");
+    let _ = builder_append(b, format!("{}{}{}{}{}{}{}{}", cursor_pos(bottom_y + 1, table_x), acs_vline(),
+                                      fg_rgb(186, 206, 236), upper_line, reset(),
+                                      fg_rgb(255, 220, 120), upper_score, acs_vline()));
+    let total_line: str8 = fit_right(format!(" Total"), 20, " ");
+    let total_score: str8 = fit_right(format!("{}", final_total(scores)), 10, " ");
+    let _ = builder_append(b, format!("{}{}{}{}{}{}{}{}", cursor_pos(bottom_y + 2, table_x), acs_vline(),
+                                      fg_rgb(206, 244, 192), total_line, reset(),
+                                      fg_rgb(255, 236, 156), total_score, acs_vline()));
+    let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(bottom_y + 3, table_x), acs_llcorner(),
+                                      repeat(acs_hline(), table_w - 2), acs_lrcorner(), reset()));
+
+    let dice_x: i64 = table_x + table_w + 6;
+    let dice_y: i64 = table_y + 1;
+    let roll_state: str8 = rolling == 1 ? "ROLLING..." : format!("Rolls left: {}", 3 - rolls_used);
+    let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(dice_y - 1, dice_x), fg_rgb(255, 220, 112), bold_on(), "Dice Tray", reset()));
+    let _ = builder_append(b, format!("{}{}{}{}", cursor_pos(dice_y, dice_x), fg_rgb(182, 214, 250), roll_state, reset()));
+    var di: i64 = 0;
+    while di < 5 {
+        let slot_x: i64 = dice_x + di * 14;
+        let slot_y: i64 = dice_y + 5;
+        var face: i64 = dice[di];
+        if face <= 0 {
+            face = blink_visible == 1 ? 1 : 6;
+        }
+        let phase: i64 = die_phase(rolling, anim_tick, di, face);
+        let dx: i64 = slot_x + die_anim_dx(rolling, anim_tick, di, face);
+        let dy: i64 = slot_y + die_anim_dy(rolling, anim_tick, di, face);
+        draw_die(b, dx, dy, face, held[di], rolling, phase);
+        let num_label: str8 = format!("  {}", di + 1);
+        let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(slot_y + 11, slot_x + 4), fg_rgb(180, 206, 240), bg_rgb(18, 28, 54), num_label, reset()));
+        di = di + 1;
+    }
+
+    let banner_y: i64 = min_i64(rows - 2, bottom_y + 5);
+    let final_msg: str8 = all_scored(scores) == 1 ? format!("Game complete. Final total: {}. Press n for a new game.", final_total(scores)) : status;
+    let line_fit: str8 = fit_right(concat(" ", final_msg), max_i64(1, cols - 4), " ");
+    let _ = builder_append(b, format!("{}{}{}{}{}", cursor_pos(banner_y, 2), fg_rgb(232, 232, 232), bg_rgb(26, 42, 76), line_fit, reset()));
+
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn parse_key(input: Stdin) -> i32 {
+    let keycode: i32 = read_keycode_nonblocking(input);
+    if keycode != AsciiKey::Esc {
+        return keycode;
+    }
+    let k2: i32 = read_keycode_nonblocking(stdin());
+    if k2 == -2 {
+        return AsciiKey::Esc;
+    }
+    if k2 == AsciiKey::LBracket {
+        let k3: i32 = read_keycode_nonblocking(stdin());
+        if k3 == AsciiKey::UpperA { return 1001; }
+        if k3 == AsciiKey::UpperB { return 1002; }
+        if k3 == AsciiKey::UpperC { return 1003; }
+        if k3 == AsciiKey::UpperD { return 1004; }
+    }
+    return AsciiKey::Esc;
+}
+
+fn main() -> i32 {
+    if stdin_is_tty() == 0 {
+        println!("yatzy_game_demo requires a TTY");
+        return 1;
+    }
+
+    let _seed: i64 = seed_auto();
+    let input: Stdin = stdin();
+    let _ = stdin_enable_raw();
+    let _ = write(stdout(), alt_screen_on_real());
+
+    var scores: list<i64> = negative_ones_i64(category_count());
+    var dice: list<i64> = zeros_i64(5);
+    var held: list<i64> = zeros_i64(5);
+    var selected_row: i64 = 0;
+    var rolls_used: i64 = 0;
+    var rolling: i32 = 0;
+    var running: i32 = 1;
+    var status: str8 = clone("Press r to roll the dice.");
+    var rolling_until_ms: i64 = 0;
+    var next_anim_ms: i64 = 0;
+    var blink_tick: i64 = 0;
+
+    while running == 1 {
+        let now: i64 = now_ms();
+        if rolling == 1 && now >= next_anim_ms {
+            dice = roll_available_dice(dice, held);
+            next_anim_ms = now + 70;
+        }
+        if rolling == 1 && now >= rolling_until_ms {
+            rolling = 0;
+            dice = roll_available_dice(dice, held);
+            rolls_used = rolls_used + 1;
+            status = rolls_used >= 3 ? clone("Choose a category for this hand.") :
+                                       clone("Roll again, hold dice, or score this hand.");
+        }
+
+        let ts: TermSize = stdout_size();
+        let rows: i64 = max_i64(28, ts.rows);
+        let cols: i64 = max_i64(118, ts.cols);
+        let blink_visible: i32 = ((blink_tick / 18) % 2) == 0 ? 1 : 0;
+        let frame: str8 = render_frame(cols, rows, scores, selected_row, dice, held, rolls_used,
+                                       rolling, status, blink_visible, blink_tick);
+        let _ = write(stdout(), frame);
+
+        while 1 {
+            let keycode: i32 = parse_key(input);
+            if keycode == -2 {
+                break;
+            }
+            if keycode < 0 {
+                running = 0;
+                break;
+            }
+            if keycode == AsciiKey::LowerQ {
+                running = 0;
+                break;
+            }
+            if keycode == AsciiKey::LowerN {
+                scores = negative_ones_i64(category_count());
+                dice = zeros_i64(5);
+                held = zeros_i64(5);
+                selected_row = 0;
+                rolls_used = 0;
+                rolling = 0;
+                status = clone("New game. Press r to roll the dice.");
+                continue;
+            }
+            if keycode == 1001 || keycode == AsciiKey::LowerK {
+                selected_row = selected_row <= 0 ? (category_count() - 1) : (selected_row - 1);
+                continue;
+            }
+            if keycode == 1002 || keycode == AsciiKey::LowerJ {
+                selected_row = selected_row + 1 >= category_count() ? 0 : (selected_row + 1);
+                continue;
+            }
+            if keycode >= AsciiKey::Digit1 && keycode <= AsciiKey::Digit5 {
+                let die_idx: i64 = keycode - AsciiKey::Digit1;
+                if rolling == 0 && rolls_used > 0 && rolls_used < 3 {
+                    held = replace_i64_at(held, die_idx, held[die_idx] == 1 ? 0 : 1);
+                    status = format!("Die {} {}", die_idx + 1, hold_label(held[die_idx]));
+                }
+                continue;
+            }
+            if keycode == AsciiKey::LowerR || keycode == AsciiKey::Space {
+                if rolling == 1 {
+                    continue;
+                }
+                if all_scored(scores) == 1 {
+                    status = clone("Game finished. Press n to start again.");
+                    continue;
+                }
+                if rolls_used >= 3 {
+                    status = clone("No rolls left. Score the hand or start a new game.");
+                    continue;
+                }
+                rolling = 1;
+                rolling_until_ms = now_ms() + 900;
+                next_anim_ms = 0;
+                status = clone("Rolling the dice...");
+                continue;
+            }
+            if keycode == AsciiKey::Cr || keycode == AsciiKey::Lf {
+                if rolling == 1 {
+                    continue;
+                }
+                if rolls_used <= 0 {
+                    status = clone("Roll before choosing a score.");
+                    continue;
+                }
+                if scores[selected_row] >= 0 {
+                    status = clone("That category is already used.");
+                    continue;
+                }
+                let gained: i64 = score_preview(selected_row, dice);
+                scores = replace_i64_at(scores, selected_row, gained);
+                held = zeros_i64(5);
+                dice = zeros_i64(5);
+                rolls_used = 0;
+                status = format!("Scored {} in {}", gained, category_name(selected_row));
+                if all_scored(scores) == 1 {
+                    status = format!("Yatzy complete. Final total: {}", final_total(scores));
+                }
+                continue;
+            }
+        }
+
+        sleep_ms(16);
+        blink_tick = blink_tick + 1;
+    }
+
+    let _ = stdin_restore();
+    let _ = write(stdout(), reset());
+    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), alt_screen_off_real());
+    let _ = write(stdout(), "\n");
+    return 0;
+}
