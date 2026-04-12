@@ -1,0 +1,2138 @@
+mod std::ascii;
+mod std::env;
+mod std::esc;
+mod std::fs;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use std::ascii::AsciiKey;
+use std::env::args;
+use std::esc::bg_rgb;
+use std::esc::acs_vline;
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::cursor_color_reset;
+use std::esc::cursor_pos;
+use std::esc::fg;
+use std::esc::inverse_on;
+use std::esc::reset;
+use std::esc::color_black;
+use std::esc::color_white;
+use std::fs::read_all_text;
+use std::fs::write_all_text;
+use std::io::Stdin;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::strbuf::StringBuilder;
+use std::strbuf::builder_append;
+use std::strbuf::builder_append_char;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+use std::strbuf::clone;
+use std::strbuf::concat;
+use std::strbuf::eq;
+use std::strbuf::fit_right;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::strbuf::repeat;
+use std::strbuf::starts_with;
+use std::strbuf::sub;
+use std::term::TermSize;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::sleep_ms;
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a : b;
+}
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a : b;
+}
+
+fn clamp_i64(v: i64, lo: i64, hi: i64) -> i64 {
+    if v < lo {
+        return lo;
+    }
+    if v > hi {
+        return hi;
+    }
+    return v;
+}
+
+fn digits_i64(v: i64) -> i64 {
+    var n: i64 = v <= 0 ? 1 : v;
+    var digits: i64 = 0;
+    while n > 0 {
+        digits = digits + 1;
+        n = n / 10;
+    }
+    return digits;
+}
+
+fn printable_ascii(keycode: i32) -> i32 {
+    return keycode >= 32 && keycode <= 126 ? 1 : 0;
+}
+
+fn is_word_sep_at(text: str8, idx: i64) -> i32 {
+    if idx < 0 || idx >= len(text) {
+        return 1;
+    }
+    let ch: str8 = sub(text, idx, 1);
+    return eq(ch, " ") == 1 ||
+           eq(ch, "\t") == 1 ||
+           eq(ch, ".") == 1 ||
+           eq(ch, ",") == 1 ||
+           eq(ch, ";") == 1 ||
+           eq(ch, ":") == 1 ||
+           eq(ch, "(") == 1 ||
+           eq(ch, ")") == 1 ||
+           eq(ch, "[") == 1 ||
+           eq(ch, "]") == 1 ||
+           eq(ch, "{") == 1 ||
+           eq(ch, "}") == 1 ||
+           eq(ch, "<") == 1 ||
+           eq(ch, ">") == 1 ||
+           eq(ch, "/") == 1 ||
+           eq(ch, "\\") == 1 ||
+           eq(ch, "'") == 1 ||
+           eq(ch, "\"") == 1 ||
+           eq(ch, "+") == 1 ||
+           eq(ch, "-") == 1 ||
+           eq(ch, "*") == 1 ||
+           eq(ch, "=") == 1 ||
+           eq(ch, "!") == 1 ||
+           eq(ch, "?") == 1 ||
+           eq(ch, "&") == 1 ||
+           eq(ch, "|") == 1 ||
+           eq(ch, "@") == 1 ||
+           eq(ch, "#") == 1 ||
+           eq(ch, "$") == 1 ||
+           eq(ch, "%") == 1 ||
+           eq(ch, "^") == 1 ||
+           eq(ch, "~") == 1 ? 1 : 0;
+}
+
+fn append_char_to_owned(src: str8, k: i32) -> str8 {
+    let b: StringBuilder = builder_new(len(src) + 8);
+    let _ = builder_append(b, src);
+    let _ = builder_append_char(b, k);
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn stack_separator() -> str8 {
+    return "#";
+}
+
+fn stack_length_width() -> i64 {
+    return 16;
+}
+
+fn parse_i64_text(text: str8) -> i64 {
+    let n: i64 = len(text);
+    if n <= 0 {
+        return 0;
+    }
+    var value: i64 = 0;
+    var i: i64 = 0;
+    while i < n {
+        let ch: str8 = sub(text, i, 1);
+        if eq(ch, "0") == 1 { value = value * 10; }
+        else if eq(ch, "1") == 1 { value = value * 10 + 1; }
+        else if eq(ch, "2") == 1 { value = value * 10 + 2; }
+        else if eq(ch, "3") == 1 { value = value * 10 + 3; }
+        else if eq(ch, "4") == 1 { value = value * 10 + 4; }
+        else if eq(ch, "5") == 1 { value = value * 10 + 5; }
+        else if eq(ch, "6") == 1 { value = value * 10 + 6; }
+        else if eq(ch, "7") == 1 { value = value * 10 + 7; }
+        else if eq(ch, "8") == 1 { value = value * 10 + 8; }
+        else if eq(ch, "9") == 1 { value = value * 10 + 9; }
+        else { return 0; }
+        i = i + 1;
+    }
+    return value;
+}
+
+fn pad_decimal_left(text: str8, width: i64) -> str8 {
+    let n: i64 = len(text);
+    if n >= width {
+        return clone(text);
+    }
+    return concat(repeat("0", width - n), text);
+}
+
+fn push_snapshot_text(stack_text: str8, snapshot: str8) -> str8 {
+    let ntext: str8 = format!("{}", len(snapshot));
+    let padded: str8 = pad_decimal_left(ntext, stack_length_width());
+    return concat(concat(concat(stack_text, snapshot), padded), stack_separator());
+}
+
+fn pop_snapshot_text(stack_text: str8) -> list<str8> {
+    var out: list<str8> = [];
+    let n: i64 = len(stack_text);
+    if n == 0 {
+        out.push(clone(""));
+        out.push(clone(""));
+        return out;
+    }
+    let sep_idx: i64 = n - 1;
+    if eq(sub(stack_text, sep_idx, 1), stack_separator()) != 1 {
+        out.push(clone(""));
+        out.push(clone(""));
+        return out;
+    }
+    let width: i64 = stack_length_width();
+    if sep_idx < width {
+        out.push(clone(""));
+        out.push(clone(""));
+        return out;
+    }
+    let len_start: i64 = sep_idx - width;
+    let len_text: str8 = sub(stack_text, len_start, width);
+    let snap_len: i64 = parse_i64_text(len_text);
+    let snap_start: i64 = len_start - snap_len;
+    if snap_start < 0 {
+        out.push(clone(""));
+        out.push(clone(""));
+        return out;
+    }
+    out.push(sub(stack_text, 0, snap_start));
+    out.push(sub(stack_text, snap_start, snap_len));
+    return out;
+}
+
+fn esc_prefixed(suffix: str8) -> str8 {
+    let b: StringBuilder = builder_new(len(suffix) + 4);
+    let _ = builder_append_char(b, 27);
+    let _ = builder_append(b, suffix);
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn alt_screen_on_real() -> str8 {
+    return esc_prefixed("[?1049h");
+}
+
+fn alt_screen_off_real() -> str8 {
+    return esc_prefixed("[?1049l");
+}
+
+fn ensure_line_buffer(lines: list<str8>) -> list<str8> {
+    if lines.len() > 0 {
+        return lines;
+    }
+    var out: list<str8> = [];
+    out.push(clone(""));
+    return out;
+}
+
+fn split_text_lines(text: str8) -> list<str8> {
+    var out: list<str8> = [];
+    let n: i64 = len(text);
+    let b: StringBuilder = builder_new(n + 16);
+    var i: i64 = 0;
+    while i < n {
+        let ch: str8 = sub(text, i, 1);
+        if eq(ch, "\r") == 1 {
+            out.push(builder_take_string(b));
+            let nx: i64 = i + 1;
+            if nx < n {
+                let ch2: str8 = sub(text, nx, 1);
+                if eq(ch2, "\n") == 1 {
+                    free(ch2);
+                    free(ch);
+                    i = i + 2;
+                    continue;
+                }
+                free(ch2);
+            }
+            free(ch);
+            i = i + 1;
+            continue;
+        }
+        if eq(ch, "\n") == 1 {
+            out.push(builder_take_string(b));
+            free(ch);
+            i = i + 1;
+            continue;
+        }
+        let _ = builder_append(b, ch);
+        free(ch);
+        i = i + 1;
+    }
+    out.push(builder_take_string(b));
+    builder_free(b);
+    return ensure_line_buffer(out);
+}
+
+fn join_lines(lines: &list<str8>) -> str8 {
+    let b: StringBuilder = builder_new(1024);
+    for(i, line) in lines.enumerate() {
+        let _ = builder_append(b, line);
+        if i + 1 < lines.len() {
+            let _ = builder_append(b, "\n");
+        }
+    }
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn join_lines_for_save(lines: &list<str8>) -> str8 {
+    let body: str8 = join_lines(lines);
+    return len(body) == 0 ? clone("") : concat(body, "\n");
+}
+
+fn replace_line(lines: &list<str8>, row: i64, new_line: str8) -> list<str8> {
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        if i == row {
+            out.push(new_line);
+        } else {
+            out.push(clone(line));
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn insert_line_after(lines: &list<str8>, row: i64, new_line: str8) -> list<str8> {
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        out.push(clone(line));
+        if i == row {
+            out.push(new_line);
+        }
+    }
+    if lines.len() == 0 {
+        out.push(new_line);
+    }
+    return ensure_line_buffer(out);
+}
+
+fn insert_line_before(lines: &list<str8>, row: i64, new_line: str8) -> list<str8> {
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        if i == row {
+            out.push(new_line);
+        }
+        out.push(clone(line));
+    }
+    if lines.len() == 0 {
+        out.push(new_line);
+    }
+    return ensure_line_buffer(out);
+}
+
+fn remove_line(lines: &list<str8>, row: i64) -> list<str8> {
+    if lines.len() <= 1 {
+        var blank: list<str8> = [];
+        blank.push(clone(""));
+        return blank;
+    }
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        if i != row {
+            out.push(clone(line));
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn update_scroll(cursor_row: i64, cursor_col: i64, editor_rows: i64, editor_cols: i64,
+                 scroll_row: i64, scroll_col: i64) -> list<i64> {
+    var out: list<i64> = [];
+    var next_scroll_row: i64 = scroll_row;
+    var next_scroll_col: i64 = scroll_col;
+    if cursor_row < next_scroll_row {
+        next_scroll_row = cursor_row;
+    }
+    if cursor_row >= next_scroll_row + editor_rows {
+        next_scroll_row = cursor_row - editor_rows + 1;
+    }
+    if cursor_col < next_scroll_col {
+        next_scroll_col = cursor_col;
+    }
+    if cursor_col >= next_scroll_col + editor_cols {
+        next_scroll_col = cursor_col - editor_cols + 1;
+    }
+    out.push(max_i64(0, next_scroll_row));
+    out.push(max_i64(0, next_scroll_col));
+    return out;
+}
+
+fn move_word_forward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_word_sep_at(line, col) == 0 {
+            col = col + 1;
+        }
+        while col < n && is_word_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
+fn move_word_backward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row >= 0 {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        if col > n {
+            col = n;
+        }
+        if col > 0 {
+            col = col - 1;
+        } else if row > 0 {
+            row = row - 1;
+            col = len(lines[row]);
+            continue;
+        } else {
+            break;
+        }
+        while col > 0 && is_word_sep_at(line, col) == 1 {
+            col = col - 1;
+        }
+        while col > 0 && is_word_sep_at(line, col - 1) == 0 {
+            col = col - 1;
+        }
+        var out: list<i64> = [];
+        out.push(row);
+        out.push(col);
+        return out;
+    }
+    var out2: list<i64> = [];
+    out2.push(0);
+    out2.push(0);
+    return out2;
+}
+
+fn move_word_end(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    if row < lines.len() {
+        let line0: str8 = lines[row];
+        if col < len(line0) && is_word_sep_at(line0, col) == 0 {
+            col = col + 1;
+        }
+    }
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_word_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            while col + 1 < n && is_word_sep_at(line, col + 1) == 0 {
+                col = col + 1;
+            }
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
+fn is_bigword_sep_at(text: str8, idx: i64) -> i32 {
+    if idx < 0 || idx >= len(text) {
+        return 1;
+    }
+    let ch: str8 = sub(text, idx, 1);
+    return eq(ch, " ") == 1 || eq(ch, "\t") == 1 ? 1 : 0;
+}
+
+fn move_bigword_forward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_bigword_sep_at(line, col) == 0 {
+            col = col + 1;
+        }
+        while col < n && is_bigword_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
+fn move_bigword_backward(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    while row >= 0 {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        if col > n {
+            col = n;
+        }
+        if col > 0 {
+            col = col - 1;
+        } else if row > 0 {
+            row = row - 1;
+            col = len(lines[row]);
+            continue;
+        } else {
+            break;
+        }
+        while col > 0 && is_bigword_sep_at(line, col) == 1 {
+            col = col - 1;
+        }
+        while col > 0 && is_bigword_sep_at(line, col - 1) == 0 {
+            col = col - 1;
+        }
+        var out: list<i64> = [];
+        out.push(row);
+        out.push(col);
+        return out;
+    }
+    var out2: list<i64> = [];
+    out2.push(0);
+    out2.push(0);
+    return out2;
+}
+
+fn move_bigword_end(lines: &list<str8>, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var row: i64 = cursor_row;
+    var col: i64 = cursor_col;
+    if row < lines.len() {
+        let line0: str8 = lines[row];
+        if col < len(line0) && is_bigword_sep_at(line0, col) == 0 {
+            col = col + 1;
+        }
+    }
+    while row < lines.len() {
+        let line: str8 = lines[row];
+        let n: i64 = len(line);
+        while col < n && is_bigword_sep_at(line, col) == 1 {
+            col = col + 1;
+        }
+        if col < n {
+            while col + 1 < n && is_bigword_sep_at(line, col + 1) == 0 {
+                col = col + 1;
+            }
+            var out: list<i64> = [];
+            out.push(row);
+            out.push(col);
+            return out;
+        }
+        row = row + 1;
+        col = 0;
+    }
+    var out2: list<i64> = [];
+    let last_row: i64 = lines.len() - 1;
+    out2.push(last_row);
+    out2.push(len(lines[last_row]));
+    return out2;
+}
+
+fn parse_key(input: Stdin) -> i32 {
+    let keycode: i32 = read_keycode_nonblocking(input);
+    if keycode != AsciiKey::Esc {
+        return keycode;
+    }
+    let k2: i32 = read_keycode_nonblocking(stdin());
+    if k2 == -2 {
+        return AsciiKey::Esc;
+    }
+    if k2 == AsciiKey::LBracket {
+        let k3: i32 = read_keycode_nonblocking(stdin());
+        if k3 == AsciiKey::UpperA { return 1001; }
+        if k3 == AsciiKey::UpperB { return 1002; }
+        if k3 == AsciiKey::UpperC { return 1003; }
+        if k3 == AsciiKey::UpperD { return 1004; }
+        if k3 == AsciiKey::Digit3 {
+            let k4: i32 = read_keycode_nonblocking(stdin());
+            if k4 == AsciiKey::Tilde {
+                return 1005;
+            }
+        }
+    }
+    return AsciiKey::Esc;
+}
+
+fn open_file_into_buffer(path: str8) -> Result<list<str8>, str8> {
+    let text: str8 = read_all_text(path)?;
+    let lines: list<str8> = split_text_lines(text);
+    free(text);
+    return Ok<list<str8>, str8>(lines);
+}
+
+fn replace_str8_at(values: &list<str8>, idx: i64, value: str8) -> list<str8> {
+    var out: list<str8> = [];
+    for(i, item) in values.enumerate() {
+        if i == idx {
+            out.push(value);
+        } else {
+            out.push(clone(item));
+        }
+    }
+    return out;
+}
+
+fn replace_i64_at(values: &list<i64>, idx: i64, value: i64) -> list<i64> {
+    var out: list<i64> = [];
+    for(i, item) in values.enumerate() {
+        out.push(i == idx ? value : item);
+    }
+    return out;
+}
+
+fn i64_at_or(values: &list<i64>, idx: i64, fallback: i64) -> i64 {
+    if idx < 0 || idx >= values.len() {
+        return fallback;
+    }
+    return values[idx];
+}
+
+fn pos_leq(row_a: i64, col_a: i64, row_b: i64, col_b: i64) -> i32 {
+    if row_a < row_b {
+        return 1;
+    }
+    if row_a > row_b {
+        return 0;
+    }
+    return col_a <= col_b ? 1 : 0;
+}
+
+fn selection_bounds(anchor_row: i64, anchor_col: i64, cursor_row: i64, cursor_col: i64) -> list<i64> {
+    var out: list<i64> = [];
+    if pos_leq(anchor_row, anchor_col, cursor_row, cursor_col) == 1 {
+        out.push(anchor_row);
+        out.push(anchor_col);
+        out.push(cursor_row);
+        out.push(cursor_col);
+        return out;
+    }
+    out.push(cursor_row);
+    out.push(cursor_col);
+    out.push(anchor_row);
+    out.push(anchor_col);
+    return out;
+}
+
+fn is_selected_cell(sel_mode: i32, anchor_row: i64, anchor_col: i64, cursor_row: i64, cursor_col: i64,
+                    row: i64, col: i64) -> i32 {
+    if sel_mode == 4 {
+        let top: i64 = min_i64(anchor_row, cursor_row);
+        let bot: i64 = max_i64(anchor_row, cursor_row);
+        return row >= top && row <= bot ? 1 : 0;
+    }
+    if sel_mode != 3 {
+        return 0;
+    }
+    let bounds: list<i64> = selection_bounds(anchor_row, anchor_col, cursor_row, cursor_col);
+    let start_row: i64 = bounds[0];
+    let start_col: i64 = bounds[1];
+    let end_row: i64 = bounds[2];
+    let end_col: i64 = bounds[3];
+    if row < start_row || row > end_row {
+        return 0;
+    }
+    if start_row == end_row {
+        return col >= start_col && col <= end_col ? 1 : 0;
+    }
+    if row == start_row {
+        return col >= start_col ? 1 : 0;
+    }
+    if row == end_row {
+        return col <= end_col ? 1 : 0;
+    }
+    return 1;
+}
+
+fn insert_lines_after_many(lines: &list<str8>, row: i64, extra_lines: &list<str8>) -> list<str8> {
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        out.push(clone(line));
+        if i == row {
+            for(_, extra) in extra_lines.enumerate() {
+                out.push(clone(extra));
+            }
+        }
+    }
+    if lines.len() == 0 {
+        for(_, extra2) in extra_lines.enumerate() {
+            out.push(clone(extra2));
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn yank_charwise(lines: &list<str8>, anchor_row: i64, anchor_col: i64, cursor_row: i64, cursor_col: i64) -> str8 {
+    let bounds: list<i64> = selection_bounds(anchor_row, anchor_col, cursor_row, cursor_col);
+    let start_row: i64 = bounds[0];
+    let start_col: i64 = bounds[1];
+    let end_row: i64 = bounds[2];
+    let end_col: i64 = bounds[3];
+    let b: StringBuilder = builder_new(256);
+    var row: i64 = start_row;
+    while row <= end_row {
+        let line: str8 = row < lines.len() ? lines[row] : "";
+        if row == start_row && row == end_row {
+            let _ = builder_append(b, sub(line, start_col, end_col - start_col + 1));
+        } else if row == start_row {
+            let _ = builder_append(b, sub(line, start_col, len(line) - start_col));
+            let _ = builder_append(b, "\n");
+        } else if row == end_row {
+            let _ = builder_append(b, sub(line, 0, end_col + 1));
+        } else {
+            let _ = builder_append(b, line);
+            let _ = builder_append(b, "\n");
+        }
+        row = row + 1;
+    }
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn yank_linewise(lines: &list<str8>, start_row: i64, end_row: i64) -> str8 {
+    let top: i64 = min_i64(start_row, end_row);
+    let bot: i64 = max_i64(start_row, end_row);
+    let b: StringBuilder = builder_new(256);
+    var row: i64 = top;
+    while row <= bot {
+        if row < lines.len() {
+            let _ = builder_append(b, lines[row]);
+        }
+        if row < bot {
+            let _ = builder_append(b, "\n");
+        }
+        row = row + 1;
+    }
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn delete_charwise_selection(lines: &list<str8>, anchor_row: i64, anchor_col: i64,
+                             cursor_row: i64, cursor_col: i64) -> list<str8> {
+    let bounds: list<i64> = selection_bounds(anchor_row, anchor_col, cursor_row, cursor_col);
+    let start_row: i64 = bounds[0];
+    let start_col: i64 = bounds[1];
+    let end_row: i64 = bounds[2];
+    let end_col: i64 = bounds[3];
+    if start_row == end_row {
+        let line: str8 = lines[start_row];
+        let left: str8 = sub(line, 0, start_col);
+        let right: str8 = sub(line, end_col + 1, len(line) - end_col - 1);
+        return replace_line(lines, start_row, concat(left, right));
+    }
+    let first_line: str8 = lines[start_row];
+    let last_line: str8 = lines[end_row];
+    let merged: str8 = concat(sub(first_line, 0, start_col),
+                              sub(last_line, end_col + 1, len(last_line) - end_col - 1));
+    var out: list<str8> = [];
+    for(i, line2) in lines.enumerate() {
+        if i < start_row || i > end_row {
+            out.push(clone(line2));
+        } else if i == start_row {
+            out.push(merged);
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn delete_linewise_selection(lines: &list<str8>, start_row: i64, end_row: i64) -> list<str8> {
+    let top: i64 = min_i64(start_row, end_row);
+    let bot: i64 = max_i64(start_row, end_row);
+    var out: list<str8> = [];
+    for(i, line) in lines.enumerate() {
+        if i < top || i > bot {
+            out.push(clone(line));
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn find_prev_char(text: str8, from_idx: i64, target: str8) -> i64 {
+    let n: i64 = len(text);
+    if n <= 0 {
+        return -1;
+    }
+    var i: i64 = from_idx >= n ? (n - 1) : from_idx;
+    while i >= 0 {
+        let ch: str8 = sub(text, i, 1);
+        if eq(ch, target) == 1 {
+            return i;
+        }
+        if i == 0 {
+            break;
+        }
+        i = i - 1;
+    }
+    return -1;
+}
+
+fn find_next_char(text: str8, from_idx: i64, target: str8) -> i64 {
+    let n: i64 = len(text);
+    var i: i64 = from_idx < 0 ? 0 : from_idx;
+    while i < n {
+        let ch: str8 = sub(text, i, 1);
+        if eq(ch, target) == 1 {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn inside_quote_bounds(line: str8, cursor_col: i64, quote: str8) -> list<i64> {
+    var out: list<i64> = [];
+    let n: i64 = len(line);
+    let probe: i64 = cursor_col <= 0 ? 0 : (cursor_col - 1);
+    let left_quote: i64 = find_prev_char(line, probe, quote);
+    let right_quote: i64 = find_next_char(line, cursor_col, quote);
+    if left_quote < 0 || right_quote < 0 || left_quote >= right_quote {
+        out.push(-1);
+        out.push(-1);
+        return out;
+    }
+    out.push(left_quote + 1);
+    out.push(right_quote - 1);
+    return out;
+}
+
+fn insert_charwise_text(lines: &list<str8>, row: i64, col: i64, text: str8) -> list<str8> {
+    let current: str8 = lines[row];
+    let left: str8 = sub(current, 0, col);
+    let right: str8 = sub(current, col, len(current) - col);
+    let parts: list<str8> = split_text_lines(text);
+    if parts.len() <= 1 {
+        return replace_line(lines, row, concat(concat(left, parts[0]), right));
+    }
+    let first: str8 = concat(left, parts[0]);
+    let last_idx: i64 = parts.len() - 1;
+    let last: str8 = concat(parts[last_idx], right);
+    let replaced: list<str8> = replace_line(lines, row, first);
+    var out: list<str8> = [];
+    for(i, line2) in replaced.enumerate() {
+        out.push(clone(line2));
+        if i == row {
+            var j: i64 = 1;
+            while j < last_idx {
+                out.push(clone(parts[j]));
+                j = j + 1;
+            }
+            out.push(last);
+        }
+    }
+    return ensure_line_buffer(out);
+}
+
+fn recompute_dirty(lines: &list<str8>, saved_text: str8) -> i64 {
+    let current_text: str8 = join_lines(lines);
+    return eq(current_text, saved_text) == 1 ? 0 : 1;
+}
+
+fn begin_insert_undo(snapshot: str8, session_active: i32, undo_text: str8, redo_text: str8) -> list<str8> {
+    var out: list<str8> = [];
+    if session_active == 0 {
+        out.push(push_snapshot_text(undo_text, snapshot));
+        out.push(clone(""));
+        return out;
+    }
+    out.push(clone(undo_text));
+    out.push(clone(redo_text));
+    return out;
+}
+
+fn display_filename(filename: str8) -> str8 {
+    if eq(filename, "__MLANG_HELP__") == 1 {
+        return "[Help]";
+    }
+    return len(filename) == 0 ? "[No Name]" : filename;
+}
+
+fn is_help_buffer(filename: str8) -> i32 {
+    return eq(filename, "__MLANG_HELP__") == 1 ? 1 : 0;
+}
+
+fn help_buffer_lines() -> list<str8> {
+    var out: list<str8> = [];
+    out.push("MLang Minimal Vim Demo Help");
+    out.push("");
+    out.push("Navigation");
+    out.push("  h j k l      Move cursor");
+    out.push("  w b e        Word motions");
+    out.push("  W B E        WORD motions");
+    out.push("  0 $          Start/end of line");
+    out.push("  gg G         Top/bottom of file");
+    out.push("  Ctrl-U/D     Half-page up/down");
+    out.push("  Ctrl-H/L     Previous/next buffer");
+    out.push("");
+    out.push("Modes");
+    out.push("  i            Insert before cursor");
+    out.push("  a            Insert after cursor");
+    out.push("  A            Insert at end of line");
+    out.push("  s            Substitute character and insert");
+    out.push("  v            Visual mode");
+    out.push("  V            Visual line mode");
+    out.push("  Esc          Return to normal mode");
+    out.push("");
+    out.push("Edit");
+    out.push("  x            Delete character");
+    out.push("  dd           Delete line");
+    out.push("  di\" di'      Delete inside quotes");
+    out.push("  ci\" ci'      Change inside quotes");
+    out.push("  u            Undo");
+    out.push("  Ctrl-R       Redo");
+    out.push("  yy           Yank line");
+    out.push("  p            Paste");
+    out.push("  v/V + d c y  Delete/change/yank selection");
+    out.push("");
+    out.push("Commands");
+    out.push("  :e <file>    Open or create file");
+    out.push("  :w           Write file");
+    out.push("  :q           Quit current buffer");
+    out.push("  :q!          Force quit current buffer");
+    out.push("  :wq          Write and quit");
+    out.push("  :bn / :bp    Next / previous buffer");
+    out.push("  :help        Open this help view");
+    out.push("");
+    out.push("Help view");
+    out.push("  q            Return to previous editor buffer");
+    return out;
+}
+
+fn tab_label(filename: str8, dirty: i64) -> str8 {
+    let shown: str8 = display_filename(filename);
+    return dirty == 1 ? format!(" {}* ", shown) : format!(" {} ", shown);
+}
+
+fn mode_label(mode: i32) -> str8 {
+    if mode == 1 { return "INSERT"; }
+    if mode == 2 { return "COMMAND"; }
+    if mode == 3 { return "VISUAL"; }
+    if mode == 4 { return "V-LINE"; }
+    return "NORMAL";
+}
+
+fn help_text() -> str8 {
+    return "NORMAL: hjkl w b e W B E 0 $ i a A s o O x dd u Ctrl-R gg G Ctrl-H Ctrl-L  COMMAND: :w :q :q! :wq :e path :bn :bp";
+}
+
+fn footer_line(cols: i64, left_text: str8, right_text: str8) -> str8 {
+    let left_len: i64 = len(left_text);
+    let right_len: i64 = len(right_text);
+    if left_len + right_len >= cols {
+        return sub(fit_right(left_text, cols, " "), 0, cols);
+    }
+    let gap: i64 = cols - left_len - right_len;
+    return concat(concat(left_text, repeat(" ", gap)), right_text);
+}
+
+fn render_frame(cols: i64, rows: i64, tab_names: &list<str8>, tab_dirty: &list<i64>, active_tab: i64,
+                filename: str8, lines: &list<str8>, cursor_row: i64, cursor_col: i64,
+                scroll_row: i64, scroll_col: i64, mode: i32, status: str8,
+                command_input: str8, blink_visible: i32, pending_normal: i32,
+                visual_anchor_row: i64, visual_anchor_col: i64) -> str8 {
+    let editor_rows: i64 = max_i64(1, rows - 3);
+    let gutter_digits: i64 = digits_i64(lines.len());
+    let gutter_width: i64 = gutter_digits + 2;
+    let code_cols: i64 = max_i64(1, cols - gutter_width);
+    let b: StringBuilder = builder_new(4096);
+    let _ = builder_append(b, cursor(cmd_home()));
+    let _ = builder_append(b, cursor(cmd_clear_screen()));
+    let _ = builder_append(b, cursor(cmd_hide()));
+    let _ = builder_append(b, cursor_color_reset());
+
+    let tab_builder: StringBuilder = builder_new(512);
+    for(i, name) in tab_names.enumerate() {
+        let label: str8 = tab_label(name, i64_at_or(tab_dirty, i, 0));
+        if i == active_tab {
+            let marked: str8 = format!("|{}", label);
+            let _ = builder_append(tab_builder, format!("{}{}{}{}{}", fg(color_black()), bg_rgb(228, 228, 220), bold_on(), marked, reset()));
+        } else {
+            let _ = builder_append(tab_builder, format!("{}{}{}{}", fg(color_white()), bg_rgb(32, 52, 120), label, reset()));
+        }
+    }
+    let tabs_raw: str8 = builder_take_string(tab_builder);
+    builder_free(tab_builder);
+    let tabs_pad: str8 = fit_right("", max_i64(0, cols - len(tabs_raw)), " ");
+    let _ = builder_append(b, tabs_raw);
+    let _ = builder_append(b, format!("{}{}{}{}\r\n", fg_rgb(210, 210, 210), bg_rgb(38, 38, 38), tabs_pad, reset()));
+
+    var pending_mark: str8 = "";
+    if pending_normal == 1 {
+        pending_mark = " g";
+    } else if pending_normal == 2 {
+        pending_mark = " d";
+    } else if pending_normal == 3 {
+        pending_mark = " y";
+    }
+
+    var r: i64 = 0;
+    while r < editor_rows {
+        let line_idx: i64 = scroll_row + r;
+        let gutter_pipe: str8 = acs_vline();
+        var line_no: str8 = repeat(" ", gutter_digits);
+        if line_idx < lines.len() {
+            line_no = fit_right(format!("{}", line_idx + 1), gutter_digits, " ");
+        }
+        let _ = builder_append(b, format!("{}{}{}{} ", fg(color_white()), bg_rgb(8, 24, 92), line_no, gutter_pipe));
+        var c: i64 = 0;
+        while c < code_cols {
+            let abs_col: i64 = scroll_col + c;
+            var cell: str8 = " ";
+            if line_idx < lines.len() && abs_col < len(lines[line_idx]) {
+                cell = sub(lines[line_idx], abs_col, 1);
+            }
+            let selected: i32 = is_selected_cell(mode, visual_anchor_row, visual_anchor_col, cursor_row, cursor_col,
+                                                 line_idx, abs_col);
+            let cursor_here: i32 = mode != 2 && blink_visible == 1 && line_idx == cursor_row && abs_col == cursor_col ? 1 : 0;
+            if cursor_here == 1 {
+                let _ = builder_append(b, format!("{}{}{}{}{}", fg(color_white()), bg_rgb(8, 24, 92), inverse_on(), cell, reset()));
+            } else if selected == 1 {
+                let _ = builder_append(b, format!("{}{}{}", fg(color_white()), bg_rgb(28, 52, 136), cell));
+            } else {
+                let _ = builder_append(b, format!("{}{}{}", fg(color_white()), bg_rgb(8, 24, 92), cell));
+            }
+            c = c + 1;
+        }
+        let _ = builder_append(b, reset());
+        if r + 1 < editor_rows {
+            let _ = builder_append(b, "\r\n");
+        }
+        r = r + 1;
+    }
+
+    let modeline_left: str8 = format!(" {} {}{} ", mode_label(mode), display_filename(filename), pending_mark);
+    let modeline_right: str8 = format!("{}:{}", cursor_col + 1, cursor_row + 1);
+    let modeline_fit: str8 = fit_right(footer_line(cols, modeline_left, modeline_right), cols, " ");
+    let _ = builder_append(b, format!("\r\n{}{}{}{}", fg(color_black()), bg_rgb(210, 210, 202), modeline_fit, reset()));
+
+    let prompt_left: str8 = mode == 2 ? format!(":{}", command_input) : format!(" {}", status);
+    let prompt_fit: str8 = fit_right(prompt_left, cols, " ");
+    let _ = builder_append(b, format!("\r\n{}{}{}{}", fg_rgb(214, 214, 214), bg_rgb(8, 24, 92), prompt_fit, reset()));
+
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn main() -> i32 {
+    if stdin_is_tty() == 0 {
+        println!("minimal_vim_demo requires a TTY");
+        return 1;
+    }
+
+    let argv: list<str8> = args();
+    var tab_names: list<str8> = [];
+    var tab_texts: list<str8> = [];
+    var tab_saved_texts: list<str8> = [];
+    var tab_undo_texts: list<str8> = [];
+    var tab_redo_texts: list<str8> = [];
+    var tab_dirty: list<i64> = [];
+    var tab_cursor_rows: list<i64> = [];
+    var tab_cursor_cols: list<i64> = [];
+    var tab_scroll_rows: list<i64> = [];
+    var tab_scroll_cols: list<i64> = [];
+    var active_tab: i64 = 0;
+    var status: str8 = clone("");
+    var command_input: str8 = clone("");
+    var mode: i32 = 0;
+    var pending_normal: i32 = 0;
+    var running: i32 = 1;
+    var skip_lf_after_cr: i32 = 0;
+    var blink_tick: i64 = 0;
+
+    var current_filename: str8 = clone("");
+    var current_lines: list<str8> = [];
+    current_lines.push(clone(""));
+    var current_cursor_row: i64 = 0;
+    var current_cursor_col: i64 = 0;
+    var current_scroll_row: i64 = 0;
+    var current_scroll_col: i64 = 0;
+    var current_saved_text: str8 = clone("");
+    var current_undo_text: str8 = clone("");
+    var current_redo_text: str8 = clone("");
+    var insert_session_active: i32 = 0;
+    var insert_session_snapshot: str8 = clone("");
+    var current_dirty: i64 = 0;
+    var current_yank_text: str8 = clone("");
+    var current_yank_kind: i32 = 0;
+    var visual_anchor_row: i64 = 0;
+    var visual_anchor_col: i64 = 0;
+    var help_return_tab: i64 = -1;
+
+    if argv.len() > 1 {
+        let path: str8 = argv[1];
+        let rr: Result<list<str8>, str8> = open_file_into_buffer(path);
+        current_filename = clone(path);
+        if rr.is_ok() {
+            let text0: str8 = join_lines(rr.unwrap());
+            current_lines = split_text_lines(text0);
+            current_saved_text = clone(text0);
+        } else {
+            current_lines = split_text_lines("");
+            current_saved_text = clone("");
+            status = format!("New file {}", path);
+        }
+    } else {
+        status = clone("Use :e somefile.txt to open or create a file");
+    }
+
+    tab_names.push(clone(current_filename));
+    tab_texts.push(join_lines(current_lines));
+    tab_saved_texts.push(clone(current_saved_text));
+    tab_undo_texts.push(clone(""));
+    tab_redo_texts.push(clone(""));
+    tab_dirty.push(0);
+    tab_cursor_rows.push(0);
+    tab_cursor_cols.push(0);
+    tab_scroll_rows.push(0);
+    tab_scroll_cols.push(0);
+
+    let input: Stdin = stdin();
+    let _ = stdin_enable_raw();
+    let _ = write(stdout(), alt_screen_on_real());
+    while running == 1 {
+        let ts: TermSize = stdout_size();
+        let rows: i64 = max_i64(8, ts.rows);
+        let cols: i64 = max_i64(30, ts.cols);
+        current_lines = ensure_line_buffer(current_lines);
+        current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
+        current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+        active_tab = clamp_i64(active_tab, 0, max_i64(0, tab_names.len() - 1));
+        let editor_rows: i64 = max_i64(1, rows - 3);
+        let gutter_digits: i64 = digits_i64(current_lines.len());
+        let gutter_width: i64 = gutter_digits + 2;
+        let code_cols: i64 = max_i64(1, cols - gutter_width);
+        let scroll_pair: list<i64> = update_scroll(current_cursor_row, current_cursor_col, editor_rows, code_cols, current_scroll_row, current_scroll_col);
+        current_scroll_row = scroll_pair[0];
+        current_scroll_col = scroll_pair[1];
+
+        current_dirty = recompute_dirty(current_lines, current_saved_text);
+        tab_dirty = replace_i64_at(tab_dirty, active_tab, current_dirty);
+        tab_cursor_rows = replace_i64_at(tab_cursor_rows, active_tab, current_cursor_row);
+        tab_cursor_cols = replace_i64_at(tab_cursor_cols, active_tab, current_cursor_col);
+        tab_scroll_rows = replace_i64_at(tab_scroll_rows, active_tab, current_scroll_row);
+        tab_scroll_cols = replace_i64_at(tab_scroll_cols, active_tab, current_scroll_col);
+        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, current_saved_text);
+        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, current_undo_text);
+        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, current_redo_text);
+
+        let blink_visible: i32 = ((blink_tick / 18) % 2) == 0 ? 1 : 0;
+        let frame: str8 = render_frame(cols, rows, tab_names, tab_dirty, active_tab, current_filename,
+                                       current_lines, current_cursor_row, current_cursor_col,
+                                       current_scroll_row, current_scroll_col, mode, status,
+                                       command_input, blink_visible, pending_normal,
+                                       visual_anchor_row, visual_anchor_col);
+        let _ = write(stdout(), frame);
+
+        while 1 {
+            let keycode: i32 = parse_key(input);
+            if keycode == -2 {
+                break;
+            }
+            if keycode < 0 {
+                running = 0;
+                break;
+            }
+            if skip_lf_after_cr == 1 && keycode == AsciiKey::Lf {
+                skip_lf_after_cr = 0;
+                continue;
+            }
+            if keycode != AsciiKey::Cr {
+                skip_lf_after_cr = 0;
+            }
+            if keycode == AsciiKey::Etx {
+                running = 0;
+                break;
+            }
+
+            if mode == 2 {
+                if keycode == AsciiKey::Esc {
+                    mode = 0;
+                    command_input = clone("");
+                    status = clone("");
+                    continue;
+                }
+                if keycode == AsciiKey::Backspace || keycode == AsciiKey::Del || keycode == 127 {
+                    let n0: i64 = len(command_input);
+                    if n0 > 0 {
+                        command_input = sub(command_input, 0, n0 - 1);
+                    }
+                    continue;
+                }
+                if keycode == AsciiKey::Cr || keycode == AsciiKey::Lf {
+                    skip_lf_after_cr = keycode == AsciiKey::Cr ? 1 : 0;
+                    let cmd: str8 = clone(command_input);
+                    mode = 0;
+                    command_input = clone("");
+
+                    if eq(cmd, "w") == 1 {
+                        if len(current_filename) == 0 {
+                            status = clone("No file name. Use :e somefile.txt");
+                            continue;
+                        }
+                        let body: str8 = join_lines(current_lines);
+                        let text: str8 = join_lines_for_save(current_lines);
+                        let wr: Result<i32, str8> = write_all_text(current_filename, text);
+                        if wr.is_err() {
+                            status = format!("Write failed: {}", wr.unwrap_err());
+                        } else {
+                            current_saved_text = clone(body);
+                            current_undo_text = clone("");
+                            current_redo_text = clone("");
+                            current_dirty = 0;
+                            tab_texts = replace_str8_at(tab_texts, active_tab, body);
+                            tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                            tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(""));
+                            tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(""));
+                            tab_dirty = replace_i64_at(tab_dirty, active_tab, 0);
+                            status = format!("Written {}", current_filename);
+                        }
+                        continue;
+                    }
+                    if eq(cmd, "q") == 1 {
+                        if current_dirty == 1 {
+                            status = clone("Unsaved changes. Use :w or :q!");
+                            continue;
+                        }
+                        if tab_names.len() == 1 {
+                            running = 0;
+                        } else {
+                            let next_tab: i64 = active_tab == 0 ? 0 : (active_tab - 1);
+                            var next_names: list<str8> = [];
+                            var next_texts: list<str8> = [];
+                            var next_saved_texts: list<str8> = [];
+                            var next_undo_texts: list<str8> = [];
+                            var next_redo_texts: list<str8> = [];
+                            var next_dirty: list<i64> = [];
+                            var next_rows: list<i64> = [];
+                            var next_cols: list<i64> = [];
+                            var next_srows: list<i64> = [];
+                            var next_scols: list<i64> = [];
+                            for(i, name) in tab_names.enumerate() {
+                                if i != active_tab {
+                                    next_names.push(clone(name));
+                                    next_texts.push(clone(tab_texts[i]));
+                                    next_saved_texts.push(clone(tab_saved_texts[i]));
+                                    next_undo_texts.push(clone(tab_undo_texts[i]));
+                                    next_redo_texts.push(clone(tab_redo_texts[i]));
+                                    next_dirty.push(tab_dirty[i]);
+                                    next_rows.push(tab_cursor_rows[i]);
+                                    next_cols.push(tab_cursor_cols[i]);
+                                    next_srows.push(tab_scroll_rows[i]);
+                                    next_scols.push(tab_scroll_cols[i]);
+                                }
+                            }
+                            tab_names = next_names;
+                            tab_texts = next_texts;
+                            tab_saved_texts = next_saved_texts;
+                            tab_undo_texts = next_undo_texts;
+                            tab_redo_texts = next_redo_texts;
+                            tab_dirty = next_dirty;
+                            tab_cursor_rows = next_rows;
+                            tab_cursor_cols = next_cols;
+                            tab_scroll_rows = next_srows;
+                            tab_scroll_cols = next_scols;
+                            active_tab = next_tab >= tab_names.len() ? (tab_names.len() - 1) : next_tab;
+                            current_filename = clone(tab_names[active_tab]);
+                            current_lines = split_text_lines(tab_texts[active_tab]);
+                            current_saved_text = clone(tab_saved_texts[active_tab]);
+                            current_undo_text = clone(tab_undo_texts[active_tab]);
+                            current_redo_text = clone(tab_redo_texts[active_tab]);
+                            current_cursor_row = tab_cursor_rows[active_tab];
+                            current_cursor_col = tab_cursor_cols[active_tab];
+                            current_scroll_row = tab_scroll_rows[active_tab];
+                            current_scroll_col = tab_scroll_cols[active_tab];
+                            current_dirty = tab_dirty[active_tab];
+                            status = clone("Closed tab");
+                        }
+                        continue;
+                    }
+                    if eq(cmd, "q!") == 1 {
+                        if tab_names.len() == 1 {
+                            running = 0;
+                        } else {
+                            let next_tab2: i64 = active_tab == 0 ? 0 : (active_tab - 1);
+                            var force_names: list<str8> = [];
+                            var force_texts: list<str8> = [];
+                            var force_saved_texts: list<str8> = [];
+                            var force_undo_texts: list<str8> = [];
+                            var force_redo_texts: list<str8> = [];
+                            var force_dirty: list<i64> = [];
+                            var force_rows: list<i64> = [];
+                            var force_cols: list<i64> = [];
+                            var force_srows: list<i64> = [];
+                            var force_scols: list<i64> = [];
+                            for(i, name) in tab_names.enumerate() {
+                                if i != active_tab {
+                                    force_names.push(clone(name));
+                                    force_texts.push(clone(tab_texts[i]));
+                                    force_saved_texts.push(clone(tab_saved_texts[i]));
+                                    force_undo_texts.push(clone(tab_undo_texts[i]));
+                                    force_redo_texts.push(clone(tab_redo_texts[i]));
+                                    force_dirty.push(tab_dirty[i]);
+                                    force_rows.push(tab_cursor_rows[i]);
+                                    force_cols.push(tab_cursor_cols[i]);
+                                    force_srows.push(tab_scroll_rows[i]);
+                                    force_scols.push(tab_scroll_cols[i]);
+                                }
+                            }
+                            tab_names = force_names;
+                            tab_texts = force_texts;
+                            tab_saved_texts = force_saved_texts;
+                            tab_undo_texts = force_undo_texts;
+                            tab_redo_texts = force_redo_texts;
+                            tab_dirty = force_dirty;
+                            tab_cursor_rows = force_rows;
+                            tab_cursor_cols = force_cols;
+                            tab_scroll_rows = force_srows;
+                            tab_scroll_cols = force_scols;
+                            active_tab = next_tab2 >= tab_names.len() ? (tab_names.len() - 1) : next_tab2;
+                            current_filename = clone(tab_names[active_tab]);
+                            current_lines = split_text_lines(tab_texts[active_tab]);
+                            current_saved_text = clone(tab_saved_texts[active_tab]);
+                            current_undo_text = clone(tab_undo_texts[active_tab]);
+                            current_redo_text = clone(tab_redo_texts[active_tab]);
+                            current_cursor_row = tab_cursor_rows[active_tab];
+                            current_cursor_col = tab_cursor_cols[active_tab];
+                            current_scroll_row = tab_scroll_rows[active_tab];
+                            current_scroll_col = tab_scroll_cols[active_tab];
+                            current_dirty = tab_dirty[active_tab];
+                            status = clone("Forced close");
+                        }
+                        continue;
+                    }
+                    if eq(cmd, "wq") == 1 {
+                        if len(current_filename) == 0 {
+                            status = clone("No file name. Use :e somefile.txt");
+                            continue;
+                        }
+                        let text2: str8 = join_lines_for_save(current_lines);
+                        let wr2: Result<i32, str8> = write_all_text(current_filename, text2);
+                        if wr2.is_err() {
+                            status = format!("Write failed: {}", wr2.unwrap_err());
+                        } else {
+                            running = 0;
+                        }
+                        continue;
+                    }
+                    if eq(cmd, "bn") == 1 {
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                        active_tab = active_tab + 1 >= tab_names.len() ? 0 : (active_tab + 1);
+                        current_filename = clone(tab_names[active_tab]);
+                        current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone(tab_saved_texts[active_tab]);
+                        current_undo_text = clone(tab_undo_texts[active_tab]);
+                        current_redo_text = clone(tab_redo_texts[active_tab]);
+                        current_cursor_row = tab_cursor_rows[active_tab];
+                        current_cursor_col = tab_cursor_cols[active_tab];
+                        current_scroll_row = tab_scroll_rows[active_tab];
+                        current_scroll_col = tab_scroll_cols[active_tab];
+                        current_dirty = tab_dirty[active_tab];
+                        status = format!("Tab {}", display_filename(current_filename));
+                        continue;
+                    }
+                    if eq(cmd, "bp") == 1 {
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                        active_tab = active_tab == 0 ? (tab_names.len() - 1) : (active_tab - 1);
+                        current_filename = clone(tab_names[active_tab]);
+                        current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone(tab_saved_texts[active_tab]);
+                        current_undo_text = clone(tab_undo_texts[active_tab]);
+                        current_redo_text = clone(tab_redo_texts[active_tab]);
+                        current_cursor_row = tab_cursor_rows[active_tab];
+                        current_cursor_col = tab_cursor_cols[active_tab];
+                        current_scroll_row = tab_scroll_rows[active_tab];
+                        current_scroll_col = tab_scroll_cols[active_tab];
+                        current_dirty = tab_dirty[active_tab];
+                        status = format!("Tab {}", display_filename(current_filename));
+                        continue;
+                    }
+                    if eq(cmd, "help") == 1 {
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                        help_return_tab = active_tab;
+                        tab_names.push("__MLANG_HELP__");
+                        tab_texts.push(join_lines(help_buffer_lines()));
+                        tab_saved_texts.push(clone(""));
+                        tab_undo_texts.push(clone(""));
+                        tab_redo_texts.push(clone(""));
+                        tab_dirty.push(0);
+                        tab_cursor_rows.push(0);
+                        tab_cursor_cols.push(0);
+                        tab_scroll_rows.push(0);
+                        tab_scroll_cols.push(0);
+                        active_tab = tab_names.len() - 1;
+                        current_filename = clone(tab_names[active_tab]);
+                        current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone("");
+                        current_undo_text = clone("");
+                        current_redo_text = clone("");
+                        current_cursor_row = 0;
+                        current_cursor_col = 0;
+                        current_scroll_row = 0;
+                        current_scroll_col = 0;
+                        current_dirty = 0;
+                        status = clone("Help");
+                        continue;
+                    }
+                    if starts_with(cmd, "e ") == 1 {
+                        let path: str8 = sub(cmd, 2, len(cmd) - 2);
+                        let rr2: Result<list<str8>, str8> = open_file_into_buffer(path);
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                        tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                        tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                        tab_names.push(clone(path));
+                        if rr2.is_err() {
+                            tab_texts.push(clone(""));
+                            tab_saved_texts.push(clone(""));
+                            tab_undo_texts.push(clone(""));
+                            tab_redo_texts.push(clone(""));
+                            status = format!("New file {}", path);
+                        } else {
+                            let opened_text: str8 = join_lines(rr2.unwrap());
+                            tab_texts.push(clone(opened_text));
+                            tab_saved_texts.push(clone(opened_text));
+                            tab_undo_texts.push(clone(""));
+                            tab_redo_texts.push(clone(""));
+                            status = format!("Opened {}", path);
+                        }
+                        tab_dirty.push(0);
+                        tab_cursor_rows.push(0);
+                        tab_cursor_cols.push(0);
+                        tab_scroll_rows.push(0);
+                        tab_scroll_cols.push(0);
+                        active_tab = tab_names.len() - 1;
+                        current_filename = clone(tab_names[active_tab]);
+                        current_lines = split_text_lines(tab_texts[active_tab]);
+                        current_saved_text = clone(tab_saved_texts[active_tab]);
+                        current_undo_text = clone(tab_undo_texts[active_tab]);
+                        current_redo_text = clone(tab_redo_texts[active_tab]);
+                        current_cursor_row = 0;
+                        current_cursor_col = 0;
+                        current_scroll_row = 0;
+                        current_scroll_col = 0;
+                        current_dirty = 0;
+                        continue;
+                    }
+                    status = format!("Unknown command: {}", cmd);
+                    continue;
+                }
+                if printable_ascii(keycode) == 1 {
+                    command_input = append_char_to_owned(command_input, keycode);
+                }
+                continue;
+            }
+
+            if mode == 1 {
+                if keycode == AsciiKey::Esc {
+                    mode = 0;
+                    insert_session_active = 0;
+                    insert_session_snapshot = clone("");
+                    pending_normal = 0;
+                    current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1);
+                    status = clone("");
+                    continue;
+                }
+                if keycode == 1001 { current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); continue; }
+                if keycode == 1002 { current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); continue; }
+                if keycode == 1003 { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); continue; }
+                if keycode == 1004 { current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1); continue; }
+                if keycode == AsciiKey::Cr || keycode == AsciiKey::Lf {
+                    skip_lf_after_cr = keycode == AsciiKey::Cr ? 1 : 0;
+                    let ins_pair1: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                    current_undo_text = clone(ins_pair1[0]);
+                    current_redo_text = clone(ins_pair1[1]);
+                    insert_session_active = 1;
+                    let current: str8 = current_lines[current_cursor_row];
+                    let left: str8 = sub(current, 0, current_cursor_col);
+                    let right: str8 = sub(current, current_cursor_col, len(current) - current_cursor_col);
+                    let replaced: list<str8> = replace_line(current_lines, current_cursor_row, left);
+                    current_lines = insert_line_after(replaced, current_cursor_row, right);
+                    current_cursor_row = current_cursor_row + 1;
+                    current_cursor_col = 0;
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    continue;
+                }
+                if keycode == AsciiKey::Backspace || keycode == AsciiKey::Del || keycode == 127 {
+                    if current_cursor_col > 0 {
+                        let ins_pair2: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                        current_undo_text = clone(ins_pair2[0]);
+                        current_redo_text = clone(ins_pair2[1]);
+                        insert_session_active = 1;
+                        let current2: str8 = current_lines[current_cursor_row];
+                        let left2: str8 = sub(current2, 0, current_cursor_col - 1);
+                        let right2: str8 = sub(current2, current_cursor_col, len(current2) - current_cursor_col);
+                        current_lines = replace_line(current_lines, current_cursor_row, concat(left2, right2));
+                        current_cursor_col = current_cursor_col - 1;
+                    } else if current_cursor_row > 0 {
+                        let ins_pair3: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                        current_undo_text = clone(ins_pair3[0]);
+                        current_redo_text = clone(ins_pair3[1]);
+                        insert_session_active = 1;
+                        let merged: str8 = concat(current_lines[current_cursor_row - 1], current_lines[current_cursor_row]);
+                        let tmp: list<str8> = replace_line(current_lines, current_cursor_row - 1, merged);
+                        current_lines = remove_line(tmp, current_cursor_row);
+                        current_cursor_row = current_cursor_row - 1;
+                        current_cursor_col = len(current_lines[current_cursor_row]);
+                    }
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    continue;
+                }
+                if keycode == 1005 {
+                    let cur_len: i64 = len(current_lines[current_cursor_row]);
+                    if current_cursor_col < cur_len {
+                        let ins_pair4: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                        current_undo_text = clone(ins_pair4[0]);
+                        current_redo_text = clone(ins_pair4[1]);
+                        insert_session_active = 1;
+                        let left3: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
+                        let right3: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len - current_cursor_col - 1);
+                        current_lines = replace_line(current_lines, current_cursor_row, concat(left3, right3));
+                    } else if current_cursor_row + 1 < current_lines.len() {
+                        let ins_pair5: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                        current_undo_text = clone(ins_pair5[0]);
+                        current_redo_text = clone(ins_pair5[1]);
+                        insert_session_active = 1;
+                        let merged2: str8 = concat(current_lines[current_cursor_row], current_lines[current_cursor_row + 1]);
+                        let tmp2: list<str8> = replace_line(current_lines, current_cursor_row, merged2);
+                        current_lines = remove_line(tmp2, current_cursor_row + 1);
+                    }
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    continue;
+                }
+                if keycode == AsciiKey::Tab {
+                    let ins_pair6: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                    current_undo_text = clone(ins_pair6[0]);
+                    current_redo_text = clone(ins_pair6[1]);
+                    insert_session_active = 1;
+                    var t: i32 = 0;
+                    while t < 4 {
+                        let left4: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
+                        let right4: str8 = sub(current_lines[current_cursor_row], current_cursor_col, len(current_lines[current_cursor_row]) - current_cursor_col);
+                        current_lines = replace_line(current_lines, current_cursor_row, concat(concat(left4, " "), right4));
+                        current_cursor_col = current_cursor_col + 1;
+                        t = t + 1;
+                    }
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    continue;
+                }
+                if printable_ascii(keycode) == 1 {
+                    let ins_pair7: list<str8> = begin_insert_undo(insert_session_snapshot, insert_session_active, current_undo_text, current_redo_text);
+                    current_undo_text = clone(ins_pair7[0]);
+                    current_redo_text = clone(ins_pair7[1]);
+                    insert_session_active = 1;
+                    let left5: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
+                    let right5: str8 = sub(current_lines[current_cursor_row], current_cursor_col, len(current_lines[current_cursor_row]) - current_cursor_col);
+                    current_lines = replace_line(current_lines, current_cursor_row, concat(append_char_to_owned(left5, keycode), right5));
+                    current_cursor_col = current_cursor_col + 1;
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                }
+                continue;
+            }
+
+            if mode == 3 || mode == 4 {
+                if keycode == AsciiKey::Esc {
+                    mode = 0;
+                    pending_normal = 0;
+                    status = clone("");
+                    continue;
+                }
+                if keycode == 1001 || keycode == AsciiKey::LowerK {
+                    current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    continue;
+                }
+                if keycode == 1002 || keycode == AsciiKey::LowerJ {
+                    current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    continue;
+                }
+                if keycode == 1003 || keycode == AsciiKey::LowerL {
+                    current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1);
+                    continue;
+                }
+                if keycode == 1004 || keycode == AsciiKey::LowerH {
+                    current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1);
+                    continue;
+                }
+                if keycode == AsciiKey::LowerW {
+                    let next_wv: list<i64> = move_word_forward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_wv[0];
+                    current_cursor_col = next_wv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::UpperW {
+                    let next_Wv: list<i64> = move_bigword_forward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_Wv[0];
+                    current_cursor_col = next_Wv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::LowerB {
+                    let next_bv: list<i64> = move_word_backward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_bv[0];
+                    current_cursor_col = next_bv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::LowerE {
+                    let next_ev: list<i64> = move_word_end(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_ev[0];
+                    current_cursor_col = next_ev[1];
+                    continue;
+                }
+                if keycode == AsciiKey::UpperB {
+                    let next_Bv: list<i64> = move_bigword_backward(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_Bv[0];
+                    current_cursor_col = next_Bv[1];
+                    continue;
+                }
+                if keycode == AsciiKey::UpperE {
+                    let next_Ev: list<i64> = move_bigword_end(current_lines, current_cursor_row, current_cursor_col);
+                    current_cursor_row = next_Ev[0];
+                    current_cursor_col = next_Ev[1];
+                    continue;
+                }
+                if keycode == AsciiKey::LowerY {
+                    if mode == 3 {
+                        current_yank_text = yank_charwise(current_lines, visual_anchor_row, visual_anchor_col, current_cursor_row, current_cursor_col);
+                        current_yank_kind = 1;
+                    } else {
+                        current_yank_text = yank_linewise(current_lines, visual_anchor_row, current_cursor_row);
+                        current_yank_kind = 2;
+                    }
+                    mode = 0;
+                    status = clone("Yanked");
+                    continue;
+                }
+                if keycode == AsciiKey::LowerD || keycode == AsciiKey::LowerC {
+                    let before_text_v: str8 = join_lines(current_lines);
+                    if mode == 3 {
+                        current_yank_text = yank_charwise(current_lines, visual_anchor_row, visual_anchor_col, current_cursor_row, current_cursor_col);
+                        current_yank_kind = 1;
+                        current_lines = delete_charwise_selection(current_lines, visual_anchor_row, visual_anchor_col, current_cursor_row, current_cursor_col);
+                        let bounds_v: list<i64> = selection_bounds(visual_anchor_row, visual_anchor_col, current_cursor_row, current_cursor_col);
+                        current_cursor_row = clamp_i64(bounds_v[0], 0, current_lines.len() - 1);
+                        current_cursor_col = clamp_i64(bounds_v[1], 0, len(current_lines[current_cursor_row]));
+                    } else {
+                        current_yank_text = yank_linewise(current_lines, visual_anchor_row, current_cursor_row);
+                        current_yank_kind = 2;
+                        current_lines = delete_linewise_selection(current_lines, visual_anchor_row, current_cursor_row);
+                        current_cursor_row = clamp_i64(min_i64(visual_anchor_row, current_cursor_row), 0, current_lines.len() - 1);
+                        current_cursor_col = clamp_i64(0, 0, len(current_lines[current_cursor_row]));
+                    }
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    mode = keycode == AsciiKey::LowerC ? 1 : 0;
+                    if keycode == AsciiKey::LowerC {
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text_v);
+                        current_redo_text = clone("");
+                        insert_session_active = 1;
+                        insert_session_snapshot = clone(before_text_v);
+                    } else {
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text_v);
+                        current_redo_text = clone("");
+                    }
+                    status = keycode == AsciiKey::LowerC ? clone("-- INSERT --") : clone("Deleted");
+                    continue;
+                }
+                continue;
+            }
+
+            if keycode == 1001 { current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); pending_normal = 0; continue; }
+            if keycode == 1002 { current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); pending_normal = 0; continue; }
+            if keycode == 1003 { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); pending_normal = 0; continue; }
+            if keycode == 1004 { current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1); pending_normal = 0; continue; }
+            if keycode == AsciiKey::Backspace {
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                active_tab = active_tab == 0 ? (tab_names.len() - 1) : (active_tab - 1);
+                current_filename = clone(tab_names[active_tab]);
+                current_lines = split_text_lines(tab_texts[active_tab]);
+                current_saved_text = clone(tab_saved_texts[active_tab]);
+                current_undo_text = clone(tab_undo_texts[active_tab]);
+                current_redo_text = clone(tab_redo_texts[active_tab]);
+                current_cursor_row = tab_cursor_rows[active_tab];
+                current_cursor_col = tab_cursor_cols[active_tab];
+                current_scroll_row = tab_scroll_rows[active_tab];
+                current_scroll_col = tab_scroll_cols[active_tab];
+                current_dirty = tab_dirty[active_tab];
+                pending_normal = 0;
+                status = format!("Tab {}", display_filename(current_filename));
+                continue;
+            }
+            if keycode == AsciiKey::Ff {
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                tab_saved_texts = replace_str8_at(tab_saved_texts, active_tab, clone(current_saved_text));
+                tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                active_tab = active_tab + 1 >= tab_names.len() ? 0 : (active_tab + 1);
+                current_filename = clone(tab_names[active_tab]);
+                current_lines = split_text_lines(tab_texts[active_tab]);
+                current_saved_text = clone(tab_saved_texts[active_tab]);
+                current_undo_text = clone(tab_undo_texts[active_tab]);
+                current_redo_text = clone(tab_redo_texts[active_tab]);
+                current_cursor_row = tab_cursor_rows[active_tab];
+                current_cursor_col = tab_cursor_cols[active_tab];
+                current_scroll_row = tab_scroll_rows[active_tab];
+                current_scroll_col = tab_scroll_cols[active_tab];
+                current_dirty = tab_dirty[active_tab];
+                pending_normal = 0;
+                status = format!("Tab {}", display_filename(current_filename));
+                continue;
+            }
+            if keycode == AsciiKey::Esc { pending_normal = 0; status = clone(""); continue; }
+            if keycode == AsciiKey::Colon { mode = 2; pending_normal = 0; command_input = clone(""); continue; }
+            if is_help_buffer(current_filename) == 1 && keycode == AsciiKey::LowerQ {
+                var help_names: list<str8> = [];
+                var help_texts2: list<str8> = [];
+                var help_saved2: list<str8> = [];
+                var help_undo2: list<str8> = [];
+                var help_redo2: list<str8> = [];
+                var help_dirty2: list<i64> = [];
+                var help_rows2: list<i64> = [];
+                var help_cols2: list<i64> = [];
+                var help_srows2: list<i64> = [];
+                var help_scols2: list<i64> = [];
+                for(i, name) in tab_names.enumerate() {
+                    if i != active_tab {
+                        help_names.push(clone(name));
+                        help_texts2.push(clone(tab_texts[i]));
+                        help_saved2.push(clone(tab_saved_texts[i]));
+                        help_undo2.push(clone(tab_undo_texts[i]));
+                        help_redo2.push(clone(tab_redo_texts[i]));
+                        help_dirty2.push(tab_dirty[i]);
+                        help_rows2.push(tab_cursor_rows[i]);
+                        help_cols2.push(tab_cursor_cols[i]);
+                        help_srows2.push(tab_scroll_rows[i]);
+                        help_scols2.push(tab_scroll_cols[i]);
+                    }
+                }
+                tab_names = help_names;
+                tab_texts = help_texts2;
+                tab_saved_texts = help_saved2;
+                tab_undo_texts = help_undo2;
+                tab_redo_texts = help_redo2;
+                tab_dirty = help_dirty2;
+                tab_cursor_rows = help_rows2;
+                tab_cursor_cols = help_cols2;
+                tab_scroll_rows = help_srows2;
+                tab_scroll_cols = help_scols2;
+                if tab_names.len() <= 0 {
+                    active_tab = 0;
+                    current_filename = clone("");
+                    current_lines = split_text_lines("");
+                    current_saved_text = clone("");
+                    current_undo_text = clone("");
+                    current_redo_text = clone("");
+                    current_cursor_row = 0;
+                    current_cursor_col = 0;
+                    current_scroll_row = 0;
+                    current_scroll_col = 0;
+                    current_dirty = 0;
+                } else {
+                    active_tab = help_return_tab < 0 ? 0 : clamp_i64(help_return_tab, 0, tab_names.len() - 1);
+                    current_filename = clone(tab_names[active_tab]);
+                    current_lines = split_text_lines(tab_texts[active_tab]);
+                    current_saved_text = clone(tab_saved_texts[active_tab]);
+                    current_undo_text = clone(tab_undo_texts[active_tab]);
+                    current_redo_text = clone(tab_redo_texts[active_tab]);
+                    current_cursor_row = tab_cursor_rows[active_tab];
+                    current_cursor_col = tab_cursor_cols[active_tab];
+                    current_scroll_row = tab_scroll_rows[active_tab];
+                    current_scroll_col = tab_scroll_cols[active_tab];
+                    current_dirty = tab_dirty[active_tab];
+                }
+                help_return_tab = -1;
+                status = clone("");
+                pending_normal = 0;
+                continue;
+            }
+            if keycode == AsciiKey::LowerU {
+                let undo_pair: list<str8> = pop_snapshot_text(current_undo_text);
+                if len(undo_pair[1]) > 0 || len(current_undo_text) > 0 {
+                    let current_text_u: str8 = join_lines(current_lines);
+                    current_redo_text = push_snapshot_text(current_redo_text, current_text_u);
+                    current_undo_text = undo_pair[0];
+                    current_lines = split_text_lines(undo_pair[1]);
+                    current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    tab_dirty = replace_i64_at(tab_dirty, active_tab, current_dirty);
+                    tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                    tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                    status = clone("Undo");
+                }
+                continue;
+            }
+            if keycode == AsciiKey::Dc2 {
+                let redo_pair: list<str8> = pop_snapshot_text(current_redo_text);
+                if len(redo_pair[1]) > 0 || len(current_redo_text) > 0 {
+                    let current_text_r: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, current_text_r);
+                    current_redo_text = redo_pair[0];
+                    current_lines = split_text_lines(redo_pair[1]);
+                    current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
+                    current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    tab_dirty = replace_i64_at(tab_dirty, active_tab, current_dirty);
+                    tab_undo_texts = replace_str8_at(tab_undo_texts, active_tab, clone(current_undo_text));
+                    tab_redo_texts = replace_str8_at(tab_redo_texts, active_tab, clone(current_redo_text));
+                    status = clone("Redo");
+                }
+                continue;
+            }
+            if keycode == AsciiKey::Nak {
+                let page_step_up: i64 = max_i64(1, editor_rows / 2);
+                current_cursor_row = current_cursor_row - page_step_up;
+                if current_cursor_row < 0 {
+                    current_cursor_row = 0;
+                }
+                current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                pending_normal = 0;
+                status = clone("Page up");
+                continue;
+            }
+            if keycode == AsciiKey::Eot {
+                let page_step_down: i64 = max_i64(1, editor_rows / 2);
+                current_cursor_row = current_cursor_row + page_step_down;
+                if current_cursor_row >= current_lines.len() {
+                    current_cursor_row = current_lines.len() - 1;
+                }
+                current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row]));
+                pending_normal = 0;
+                status = clone("Page down");
+                continue;
+            }
+            if keycode == AsciiKey::LowerV {
+                mode = 3;
+                visual_anchor_row = current_cursor_row;
+                visual_anchor_col = current_cursor_col;
+                status = clone("-- VISUAL --");
+                continue;
+            }
+            if keycode == AsciiKey::UpperV {
+                mode = 4;
+                visual_anchor_row = current_cursor_row;
+                visual_anchor_col = 0;
+                status = clone("-- V-LINE --");
+                continue;
+            }
+
+            if pending_normal == 1 {
+                pending_normal = 0;
+                if keycode == AsciiKey::LowerG {
+                    current_cursor_row = 0;
+                    current_cursor_col = 0;
+                    current_scroll_row = 0;
+                    current_scroll_col = 0;
+                    status = clone("Top of file");
+                    continue;
+                }
+            } else if pending_normal == 2 {
+                pending_normal = 0;
+                if keycode == AsciiKey::LowerD {
+                    let before_text6: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text6);
+                    current_redo_text = clone("");
+                    current_lines = remove_line(current_lines, current_cursor_row);
+                    current_cursor_row = clamp_i64(current_cursor_row, 0, current_lines.len() - 1);
+                    current_cursor_col = clamp_i64(0, 0, len(current_lines[current_cursor_row]));
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    status = clone("Deleted line");
+                    continue;
+                }
+                if keycode == AsciiKey::LowerI {
+                    pending_normal = 5;
+                    continue;
+                }
+            } else if pending_normal == 3 {
+                pending_normal = 0;
+                if keycode == AsciiKey::LowerY {
+                    current_yank_text = yank_linewise(current_lines, current_cursor_row, current_cursor_row);
+                    current_yank_kind = 2;
+                    status = clone("Yanked line");
+                    continue;
+                }
+            } else if pending_normal == 4 {
+                pending_normal = 0;
+                if keycode == AsciiKey::LowerI {
+                    pending_normal = 6;
+                    continue;
+                }
+            } else if pending_normal == 5 || pending_normal == 6 {
+                let change_mode: i32 = pending_normal == 6 ? 1 : 0;
+                pending_normal = 0;
+                var quote_target: str8 = clone("");
+                if keycode == AsciiKey::SingleQuote {
+                    quote_target = "'";
+                } else if keycode == AsciiKey::DoubleQuote {
+                    quote_target = "\"";
+                }
+                if len(quote_target) > 0 {
+                    let current_line_q: str8 = current_lines[current_cursor_row];
+                    let quote_bounds: list<i64> = inside_quote_bounds(current_line_q, current_cursor_col, quote_target);
+                    if quote_bounds[0] >= 0 {
+                        let before_text_q: str8 = join_lines(current_lines);
+                        let start_q: i64 = quote_bounds[0];
+                        let end_q: i64 = quote_bounds[1];
+                        let left_q: str8 = sub(current_line_q, 0, start_q);
+                        let right_q: str8 = end_q < start_q ? sub(current_line_q, start_q, len(current_line_q) - start_q) :
+                                                       sub(current_line_q, end_q + 1, len(current_line_q) - end_q - 1);
+                        current_yank_text = end_q < start_q ? clone("") :
+                                           sub(current_line_q, start_q, end_q - start_q + 1);
+                        current_yank_kind = 1;
+                        current_lines = replace_line(current_lines, current_cursor_row, concat(left_q, right_q));
+                        current_cursor_col = clamp_i64(start_q, 0, len(current_lines[current_cursor_row]));
+                        current_dirty = recompute_dirty(current_lines, current_saved_text);
+                        tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                        current_undo_text = push_snapshot_text(current_undo_text, before_text_q);
+                        current_redo_text = clone("");
+                        if change_mode == 1 {
+                            insert_session_active = 1;
+                            insert_session_snapshot = clone(before_text_q);
+                        }
+                        mode = change_mode == 1 ? 1 : 0;
+                        status = change_mode == 1 ? clone("-- INSERT --") : clone("Deleted");
+                        continue;
+                    }
+                    status = clone("Quote text object not found");
+                    continue;
+                }
+            }
+
+            if keycode == AsciiKey::LowerH { current_cursor_col = current_cursor_col <= 0 ? 0 : (current_cursor_col - 1); continue; }
+            if keycode == AsciiKey::LowerJ { current_cursor_row = current_cursor_row + 1 >= current_lines.len() ? (current_lines.len() - 1) : (current_cursor_row + 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); continue; }
+            if keycode == AsciiKey::LowerK { current_cursor_row = current_cursor_row <= 0 ? 0 : (current_cursor_row - 1); current_cursor_col = clamp_i64(current_cursor_col, 0, len(current_lines[current_cursor_row])); continue; }
+            if keycode == AsciiKey::LowerL { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); continue; }
+            if keycode == AsciiKey::LowerW {
+                let next_w: list<i64> = move_word_forward(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_w[0];
+                current_cursor_col = next_w[1];
+                continue;
+            }
+            if keycode == AsciiKey::UpperW {
+                let next_W: list<i64> = move_bigword_forward(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_W[0];
+                current_cursor_col = next_W[1];
+                continue;
+            }
+            if keycode == AsciiKey::LowerB {
+                let next_b: list<i64> = move_word_backward(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_b[0];
+                current_cursor_col = next_b[1];
+                continue;
+            }
+            if keycode == AsciiKey::LowerE {
+                let next_e: list<i64> = move_word_end(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_e[0];
+                current_cursor_col = next_e[1];
+                continue;
+            }
+            if keycode == AsciiKey::UpperB {
+                let next_B: list<i64> = move_bigword_backward(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_B[0];
+                current_cursor_col = next_B[1];
+                continue;
+            }
+            if keycode == AsciiKey::UpperE {
+                let next_E: list<i64> = move_bigword_end(current_lines, current_cursor_row, current_cursor_col);
+                current_cursor_row = next_E[0];
+                current_cursor_col = next_E[1];
+                continue;
+            }
+            if keycode == AsciiKey::Digit0 { current_cursor_col = 0; continue; }
+            if keycode == AsciiKey::Dollar { current_cursor_col = len(current_lines[current_cursor_row]); continue; }
+            if keycode == AsciiKey::LowerI { mode = 1; insert_session_active = 0; insert_session_snapshot = join_lines(current_lines); status = clone("-- INSERT --"); continue; }
+            if keycode == AsciiKey::LowerA { current_cursor_col = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1); mode = 1; insert_session_active = 0; insert_session_snapshot = join_lines(current_lines); status = clone("-- INSERT --"); continue; }
+            if keycode == AsciiKey::UpperA { current_cursor_col = len(current_lines[current_cursor_row]); mode = 1; insert_session_active = 0; insert_session_snapshot = join_lines(current_lines); status = clone("-- INSERT --"); continue; }
+            if keycode == AsciiKey::LowerS {
+                let before_text7: str8 = join_lines(current_lines);
+                let cur_len_s: i64 = len(current_lines[current_cursor_row]);
+                if current_cursor_col < cur_len_s {
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text7);
+                    current_redo_text = clone("");
+                    insert_session_active = 1;
+                    insert_session_snapshot = clone(before_text7);
+                    let left_s: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
+                    let right_s: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len_s - current_cursor_col - 1);
+                    current_lines = replace_line(current_lines, current_cursor_row, concat(left_s, right_s));
+                    current_dirty = 1;
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                } else {
+                    insert_session_active = 0;
+                    insert_session_snapshot = join_lines(current_lines);
+                }
+                mode = 1;
+                status = clone("-- INSERT --");
+                continue;
+            }
+            if keycode == AsciiKey::LowerO {
+                let before_text8: str8 = join_lines(current_lines);
+                current_undo_text = push_snapshot_text(current_undo_text, before_text8);
+                current_redo_text = clone("");
+                insert_session_active = 1;
+                insert_session_snapshot = clone(before_text8);
+                current_lines = insert_line_after(current_lines, current_cursor_row, clone(""));
+                current_cursor_row = current_cursor_row + 1;
+                current_cursor_col = 0;
+                current_dirty = 1;
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                mode = 1;
+                status = clone("-- INSERT --");
+                continue;
+            }
+            if keycode == AsciiKey::UpperO {
+                let before_text9: str8 = join_lines(current_lines);
+                current_undo_text = push_snapshot_text(current_undo_text, before_text9);
+                current_redo_text = clone("");
+                insert_session_active = 1;
+                insert_session_snapshot = clone(before_text9);
+                current_lines = insert_line_before(current_lines, current_cursor_row, clone(""));
+                current_cursor_col = 0;
+                current_dirty = 1;
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                mode = 1;
+                status = clone("-- INSERT --");
+                continue;
+            }
+            if keycode == AsciiKey::LowerX || keycode == 1005 {
+                let before_text10: str8 = join_lines(current_lines);
+                let cur_len2: i64 = len(current_lines[current_cursor_row]);
+                if current_cursor_col < cur_len2 {
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text10);
+                    current_redo_text = clone("");
+                    let left6: str8 = sub(current_lines[current_cursor_row], 0, current_cursor_col);
+                    let right6: str8 = sub(current_lines[current_cursor_row], current_cursor_col + 1, cur_len2 - current_cursor_col - 1);
+                    current_lines = replace_line(current_lines, current_cursor_row, concat(left6, right6));
+                } else if current_cursor_row + 1 < current_lines.len() {
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text10);
+                    current_redo_text = clone("");
+                    let merged3: str8 = concat(current_lines[current_cursor_row], current_lines[current_cursor_row + 1]);
+                    let tmp3: list<str8> = replace_line(current_lines, current_cursor_row, merged3);
+                    current_lines = remove_line(tmp3, current_cursor_row + 1);
+                }
+                current_dirty = 1;
+                tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                status = clone("Deleted character");
+                continue;
+            }
+            if keycode == AsciiKey::LowerD { pending_normal = 2; continue; }
+            if keycode == AsciiKey::LowerC { pending_normal = 4; continue; }
+            if keycode == AsciiKey::LowerY {
+                pending_normal = 3;
+                continue;
+            }
+            if keycode == AsciiKey::LowerP {
+                if current_yank_kind == 2 {
+                    let before_text11: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text11);
+                    current_redo_text = clone("");
+                    let yank_lines: list<str8> = split_text_lines(current_yank_text);
+                    current_lines = insert_lines_after_many(current_lines, current_cursor_row, yank_lines);
+                    current_cursor_row = min_i64(current_cursor_row + 1, current_lines.len() - 1);
+                    current_cursor_col = 0;
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    status = clone("Pasted");
+                    continue;
+                }
+                if current_yank_kind == 1 {
+                    let before_text12: str8 = join_lines(current_lines);
+                    current_undo_text = push_snapshot_text(current_undo_text, before_text12);
+                    current_redo_text = clone("");
+                    let paste_col: i64 = current_cursor_col >= len(current_lines[current_cursor_row]) ? len(current_lines[current_cursor_row]) : (current_cursor_col + 1);
+                    current_lines = insert_charwise_text(current_lines, current_cursor_row, paste_col, current_yank_text);
+                    current_cursor_col = paste_col;
+                    current_dirty = recompute_dirty(current_lines, current_saved_text);
+                    tab_texts = replace_str8_at(tab_texts, active_tab, join_lines(current_lines));
+                    status = clone("Pasted");
+                    continue;
+                }
+            }
+            if keycode == AsciiKey::LowerG { pending_normal = 1; continue; }
+            if keycode == AsciiKey::UpperG {
+                current_cursor_row = current_lines.len() - 1;
+                current_cursor_col = len(current_lines[current_cursor_row]);
+                status = clone("Bottom of file");
+                continue;
+            }
+        }
+
+        sleep_ms(16);
+        blink_tick = blink_tick + 1;
+    }
+
+    let _ = stdin_restore();
+    let _ = write(stdout(), reset());
+    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), cursor_color_reset());
+    let _ = write(stdout(), alt_screen_off_real());
+    let _ = write(stdout(), "\n");
+    return 0;
+}
