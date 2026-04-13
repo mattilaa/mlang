@@ -23,6 +23,7 @@ static const int UML_STROKE = 1;
 static const int UML_AA_SCALE = 4;
 static const float UML_TEXT_SIZE = 14.0f;
 static int text_width(const char *text);
+static int parse_string_value(const char *text, char *out, size_t out_size);
 
 typedef enum
 {
@@ -309,6 +310,8 @@ static int parse_hex_byte(const char *s)
 
 static int parse_color(const char *text, color_t fallback, color_t *out)
 {
+    char buffer[32];
+    const char *value = text;
     int r;
     int g;
     int b;
@@ -318,11 +321,14 @@ static int parse_color(const char *text, color_t fallback, color_t *out)
         *out = fallback;
         return 1;
     }
-    if(text[0] != '#' || strlen(text) != 7)
+    if(!parse_string_value(text, buffer, sizeof(buffer)))
         return 0;
-    r = parse_hex_byte(text + 1);
-    g = parse_hex_byte(text + 3);
-    b = parse_hex_byte(text + 5);
+    value = buffer;
+    if(value[0] != '#' || strlen(value) != 7)
+        return 0;
+    r = parse_hex_byte(value + 1);
+    g = parse_hex_byte(value + 3);
+    b = parse_hex_byte(value + 5);
     if(r < 0 || g < 0 || b < 0)
         return 0;
     *out = color_rgba(r, g, b, 255);
@@ -418,8 +424,847 @@ static int find_participant_index(const sequence_diagram_t *diagram,
     return -1;
 }
 
+typedef struct
+{
+    color_t action_fill;
+    color_t action_stroke;
+    color_t action_text;
+    color_t decision_fill;
+    color_t decision_stroke;
+    color_t decision_text;
+    color_t start_fill;
+    color_t start_stroke;
+    color_t start_text;
+    color_t end_fill;
+    color_t end_stroke;
+    color_t end_text;
+    color_t edge_color;
+    color_t participant_fill;
+    color_t participant_stroke;
+    color_t participant_text;
+    color_t message_color;
+} style_defaults_t;
+
+typedef struct
+{
+    char id[64];
+    node_type_t type;
+    int has_type;
+    char label[160];
+    int has_label;
+    color_t fill;
+    int has_fill;
+    color_t stroke;
+    int has_stroke;
+    color_t text;
+    int has_text;
+} activity_node_input_t;
+
+typedef struct
+{
+    char from_id[64];
+    char to_id[64];
+    char label[64];
+    color_t color;
+    int has_color;
+} activity_edge_input_t;
+
+typedef struct
+{
+    char id[64];
+    char label[160];
+    int has_label;
+    color_t fill;
+    int has_fill;
+    color_t stroke;
+    int has_stroke;
+    color_t text;
+    int has_text;
+} participant_input_t;
+
+typedef struct
+{
+    char from_id[64];
+    char to_id[64];
+    char label[160];
+    color_t color;
+    int has_color;
+} message_input_t;
+
+typedef enum
+{
+    SECTION_NONE = 0,
+    SECTION_SETTINGS = 1,
+    SECTION_PROPERTIES = 2,
+    SECTION_NODE_ITEM = 3,
+    SECTION_EDGE_ITEM = 4,
+    SECTION_PARTICIPANT_ITEM = 5,
+    SECTION_MESSAGE_ITEM = 6
+} section_kind_t;
+
+static void init_style_defaults(style_defaults_t *defaults)
+{
+    defaults->action_fill = color_rgba(219, 234, 254, 255);
+    defaults->action_stroke = color_rgba(37, 99, 235, 255);
+    defaults->action_text = color_rgba(15, 23, 42, 255);
+    defaults->decision_fill = color_rgba(253, 230, 138, 255);
+    defaults->decision_stroke = color_rgba(217, 119, 6, 255);
+    defaults->decision_text = color_rgba(17, 24, 39, 255);
+    defaults->start_fill = color_rgba(34, 197, 94, 255);
+    defaults->start_stroke = color_rgba(22, 101, 52, 255);
+    defaults->start_text = color_rgba(255, 255, 255, 255);
+    defaults->end_fill = color_rgba(192, 132, 252, 255);
+    defaults->end_stroke = color_rgba(124, 58, 237, 255);
+    defaults->end_text = color_rgba(255, 255, 255, 255);
+    defaults->edge_color = color_rgba(71, 85, 105, 255);
+    defaults->participant_fill = color_rgba(219, 234, 254, 255);
+    defaults->participant_stroke = color_rgba(37, 99, 235, 255);
+    defaults->participant_text = color_rgba(15, 23, 42, 255);
+    defaults->message_color = color_rgba(71, 85, 105, 255);
+}
+
+static int looks_like_sectioned_text(const char *text)
+{
+    const char *cursor = text;
+    while(*cursor != '\0')
+    {
+        const char *line = cursor;
+        const char *newline = strchr(cursor, '\n');
+        char buf[512];
+        size_t len;
+        if(newline)
+            len = (size_t)(newline - line);
+        else
+            len = strlen(line);
+        if(len >= sizeof(buf))
+            len = sizeof(buf) - 1;
+        memcpy(buf, line, len);
+        buf[len] = '\0';
+        trim_in_place(buf);
+        if(buf[0] != '\0' && buf[0] != '#')
+            return buf[0] == '[' || strchr(buf, '=') != NULL;
+        if(!newline)
+            break;
+        cursor = newline + 1;
+    }
+    return 0;
+}
+
+static void strip_inline_comment(char *line)
+{
+    int in_string = 0;
+    while(*line != '\0')
+    {
+        if(*line == '"')
+            in_string = !in_string;
+        else if(*line == '#' && !in_string)
+        {
+            *line = '\0';
+            break;
+        }
+        line++;
+    }
+}
+
+static int split_key_value(char *line, char **key, char **value)
+{
+    char *eq = strchr(line, '=');
+    if(!eq)
+        return 0;
+    *eq = '\0';
+    *key = line;
+    *value = eq + 1;
+    trim_in_place(*key);
+    trim_in_place(*value);
+    return (*key)[0] != '\0';
+}
+
+static int parse_string_value(const char *text, char *out, size_t out_size)
+{
+    char buffer[512];
+    size_t len;
+    if(!text)
+        return 0;
+    len = strlen(text);
+    if(len >= sizeof(buffer))
+        len = sizeof(buffer) - 1;
+    memcpy(buffer, text, len);
+    buffer[len] = '\0';
+    trim_in_place(buffer);
+    if(buffer[0] == '"' && len >= 2 && buffer[strlen(buffer) - 1] == '"')
+    {
+        size_t inner_len = strlen(buffer) - 2;
+        if(inner_len >= out_size)
+            inner_len = out_size - 1;
+        memcpy(out, buffer + 1, inner_len);
+        out[inner_len] = '\0';
+        return 1;
+    }
+    snprintf(out, out_size, "%s", buffer);
+    return 1;
+}
+
+static int parse_section_header(const char *line, section_kind_t *section)
+{
+    if(strcmp(line, "[settings]") == 0)
+    {
+        *section = SECTION_SETTINGS;
+        return 1;
+    }
+    if(strcmp(line, "[properties]") == 0)
+    {
+        *section = SECTION_PROPERTIES;
+        return 1;
+    }
+    if(strcmp(line, "[[nodes]]") == 0)
+    {
+        *section = SECTION_NODE_ITEM;
+        return 1;
+    }
+    if(strcmp(line, "[[edges]]") == 0)
+    {
+        *section = SECTION_EDGE_ITEM;
+        return 1;
+    }
+    if(strcmp(line, "[[participants]]") == 0)
+    {
+        *section = SECTION_PARTICIPANT_ITEM;
+        return 1;
+    }
+    if(strcmp(line, "[[messages]]") == 0)
+    {
+        *section = SECTION_MESSAGE_ITEM;
+        return 1;
+    }
+    return 0;
+}
+
+static int apply_property_color(style_defaults_t *defaults, const char *key,
+                                const char *value)
+{
+    if(eq_ci(key, "action_fill"))
+        return parse_color(value, defaults->action_fill, &defaults->action_fill);
+    if(eq_ci(key, "action_stroke"))
+        return parse_color(value, defaults->action_stroke, &defaults->action_stroke);
+    if(eq_ci(key, "action_text"))
+        return parse_color(value, defaults->action_text, &defaults->action_text);
+    if(eq_ci(key, "decision_fill"))
+        return parse_color(value, defaults->decision_fill, &defaults->decision_fill);
+    if(eq_ci(key, "decision_stroke"))
+        return parse_color(value, defaults->decision_stroke, &defaults->decision_stroke);
+    if(eq_ci(key, "decision_text"))
+        return parse_color(value, defaults->decision_text, &defaults->decision_text);
+    if(eq_ci(key, "start_fill"))
+        return parse_color(value, defaults->start_fill, &defaults->start_fill);
+    if(eq_ci(key, "start_stroke"))
+        return parse_color(value, defaults->start_stroke, &defaults->start_stroke);
+    if(eq_ci(key, "start_text"))
+        return parse_color(value, defaults->start_text, &defaults->start_text);
+    if(eq_ci(key, "end_fill"))
+        return parse_color(value, defaults->end_fill, &defaults->end_fill);
+    if(eq_ci(key, "end_stroke"))
+        return parse_color(value, defaults->end_stroke, &defaults->end_stroke);
+    if(eq_ci(key, "end_text"))
+        return parse_color(value, defaults->end_text, &defaults->end_text);
+    if(eq_ci(key, "edge_color"))
+        return parse_color(value, defaults->edge_color, &defaults->edge_color);
+    if(eq_ci(key, "participant_fill"))
+        return parse_color(value, defaults->participant_fill, &defaults->participant_fill);
+    if(eq_ci(key, "participant_stroke"))
+        return parse_color(value, defaults->participant_stroke, &defaults->participant_stroke);
+    if(eq_ci(key, "participant_text"))
+        return parse_color(value, defaults->participant_text, &defaults->participant_text);
+    if(eq_ci(key, "message_color"))
+        return parse_color(value, defaults->message_color, &defaults->message_color);
+    return 0;
+}
+
+static void apply_node_defaults(node_t *node, const activity_node_input_t *input,
+                                const style_defaults_t *defaults)
+{
+    node->type = input->type;
+    snprintf(node->id, sizeof(node->id), "%s", input->id);
+    snprintf(node->label, sizeof(node->label), "%s", input->label);
+    if(node->type == NODE_ACTION)
+    {
+        node->fill = input->has_fill ? input->fill : defaults->action_fill;
+        node->stroke =
+            input->has_stroke ? input->stroke : defaults->action_stroke;
+        node->text = input->has_text ? input->text : defaults->action_text;
+    }
+    else if(node->type == NODE_DECISION)
+    {
+        node->fill = input->has_fill ? input->fill : defaults->decision_fill;
+        node->stroke =
+            input->has_stroke ? input->stroke : defaults->decision_stroke;
+        node->text = input->has_text ? input->text : defaults->decision_text;
+    }
+    else if(node->type == NODE_START)
+    {
+        node->fill = input->has_fill ? input->fill : defaults->start_fill;
+        node->stroke =
+            input->has_stroke ? input->stroke : defaults->start_stroke;
+        node->text = input->has_text ? input->text : defaults->start_text;
+    }
+    else
+    {
+        node->fill = input->has_fill ? input->fill : defaults->end_fill;
+        node->stroke =
+            input->has_stroke ? input->stroke : defaults->end_stroke;
+        node->text = input->has_text ? input->text : defaults->end_text;
+    }
+}
+
+static int detect_diagram_kind_from_text(const char *text, diagram_kind_t *kind)
+{
+    char *owned;
+    char *cursor;
+    section_kind_t section = SECTION_NONE;
+
+    *kind = DIAGRAM_ACTIVITY;
+    owned = (char *)malloc(strlen(text) + 1);
+    if(!owned)
+        return 1;
+    strcpy(owned, text);
+    cursor = owned;
+    while(*cursor != '\0')
+    {
+        char *line = cursor;
+        char *newline = strchr(cursor, '\n');
+        if(newline)
+        {
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        else
+            cursor += strlen(cursor);
+        trim_in_place(line);
+        strip_inline_comment(line);
+        trim_in_place(line);
+        if(line[0] == '\0' || line[0] == '#')
+            continue;
+        if(!looks_like_sectioned_text(text))
+        {
+            if(strncmp(line, "diagram|sequence", 16) == 0)
+                *kind = DIAGRAM_SEQUENCE;
+            break;
+        }
+        if(parse_section_header(line, &section))
+            continue;
+        if(section == SECTION_SETTINGS)
+        {
+            char *key;
+            char *value;
+            char parsed[64];
+            if(split_key_value(line, &key, &value) && eq_ci(key, "diagram") &&
+               parse_string_value(value, parsed, sizeof(parsed)) &&
+               parse_diagram_kind(parsed, kind))
+                break;
+        }
+    }
+    free(owned);
+    return 1;
+}
+
+static int parse_activity_sectioned(diagram_t *diagram, const char *text)
+{
+    char *owned = NULL;
+    char *cursor;
+    int line_no = 0;
+    section_kind_t section = SECTION_NONE;
+    style_defaults_t defaults;
+    activity_node_input_t node_inputs[128];
+    activity_edge_input_t edge_inputs[256];
+    int node_input_count = 0;
+    int edge_input_count = 0;
+    int current_node = -1;
+    int current_edge = -1;
+    int i;
+
+    memset(diagram, 0, sizeof(*diagram));
+    init_style_defaults(&defaults);
+    diagram->scale = 1.0f;
+    diagram->kind = DIAGRAM_ACTIVITY;
+    diagram->box_radius = 8.0f;
+    diagram->edge_radius = 5.0f;
+    memset(node_inputs, 0, sizeof(node_inputs));
+    memset(edge_inputs, 0, sizeof(edge_inputs));
+
+    owned = (char *)malloc(strlen(text) + 1);
+    if(!owned)
+    {
+        set_errorf("out of memory");
+        return 0;
+    }
+    strcpy(owned, text);
+    cursor = owned;
+
+    while(*cursor != '\0')
+    {
+        char *line = cursor;
+        char *newline = strchr(cursor, '\n');
+        char *key;
+        char *value;
+
+        line_no++;
+        if(newline)
+        {
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        else
+            cursor += strlen(cursor);
+
+        trim_in_place(line);
+        strip_inline_comment(line);
+        trim_in_place(line);
+        if(line[0] == '\0')
+            continue;
+        if(parse_section_header(line, &section))
+        {
+            if(section == SECTION_NODE_ITEM)
+            {
+                if(node_input_count >= 128)
+                {
+                    free(owned);
+                    set_errorf("too many nodes");
+                    return 0;
+                }
+                current_node = node_input_count++;
+                current_edge = -1;
+                memset(&node_inputs[current_node], 0, sizeof(node_inputs[0]));
+            }
+            else if(section == SECTION_EDGE_ITEM)
+            {
+                if(edge_input_count >= 256)
+                {
+                    free(owned);
+                    set_errorf("too many edges");
+                    return 0;
+                }
+                current_edge = edge_input_count++;
+                current_node = -1;
+                memset(&edge_inputs[current_edge], 0, sizeof(edge_inputs[0]));
+            }
+            else
+            {
+                current_node = -1;
+                current_edge = -1;
+            }
+            continue;
+        }
+        if(!split_key_value(line, &key, &value))
+        {
+            free(owned);
+            set_errorf("line %d: expected key = value", line_no);
+            return 0;
+        }
+
+        if(section == SECTION_SETTINGS)
+        {
+            char parsed[160];
+            if(eq_ci(key, "diagram"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !parse_diagram_kind(parsed, &diagram->kind))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid diagram type", line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "title"))
+            {
+                parse_string_value(value, diagram->title, sizeof(diagram->title));
+            }
+            else if(eq_ci(key, "scale"))
+                diagram->scale = parse_scale_value(value, 1.0f);
+            else if(eq_ci(key, "box_radius"))
+                diagram->box_radius = parse_option_value(value, 8.0f);
+            else if(eq_ci(key, "edge_radius"))
+                diagram->edge_radius = parse_option_value(value, 5.0f);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown settings key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_PROPERTIES)
+        {
+            if(!apply_property_color(&defaults, key, value))
+            {
+                free(owned);
+                set_errorf("line %d: unknown properties key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_NODE_ITEM && current_node >= 0)
+        {
+            activity_node_input_t *node = &node_inputs[current_node];
+            char parsed[160];
+            if(eq_ci(key, "id"))
+                parse_string_value(value, node->id, sizeof(node->id));
+            else if(eq_ci(key, "type"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !parse_node_type(parsed, &node->type))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid node type", line_no);
+                    return 0;
+                }
+                node->has_type = 1;
+            }
+            else if(eq_ci(key, "label"))
+            {
+                parse_string_value(value, node->label, sizeof(node->label));
+                node->has_label = 1;
+            }
+            else if(eq_ci(key, "fill"))
+                node->has_fill = parse_color(value, defaults.action_fill, &node->fill);
+            else if(eq_ci(key, "stroke"))
+                node->has_stroke = parse_color(value, defaults.action_stroke, &node->stroke);
+            else if(eq_ci(key, "text"))
+                node->has_text = parse_color(value, defaults.action_text, &node->text);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown node key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_EDGE_ITEM && current_edge >= 0)
+        {
+            activity_edge_input_t *edge = &edge_inputs[current_edge];
+            if(eq_ci(key, "from"))
+                parse_string_value(value, edge->from_id, sizeof(edge->from_id));
+            else if(eq_ci(key, "to"))
+                parse_string_value(value, edge->to_id, sizeof(edge->to_id));
+            else if(eq_ci(key, "label"))
+                parse_string_value(value, edge->label, sizeof(edge->label));
+            else if(eq_ci(key, "color"))
+                edge->has_color = parse_color(value, defaults.edge_color, &edge->color);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown edge key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        free(owned);
+        set_errorf("line %d: key outside a supported section", line_no);
+        return 0;
+    }
+
+    free(owned);
+    if(diagram->kind != DIAGRAM_ACTIVITY)
+    {
+        set_errorf("sectioned activity parser received non-activity diagram");
+        return 0;
+    }
+    if(node_input_count == 0)
+    {
+        set_errorf("diagram contains no nodes");
+        return 0;
+    }
+
+    diagram->node_count = node_input_count;
+    for(i = 0; i < node_input_count; ++i)
+    {
+        if(node_inputs[i].id[0] == '\0' || !node_inputs[i].has_type)
+        {
+            set_errorf("node %d is missing required id/type", i + 1);
+            return 0;
+        }
+        if(find_node_index(diagram, node_inputs[i].id) >= 0)
+        {
+            set_errorf("duplicate node id '%s'", node_inputs[i].id);
+            return 0;
+        }
+        apply_node_defaults(&diagram->nodes[i], &node_inputs[i], &defaults);
+    }
+
+    diagram->edge_count = edge_input_count;
+    for(i = 0; i < edge_input_count; ++i)
+    {
+        edge_t *edge = &diagram->edges[i];
+        edge->from = find_node_index(diagram, edge_inputs[i].from_id);
+        edge->to = find_node_index(diagram, edge_inputs[i].to_id);
+        if(edge->from < 0 || edge->to < 0)
+        {
+            set_errorf("edge %d references unknown node", i + 1);
+            return 0;
+        }
+        snprintf(edge->label, sizeof(edge->label), "%s", edge_inputs[i].label);
+        edge->color =
+            edge_inputs[i].has_color ? edge_inputs[i].color : defaults.edge_color;
+    }
+
+    return 1;
+}
+
+static int parse_sequence_sectioned(sequence_diagram_t *diagram, const char *text)
+{
+    char *owned = NULL;
+    char *cursor;
+    int line_no = 0;
+    section_kind_t section = SECTION_NONE;
+    style_defaults_t defaults;
+    participant_input_t participant_inputs[24];
+    message_input_t message_inputs[256];
+    int participant_input_count = 0;
+    int message_input_count = 0;
+    int current_participant = -1;
+    int current_message = -1;
+    int i;
+
+    memset(diagram, 0, sizeof(*diagram));
+    init_style_defaults(&defaults);
+    diagram->scale = 1.0f;
+    diagram->box_radius = 8.0f;
+    diagram->edge_radius = 0.0f;
+    diagram->arrow_size = 12.0f;
+    memset(participant_inputs, 0, sizeof(participant_inputs));
+    memset(message_inputs, 0, sizeof(message_inputs));
+
+    owned = (char *)malloc(strlen(text) + 1);
+    if(!owned)
+    {
+        set_errorf("out of memory");
+        return 0;
+    }
+    strcpy(owned, text);
+    cursor = owned;
+
+    while(*cursor != '\0')
+    {
+        char *line = cursor;
+        char *newline = strchr(cursor, '\n');
+        char *key;
+        char *value;
+
+        line_no++;
+        if(newline)
+        {
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        else
+            cursor += strlen(cursor);
+
+        trim_in_place(line);
+        strip_inline_comment(line);
+        trim_in_place(line);
+        if(line[0] == '\0')
+            continue;
+        if(parse_section_header(line, &section))
+        {
+            if(section == SECTION_PARTICIPANT_ITEM)
+            {
+                if(participant_input_count >= 24)
+                {
+                    free(owned);
+                    set_errorf("too many participants");
+                    return 0;
+                }
+                current_participant = participant_input_count++;
+                current_message = -1;
+                memset(&participant_inputs[current_participant], 0,
+                       sizeof(participant_inputs[0]));
+            }
+            else if(section == SECTION_MESSAGE_ITEM)
+            {
+                if(message_input_count >= 256)
+                {
+                    free(owned);
+                    set_errorf("too many messages");
+                    return 0;
+                }
+                current_message = message_input_count++;
+                current_participant = -1;
+                memset(&message_inputs[current_message], 0,
+                       sizeof(message_inputs[0]));
+            }
+            else
+            {
+                current_participant = -1;
+                current_message = -1;
+            }
+            continue;
+        }
+        if(!split_key_value(line, &key, &value))
+        {
+            free(owned);
+            set_errorf("line %d: expected key = value", line_no);
+            return 0;
+        }
+
+        if(section == SECTION_SETTINGS)
+        {
+            char parsed[160];
+            if(eq_ci(key, "diagram"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !eq_ci(parsed, "sequence"))
+                {
+                    free(owned);
+                    set_errorf("line %d: sequence input requires diagram = \"sequence\"",
+                               line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "title"))
+                parse_string_value(value, diagram->title, sizeof(diagram->title));
+            else if(eq_ci(key, "scale"))
+                diagram->scale = parse_scale_value(value, 1.0f);
+            else if(eq_ci(key, "box_radius"))
+                diagram->box_radius = parse_option_value(value, 8.0f);
+            else if(eq_ci(key, "edge_radius"))
+                diagram->edge_radius = parse_option_value(value, 0.0f);
+            else if(eq_ci(key, "arrow_size"))
+                diagram->arrow_size = parse_option_value(value, 12.0f);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown settings key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_PROPERTIES)
+        {
+            if(!apply_property_color(&defaults, key, value))
+            {
+                free(owned);
+                set_errorf("line %d: unknown properties key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_PARTICIPANT_ITEM && current_participant >= 0)
+        {
+            participant_input_t *p = &participant_inputs[current_participant];
+            if(eq_ci(key, "id"))
+                parse_string_value(value, p->id, sizeof(p->id));
+            else if(eq_ci(key, "label"))
+            {
+                parse_string_value(value, p->label, sizeof(p->label));
+                p->has_label = 1;
+            }
+            else if(eq_ci(key, "fill"))
+                p->has_fill =
+                    parse_color(value, defaults.participant_fill, &p->fill);
+            else if(eq_ci(key, "stroke"))
+                p->has_stroke =
+                    parse_color(value, defaults.participant_stroke, &p->stroke);
+            else if(eq_ci(key, "text"))
+                p->has_text =
+                    parse_color(value, defaults.participant_text, &p->text);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown participant key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_MESSAGE_ITEM && current_message >= 0)
+        {
+            message_input_t *m = &message_inputs[current_message];
+            if(eq_ci(key, "from"))
+                parse_string_value(value, m->from_id, sizeof(m->from_id));
+            else if(eq_ci(key, "to"))
+                parse_string_value(value, m->to_id, sizeof(m->to_id));
+            else if(eq_ci(key, "label"))
+                parse_string_value(value, m->label, sizeof(m->label));
+            else if(eq_ci(key, "color"))
+                m->has_color =
+                    parse_color(value, defaults.message_color, &m->color);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown message key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        free(owned);
+        set_errorf("line %d: key outside a supported section", line_no);
+        return 0;
+    }
+
+    free(owned);
+    if(participant_input_count == 0)
+    {
+        set_errorf("sequence diagram contains no participants");
+        return 0;
+    }
+
+    diagram->participant_count = participant_input_count;
+    for(i = 0; i < participant_input_count; ++i)
+    {
+        participant_t *p;
+        if(participant_inputs[i].id[0] == '\0')
+        {
+            set_errorf("participant %d is missing required id", i + 1);
+            return 0;
+        }
+        if(find_participant_index(diagram, participant_inputs[i].id) >= 0)
+        {
+            set_errorf("duplicate participant id '%s'", participant_inputs[i].id);
+            return 0;
+        }
+        p = &diagram->participants[i];
+        snprintf(p->id, sizeof(p->id), "%s", participant_inputs[i].id);
+        snprintf(p->label, sizeof(p->label), "%s",
+                 participant_inputs[i].has_label ? participant_inputs[i].label
+                                                 : participant_inputs[i].id);
+        p->fill = participant_inputs[i].has_fill ? participant_inputs[i].fill
+                                                 : defaults.participant_fill;
+        p->stroke =
+            participant_inputs[i].has_stroke ? participant_inputs[i].stroke
+                                             : defaults.participant_stroke;
+        p->text = participant_inputs[i].has_text ? participant_inputs[i].text
+                                                 : defaults.participant_text;
+    }
+
+    diagram->message_count = message_input_count;
+    for(i = 0; i < message_input_count; ++i)
+    {
+        message_t *m = &diagram->messages[i];
+        m->from = find_participant_index(diagram, message_inputs[i].from_id);
+        m->to = find_participant_index(diagram, message_inputs[i].to_id);
+        if(m->from < 0 || m->to < 0)
+        {
+            set_errorf("message %d references unknown participant", i + 1);
+            return 0;
+        }
+        snprintf(m->label, sizeof(m->label), "%s", message_inputs[i].label);
+        m->color = message_inputs[i].has_color ? message_inputs[i].color
+                                               : defaults.message_color;
+    }
+
+    return 1;
+}
+
 static int parse_diagram_text(diagram_t *diagram, const char *text)
 {
+    if(looks_like_sectioned_text(text))
+        return parse_activity_sectioned(diagram, text);
+
     char *owned = NULL;
     char *cursor;
     int line_no = 0;
@@ -663,6 +1508,9 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
 
 static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
 {
+    if(looks_like_sectioned_text(text))
+        return parse_sequence_sectioned(diagram, text);
+
     char *owned = NULL;
     char *cursor;
     int line_no = 0;
@@ -2263,25 +3111,28 @@ static int ensure_parent_dirs(const char *path)
 int uml_render_file(const char *input_path, const char *output_path)
 {
     char *text;
-    diagram_t diagram;
     image_t image;
+    diagram_kind_t kind;
+    diagram_t diagram;
     int i;
 
     g_last_error[0] = '\0';
     text = read_text_file(input_path);
     if(!text)
         return 1;
-    if(!parse_diagram_text(&diagram, text))
-    {
-        free(text);
-        return 1;
-    }
 
-    if(diagram.kind == DIAGRAM_SEQUENCE)
+    detect_diagram_kind_from_text(text, &kind);
+    if(kind == DIAGRAM_SEQUENCE)
     {
         int rc = render_sequence_file(input_path, output_path, text);
         free(text);
         return rc;
+    }
+
+    if(!parse_diagram_text(&diagram, text))
+    {
+        free(text);
+        return 1;
     }
     free(text);
 

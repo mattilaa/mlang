@@ -1,23 +1,97 @@
-diagram|sequence
-scale|1.0
-box_radius|8
-arrow_size|12
-title|HTTPS authentication sequence
+[settings]
+diagram = "sequence"
+title = "HTTPS authentication sequence"
+scale = 1.0
+box_radius = 8
+arrow_size = 12
 
-# participant|id|label|fill|stroke|text
-participant|browser|Browser|#dbeafe|#2563eb|#0f172a
-participant|gateway|HTTPS API Gateway|#fde68a|#d97706|#111827
-participant|auth|Auth Service|#ddd6fe|#7c3aed|#111827
-participant|session|Session Store|#bbf7d0|#16a34a|#052e16
+[properties]
+participant_fill = "#dbeafe"
+participant_stroke = "#2563eb"
+participant_text = "#0f172a"
+message_color = "#334155"
 
-# message|from|to|label|color
-message|browser|gateway|POST /login over TLS|#2563eb
-message|gateway|auth|Validate credentials|#d97706
-message|auth|session|Create authenticated session|#16a34a
-message|session|auth|Session id + expiry|#16a34a
-message|auth|gateway|JWT + session cookie|#7c3aed
-message|gateway|browser|200 OK Set-Cookie auth_sid|#2563eb
-message|browser|gateway|GET /profile with cookie|#2563eb
-message|gateway|session|Resolve session from cookie|#16a34a
-message|session|gateway|Session valid for user|#16a34a
-message|gateway|browser|200 OK profile payload|#2563eb
+[[participants]]
+id = "browser"
+label = "Browser"
+
+[[participants]]
+id = "gateway"
+label = "HTTPS API Gateway"
+fill = "#fde68a"
+stroke = "#d97706"
+text = "#111827"
+
+[[participants]]
+id = "auth"
+label = "Auth Service"
+fill = "#ddd6fe"
+stroke = "#7c3aed"
+text = "#111827"
+
+[[participants]]
+id = "session"
+label = "Session Store"
+fill = "#bbf7d0"
+stroke = "#16a34a"
+text = "#052e16"
+
+[[messages]]
+from = "browser"
+to = "gateway"
+label = "POST /login over TLS"
+color = "#2563eb"
+
+[[messages]]
+from = "gateway"
+to = "auth"
+label = "Validate credentials"
+color = "#d97706"
+
+[[messages]]
+from = "auth"
+to = "session"
+label = "Create authenticated session"
+color = "#16a34a"
+
+[[messages]]
+from = "session"
+to = "auth"
+label = "Session id + expiry"
+color = "#16a34a"
+
+[[messages]]
+from = "auth"
+to = "gateway"
+label = "JWT + session cookie"
+color = "#7c3aed"
+
+[[messages]]
+from = "gateway"
+to = "browser"
+label = "200 OK Set-Cookie auth_sid"
+color = "#2563eb"
+
+[[messages]]
+from = "browser"
+to = "gateway"
+label = "GET /profile with cookie"
+color = "#2563eb"
+
+[[messages]]
+from = "gateway"
+to = "session"
+label = "Resolve session from cookie"
+color = "#16a34a"
+
+[[messages]]
+from = "session"
+to = "gateway"
+label = "Session valid for user"
+color = "#16a34a"
+
+[[messages]]
+from = "gateway"
+to = "browser"
+label = "200 OK profile payload"
+color = "#2563eb"

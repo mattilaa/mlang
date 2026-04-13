@@ -6,87 +6,144 @@ renders a PNG for either:
 - UML activity/control-flow diagrams
 - UML-style sequence diagrams
 
-Activity diagrams use:
-
-- start: filled circle
-- action: rectangle
-- decision: diamond
-- end: bullseye
-
-The PNG writer and ASCII text rasterization come from the fetched open-source
-[`stb`](https://github.com/nothings/stb) C headers. No Java runtime is used.
+The renderer is implemented in C and writes PNGs directly with `stb`. No Java
+runtime is used.
 
 ## Input Format
 
-Use a simple pipe-delimited text file.
+The preferred format is a TOML-like sectioned file.
+
+Use:
+
+- `[settings]` for diagram-wide values
+- `[properties]` for default colors per element family
+- `[[nodes]]`, `[[edges]]`, `[[participants]]`, `[[messages]]` for the actual graph
 
 Activity example:
 
-```text
-scale|1.0
-box_radius|8
-edge_radius|5
-title|Basic order approval flow
-node|start|start|Start|#22c55e|#166534|#ffffff
-node|capture|action|Capture order|#bfdbfe|#2563eb|#0f172a
-node|review|decision|Approved?|#fde68a|#d97706|#111827
-node|fix|action|Revise request|#fecaca|#dc2626|#111827
-node|ship|action|Ship order|#bbf7d0|#16a34a|#052e16
-node|done|end|Done|#c084fc|#7c3aed|#ffffff
-edge|start|capture||#334155
-edge|capture|review||#334155
-edge|review|ship|yes|#16a34a
-edge|review|fix|no|#dc2626
-edge|fix|capture|retry|#2563eb
-edge|ship|done||#334155
+```toml
+[settings]
+diagram = "activity"
+title = "Basic order approval flow"
+scale = 1.0
+box_radius = 8
+edge_radius = 5
+
+[properties]
+action_fill = "#bfdbfe"
+action_stroke = "#2563eb"
+action_text = "#0f172a"
+decision_fill = "#fde68a"
+decision_stroke = "#d97706"
+decision_text = "#111827"
+start_fill = "#22c55e"
+start_stroke = "#166534"
+start_text = "#ffffff"
+end_fill = "#c084fc"
+end_stroke = "#7c3aed"
+end_text = "#ffffff"
+edge_color = "#334155"
+
+[[nodes]]
+id = "review"
+type = "decision"
+label = "Approved?"
+
+[[edges]]
+from = "review"
+to = "ship"
+label = "yes"
+color = "#16a34a"
 ```
-
-Records:
-
-- `diagram|activity` or `diagram|sequence` (optional for activity, required for sequence)
-- `scale|1.0` optional global scaling factor; when omitted, `1.0` is used
-- `box_radius|8` optional activity/flow node corner radius; when omitted, a mild default is used
-- `edge_radius|5` optional activity/flow connector bend radius; when omitted, a mild default is used
-- `title|Text`
-- `node|id|type|label|fill|stroke|text`
-- `edge|from|to|label|color`
 
 Sequence example:
 
-```text
-diagram|sequence
-scale|1.0
-box_radius|8
-edge_radius|0
-arrow_size|12
-title|HTTPS authentication sequence
-participant|browser|Browser|#dbeafe|#2563eb|#0f172a
-participant|gateway|HTTPS API Gateway|#fde68a|#d97706|#111827
-participant|auth|Auth Service|#ddd6fe|#7c3aed|#111827
-participant|session|Session Store|#bbf7d0|#16a34a|#052e16
-message|browser|gateway|POST /login over TLS|#2563eb
-message|gateway|auth|Validate credentials|#d97706
-message|auth|session|Create authenticated session|#16a34a
-message|session|auth|Session id + expiry|#16a34a
-message|auth|gateway|JWT + session cookie|#7c3aed
-message|gateway|browser|200 OK Set-Cookie auth_sid|#2563eb
+```toml
+[settings]
+diagram = "sequence"
+title = "HTTPS authentication sequence"
+scale = 1.0
+box_radius = 8
+arrow_size = 12
+
+[properties]
+participant_fill = "#dbeafe"
+participant_stroke = "#2563eb"
+participant_text = "#0f172a"
+message_color = "#334155"
+
+[[participants]]
+id = "gateway"
+label = "HTTPS API Gateway"
+fill = "#fde68a"
+stroke = "#d97706"
+text = "#111827"
+
+[[messages]]
+from = "browser"
+to = "gateway"
+label = "POST /login over TLS"
+color = "#2563eb"
 ```
 
-Sequence records:
+## Sections
 
-- `participant|id|label|fill|stroke|text`
-- `message|from|to|label|color`
-- `arrow_size|12` optional sequence arrowhead size; when omitted, a smaller default is used
+`[settings]`
 
-Notes:
+- `diagram = "activity"` or `diagram = "sequence"`
+- `title = "Text"`
+- `scale = 1.0`
+- `box_radius = 8`
+- `edge_radius = 5` for activity/control-flow diagrams
+- `arrow_size = 12` for sequence diagrams
 
-- Lines starting with `#` are comments.
-- Colors use `#RRGGBB`.
-- `box_radius` also affects sequence participant header rounding.
-- `arrow_size` currently affects sequence message arrowheads.
-- For now the layout is optimized for control-flow and activity-style diagrams.
-- Back-edges such as retry loops are supported.
-- Sequence diagrams render participant headers, lifelines, and message arrows.
+`[properties]`
+
+Supported activity defaults:
+
+- `action_fill`, `action_stroke`, `action_text`
+- `decision_fill`, `decision_stroke`, `decision_text`
+- `start_fill`, `start_stroke`, `start_text`
+- `end_fill`, `end_stroke`, `end_text`
+- `edge_color`
+
+Supported sequence defaults:
+
+- `participant_fill`, `participant_stroke`, `participant_text`
+- `message_color`
+
+## Item Tables
+
+`[[nodes]]`
+
+- required: `id`, `type`
+- optional: `label`, `fill`, `stroke`, `text`
+
+`[[edges]]`
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+`[[participants]]`
+
+- required: `id`
+- optional: `label`, `fill`, `stroke`, `text`
+
+`[[messages]]`
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+## Color Rules
+
+- If an item defines its own `fill`, `stroke`, `text`, or `color`, that value wins.
+- Otherwise the renderer uses the matching default from `[properties]`.
+- If `[properties]` omits a value, the built-in example defaults are used.
+
+## Legacy Support
+
+The older pipe-delimited format is still accepted for now, but the sectioned
+format is the intended direction.
 
 ## Build
 
@@ -97,21 +154,15 @@ From this directory:
 ../../build/mlang pkg build
 ```
 
-That fetches `stb`, builds the MLang wrapper plus the C renderer, and links:
-
-```text
-build/uml_ui_generator
-```
-
 ## Run
 
-Render the bundled colorful sample:
+Render the bundled control-flow sample:
 
 ```sh
 ../../build/mlang pkg run render-sample
 ```
 
-Render the more complex multi-path sample:
+Render the more complex multi-path control-flow sample:
 
 ```sh
 ../../build/mlang pkg run render-complex-sample
@@ -123,20 +174,10 @@ Render the HTTPS authentication sequence sample:
 ../../build/mlang pkg run render-sequence-sample
 ```
 
-Or run the binary directly with your own text file:
+Or run the binary directly:
 
 ```sh
 ./build/uml_ui_generator samples/basic_control_flow.umlflow build/generated/basic_control_flow.png
 ./build/uml_ui_generator samples/multi_path_control_flow.umlflow build/generated/multi_path_control_flow.png
 ./build/uml_ui_generator samples/https_auth_sequence.umlflow build/generated/https_auth_sequence.png
-./build/uml_ui_generator my_flow.umlflow build/generated/my_flow.png
 ```
-
-## Scope
-
-This now covers:
-
-- text-driven node and edge definitions
-- colorful UML-style control-flow nodes
-- sequence participants, lifelines, and messages
-- direct PNG output from one command

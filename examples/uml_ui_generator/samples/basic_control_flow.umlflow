@@ -1,20 +1,86 @@
-scale|1.0
-box_radius|8
-edge_radius|5
-title|Basic order approval flow
+[settings]
+diagram = "activity"
+title = "Basic order approval flow"
+scale = 1.0
+box_radius = 8
+edge_radius = 5
 
-# node|id|type|label|fill|stroke|text
-node|start|start|Start|#22c55e|#166534|#ffffff
-node|capture|action|Capture order|#bfdbfe|#2563eb|#0f172a
-node|review|decision|Approved?|#fde68a|#d97706|#111827
-node|fix|action|Revise request|#fecaca|#dc2626|#111827
-node|ship|action|Ship order|#bbf7d0|#16a34a|#052e16
-node|done|end|Done|#c084fc|#7c3aed|#ffffff
+[properties]
+action_fill = "#bfdbfe"
+action_stroke = "#2563eb"
+action_text = "#0f172a"
+decision_fill = "#fde68a"
+decision_stroke = "#d97706"
+decision_text = "#111827"
+start_fill = "#22c55e"
+start_stroke = "#166534"
+start_text = "#ffffff"
+end_fill = "#c084fc"
+end_stroke = "#7c3aed"
+end_text = "#ffffff"
+edge_color = "#334155"
 
-# edge|from|to|label|color
-edge|start|capture||#334155
-edge|capture|review||#334155
-edge|review|ship|yes|#16a34a
-edge|review|fix|no|#dc2626
-edge|fix|capture|retry|#2563eb
-edge|ship|done||#334155
+[[nodes]]
+id = "start"
+type = "start"
+label = "Start"
+
+[[nodes]]
+id = "capture"
+type = "action"
+label = "Capture order"
+
+[[nodes]]
+id = "review"
+type = "decision"
+label = "Approved?"
+
+[[nodes]]
+id = "fix"
+type = "action"
+label = "Revise request"
+fill = "#fecaca"
+stroke = "#dc2626"
+
+[[nodes]]
+id = "ship"
+type = "action"
+label = "Ship order"
+fill = "#bbf7d0"
+stroke = "#16a34a"
+text = "#052e16"
+
+[[nodes]]
+id = "done"
+type = "end"
+label = "Done"
+
+[[edges]]
+from = "start"
+to = "capture"
+
+[[edges]]
+from = "capture"
+to = "review"
+
+[[edges]]
+from = "review"
+to = "ship"
+label = "yes"
+color = "#16a34a"
+
+[[edges]]
+from = "review"
+to = "fix"
+label = "no"
+color = "#dc2626"
+
+[[edges]]
+from = "fix"
+to = "capture"
+label = "retry"
+color = "#2563eb"
+
+[[edges]]
+from = "ship"
+to = "done"
