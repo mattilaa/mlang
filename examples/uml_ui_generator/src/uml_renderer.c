@@ -64,6 +64,7 @@ typedef struct
 {
     char title[160];
     diagram_kind_t kind;
+    float scale;
     node_t nodes[128];
     int node_count;
     edge_t edges[256];
@@ -93,6 +94,7 @@ typedef struct
 typedef struct
 {
     char title[160];
+    float scale;
     participant_t participants[24];
     int participant_count;
     message_t messages[256];
@@ -313,6 +315,19 @@ static int parse_diagram_kind(const char *text, diagram_kind_t *out)
     return 0;
 }
 
+static float parse_scale_value(const char *text, float fallback)
+{
+    char *end = NULL;
+    double value;
+
+    if(!text || text[0] == '\0')
+        return fallback;
+    value = strtod(text, &end);
+    if(end == text || (end && *end != '\0') || value <= 0.05)
+        return fallback;
+    return (float)value;
+}
+
 static int find_node_index(const diagram_t *diagram, const char *id)
 {
     int i;
@@ -343,6 +358,7 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
     int line_no = 0;
 
     memset(diagram, 0, sizeof(*diagram));
+    diagram->scale = 1.0f;
     diagram->kind = DIAGRAM_ACTIVITY;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
@@ -389,6 +405,19 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             snprintf(diagram->title, sizeof(diagram->title), "%s", fields[1]);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "scale"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: scale requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->scale = parse_scale_value(fields[1], 1.0f);
             continue;
         }
 
@@ -534,6 +563,7 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
     int line_no = 0;
 
     memset(diagram, 0, sizeof(*diagram));
+    diagram->scale = 1.0f;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -598,6 +628,19 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             snprintf(diagram->title, sizeof(diagram->title), "%s", fields[1]);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "scale"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: scale requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->scale = parse_scale_value(fields[1], 1.0f);
             continue;
         }
 
@@ -717,26 +760,29 @@ static int min_i32(int a, int b)
 static void compute_node_sizes(diagram_t *diagram)
 {
     int i;
+    float scale = diagram->scale;
     for(i = 0; i < diagram->node_count; ++i)
     {
         node_t *node = &diagram->nodes[i];
         int label_len = (int)strlen(node->label);
         if(node->type == NODE_START || node->type == NODE_END)
         {
-            node->width = 62;
-            node->height = 62;
+            node->width = (int)(62.0f * scale);
+            node->height = (int)(62.0f * scale);
         }
         else if(node->type == NODE_DECISION)
         {
-            node->width = max_i32(140, 72 + label_len * 8);
+            node->width = max_i32((int)(140.0f * scale),
+                                  (int)((72.0f + label_len * 8.0f) * scale));
             if((node->width & 1) != 0)
                 node->width++;
-            node->height = 92;
+            node->height = (int)(92.0f * scale);
         }
         else
         {
-            node->width = max_i32(170, 76 + label_len * 8);
-            node->height = 74;
+            node->width = max_i32((int)(170.0f * scale),
+                                  (int)((76.0f + label_len * 8.0f) * scale));
+            node->height = (int)(74.0f * scale);
         }
     }
 }
@@ -748,10 +794,11 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
     int level_used_width[64];
     int max_level = 0;
     int max_cols = 1;
-    int margin_x = 56;
-    int margin_y = 44;
-    int sibling_gap = 34;
-    int row_gap = 40;
+    float scale = diagram->scale;
+    int margin_x = (int)(56.0f * scale);
+    int margin_y = (int)(44.0f * scale);
+    int sibling_gap = (int)(34.0f * scale);
+    int row_gap = (int)(40.0f * scale);
     int level_max_width[64];
     int level_max_height[64];
     int level_y[64];
@@ -804,14 +851,14 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
             level_used_width[i] += sibling_gap * (level_counts[i] - 1);
     }
 
-    *out_w = margin_x * 2 + max_cols * 190;
+    *out_w = margin_x * 2 + max_cols * (int)(190.0f * scale);
     for(i = 0; i <= max_level; ++i)
     {
         if(level_used_width[i] + margin_x * 2 > *out_w)
             *out_w = level_used_width[i] + margin_x * 2;
     }
     if(diagram->title[0] != '\0')
-        total_height += 34;
+        total_height += (int)(34.0f * scale);
 
     for(i = 0; i <= max_level; ++i)
     {
@@ -1245,15 +1292,17 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
                                     int *out_h)
 {
     int i;
-    int top = 70;
-    int participant_gap = 142;
-    int margin_x = 48;
-    int message_gap = 56;
+    float scale = diagram->scale;
+    int top = (int)(70.0f * scale);
+    int participant_gap = (int)(142.0f * scale);
+    int margin_x = (int)(48.0f * scale);
+    int message_gap = (int)(56.0f * scale);
 
     for(i = 0; i < diagram->participant_count; ++i)
     {
         participant_t *p = &diagram->participants[i];
-        p->width = max_i32(120, text_width(p->label) + 24);
+        p->width = max_i32((int)(120.0f * scale),
+                           (int)((float)text_width(p->label) * scale + 24.0f * scale));
         p->x = margin_x + p->width / 2 + i * participant_gap;
     }
 
@@ -1265,42 +1314,38 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
             *out_w = right + margin_x;
     }
 
-    *out_h = top + 52 + diagram->message_count * message_gap + 52;
+    *out_h = top + (int)(52.0f * scale) + diagram->message_count * message_gap +
+             (int)(52.0f * scale);
     if(diagram->title[0] != '\0')
-        *out_h += 24;
+        *out_h += (int)(24.0f * scale);
 
     for(i = 0; i < diagram->message_count; ++i)
-        diagram->messages[i].y = top + 38 + i * message_gap +
-                                 (diagram->title[0] != '\0' ? 24 : 0);
+        diagram->messages[i].y = top + (int)(38.0f * scale) + i * message_gap +
+                                 (diagram->title[0] != '\0' ? (int)(24.0f * scale) : 0);
 }
 
-static void draw_dashed_vertical(image_t *img, int x, int y0, int y1,
-                                 color_t color)
+static void draw_vertical_line(image_t *img, int x, int y0, int y1,
+                               color_t color)
 {
-    int y = y0;
-    while(y < y1)
-    {
-        int seg_y1 = y + 10;
-        if(seg_y1 > y1)
-            seg_y1 = y1;
-        draw_line(img, x, y, x, seg_y1, 2, color);
-        y += 18;
-    }
+    draw_line(img, x, y0, x, y1, 2, color);
 }
 
 static void draw_participant(image_t *img, const participant_t *p, int top_y,
                              int bottom_y)
 {
+    int box_h = 30;
+    int border = 2;
     int x = p->x - p->width / 2;
     int label_x = p->x - text_width(p->label) / 2;
-    fill_rect(img, x, top_y, x + p->width, top_y + 30, p->fill);
-    fill_rect(img, x, top_y, x + p->width, top_y + 2, p->stroke);
-    fill_rect(img, x, top_y + 28, x + p->width, top_y + 30, p->stroke);
-    fill_rect(img, x, top_y, x + 2, top_y + 30, p->stroke);
-    fill_rect(img, x + p->width - 2, top_y, x + p->width, top_y + 30,
+    fill_rect(img, x, top_y, x + p->width, top_y + box_h, p->fill);
+    fill_rect(img, x, top_y, x + p->width, top_y + border, p->stroke);
+    fill_rect(img, x, top_y + box_h - border, x + p->width, top_y + box_h,
+              p->stroke);
+    fill_rect(img, x, top_y, x + border, top_y + box_h, p->stroke);
+    fill_rect(img, x + p->width - border, top_y, x + p->width, top_y + box_h,
               p->stroke);
     draw_text(img, label_x, top_y + 8, p->label, p->text);
-    draw_dashed_vertical(img, p->x, top_y + 30, bottom_y, p->stroke);
+    draw_vertical_line(img, p->x, top_y + box_h, bottom_y, p->stroke);
 }
 
 static void draw_sequence_arrow(image_t *img, int x0, int x1, int y,
@@ -1316,20 +1361,19 @@ static void draw_sequence_message(image_t *img,
 {
     const participant_t *from = &diagram->participants[m->from];
     const participant_t *to = &diagram->participants[m->to];
-    int dir = to->x >= from->x ? 1 : -1;
-    int start_x = from->x + dir * (from->width / 2);
-    int end_x = to->x - dir * (to->width / 2);
+    int start_x = from->x;
+    int end_x = to->x;
     int label_x = min_i32(start_x, end_x) + (abs(end_x - start_x) - text_width(m->label)) / 2;
 
     if(m->from == m->to)
     {
         int right = from->x + from->width / 2 + 48;
         int y2 = m->y + 28;
-        draw_line(img, start_x, m->y, right, m->y, 2, m->color);
+        draw_line(img, from->x, m->y, right, m->y, 2, m->color);
         draw_line(img, right, m->y, right, y2, 2, m->color);
-        draw_line(img, right, y2, start_x, y2, 2, m->color);
-        draw_arrow_head(img, start_x, y2, start_x - right, 0, m->color);
-        draw_edge_label(img, start_x + 12, m->y - 18, m->label, m->color);
+        draw_line(img, right, y2, from->x, y2, 2, m->color);
+        draw_arrow_head(img, from->x, y2, from->x - right, 0, m->color);
+        draw_edge_label(img, from->x + 12, m->y - 18, m->label, m->color);
         return;
     }
 
