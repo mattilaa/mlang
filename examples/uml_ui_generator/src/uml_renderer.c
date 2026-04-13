@@ -37,7 +37,8 @@ typedef enum
 typedef enum
 {
     DIAGRAM_ACTIVITY = 0,
-    DIAGRAM_SEQUENCE = 1
+    DIAGRAM_SEQUENCE = 1,
+    DIAGRAM_CLASS = 2
 } diagram_kind_t;
 
 typedef struct
@@ -126,6 +127,57 @@ typedef struct
     message_t messages[256];
     int message_count;
 } sequence_diagram_t;
+
+typedef enum
+{
+    CLASS_ASSOCIATION = 0,
+    CLASS_AGGREGATION = 1,
+    CLASS_COMPOSITION = 2
+} class_association_kind_t;
+
+typedef struct
+{
+    char id[64];
+    char name[160];
+    int x;
+    int y;
+    int width;
+    int height;
+    char attributes[24][160];
+    int attribute_count;
+    char methods[24][160];
+    int method_count;
+    color_t fill;
+    color_t stroke;
+    color_t text;
+    int bold;
+} class_box_t;
+
+typedef struct
+{
+    int from;
+    int to;
+    class_association_kind_t kind;
+    char from_multiplicity[32];
+    char to_multiplicity[32];
+    char label[80];
+    color_t color;
+    int bold;
+} class_association_t;
+
+typedef struct
+{
+    char title[160];
+    float scale;
+    float box_radius;
+    float edge_radius;
+    float title_size;
+    int title_bold;
+    class_box_t classes[48];
+    int class_count;
+    class_association_t associations[96];
+    int association_count;
+} class_diagram_t;
 
 typedef struct
 {
@@ -382,6 +434,32 @@ static int parse_diagram_kind(const char *text, diagram_kind_t *out)
         *out = DIAGRAM_SEQUENCE;
         return 1;
     }
+    if(eq_ci(text, "class"))
+    {
+        *out = DIAGRAM_CLASS;
+        return 1;
+    }
+    return 0;
+}
+
+static int parse_class_association_kind(const char *text,
+                                        class_association_kind_t *out)
+{
+    if(eq_ci(text, "association"))
+    {
+        *out = CLASS_ASSOCIATION;
+        return 1;
+    }
+    if(eq_ci(text, "aggregation"))
+    {
+        *out = CLASS_AGGREGATION;
+        return 1;
+    }
+    if(eq_ci(text, "composition"))
+    {
+        *out = CLASS_COMPOSITION;
+        return 1;
+    }
     return 0;
 }
 
@@ -425,6 +503,63 @@ static int parse_bool_value(const char *text, int fallback)
     return fallback;
 }
 
+static int parse_int_value(const char *text, int fallback)
+{
+    char buffer[64];
+    char *end = NULL;
+    long value;
+    if(!text || text[0] == '\0')
+        return fallback;
+    if(!parse_string_value(text, buffer, sizeof(buffer)))
+        return fallback;
+    value = strtol(buffer, &end, 10);
+    if(end == buffer || (end && *end != '\0'))
+        return fallback;
+    return (int)value;
+}
+
+static int parse_string_array(const char *text, char out[][160], int max_items,
+                              int *out_count)
+{
+    char buffer[2048];
+    char *cursor;
+    int count = 0;
+
+    if(!parse_string_value(text, buffer, sizeof(buffer)))
+        return 0;
+    trim_in_place(buffer);
+    if(buffer[0] != '[')
+        return 0;
+    cursor = buffer + 1;
+    while(*cursor != '\0')
+    {
+        char *start;
+        char *end;
+        while(*cursor != '\0' && (isspace((unsigned char)*cursor) || *cursor == ','))
+            cursor++;
+        if(*cursor == ']')
+            break;
+        if(*cursor != '"' || count >= max_items)
+            return 0;
+        start = ++cursor;
+        end = strchr(start, '"');
+        if(!end)
+            return 0;
+        *end = '\0';
+        snprintf(out[count], 160, "%s", start);
+        count++;
+        cursor = end + 1;
+        while(*cursor != '\0' && isspace((unsigned char)*cursor))
+            cursor++;
+        if(*cursor == ',')
+            cursor++;
+        else if(*cursor == ']')
+            break;
+    }
+    *out_count = count;
+    return 1;
+}
+
 static int find_node_index(const diagram_t *diagram, const char *id)
 {
     int i;
@@ -443,6 +578,17 @@ static int find_participant_index(const sequence_diagram_t *diagram,
     for(i = 0; i < diagram->participant_count; ++i)
     {
         if(strcmp(diagram->participants[i].id, id) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static int find_class_index(const class_diagram_t *diagram, const char *id)
+{
+    int i;
+    for(i = 0; i < diagram->class_count; ++i)
+    {
+        if(strcmp(diagram->classes[i].id, id) == 0)
             return i;
     }
     return -1;
@@ -475,6 +621,12 @@ typedef struct
     int participant_bold;
     color_t message_color;
     int message_bold;
+    color_t class_fill;
+    color_t class_stroke;
+    color_t class_text;
+    int class_bold;
+    color_t association_color;
+    int association_bold;
 } style_defaults_t;
 
 typedef struct
@@ -523,6 +675,44 @@ typedef struct
     int has_color;
 } message_input_t;
 
+typedef struct
+{
+    char id[64];
+    char name[160];
+    int has_name;
+    int x;
+    int has_x;
+    int y;
+    int has_y;
+    char attributes[24][160];
+    int attribute_count;
+    char methods[24][160];
+    int method_count;
+    color_t fill;
+    int has_fill;
+    color_t stroke;
+    int has_stroke;
+    color_t text;
+    int has_text;
+    int bold;
+    int has_bold;
+} class_input_t;
+
+typedef struct
+{
+    char from_id[64];
+    char to_id[64];
+    class_association_kind_t kind;
+    int has_kind;
+    char from_multiplicity[32];
+    char to_multiplicity[32];
+    char label[80];
+    color_t color;
+    int has_color;
+    int bold;
+    int has_bold;
+} class_association_input_t;
+
 typedef enum
 {
     SECTION_NONE = 0,
@@ -531,7 +721,9 @@ typedef enum
     SECTION_NODE_ITEM = 3,
     SECTION_EDGE_ITEM = 4,
     SECTION_PARTICIPANT_ITEM = 5,
-    SECTION_MESSAGE_ITEM = 6
+    SECTION_MESSAGE_ITEM = 6,
+    SECTION_CLASS_ITEM = 7,
+    SECTION_ASSOCIATION_ITEM = 8
 } section_kind_t;
 
 static void init_style_defaults(style_defaults_t *defaults)
@@ -561,6 +753,12 @@ static void init_style_defaults(style_defaults_t *defaults)
     defaults->participant_bold = 0;
     defaults->message_color = color_rgba(71, 85, 105, 255);
     defaults->message_bold = 0;
+    defaults->class_fill = color_rgba(255, 255, 255, 255);
+    defaults->class_stroke = color_rgba(24, 24, 27, 255);
+    defaults->class_text = color_rgba(24, 24, 27, 255);
+    defaults->class_bold = 1;
+    defaults->association_color = color_rgba(82, 82, 91, 255);
+    defaults->association_bold = 0;
 }
 
 static int looks_like_sectioned_text(const char *text)
@@ -676,6 +874,16 @@ static int parse_section_header(const char *line, section_kind_t *section)
         *section = SECTION_MESSAGE_ITEM;
         return 1;
     }
+    if(strcmp(line, "[[classes]]") == 0)
+    {
+        *section = SECTION_CLASS_ITEM;
+        return 1;
+    }
+    if(strcmp(line, "[[associations]]") == 0)
+    {
+        *section = SECTION_ASSOCIATION_ITEM;
+        return 1;
+    }
     return 0;
 }
 
@@ -756,6 +964,26 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
     if(eq_ci(key, "message_bold"))
     {
         defaults->message_bold = parse_bool_value(value, defaults->message_bold);
+        return 1;
+    }
+    if(eq_ci(key, "class_fill"))
+        return parse_color(value, defaults->class_fill, &defaults->class_fill);
+    if(eq_ci(key, "class_stroke"))
+        return parse_color(value, defaults->class_stroke, &defaults->class_stroke);
+    if(eq_ci(key, "class_text"))
+        return parse_color(value, defaults->class_text, &defaults->class_text);
+    if(eq_ci(key, "class_bold"))
+    {
+        defaults->class_bold = parse_bool_value(value, defaults->class_bold);
+        return 1;
+    }
+    if(eq_ci(key, "association_color"))
+        return parse_color(value, defaults->association_color,
+                           &defaults->association_color);
+    if(eq_ci(key, "association_bold"))
+    {
+        defaults->association_bold =
+            parse_bool_value(value, defaults->association_bold);
         return 1;
     }
     return 0;
@@ -1359,6 +1587,330 @@ static int parse_sequence_sectioned(sequence_diagram_t *diagram, const char *tex
         m->color = message_inputs[i].has_color ? message_inputs[i].color
                                                : defaults.message_color;
         m->bold = defaults.message_bold;
+    }
+
+    return 1;
+}
+
+static int parse_class_sectioned(class_diagram_t *diagram, const char *text)
+{
+    char *owned = NULL;
+    char *cursor;
+    int line_no = 0;
+    section_kind_t section = SECTION_NONE;
+    style_defaults_t defaults;
+    class_input_t class_inputs[48];
+    class_association_input_t association_inputs[96];
+    int class_input_count = 0;
+    int association_input_count = 0;
+    int current_class = -1;
+    int current_association = -1;
+    int i;
+
+    memset(diagram, 0, sizeof(*diagram));
+    init_style_defaults(&defaults);
+    diagram->scale = 1.0f;
+    diagram->box_radius = 4.0f;
+    diagram->edge_radius = 0.0f;
+    diagram->title_size = 18.0f;
+    diagram->title_bold = 1;
+    memset(class_inputs, 0, sizeof(class_inputs));
+    memset(association_inputs, 0, sizeof(association_inputs));
+
+    owned = (char *)malloc(strlen(text) + 1);
+    if(!owned)
+    {
+        set_errorf("out of memory");
+        return 0;
+    }
+    strcpy(owned, text);
+    cursor = owned;
+
+    while(*cursor != '\0')
+    {
+        char *line = cursor;
+        char *newline = strchr(cursor, '\n');
+        char *key;
+        char *value;
+
+        line_no++;
+        if(newline)
+        {
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        else
+            cursor += strlen(cursor);
+
+        trim_in_place(line);
+        strip_inline_comment(line);
+        trim_in_place(line);
+        if(line[0] == '\0')
+            continue;
+        if(parse_section_header(line, &section))
+        {
+            if(section == SECTION_CLASS_ITEM)
+            {
+                if(class_input_count >= 48)
+                {
+                    free(owned);
+                    set_errorf("too many classes");
+                    return 0;
+                }
+                current_class = class_input_count++;
+                current_association = -1;
+                memset(&class_inputs[current_class], 0, sizeof(class_inputs[0]));
+            }
+            else if(section == SECTION_ASSOCIATION_ITEM)
+            {
+                if(association_input_count >= 96)
+                {
+                    free(owned);
+                    set_errorf("too many associations");
+                    return 0;
+                }
+                current_association = association_input_count++;
+                current_class = -1;
+                memset(&association_inputs[current_association], 0,
+                       sizeof(association_inputs[0]));
+            }
+            else
+            {
+                current_class = -1;
+                current_association = -1;
+            }
+            continue;
+        }
+        if(!split_key_value(line, &key, &value))
+        {
+            free(owned);
+            set_errorf("line %d: expected key = value", line_no);
+            return 0;
+        }
+
+        if(section == SECTION_SETTINGS)
+        {
+            char parsed[160];
+            if(eq_ci(key, "diagram"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !eq_ci(parsed, "class"))
+                {
+                    free(owned);
+                    set_errorf("line %d: class input requires diagram = \"class\"",
+                               line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "title"))
+                parse_string_value(value, diagram->title, sizeof(diagram->title));
+            else if(eq_ci(key, "title_size"))
+                diagram->title_size = parse_option_value(value, 18.0f);
+            else if(eq_ci(key, "title_bold"))
+                diagram->title_bold = parse_bool_value(value, 1);
+            else if(eq_ci(key, "scale"))
+                diagram->scale = parse_scale_value(value, 1.0f);
+            else if(eq_ci(key, "box_radius"))
+                diagram->box_radius = parse_option_value(value, 4.0f);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown settings key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_PROPERTIES)
+        {
+            if(!apply_property_color(&defaults, key, value))
+            {
+                free(owned);
+                set_errorf("line %d: unknown properties key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_CLASS_ITEM && current_class >= 0)
+        {
+            class_input_t *cls = &class_inputs[current_class];
+            char parsed[160];
+            if(eq_ci(key, "id"))
+                parse_string_value(value, cls->id, sizeof(cls->id));
+            else if(eq_ci(key, "name"))
+            {
+                parse_string_value(value, cls->name, sizeof(cls->name));
+                cls->has_name = 1;
+            }
+            else if(eq_ci(key, "x"))
+            {
+                cls->x = parse_int_value(value, 0);
+                cls->has_x = 1;
+            }
+            else if(eq_ci(key, "y"))
+            {
+                cls->y = parse_int_value(value, 0);
+                cls->has_y = 1;
+            }
+            else if(eq_ci(key, "attributes"))
+            {
+                if(!parse_string_array(value, cls->attributes, 24,
+                                       &cls->attribute_count))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid attributes array", line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "methods"))
+            {
+                if(!parse_string_array(value, cls->methods, 24,
+                                       &cls->method_count))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid methods array", line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "fill"))
+                cls->has_fill = parse_color(value, defaults.class_fill, &cls->fill);
+            else if(eq_ci(key, "stroke"))
+                cls->has_stroke =
+                    parse_color(value, defaults.class_stroke, &cls->stroke);
+            else if(eq_ci(key, "text"))
+                cls->has_text = parse_color(value, defaults.class_text, &cls->text);
+            else if(eq_ci(key, "bold"))
+            {
+                cls->bold = parse_bool_value(value, defaults.class_bold);
+                cls->has_bold = 1;
+            }
+            else
+            {
+                parse_string_value(value, parsed, sizeof(parsed));
+                free(owned);
+                set_errorf("line %d: unknown class key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_ASSOCIATION_ITEM && current_association >= 0)
+        {
+            class_association_input_t *assoc =
+                &association_inputs[current_association];
+            char parsed[80];
+            if(eq_ci(key, "from"))
+                parse_string_value(value, assoc->from_id, sizeof(assoc->from_id));
+            else if(eq_ci(key, "to"))
+                parse_string_value(value, assoc->to_id, sizeof(assoc->to_id));
+            else if(eq_ci(key, "kind"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !parse_class_association_kind(parsed, &assoc->kind))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid association kind", line_no);
+                    return 0;
+                }
+                assoc->has_kind = 1;
+            }
+            else if(eq_ci(key, "from_multiplicity"))
+                parse_string_value(value, assoc->from_multiplicity,
+                                   sizeof(assoc->from_multiplicity));
+            else if(eq_ci(key, "to_multiplicity"))
+                parse_string_value(value, assoc->to_multiplicity,
+                                   sizeof(assoc->to_multiplicity));
+            else if(eq_ci(key, "label"))
+                parse_string_value(value, assoc->label, sizeof(assoc->label));
+            else if(eq_ci(key, "color"))
+                assoc->has_color =
+                    parse_color(value, defaults.association_color, &assoc->color);
+            else if(eq_ci(key, "bold"))
+            {
+                assoc->bold = parse_bool_value(value, defaults.association_bold);
+                assoc->has_bold = 1;
+            }
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown association key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        free(owned);
+        set_errorf("line %d: key outside a supported section", line_no);
+        return 0;
+    }
+    free(owned);
+
+    if(class_input_count == 0)
+    {
+        set_errorf("class diagram contains no classes");
+        return 0;
+    }
+
+    diagram->class_count = class_input_count;
+    for(i = 0; i < class_input_count; ++i)
+    {
+        class_box_t *cls = &diagram->classes[i];
+        if(class_inputs[i].id[0] == '\0')
+        {
+            set_errorf("class %d is missing required id", i + 1);
+            return 0;
+        }
+        if(find_class_index(diagram, class_inputs[i].id) >= 0)
+        {
+            set_errorf("duplicate class id '%s'", class_inputs[i].id);
+            return 0;
+        }
+        snprintf(cls->id, sizeof(cls->id), "%s", class_inputs[i].id);
+        snprintf(cls->name, sizeof(cls->name), "%s",
+                 class_inputs[i].has_name ? class_inputs[i].name
+                                          : class_inputs[i].id);
+        cls->x = class_inputs[i].has_x ? class_inputs[i].x : 80 + (i % 3) * 260;
+        cls->y = class_inputs[i].has_y ? class_inputs[i].y : 100 + (i / 3) * 220;
+        cls->attribute_count = class_inputs[i].attribute_count;
+        cls->method_count = class_inputs[i].method_count;
+        memcpy(cls->attributes, class_inputs[i].attributes, sizeof(cls->attributes));
+        memcpy(cls->methods, class_inputs[i].methods, sizeof(cls->methods));
+        cls->fill = class_inputs[i].has_fill ? class_inputs[i].fill
+                                             : defaults.class_fill;
+        cls->stroke = class_inputs[i].has_stroke ? class_inputs[i].stroke
+                                                 : defaults.class_stroke;
+        cls->text = class_inputs[i].has_text ? class_inputs[i].text
+                                             : defaults.class_text;
+        cls->bold = class_inputs[i].has_bold ? class_inputs[i].bold
+                                             : defaults.class_bold;
+    }
+
+    diagram->association_count = association_input_count;
+    for(i = 0; i < association_input_count; ++i)
+    {
+        class_association_t *assoc = &diagram->associations[i];
+        assoc->from = find_class_index(diagram, association_inputs[i].from_id);
+        assoc->to = find_class_index(diagram, association_inputs[i].to_id);
+        if(assoc->from < 0 || assoc->to < 0)
+        {
+            set_errorf("association %d references unknown class", i + 1);
+            return 0;
+        }
+        assoc->kind = association_inputs[i].has_kind ? association_inputs[i].kind
+                                                     : CLASS_ASSOCIATION;
+        snprintf(assoc->from_multiplicity, sizeof(assoc->from_multiplicity), "%s",
+                 association_inputs[i].from_multiplicity);
+        snprintf(assoc->to_multiplicity, sizeof(assoc->to_multiplicity), "%s",
+                 association_inputs[i].to_multiplicity);
+        snprintf(assoc->label, sizeof(assoc->label), "%s",
+                 association_inputs[i].label);
+        assoc->color = association_inputs[i].has_color
+                           ? association_inputs[i].color
+                           : defaults.association_color;
+        assoc->bold = association_inputs[i].has_bold
+                          ? association_inputs[i].bold
+                          : defaults.association_bold;
     }
 
     return 1;
@@ -3214,6 +3766,351 @@ static void draw_sequence_message(image_t *img,
                         m->color);
     draw_text_styled(img, label_x, m->y - 26, m->label, m->color,
                      UML_TEXT_SIZE, m->bold);
+}
+
+static void compute_class_layout(class_diagram_t *diagram, int *out_w, int *out_h)
+{
+    int i;
+    int max_right = 0;
+    int max_bottom = 0;
+    int min_left = 1000000;
+    int min_top = 1000000;
+    int padding_x = 14;
+    int title_h = text_height() + 16;
+    int row_h = text_height() + 6;
+
+    for(i = 0; i < diagram->class_count; ++i)
+    {
+        class_box_t *cls = &diagram->classes[i];
+        int j;
+        int content_w = text_width_styled(cls->name, UML_TEXT_SIZE, 0);
+        int attr_h = cls->attribute_count > 0 ? cls->attribute_count * row_h + 10 : 20;
+        int method_h = cls->method_count > 0 ? cls->method_count * row_h + 10 : 20;
+        for(j = 0; j < cls->attribute_count; ++j)
+        {
+            int w = text_width(cls->attributes[j]);
+            if(w > content_w)
+                content_w = w;
+        }
+        for(j = 0; j < cls->method_count; ++j)
+        {
+            int w = text_width(cls->methods[j]);
+            if(w > content_w)
+                content_w = w;
+        }
+        cls->width = max_i32(180, content_w + padding_x * 2);
+        cls->height = title_h + attr_h + method_h;
+        if(cls->x < min_left)
+            min_left = cls->x;
+        if(cls->y < min_top)
+            min_top = cls->y;
+        if(cls->x + cls->width > max_right)
+            max_right = cls->x + cls->width;
+        if(cls->y + cls->height > max_bottom)
+            max_bottom = cls->y + cls->height;
+    }
+
+    if(min_left > 40 || min_top > 60)
+    {
+        int shift_x = min_left > 40 ? 0 : 40 - min_left;
+        int shift_y = min_top > 80 ? 0 : 80 - min_top;
+        for(i = 0; i < diagram->class_count; ++i)
+        {
+            diagram->classes[i].x += shift_x;
+            diagram->classes[i].y += shift_y;
+        }
+        max_right += shift_x;
+        max_bottom += shift_y;
+        min_left += shift_x;
+        min_top += shift_y;
+    }
+
+    *out_w = max_right + 60;
+    *out_h = max_bottom + 60;
+    if(diagram->title[0] != '\0')
+        *out_h += text_height_for_size(diagram->title_size) + 12;
+}
+
+static void fill_triangle(image_t *img, int x0, int y0, int x1, int y1, int x2,
+                          int y2, color_t color)
+{
+    int min_x = min_i32(x0, min_i32(x1, x2));
+    int max_x = max_i32(x0, max_i32(x1, x2));
+    int min_y = min_i32(y0, min_i32(y1, y2));
+    int max_y = max_i32(y0, max_i32(y1, y2));
+    int x;
+    int y;
+    for(y = min_y; y <= max_y; ++y)
+    {
+        for(x = min_x; x <= max_x; ++x)
+        {
+            int w0 = (x1 - x0) * (y - y0) - (y1 - y0) * (x - x0);
+            int w1 = (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
+            int w2 = (x0 - x2) * (y - y2) - (y0 - y2) * (x - x2);
+            if((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0))
+                set_pixel(img, x, y, color);
+        }
+    }
+}
+
+static void draw_diamond_marker(image_t *img, int x0, int y0, int x1, int y1,
+                                class_association_kind_t kind, color_t color)
+{
+    float ux;
+    float uy;
+    float px;
+    float py;
+    float len = (float)aa_px(10);
+    float half = (float)aa_px(6);
+    float mag = sqrtf((float)((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)));
+    int ax;
+    int ay;
+    int bx;
+    int by;
+    int cx;
+    int cy;
+    int dx;
+    int dy;
+
+    if(mag < 0.001f)
+        return;
+    ux = (float)(x1 - x0) / mag;
+    uy = (float)(y1 - y0) / mag;
+    px = -uy;
+    py = ux;
+
+    ax = x0;
+    ay = y0;
+    bx = (int)roundf((float)x0 + ux * len * 0.5f + px * half);
+    by = (int)roundf((float)y0 + uy * len * 0.5f + py * half);
+    cx = (int)roundf((float)x0 + ux * len);
+    cy = (int)roundf((float)y0 + uy * len);
+    dx = (int)roundf((float)x0 + ux * len * 0.5f - px * half);
+    dy = (int)roundf((float)y0 + uy * len * 0.5f - py * half);
+
+    if(kind == CLASS_COMPOSITION)
+    {
+        fill_triangle(img, ax, ay, bx, by, cx, cy, color);
+        fill_triangle(img, ax, ay, cx, cy, dx, dy, color);
+    }
+    else
+    {
+        fill_triangle(img, ax, ay, bx, by, cx, cy, color_rgba(255, 255, 255, 255));
+        fill_triangle(img, ax, ay, cx, cy, dx, dy, color_rgba(255, 255, 255, 255));
+    }
+    draw_line(img, ax, ay, bx, by, aa_stroke(UML_STROKE), color);
+    draw_line(img, bx, by, cx, cy, aa_stroke(UML_STROKE), color);
+    draw_line(img, cx, cy, dx, dy, aa_stroke(UML_STROKE), color);
+    draw_line(img, dx, dy, ax, ay, aa_stroke(UML_STROKE), color);
+}
+
+static void class_anchor_points(const class_box_t *from, const class_box_t *to,
+                                int *x0, int *y0, int *x1, int *y1)
+{
+    int from_cx = from->x + from->width / 2;
+    int from_cy = from->y + from->height / 2;
+    int to_cx = to->x + to->width / 2;
+    int to_cy = to->y + to->height / 2;
+    int dx = to_cx - from_cx;
+    int dy = to_cy - from_cy;
+
+    if(abs_i32(dx) > abs_i32(dy))
+    {
+        *x0 = dx >= 0 ? from->x + from->width : from->x;
+        *y0 = from_cy;
+        *x1 = dx >= 0 ? to->x : to->x + to->width;
+        *y1 = to_cy;
+    }
+    else
+    {
+        *x0 = from_cx;
+        *y0 = dy >= 0 ? from->y + from->height : from->y;
+        *x1 = to_cx;
+        *y1 = dy >= 0 ? to->y : to->y + to->height;
+    }
+}
+
+static void draw_class_box(image_t *img, const class_diagram_t *diagram,
+                           const class_box_t *cls)
+{
+    int title_h = text_height() + 16;
+    int row_h = text_height() + 6;
+    int attr_h = cls->attribute_count > 0 ? cls->attribute_count * row_h + 10 : 20;
+    int title_y = cls->y + (title_h - text_height()) / 2;
+    int title_x = cls->x + cls->width / 2 - text_width(cls->name) / 2;
+    int y = cls->y + title_h + 8;
+    int i;
+    color_t shadow = color_rgba(15, 23, 42, 55);
+
+    draw_soft_box(img, cls->x + 4, cls->y + 4, cls->width, cls->height,
+                  (int)(diagram->box_radius * diagram->scale), shadow, shadow);
+    draw_soft_box(img, cls->x, cls->y, cls->width, cls->height,
+                  (int)(diagram->box_radius * diagram->scale), cls->fill,
+                  cls->stroke);
+    draw_line(img, aa_px(cls->x), aa_px(cls->y + title_h), aa_px(cls->x + cls->width),
+              aa_px(cls->y + title_h), aa_stroke(UML_STROKE), cls->stroke);
+    draw_line(img, aa_px(cls->x), aa_px(cls->y + title_h + attr_h),
+              aa_px(cls->x + cls->width), aa_px(cls->y + title_h + attr_h),
+              aa_stroke(UML_STROKE), cls->stroke);
+    draw_text_styled(img, title_x, title_y, cls->name, cls->text, UML_TEXT_SIZE,
+                     1);
+    for(i = 0; i < cls->attribute_count; ++i)
+    {
+        draw_text_styled(img, cls->x + 10, y, cls->attributes[i], cls->text,
+                         UML_TEXT_SIZE, 0);
+        y += row_h;
+    }
+    y = cls->y + title_h + attr_h + 8;
+    for(i = 0; i < cls->method_count; ++i)
+    {
+        draw_text_styled(img, cls->x + 10, y, cls->methods[i], cls->text,
+                         UML_TEXT_SIZE, 0);
+        y += row_h;
+    }
+}
+
+static void draw_class_association(image_t *img, const class_diagram_t *diagram,
+                                   const class_association_t *assoc)
+{
+    const class_box_t *from = &diagram->classes[assoc->from];
+    const class_box_t *to = &diagram->classes[assoc->to];
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+    int start_x;
+    int start_y;
+    int end_x;
+    int end_y;
+    float ux;
+    float uy;
+    float px;
+    float py;
+    float mag;
+    int label_x;
+    int label_y;
+
+    class_anchor_points(from, to, &x0, &y0, &x1, &y1);
+    start_x = aa_px(x0);
+    start_y = aa_px(y0);
+    end_x = aa_px(x1);
+    end_y = aa_px(y1);
+
+    if(assoc->kind == CLASS_AGGREGATION || assoc->kind == CLASS_COMPOSITION)
+    {
+        mag = sqrtf((float)((end_x - start_x) * (end_x - start_x) +
+                            (end_y - start_y) * (end_y - start_y)));
+        if(mag > 0.001f)
+        {
+            ux = (float)(end_x - start_x) / mag;
+            uy = (float)(end_y - start_y) / mag;
+            start_x = (int)roundf((float)start_x + ux * aa_px(10));
+            start_y = (int)roundf((float)start_y + uy * aa_px(10));
+            draw_diamond_marker(img, aa_px(x0), aa_px(y0), end_x, end_y,
+                                assoc->kind, assoc->color);
+        }
+    }
+
+    draw_line(img, start_x, start_y, end_x, end_y, aa_stroke(UML_STROKE),
+              assoc->color);
+
+    mag = sqrtf((float)((end_x - start_x) * (end_x - start_x) +
+                        (end_y - start_y) * (end_y - start_y)));
+    if(mag > 0.001f)
+    {
+        ux = (float)(end_x - start_x) / mag;
+        uy = (float)(end_y - start_y) / mag;
+        px = -uy;
+        py = ux;
+        if(assoc->from_multiplicity[0] != '\0')
+        {
+            draw_text_styled(img,
+                             x0 + (int)roundf(px * 10.0f / (float)UML_AA_SCALE) -
+                                 text_width(assoc->from_multiplicity) / 2,
+                             y0 + (int)roundf(py * 10.0f / (float)UML_AA_SCALE) - 8,
+                             assoc->from_multiplicity, assoc->color, UML_TEXT_SIZE,
+                             assoc->bold);
+        }
+        if(assoc->to_multiplicity[0] != '\0')
+        {
+            draw_text_styled(img,
+                             x1 + (int)roundf(px * 10.0f / (float)UML_AA_SCALE) -
+                                 text_width(assoc->to_multiplicity) / 2,
+                             y1 + (int)roundf(py * 10.0f / (float)UML_AA_SCALE) - 8,
+                             assoc->to_multiplicity, assoc->color, UML_TEXT_SIZE,
+                             assoc->bold);
+        }
+    }
+
+    if(assoc->label[0] != '\0')
+    {
+        label_x = (x0 + x1) / 2 - text_width(assoc->label) / 2;
+        label_y = (y0 + y1) / 2 - text_height() - 8;
+        draw_text_styled(img, label_x, label_y, assoc->label, assoc->color,
+                         UML_TEXT_SIZE, assoc->bold);
+    }
+}
+
+static int render_class_file(const char *input_path, const char *output_path,
+                             const char *text)
+{
+    class_diagram_t diagram;
+    image_t image;
+    int logical_w;
+    int logical_h;
+    int i;
+    int title_offset = 0;
+
+    if(!parse_class_sectioned(&diagram, text))
+        return 1;
+    compute_class_layout(&diagram, &logical_w, &logical_h);
+    if(diagram.title[0] != '\0')
+        title_offset = text_height_for_size(diagram.title_size) + 12;
+    for(i = 0; i < diagram.class_count; ++i)
+        diagram.classes[i].y += title_offset;
+
+    image.width = logical_w * UML_AA_SCALE;
+    image.height = (logical_h + title_offset) * UML_AA_SCALE;
+    image.pixels = (unsigned char *)calloc((size_t)image.width * (size_t)image.height * 4u, 1u);
+    if(!image.pixels)
+    {
+        set_errorf("out of memory");
+        return 1;
+    }
+
+    clear_image(&image, color_rgba(248, 250, 252, 255));
+    if(diagram.title[0] != '\0')
+        draw_title(&image, diagram.title, diagram.title_size, diagram.title_bold);
+    for(i = 0; i < diagram.association_count; ++i)
+        draw_class_association(&image, &diagram, &diagram.associations[i]);
+    for(i = 0; i < diagram.class_count; ++i)
+        draw_class_box(&image, &diagram, &diagram.classes[i]);
+    {
+        image_t out = downsample_image(&image, image.width / UML_AA_SCALE,
+                                       image.height / UML_AA_SCALE);
+        free(image.pixels);
+        if(!out.pixels)
+        {
+            set_errorf("out of memory");
+            return 1;
+        }
+        image = out;
+    }
+    if(!ensure_parent_dirs(output_path))
+    {
+        free(image.pixels);
+        return 1;
+    }
+    if(stbi_write_png(output_path, image.width, image.height, 4, image.pixels,
+                      image.width * 4) == 0)
+    {
+        free(image.pixels);
+        set_errorf("failed to write png: %s", output_path);
+        return 1;
+    }
+    free(image.pixels);
+    (void)input_path;
+    return 0;
 }
 
 static int render_sequence_file(const char *input_path, const char *output_path,
