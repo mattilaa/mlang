@@ -67,10 +67,17 @@ Render the bundled colorful sample:
 ../../build/mlang pkg run render-sample
 ```
 
+Render the more complex multi-path sample:
+
+```sh
+../../build/mlang pkg run render-complex-sample
+```
+
 Or run the binary directly with your own text file:
 
 ```sh
 ./build/uml_ui_generator samples/basic_control_flow.umlflow build/generated/basic_control_flow.png
+./build/uml_ui_generator samples/multi_path_control_flow.umlflow build/generated/multi_path_control_flow.png
 ./build/uml_ui_generator my_flow.umlflow build/generated/my_flow.png
 ```
 

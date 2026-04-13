@@ -86,3 +86,12 @@ join_on = ["link-demo"]
 shell = [
   "exec {{build_dir}}/uml_ui_generator samples/basic_control_flow.umlflow {{build_dir}}/generated/basic_control_flow.png"
 ]
+
+[[task]]
+name = "render-complex-sample"
+print = "[example] Rendering the bundled multi-path control-flow sample"
+workdir = "{{root}}"
+join_on = ["link-demo"]
+shell = [
+  "exec {{build_dir}}/uml_ui_generator samples/multi_path_control_flow.umlflow {{build_dir}}/generated/multi_path_control_flow.png"
+]

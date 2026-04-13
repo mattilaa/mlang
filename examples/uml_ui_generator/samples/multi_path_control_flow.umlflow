@@ -1,0 +1,34 @@
+title|Multi-path release workflow
+
+# node|id|type|label|fill|stroke|text
+node|start|start|Start|#22c55e|#166534|#ffffff
+node|draft|action|Draft change|#bfdbfe|#2563eb|#0f172a
+node|review|decision|Review ok?|#fde68a|#d97706|#111827
+node|revise|action|Revise patch|#fecaca|#dc2626|#111827
+node|tests|action|Run tests|#ddd6fe|#7c3aed|#111827
+node|tests_ok|decision|Tests pass?|#fde68a|#d97706|#111827
+node|fix_tests|action|Fix failing tests|#fecaca|#dc2626|#111827
+node|deploy|decision|Deploy target?|#fdba74|#ea580c|#111827
+node|stage|action|Deploy to staging|#bae6fd|#0284c7|#082f49
+node|prod|action|Deploy to production|#bbf7d0|#16a34a|#052e16
+node|verify|decision|Smoke check ok?|#fde68a|#d97706|#111827
+node|rollback|action|Rollback release|#fca5a5|#b91c1c|#111827
+node|done|end|Done|#c084fc|#7c3aed|#ffffff
+
+# edge|from|to|label|color
+edge|start|draft||#334155
+edge|draft|review||#334155
+edge|review|tests|yes|#16a34a
+edge|review|revise|no|#dc2626
+edge|revise|draft|retry|#2563eb
+edge|tests|tests_ok||#334155
+edge|tests_ok|deploy|yes|#16a34a
+edge|tests_ok|fix_tests|no|#dc2626
+edge|fix_tests|tests|rerun|#7c3aed
+edge|deploy|stage|staging|#0284c7
+edge|deploy|prod|production|#16a34a
+edge|stage|verify||#334155
+edge|prod|verify||#334155
+edge|verify|done|yes|#16a34a
+edge|verify|rollback|no|#dc2626
+edge|rollback|stage|retry staging|#ea580c
