@@ -748,17 +748,20 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
     int level_used_width[64];
     int max_level = 0;
     int max_cols = 1;
-    int margin_x = 70;
-    int margin_y = 80;
-    int sibling_gap = 48;
-    int row_spacing = 110;
+    int margin_x = 56;
+    int margin_y = 44;
+    int sibling_gap = 34;
+    int row_gap = 40;
     int level_max_width[64];
     int level_max_height[64];
+    int level_y[64];
+    int total_height = margin_y;
 
     memset(level_counts, 0, sizeof(level_counts));
     memset(level_used_width, 0, sizeof(level_used_width));
     memset(level_max_width, 0, sizeof(level_max_width));
     memset(level_max_height, 0, sizeof(level_max_height));
+    memset(level_y, 0, sizeof(level_y));
 
     for(i = 0; i < diagram->node_count; ++i)
     {
@@ -801,21 +804,27 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
             level_used_width[i] += sibling_gap * (level_counts[i] - 1);
     }
 
-    *out_w = margin_x * 2 + max_cols * 220;
+    *out_w = margin_x * 2 + max_cols * 190;
     for(i = 0; i <= max_level; ++i)
     {
         if(level_used_width[i] + margin_x * 2 > *out_w)
             *out_w = level_used_width[i] + margin_x * 2;
     }
-    *out_h = margin_y * 2 + (max_level + 1) * 120 + max_level * row_spacing;
     if(diagram->title[0] != '\0')
-        *out_h += 56;
+        total_height += 34;
+
+    for(i = 0; i <= max_level; ++i)
+    {
+        level_y[i] = total_height + level_max_height[i] / 2;
+        total_height += level_max_height[i];
+        if(i < max_level)
+            total_height += row_gap;
+    }
+    *out_h = total_height + margin_y;
 
     for(i = 0; i < diagram->node_count; ++i)
     {
         node_t *node = &diagram->nodes[i];
-        int row_y = margin_y + node->level * (120 + row_spacing);
-        int top_extra = diagram->title[0] != '\0' ? 56 : 0;
         int j;
         int x_cursor = (*out_w - level_used_width[node->level]) / 2;
 
@@ -834,7 +843,7 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
         }
 
         node->x = x_cursor + node->width / 2;
-        node->y = row_y + top_extra;
+        node->y = level_y[node->level];
     }
 }
 
@@ -1236,15 +1245,15 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
                                     int *out_h)
 {
     int i;
-    int top = 104;
-    int participant_gap = 150;
-    int margin_x = 70;
-    int message_gap = 86;
+    int top = 70;
+    int participant_gap = 142;
+    int margin_x = 48;
+    int message_gap = 56;
 
     for(i = 0; i < diagram->participant_count; ++i)
     {
         participant_t *p = &diagram->participants[i];
-        p->width = max_i32(120, text_width(p->label) + 28);
+        p->width = max_i32(120, text_width(p->label) + 24);
         p->x = margin_x + p->width / 2 + i * participant_gap;
     }
 
@@ -1256,12 +1265,13 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
             *out_w = right + margin_x;
     }
 
-    *out_h = top + 70 + diagram->message_count * message_gap + 90;
+    *out_h = top + 52 + diagram->message_count * message_gap + 52;
     if(diagram->title[0] != '\0')
-        *out_h += 40;
+        *out_h += 24;
 
     for(i = 0; i < diagram->message_count; ++i)
-        diagram->messages[i].y = top + 58 + i * message_gap + (diagram->title[0] != '\0' ? 40 : 0);
+        diagram->messages[i].y = top + 38 + i * message_gap +
+                                 (diagram->title[0] != '\0' ? 24 : 0);
 }
 
 static void draw_dashed_vertical(image_t *img, int x, int y0, int y1,
@@ -1283,14 +1293,14 @@ static void draw_participant(image_t *img, const participant_t *p, int top_y,
 {
     int x = p->x - p->width / 2;
     int label_x = p->x - text_width(p->label) / 2;
-    fill_rect(img, x, top_y, x + p->width, top_y + 34, p->fill);
+    fill_rect(img, x, top_y, x + p->width, top_y + 30, p->fill);
     fill_rect(img, x, top_y, x + p->width, top_y + 2, p->stroke);
-    fill_rect(img, x, top_y + 32, x + p->width, top_y + 34, p->stroke);
-    fill_rect(img, x, top_y, x + 2, top_y + 34, p->stroke);
-    fill_rect(img, x + p->width - 2, top_y, x + p->width, top_y + 34,
+    fill_rect(img, x, top_y + 28, x + p->width, top_y + 30, p->stroke);
+    fill_rect(img, x, top_y, x + 2, top_y + 30, p->stroke);
+    fill_rect(img, x + p->width - 2, top_y, x + p->width, top_y + 30,
               p->stroke);
-    draw_text(img, label_x, top_y + 10, p->label, p->text);
-    draw_dashed_vertical(img, p->x, top_y + 34, bottom_y, p->stroke);
+    draw_text(img, label_x, top_y + 8, p->label, p->text);
+    draw_dashed_vertical(img, p->x, top_y + 30, bottom_y, p->stroke);
 }
 
 static void draw_sequence_arrow(image_t *img, int x0, int x1, int y,
@@ -1348,7 +1358,7 @@ static int render_sequence_file(const char *input_path, const char *output_path,
     clear_image(&image, color_rgba(248, 250, 252, 255));
     if(diagram.title[0] != '\0')
         draw_title(&image, diagram.title);
-    top_y = 64 + (diagram.title[0] != '\0' ? 40 : 0);
+    top_y = 40 + (diagram.title[0] != '\0' ? 24 : 0);
 
     for(i = 0; i < diagram.participant_count; ++i)
         draw_participant(&image, &diagram.participants[i], top_y,
