@@ -24,6 +24,8 @@ Activity example:
 
 ```text
 scale|1.0
+box_radius|8
+edge_radius|14
 title|Basic order approval flow
 node|start|start|Start|#22c55e|#166534|#ffffff
 node|capture|action|Capture order|#bfdbfe|#2563eb|#0f172a
@@ -43,6 +45,8 @@ Records:
 
 - `diagram|activity` or `diagram|sequence` (optional for activity, required for sequence)
 - `scale|1.0` optional global scaling factor; when omitted, `1.0` is used
+- `box_radius|8` optional activity/flow node corner radius; when omitted, a mild default is used
+- `edge_radius|14` optional activity/flow connector bend radius; when omitted, a mild default is used
 - `title|Text`
 - `node|id|type|label|fill|stroke|text`
 - `edge|from|to|label|color`
@@ -52,6 +56,8 @@ Sequence example:
 ```text
 diagram|sequence
 scale|1.0
+box_radius|0
+edge_radius|0
 title|HTTPS authentication sequence
 participant|browser|Browser|#dbeafe|#2563eb|#0f172a
 participant|gateway|HTTPS API Gateway|#fde68a|#d97706|#111827
@@ -74,6 +80,7 @@ Notes:
 
 - Lines starting with `#` are comments.
 - Colors use `#RRGGBB`.
+- `box_radius` and `edge_radius` are currently applied to activity/flow rendering.
 - For now the layout is optimized for control-flow and activity-style diagrams.
 - Back-edges such as retry loops are supported.
 - Sequence diagrams render participant headers, lifelines, and message arrows.

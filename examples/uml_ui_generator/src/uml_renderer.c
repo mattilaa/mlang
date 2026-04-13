@@ -11,9 +11,17 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include "stb_easy_font.h"
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 static char g_last_error[512];
 static const int UML_STROKE = 1;
+static const int UML_AA_SCALE = 4;
+static const float UML_TEXT_SIZE = 14.0f;
 static int text_width(const char *text);
 
 typedef enum
@@ -67,6 +75,8 @@ typedef struct
     char title[160];
     diagram_kind_t kind;
     float scale;
+    float box_radius;
+    float edge_radius;
     node_t nodes[128];
     int node_count;
     edge_t edges[256];
@@ -97,6 +107,8 @@ typedef struct
 {
     char title[160];
     float scale;
+    float box_radius;
+    float edge_radius;
     participant_t participants[24];
     int participant_count;
     message_t messages[256];
@@ -109,6 +121,19 @@ typedef struct
     int height;
     unsigned char *pixels;
 } image_t;
+
+typedef struct
+{
+    int ready;
+    int available;
+    unsigned char *ttf_data;
+    stbtt_fontinfo info;
+    int ascent;
+    int descent;
+    int line_gap;
+} font_cache_t;
+
+static font_cache_t g_font;
 
 static int ensure_parent_dirs(const char *path);
 
@@ -234,6 +259,32 @@ static color_t color_rgba(int r, int g, int b, int a)
     return c;
 }
 
+static color_t mix_color(color_t a, color_t b, int weight_b)
+{
+    color_t out;
+    int weight_a = 255 - weight_b;
+    out.r = (a.r * weight_a + b.r * weight_b) / 255;
+    out.g = (a.g * weight_a + b.g * weight_b) / 255;
+    out.b = (a.b * weight_a + b.b * weight_b) / 255;
+    out.a = (a.a * weight_a + b.a * weight_b) / 255;
+    return out;
+}
+
+static color_t activity_border_color(void)
+{
+    return color_rgba(20, 20, 20, 255);
+}
+
+static color_t activity_text_color(void)
+{
+    return color_rgba(20, 20, 20, 255);
+}
+
+static color_t activity_fill_color(color_t base)
+{
+    return mix_color(base, color_rgba(255, 255, 255, 255), 160);
+}
+
 static int parse_hex_byte(const char *s)
 {
     int value = 0;
@@ -330,6 +381,19 @@ static float parse_scale_value(const char *text, float fallback)
     return (float)value;
 }
 
+static float parse_option_value(const char *text, float fallback)
+{
+    char *end = NULL;
+    double value;
+
+    if(!text || text[0] == '\0')
+        return fallback;
+    value = strtod(text, &end);
+    if(end == text || (end && *end != '\0') || value < 0.0)
+        return fallback;
+    return (float)value;
+}
+
 static int find_node_index(const diagram_t *diagram, const char *id)
 {
     int i;
@@ -362,6 +426,8 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
     memset(diagram, 0, sizeof(*diagram));
     diagram->scale = 1.0f;
     diagram->kind = DIAGRAM_ACTIVITY;
+    diagram->box_radius = 8.0f;
+    diagram->edge_radius = 14.0f;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -420,6 +486,32 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             diagram->scale = parse_scale_value(fields[1], 1.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "box_radius"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: box_radius requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->box_radius = parse_option_value(fields[1], 8.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "edge_radius"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: edge_radius requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->edge_radius = parse_option_value(fields[1], 14.0f);
             continue;
         }
 
@@ -566,6 +658,8 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
 
     memset(diagram, 0, sizeof(*diagram));
     diagram->scale = 1.0f;
+    diagram->box_radius = 0.0f;
+    diagram->edge_radius = 0.0f;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -643,6 +737,32 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             diagram->scale = parse_scale_value(fields[1], 1.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "box_radius"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: box_radius requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->box_radius = parse_option_value(fields[1], 0.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "edge_radius"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: edge_radius requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->edge_radius = parse_option_value(fields[1], 0.0f);
             continue;
         }
 
@@ -759,15 +879,101 @@ static int min_i32(int a, int b)
     return a < b ? a : b;
 }
 
+static int text_height(void)
+{
+    return (int)ceilf(UML_TEXT_SIZE);
+}
+
+static char *read_binary_file(const char *path, size_t *out_size)
+{
+    FILE *fp = fopen(path, "rb");
+    long size;
+    char *buf;
+    size_t got;
+
+    if(!fp)
+        return NULL;
+    if(fseek(fp, 0, SEEK_END) != 0)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    size = ftell(fp);
+    if(size <= 0)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    if(fseek(fp, 0, SEEK_SET) != 0)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    buf = (char *)malloc((size_t)size);
+    if(!buf)
+    {
+        fclose(fp);
+        return NULL;
+    }
+    got = fread(buf, 1, (size_t)size, fp);
+    fclose(fp);
+    if(got != (size_t)size)
+    {
+        free(buf);
+        return NULL;
+    }
+    *out_size = (size_t)size;
+    return buf;
+}
+
+static int ensure_font_loaded(void)
+{
+    static const char *candidates[] = {
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Geneva.ttf",
+        "/Library/Fonts/Arial Unicode.ttf"
+    };
+    size_t i;
+
+    if(g_font.ready)
+        return g_font.available;
+
+    memset(&g_font, 0, sizeof(g_font));
+    g_font.ready = 1;
+
+    for(i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i)
+    {
+        size_t font_size = 0;
+        unsigned char *data = (unsigned char *)read_binary_file(candidates[i],
+                                                                &font_size);
+        int offset;
+        if(!data)
+            continue;
+        offset = stbtt_GetFontOffsetForIndex(data, 0);
+        if(offset < 0 || !stbtt_InitFont(&g_font.info, data, offset))
+        {
+            free(data);
+            continue;
+        }
+        g_font.ttf_data = data;
+        stbtt_GetFontVMetrics(&g_font.info, &g_font.ascent, &g_font.descent,
+                              &g_font.line_gap);
+        g_font.available = 1;
+        return 1;
+    }
+
+    return 0;
+}
+
 static void compute_node_sizes(diagram_t *diagram)
 {
     int i;
     float scale = diagram->scale;
-    int text_h = 8;
-    int action_pad_x = (int)(18.0f * scale);
-    int action_pad_y = (int)(12.0f * scale);
+    int text_h = text_height();
+    int action_pad_x = (int)(16.0f * scale);
+    int action_pad_y = (int)(10.0f * scale);
     int decision_pad_x = (int)(22.0f * scale);
-    int decision_pad_y = (int)(18.0f * scale);
+    int decision_pad_y = (int)(16.0f * scale);
     for(i = 0; i < diagram->node_count; ++i)
     {
         node_t *node = &diagram->nodes[i];
@@ -779,18 +985,18 @@ static void compute_node_sizes(diagram_t *diagram)
         }
         else if(node->type == NODE_DECISION)
         {
-            node->width = max_i32((int)(140.0f * scale),
+            node->width = max_i32((int)(128.0f * scale),
                                   label_w + decision_pad_x * 2);
             if((node->width & 1) != 0)
                 node->width++;
-            node->height = max_i32((int)(60.0f * scale),
+            node->height = max_i32((int)(54.0f * scale),
                                    text_h + decision_pad_y * 2);
         }
         else
         {
-            node->width = max_i32((int)(118.0f * scale),
+            node->width = max_i32((int)(104.0f * scale),
                                   label_w + action_pad_x * 2);
-            node->height = max_i32((int)(34.0f * scale),
+            node->height = max_i32((int)(38.0f * scale),
                                    text_h + action_pad_y * 2);
         }
     }
@@ -917,6 +1123,22 @@ static int blend_channel(int dst, int src, int alpha)
     return (dst * (255 - alpha) + src * alpha) / 255;
 }
 
+static int abs_i32(int v)
+{
+    return v < 0 ? -v : v;
+}
+
+static int aa_px(int v)
+{
+    return v * UML_AA_SCALE;
+}
+
+static int aa_stroke(int v)
+{
+    int scaled = v * UML_AA_SCALE;
+    return scaled > 0 ? scaled : 1;
+}
+
 static void set_pixel(image_t *img, int x, int y, color_t color)
 {
     unsigned char *px;
@@ -938,6 +1160,63 @@ static void clear_image(image_t *img, color_t color)
         for(x = 0; x < img->width; ++x)
             set_pixel(img, x, y, color);
     }
+}
+
+static image_t downsample_image(const image_t *src, int out_w, int out_h)
+{
+    image_t out;
+    int y;
+
+    out.width = out_w;
+    out.height = out_h;
+    out.pixels = (unsigned char *)calloc((size_t)out_w * (size_t)out_h * 4u, 1u);
+    if(!out.pixels)
+    {
+        out.width = 0;
+        out.height = 0;
+        return out;
+    }
+
+    for(y = 0; y < out_h; ++y)
+    {
+        int x;
+        for(x = 0; x < out_w; ++x)
+        {
+            int sx0 = x * UML_AA_SCALE;
+            int sy0 = y * UML_AA_SCALE;
+            int yy;
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            int a = 0;
+            for(yy = 0; yy < UML_AA_SCALE; ++yy)
+            {
+                int xx;
+                for(xx = 0; xx < UML_AA_SCALE; ++xx)
+                {
+                    size_t idx =
+                        ((size_t)(sy0 + yy) * (size_t)src->width +
+                         (size_t)(sx0 + xx)) *
+                        4u;
+                    r += src->pixels[idx + 0];
+                    g += src->pixels[idx + 1];
+                    b += src->pixels[idx + 2];
+                    a += src->pixels[idx + 3];
+                }
+            }
+            {
+                size_t out_idx =
+                    ((size_t)y * (size_t)out.width + (size_t)x) * 4u;
+                int denom = UML_AA_SCALE * UML_AA_SCALE;
+                out.pixels[out_idx + 0] = (unsigned char)(r / denom);
+                out.pixels[out_idx + 1] = (unsigned char)(g / denom);
+                out.pixels[out_idx + 2] = (unsigned char)(b / denom);
+                out.pixels[out_idx + 3] = (unsigned char)(a / denom);
+            }
+        }
+    }
+
+    return out;
 }
 
 static void fill_rect(image_t *img, int x0, int y0, int x1, int y1, color_t color)
@@ -1004,10 +1283,17 @@ static void fill_rounded_rect(image_t *img, int x, int y, int w, int h, int radi
 
 static void stroke_rounded_rect(image_t *img, int x, int y, int w, int h, int radius, int thickness, color_t color)
 {
-    fill_rounded_rect(img, x, y, w, thickness + radius, radius, color);
-    fill_rounded_rect(img, x, y + h - thickness - radius, w, thickness + radius, radius, color);
+    fill_rect(img, x + radius, y, x + w - radius, y + thickness, color);
+    fill_rect(img, x + radius, y + h - thickness, x + w - radius, y + h,
+              color);
     fill_rect(img, x, y + radius, x + thickness, y + h - radius, color);
-    fill_rect(img, x + w - thickness, y + radius, x + w, y + h - radius, color);
+    fill_rect(img, x + w - thickness, y + radius, x + w, y + h - radius,
+              color);
+    stroke_circle(img, x + radius, y + radius, radius, thickness, color);
+    stroke_circle(img, x + w - radius, y + radius, radius, thickness, color);
+    stroke_circle(img, x + radius, y + h - radius, radius, thickness, color);
+    stroke_circle(img, x + w - radius, y + h - radius, radius, thickness,
+                  color);
 }
 
 static void fill_diamond(image_t *img, int cx, int cy, int w, int h, color_t color)
@@ -1095,8 +1381,8 @@ static void draw_line(image_t *img, int x0, int y0, int x1, int y1, int thicknes
 
 static void draw_arrow_head(image_t *img, int tip_x, int tip_y, int dx, int dy, color_t color)
 {
-    int len = 14;
-    int wing = 7;
+    int len = aa_px(14);
+    int wing = aa_px(7);
     float mag = sqrtf((float)(dx * dx + dy * dy));
     float ux;
     float uy;
@@ -1123,125 +1409,337 @@ static void draw_arrow_head(image_t *img, int tip_x, int tip_y, int dx, int dy, 
 
 static void draw_text(image_t *img, int x, int y, const char *text, color_t color)
 {
-    typedef struct
+    if(ensure_font_loaded())
     {
-        float x;
-        float y;
-        float z;
-        unsigned char c[4];
-    } easy_font_vertex_t;
+        float scale = stbtt_ScaleForPixelHeight(&g_font.info,
+                                                UML_TEXT_SIZE * (float)UML_AA_SCALE);
+        float pen_x = (float)aa_px(x);
+        int baseline = aa_px(y) + (int)(g_font.ascent * scale);
+        const unsigned char *p = (const unsigned char *)text;
 
-    char buffer[99999];
-    unsigned char rgba[4];
-    int quads;
-    int i;
-
-    rgba[0] = (unsigned char)color.r;
-    rgba[1] = (unsigned char)color.g;
-    rgba[2] = (unsigned char)color.b;
-    rgba[3] = (unsigned char)color.a;
-    quads = stb_easy_font_print((float)x, (float)y, (char *)text, rgba,
-                                buffer, (int)sizeof(buffer));
-    for(i = 0; i < quads; ++i)
-    {
-        easy_font_vertex_t *v = (easy_font_vertex_t *)buffer + i * 4;
-        float min_xf = v[0].x;
-        float max_xf = v[0].x;
-        float min_yf = v[0].y;
-        float max_yf = v[0].y;
-        int j;
-        int min_x;
-        int max_x;
-        int min_y;
-        int max_y;
-        for(j = 1; j < 4; ++j)
+        while(*p != '\0')
         {
-            if(v[j].x < min_xf)
-                min_xf = v[j].x;
-            if(v[j].x > max_xf)
-                max_xf = v[j].x;
-            if(v[j].y < min_yf)
-                min_yf = v[j].y;
-            if(v[j].y > max_yf)
-                max_yf = v[j].y;
+            int cp = (int)*p++;
+            int advance;
+            int lsb;
+            int x0;
+            int y0;
+            int x1;
+            int y1;
+            int glyph_w;
+            int glyph_h;
+
+            stbtt_GetCodepointHMetrics(&g_font.info, cp, &advance, &lsb);
+            stbtt_GetCodepointBitmapBox(&g_font.info, cp, scale, scale,
+                                        &x0, &y0, &x1, &y1);
+            glyph_w = x1 - x0;
+            glyph_h = y1 - y0;
+            if(glyph_w > 0 && glyph_h > 0)
+            {
+                unsigned char *bitmap =
+                    (unsigned char *)calloc((size_t)glyph_w * (size_t)glyph_h, 1u);
+                int gy;
+                if(bitmap)
+                {
+                    stbtt_MakeCodepointBitmap(&g_font.info, bitmap, glyph_w,
+                                              glyph_h, glyph_w, scale, scale,
+                                              cp);
+                    for(gy = 0; gy < glyph_h; ++gy)
+                    {
+                        int gx;
+                        for(gx = 0; gx < glyph_w; ++gx)
+                        {
+                            unsigned char alpha = bitmap[gy * glyph_w + gx];
+                            if(alpha > 0)
+                            {
+                                color_t shaded = color;
+                                shaded.a = (color.a * alpha) / 255;
+                                set_pixel(img, (int)pen_x + x0 + gx,
+                                          baseline + y0 + gy, shaded);
+                            }
+                        }
+                    }
+                    free(bitmap);
+                }
+            }
+
+            pen_x += (float)advance * scale;
+            if(*p != '\0')
+            {
+                int kern = stbtt_GetCodepointKernAdvance(&g_font.info, cp,
+                                                         (int)*p);
+                pen_x += (float)kern * scale;
+            }
         }
-        min_x = (int)floorf(min_xf);
-        max_x = (int)ceilf(max_xf);
-        min_y = (int)floorf(min_yf);
-        max_y = (int)ceilf(max_yf);
-        fill_rect(img, min_x, min_y, max_x, max_y, color);
+        return;
+    }
+
+    {
+        typedef struct
+        {
+            float x;
+            float y;
+            float z;
+            unsigned char c[4];
+        } easy_font_vertex_t;
+
+        char buffer[99999];
+        unsigned char rgba[4];
+        int quads;
+        int i;
+
+        rgba[0] = (unsigned char)color.r;
+        rgba[1] = (unsigned char)color.g;
+        rgba[2] = (unsigned char)color.b;
+        rgba[3] = (unsigned char)color.a;
+        quads = stb_easy_font_print(0.0f, 0.0f, (char *)text, rgba,
+                                    buffer, (int)sizeof(buffer));
+        for(i = 0; i < quads; ++i)
+        {
+            easy_font_vertex_t *v = (easy_font_vertex_t *)buffer + i * 4;
+            float scale = (float)UML_AA_SCALE * 1.25f;
+            float min_xf = (float)aa_px(x) + v[0].x * scale;
+            float max_xf = (float)aa_px(x) + v[0].x * scale;
+            float min_yf = (float)aa_px(y) + v[0].y * scale;
+            float max_yf = (float)aa_px(y) + v[0].y * scale;
+            int j;
+            int min_x;
+            int max_x;
+            int min_y;
+            int max_y;
+            for(j = 1; j < 4; ++j)
+            {
+                float sx = (float)aa_px(x) + v[j].x * scale;
+                float sy = (float)aa_px(y) + v[j].y * scale;
+                if(sx < min_xf)
+                    min_xf = sx;
+                if(sx > max_xf)
+                    max_xf = sx;
+                if(sy < min_yf)
+                    min_yf = sy;
+                if(sy > max_yf)
+                    max_yf = sy;
+            }
+            min_x = (int)floorf(min_xf);
+            max_x = (int)ceilf(max_xf);
+            min_y = (int)floorf(min_yf);
+            max_y = (int)ceilf(max_yf);
+            fill_rect(img, min_x, min_y, max_x, max_y, color);
+        }
     }
 }
 
 static int text_width(const char *text)
 {
-    return stb_easy_font_width((char *)text);
+    if(ensure_font_loaded())
+    {
+        float scale = stbtt_ScaleForPixelHeight(&g_font.info,
+                                                UML_TEXT_SIZE * (float)UML_AA_SCALE);
+        float width = 0.0f;
+        const unsigned char *p = (const unsigned char *)text;
+        while(*p != '\0')
+        {
+            int cp = (int)*p++;
+            int advance;
+            int lsb;
+            stbtt_GetCodepointHMetrics(&g_font.info, cp, &advance, &lsb);
+            width += (float)advance * scale;
+            if(*p != '\0')
+                width += (float)stbtt_GetCodepointKernAdvance(&g_font.info, cp,
+                                                              (int)*p) *
+                         scale;
+        }
+        return (int)ceilf(width / (float)UML_AA_SCALE);
+    }
+    return (int)ceilf((float)stb_easy_font_width((char *)text) * 1.25f);
 }
 
 static void draw_title(image_t *img, const char *title)
 {
     color_t title_color = color_rgba(15, 23, 42, 255);
-    int x = img->width / 2 - text_width(title) / 2;
+    int x = (img->width / UML_AA_SCALE) / 2 - text_width(title) / 2;
     draw_text(img, x, 26, title, title_color);
 }
 
-static void draw_node(image_t *img, const node_t *node)
+static void draw_soft_box(image_t *img, int x, int y, int w, int h, int radius,
+                          color_t fill, color_t border)
+{
+    int ax = aa_px(x);
+    int ay = aa_px(y);
+    int aw = aa_px(w);
+    int ah = aa_px(h);
+    int border_w = aa_stroke(UML_STROKE);
+    int outer_radius = min_i32(aa_px(radius), min_i32(aw, ah) / 2);
+    int inner_w = aw - border_w * 2;
+    int inner_h = ah - border_w * 2;
+
+    fill_rounded_rect(img, ax, ay, aw, ah, outer_radius, border);
+    if(inner_w > 0 && inner_h > 0)
+    {
+        int inner_radius = outer_radius - border_w;
+        if(inner_radius < 0)
+            inner_radius = 0;
+        fill_rounded_rect(img, ax + border_w, ay + border_w, inner_w, inner_h,
+                          inner_radius, fill);
+    }
+}
+
+static void draw_node(image_t *img, const diagram_t *diagram, const node_t *node)
 {
     int x = node->x - node->width / 2;
     int y = node->y - node->height / 2;
     int label_x = node->x - text_width(node->label) / 2;
-    int label_y = node->y - 6;
+    int label_y = node->y - text_height() / 2 - 1;
+    color_t border = activity_border_color();
+    color_t text = activity_text_color();
+    color_t fill = activity_fill_color(node->fill);
 
     if(node->type == NODE_START)
     {
-        fill_circle(img, node->x, node->y, node->width / 2, node->fill);
-        stroke_circle(img, node->x, node->y, node->width / 2, UML_STROKE, node->stroke);
+        fill_circle(img, aa_px(node->x), aa_px(node->y), aa_px(node->width / 2),
+                    border);
+        stroke_circle(img, aa_px(node->x), aa_px(node->y),
+                      aa_px(node->width / 2), aa_stroke(UML_STROKE),
+                      border);
     }
     else if(node->type == NODE_END)
     {
-        fill_circle(img, node->x, node->y, node->width / 2, color_rgba(255, 255, 255, 255));
-        stroke_circle(img, node->x, node->y, node->width / 2, UML_STROKE, node->stroke);
-        fill_circle(img, node->x, node->y, node->width / 2 - 10, node->fill);
+        fill_circle(img, aa_px(node->x), aa_px(node->y), aa_px(node->width / 2),
+                    color_rgba(255, 255, 255, 255));
+        stroke_circle(img, aa_px(node->x), aa_px(node->y),
+                      aa_px(node->width / 2), aa_stroke(UML_STROKE),
+                      border);
+        fill_circle(img, aa_px(node->x), aa_px(node->y),
+                    aa_px(node->width / 2 - 10), border);
     }
     else if(node->type == NODE_DECISION)
     {
-        fill_diamond(img, node->x, node->y, node->width, node->height, node->fill);
-        stroke_diamond(img, node->x, node->y, node->width, node->height, UML_STROKE, node->stroke);
+        fill_diamond(img, aa_px(node->x), aa_px(node->y), aa_px(node->width),
+                     aa_px(node->height), mix_color(fill, color_rgba(255, 255, 255, 255), 80));
+        stroke_diamond(img, aa_px(node->x), aa_px(node->y), aa_px(node->width),
+                       aa_px(node->height), aa_stroke(UML_STROKE),
+                       border);
     }
     else
     {
-        fill_rect(img, x, y, x + node->width, y + node->height, node->fill);
-        fill_rect(img, x, y, x + node->width, y + UML_STROKE, node->stroke);
-        fill_rect(img, x, y + node->height - UML_STROKE, x + node->width,
-                  y + node->height, node->stroke);
-        fill_rect(img, x, y, x + UML_STROKE, y + node->height, node->stroke);
-        fill_rect(img, x + node->width - UML_STROKE, y, x + node->width,
-                  y + node->height, node->stroke);
+        draw_soft_box(img, x, y, node->width, node->height,
+                      (int)(diagram->box_radius * diagram->scale), fill,
+                      border);
     }
 
     if(node->label[0] != '\0')
-        draw_text(img, label_x, label_y, node->label, node->text);
+        draw_text(img, label_x, label_y, node->label, text);
 }
 
-static void draw_polyline(image_t *img, int *xs, int *ys, int count, color_t color)
+static void draw_arc_segment(image_t *img, float cx, float cy, float radius,
+                             float start_angle, float end_angle, color_t color)
 {
     int i;
-    for(i = 0; i + 1 < count; ++i)
-        draw_line(img, xs[i], ys[i], xs[i + 1], ys[i + 1], UML_STROKE, color);
+    int steps =
+        max_i32(6, (int)ceilf(fabsf(end_angle - start_angle) * radius / 14.0f));
+    int prev_x = (int)roundf(cx + cosf(start_angle) * radius);
+    int prev_y = (int)roundf(cy + sinf(start_angle) * radius);
+    for(i = 1; i <= steps; ++i)
+    {
+        float t = (float)i / (float)steps;
+        float angle = start_angle + (end_angle - start_angle) * t;
+        int x = (int)roundf(cx + cosf(angle) * radius);
+        int y = (int)roundf(cy + sinf(angle) * radius);
+        draw_line(img, prev_x, prev_y, x, y, aa_stroke(UML_STROKE), color);
+        prev_x = x;
+        prev_y = y;
+    }
+}
+
+static void draw_polyline(image_t *img, int *xs, int *ys, int count, int radius,
+                          color_t color)
+{
+    int i;
+    int last_x;
+    int last_y;
+
+    if(count < 2)
+        return;
+
+    last_x = aa_px(xs[0]);
+    last_y = aa_px(ys[0]);
+
+    for(i = 1; i < count - 1; ++i)
+    {
+        int prev_x = xs[i - 1];
+        int prev_y = ys[i - 1];
+        int cur_x = xs[i];
+        int cur_y = ys[i];
+        int next_x = xs[i + 1];
+        int next_y = ys[i + 1];
+        int dx1 = cur_x - prev_x;
+        int dy1 = cur_y - prev_y;
+        int dx2 = next_x - cur_x;
+        int dy2 = next_y - cur_y;
+        int len1 = abs_i32(dx1) + abs_i32(dy1);
+        int len2 = abs_i32(dx2) + abs_i32(dy2);
+        int corner = min_i32(radius, min_i32(len1 / 2, len2 / 2));
+
+        if(corner <= 0 || (dx1 != 0 && dx2 != 0) || (dy1 != 0 && dy2 != 0))
+        {
+            draw_line(img, last_x, last_y, aa_px(cur_x), aa_px(cur_y),
+                      aa_stroke(UML_STROKE), color);
+            last_x = aa_px(cur_x);
+            last_y = aa_px(cur_y);
+            continue;
+        }
+
+        {
+            int dir1_x = dx1 == 0 ? 0 : (dx1 > 0 ? 1 : -1);
+            int dir1_y = dy1 == 0 ? 0 : (dy1 > 0 ? 1 : -1);
+            int dir2_x = dx2 == 0 ? 0 : (dx2 > 0 ? 1 : -1);
+            int dir2_y = dy2 == 0 ? 0 : (dy2 > 0 ? 1 : -1);
+            int in_x = cur_x - dir1_x * corner;
+            int in_y = cur_y - dir1_y * corner;
+            int out_x = cur_x + dir2_x * corner;
+            int out_y = cur_y + dir2_y * corner;
+            float center_x = (float)aa_px(cur_x - dir1_x * corner + dir2_x * corner);
+            float center_y = (float)aa_px(cur_y - dir1_y * corner + dir2_y * corner);
+            float start_angle =
+                atan2f((float)(aa_px(in_y) - center_y), (float)(aa_px(in_x) - center_x));
+            float end_angle =
+                atan2f((float)(aa_px(out_y) - center_y), (float)(aa_px(out_x) - center_x));
+            float delta = end_angle - start_angle;
+
+            while(delta > (float)M_PI)
+                delta -= (float)(M_PI * 2.0);
+            while(delta < (float)-M_PI)
+                delta += (float)(M_PI * 2.0);
+            end_angle = start_angle + delta;
+
+            draw_line(img, last_x, last_y, aa_px(in_x), aa_px(in_y),
+                      aa_stroke(UML_STROKE), color);
+            draw_arc_segment(img, center_x, center_y, (float)aa_px(corner),
+                             start_angle, end_angle, color);
+            last_x = aa_px(out_x);
+            last_y = aa_px(out_y);
+        }
+    }
+
+    draw_line(img, last_x, last_y, aa_px(xs[count - 1]), aa_px(ys[count - 1]),
+              aa_stroke(UML_STROKE), color);
     if(count >= 2)
-        draw_arrow_head(img, xs[count - 1], ys[count - 1],
-                        xs[count - 1] - xs[count - 2],
-                        ys[count - 1] - ys[count - 2], color);
+        draw_arrow_head(img, aa_px(xs[count - 1]), aa_px(ys[count - 1]),
+                        aa_px(xs[count - 1] - xs[count - 2]),
+                        aa_px(ys[count - 1] - ys[count - 2]), color);
 }
 
 static void draw_edge_label(image_t *img, int x, int y, const char *text, color_t color)
 {
     color_t bg = color_rgba(255, 255, 255, 230);
     int w;
+    int h;
     if(text[0] == '\0')
         return;
     w = text_width(text);
-    fill_rect(img, x - 6, y - 6, x + w + 6, y + 14, bg);
+    h = text_height();
+    fill_rect(img, aa_px(x - 6), aa_px(y - 4), aa_px(x + w + 6),
+              aa_px(y + h + 4), bg);
     draw_text(img, x, y, text, color);
 }
 
@@ -1249,6 +1747,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
 {
     const node_t *from = &diagram->nodes[edge->from];
     const node_t *to = &diagram->nodes[edge->to];
+    color_t edge_color = activity_border_color();
     int xs[6];
     int ys[6];
     int count = 0;
@@ -1269,9 +1768,11 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         ys[count++] = mid_y;
         xs[count] = tx;
         ys[count++] = ty;
-        draw_polyline(img, xs, ys, count, edge->color);
+        draw_polyline(img, xs, ys, count,
+                      (int)(diagram->edge_radius * diagram->scale),
+                      edge_color);
         draw_edge_label(img, (sx + tx) / 2 - text_width(edge->label) / 2,
-                        label_y, edge->label, edge->color);
+                        label_y, edge->label, edge_color);
         return;
     }
 
@@ -1295,9 +1796,11 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         ys[count++] = top_y;
         xs[count] = tx;
         ys[count++] = ty;
-        draw_polyline(img, xs, ys, count, edge->color);
+        draw_polyline(img, xs, ys, count,
+                      (int)(diagram->edge_radius * diagram->scale),
+                      edge_color);
         draw_edge_label(img, bend_x - text_width(edge->label) / 2, label_y,
-                        edge->label, edge->color);
+                        edge->label, edge_color);
     }
 }
 
@@ -1340,32 +1843,38 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
 static void draw_vertical_line(image_t *img, int x, int y0, int y1,
                                color_t color)
 {
-    draw_line(img, x, y0, x, y1, UML_STROKE, color);
+    draw_line(img, aa_px(x), aa_px(y0), aa_px(x), aa_px(y1),
+              aa_stroke(UML_STROKE), color);
 }
 
 static void draw_participant(image_t *img, const participant_t *p, int top_y,
                              int bottom_y)
 {
-    int box_h = 30;
+    int box_h = text_height() + 16;
     int border = UML_STROKE;
     int x = p->x - p->width / 2;
     int label_x = p->x - text_width(p->label) / 2;
-    fill_rect(img, x, top_y, x + p->width, top_y + box_h, p->fill);
-    fill_rect(img, x, top_y, x + p->width, top_y + border, p->stroke);
-    fill_rect(img, x, top_y + box_h - border, x + p->width, top_y + box_h,
-              p->stroke);
-    fill_rect(img, x, top_y, x + border, top_y + box_h, p->stroke);
-    fill_rect(img, x + p->width - border, top_y, x + p->width, top_y + box_h,
-              p->stroke);
-    draw_text(img, label_x, top_y + 8, p->label, p->text);
+    fill_rect(img, aa_px(x), aa_px(top_y), aa_px(x + p->width),
+              aa_px(top_y + box_h), p->fill);
+    fill_rect(img, aa_px(x), aa_px(top_y), aa_px(x + p->width),
+              aa_px(top_y + border), p->stroke);
+    fill_rect(img, aa_px(x), aa_px(top_y + box_h - border),
+              aa_px(x + p->width), aa_px(top_y + box_h), p->stroke);
+    fill_rect(img, aa_px(x), aa_px(top_y), aa_px(x + border),
+              aa_px(top_y + box_h), p->stroke);
+    fill_rect(img, aa_px(x + p->width - border), aa_px(top_y),
+              aa_px(x + p->width), aa_px(top_y + box_h), p->stroke);
+    draw_text(img, label_x, top_y + (box_h - text_height()) / 2, p->label,
+              p->text);
     draw_vertical_line(img, p->x, top_y + box_h, bottom_y, p->stroke);
 }
 
 static void draw_sequence_arrow(image_t *img, int x0, int x1, int y,
                                 color_t color)
 {
-    draw_line(img, x0, y, x1, y, UML_STROKE, color);
-    draw_arrow_head(img, x1, y, x1 - x0, 0, color);
+    draw_line(img, aa_px(x0), aa_px(y), aa_px(x1), aa_px(y),
+              aa_stroke(UML_STROKE), color);
+    draw_arrow_head(img, aa_px(x1), aa_px(y), aa_px(x1 - x0), 0, color);
 }
 
 static void draw_sequence_message(image_t *img,
@@ -1382,10 +1891,14 @@ static void draw_sequence_message(image_t *img,
     {
         int right = from->x + from->width / 2 + 48;
         int y2 = m->y + 28;
-        draw_line(img, from->x, m->y, right, m->y, UML_STROKE, m->color);
-        draw_line(img, right, m->y, right, y2, UML_STROKE, m->color);
-        draw_line(img, right, y2, from->x, y2, UML_STROKE, m->color);
-        draw_arrow_head(img, from->x, y2, from->x - right, 0, m->color);
+        draw_line(img, aa_px(from->x), aa_px(m->y), aa_px(right), aa_px(m->y),
+                  aa_stroke(UML_STROKE), m->color);
+        draw_line(img, aa_px(right), aa_px(m->y), aa_px(right), aa_px(y2),
+                  aa_stroke(UML_STROKE), m->color);
+        draw_line(img, aa_px(right), aa_px(y2), aa_px(from->x), aa_px(y2),
+                  aa_stroke(UML_STROKE), m->color);
+        draw_arrow_head(img, aa_px(from->x), aa_px(y2), aa_px(from->x - right),
+                        0, m->color);
         draw_edge_label(img, from->x + 12, m->y - 26, m->label, m->color);
         return;
     }
@@ -1401,10 +1914,18 @@ static int render_sequence_file(const char *input_path, const char *output_path,
     image_t image;
     int i;
     int top_y;
+    int logical_w;
+    int logical_h;
 
     if(!parse_sequence_text(&diagram, text))
         return 1;
     compute_sequence_layout(&diagram, &image.width, &image.height);
+    logical_w = image.width;
+    logical_h = image.height;
+    {
+        image.width = logical_w * UML_AA_SCALE;
+        image.height = logical_h * UML_AA_SCALE;
+    }
     image.pixels = (unsigned char *)calloc((size_t)image.width * (size_t)image.height * 4u, 1u);
     if(!image.pixels)
     {
@@ -1419,9 +1940,20 @@ static int render_sequence_file(const char *input_path, const char *output_path,
 
     for(i = 0; i < diagram.participant_count; ++i)
         draw_participant(&image, &diagram.participants[i], top_y,
-                         image.height - 36);
+                         logical_h - 36);
     for(i = 0; i < diagram.message_count; ++i)
         draw_sequence_message(&image, &diagram, &diagram.messages[i]);
+    {
+        image_t out = downsample_image(&image, image.width / UML_AA_SCALE,
+                                       image.height / UML_AA_SCALE);
+        free(image.pixels);
+        if(!out.pixels)
+        {
+            set_errorf("out of memory");
+            return 1;
+        }
+        image = out;
+    }
 
     if(!ensure_parent_dirs(output_path))
     {
@@ -1493,6 +2025,12 @@ int uml_render_file(const char *input_path, const char *output_path)
 
     compute_node_sizes(&diagram);
     compute_layout(&diagram, &image.width, &image.height);
+    {
+        int logical_w = image.width;
+        int logical_h = image.height;
+        image.width = logical_w * UML_AA_SCALE;
+        image.height = logical_h * UML_AA_SCALE;
+    }
     image.pixels = (unsigned char *)calloc((size_t)image.width * (size_t)image.height * 4u, 1u);
     if(!image.pixels)
     {
@@ -1507,7 +2045,18 @@ int uml_render_file(const char *input_path, const char *output_path)
     for(i = 0; i < diagram.edge_count; ++i)
         draw_edge(&image, &diagram, &diagram.edges[i]);
     for(i = 0; i < diagram.node_count; ++i)
-        draw_node(&image, &diagram.nodes[i]);
+        draw_node(&image, &diagram, &diagram.nodes[i]);
+    {
+        image_t out = downsample_image(&image, image.width / UML_AA_SCALE,
+                                       image.height / UML_AA_SCALE);
+        free(image.pixels);
+        if(!out.pixels)
+        {
+            set_errorf("out of memory");
+            return 1;
+        }
+        image = out;
+    }
 
     if(!ensure_parent_dirs(output_path))
     {
