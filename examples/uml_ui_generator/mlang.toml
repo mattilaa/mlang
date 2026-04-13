@@ -1,0 +1,88 @@
+[package]
+name = "uml_ui_generator"
+version = "0.1.0"
+
+[dependencies]
+stb = { url = "https://github.com/nothings/stb/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+[[task]]
+name = "toolchain-check"
+print = "[example] Checking MLang and C toolchains"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
+  "sh -c 'for tool in cc ar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "prepare-build-tree"
+print = "[example] Preparing build output directories"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}/obj {{build_dir}}/lib {{build_dir}}/generated"
+]
+
+[[task]]
+name = "compile-mlang-main"
+phase = "compile"
+print = "[example] Compiling the MLang CLI entrypoint"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/main_mlang.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "compile-c-renderer"
+phase = "compile"
+print = "[example] Compiling the C UML PNG renderer"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+language = "c"
+source = "src/uml_renderer.c"
+output = "{{build_dir}}/obj/uml_renderer.o"
+compile_only = true
+compiler_flags = [
+  "-std=c99",
+  "-O2",
+  "-I{{deps_dir}}/stb"
+]
+commands = [
+  "ar rcs {{build_dir}}/lib/libuml_renderer.a {{build_dir}}/obj/uml_renderer.o"
+]
+
+[[task]]
+name = "link-demo"
+phase = "build"
+print = "[example] Linking the UML flowchart generator"
+workdir = "{{root}}"
+depends_on = ["compile-mlang-main", "compile-c-renderer"]
+language = "c"
+output = "{{build_dir}}/uml_ui_generator"
+inputs = [
+  "{{build_dir}}/obj/main_mlang.o",
+  "{{build_dir}}/lib/libuml_renderer.a"
+]
+lib_paths = ["../../build"]
+libs = ["mlang_std"]
+
+[task.host.linux]
+libs = ["m"]
+
+[[task]]
+name = "render-sample"
+print = "[example] Rendering the bundled colorful control-flow sample"
+workdir = "{{root}}"
+join_on = ["link-demo"]
+shell = [
+  "exec {{build_dir}}/uml_ui_generator samples/basic_control_flow.umlflow {{build_dir}}/generated/basic_control_flow.png"
+]

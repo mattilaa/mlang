@@ -1,0 +1,52 @@
+mod std::argparser;
+
+use std::argparser::ArgParser;
+use std::argparser::ParseResult;
+
+extern fn uml_render_file(input_path: str8, output_path: str8) -> i32;
+extern fn uml_last_error() -> str8;
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var ap: ArgParser = ArgParser::new("uml_ui_generator",
+                                       "Render a UML activity-style flowchart PNG from a text file.");
+    ap.positional("input", "Input .umlflow file");
+    ap.positional("output", "Output PNG path");
+
+    let parsed: ParseResult = ap.parse(argc, args);
+    if parsed.help_requested() {
+        ap.print_help();
+        parsed.free();
+        ap.free();
+        return 0;
+    }
+    if parsed.has_error() {
+        eprintln!("argument error: {}", parsed.error());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+    if parsed.positional_count() < 2 {
+        ap.print_help();
+        eprintln!("");
+        eprintln!("Example:");
+        eprintln!("  ./build/uml_ui_generator samples/basic_control_flow.umlflow build/generated/basic_control_flow.png");
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    let input_path: str8 = parsed.positional(0);
+    let output_path: str8 = parsed.positional(1);
+    let rc: i32 = uml_render_file(input_path, output_path);
+    if rc != 0 {
+        eprintln!("render failed: {}", uml_last_error());
+        parsed.free();
+        ap.free();
+        return 1;
+    }
+
+    println!("rendered {} -> {}", input_path, output_path);
+    parsed.free();
+    ap.free();
+    return 0;
+}
