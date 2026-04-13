@@ -473,16 +473,18 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
 {
     int i;
     int level_counts[64];
+    int level_used_width[64];
     int max_level = 0;
     int max_cols = 1;
     int margin_x = 70;
     int margin_y = 80;
-    int col_spacing = 90;
+    int sibling_gap = 48;
     int row_spacing = 110;
     int level_max_width[64];
     int level_max_height[64];
 
     memset(level_counts, 0, sizeof(level_counts));
+    memset(level_used_width, 0, sizeof(level_used_width));
     memset(level_max_width, 0, sizeof(level_max_width));
     memset(level_max_height, 0, sizeof(level_max_height));
 
@@ -512,6 +514,7 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
         if(node->level > max_level)
             max_level = node->level;
         node->slot = level_counts[node->level]++;
+        level_used_width[node->level] += node->width;
         if(node->width > level_max_width[node->level])
             level_max_width[node->level] = node->width;
         if(node->height > level_max_height[node->level])
@@ -522,9 +525,16 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
     {
         if(level_counts[i] > max_cols)
             max_cols = level_counts[i];
+        if(level_counts[i] > 1)
+            level_used_width[i] += sibling_gap * (level_counts[i] - 1);
     }
 
-    *out_w = margin_x * 2 + max_cols * 220 + (max_cols - 1) * col_spacing;
+    *out_w = margin_x * 2 + max_cols * 220;
+    for(i = 0; i <= max_level; ++i)
+    {
+        if(level_used_width[i] + margin_x * 2 > *out_w)
+            *out_w = level_used_width[i] + margin_x * 2;
+    }
     *out_h = margin_y * 2 + (max_level + 1) * 120 + max_level * row_spacing;
     if(diagram->title[0] != '\0')
         *out_h += 56;
@@ -532,13 +542,26 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
     for(i = 0; i < diagram->node_count; ++i)
     {
         node_t *node = &diagram->nodes[i];
-        int cols = level_counts[node->level];
         int row_y = margin_y + node->level * (120 + row_spacing);
-        int usable_w = *out_w - margin_x * 2;
-        int step = cols > 0 ? usable_w / (cols + 1) : usable_w;
         int top_extra = diagram->title[0] != '\0' ? 56 : 0;
+        int j;
+        int x_cursor = (*out_w - level_used_width[node->level]) / 2;
 
-        node->x = margin_x + step * (node->slot + 1);
+        for(j = 0; j < node->slot; ++j)
+        {
+            int k;
+            for(k = 0; k < diagram->node_count; ++k)
+            {
+                if(diagram->nodes[k].level == node->level &&
+                   diagram->nodes[k].slot == j)
+                {
+                    x_cursor += diagram->nodes[k].width + sibling_gap;
+                    break;
+                }
+            }
+        }
+
+        node->x = x_cursor + node->width / 2;
         node->y = row_y + top_extra;
     }
 }
@@ -830,7 +853,6 @@ static void draw_node(image_t *img, const node_t *node)
     int y = node->y - node->height / 2;
     int label_x = node->x - text_width(node->label) / 2;
     int label_y = node->y - 6;
-    int action_radius = 10;
 
     if(node->type == NODE_START)
     {
@@ -850,10 +872,13 @@ static void draw_node(image_t *img, const node_t *node)
     }
     else
     {
-        fill_rounded_rect(img, x, y, node->width, node->height, action_radius,
-                          node->fill);
-        stroke_rounded_rect(img, x, y, node->width, node->height, action_radius,
-                            3, node->stroke);
+        fill_rect(img, x, y, x + node->width, y + node->height, node->fill);
+        fill_rect(img, x, y, x + node->width, y + 3, node->stroke);
+        fill_rect(img, x, y + node->height - 3, x + node->width,
+                  y + node->height, node->stroke);
+        fill_rect(img, x, y, x + 3, y + node->height, node->stroke);
+        fill_rect(img, x + node->width - 3, y, x + node->width,
+                  y + node->height, node->stroke);
     }
 
     if(node->label[0] != '\0')
