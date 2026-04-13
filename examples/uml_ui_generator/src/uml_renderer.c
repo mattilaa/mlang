@@ -24,6 +24,7 @@ static const int UML_AA_SCALE = 4;
 static const float UML_TEXT_SIZE = 14.0f;
 static int text_width(const char *text);
 static int parse_string_value(const char *text, char *out, size_t out_size);
+static int parse_bool_value(const char *text, int fallback);
 
 typedef enum
 {
@@ -61,6 +62,7 @@ typedef struct
     int y;
     int width;
     int height;
+    int bold;
 } node_t;
 
 typedef struct
@@ -80,6 +82,8 @@ typedef struct
     float edge_radius;
     float start_radius;
     float end_radius;
+    float title_size;
+    int title_bold;
     node_t nodes[128];
     int node_count;
     edge_t edges[256];
@@ -95,6 +99,7 @@ typedef struct
     color_t text;
     int x;
     int width;
+    int bold;
 } participant_t;
 
 typedef struct
@@ -104,6 +109,7 @@ typedef struct
     char label[160];
     color_t color;
     int y;
+    int bold;
 } message_t;
 
 typedef struct
@@ -113,6 +119,8 @@ typedef struct
     float box_radius;
     float edge_radius;
     float arrow_size;
+    float title_size;
+    int title_bold;
     participant_t participants[24];
     int participant_count;
     message_t messages[256];
@@ -403,6 +411,20 @@ static float parse_option_value(const char *text, float fallback)
     return (float)value;
 }
 
+static int parse_bool_value(const char *text, int fallback)
+{
+    char buffer[32];
+    if(!text || text[0] == '\0')
+        return fallback;
+    if(!parse_string_value(text, buffer, sizeof(buffer)))
+        return fallback;
+    if(eq_ci(buffer, "true") || eq_ci(buffer, "yes") || eq_ci(buffer, "1"))
+        return 1;
+    if(eq_ci(buffer, "false") || eq_ci(buffer, "no") || eq_ci(buffer, "0"))
+        return 0;
+    return fallback;
+}
+
 static int find_node_index(const diagram_t *diagram, const char *id)
 {
     int i;
@@ -431,22 +453,28 @@ typedef struct
     color_t action_fill;
     color_t action_stroke;
     color_t action_text;
+    int action_bold;
     color_t decision_fill;
     color_t decision_stroke;
     color_t decision_text;
+    int decision_bold;
     color_t start_fill;
     color_t start_stroke;
     color_t start_text;
     float start_radius;
+    int start_bold;
     color_t end_fill;
     color_t end_stroke;
     color_t end_text;
     float end_radius;
+    int end_bold;
     color_t edge_color;
     color_t participant_fill;
     color_t participant_stroke;
     color_t participant_text;
+    int participant_bold;
     color_t message_color;
+    int message_bold;
 } style_defaults_t;
 
 typedef struct
@@ -511,22 +539,28 @@ static void init_style_defaults(style_defaults_t *defaults)
     defaults->action_fill = color_rgba(219, 234, 254, 255);
     defaults->action_stroke = color_rgba(37, 99, 235, 255);
     defaults->action_text = color_rgba(15, 23, 42, 255);
+    defaults->action_bold = 0;
     defaults->decision_fill = color_rgba(253, 230, 138, 255);
     defaults->decision_stroke = color_rgba(217, 119, 6, 255);
     defaults->decision_text = color_rgba(17, 24, 39, 255);
+    defaults->decision_bold = 0;
     defaults->start_fill = color_rgba(34, 197, 94, 255);
     defaults->start_stroke = color_rgba(22, 101, 52, 255);
     defaults->start_text = color_rgba(255, 255, 255, 255);
     defaults->start_radius = 10.0f;
+    defaults->start_bold = 0;
     defaults->end_fill = color_rgba(192, 132, 252, 255);
     defaults->end_stroke = color_rgba(124, 58, 237, 255);
     defaults->end_text = color_rgba(255, 255, 255, 255);
     defaults->end_radius = 10.0f;
+    defaults->end_bold = 0;
     defaults->edge_color = color_rgba(71, 85, 105, 255);
     defaults->participant_fill = color_rgba(219, 234, 254, 255);
     defaults->participant_stroke = color_rgba(37, 99, 235, 255);
     defaults->participant_text = color_rgba(15, 23, 42, 255);
+    defaults->participant_bold = 0;
     defaults->message_color = color_rgba(71, 85, 105, 255);
+    defaults->message_bold = 0;
 }
 
 static int looks_like_sectioned_text(const char *text)
@@ -654,12 +688,23 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
         return parse_color(value, defaults->action_stroke, &defaults->action_stroke);
     if(eq_ci(key, "action_text"))
         return parse_color(value, defaults->action_text, &defaults->action_text);
+    if(eq_ci(key, "action_bold"))
+    {
+        defaults->action_bold = parse_bool_value(value, defaults->action_bold);
+        return 1;
+    }
     if(eq_ci(key, "decision_fill"))
         return parse_color(value, defaults->decision_fill, &defaults->decision_fill);
     if(eq_ci(key, "decision_stroke"))
         return parse_color(value, defaults->decision_stroke, &defaults->decision_stroke);
     if(eq_ci(key, "decision_text"))
         return parse_color(value, defaults->decision_text, &defaults->decision_text);
+    if(eq_ci(key, "decision_bold"))
+    {
+        defaults->decision_bold =
+            parse_bool_value(value, defaults->decision_bold);
+        return 1;
+    }
     if(eq_ci(key, "start_fill"))
         return parse_color(value, defaults->start_fill, &defaults->start_fill);
     if(eq_ci(key, "start_stroke"))
@@ -669,6 +714,11 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
     if(eq_ci(key, "start_radius"))
     {
         defaults->start_radius = parse_option_value(value, defaults->start_radius);
+        return 1;
+    }
+    if(eq_ci(key, "start_bold"))
+    {
+        defaults->start_bold = parse_bool_value(value, defaults->start_bold);
         return 1;
     }
     if(eq_ci(key, "end_fill"))
@@ -682,6 +732,11 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
         defaults->end_radius = parse_option_value(value, defaults->end_radius);
         return 1;
     }
+    if(eq_ci(key, "end_bold"))
+    {
+        defaults->end_bold = parse_bool_value(value, defaults->end_bold);
+        return 1;
+    }
     if(eq_ci(key, "edge_color"))
         return parse_color(value, defaults->edge_color, &defaults->edge_color);
     if(eq_ci(key, "participant_fill"))
@@ -690,8 +745,19 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
         return parse_color(value, defaults->participant_stroke, &defaults->participant_stroke);
     if(eq_ci(key, "participant_text"))
         return parse_color(value, defaults->participant_text, &defaults->participant_text);
+    if(eq_ci(key, "participant_bold"))
+    {
+        defaults->participant_bold =
+            parse_bool_value(value, defaults->participant_bold);
+        return 1;
+    }
     if(eq_ci(key, "message_color"))
         return parse_color(value, defaults->message_color, &defaults->message_color);
+    if(eq_ci(key, "message_bold"))
+    {
+        defaults->message_bold = parse_bool_value(value, defaults->message_bold);
+        return 1;
+    }
     return 0;
 }
 
@@ -707,6 +773,7 @@ static void apply_node_defaults(node_t *node, const activity_node_input_t *input
         node->stroke =
             input->has_stroke ? input->stroke : defaults->action_stroke;
         node->text = input->has_text ? input->text : defaults->action_text;
+        node->bold = defaults->action_bold;
     }
     else if(node->type == NODE_DECISION)
     {
@@ -714,6 +781,7 @@ static void apply_node_defaults(node_t *node, const activity_node_input_t *input
         node->stroke =
             input->has_stroke ? input->stroke : defaults->decision_stroke;
         node->text = input->has_text ? input->text : defaults->decision_text;
+        node->bold = defaults->decision_bold;
     }
     else if(node->type == NODE_START)
     {
@@ -721,6 +789,7 @@ static void apply_node_defaults(node_t *node, const activity_node_input_t *input
         node->stroke =
             input->has_stroke ? input->stroke : defaults->start_stroke;
         node->text = input->has_text ? input->text : defaults->start_text;
+        node->bold = defaults->start_bold;
     }
     else
     {
@@ -728,6 +797,7 @@ static void apply_node_defaults(node_t *node, const activity_node_input_t *input
         node->stroke =
             input->has_stroke ? input->stroke : defaults->end_stroke;
         node->text = input->has_text ? input->text : defaults->end_text;
+        node->bold = defaults->end_bold;
     }
 }
 
@@ -805,6 +875,8 @@ static int parse_activity_sectioned(diagram_t *diagram, const char *text)
     diagram->edge_radius = 5.0f;
     diagram->start_radius = defaults.start_radius;
     diagram->end_radius = defaults.end_radius;
+    diagram->title_size = 18.0f;
+    diagram->title_bold = 1;
     memset(node_inputs, 0, sizeof(node_inputs));
     memset(edge_inputs, 0, sizeof(edge_inputs));
 
@@ -897,6 +969,10 @@ static int parse_activity_sectioned(diagram_t *diagram, const char *text)
             }
             else if(eq_ci(key, "scale"))
                 diagram->scale = parse_scale_value(value, 1.0f);
+            else if(eq_ci(key, "title_size"))
+                diagram->title_size = parse_option_value(value, 18.0f);
+            else if(eq_ci(key, "title_bold"))
+                diagram->title_bold = parse_bool_value(value, 1);
             else if(eq_ci(key, "box_radius"))
                 diagram->box_radius = parse_option_value(value, 8.0f);
             else if(eq_ci(key, "edge_radius"))
@@ -1053,6 +1129,8 @@ static int parse_sequence_sectioned(sequence_diagram_t *diagram, const char *tex
     diagram->box_radius = 8.0f;
     diagram->edge_radius = 0.0f;
     diagram->arrow_size = 12.0f;
+    diagram->title_size = 18.0f;
+    diagram->title_bold = 1;
     memset(participant_inputs, 0, sizeof(participant_inputs));
     memset(message_inputs, 0, sizeof(message_inputs));
 
@@ -1146,6 +1224,10 @@ static int parse_sequence_sectioned(sequence_diagram_t *diagram, const char *tex
                 parse_string_value(value, diagram->title, sizeof(diagram->title));
             else if(eq_ci(key, "scale"))
                 diagram->scale = parse_scale_value(value, 1.0f);
+            else if(eq_ci(key, "title_size"))
+                diagram->title_size = parse_option_value(value, 18.0f);
+            else if(eq_ci(key, "title_bold"))
+                diagram->title_bold = parse_bool_value(value, 1);
             else if(eq_ci(key, "box_radius"))
                 diagram->box_radius = parse_option_value(value, 8.0f);
             else if(eq_ci(key, "edge_radius"))
@@ -1259,6 +1341,7 @@ static int parse_sequence_sectioned(sequence_diagram_t *diagram, const char *tex
                                              : defaults.participant_stroke;
         p->text = participant_inputs[i].has_text ? participant_inputs[i].text
                                                  : defaults.participant_text;
+        p->bold = defaults.participant_bold;
     }
 
     diagram->message_count = message_input_count;
@@ -1275,6 +1358,7 @@ static int parse_sequence_sectioned(sequence_diagram_t *diagram, const char *tex
         snprintf(m->label, sizeof(m->label), "%s", message_inputs[i].label);
         m->color = message_inputs[i].has_color ? message_inputs[i].color
                                                : defaults.message_color;
+        m->bold = defaults.message_bold;
     }
 
     return 1;
@@ -1296,6 +1380,8 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
     diagram->edge_radius = 14.0f;
     diagram->start_radius = 10.0f;
     diagram->end_radius = 10.0f;
+    diagram->title_size = 18.0f;
+    diagram->title_bold = 1;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -1354,6 +1440,32 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             diagram->scale = parse_scale_value(fields[1], 1.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "title_size"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: title_size requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->title_size = parse_option_value(fields[1], 18.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "title_bold"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: title_bold requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->title_bold = parse_bool_value(fields[1], 1);
             continue;
         }
 
@@ -1542,6 +1654,8 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
     diagram->box_radius = 0.0f;
     diagram->edge_radius = 0.0f;
     diagram->arrow_size = 8.0f;
+    diagram->title_size = 18.0f;
+    diagram->title_bold = 1;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -1619,6 +1733,32 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             diagram->scale = parse_scale_value(fields[1], 1.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "title_size"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: title_size requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->title_size = parse_option_value(fields[1], 18.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "title_bold"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: title_bold requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->title_bold = parse_bool_value(fields[1], 1);
             continue;
         }
 
@@ -1777,6 +1917,11 @@ static int min_i32(int a, int b)
 static int text_height(void)
 {
     return (int)ceilf(UML_TEXT_SIZE);
+}
+
+static int text_height_for_size(float size)
+{
+    return (int)ceilf(size > 0.0f ? size : UML_TEXT_SIZE);
 }
 
 static char *read_binary_file(const char *path, size_t *out_size)
@@ -1973,7 +2118,7 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
             *out_w = level_used_width[i] + margin_x * 2;
     }
     if(diagram->title[0] != '\0')
-        total_height += (int)(34.0f * scale);
+        total_height += text_height_for_size(diagram->title_size) + (int)(16.0f * scale);
 
     for(i = 0; i <= max_level; ++i)
     {
@@ -2425,68 +2570,100 @@ static void draw_arrow_head_sized(image_t *img, int tip_x, int tip_y, int dx,
     draw_line(img, tip_x, tip_y, rx, ry, aa_stroke(UML_STROKE), color);
 }
 
-static void draw_text(image_t *img, int x, int y, const char *text, color_t color)
+static int text_width_styled(const char *text, float size)
 {
     if(ensure_font_loaded())
     {
         float scale = stbtt_ScaleForPixelHeight(&g_font.info,
-                                                UML_TEXT_SIZE * (float)UML_AA_SCALE);
-        float pen_x = (float)aa_px(x);
-        int baseline = aa_px(y) + (int)(g_font.ascent * scale);
+                                                size * (float)UML_AA_SCALE);
+        float width = 0.0f;
         const unsigned char *p = (const unsigned char *)text;
-
         while(*p != '\0')
         {
             int cp = (int)*p++;
             int advance;
             int lsb;
-            int x0;
-            int y0;
-            int x1;
-            int y1;
-            int glyph_w;
-            int glyph_h;
-
             stbtt_GetCodepointHMetrics(&g_font.info, cp, &advance, &lsb);
-            stbtt_GetCodepointBitmapBox(&g_font.info, cp, scale, scale,
-                                        &x0, &y0, &x1, &y1);
-            glyph_w = x1 - x0;
-            glyph_h = y1 - y0;
-            if(glyph_w > 0 && glyph_h > 0)
+            width += (float)advance * scale;
+            if(*p != '\0')
+                width += (float)stbtt_GetCodepointKernAdvance(&g_font.info, cp,
+                                                              (int)*p) *
+                         scale;
+        }
+        return (int)ceilf(width / (float)UML_AA_SCALE);
+    }
+    return (int)ceilf((float)stb_easy_font_width((char *)text) *
+                      (size / 11.0f));
+}
+
+static void draw_text_styled(image_t *img, int x, int y, const char *text,
+                             color_t color, float size, int bold)
+{
+    if(ensure_font_loaded())
+    {
+        float scale =
+            stbtt_ScaleForPixelHeight(&g_font.info, size * (float)UML_AA_SCALE);
+        int pass_count = bold ? 2 : 1;
+        int pass;
+        for(pass = 0; pass < pass_count; ++pass)
+        {
+            float pen_x = (float)aa_px(x) + (float)pass;
+            int baseline = aa_px(y) + (int)(g_font.ascent * scale);
+            const unsigned char *p = (const unsigned char *)text;
+
+            while(*p != '\0')
             {
-                unsigned char *bitmap =
-                    (unsigned char *)calloc((size_t)glyph_w * (size_t)glyph_h, 1u);
-                int gy;
-                if(bitmap)
+                int cp = (int)*p++;
+                int advance;
+                int lsb;
+                int x0;
+                int y0;
+                int x1;
+                int y1;
+                int glyph_w;
+                int glyph_h;
+
+                stbtt_GetCodepointHMetrics(&g_font.info, cp, &advance, &lsb);
+                stbtt_GetCodepointBitmapBox(&g_font.info, cp, scale, scale,
+                                            &x0, &y0, &x1, &y1);
+                glyph_w = x1 - x0;
+                glyph_h = y1 - y0;
+                if(glyph_w > 0 && glyph_h > 0)
                 {
-                    stbtt_MakeCodepointBitmap(&g_font.info, bitmap, glyph_w,
-                                              glyph_h, glyph_w, scale, scale,
-                                              cp);
-                    for(gy = 0; gy < glyph_h; ++gy)
+                    unsigned char *bitmap = (unsigned char *)calloc(
+                        (size_t)glyph_w * (size_t)glyph_h, 1u);
+                    int gy;
+                    if(bitmap)
                     {
-                        int gx;
-                        for(gx = 0; gx < glyph_w; ++gx)
+                        stbtt_MakeCodepointBitmap(&g_font.info, bitmap, glyph_w,
+                                                  glyph_h, glyph_w, scale,
+                                                  scale, cp);
+                        for(gy = 0; gy < glyph_h; ++gy)
                         {
-                            unsigned char alpha = bitmap[gy * glyph_w + gx];
-                            if(alpha > 0)
+                            int gx;
+                            for(gx = 0; gx < glyph_w; ++gx)
                             {
-                                color_t shaded = color;
-                                shaded.a = (color.a * alpha) / 255;
-                                set_pixel(img, (int)pen_x + x0 + gx,
-                                          baseline + y0 + gy, shaded);
+                                unsigned char alpha = bitmap[gy * glyph_w + gx];
+                                if(alpha > 0)
+                                {
+                                    color_t shaded = color;
+                                    shaded.a = (color.a * alpha) / 255;
+                                    set_pixel(img, (int)pen_x + x0 + gx,
+                                              baseline + y0 + gy, shaded);
+                                }
                             }
                         }
+                        free(bitmap);
                     }
-                    free(bitmap);
                 }
-            }
 
-            pen_x += (float)advance * scale;
-            if(*p != '\0')
-            {
-                int kern = stbtt_GetCodepointKernAdvance(&g_font.info, cp,
-                                                         (int)*p);
-                pen_x += (float)kern * scale;
+                pen_x += (float)advance * scale;
+                if(*p != '\0')
+                {
+                    int kern = stbtt_GetCodepointKernAdvance(&g_font.info, cp,
+                                                             (int)*p);
+                    pen_x += (float)kern * scale;
+                }
             }
         }
         return;
@@ -2505,6 +2682,9 @@ static void draw_text(image_t *img, int x, int y, const char *text, color_t colo
         unsigned char rgba[4];
         int quads;
         int i;
+        int pass;
+        int pass_count = bold ? 2 : 1;
+        float scale = (float)UML_AA_SCALE * (size / 11.0f);
 
         rgba[0] = (unsigned char)color.r;
         rgba[1] = (unsigned char)color.g;
@@ -2512,71 +2692,59 @@ static void draw_text(image_t *img, int x, int y, const char *text, color_t colo
         rgba[3] = (unsigned char)color.a;
         quads = stb_easy_font_print(0.0f, 0.0f, (char *)text, rgba,
                                     buffer, (int)sizeof(buffer));
-        for(i = 0; i < quads; ++i)
+        for(pass = 0; pass < pass_count; ++pass)
         {
-            easy_font_vertex_t *v = (easy_font_vertex_t *)buffer + i * 4;
-            float scale = (float)UML_AA_SCALE * 1.25f;
-            float min_xf = (float)aa_px(x) + v[0].x * scale;
-            float max_xf = (float)aa_px(x) + v[0].x * scale;
-            float min_yf = (float)aa_px(y) + v[0].y * scale;
-            float max_yf = (float)aa_px(y) + v[0].y * scale;
-            int j;
-            int min_x;
-            int max_x;
-            int min_y;
-            int max_y;
-            for(j = 1; j < 4; ++j)
+            for(i = 0; i < quads; ++i)
             {
-                float sx = (float)aa_px(x) + v[j].x * scale;
-                float sy = (float)aa_px(y) + v[j].y * scale;
-                if(sx < min_xf)
-                    min_xf = sx;
-                if(sx > max_xf)
-                    max_xf = sx;
-                if(sy < min_yf)
-                    min_yf = sy;
-                if(sy > max_yf)
-                    max_yf = sy;
+                easy_font_vertex_t *v = (easy_font_vertex_t *)buffer + i * 4;
+                float min_xf = (float)aa_px(x) + v[0].x * scale + (float)pass;
+                float max_xf = (float)aa_px(x) + v[0].x * scale + (float)pass;
+                float min_yf = (float)aa_px(y) + v[0].y * scale;
+                float max_yf = (float)aa_px(y) + v[0].y * scale;
+                int j;
+                int min_x;
+                int max_x;
+                int min_y;
+                int max_y;
+                for(j = 1; j < 4; ++j)
+                {
+                    float sx =
+                        (float)aa_px(x) + v[j].x * scale + (float)pass;
+                    float sy = (float)aa_px(y) + v[j].y * scale;
+                    if(sx < min_xf)
+                        min_xf = sx;
+                    if(sx > max_xf)
+                        max_xf = sx;
+                    if(sy < min_yf)
+                        min_yf = sy;
+                    if(sy > max_yf)
+                        max_yf = sy;
+                }
+                min_x = (int)floorf(min_xf);
+                max_x = (int)ceilf(max_xf);
+                min_y = (int)floorf(min_yf);
+                max_y = (int)ceilf(max_yf);
+                fill_rect(img, min_x, min_y, max_x, max_y, color);
             }
-            min_x = (int)floorf(min_xf);
-            max_x = (int)ceilf(max_xf);
-            min_y = (int)floorf(min_yf);
-            max_y = (int)ceilf(max_yf);
-            fill_rect(img, min_x, min_y, max_x, max_y, color);
         }
     }
 }
 
 static int text_width(const char *text)
 {
-    if(ensure_font_loaded())
-    {
-        float scale = stbtt_ScaleForPixelHeight(&g_font.info,
-                                                UML_TEXT_SIZE * (float)UML_AA_SCALE);
-        float width = 0.0f;
-        const unsigned char *p = (const unsigned char *)text;
-        while(*p != '\0')
-        {
-            int cp = (int)*p++;
-            int advance;
-            int lsb;
-            stbtt_GetCodepointHMetrics(&g_font.info, cp, &advance, &lsb);
-            width += (float)advance * scale;
-            if(*p != '\0')
-                width += (float)stbtt_GetCodepointKernAdvance(&g_font.info, cp,
-                                                              (int)*p) *
-                         scale;
-        }
-        return (int)ceilf(width / (float)UML_AA_SCALE);
-    }
-    return (int)ceilf((float)stb_easy_font_width((char *)text) * 1.25f);
+    return text_width_styled(text, UML_TEXT_SIZE);
 }
 
-static void draw_title(image_t *img, const char *title)
+static void draw_text(image_t *img, int x, int y, const char *text, color_t color)
+{
+    draw_text_styled(img, x, y, text, color, UML_TEXT_SIZE, 0);
+}
+
+static void draw_title(image_t *img, const char *title, float size, int bold)
 {
     color_t title_color = color_rgba(15, 23, 42, 255);
-    int x = (img->width / UML_AA_SCALE) / 2 - text_width(title) / 2;
-    draw_text(img, x, 26, title, title_color);
+    int x = (img->width / UML_AA_SCALE) / 2 - text_width_styled(title, size) / 2;
+    draw_text_styled(img, x, 26, title, title_color, size, bold);
 }
 
 static void draw_soft_box(image_t *img, int x, int y, int w, int h, int radius,
@@ -2647,7 +2815,8 @@ static void draw_node(image_t *img, const diagram_t *diagram, const node_t *node
     }
 
     if(node->label[0] != '\0')
-        draw_text(img, label_x, label_y, node->label, text);
+        draw_text_styled(img, label_x, label_y, node->label, text,
+                         UML_TEXT_SIZE, node->bold);
 }
 
 static void draw_arc_segment(image_t *img, float cx, float cy, float radius,
@@ -2975,11 +3144,13 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
     *out_h = top + (int)(52.0f * scale) + diagram->message_count * message_gap +
              (int)(52.0f * scale);
     if(diagram->title[0] != '\0')
-        *out_h += (int)(24.0f * scale);
+        *out_h += text_height_for_size(diagram->title_size) + (int)(10.0f * scale);
 
     for(i = 0; i < diagram->message_count; ++i)
         diagram->messages[i].y = top + (int)(38.0f * scale) + i * message_gap +
-                                 (diagram->title[0] != '\0' ? (int)(24.0f * scale) : 0);
+                                 (diagram->title[0] != '\0'
+                                      ? text_height_for_size(diagram->title_size) + (int)(10.0f * scale)
+                                      : 0);
 }
 
 static void draw_vertical_line(image_t *img, int x, int y0, int y1,
@@ -2997,8 +3168,8 @@ static void draw_participant(image_t *img, const participant_t *p, int top_y,
     int label_x = p->x - text_width(p->label) / 2;
     draw_soft_box(img, x, top_y, p->width, box_h, box_radius, p->fill,
                   p->stroke);
-    draw_text(img, label_x, top_y + (box_h - text_height()) / 2, p->label,
-              p->text);
+    draw_text_styled(img, label_x, top_y + (box_h - text_height()) / 2,
+                     p->label, p->text, UML_TEXT_SIZE, p->bold);
     draw_vertical_line(img, p->x, top_y + box_h, bottom_y, p->stroke);
 }
 
@@ -3034,13 +3205,15 @@ static void draw_sequence_message(image_t *img,
         draw_arrow_head_sized(img, aa_px(from->x), aa_px(y2),
                               aa_px(from->x - right), 0,
                               diagram->arrow_size, m->color);
-        draw_edge_label(img, from->x + 12, m->y - 26, m->label, m->color);
+        draw_text_styled(img, from->x + 12, m->y - 26, m->label, m->color,
+                         UML_TEXT_SIZE, m->bold);
         return;
     }
 
     draw_sequence_arrow(img, start_x, end_x, m->y, diagram->arrow_size,
                         m->color);
-    draw_edge_label(img, label_x, m->y - 26, m->label, m->color);
+    draw_text_styled(img, label_x, m->y - 26, m->label, m->color,
+                     UML_TEXT_SIZE, m->bold);
 }
 
 static int render_sequence_file(const char *input_path, const char *output_path,
@@ -3071,8 +3244,10 @@ static int render_sequence_file(const char *input_path, const char *output_path,
 
     clear_image(&image, color_rgba(248, 250, 252, 255));
     if(diagram.title[0] != '\0')
-        draw_title(&image, diagram.title);
-    top_y = 40 + (diagram.title[0] != '\0' ? 24 : 0);
+        draw_title(&image, diagram.title, diagram.title_size, diagram.title_bold);
+    top_y = 40 + (diagram.title[0] != '\0'
+                      ? text_height_for_size(diagram.title_size) + 10
+                      : 0);
 
     for(i = 0; i < diagram.participant_count; ++i)
         draw_participant(&image, &diagram.participants[i], top_y,
@@ -3181,7 +3356,7 @@ int uml_render_file(const char *input_path, const char *output_path)
 
     clear_image(&image, color_rgba(248, 250, 252, 255));
     if(diagram.title[0] != '\0')
-        draw_title(&image, diagram.title);
+        draw_title(&image, diagram.title, diagram.title_size, diagram.title_bold);
 
     for(i = 0; i < diagram.edge_count; ++i)
         draw_edge(&image, &diagram, &diagram.edges[i]);

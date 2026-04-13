@@ -1,6 +1,8 @@
 [settings]
 diagram = "sequence"
 title = "HTTPS authentication sequence"
+title_size = 22
+title_bold = true
 scale = 1.0
 box_radius = 8
 arrow_size = 12

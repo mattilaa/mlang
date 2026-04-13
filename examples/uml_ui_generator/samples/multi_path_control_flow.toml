@@ -1,6 +1,8 @@
 [settings]
 diagram = "activity"
 title = "Multi-path release workflow"
+title_size = 22
+title_bold = true
 scale = 1.0
 box_radius = 8
 edge_radius = 5

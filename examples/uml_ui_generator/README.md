@@ -25,6 +25,8 @@ Activity example:
 [settings]
 diagram = "activity"
 title = "Basic order approval flow"
+title_size = 22
+title_bold = true
 scale = 1.0
 box_radius = 8
 edge_radius = 5
@@ -64,6 +66,8 @@ Sequence example:
 [settings]
 diagram = "sequence"
 title = "HTTPS authentication sequence"
+title_size = 22
+title_bold = true
 scale = 1.0
 box_radius = 8
 arrow_size = 12
@@ -94,6 +98,8 @@ color = "#2563eb"
 
 - `diagram = "activity"` or `diagram = "sequence"`
 - `title = "Text"`
+- `title_size = 22`
+- `title_bold = true`
 - `scale = 1.0`
 - `box_radius = 8`
 - `edge_radius = 5` for activity/control-flow diagrams
@@ -104,17 +110,23 @@ color = "#2563eb"
 Supported activity defaults:
 
 - `action_fill`, `action_stroke`, `action_text`
+- `action_bold`
 - `decision_fill`, `decision_stroke`, `decision_text`
+- `decision_bold`
 - `start_fill`, `start_stroke`, `start_text`
 - `start_radius`
+- `start_bold`
 - `end_fill`, `end_stroke`, `end_text`
 - `end_radius`
+- `end_bold`
 - `edge_color`
 
 Supported sequence defaults:
 
 - `participant_fill`, `participant_stroke`, `participant_text`
+- `participant_bold`
 - `message_color`
+- `message_bold`
 
 ## Item Tables
 
