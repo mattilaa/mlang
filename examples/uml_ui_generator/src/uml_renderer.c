@@ -14,6 +14,7 @@
 
 static char g_last_error[512];
 static const int UML_STROKE = 1;
+static int text_width(const char *text);
 
 typedef enum
 {
@@ -762,10 +763,15 @@ static void compute_node_sizes(diagram_t *diagram)
 {
     int i;
     float scale = diagram->scale;
+    int text_h = 8;
+    int action_pad_x = (int)(18.0f * scale);
+    int action_pad_y = (int)(12.0f * scale);
+    int decision_pad_x = (int)(22.0f * scale);
+    int decision_pad_y = (int)(18.0f * scale);
     for(i = 0; i < diagram->node_count; ++i)
     {
         node_t *node = &diagram->nodes[i];
-        int label_len = (int)strlen(node->label);
+        int label_w = text_width(node->label);
         if(node->type == NODE_START || node->type == NODE_END)
         {
             node->width = (int)(62.0f * scale);
@@ -774,16 +780,18 @@ static void compute_node_sizes(diagram_t *diagram)
         else if(node->type == NODE_DECISION)
         {
             node->width = max_i32((int)(140.0f * scale),
-                                  (int)((72.0f + label_len * 8.0f) * scale));
+                                  label_w + decision_pad_x * 2);
             if((node->width & 1) != 0)
                 node->width++;
-            node->height = (int)(92.0f * scale);
+            node->height = max_i32((int)(60.0f * scale),
+                                   text_h + decision_pad_y * 2);
         }
         else
         {
-            node->width = max_i32((int)(170.0f * scale),
-                                  (int)((76.0f + label_len * 8.0f) * scale));
-            node->height = (int)(74.0f * scale);
+            node->width = max_i32((int)(118.0f * scale),
+                                  label_w + action_pad_x * 2);
+            node->height = max_i32((int)(34.0f * scale),
+                                   text_h + action_pad_y * 2);
         }
     }
 }
@@ -1252,6 +1260,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         int tx = to->x;
         int ty = to->y - to->height / 2;
         int mid_y = sy + (ty - sy) / 2;
+        int label_y = min_i32(mid_y - 28, ty - 22);
         xs[count] = sx;
         ys[count++] = sy;
         xs[count] = sx;
@@ -1262,7 +1271,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         ys[count++] = ty;
         draw_polyline(img, xs, ys, count, edge->color);
         draw_edge_label(img, (sx + tx) / 2 - text_width(edge->label) / 2,
-                        mid_y - 28, edge->label, edge->color);
+                        label_y, edge->label, edge->color);
         return;
     }
 
@@ -1275,6 +1284,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         int bend_x = dir > 0 ? max_i32(from->x + from->width / 2 + 40, to->x + to->width / 2 + 40)
                              : min_i32(from->x - from->width / 2 - 40, to->x - to->width / 2 - 40);
         int top_y = min_i32(from->y - from->height / 2 - 28, to->y - to->height / 2 - 28);
+        int label_y = top_y - 20;
         xs[count] = sx;
         ys[count++] = sy;
         xs[count] = bend_x;
@@ -1286,7 +1296,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         xs[count] = tx;
         ys[count++] = ty;
         draw_polyline(img, xs, ys, count, edge->color);
-        draw_edge_label(img, bend_x - text_width(edge->label) / 2, top_y - 28,
+        draw_edge_label(img, bend_x - text_width(edge->label) / 2, label_y,
                         edge->label, edge->color);
     }
 }
