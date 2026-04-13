@@ -1107,6 +1107,95 @@ static void compute_layout(diagram_t *diagram, int *out_w, int *out_h)
         node->x = x_cursor + node->width / 2;
         node->y = level_y[node->level];
     }
+
+    {
+        int min_extent = *out_w;
+        int max_extent = 0;
+        int expand_left = 0;
+        int expand_right = 0;
+
+        for(i = 0; i < diagram->node_count; ++i)
+        {
+            const node_t *node = &diagram->nodes[i];
+            int left = node->x - node->width / 2 - margin_x / 2;
+            int right = node->x + node->width / 2 + margin_x / 2;
+            int label_w = text_width(node->label);
+            int label_left = node->x - label_w / 2 - 12;
+            int label_right = node->x + label_w / 2 + 12;
+            if(left < min_extent)
+                min_extent = left;
+            if(label_left < min_extent)
+                min_extent = label_left;
+            if(right > max_extent)
+                max_extent = right;
+            if(label_right > max_extent)
+                max_extent = label_right;
+        }
+
+        for(i = 0; i < diagram->edge_count; ++i)
+        {
+            const edge_t *edge = &diagram->edges[i];
+            const node_t *from = &diagram->nodes[edge->from];
+            const node_t *to = &diagram->nodes[edge->to];
+            int label_w = text_width(edge->label);
+
+            if(edge->label[0] != '\0')
+            {
+                int label_left;
+                int label_right;
+                if(to->level > from->level && from->type == NODE_DECISION &&
+                   to->x != from->x)
+                {
+                    int dir = to->x > from->x ? 1 : -1;
+                    int exit_x = from->x + dir * (from->width / 2);
+                    int branch_x = exit_x + dir * max_i32(18, from->width / 6);
+                    int label_x = branch_x - label_w / 2;
+                    if(dir > 0)
+                        label_x -= max_i32(8, label_w / 4);
+                    else
+                        label_x += max_i32(8, label_w / 4);
+                    label_left = label_x - 8;
+                    label_right = label_x + label_w + 8;
+                }
+                else
+                {
+                    int center_x = (from->x + to->x) / 2;
+                    label_left = center_x - label_w / 2 - 8;
+                    label_right = center_x + label_w / 2 + 8;
+                }
+                if(label_left < min_extent)
+                    min_extent = label_left;
+                if(label_right > max_extent)
+                    max_extent = label_right;
+            }
+
+            if(to->level <= from->level)
+            {
+                int dir = to->x >= from->x ? 1 : -1;
+                int bend_x = dir > 0
+                                 ? max_i32(from->x + from->width / 2 + 40,
+                                           to->x + to->width / 2 + 40)
+                                 : min_i32(from->x - from->width / 2 - 40,
+                                           to->x - to->width / 2 - 40);
+                if(bend_x - margin_x / 2 < min_extent)
+                    min_extent = bend_x - margin_x / 2;
+                if(bend_x + margin_x / 2 > max_extent)
+                    max_extent = bend_x + margin_x / 2;
+            }
+        }
+
+        if(min_extent < 0)
+            expand_left = -min_extent;
+        if(max_extent > *out_w)
+            expand_right = max_extent - *out_w;
+
+        if(expand_left > 0 || expand_right > 0)
+        {
+            for(i = 0; i < diagram->node_count; ++i)
+                diagram->nodes[i].x += expand_left;
+            *out_w += expand_left + expand_right;
+        }
+    }
 }
 
 static int clamp_int(int v, int lo, int hi)
@@ -1780,8 +1869,8 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
             int dir = tx > from->x ? 1 : -1;
             int exit_x = from->x + dir * (from->width / 2);
             int exit_y = from->y;
-            int branch_x = exit_x + dir * max_i32(18, from->width / 6);
-            int mid_y = exit_y + max_i32(18, (ty - exit_y) / 2);
+            int branch_x = exit_x + dir * max_i32(12, from->width / 8);
+            int mid_y = ty - max_i32(16, radius * 3);
 
             xs[count] = exit_x;
             ys[count++] = exit_y;
@@ -1795,12 +1884,13 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
             ys[count++] = ty;
 
             draw_polyline(img, xs, ys, count, radius, edge_color);
-            label_x = branch_x - text_width(edge->label) / 2;
+            label_x = exit_x + dir * max_i32(8, text_width(edge->label) / 3) -
+                      text_width(edge->label) / 2;
             if(dir > 0)
-                label_x -= max_i32(8, text_width(edge->label) / 4);
+                label_x -= 4;
             else
-                label_x += max_i32(8, text_width(edge->label) / 4);
-            label_y = exit_y - text_height() - 10;
+                label_x += 4;
+            label_y = exit_y - text_height() - 8;
             draw_edge_label(img, label_x, label_y, edge->label, edge_color);
             return;
         }
