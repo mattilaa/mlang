@@ -1,0 +1,20 @@
+diagram|sequence
+title|HTTPS authentication sequence
+
+# participant|id|label|fill|stroke|text
+participant|browser|Browser|#dbeafe|#2563eb|#0f172a
+participant|gateway|HTTPS API Gateway|#fde68a|#d97706|#111827
+participant|auth|Auth Service|#ddd6fe|#7c3aed|#111827
+participant|session|Session Store|#bbf7d0|#16a34a|#052e16
+
+# message|from|to|label|color
+message|browser|gateway|POST /login over TLS|#2563eb
+message|gateway|auth|Validate credentials|#d97706
+message|auth|session|Create authenticated session|#16a34a
+message|session|auth|Session id + expiry|#16a34a
+message|auth|gateway|JWT + session cookie|#7c3aed
+message|gateway|browser|200 OK Set-Cookie auth_sid|#2563eb
+message|browser|gateway|GET /profile with cookie|#2563eb
+message|gateway|session|Resolve session from cookie|#16a34a
+message|session|gateway|Session valid for user|#16a34a
+message|gateway|browser|200 OK profile payload|#2563eb

@@ -22,6 +22,12 @@ typedef enum
     NODE_END = 3
 } node_type_t;
 
+typedef enum
+{
+    DIAGRAM_ACTIVITY = 0,
+    DIAGRAM_SEQUENCE = 1
+} diagram_kind_t;
+
 typedef struct
 {
     int r;
@@ -57,6 +63,7 @@ typedef struct
 typedef struct
 {
     char title[160];
+    diagram_kind_t kind;
     node_t nodes[128];
     int node_count;
     edge_t edges[256];
@@ -65,10 +72,41 @@ typedef struct
 
 typedef struct
 {
+    char id[64];
+    char label[160];
+    color_t fill;
+    color_t stroke;
+    color_t text;
+    int x;
+    int width;
+} participant_t;
+
+typedef struct
+{
+    int from;
+    int to;
+    char label[160];
+    color_t color;
+    int y;
+} message_t;
+
+typedef struct
+{
+    char title[160];
+    participant_t participants[24];
+    int participant_count;
+    message_t messages[256];
+    int message_count;
+} sequence_diagram_t;
+
+typedef struct
+{
     int width;
     int height;
     unsigned char *pixels;
 } image_t;
+
+static int ensure_parent_dirs(const char *path);
 
 static void set_errorf(const char *fmt, ...)
 {
@@ -260,12 +298,39 @@ static int parse_node_type(const char *text, node_type_t *out)
     return 0;
 }
 
+static int parse_diagram_kind(const char *text, diagram_kind_t *out)
+{
+    if(eq_ci(text, "activity") || eq_ci(text, "flow"))
+    {
+        *out = DIAGRAM_ACTIVITY;
+        return 1;
+    }
+    if(eq_ci(text, "sequence"))
+    {
+        *out = DIAGRAM_SEQUENCE;
+        return 1;
+    }
+    return 0;
+}
+
 static int find_node_index(const diagram_t *diagram, const char *id)
 {
     int i;
     for(i = 0; i < diagram->node_count; ++i)
     {
         if(strcmp(diagram->nodes[i].id, id) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static int find_participant_index(const sequence_diagram_t *diagram,
+                                  const char *id)
+{
+    int i;
+    for(i = 0; i < diagram->participant_count; ++i)
+    {
+        if(strcmp(diagram->participants[i].id, id) == 0)
             return i;
     }
     return -1;
@@ -278,6 +343,7 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
     int line_no = 0;
 
     memset(diagram, 0, sizeof(*diagram));
+    diagram->kind = DIAGRAM_ACTIVITY;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -326,8 +392,29 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
             continue;
         }
 
+        if(eq_ci(fields[0], "diagram"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: diagram requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            if(!parse_diagram_kind(fields[1], &diagram->kind))
+            {
+                free(owned);
+                set_errorf("line %d: unknown diagram type '%s'", line_no,
+                           fields[1]);
+                return 0;
+            }
+            continue;
+        }
+
         if(eq_ci(fields[0], "node"))
         {
+            if(diagram->kind == DIAGRAM_SEQUENCE)
+                continue;
             node_t *node;
             node_type_t type;
 
@@ -379,6 +466,8 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
 
         if(eq_ci(fields[0], "edge"))
         {
+            if(diagram->kind == DIAGRAM_SEQUENCE)
+                continue;
             edge_t *edge;
 
             if(count < 5)
@@ -418,15 +507,198 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
             continue;
         }
 
+        if(diagram->kind == DIAGRAM_SEQUENCE &&
+           (eq_ci(fields[0], "participant") || eq_ci(fields[0], "message")))
+        {
+            continue;
+        }
+
         free(owned);
         set_errorf("line %d: unknown record type '%s'", line_no, fields[0]);
         return 0;
     }
 
     free(owned);
-    if(diagram->node_count == 0)
+    if(diagram->kind == DIAGRAM_ACTIVITY && diagram->node_count == 0)
     {
         set_errorf("diagram contains no nodes");
+        return 0;
+    }
+    return 1;
+}
+
+static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
+{
+    char *owned = NULL;
+    char *cursor;
+    int line_no = 0;
+
+    memset(diagram, 0, sizeof(*diagram));
+    owned = (char *)malloc(strlen(text) + 1);
+    if(!owned)
+    {
+        set_errorf("out of memory");
+        return 0;
+    }
+    strcpy(owned, text);
+
+    cursor = owned;
+    while(*cursor != '\0')
+    {
+        char *line = cursor;
+        char *newline = strchr(cursor, '\n');
+        char *fields[8];
+        int count;
+
+        line_no++;
+        if(newline)
+        {
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        else
+        {
+            cursor += strlen(cursor);
+        }
+
+        trim_in_place(line);
+        if(line[0] == '\0' || line[0] == '#')
+            continue;
+
+        count = split_fields(line, fields, 8);
+        if(count <= 0)
+            continue;
+
+        if(eq_ci(fields[0], "diagram"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: diagram requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            if(!eq_ci(fields[1], "sequence"))
+            {
+                free(owned);
+                set_errorf("line %d: sequence input requires diagram|sequence",
+                           line_no);
+                return 0;
+            }
+            continue;
+        }
+
+        if(eq_ci(fields[0], "title"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: title requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            snprintf(diagram->title, sizeof(diagram->title), "%s", fields[1]);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "participant"))
+        {
+            participant_t *p;
+            if(count < 6)
+            {
+                free(owned);
+                set_errorf("line %d: participant format is participant|id|label|fill|stroke|text",
+                           line_no);
+                return 0;
+            }
+            if(diagram->participant_count >=
+               (int)(sizeof(diagram->participants) / sizeof(diagram->participants[0])))
+            {
+                free(owned);
+                set_errorf("too many participants");
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            trim_in_place(fields[2]);
+            trim_in_place(fields[3]);
+            trim_in_place(fields[4]);
+            trim_in_place(fields[5]);
+            if(find_participant_index(diagram, fields[1]) >= 0)
+            {
+                free(owned);
+                set_errorf("line %d: duplicate participant id '%s'", line_no,
+                           fields[1]);
+                return 0;
+            }
+            p = &diagram->participants[diagram->participant_count];
+            memset(p, 0, sizeof(*p));
+            snprintf(p->id, sizeof(p->id), "%s", fields[1]);
+            snprintf(p->label, sizeof(p->label), "%s", fields[2]);
+            if(!parse_color(fields[3], color_rgba(219, 234, 254, 255), &p->fill) ||
+               !parse_color(fields[4], color_rgba(37, 99, 235, 255), &p->stroke) ||
+               !parse_color(fields[5], color_rgba(15, 23, 42, 255), &p->text))
+            {
+                free(owned);
+                set_errorf("line %d: invalid participant color field", line_no);
+                return 0;
+            }
+            diagram->participant_count++;
+            continue;
+        }
+
+        if(eq_ci(fields[0], "message"))
+        {
+            message_t *m;
+            if(count < 5)
+            {
+                free(owned);
+                set_errorf("line %d: message format is message|from|to|label|color",
+                           line_no);
+                return 0;
+            }
+            if(diagram->message_count >=
+               (int)(sizeof(diagram->messages) / sizeof(diagram->messages[0])))
+            {
+                free(owned);
+                set_errorf("too many messages");
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            trim_in_place(fields[2]);
+            trim_in_place(fields[3]);
+            trim_in_place(fields[4]);
+            m = &diagram->messages[diagram->message_count];
+            memset(m, 0, sizeof(*m));
+            m->from = find_participant_index(diagram, fields[1]);
+            m->to = find_participant_index(diagram, fields[2]);
+            if(m->from < 0 || m->to < 0)
+            {
+                free(owned);
+                set_errorf("line %d: message references unknown participant",
+                           line_no);
+                return 0;
+            }
+            snprintf(m->label, sizeof(m->label), "%s", fields[3]);
+            if(!parse_color(fields[4], color_rgba(71, 85, 105, 255), &m->color))
+            {
+                free(owned);
+                set_errorf("line %d: invalid message color", line_no);
+                return 0;
+            }
+            diagram->message_count++;
+            continue;
+        }
+
+        free(owned);
+        set_errorf("line %d: unknown sequence record type '%s'", line_no,
+                   fields[0]);
+        return 0;
+    }
+
+    free(owned);
+    if(diagram->participant_count == 0)
+    {
+        set_errorf("sequence diagram contains no participants");
         return 0;
     }
     return 1;
@@ -724,14 +996,13 @@ static void stroke_diamond(image_t *img, int cx, int cy, int w, int h, int thick
 
 static void draw_line(image_t *img, int x0, int y0, int x1, int y1, int thickness, color_t color)
 {
-    int dx = abs(x1 - x0);
-    int sx = x0 < x1 ? 1 : -1;
-    int dy = -abs(y1 - y0);
-    int sy = y0 < y1 ? 1 : -1;
-    int err = dx + dy;
+    int dx = x1 - x0;
+    int dy = y1 - y0;
+    int steps = max_i32(abs(dx), abs(dy));
     int half = thickness / 2;
+    int step;
 
-    for(;;)
+    if(steps == 0)
     {
         int ox;
         int oy;
@@ -740,17 +1011,19 @@ static void draw_line(image_t *img, int x0, int y0, int x1, int y1, int thicknes
             for(ox = -half; ox <= half; ++ox)
                 set_pixel(img, x0 + ox, y0 + oy, color);
         }
-        if(x0 == x1 && y0 == y1)
-            break;
-        if(2 * err >= dy)
+        return;
+    }
+
+    for(step = 0; step <= steps; ++step)
+    {
+        int px = x0 + (dx * step) / steps;
+        int py = y0 + (dy * step) / steps;
+        int ox;
+        int oy;
+        for(oy = -half; oy <= half; ++oy)
         {
-            err += dy;
-            x0 += sx;
-        }
-        if(2 * err <= dx)
-        {
-            err += dx;
-            y0 += sy;
+            for(ox = -half; ox <= half; ++ox)
+                set_pixel(img, px + ox, py + oy, color);
         }
     }
 }
@@ -959,6 +1232,147 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
     }
 }
 
+static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
+                                    int *out_h)
+{
+    int i;
+    int top = 104;
+    int participant_gap = 150;
+    int margin_x = 70;
+    int message_gap = 86;
+
+    for(i = 0; i < diagram->participant_count; ++i)
+    {
+        participant_t *p = &diagram->participants[i];
+        p->width = max_i32(120, text_width(p->label) + 28);
+        p->x = margin_x + p->width / 2 + i * participant_gap;
+    }
+
+    *out_w = margin_x * 2;
+    for(i = 0; i < diagram->participant_count; ++i)
+    {
+        int right = diagram->participants[i].x + diagram->participants[i].width / 2;
+        if(right + margin_x > *out_w)
+            *out_w = right + margin_x;
+    }
+
+    *out_h = top + 70 + diagram->message_count * message_gap + 90;
+    if(diagram->title[0] != '\0')
+        *out_h += 40;
+
+    for(i = 0; i < diagram->message_count; ++i)
+        diagram->messages[i].y = top + 58 + i * message_gap + (diagram->title[0] != '\0' ? 40 : 0);
+}
+
+static void draw_dashed_vertical(image_t *img, int x, int y0, int y1,
+                                 color_t color)
+{
+    int y = y0;
+    while(y < y1)
+    {
+        int seg_y1 = y + 10;
+        if(seg_y1 > y1)
+            seg_y1 = y1;
+        draw_line(img, x, y, x, seg_y1, 2, color);
+        y += 18;
+    }
+}
+
+static void draw_participant(image_t *img, const participant_t *p, int top_y,
+                             int bottom_y)
+{
+    int x = p->x - p->width / 2;
+    int label_x = p->x - text_width(p->label) / 2;
+    fill_rect(img, x, top_y, x + p->width, top_y + 34, p->fill);
+    fill_rect(img, x, top_y, x + p->width, top_y + 2, p->stroke);
+    fill_rect(img, x, top_y + 32, x + p->width, top_y + 34, p->stroke);
+    fill_rect(img, x, top_y, x + 2, top_y + 34, p->stroke);
+    fill_rect(img, x + p->width - 2, top_y, x + p->width, top_y + 34,
+              p->stroke);
+    draw_text(img, label_x, top_y + 10, p->label, p->text);
+    draw_dashed_vertical(img, p->x, top_y + 34, bottom_y, p->stroke);
+}
+
+static void draw_sequence_arrow(image_t *img, int x0, int x1, int y,
+                                color_t color)
+{
+    draw_line(img, x0, y, x1, y, 2, color);
+    draw_arrow_head(img, x1, y, x1 - x0, 0, color);
+}
+
+static void draw_sequence_message(image_t *img,
+                                  const sequence_diagram_t *diagram,
+                                  const message_t *m)
+{
+    const participant_t *from = &diagram->participants[m->from];
+    const participant_t *to = &diagram->participants[m->to];
+    int dir = to->x >= from->x ? 1 : -1;
+    int start_x = from->x + dir * (from->width / 2);
+    int end_x = to->x - dir * (to->width / 2);
+    int label_x = min_i32(start_x, end_x) + (abs(end_x - start_x) - text_width(m->label)) / 2;
+
+    if(m->from == m->to)
+    {
+        int right = from->x + from->width / 2 + 48;
+        int y2 = m->y + 28;
+        draw_line(img, start_x, m->y, right, m->y, 2, m->color);
+        draw_line(img, right, m->y, right, y2, 2, m->color);
+        draw_line(img, right, y2, start_x, y2, 2, m->color);
+        draw_arrow_head(img, start_x, y2, start_x - right, 0, m->color);
+        draw_edge_label(img, start_x + 12, m->y - 18, m->label, m->color);
+        return;
+    }
+
+    draw_sequence_arrow(img, start_x, end_x, m->y, m->color);
+    draw_edge_label(img, label_x, m->y - 18, m->label, m->color);
+}
+
+static int render_sequence_file(const char *input_path, const char *output_path,
+                                const char *text)
+{
+    sequence_diagram_t diagram;
+    image_t image;
+    int i;
+    int top_y;
+
+    if(!parse_sequence_text(&diagram, text))
+        return 1;
+    compute_sequence_layout(&diagram, &image.width, &image.height);
+    image.pixels = (unsigned char *)calloc((size_t)image.width * (size_t)image.height * 4u, 1u);
+    if(!image.pixels)
+    {
+        set_errorf("out of memory");
+        return 1;
+    }
+
+    clear_image(&image, color_rgba(248, 250, 252, 255));
+    if(diagram.title[0] != '\0')
+        draw_title(&image, diagram.title);
+    top_y = 64 + (diagram.title[0] != '\0' ? 40 : 0);
+
+    for(i = 0; i < diagram.participant_count; ++i)
+        draw_participant(&image, &diagram.participants[i], top_y,
+                         image.height - 36);
+    for(i = 0; i < diagram.message_count; ++i)
+        draw_sequence_message(&image, &diagram, &diagram.messages[i]);
+
+    if(!ensure_parent_dirs(output_path))
+    {
+        free(image.pixels);
+        return 1;
+    }
+    if(stbi_write_png(output_path, image.width, image.height, 4, image.pixels,
+                      image.width * 4) == 0)
+    {
+        free(image.pixels);
+        set_errorf("failed to write png: %s", output_path);
+        return 1;
+    }
+    free(image.pixels);
+    (void)input_path;
+    return 0;
+}
+
 static int ensure_parent_dirs(const char *path)
 {
     char buf[1024];
@@ -1000,6 +1414,13 @@ int uml_render_file(const char *input_path, const char *output_path)
     {
         free(text);
         return 1;
+    }
+
+    if(diagram.kind == DIAGRAM_SEQUENCE)
+    {
+        int rc = render_sequence_file(input_path, output_path, text);
+        free(text);
+        return rc;
     }
     free(text);
 

@@ -1,10 +1,15 @@
 # UML UI Generator Example
 
-This example builds a small `mlang` CLI that reads a text flow definition and
-renders a PNG using UML activity-style shapes:
+This example builds a small `mlang` CLI that reads a text definition and
+renders a PNG for either:
+
+- UML activity/control-flow diagrams
+- UML-style sequence diagrams
+
+Activity diagrams use:
 
 - start: filled circle
-- action: rounded rectangle
+- action: rectangle
 - decision: diamond
 - end: bullseye
 
@@ -13,7 +18,9 @@ The PNG writer and ASCII text rasterization come from the fetched open-source
 
 ## Input Format
 
-Use a simple pipe-delimited text file:
+Use a simple pipe-delimited text file.
+
+Activity example:
 
 ```text
 title|Basic order approval flow
@@ -33,9 +40,32 @@ edge|ship|done||#334155
 
 Records:
 
+- `diagram|activity` or `diagram|sequence` (optional for activity, required for sequence)
 - `title|Text`
 - `node|id|type|label|fill|stroke|text`
 - `edge|from|to|label|color`
+
+Sequence example:
+
+```text
+diagram|sequence
+title|HTTPS authentication sequence
+participant|browser|Browser|#dbeafe|#2563eb|#0f172a
+participant|gateway|HTTPS API Gateway|#fde68a|#d97706|#111827
+participant|auth|Auth Service|#ddd6fe|#7c3aed|#111827
+participant|session|Session Store|#bbf7d0|#16a34a|#052e16
+message|browser|gateway|POST /login over TLS|#2563eb
+message|gateway|auth|Validate credentials|#d97706
+message|auth|session|Create authenticated session|#16a34a
+message|session|auth|Session id + expiry|#16a34a
+message|auth|gateway|JWT + session cookie|#7c3aed
+message|gateway|browser|200 OK Set-Cookie auth_sid|#2563eb
+```
+
+Sequence records:
+
+- `participant|id|label|fill|stroke|text`
+- `message|from|to|label|color`
 
 Notes:
 
@@ -43,6 +73,7 @@ Notes:
 - Colors use `#RRGGBB`.
 - For now the layout is optimized for control-flow and activity-style diagrams.
 - Back-edges such as retry loops are supported.
+- Sequence diagrams render participant headers, lifelines, and message arrows.
 
 ## Build
 
@@ -73,20 +104,26 @@ Render the more complex multi-path sample:
 ../../build/mlang pkg run render-complex-sample
 ```
 
+Render the HTTPS authentication sequence sample:
+
+```sh
+../../build/mlang pkg run render-sequence-sample
+```
+
 Or run the binary directly with your own text file:
 
 ```sh
 ./build/uml_ui_generator samples/basic_control_flow.umlflow build/generated/basic_control_flow.png
 ./build/uml_ui_generator samples/multi_path_control_flow.umlflow build/generated/multi_path_control_flow.png
+./build/uml_ui_generator samples/https_auth_sequence.umlflow build/generated/https_auth_sequence.png
 ./build/uml_ui_generator my_flow.umlflow build/generated/my_flow.png
 ```
 
 ## Scope
 
-This is the starting point for control-flow and activity-style charts. Sequence
-diagram support can be added later by extending the input grammar and shape
-set, but the current example already covers:
+This now covers:
 
 - text-driven node and edge definitions
 - colorful UML-style control-flow nodes
+- sequence participants, lifelines, and messages
 - direct PNG output from one command
