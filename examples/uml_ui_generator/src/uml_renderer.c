@@ -78,6 +78,8 @@ typedef struct
     float scale;
     float box_radius;
     float edge_radius;
+    float start_radius;
+    float end_radius;
     node_t nodes[128];
     int node_count;
     edge_t edges[256];
@@ -435,9 +437,11 @@ typedef struct
     color_t start_fill;
     color_t start_stroke;
     color_t start_text;
+    float start_radius;
     color_t end_fill;
     color_t end_stroke;
     color_t end_text;
+    float end_radius;
     color_t edge_color;
     color_t participant_fill;
     color_t participant_stroke;
@@ -513,9 +517,11 @@ static void init_style_defaults(style_defaults_t *defaults)
     defaults->start_fill = color_rgba(34, 197, 94, 255);
     defaults->start_stroke = color_rgba(22, 101, 52, 255);
     defaults->start_text = color_rgba(255, 255, 255, 255);
+    defaults->start_radius = 10.0f;
     defaults->end_fill = color_rgba(192, 132, 252, 255);
     defaults->end_stroke = color_rgba(124, 58, 237, 255);
     defaults->end_text = color_rgba(255, 255, 255, 255);
+    defaults->end_radius = 10.0f;
     defaults->edge_color = color_rgba(71, 85, 105, 255);
     defaults->participant_fill = color_rgba(219, 234, 254, 255);
     defaults->participant_stroke = color_rgba(37, 99, 235, 255);
@@ -660,12 +666,22 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
         return parse_color(value, defaults->start_stroke, &defaults->start_stroke);
     if(eq_ci(key, "start_text"))
         return parse_color(value, defaults->start_text, &defaults->start_text);
+    if(eq_ci(key, "start_radius"))
+    {
+        defaults->start_radius = parse_option_value(value, defaults->start_radius);
+        return 1;
+    }
     if(eq_ci(key, "end_fill"))
         return parse_color(value, defaults->end_fill, &defaults->end_fill);
     if(eq_ci(key, "end_stroke"))
         return parse_color(value, defaults->end_stroke, &defaults->end_stroke);
     if(eq_ci(key, "end_text"))
         return parse_color(value, defaults->end_text, &defaults->end_text);
+    if(eq_ci(key, "end_radius"))
+    {
+        defaults->end_radius = parse_option_value(value, defaults->end_radius);
+        return 1;
+    }
     if(eq_ci(key, "edge_color"))
         return parse_color(value, defaults->edge_color, &defaults->edge_color);
     if(eq_ci(key, "participant_fill"))
@@ -787,6 +803,8 @@ static int parse_activity_sectioned(diagram_t *diagram, const char *text)
     diagram->kind = DIAGRAM_ACTIVITY;
     diagram->box_radius = 8.0f;
     diagram->edge_radius = 5.0f;
+    diagram->start_radius = defaults.start_radius;
+    diagram->end_radius = defaults.end_radius;
     memset(node_inputs, 0, sizeof(node_inputs));
     memset(edge_inputs, 0, sizeof(edge_inputs));
 
@@ -971,6 +989,8 @@ static int parse_activity_sectioned(diagram_t *diagram, const char *text)
         set_errorf("sectioned activity parser received non-activity diagram");
         return 0;
     }
+    diagram->start_radius = defaults.start_radius;
+    diagram->end_radius = defaults.end_radius;
     if(node_input_count == 0)
     {
         set_errorf("diagram contains no nodes");
@@ -1274,6 +1294,8 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
     diagram->kind = DIAGRAM_ACTIVITY;
     diagram->box_radius = 8.0f;
     diagram->edge_radius = 14.0f;
+    diagram->start_radius = 10.0f;
+    diagram->end_radius = 10.0f;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -1853,8 +1875,13 @@ static void compute_node_sizes(diagram_t *diagram)
         int label_w = text_width(node->label);
         if(node->type == NODE_START || node->type == NODE_END)
         {
-            node->width = (int)(62.0f * scale);
-            node->height = (int)(62.0f * scale);
+            int radius = (int)((node->type == NODE_START ? diagram->start_radius
+                                                         : diagram->end_radius) *
+                               scale);
+            if(radius < 4)
+                radius = 4;
+            node->width = radius * 2;
+            node->height = radius * 2;
         }
         else if(node->type == NODE_DECISION)
         {
@@ -2595,13 +2622,14 @@ static void draw_node(image_t *img, const diagram_t *diagram, const node_t *node
     }
     else if(node->type == NODE_END)
     {
+        int outer_radius = aa_px(node->width / 2);
+        int inner_radius = max_i32(aa_px(3), (int)(outer_radius * 0.58f));
         fill_circle(img, aa_px(node->x), aa_px(node->y), aa_px(node->width / 2),
                     color_rgba(255, 255, 255, 255));
         stroke_circle(img, aa_px(node->x), aa_px(node->y),
                       aa_px(node->width / 2), aa_stroke(UML_STROKE),
                       border);
-        fill_circle(img, aa_px(node->x), aa_px(node->y),
-                    aa_px(node->width / 2 - 10), border);
+        fill_circle(img, aa_px(node->x), aa_px(node->y), inner_radius, border);
     }
     else if(node->type == NODE_DECISION)
     {

@@ -39,9 +39,11 @@ decision_text = "#111827"
 start_fill = "#22c55e"
 start_stroke = "#166534"
 start_text = "#ffffff"
+start_radius = 9
 end_fill = "#c084fc"
 end_stroke = "#7c3aed"
 end_text = "#ffffff"
+end_radius = 10
 edge_color = "#334155"
 
 [[nodes]]
@@ -104,7 +106,9 @@ Supported activity defaults:
 - `action_fill`, `action_stroke`, `action_text`
 - `decision_fill`, `decision_stroke`, `decision_text`
 - `start_fill`, `start_stroke`, `start_text`
+- `start_radius`
 - `end_fill`, `end_stroke`, `end_text`
+- `end_radius`
 - `edge_color`
 
 Supported sequence defaults:

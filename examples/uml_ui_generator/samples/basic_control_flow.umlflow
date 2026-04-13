@@ -15,15 +15,17 @@ decision_text = "#111827"
 start_fill = "#22c55e"
 start_stroke = "#166534"
 start_text = "#ffffff"
+start_radius = 9
 end_fill = "#c084fc"
 end_stroke = "#7c3aed"
 end_text = "#ffffff"
+end_radius = 10
 edge_color = "#334155"
 
 [[nodes]]
 id = "start"
 type = "start"
-label = "Start"
+label = ""
 
 [[nodes]]
 id = "capture"
@@ -53,7 +55,7 @@ text = "#052e16"
 [[nodes]]
 id = "done"
 type = "end"
-label = "Done"
+label = ""
 
 [[edges]]
 from = "start"
