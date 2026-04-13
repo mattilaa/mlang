@@ -13,6 +13,7 @@
 #include "stb_easy_font.h"
 
 static char g_last_error[512];
+static const int UML_STROKE = 1;
 
 typedef enum
 {
@@ -1108,8 +1109,8 @@ static void draw_arrow_head(image_t *img, int tip_x, int tip_y, int dx, int dy, 
     ly = (int)(tip_y - uy * len + py * wing);
     rx = (int)(tip_x - ux * len - px * wing);
     ry = (int)(tip_y - uy * len - py * wing);
-    draw_line(img, tip_x, tip_y, lx, ly, 2, color);
-    draw_line(img, tip_x, tip_y, rx, ry, 2, color);
+    draw_line(img, tip_x, tip_y, lx, ly, UML_STROKE, color);
+    draw_line(img, tip_x, tip_y, rx, ry, UML_STROKE, color);
 }
 
 static void draw_text(image_t *img, int x, int y, const char *text, color_t color)
@@ -1186,27 +1187,27 @@ static void draw_node(image_t *img, const node_t *node)
     if(node->type == NODE_START)
     {
         fill_circle(img, node->x, node->y, node->width / 2, node->fill);
-        stroke_circle(img, node->x, node->y, node->width / 2, 3, node->stroke);
+        stroke_circle(img, node->x, node->y, node->width / 2, UML_STROKE, node->stroke);
     }
     else if(node->type == NODE_END)
     {
         fill_circle(img, node->x, node->y, node->width / 2, color_rgba(255, 255, 255, 255));
-        stroke_circle(img, node->x, node->y, node->width / 2, 3, node->stroke);
+        stroke_circle(img, node->x, node->y, node->width / 2, UML_STROKE, node->stroke);
         fill_circle(img, node->x, node->y, node->width / 2 - 10, node->fill);
     }
     else if(node->type == NODE_DECISION)
     {
         fill_diamond(img, node->x, node->y, node->width, node->height, node->fill);
-        stroke_diamond(img, node->x, node->y, node->width, node->height, 3, node->stroke);
+        stroke_diamond(img, node->x, node->y, node->width, node->height, UML_STROKE, node->stroke);
     }
     else
     {
         fill_rect(img, x, y, x + node->width, y + node->height, node->fill);
-        fill_rect(img, x, y, x + node->width, y + 3, node->stroke);
-        fill_rect(img, x, y + node->height - 3, x + node->width,
+        fill_rect(img, x, y, x + node->width, y + UML_STROKE, node->stroke);
+        fill_rect(img, x, y + node->height - UML_STROKE, x + node->width,
                   y + node->height, node->stroke);
-        fill_rect(img, x, y, x + 3, y + node->height, node->stroke);
-        fill_rect(img, x + node->width - 3, y, x + node->width,
+        fill_rect(img, x, y, x + UML_STROKE, y + node->height, node->stroke);
+        fill_rect(img, x + node->width - UML_STROKE, y, x + node->width,
                   y + node->height, node->stroke);
     }
 
@@ -1218,7 +1219,7 @@ static void draw_polyline(image_t *img, int *xs, int *ys, int count, color_t col
 {
     int i;
     for(i = 0; i + 1 < count; ++i)
-        draw_line(img, xs[i], ys[i], xs[i + 1], ys[i + 1], 3, color);
+        draw_line(img, xs[i], ys[i], xs[i + 1], ys[i + 1], UML_STROKE, color);
     if(count >= 2)
         draw_arrow_head(img, xs[count - 1], ys[count - 1],
                         xs[count - 1] - xs[count - 2],
@@ -1329,14 +1330,14 @@ static void compute_sequence_layout(sequence_diagram_t *diagram, int *out_w,
 static void draw_vertical_line(image_t *img, int x, int y0, int y1,
                                color_t color)
 {
-    draw_line(img, x, y0, x, y1, 2, color);
+    draw_line(img, x, y0, x, y1, UML_STROKE, color);
 }
 
 static void draw_participant(image_t *img, const participant_t *p, int top_y,
                              int bottom_y)
 {
     int box_h = 30;
-    int border = 2;
+    int border = UML_STROKE;
     int x = p->x - p->width / 2;
     int label_x = p->x - text_width(p->label) / 2;
     fill_rect(img, x, top_y, x + p->width, top_y + box_h, p->fill);
@@ -1353,7 +1354,7 @@ static void draw_participant(image_t *img, const participant_t *p, int top_y,
 static void draw_sequence_arrow(image_t *img, int x0, int x1, int y,
                                 color_t color)
 {
-    draw_line(img, x0, y, x1, y, 2, color);
+    draw_line(img, x0, y, x1, y, UML_STROKE, color);
     draw_arrow_head(img, x1, y, x1 - x0, 0, color);
 }
 
@@ -1371,9 +1372,9 @@ static void draw_sequence_message(image_t *img,
     {
         int right = from->x + from->width / 2 + 48;
         int y2 = m->y + 28;
-        draw_line(img, from->x, m->y, right, m->y, 2, m->color);
-        draw_line(img, right, m->y, right, y2, 2, m->color);
-        draw_line(img, right, y2, from->x, y2, 2, m->color);
+        draw_line(img, from->x, m->y, right, m->y, UML_STROKE, m->color);
+        draw_line(img, right, m->y, right, y2, UML_STROKE, m->color);
+        draw_line(img, right, y2, from->x, y2, UML_STROKE, m->color);
         draw_arrow_head(img, from->x, y2, from->x - right, 0, m->color);
         draw_edge_label(img, from->x + 12, m->y - 26, m->label, m->color);
         return;
