@@ -1470,8 +1470,8 @@ static void draw_line(image_t *img, int x0, int y0, int x1, int y1, int thicknes
 
 static void draw_arrow_head(image_t *img, int tip_x, int tip_y, int dx, int dy, color_t color)
 {
-    int len = aa_px(14);
-    int wing = aa_px(7);
+    int len = aa_px(8);
+    int wing = aa_px(4);
     float mag = sqrtf((float)(dx * dx + dy * dy));
     float ux;
     float uy;
@@ -1835,14 +1835,41 @@ static void draw_edge_label(image_t *img, int x, int y, const char *text, color_
 static int effective_edge_radius(const diagram_t *diagram)
 {
     int configured = (int)(diagram->edge_radius * diagram->scale);
-    int box_based = (int)(diagram->box_radius * diagram->scale * 0.6f);
+    int box_based = (int)(diagram->box_radius * diagram->scale * 0.5f);
     int radius = configured;
 
     if(box_based > 0 && (radius <= 0 || radius > box_based))
         radius = box_based;
-    if(radius < 3)
-        radius = 3;
+    if(radius < 2)
+        radius = 2;
     return radius;
+}
+
+static int is_primary_converging_edge(const diagram_t *diagram, const edge_t *edge,
+                                      int *out_peer_count)
+{
+    int i;
+    int peer_count = 0;
+    int primary_from = edge->from;
+
+    for(i = 0; i < diagram->edge_count; ++i)
+    {
+        const edge_t *candidate = &diagram->edges[i];
+        if(candidate->to != edge->to)
+            continue;
+        if(diagram->nodes[candidate->from].level !=
+           diagram->nodes[edge->from].level)
+            continue;
+        if(candidate->to <= candidate->from)
+            continue;
+        peer_count++;
+        if(diagram->nodes[candidate->from].x < diagram->nodes[primary_from].x)
+            primary_from = candidate->from;
+    }
+
+    if(out_peer_count)
+        *out_peer_count = peer_count;
+    return edge->from == primary_from;
 }
 
 static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge)
@@ -1897,16 +1924,60 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         else
         {
             int mid_y = sy + (ty - sy) / 2;
+            int peer_count = 0;
+            int is_primary = is_primary_converging_edge(diagram, edge, &peer_count);
+            int path_radius = radius;
             label_y = min_i32(mid_y - text_height() - 12, ty - text_height() - 8);
-            xs[count] = sx;
-            ys[count++] = sy;
-            xs[count] = sx;
-            ys[count++] = mid_y;
-            xs[count] = tx;
-            ys[count++] = mid_y;
-            xs[count] = tx;
-            ys[count++] = ty;
-            draw_polyline(img, xs, ys, count, radius, edge_color);
+            if(peer_count > 1)
+            {
+                int merge_y = ty - max_i32(16, radius * 3);
+                int primary_x = sx;
+                int i;
+                path_radius = 0;
+
+                for(i = 0; i < diagram->edge_count; ++i)
+                {
+                    const edge_t *candidate = &diagram->edges[i];
+                    if(candidate->to != edge->to)
+                        continue;
+                    if(diagram->nodes[candidate->from].level !=
+                       diagram->nodes[edge->from].level)
+                        continue;
+                    if(candidate->to <= candidate->from)
+                        continue;
+                    if(diagram->nodes[candidate->from].x < primary_x)
+                        primary_x = diagram->nodes[candidate->from].x;
+                }
+
+                xs[count] = sx;
+                ys[count++] = sy;
+                xs[count] = sx;
+                ys[count++] = merge_y;
+                if(sx != primary_x)
+                {
+                    xs[count] = primary_x;
+                    ys[count++] = merge_y;
+                }
+                if(is_primary)
+                {
+                    xs[count] = tx;
+                    ys[count++] = merge_y;
+                    xs[count] = tx;
+                    ys[count++] = ty;
+                }
+            }
+            else
+            {
+                xs[count] = sx;
+                ys[count++] = sy;
+                xs[count] = sx;
+                ys[count++] = mid_y;
+                xs[count] = tx;
+                ys[count++] = mid_y;
+                xs[count] = tx;
+                ys[count++] = ty;
+            }
+            draw_polyline(img, xs, ys, count, path_radius, edge_color);
             label_x = (sx + tx) / 2 - text_width(edge->label) / 2;
             draw_edge_label(img, label_x, label_y, edge->label, edge_color);
             return;
