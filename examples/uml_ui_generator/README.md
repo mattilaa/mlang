@@ -56,8 +56,9 @@ Sequence example:
 ```text
 diagram|sequence
 scale|1.0
-box_radius|0
+box_radius|8
 edge_radius|0
+arrow_size|12
 title|HTTPS authentication sequence
 participant|browser|Browser|#dbeafe|#2563eb|#0f172a
 participant|gateway|HTTPS API Gateway|#fde68a|#d97706|#111827
@@ -75,12 +76,14 @@ Sequence records:
 
 - `participant|id|label|fill|stroke|text`
 - `message|from|to|label|color`
+- `arrow_size|12` optional sequence arrowhead size; when omitted, a smaller default is used
 
 Notes:
 
 - Lines starting with `#` are comments.
 - Colors use `#RRGGBB`.
-- `box_radius` and `edge_radius` are currently applied to activity/flow rendering.
+- `box_radius` also affects sequence participant header rounding.
+- `arrow_size` currently affects sequence message arrowheads.
 - For now the layout is optimized for control-flow and activity-style diagrams.
 - Back-edges such as retry loops are supported.
 - Sequence diagrams render participant headers, lifelines, and message arrows.

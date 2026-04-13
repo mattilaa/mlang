@@ -109,6 +109,7 @@ typedef struct
     float scale;
     float box_radius;
     float edge_radius;
+    float arrow_size;
     participant_t participants[24];
     int participant_count;
     message_t messages[256];
@@ -515,6 +516,16 @@ static int parse_diagram_text(diagram_t *diagram, const char *text)
             continue;
         }
 
+        if(eq_ci(fields[0], "arrow_size"))
+        {
+            if(diagram->kind == DIAGRAM_SEQUENCE)
+                continue;
+            free(owned);
+            set_errorf("line %d: arrow_size is only supported for sequence diagrams",
+                       line_no);
+            return 0;
+        }
+
         if(eq_ci(fields[0], "diagram"))
         {
             if(count < 2)
@@ -660,6 +671,7 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
     diagram->scale = 1.0f;
     diagram->box_radius = 0.0f;
     diagram->edge_radius = 0.0f;
+    diagram->arrow_size = 8.0f;
     owned = (char *)malloc(strlen(text) + 1);
     if(!owned)
     {
@@ -763,6 +775,19 @@ static int parse_sequence_text(sequence_diagram_t *diagram, const char *text)
             }
             trim_in_place(fields[1]);
             diagram->edge_radius = parse_option_value(fields[1], 0.0f);
+            continue;
+        }
+
+        if(eq_ci(fields[0], "arrow_size"))
+        {
+            if(count < 2)
+            {
+                free(owned);
+                set_errorf("line %d: arrow_size requires one field", line_no);
+                return 0;
+            }
+            trim_in_place(fields[1]);
+            diagram->arrow_size = parse_option_value(fields[1], 8.0f);
             continue;
         }
 
@@ -1492,8 +1517,37 @@ static void draw_arrow_head(image_t *img, int tip_x, int tip_y, int dx, int dy, 
     ly = (int)(tip_y - uy * len + py * wing);
     rx = (int)(tip_x - ux * len - px * wing);
     ry = (int)(tip_y - uy * len - py * wing);
-    draw_line(img, tip_x, tip_y, lx, ly, UML_STROKE, color);
-    draw_line(img, tip_x, tip_y, rx, ry, UML_STROKE, color);
+    draw_line(img, tip_x, tip_y, lx, ly, aa_stroke(UML_STROKE), color);
+    draw_line(img, tip_x, tip_y, rx, ry, aa_stroke(UML_STROKE), color);
+}
+
+static void draw_arrow_head_sized(image_t *img, int tip_x, int tip_y, int dx,
+                                  int dy, float size, color_t color)
+{
+    int len = aa_px((int)size);
+    int wing = aa_px(max_i32(2, (int)(size * 0.5f)));
+    float mag = sqrtf((float)(dx * dx + dy * dy));
+    float ux;
+    float uy;
+    float px;
+    float py;
+    int lx;
+    int ly;
+    int rx;
+    int ry;
+
+    if(mag < 0.001f)
+        return;
+    ux = (float)dx / mag;
+    uy = (float)dy / mag;
+    px = -uy;
+    py = ux;
+    lx = (int)(tip_x - ux * len + px * wing);
+    ly = (int)(tip_y - uy * len + py * wing);
+    rx = (int)(tip_x - ux * len - px * wing);
+    ry = (int)(tip_y - uy * len - py * wing);
+    draw_line(img, tip_x, tip_y, lx, ly, aa_stroke(UML_STROKE), color);
+    draw_line(img, tip_x, tip_y, rx, ry, aa_stroke(UML_STROKE), color);
 }
 
 static void draw_text(image_t *img, int x, int y, const char *text, color_t color)
@@ -2060,33 +2114,25 @@ static void draw_vertical_line(image_t *img, int x, int y0, int y1,
 }
 
 static void draw_participant(image_t *img, const participant_t *p, int top_y,
-                             int bottom_y)
+                             int bottom_y, int box_radius)
 {
     int box_h = text_height() + 16;
-    int border = UML_STROKE;
     int x = p->x - p->width / 2;
     int label_x = p->x - text_width(p->label) / 2;
-    fill_rect(img, aa_px(x), aa_px(top_y), aa_px(x + p->width),
-              aa_px(top_y + box_h), p->fill);
-    fill_rect(img, aa_px(x), aa_px(top_y), aa_px(x + p->width),
-              aa_px(top_y + border), p->stroke);
-    fill_rect(img, aa_px(x), aa_px(top_y + box_h - border),
-              aa_px(x + p->width), aa_px(top_y + box_h), p->stroke);
-    fill_rect(img, aa_px(x), aa_px(top_y), aa_px(x + border),
-              aa_px(top_y + box_h), p->stroke);
-    fill_rect(img, aa_px(x + p->width - border), aa_px(top_y),
-              aa_px(x + p->width), aa_px(top_y + box_h), p->stroke);
+    draw_soft_box(img, x, top_y, p->width, box_h, box_radius, p->fill,
+                  p->stroke);
     draw_text(img, label_x, top_y + (box_h - text_height()) / 2, p->label,
               p->text);
     draw_vertical_line(img, p->x, top_y + box_h, bottom_y, p->stroke);
 }
 
 static void draw_sequence_arrow(image_t *img, int x0, int x1, int y,
-                                color_t color)
+                                float arrow_size, color_t color)
 {
     draw_line(img, aa_px(x0), aa_px(y), aa_px(x1), aa_px(y),
               aa_stroke(UML_STROKE), color);
-    draw_arrow_head(img, aa_px(x1), aa_px(y), aa_px(x1 - x0), 0, color);
+    draw_arrow_head_sized(img, aa_px(x1), aa_px(y), aa_px(x1 - x0), 0,
+                          arrow_size, color);
 }
 
 static void draw_sequence_message(image_t *img,
@@ -2109,13 +2155,15 @@ static void draw_sequence_message(image_t *img,
                   aa_stroke(UML_STROKE), m->color);
         draw_line(img, aa_px(right), aa_px(y2), aa_px(from->x), aa_px(y2),
                   aa_stroke(UML_STROKE), m->color);
-        draw_arrow_head(img, aa_px(from->x), aa_px(y2), aa_px(from->x - right),
-                        0, m->color);
+        draw_arrow_head_sized(img, aa_px(from->x), aa_px(y2),
+                              aa_px(from->x - right), 0,
+                              diagram->arrow_size, m->color);
         draw_edge_label(img, from->x + 12, m->y - 26, m->label, m->color);
         return;
     }
 
-    draw_sequence_arrow(img, start_x, end_x, m->y, m->color);
+    draw_sequence_arrow(img, start_x, end_x, m->y, diagram->arrow_size,
+                        m->color);
     draw_edge_label(img, label_x, m->y - 26, m->label, m->color);
 }
 
@@ -2152,7 +2200,9 @@ static int render_sequence_file(const char *input_path, const char *output_path,
 
     for(i = 0; i < diagram.participant_count; ++i)
         draw_participant(&image, &diagram.participants[i], top_y,
-                         logical_h - 36);
+                         logical_h - 36,
+                         (int)(diagram.box_radius > 0.0f ? diagram.box_radius
+                                                         : 8.0f));
     for(i = 0; i < diagram.message_count; ++i)
         draw_sequence_message(&image, &diagram, &diagram.messages[i]);
     {

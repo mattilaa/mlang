@@ -1,5 +1,7 @@
 diagram|sequence
 scale|1.0
+box_radius|8
+arrow_size|12
 title|HTTPS authentication sequence
 
 # participant|id|label|fill|stroke|text
