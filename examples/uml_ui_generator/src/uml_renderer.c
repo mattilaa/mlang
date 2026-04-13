@@ -1743,6 +1743,19 @@ static void draw_edge_label(image_t *img, int x, int y, const char *text, color_
     draw_text(img, x, y, text, color);
 }
 
+static int effective_edge_radius(const diagram_t *diagram)
+{
+    int configured = (int)(diagram->edge_radius * diagram->scale);
+    int box_based = (int)(diagram->box_radius * diagram->scale * 0.6f);
+    int radius = configured;
+
+    if(box_based > 0 && (radius <= 0 || radius > box_based))
+        radius = box_based;
+    if(radius < 3)
+        radius = 3;
+    return radius;
+}
+
 static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge)
 {
     const node_t *from = &diagram->nodes[edge->from];
@@ -1751,6 +1764,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
     int xs[6];
     int ys[6];
     int count = 0;
+    int radius = effective_edge_radius(diagram);
 
     if(to->level > from->level)
     {
@@ -1758,22 +1772,55 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         int sy = from->y + from->height / 2;
         int tx = to->x;
         int ty = to->y - to->height / 2;
-        int mid_y = sy + (ty - sy) / 2;
-        int label_y = min_i32(mid_y - 28, ty - 22);
-        xs[count] = sx;
-        ys[count++] = sy;
-        xs[count] = sx;
-        ys[count++] = mid_y;
-        xs[count] = tx;
-        ys[count++] = mid_y;
-        xs[count] = tx;
-        ys[count++] = ty;
-        draw_polyline(img, xs, ys, count,
-                      (int)(diagram->edge_radius * diagram->scale),
-                      edge_color);
-        draw_edge_label(img, (sx + tx) / 2 - text_width(edge->label) / 2,
-                        label_y, edge->label, edge_color);
-        return;
+        int label_x;
+        int label_y;
+
+        if(from->type == NODE_DECISION && tx != from->x)
+        {
+            int dir = tx > from->x ? 1 : -1;
+            int exit_x = from->x + dir * (from->width / 2);
+            int exit_y = from->y;
+            int branch_x = exit_x + dir * max_i32(18, from->width / 6);
+            int mid_y = exit_y + max_i32(18, (ty - exit_y) / 2);
+
+            xs[count] = exit_x;
+            ys[count++] = exit_y;
+            xs[count] = branch_x;
+            ys[count++] = exit_y;
+            xs[count] = branch_x;
+            ys[count++] = mid_y;
+            xs[count] = tx;
+            ys[count++] = mid_y;
+            xs[count] = tx;
+            ys[count++] = ty;
+
+            draw_polyline(img, xs, ys, count, radius, edge_color);
+            label_x = branch_x - text_width(edge->label) / 2;
+            if(dir > 0)
+                label_x -= max_i32(8, text_width(edge->label) / 4);
+            else
+                label_x += max_i32(8, text_width(edge->label) / 4);
+            label_y = exit_y - text_height() - 10;
+            draw_edge_label(img, label_x, label_y, edge->label, edge_color);
+            return;
+        }
+        else
+        {
+            int mid_y = sy + (ty - sy) / 2;
+            label_y = min_i32(mid_y - text_height() - 12, ty - text_height() - 8);
+            xs[count] = sx;
+            ys[count++] = sy;
+            xs[count] = sx;
+            ys[count++] = mid_y;
+            xs[count] = tx;
+            ys[count++] = mid_y;
+            xs[count] = tx;
+            ys[count++] = ty;
+            draw_polyline(img, xs, ys, count, radius, edge_color);
+            label_x = (sx + tx) / 2 - text_width(edge->label) / 2;
+            draw_edge_label(img, label_x, label_y, edge->label, edge_color);
+            return;
+        }
     }
 
     {
@@ -1785,7 +1832,13 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         int bend_x = dir > 0 ? max_i32(from->x + from->width / 2 + 40, to->x + to->width / 2 + 40)
                              : min_i32(from->x - from->width / 2 - 40, to->x - to->width / 2 - 40);
         int top_y = min_i32(from->y - from->height / 2 - 28, to->y - to->height / 2 - 28);
-        int label_y = top_y - 20;
+        int label_y = top_y - text_height() - 10;
+
+        if(from->type == NODE_DECISION)
+        {
+            sx = from->x + dir * (from->width / 2);
+            sy = from->y;
+        }
         xs[count] = sx;
         ys[count++] = sy;
         xs[count] = bend_x;
@@ -1796,9 +1849,7 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         ys[count++] = top_y;
         xs[count] = tx;
         ys[count++] = ty;
-        draw_polyline(img, xs, ys, count,
-                      (int)(diagram->edge_radius * diagram->scale),
-                      edge_color);
+        draw_polyline(img, xs, ys, count, radius, edge_color);
         draw_edge_label(img, bend_x - text_width(edge->label) / 2, label_y,
                         edge->label, edge_color);
     }

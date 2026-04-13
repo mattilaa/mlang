@@ -1,6 +1,6 @@
 scale|1.0
 box_radius|8
-edge_radius|14
+edge_radius|5
 title|Multi-path release workflow
 
 # node|id|type|label|fill|stroke|text

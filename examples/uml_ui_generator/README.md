@@ -25,7 +25,7 @@ Activity example:
 ```text
 scale|1.0
 box_radius|8
-edge_radius|14
+edge_radius|5
 title|Basic order approval flow
 node|start|start|Start|#22c55e|#166534|#ffffff
 node|capture|action|Capture order|#bfdbfe|#2563eb|#0f172a
@@ -46,7 +46,7 @@ Records:
 - `diagram|activity` or `diagram|sequence` (optional for activity, required for sequence)
 - `scale|1.0` optional global scaling factor; when omitted, `1.0` is used
 - `box_radius|8` optional activity/flow node corner radius; when omitted, a mild default is used
-- `edge_radius|14` optional activity/flow connector bend radius; when omitted, a mild default is used
+- `edge_radius|5` optional activity/flow connector bend radius; when omitted, a mild default is used
 - `title|Text`
 - `node|id|type|label|fill|stroke|text`
 - `edge|from|to|label|color`
