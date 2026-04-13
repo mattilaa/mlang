@@ -1232,7 +1232,7 @@ static void draw_edge_label(image_t *img, int x, int y, const char *text, color_
     if(text[0] == '\0')
         return;
     w = text_width(text);
-    fill_rect(img, x - 6, y - 4, x + w + 6, y + 16, bg);
+    fill_rect(img, x - 6, y - 6, x + w + 6, y + 14, bg);
     draw_text(img, x, y, text, color);
 }
 
@@ -1260,7 +1260,8 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         xs[count] = tx;
         ys[count++] = ty;
         draw_polyline(img, xs, ys, count, edge->color);
-        draw_edge_label(img, (sx + tx) / 2 - text_width(edge->label) / 2, mid_y - 20, edge->label, edge->color);
+        draw_edge_label(img, (sx + tx) / 2 - text_width(edge->label) / 2,
+                        mid_y - 28, edge->label, edge->color);
         return;
     }
 
@@ -1284,7 +1285,8 @@ static void draw_edge(image_t *img, const diagram_t *diagram, const edge_t *edge
         xs[count] = tx;
         ys[count++] = ty;
         draw_polyline(img, xs, ys, count, edge->color);
-        draw_edge_label(img, bend_x - text_width(edge->label) / 2, top_y - 20, edge->label, edge->color);
+        draw_edge_label(img, bend_x - text_width(edge->label) / 2, top_y - 28,
+                        edge->label, edge->color);
     }
 }
 
@@ -1373,12 +1375,12 @@ static void draw_sequence_message(image_t *img,
         draw_line(img, right, m->y, right, y2, 2, m->color);
         draw_line(img, right, y2, from->x, y2, 2, m->color);
         draw_arrow_head(img, from->x, y2, from->x - right, 0, m->color);
-        draw_edge_label(img, from->x + 12, m->y - 18, m->label, m->color);
+        draw_edge_label(img, from->x + 12, m->y - 26, m->label, m->color);
         return;
     }
 
     draw_sequence_arrow(img, start_x, end_x, m->y, m->color);
-    draw_edge_label(img, label_x, m->y - 18, m->label, m->color);
+    draw_edge_label(img, label_x, m->y - 26, m->label, m->color);
 }
 
 static int render_sequence_file(const char *input_path, const char *output_path,
