@@ -193,7 +193,7 @@ Render the HTTPS authentication sequence sample:
 Or run the binary directly:
 
 ```sh
-./build/uml_ui_generator samples/basic_control_flow.umlflow build/generated/basic_control_flow.png
-./build/uml_ui_generator samples/multi_path_control_flow.umlflow build/generated/multi_path_control_flow.png
-./build/uml_ui_generator samples/https_auth_sequence.umlflow build/generated/https_auth_sequence.png
+./build/uml_ui_generator samples/basic_control_flow.toml build/generated/basic_control_flow.png
+./build/uml_ui_generator samples/multi_path_control_flow.toml build/generated/multi_path_control_flow.png
+./build/uml_ui_generator samples/https_auth_sequence.toml build/generated/https_auth_sequence.png
 ```

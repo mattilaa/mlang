@@ -84,7 +84,7 @@ print = "[example] Rendering the bundled colorful control-flow sample"
 workdir = "{{root}}"
 join_on = ["link-demo"]
 shell = [
-  "exec {{build_dir}}/uml_ui_generator samples/basic_control_flow.umlflow {{build_dir}}/generated/basic_control_flow.png"
+  "exec {{build_dir}}/uml_ui_generator samples/basic_control_flow.toml {{build_dir}}/generated/basic_control_flow.png"
 ]
 
 [[task]]
@@ -93,7 +93,7 @@ print = "[example] Rendering the bundled multi-path control-flow sample"
 workdir = "{{root}}"
 join_on = ["link-demo"]
 shell = [
-  "exec {{build_dir}}/uml_ui_generator samples/multi_path_control_flow.umlflow {{build_dir}}/generated/multi_path_control_flow.png"
+  "exec {{build_dir}}/uml_ui_generator samples/multi_path_control_flow.toml {{build_dir}}/generated/multi_path_control_flow.png"
 ]
 
 [[task]]
@@ -102,5 +102,5 @@ print = "[example] Rendering the bundled HTTPS authentication sequence sample"
 workdir = "{{root}}"
 join_on = ["link-demo"]
 shell = [
-  "exec {{build_dir}}/uml_ui_generator samples/https_auth_sequence.umlflow {{build_dir}}/generated/https_auth_sequence.png"
+  "exec {{build_dir}}/uml_ui_generator samples/https_auth_sequence.toml {{build_dir}}/generated/https_auth_sequence.png"
 ]
