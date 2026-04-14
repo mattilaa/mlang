@@ -5,6 +5,7 @@ renders a PNG for either:
 
 - UML activity/control-flow diagrams
 - UML-style sequence diagrams
+- UML class diagrams
 
 The renderer is implemented in C and writes PNGs directly with `stb`. No Java
 runtime is used.
@@ -92,11 +93,52 @@ label = "POST /login over TLS"
 color = "#2563eb"
 ```
 
+Class example:
+
+```toml
+[settings]
+diagram = "class"
+title = "Online golf store domain"
+title_size = 24
+title_bold = true
+scale = 1.0
+box_radius = 4
+
+[properties]
+class_fill = "#ffffff"
+class_stroke = "#18181b"
+class_text = "#18181b"
+association_color = "#3f3f46"
+
+[[classes]]
+id = "customer"
+name = "Customer"
+x = 40
+y = 180
+attributes = ["id", "name", "shippingAddress", "billingAddress"]
+methods = ["+ findById(): Customer"]
+
+[[classes]]
+id = "order"
+name = "Order"
+x = 360
+y = 180
+attributes = ["- customer", "- salesTax", "- shipping", "- total"]
+methods = ["- calculateShipping(zipCode:Int): Float"]
+
+[[associations]]
+from = "customer"
+to = "order"
+kind = "association"
+from_multiplicity = "1"
+to_multiplicity = "*"
+```
+
 ## Sections
 
 `[settings]`
 
-- `diagram = "activity"` or `diagram = "sequence"`
+- `diagram = "activity"`, `diagram = "sequence"`, or `diagram = "class"`
 - `title = "Text"`
 - `title_size = 22`
 - `title_bold = true`
@@ -128,6 +170,13 @@ Supported sequence defaults:
 - `message_color`
 - `message_bold`
 
+Supported class defaults:
+
+- `class_fill`, `class_stroke`, `class_text`
+- `class_bold`
+- `association_color`
+- `association_bold`
+
 ## Item Tables
 
 `[[nodes]]`
@@ -149,6 +198,17 @@ Supported sequence defaults:
 
 - required: `from`, `to`
 - optional: `label`, `color`
+
+`[[classes]]`
+
+- required: `id`
+- optional: `name`, `x`, `y`, `attributes`, `methods`, `fill`, `stroke`, `text`, `bold`
+
+`[[associations]]`
+
+- required: `from`, `to`
+- optional: `kind`, `from_multiplicity`, `to_multiplicity`, `label`, `color`, `bold`
+- supported `kind` values: `"association"`, `"aggregation"`, `"composition"`, `"generalization"`, `"inheritance"`, `"realization"`, `"dependency"`
 
 ## Color Rules
 
@@ -190,10 +250,17 @@ Render the HTTPS authentication sequence sample:
 ../../build/mlang pkg run render-sequence-sample
 ```
 
+Render the bundled class diagram sample:
+
+```sh
+../../build/mlang pkg run render-class-sample
+```
+
 Or run the binary directly:
 
 ```sh
 ./build/uml_ui_generator samples/basic_control_flow.toml build/generated/basic_control_flow.png
 ./build/uml_ui_generator samples/multi_path_control_flow.toml build/generated/multi_path_control_flow.png
 ./build/uml_ui_generator samples/https_auth_sequence.toml build/generated/https_auth_sequence.png
+./build/uml_ui_generator samples/online_golf_store_class.toml build/generated/online_golf_store_class.png
 ```

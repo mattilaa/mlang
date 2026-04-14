@@ -8,8 +8,8 @@ extern fn uml_last_error() -> str8;
 
 fn main(argc: i32, args: list<str8>) -> i32 {
     var ap: ArgParser = ArgParser::new("uml_ui_generator",
-                                       "Render a UML activity-style flowchart PNG from a text file.");
-    ap.positional("input", "Input .umlflow file");
+                                       "Render a UML diagram PNG from a text file.");
+    ap.positional("input", "Input .toml diagram file");
     ap.positional("output", "Output PNG path");
 
     let parsed: ParseResult = ap.parse(argc, args);
@@ -29,7 +29,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         ap.print_help();
         eprintln!("");
         eprintln!("Example:");
-        eprintln!("  ./build/uml_ui_generator samples/basic_control_flow.umlflow build/generated/basic_control_flow.png");
+        eprintln!("  ./build/uml_ui_generator samples/basic_control_flow.toml build/generated/basic_control_flow.png");
         parsed.free();
         ap.free();
         return 1;

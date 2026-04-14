@@ -104,3 +104,12 @@ join_on = ["link-demo"]
 shell = [
   "exec {{build_dir}}/uml_ui_generator samples/https_auth_sequence.toml {{build_dir}}/generated/https_auth_sequence.png"
 ]
+
+[[task]]
+name = "render-class-sample"
+print = "[example] Rendering the bundled class diagram sample"
+workdir = "{{root}}"
+join_on = ["link-demo"]
+shell = [
+  "exec {{build_dir}}/uml_ui_generator samples/online_golf_store_class.toml {{build_dir}}/generated/online_golf_store_class.png"
+]

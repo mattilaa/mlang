@@ -132,7 +132,10 @@ typedef enum
 {
     CLASS_ASSOCIATION = 0,
     CLASS_AGGREGATION = 1,
-    CLASS_COMPOSITION = 2
+    CLASS_COMPOSITION = 2,
+    CLASS_GENERALIZATION = 3,
+    CLASS_REALIZATION = 4,
+    CLASS_DEPENDENCY = 5
 } class_association_kind_t;
 
 typedef struct
@@ -458,6 +461,21 @@ static int parse_class_association_kind(const char *text,
     if(eq_ci(text, "composition"))
     {
         *out = CLASS_COMPOSITION;
+        return 1;
+    }
+    if(eq_ci(text, "generalization") || eq_ci(text, "inheritance"))
+    {
+        *out = CLASS_GENERALIZATION;
+        return 1;
+    }
+    if(eq_ci(text, "realization"))
+    {
+        *out = CLASS_REALIZATION;
+        return 1;
+    }
+    if(eq_ci(text, "dependency"))
+    {
+        *out = CLASS_DEPENDENCY;
         return 1;
     }
     return 0;
@@ -3065,6 +3083,40 @@ static void draw_line(image_t *img, int x0, int y0, int x1, int y1, int thicknes
     }
 }
 
+static void draw_dashed_line(image_t *img, int x0, int y0, int x1, int y1,
+                             int thickness, int dash_len, int gap_len,
+                             color_t color)
+{
+    int dx = x1 - x0;
+    int dy = y1 - y0;
+    float length = sqrtf((float)(dx * dx + dy * dy));
+    float ux;
+    float uy;
+    float pos = 0.0f;
+
+    if(length < 0.001f)
+        return;
+
+    ux = (float)dx / length;
+    uy = (float)dy / length;
+    while(pos < length)
+    {
+        float next = pos + (float)dash_len;
+        int sx;
+        int sy;
+        int ex;
+        int ey;
+        if(next > length)
+            next = length;
+        sx = (int)roundf((float)x0 + ux * pos);
+        sy = (int)roundf((float)y0 + uy * pos);
+        ex = (int)roundf((float)x0 + ux * next);
+        ey = (int)roundf((float)y0 + uy * next);
+        draw_line(img, sx, sy, ex, ey, thickness, color);
+        pos = next + (float)gap_len;
+    }
+}
+
 static void draw_arrow_head(image_t *img, int tip_x, int tip_y, int dx, int dy, color_t color)
 {
     int len = aa_px(8);
@@ -3783,7 +3835,7 @@ static void compute_class_layout(class_diagram_t *diagram, int *out_w, int *out_
     {
         class_box_t *cls = &diagram->classes[i];
         int j;
-        int content_w = text_width_styled(cls->name, UML_TEXT_SIZE, 0);
+        int content_w = text_width_styled(cls->name, UML_TEXT_SIZE);
         int attr_h = cls->attribute_count > 0 ? cls->attribute_count * row_h + 10 : 20;
         int method_h = cls->method_count > 0 ? cls->method_count * row_h + 10 : 20;
         for(j = 0; j < cls->attribute_count; ++j)
@@ -3904,6 +3956,39 @@ static void draw_diamond_marker(image_t *img, int x0, int y0, int x1, int y1,
     draw_line(img, dx, dy, ax, ay, aa_stroke(UML_STROKE), color);
 }
 
+static void draw_open_triangle_marker(image_t *img, int tip_x, int tip_y, int dx,
+                                      int dy, float len_px, float wing_px,
+                                      color_t color)
+{
+    float mag = sqrtf((float)(dx * dx + dy * dy));
+    float ux;
+    float uy;
+    float px;
+    float py;
+    int bx;
+    int by;
+    int lx;
+    int ly;
+    int rx;
+    int ry;
+
+    if(mag < 0.001f)
+        return;
+    ux = (float)dx / mag;
+    uy = (float)dy / mag;
+    px = -uy;
+    py = ux;
+    bx = (int)roundf((float)tip_x - ux * len_px);
+    by = (int)roundf((float)tip_y - uy * len_px);
+    lx = (int)roundf((float)bx + px * wing_px);
+    ly = (int)roundf((float)by + py * wing_px);
+    rx = (int)roundf((float)bx - px * wing_px);
+    ry = (int)roundf((float)by - py * wing_px);
+    draw_line(img, tip_x, tip_y, lx, ly, aa_stroke(UML_STROKE), color);
+    draw_line(img, tip_x, tip_y, rx, ry, aa_stroke(UML_STROKE), color);
+    draw_line(img, lx, ly, rx, ry, aa_stroke(UML_STROKE), color);
+}
+
 static void class_anchor_points(const class_box_t *from, const class_box_t *to,
                                 int *x0, int *y0, int *x1, int *y1)
 {
@@ -4011,8 +4096,58 @@ static void draw_class_association(image_t *img, const class_diagram_t *diagram,
         }
     }
 
-    draw_line(img, start_x, start_y, end_x, end_y, aa_stroke(UML_STROKE),
-              assoc->color);
+    if(assoc->kind == CLASS_GENERALIZATION || assoc->kind == CLASS_REALIZATION)
+    {
+        int tip_x = end_x;
+        int tip_y = end_y;
+        int back_x;
+        int back_y;
+        mag = sqrtf((float)((end_x - start_x) * (end_x - start_x) +
+                            (end_y - start_y) * (end_y - start_y)));
+        if(mag > 0.001f)
+        {
+            ux = (float)(end_x - start_x) / mag;
+            uy = (float)(end_y - start_y) / mag;
+            back_x = (int)roundf((float)tip_x - ux * aa_px(14));
+            back_y = (int)roundf((float)tip_y - uy * aa_px(14));
+            if(assoc->kind == CLASS_REALIZATION)
+                draw_dashed_line(img, start_x, start_y, back_x, back_y,
+                                 aa_stroke(UML_STROKE), aa_px(7), aa_px(5),
+                                 assoc->color);
+            else
+                draw_line(img, start_x, start_y, back_x, back_y,
+                          aa_stroke(UML_STROKE), assoc->color);
+            draw_open_triangle_marker(img, tip_x, tip_y, end_x - start_x,
+                                      end_y - start_y, (float)aa_px(14),
+                                      (float)aa_px(7), assoc->color);
+        }
+    }
+    else if(assoc->kind == CLASS_DEPENDENCY)
+    {
+        int tip_x = end_x;
+        int tip_y = end_y;
+        int back_x;
+        int back_y;
+        mag = sqrtf((float)((end_x - start_x) * (end_x - start_x) +
+                            (end_y - start_y) * (end_y - start_y)));
+        if(mag > 0.001f)
+        {
+            ux = (float)(end_x - start_x) / mag;
+            uy = (float)(end_y - start_y) / mag;
+            back_x = (int)roundf((float)tip_x - ux * aa_px(9));
+            back_y = (int)roundf((float)tip_y - uy * aa_px(9));
+            draw_dashed_line(img, start_x, start_y, back_x, back_y,
+                             aa_stroke(UML_STROKE), aa_px(7), aa_px(5),
+                             assoc->color);
+            draw_arrow_head_sized(img, tip_x, tip_y, end_x - start_x,
+                                  end_y - start_y, 8.0f, assoc->color);
+        }
+    }
+    else
+    {
+        draw_line(img, start_x, start_y, end_x, end_y, aa_stroke(UML_STROKE),
+                  assoc->color);
+    }
 
     mag = sqrtf((float)((end_x - start_x) * (end_x - start_x) +
                         (end_y - start_y) * (end_y - start_y)));
@@ -4070,7 +4205,7 @@ static int render_class_file(const char *input_path, const char *output_path,
         diagram.classes[i].y += title_offset;
 
     image.width = logical_w * UML_AA_SCALE;
-    image.height = (logical_h + title_offset) * UML_AA_SCALE;
+    image.height = logical_h * UML_AA_SCALE;
     image.pixels = (unsigned char *)calloc((size_t)image.width * (size_t)image.height * 4u, 1u);
     if(!image.pixels)
     {
@@ -4225,6 +4360,12 @@ int uml_render_file(const char *input_path, const char *output_path)
     if(kind == DIAGRAM_SEQUENCE)
     {
         int rc = render_sequence_file(input_path, output_path, text);
+        free(text);
+        return rc;
+    }
+    if(kind == DIAGRAM_CLASS)
+    {
+        int rc = render_class_file(input_path, output_path, text);
         free(text);
         return rc;
     }

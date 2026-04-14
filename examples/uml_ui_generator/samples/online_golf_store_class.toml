@@ -1,0 +1,115 @@
+[settings]
+diagram = "class"
+title = "Online Golf Store"
+title_size = 24
+title_bold = true
+scale = 1.0
+box_radius = 4
+
+[properties]
+class_fill = "#ffffff"
+class_stroke = "#111111"
+class_text = "#111111"
+association_color = "#444444"
+
+[[classes]]
+id = "store"
+name = "Online Golf Store"
+x = 380
+y = 40
+attributes = []
+methods = ["+ checkout(customerId: Int): Order"]
+
+[[classes]]
+id = "customer"
+name = "Customer"
+x = 20
+y = 220
+attributes = ["id", "name", "shippingAddress", "billingAddress"]
+methods = ["+ findById(id: Int): Customer", "+ placeOrder(): Order"]
+
+[[classes]]
+id = "order"
+name = "Order"
+x = 360
+y = 220
+attributes = ["- customer", "- salesTax", "- shipping", "- total"]
+methods = ["+ submit(): void", "- calculateShipping(zipCode: Int): Float"]
+
+[[classes]]
+id = "payment_method"
+name = "Payment Method"
+x = 720
+y = 220
+attributes = ["- holderName"]
+methods = ["+ authorize(total: Float): bool"]
+
+[[classes]]
+id = "address"
+name = "Address"
+x = 20
+y = 520
+attributes = ["- street", "- zip", "- city", "- state"]
+methods = ["+ prettyPrint(): string"]
+
+[[classes]]
+id = "credit_card"
+name = "Credit Card"
+x = 430
+y = 520
+attributes = ["- issuer", "- cardNumber", "- expirationDate"]
+methods = ["+ authorize(total: Float): bool"]
+
+[[classes]]
+id = "fraud_service"
+name = "Fraud Service"
+x = 760
+y = 520
+attributes = ["- endpoint"]
+methods = ["+ score(orderId: Int): int"]
+
+[[associations]]
+from = "store"
+to = "customer"
+kind = "association"
+from_multiplicity = "1"
+to_multiplicity = "*"
+
+[[associations]]
+from = "store"
+to = "order"
+kind = "association"
+from_multiplicity = "1"
+to_multiplicity = "*"
+
+[[associations]]
+from = "customer"
+to = "order"
+kind = "association"
+from_multiplicity = "1"
+to_multiplicity = "*"
+
+[[associations]]
+from = "customer"
+to = "address"
+kind = "aggregation"
+from_multiplicity = "1"
+to_multiplicity = "2"
+
+[[associations]]
+from = "order"
+to = "credit_card"
+kind = "composition"
+from_multiplicity = "1"
+to_multiplicity = "1"
+
+[[associations]]
+from = "credit_card"
+to = "payment_method"
+kind = "generalization"
+
+[[associations]]
+from = "order"
+to = "fraud_service"
+kind = "dependency"
+label = "uses"
