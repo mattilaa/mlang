@@ -1,27 +1,99 @@
 # UML UI Generator Example
 
-This example builds a small `mlang` CLI that reads a text definition and
-renders a PNG for either:
+This example builds a small `mlang` CLI that reads a TOML diagram definition
+and renders a PNG for:
 
 - UML activity/control-flow diagrams
-- UML-style sequence diagrams
+- UML sequence diagrams
 - UML class diagrams
 - UML package diagrams
 
 The renderer is implemented in C and writes PNGs directly with `stb`. No Java
 runtime is used.
 
-## Input Format
+## Overview
 
-The preferred format is a TOML-like sectioned file.
+Each diagram file uses the same high-level structure:
 
-Use:
+- `[settings]` for diagram-wide options
+- `[properties]` for default styling
+- one or more item arrays such as `[[nodes]]`, `[[messages]]`, `[[classes]]`,
+  or `[[elements]]`
 
-- `[settings]` for diagram-wide values
-- `[properties]` for default colors per element family
-- `[[nodes]]`, `[[edges]]`, `[[participants]]`, `[[messages]]` for the actual graph
+Per-item styling overrides values from `[properties]`.
 
-Activity example:
+## Common TOML Keys
+
+### `[settings]`
+
+Keys supported by every diagram:
+
+- `diagram = "activity" | "sequence" | "class" | "package"`
+- `title = "Text"`
+- `title_size = 22`
+- `title_bold = true`
+- `scale = 1.0`
+- `box_radius = 8`
+
+Diagram-specific keys:
+
+- activity: `edge_radius`
+- sequence: `arrow_size`
+- package: `edge_radius`
+
+### `[properties]`
+
+Defaults are grouped by diagram family.
+
+Activity defaults:
+
+- `action_fill`, `action_stroke`, `action_text`, `action_bold`
+- `decision_fill`, `decision_stroke`, `decision_text`, `decision_bold`
+- `start_fill`, `start_stroke`, `start_text`, `start_radius`, `start_bold`
+- `end_fill`, `end_stroke`, `end_text`, `end_radius`, `end_bold`
+- `edge_color`
+
+Sequence defaults:
+
+- `participant_fill`, `participant_stroke`, `participant_text`,
+  `participant_bold`
+- `message_color`, `message_bold`
+
+Class defaults:
+
+- `class_fill`, `class_header_fill`, `class_stroke`, `class_text`,
+  `class_bold`
+- `association_color`, `association_bold`
+
+Package defaults:
+
+- `container_fill`, `container_header_fill`, `container_stroke`,
+  `container_text`, `container_bold`
+- `package_fill`, `package_header_fill`, `package_stroke`, `package_text`,
+  `package_bold`
+- `model_fill`, `model_header_fill`, `model_stroke`, `model_text`,
+  `model_bold`
+- `dependency_color`, `dependency_bold`
+
+## Activity Diagrams
+
+Tables:
+
+- `[[nodes]]`
+- `[[edges]]`
+
+`[[nodes]]` keys:
+
+- required: `id`, `type`
+- optional: `label`, `fill`, `stroke`, `text`
+- supported `type`: `"start"`, `"action"`, `"decision"`, `"end"`
+
+`[[edges]]` keys:
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+Example:
 
 ```toml
 [settings]
@@ -42,12 +114,8 @@ decision_stroke = "#d97706"
 decision_text = "#111827"
 start_fill = "#22c55e"
 start_stroke = "#166534"
-start_text = "#ffffff"
-start_radius = 9
 end_fill = "#c084fc"
 end_stroke = "#7c3aed"
-end_text = "#ffffff"
-end_radius = 10
 edge_color = "#334155"
 
 [[nodes]]
@@ -62,7 +130,29 @@ label = "yes"
 color = "#16a34a"
 ```
 
-Sequence example:
+Full sample:
+
+- [basic_control_flow.toml](/Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/basic_control_flow.toml)
+- [multi_path_control_flow.toml](/Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/multi_path_control_flow.toml)
+
+## Sequence Diagrams
+
+Tables:
+
+- `[[participants]]`
+- `[[messages]]`
+
+`[[participants]]` keys:
+
+- required: `id`
+- optional: `label`, `fill`, `stroke`, `text`
+
+`[[messages]]` keys:
+
+- required: `from`, `to`
+- optional: `label`, `color`
+
+Example:
 
 ```toml
 [settings]
@@ -85,7 +175,6 @@ id = "gateway"
 label = "HTTPS API Gateway"
 fill = "#fde68a"
 stroke = "#d97706"
-text = "#111827"
 
 [[messages]]
 from = "browser"
@@ -94,12 +183,38 @@ label = "POST /login over TLS"
 color = "#2563eb"
 ```
 
-Class example:
+Full sample:
+
+- [https_auth_sequence.toml](/Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/https_auth_sequence.toml)
+
+## Class Diagrams
+
+Tables:
+
+- `[[classes]]`
+- `[[associations]]`
+
+`[[classes]]` keys:
+
+- required: `id`
+- optional: `name`, `x`, `y`, `attributes`, `methods`
+- optional styling: `fill`, `header_fill`, `stroke`, `text`, `bold`
+
+`[[associations]]` keys:
+
+- required: `from`, `to`
+- optional: `kind`, `from_multiplicity`, `to_multiplicity`, `label`, `color`,
+  `bold`
+- supported `kind`:
+  `"association"`, `"aggregation"`, `"composition"`, `"generalization"`,
+  `"inheritance"`, `"realization"`, `"dependency"`
+
+Example:
 
 ```toml
 [settings]
 diagram = "class"
-title = "Online golf store domain"
+title = "Online Golf Store"
 title_size = 24
 title_bold = true
 scale = 1.0
@@ -108,26 +223,19 @@ box_radius = 4
 [properties]
 class_fill = "#ffffff"
 class_header_fill = "#f4f4f5"
-class_stroke = "#18181b"
-class_text = "#18181b"
-association_color = "#3f3f46"
+class_stroke = "#111111"
+class_text = "#111111"
+association_color = "#444444"
 
 [[classes]]
 id = "customer"
 name = "Customer"
-x = 40
-y = 180
-attributes = ["id", "name", "shippingAddress", "billingAddress"]
-methods = ["+ findById(): Customer"]
-header_fill = "#dbeafe"
-
-[[classes]]
-id = "order"
-name = "Order"
-x = 360
-y = 180
-attributes = ["- customer", "- salesTax", "- shipping", "- total"]
-methods = ["- calculateShipping(zipCode:Int): Float"]
+x = 20
+y = 220
+attributes = ["id", "name"]
+methods = ["+ findById(id: Int): Customer"]
+fill = "#dbeafe"
+header_fill = "#bfdbfe"
 
 [[associations]]
 from = "customer"
@@ -137,159 +245,86 @@ from_multiplicity = "1"
 to_multiplicity = "*"
 ```
 
-Package example:
+Full sample:
+
+- [online_golf_store_class.toml](/Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/online_golf_store_class.toml)
+
+## Package Diagrams
+
+Tables:
+
+- `[[elements]]`
+- `[[dependencies]]`
+
+`[[elements]]` keys:
+
+- required: `id`, `kind`
+- optional structure: `parent`, `label`, `stereotype`, `x`, `y`, `width`,
+  `height`
+- optional styling: `fill`, `header_fill`, `stroke`, `text`, `bold`
+- supported `kind`: `"container"`, `"package"`, `"model"`
+
+Notes:
+
+- `parent` lets package and container boxes size themselves around direct
+  children.
+- explicit `x`, `y`, `width`, and `height` are still accepted and work as the
+  starting geometry.
+
+`[[dependencies]]` keys:
+
+- required: `from`, `to`
+- optional: `label`, `color`, `bold`
+- optional routing: `from_side`, `to_side`, `waypoints`, `corner_radius`
+- supported sides: `"auto"`, `"top"`, `"right"`, `"bottom"`, `"left"`
+- `waypoints` uses string points such as `["375,245", "375,405"]`
+
+Example:
 
 ```toml
 [settings]
 diagram = "package"
-title = "Layered application package view"
+title = "Layered Application"
 title_size = 24
 title_bold = true
 scale = 1.0
 box_radius = 4
-edge_radius = 10
+edge_radius = 0
 
 [properties]
 container_fill = "#ffffff"
-container_header_fill = "#f8fafc"
+container_header_fill = "#e2e8f0"
 package_fill = "#ffffff"
-package_header_fill = "#f8fafc"
+package_header_fill = "#f3f4f6"
 model_fill = "#ffffff"
-model_header_fill = "#f8fafc"
-dependency_color = "#71717a"
-
-[[elements]]
-id = "app"
-kind = "container"
-label = "Layered Application"
-stereotype = "model"
-x = 40
-y = 40
-width = 600
-height = 560
+model_header_fill = "#f3f4f6"
+dependency_color = "#52525b"
 
 [[elements]]
 id = "business_layer"
 kind = "package"
+parent = "app"
 label = "Business Layer"
-x = 80
-y = 250
-width = 500
-height = 180
 
 [[dependencies]]
-from = "presentation_layer"
-to = "business_layer"
-waypoints = ["350,190", "350,250"]
+from = "facade"
+to = "components"
+from_side = "bottom"
+to_side = "top"
+waypoints = ["375,405"]
+corner_radius = 0
 ```
 
-## Sections
+Full sample:
 
-`[settings]`
+- [layered_application_package.toml](/Users/matti.laamanen/projects/mlang/examples/uml_ui_generator/samples/layered_application_package.toml)
 
-- `diagram = "activity"`, `diagram = "sequence"`, `diagram = "class"`, or `diagram = "package"`
-- `title = "Text"`
-- `title_size = 22`
-- `title_bold = true`
-- `scale = 1.0`
-- `box_radius = 8`
-- `edge_radius = 5` for activity/control-flow diagrams
-- `arrow_size = 12` for sequence diagrams
-- `edge_radius = 10` for package dependency routing defaults
+## Styling Rules
 
-`[properties]`
-
-Supported activity defaults:
-
-- `action_fill`, `action_stroke`, `action_text`
-- `action_bold`
-- `decision_fill`, `decision_stroke`, `decision_text`
-- `decision_bold`
-- `start_fill`, `start_stroke`, `start_text`
-- `start_radius`
-- `start_bold`
-- `end_fill`, `end_stroke`, `end_text`
-- `end_radius`
-- `end_bold`
-- `edge_color`
-
-Supported sequence defaults:
-
-- `participant_fill`, `participant_stroke`, `participant_text`
-- `participant_bold`
-- `message_color`
-- `message_bold`
-
-Supported class defaults:
-
-- `class_fill`, `class_stroke`, `class_text`
-- `class_header_fill`
-- `class_bold`
-- `association_color`
-- `association_bold`
-
-Supported package defaults:
-
-- `container_fill`, `container_header_fill`, `container_stroke`, `container_text`, `container_bold`
-- `package_fill`, `package_header_fill`, `package_stroke`, `package_text`, `package_bold`
-- `model_fill`, `model_header_fill`, `model_stroke`, `model_text`, `model_bold`
-- `dependency_color`, `dependency_bold`
-
-## Item Tables
-
-`[[nodes]]`
-
-- required: `id`, `type`
-- optional: `label`, `fill`, `stroke`, `text`
-
-`[[edges]]`
-
-- required: `from`, `to`
-- optional: `label`, `color`
-
-`[[participants]]`
-
-- required: `id`
-- optional: `label`, `fill`, `stroke`, `text`
-
-`[[messages]]`
-
-- required: `from`, `to`
-- optional: `label`, `color`
-
-`[[classes]]`
-
-- required: `id`
-- optional: `name`, `x`, `y`, `attributes`, `methods`, `fill`, `header_fill`, `stroke`, `text`, `bold`
-
-`[[associations]]`
-
-- required: `from`, `to`
-- optional: `kind`, `from_multiplicity`, `to_multiplicity`, `label`, `color`, `bold`
-- supported `kind` values: `"association"`, `"aggregation"`, `"composition"`, `"generalization"`, `"inheritance"`, `"realization"`, `"dependency"`
-
-`[[elements]]`
-
-- required: `id`, `kind`
-- optional: `label`, `stereotype`, `x`, `y`, `width`, `height`, `fill`, `header_fill`, `stroke`, `text`, `bold`
-- supported `kind` values: `"container"`, `"package"`, `"model"`
-
-`[[dependencies]]`
-
-- required: `from`, `to`
-- optional: `label`, `color`, `bold`, `waypoints`, `corner_radius`
-- `waypoints` uses string points like `["350,190", "350,250"]`
-
-## Color Rules
-
-- If an item defines its own `fill`, `stroke`, `text`, or `color`, that value wins.
+- If an item defines its own `fill`, `header_fill`, `stroke`, `text`, or
+  `color`, that value wins.
 - Otherwise the renderer uses the matching default from `[properties]`.
-- If `[properties]` omits a value, the built-in example defaults are used.
-
-## Legacy Support
-
-The older pipe-delimited format is still accepted for now, but the sectioned
-format is the intended direction.
+- If `[properties]` omits a value, the renderer falls back to built-in defaults.
 
 ## Build
 
@@ -302,37 +337,17 @@ From this directory:
 
 ## Run
 
-Render the bundled control-flow sample:
+Bundled tasks:
 
 ```sh
 ../../build/mlang pkg run render-sample
-```
-
-Render the more complex multi-path control-flow sample:
-
-```sh
 ../../build/mlang pkg run render-complex-sample
-```
-
-Render the HTTPS authentication sequence sample:
-
-```sh
 ../../build/mlang pkg run render-sequence-sample
-```
-
-Render the bundled class diagram sample:
-
-```sh
 ../../build/mlang pkg run render-class-sample
-```
-
-Render the bundled package diagram sample:
-
-```sh
 ../../build/mlang pkg run render-package-sample
 ```
 
-Or run the binary directly:
+Direct execution:
 
 ```sh
 ./build/uml_ui_generator samples/basic_control_flow.toml build/generated/basic_control_flow.png

@@ -58,6 +58,8 @@ If you are new to MLang, read these pages in this order:
 - [Package Manager](package_manager.md)
   `mlang pkg` workflow, subcommands, manifest layout, and package build
   configuration keys.
+- [UML UI Generator Example](uml_ui_generator.md)
+  TOML schema and sample files for the PNG UML example renderer.
 - [Ownership Model Notes](ownership_model.h)
   Current ownership and move/copy model notes used by the compiler.
 
@@ -177,6 +179,7 @@ Relevant example files in the repository:
 - [`tests/bench_stdlib.mla`](../../../tests/bench_stdlib.mla) — benchmark example
 - [`examples/mlang_attributes.mla`](../../../examples/mlang_attributes.mla) — `#[test]` and `#[derive(Debug)]` in one file
 - [`examples/testing_mock_example.mla`](../../../examples/testing_mock_example.mla) — mock-based testing with `std::testing`
+- [`examples/uml_ui_generator`](../../../examples/uml_ui_generator) — TOML-driven UML PNG renderer example
 
 ## Design Direction
 
@@ -197,5 +200,6 @@ The language is intentionally pragmatic rather than ideological.
 - [Language Syntax](language_syntax.md)
 - [Language Attributes](language_attributes.md)
 - [Package Manager](package_manager.md)
+- [UML UI Generator Example](uml_ui_generator.md)
 - [Stdlib Module API](stdlib_mlang_api.md)
 - root project `README.md` for build, test, and workflow commands
