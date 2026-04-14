@@ -38,7 +38,8 @@ typedef enum
 {
     DIAGRAM_ACTIVITY = 0,
     DIAGRAM_SEQUENCE = 1,
-    DIAGRAM_CLASS = 2
+    DIAGRAM_CLASS = 2,
+    DIAGRAM_PACKAGE = 3
 } diagram_kind_t;
 
 typedef struct
@@ -182,6 +183,69 @@ typedef struct
     class_association_t associations[96];
     int association_count;
 } class_diagram_t;
+
+typedef enum
+{
+    PACKAGE_CONTAINER = 0,
+    PACKAGE_PACKAGE = 1,
+    PACKAGE_MODEL = 2
+} package_element_kind_t;
+
+typedef struct
+{
+    char id[64];
+    package_element_kind_t kind;
+    int parent;
+    char label[160];
+    char stereotype[64];
+    int x;
+    int y;
+    int width;
+    int height;
+    color_t fill;
+    color_t header_fill;
+    color_t stroke;
+    color_t text;
+    int bold;
+} package_element_t;
+
+typedef enum
+{
+    ANCHOR_AUTO = 0,
+    ANCHOR_TOP = 1,
+    ANCHOR_RIGHT = 2,
+    ANCHOR_BOTTOM = 3,
+    ANCHOR_LEFT = 4
+} anchor_side_t;
+
+typedef struct
+{
+    int from;
+    int to;
+    char label[96];
+    color_t color;
+    int bold;
+    int point_count;
+    int points_x[16];
+    int points_y[16];
+    int corner_radius;
+    anchor_side_t from_side;
+    anchor_side_t to_side;
+} package_dependency_t;
+
+typedef struct
+{
+    char title[160];
+    float scale;
+    float box_radius;
+    float edge_radius;
+    float title_size;
+    int title_bold;
+    package_element_t elements[64];
+    int element_count;
+    package_dependency_t dependencies[128];
+    int dependency_count;
+} package_diagram_t;
 
 typedef struct
 {
@@ -443,6 +507,62 @@ static int parse_diagram_kind(const char *text, diagram_kind_t *out)
         *out = DIAGRAM_CLASS;
         return 1;
     }
+    if(eq_ci(text, "package"))
+    {
+        *out = DIAGRAM_PACKAGE;
+        return 1;
+    }
+    return 0;
+}
+
+static int parse_package_element_kind(const char *text,
+                                      package_element_kind_t *out)
+{
+    if(eq_ci(text, "container"))
+    {
+        *out = PACKAGE_CONTAINER;
+        return 1;
+    }
+    if(eq_ci(text, "package"))
+    {
+        *out = PACKAGE_PACKAGE;
+        return 1;
+    }
+    if(eq_ci(text, "model"))
+    {
+        *out = PACKAGE_MODEL;
+        return 1;
+    }
+    return 0;
+}
+
+static int parse_anchor_side(const char *text, anchor_side_t *out)
+{
+    if(eq_ci(text, "auto"))
+    {
+        *out = ANCHOR_AUTO;
+        return 1;
+    }
+    if(eq_ci(text, "top"))
+    {
+        *out = ANCHOR_TOP;
+        return 1;
+    }
+    if(eq_ci(text, "right"))
+    {
+        *out = ANCHOR_RIGHT;
+        return 1;
+    }
+    if(eq_ci(text, "bottom"))
+    {
+        *out = ANCHOR_BOTTOM;
+        return 1;
+    }
+    if(eq_ci(text, "left"))
+    {
+        *out = ANCHOR_LEFT;
+        return 1;
+    }
     return 0;
 }
 
@@ -537,6 +657,53 @@ static int parse_int_value(const char *text, int fallback)
     return (int)value;
 }
 
+static int parse_point_array(const char *text, int *xs, int *ys, int max_points,
+                             int *out_count)
+{
+    char buffer[2048];
+    char *cursor;
+    int count = 0;
+
+    if(!parse_string_value(text, buffer, sizeof(buffer)))
+        return 0;
+    trim_in_place(buffer);
+    if(buffer[0] != '[')
+        return 0;
+    cursor = buffer + 1;
+    while(*cursor != '\0')
+    {
+        char *start;
+        char *comma;
+        char *end;
+        long x;
+        long y;
+        while(*cursor != '\0' &&
+              (isspace((unsigned char)*cursor) || *cursor == ','))
+            cursor++;
+        if(*cursor == ']')
+            break;
+        if(*cursor != '"' || count >= max_points)
+            return 0;
+        start = ++cursor;
+        end = strchr(start, '"');
+        if(!end)
+            return 0;
+        *end = '\0';
+        comma = strchr(start, ',');
+        if(!comma)
+            return 0;
+        *comma = '\0';
+        x = strtol(start, NULL, 10);
+        y = strtol(comma + 1, NULL, 10);
+        xs[count] = (int)x;
+        ys[count] = (int)y;
+        count++;
+        cursor = end + 1;
+    }
+    *out_count = count;
+    return 1;
+}
+
 static int parse_string_array(const char *text, char out[][160], int max_items,
                               int *out_count)
 {
@@ -613,6 +780,18 @@ static int find_class_index(const class_diagram_t *diagram, const char *id)
     return -1;
 }
 
+static int find_package_element_index(const package_diagram_t *diagram,
+                                      const char *id)
+{
+    int i;
+    for(i = 0; i < diagram->element_count; ++i)
+    {
+        if(strcmp(diagram->elements[i].id, id) == 0)
+            return i;
+    }
+    return -1;
+}
+
 typedef struct
 {
     color_t action_fill;
@@ -647,6 +826,23 @@ typedef struct
     int class_bold;
     color_t association_color;
     int association_bold;
+    color_t container_fill;
+    color_t container_header_fill;
+    color_t container_stroke;
+    color_t container_text;
+    int container_bold;
+    color_t package_fill;
+    color_t package_header_fill;
+    color_t package_stroke;
+    color_t package_text;
+    int package_bold;
+    color_t model_fill;
+    color_t model_header_fill;
+    color_t model_stroke;
+    color_t model_text;
+    int model_bold;
+    color_t dependency_color;
+    int dependency_bold;
 } style_defaults_t;
 
 typedef struct
@@ -735,6 +931,56 @@ typedef struct
     int has_bold;
 } class_association_input_t;
 
+typedef struct
+{
+    char id[64];
+    char parent_id[64];
+    package_element_kind_t kind;
+    int has_kind;
+    char label[160];
+    int has_label;
+    char stereotype[64];
+    int has_stereotype;
+    int x;
+    int has_x;
+    int y;
+    int has_y;
+    int width;
+    int has_width;
+    int height;
+    int has_height;
+    color_t fill;
+    int has_fill;
+    color_t header_fill;
+    int has_header_fill;
+    color_t stroke;
+    int has_stroke;
+    color_t text;
+    int has_text;
+    int bold;
+    int has_bold;
+} package_element_input_t;
+
+typedef struct
+{
+    char from_id[64];
+    char to_id[64];
+    char label[96];
+    color_t color;
+    int has_color;
+    int bold;
+    int has_bold;
+    int point_count;
+    int points_x[16];
+    int points_y[16];
+    int corner_radius;
+    int has_corner_radius;
+    anchor_side_t from_side;
+    int has_from_side;
+    anchor_side_t to_side;
+    int has_to_side;
+} package_dependency_input_t;
+
 typedef enum
 {
     SECTION_NONE = 0,
@@ -745,7 +991,9 @@ typedef enum
     SECTION_PARTICIPANT_ITEM = 5,
     SECTION_MESSAGE_ITEM = 6,
     SECTION_CLASS_ITEM = 7,
-    SECTION_ASSOCIATION_ITEM = 8
+    SECTION_ASSOCIATION_ITEM = 8,
+    SECTION_ELEMENT_ITEM = 9,
+    SECTION_DEPENDENCY_ITEM = 10
 } section_kind_t;
 
 static void init_style_defaults(style_defaults_t *defaults)
@@ -782,6 +1030,23 @@ static void init_style_defaults(style_defaults_t *defaults)
     defaults->class_bold = 1;
     defaults->association_color = color_rgba(82, 82, 91, 255);
     defaults->association_bold = 0;
+    defaults->container_fill = color_rgba(255, 255, 255, 255);
+    defaults->container_header_fill = color_rgba(255, 255, 255, 255);
+    defaults->container_stroke = color_rgba(39, 39, 42, 255);
+    defaults->container_text = color_rgba(17, 24, 39, 255);
+    defaults->container_bold = 1;
+    defaults->package_fill = color_rgba(255, 255, 255, 255);
+    defaults->package_header_fill = color_rgba(248, 250, 252, 255);
+    defaults->package_stroke = color_rgba(63, 63, 70, 255);
+    defaults->package_text = color_rgba(17, 24, 39, 255);
+    defaults->package_bold = 1;
+    defaults->model_fill = color_rgba(255, 255, 255, 255);
+    defaults->model_header_fill = color_rgba(248, 250, 252, 255);
+    defaults->model_stroke = color_rgba(63, 63, 70, 255);
+    defaults->model_text = color_rgba(17, 24, 39, 255);
+    defaults->model_bold = 1;
+    defaults->dependency_color = color_rgba(113, 113, 122, 255);
+    defaults->dependency_bold = 0;
 }
 
 static int looks_like_sectioned_text(const char *text)
@@ -907,6 +1172,16 @@ static int parse_section_header(const char *line, section_kind_t *section)
         *section = SECTION_ASSOCIATION_ITEM;
         return 1;
     }
+    if(strcmp(line, "[[elements]]") == 0)
+    {
+        *section = SECTION_ELEMENT_ITEM;
+        return 1;
+    }
+    if(strcmp(line, "[[dependencies]]") == 0)
+    {
+        *section = SECTION_DEPENDENCY_ITEM;
+        return 1;
+    }
     return 0;
 }
 
@@ -1010,6 +1285,64 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
     {
         defaults->association_bold =
             parse_bool_value(value, defaults->association_bold);
+        return 1;
+    }
+    if(eq_ci(key, "container_fill"))
+        return parse_color(value, defaults->container_fill,
+                           &defaults->container_fill);
+    if(eq_ci(key, "container_header_fill"))
+        return parse_color(value, defaults->container_header_fill,
+                           &defaults->container_header_fill);
+    if(eq_ci(key, "container_stroke"))
+        return parse_color(value, defaults->container_stroke,
+                           &defaults->container_stroke);
+    if(eq_ci(key, "container_text"))
+        return parse_color(value, defaults->container_text,
+                           &defaults->container_text);
+    if(eq_ci(key, "container_bold"))
+    {
+        defaults->container_bold =
+            parse_bool_value(value, defaults->container_bold);
+        return 1;
+    }
+    if(eq_ci(key, "package_fill"))
+        return parse_color(value, defaults->package_fill, &defaults->package_fill);
+    if(eq_ci(key, "package_header_fill"))
+        return parse_color(value, defaults->package_header_fill,
+                           &defaults->package_header_fill);
+    if(eq_ci(key, "package_stroke"))
+        return parse_color(value, defaults->package_stroke,
+                           &defaults->package_stroke);
+    if(eq_ci(key, "package_text"))
+        return parse_color(value, defaults->package_text, &defaults->package_text);
+    if(eq_ci(key, "package_bold"))
+    {
+        defaults->package_bold =
+            parse_bool_value(value, defaults->package_bold);
+        return 1;
+    }
+    if(eq_ci(key, "model_fill"))
+        return parse_color(value, defaults->model_fill, &defaults->model_fill);
+    if(eq_ci(key, "model_header_fill"))
+        return parse_color(value, defaults->model_header_fill,
+                           &defaults->model_header_fill);
+    if(eq_ci(key, "model_stroke"))
+        return parse_color(value, defaults->model_stroke, &defaults->model_stroke);
+    if(eq_ci(key, "model_text"))
+        return parse_color(value, defaults->model_text, &defaults->model_text);
+    if(eq_ci(key, "model_bold"))
+    {
+        defaults->model_bold =
+            parse_bool_value(value, defaults->model_bold);
+        return 1;
+    }
+    if(eq_ci(key, "dependency_color"))
+        return parse_color(value, defaults->dependency_color,
+                           &defaults->dependency_color);
+    if(eq_ci(key, "dependency_bold"))
+    {
+        defaults->dependency_bold =
+            parse_bool_value(value, defaults->dependency_bold);
         return 1;
     }
     return 0;
@@ -1944,6 +2277,404 @@ static int parse_class_sectioned(class_diagram_t *diagram, const char *text)
         assoc->bold = association_inputs[i].has_bold
                           ? association_inputs[i].bold
                           : defaults.association_bold;
+    }
+
+    return 1;
+}
+
+static int parse_package_sectioned(package_diagram_t *diagram, const char *text)
+{
+    char *owned = NULL;
+    char *cursor;
+    int line_no = 0;
+    section_kind_t section = SECTION_NONE;
+    style_defaults_t defaults;
+    package_element_input_t element_inputs[64];
+    package_dependency_input_t dependency_inputs[128];
+    int element_input_count = 0;
+    int dependency_input_count = 0;
+    int current_element = -1;
+    int current_dependency = -1;
+    int i;
+
+    memset(diagram, 0, sizeof(*diagram));
+    init_style_defaults(&defaults);
+    diagram->scale = 1.0f;
+    diagram->box_radius = 4.0f;
+    diagram->edge_radius = 10.0f;
+    diagram->title_size = 18.0f;
+    diagram->title_bold = 1;
+    memset(element_inputs, 0, sizeof(element_inputs));
+    memset(dependency_inputs, 0, sizeof(dependency_inputs));
+
+    owned = (char *)malloc(strlen(text) + 1);
+    if(!owned)
+    {
+        set_errorf("out of memory");
+        return 0;
+    }
+    strcpy(owned, text);
+    cursor = owned;
+
+    while(*cursor != '\0')
+    {
+        char *line = cursor;
+        char *newline = strchr(cursor, '\n');
+        char *key;
+        char *value;
+
+        line_no++;
+        if(newline)
+        {
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        else
+            cursor += strlen(cursor);
+
+        trim_in_place(line);
+        strip_inline_comment(line);
+        trim_in_place(line);
+        if(line[0] == '\0')
+            continue;
+        if(parse_section_header(line, &section))
+        {
+            if(section == SECTION_ELEMENT_ITEM)
+            {
+                if(element_input_count >= 64)
+                {
+                    free(owned);
+                    set_errorf("too many package elements");
+                    return 0;
+                }
+                current_element = element_input_count++;
+                current_dependency = -1;
+                memset(&element_inputs[current_element], 0,
+                       sizeof(element_inputs[0]));
+            }
+            else if(section == SECTION_DEPENDENCY_ITEM)
+            {
+                if(dependency_input_count >= 128)
+                {
+                    free(owned);
+                    set_errorf("too many package dependencies");
+                    return 0;
+                }
+                current_dependency = dependency_input_count++;
+                current_element = -1;
+                memset(&dependency_inputs[current_dependency], 0,
+                       sizeof(dependency_inputs[0]));
+            }
+            else
+            {
+                current_element = -1;
+                current_dependency = -1;
+            }
+            continue;
+        }
+        if(!split_key_value(line, &key, &value))
+        {
+            free(owned);
+            set_errorf("line %d: expected key = value", line_no);
+            return 0;
+        }
+
+        if(section == SECTION_SETTINGS)
+        {
+            char parsed[160];
+            if(eq_ci(key, "diagram"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !eq_ci(parsed, "package"))
+                {
+                    free(owned);
+                    set_errorf("line %d: package input requires diagram = \"package\"",
+                               line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "title"))
+                parse_string_value(value, diagram->title, sizeof(diagram->title));
+            else if(eq_ci(key, "title_size"))
+                diagram->title_size = parse_option_value(value, 18.0f);
+            else if(eq_ci(key, "title_bold"))
+                diagram->title_bold = parse_bool_value(value, 1);
+            else if(eq_ci(key, "scale"))
+                diagram->scale = parse_scale_value(value, 1.0f);
+            else if(eq_ci(key, "box_radius"))
+                diagram->box_radius = parse_option_value(value, 4.0f);
+            else if(eq_ci(key, "edge_radius"))
+                diagram->edge_radius = parse_option_value(value, 10.0f);
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown settings key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_PROPERTIES)
+        {
+            if(!apply_property_color(&defaults, key, value))
+            {
+                free(owned);
+                set_errorf("line %d: unknown properties key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_ELEMENT_ITEM && current_element >= 0)
+        {
+            package_element_input_t *el = &element_inputs[current_element];
+            char parsed[160];
+            if(eq_ci(key, "id"))
+                parse_string_value(value, el->id, sizeof(el->id));
+            else if(eq_ci(key, "parent"))
+                parse_string_value(value, el->parent_id, sizeof(el->parent_id));
+            else if(eq_ci(key, "kind"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !parse_package_element_kind(parsed, &el->kind))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid element kind", line_no);
+                    return 0;
+                }
+                el->has_kind = 1;
+            }
+            else if(eq_ci(key, "label"))
+            {
+                parse_string_value(value, el->label, sizeof(el->label));
+                el->has_label = 1;
+            }
+            else if(eq_ci(key, "stereotype"))
+            {
+                parse_string_value(value, el->stereotype, sizeof(el->stereotype));
+                el->has_stereotype = 1;
+            }
+            else if(eq_ci(key, "x"))
+            {
+                el->x = parse_int_value(value, 0);
+                el->has_x = 1;
+            }
+            else if(eq_ci(key, "y"))
+            {
+                el->y = parse_int_value(value, 0);
+                el->has_y = 1;
+            }
+            else if(eq_ci(key, "width"))
+            {
+                el->width = parse_int_value(value, 0);
+                el->has_width = 1;
+            }
+            else if(eq_ci(key, "height"))
+            {
+                el->height = parse_int_value(value, 0);
+                el->has_height = 1;
+            }
+            else if(eq_ci(key, "fill"))
+                el->has_fill = parse_color(value, defaults.package_fill, &el->fill);
+            else if(eq_ci(key, "header_fill"))
+                el->has_header_fill =
+                    parse_color(value, defaults.package_header_fill,
+                                &el->header_fill);
+            else if(eq_ci(key, "stroke"))
+                el->has_stroke = parse_color(value, defaults.package_stroke,
+                                             &el->stroke);
+            else if(eq_ci(key, "text"))
+                el->has_text = parse_color(value, defaults.package_text, &el->text);
+            else if(eq_ci(key, "bold"))
+            {
+                el->bold = parse_bool_value(value, defaults.package_bold);
+                el->has_bold = 1;
+            }
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown element key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        if(section == SECTION_DEPENDENCY_ITEM && current_dependency >= 0)
+        {
+            package_dependency_input_t *dep = &dependency_inputs[current_dependency];
+            char parsed[64];
+            if(eq_ci(key, "from"))
+                parse_string_value(value, dep->from_id, sizeof(dep->from_id));
+            else if(eq_ci(key, "to"))
+                parse_string_value(value, dep->to_id, sizeof(dep->to_id));
+            else if(eq_ci(key, "label"))
+                parse_string_value(value, dep->label, sizeof(dep->label));
+            else if(eq_ci(key, "from_side"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !parse_anchor_side(parsed, &dep->from_side))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid from_side", line_no);
+                    return 0;
+                }
+                dep->has_from_side = 1;
+            }
+            else if(eq_ci(key, "to_side"))
+            {
+                if(!parse_string_value(value, parsed, sizeof(parsed)) ||
+                   !parse_anchor_side(parsed, &dep->to_side))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid to_side", line_no);
+                    return 0;
+                }
+                dep->has_to_side = 1;
+            }
+            else if(eq_ci(key, "color"))
+                dep->has_color =
+                    parse_color(value, defaults.dependency_color, &dep->color);
+            else if(eq_ci(key, "bold"))
+            {
+                dep->bold = parse_bool_value(value, defaults.dependency_bold);
+                dep->has_bold = 1;
+            }
+            else if(eq_ci(key, "waypoints"))
+            {
+                if(!parse_point_array(value, dep->points_x, dep->points_y, 16,
+                                      &dep->point_count))
+                {
+                    free(owned);
+                    set_errorf("line %d: invalid dependency waypoint array",
+                               line_no);
+                    return 0;
+                }
+            }
+            else if(eq_ci(key, "corner_radius"))
+            {
+                dep->corner_radius = parse_int_value(value, 0);
+                dep->has_corner_radius = 1;
+            }
+            else
+            {
+                free(owned);
+                set_errorf("line %d: unknown dependency key '%s'", line_no, key);
+                return 0;
+            }
+            continue;
+        }
+
+        free(owned);
+        set_errorf("line %d: key outside a supported section", line_no);
+        return 0;
+    }
+    free(owned);
+
+    if(element_input_count == 0)
+    {
+        set_errorf("package diagram contains no elements");
+        return 0;
+    }
+
+    diagram->element_count = element_input_count;
+    for(i = 0; i < element_input_count; ++i)
+    {
+        package_element_t *el = &diagram->elements[i];
+        const package_element_input_t *in = &element_inputs[i];
+        color_t fill = defaults.package_fill;
+        color_t header_fill = defaults.package_header_fill;
+        color_t stroke = defaults.package_stroke;
+        color_t text = defaults.package_text;
+        int bold = defaults.package_bold;
+
+        if(in->id[0] == '\0')
+        {
+            set_errorf("package element %d is missing required id", i + 1);
+            return 0;
+        }
+        if(find_package_element_index(diagram, in->id) >= 0)
+        {
+            set_errorf("duplicate package element id '%s'", in->id);
+            return 0;
+        }
+        if(!in->has_kind)
+        {
+            set_errorf("package element '%s' is missing required kind", in->id);
+            return 0;
+        }
+        if(in->kind == PACKAGE_CONTAINER)
+        {
+            fill = defaults.container_fill;
+            header_fill = defaults.container_header_fill;
+            stroke = defaults.container_stroke;
+            text = defaults.container_text;
+            bold = defaults.container_bold;
+        }
+        else if(in->kind == PACKAGE_MODEL)
+        {
+            fill = defaults.model_fill;
+            header_fill = defaults.model_header_fill;
+            stroke = defaults.model_stroke;
+            text = defaults.model_text;
+            bold = defaults.model_bold;
+        }
+
+        snprintf(el->id, sizeof(el->id), "%s", in->id);
+        el->kind = in->kind;
+        el->parent = -1;
+        snprintf(el->label, sizeof(el->label), "%s",
+                 in->has_label ? in->label : in->id);
+        snprintf(el->stereotype, sizeof(el->stereotype), "%s",
+                 in->has_stereotype ? in->stereotype : "");
+        el->x = in->has_x ? in->x : 40 + (i % 3) * 220;
+        el->y = in->has_y ? in->y : 80 + (i / 3) * 180;
+        el->width = in->has_width ? in->width : 180;
+        el->height = in->has_height ? in->height : 120;
+        el->fill = in->has_fill ? in->fill : fill;
+        el->header_fill = in->has_header_fill ? in->header_fill : header_fill;
+        el->stroke = in->has_stroke ? in->stroke : stroke;
+        el->text = in->has_text ? in->text : text;
+        el->bold = in->has_bold ? in->bold : bold;
+    }
+
+    for(i = 0; i < element_input_count; ++i)
+    {
+        if(element_inputs[i].parent_id[0] != '\0')
+        {
+            int parent = find_package_element_index(diagram, element_inputs[i].parent_id);
+            if(parent < 0)
+            {
+                set_errorf("package element '%s' references unknown parent '%s'",
+                           diagram->elements[i].id, element_inputs[i].parent_id);
+                return 0;
+            }
+            diagram->elements[i].parent = parent;
+        }
+    }
+
+    diagram->dependency_count = dependency_input_count;
+    for(i = 0; i < dependency_input_count; ++i)
+    {
+        package_dependency_t *dep = &diagram->dependencies[i];
+        const package_dependency_input_t *in = &dependency_inputs[i];
+        dep->from = find_package_element_index(diagram, in->from_id);
+        dep->to = find_package_element_index(diagram, in->to_id);
+        if(dep->from < 0 || dep->to < 0)
+        {
+            set_errorf("package dependency %d references unknown element", i + 1);
+            return 0;
+        }
+        snprintf(dep->label, sizeof(dep->label), "%s", in->label);
+        dep->color = in->has_color ? in->color : defaults.dependency_color;
+        dep->bold = in->has_bold ? in->bold : defaults.dependency_bold;
+        dep->point_count = in->point_count;
+        memcpy(dep->points_x, in->points_x, sizeof(dep->points_x));
+        memcpy(dep->points_y, in->points_y, sizeof(dep->points_y));
+        dep->corner_radius = in->has_corner_radius
+                                 ? in->corner_radius
+                                 : (int)diagram->edge_radius;
+        dep->from_side = in->has_from_side ? in->from_side : ANCHOR_AUTO;
+        dep->to_side = in->has_to_side ? in->to_side : ANCHOR_AUTO;
     }
 
     return 1;
@@ -3487,6 +4218,9 @@ static void draw_polyline(image_t *img, int *xs, int *ys, int count, int radius,
         int len2 = abs_i32(dx2) + abs_i32(dy2);
         int corner = min_i32(radius, min_i32(len1 / 2, len2 / 2));
 
+        if(i == count - 2)
+            corner = 0;
+
         if(corner <= 0 || (dx1 != 0 && dx2 != 0) || (dy1 != 0 && dy2 != 0))
         {
             draw_line(img, last_x, last_y, aa_px(cur_x), aa_px(cur_y),
@@ -3534,6 +4268,107 @@ static void draw_polyline(image_t *img, int *xs, int *ys, int count, int radius,
         draw_arrow_head(img, aa_px(xs[count - 1]), aa_px(ys[count - 1]),
                         aa_px(xs[count - 1] - xs[count - 2]),
                         aa_px(ys[count - 1] - ys[count - 2]), color);
+}
+
+static void draw_dashed_arc_segment(image_t *img, float cx, float cy, float radius,
+                                    float start_angle, float end_angle,
+                                    color_t color)
+{
+    int i;
+    int steps =
+        max_i32(8, (int)ceilf(fabsf(end_angle - start_angle) * radius / 10.0f));
+    float prev_x = cx + cosf(start_angle) * radius;
+    float prev_y = cy + sinf(start_angle) * radius;
+    for(i = 1; i <= steps; ++i)
+    {
+        float t0 = (float)(i - 1) / (float)steps;
+        float t1 = (float)i / (float)steps;
+        float a1 = start_angle + (end_angle - start_angle) * t1;
+        float cur_x = cx + cosf(a1) * radius;
+        float cur_y = cy + sinf(a1) * radius;
+        if(((int)(t0 * 12.0f)) % 2 == 0)
+        {
+            draw_line(img, (int)roundf(prev_x), (int)roundf(prev_y),
+                      (int)roundf(cur_x), (int)roundf(cur_y),
+                      aa_stroke(UML_STROKE), color);
+        }
+        prev_x = cur_x;
+        prev_y = cur_y;
+    }
+}
+
+static void draw_dashed_polyline(image_t *img, int *xs, int *ys, int count,
+                                 int radius, color_t color)
+{
+    int i;
+    int last_x;
+    int last_y;
+    if(count < 2)
+        return;
+
+    last_x = aa_px(xs[0]);
+    last_y = aa_px(ys[0]);
+    for(i = 1; i < count - 1; ++i)
+    {
+        int prev_x = xs[i - 1];
+        int prev_y = ys[i - 1];
+        int cur_x = xs[i];
+        int cur_y = ys[i];
+        int next_x = xs[i + 1];
+        int next_y = ys[i + 1];
+        int dx1 = cur_x - prev_x;
+        int dy1 = cur_y - prev_y;
+        int dx2 = next_x - cur_x;
+        int dy2 = next_y - cur_y;
+        int len1 = abs_i32(dx1) + abs_i32(dy1);
+        int len2 = abs_i32(dx2) + abs_i32(dy2);
+        int corner = min_i32(radius, min_i32(len1 / 2, len2 / 2));
+
+        if(corner <= 0 || (dx1 != 0 && dx2 != 0) || (dy1 != 0 && dy2 != 0))
+        {
+            draw_dashed_line(img, last_x, last_y, aa_px(cur_x), aa_px(cur_y),
+                             aa_stroke(UML_STROKE), aa_px(7), aa_px(5), color);
+            last_x = aa_px(cur_x);
+            last_y = aa_px(cur_y);
+            continue;
+        }
+
+        {
+            int dir1_x = dx1 == 0 ? 0 : (dx1 > 0 ? 1 : -1);
+            int dir1_y = dy1 == 0 ? 0 : (dy1 > 0 ? 1 : -1);
+            int dir2_x = dx2 == 0 ? 0 : (dx2 > 0 ? 1 : -1);
+            int dir2_y = dy2 == 0 ? 0 : (dy2 > 0 ? 1 : -1);
+            int in_x = cur_x - dir1_x * corner;
+            int in_y = cur_y - dir1_y * corner;
+            int out_x = cur_x + dir2_x * corner;
+            int out_y = cur_y + dir2_y * corner;
+            float center_x = (float)aa_px(cur_x - dir1_x * corner + dir2_x * corner);
+            float center_y = (float)aa_px(cur_y - dir1_y * corner + dir2_y * corner);
+            float start_angle =
+                atan2f((float)(aa_px(in_y) - center_y), (float)(aa_px(in_x) - center_x));
+            float end_angle =
+                atan2f((float)(aa_px(out_y) - center_y), (float)(aa_px(out_x) - center_x));
+            float delta = end_angle - start_angle;
+
+            while(delta > (float)M_PI)
+                delta -= (float)(M_PI * 2.0);
+            while(delta < (float)-M_PI)
+                delta += (float)(M_PI * 2.0);
+            end_angle = start_angle + delta;
+
+            draw_dashed_line(img, last_x, last_y, aa_px(in_x), aa_px(in_y),
+                             aa_stroke(UML_STROKE), aa_px(7), aa_px(5), color);
+            draw_dashed_arc_segment(img, center_x, center_y, (float)aa_px(corner),
+                                    start_angle, end_angle, color);
+            last_x = aa_px(out_x);
+            last_y = aa_px(out_y);
+        }
+    }
+    draw_dashed_line(img, last_x, last_y, aa_px(xs[count - 1]), aa_px(ys[count - 1]),
+                     aa_stroke(UML_STROKE), aa_px(7), aa_px(5), color);
+    draw_arrow_head_sized(img, aa_px(xs[count - 1]), aa_px(ys[count - 1]),
+                          aa_px(xs[count - 1] - xs[count - 2]),
+                          aa_px(ys[count - 1] - ys[count - 2]), 8.0f, color);
 }
 
 static void draw_edge_label(image_t *img, int x, int y, const char *text, color_t color)
@@ -4212,6 +5047,325 @@ static void draw_class_association(image_t *img, const class_diagram_t *diagram,
     }
 }
 
+static void compute_package_layout(package_diagram_t *diagram, int *out_w, int *out_h)
+{
+    int i;
+    int pass;
+    int max_right = 0;
+    int max_bottom = 0;
+    int title_offset = 0;
+
+    if(diagram->title[0] != '\0')
+        title_offset = text_height_for_size(diagram->title_size) + 12;
+
+    for(i = 0; i < diagram->element_count; ++i)
+    {
+        package_element_t *el = &diagram->elements[i];
+        int min_w = max_i32(140, text_width(el->label) + 40);
+        if(el->stereotype[0] != '\0')
+            min_w = max_i32(min_w, text_width(el->stereotype) + text_width(el->label) + 56);
+        if(el->width < min_w)
+            el->width = min_w;
+        if(el->height < 70)
+            el->height = 70;
+        el->y += title_offset;
+    }
+
+    for(pass = 0; pass < 4; ++pass)
+    {
+        for(i = 0; i < diagram->element_count; ++i)
+        {
+            package_element_t *el = &diagram->elements[i];
+            int j;
+            int child_count = 0;
+            int min_x = 1000000;
+            int min_y = 1000000;
+            int max_x = -1000000;
+            int max_y = -1000000;
+            int pad_x = el->kind == PACKAGE_CONTAINER ? 35 : 45;
+            int pad_top = el->kind == PACKAGE_CONTAINER ? 18 : 28;
+            int pad_bottom = el->kind == PACKAGE_CONTAINER ? 28 : 30;
+            int tab_h = el->kind == PACKAGE_CONTAINER ? 28 : 24;
+            int needed_w;
+            int needed_h;
+            int explicit_w = el->width;
+            int explicit_h = el->height;
+            float group_cx;
+            float group_cy;
+
+            for(j = 0; j < diagram->element_count; ++j)
+            {
+                const package_element_t *child = &diagram->elements[j];
+                if(child->parent != i)
+                    continue;
+                child_count++;
+                if(child->x < min_x)
+                    min_x = child->x;
+                if(child->y < min_y)
+                    min_y = child->y;
+                if(child->x + child->width > max_x)
+                    max_x = child->x + child->width;
+                if(child->y + child->height > max_y)
+                    max_y = child->y + child->height;
+            }
+            if(child_count == 0)
+                continue;
+
+            needed_w = (max_x - min_x) + pad_x * 2;
+            needed_h = (max_y - min_y) + tab_h + pad_top + pad_bottom;
+            if(explicit_w < needed_w)
+                explicit_w = needed_w;
+            if(explicit_h < needed_h)
+                explicit_h = needed_h;
+
+            group_cx = ((float)min_x + (float)max_x) * 0.5f;
+            group_cy = ((float)min_y + (float)max_y) * 0.5f;
+
+            el->width = explicit_w;
+            el->height = explicit_h;
+            el->x = (int)roundf(group_cx - (float)el->width * 0.5f);
+            el->y = (int)roundf(group_cy -
+                                ((float)(el->height + tab_h + pad_top - pad_bottom) *
+                                 0.5f));
+        }
+    }
+
+    for(i = 0; i < diagram->element_count; ++i)
+    {
+        package_element_t *el = &diagram->elements[i];
+        if(el->x + el->width > max_right)
+            max_right = el->x + el->width;
+        if(el->y + el->height > max_bottom)
+            max_bottom = el->y + el->height;
+    }
+    for(i = 0; i < diagram->dependency_count; ++i)
+    {
+        const package_dependency_t *dep = &diagram->dependencies[i];
+        int j;
+        for(j = 0; j < dep->point_count; ++j)
+        {
+            if(dep->points_x[j] > max_right)
+                max_right = dep->points_x[j];
+            if(dep->points_y[j] + title_offset > max_bottom)
+                max_bottom = dep->points_y[j] + title_offset;
+        }
+    }
+    *out_w = max_right + 70;
+    *out_h = max_bottom + 70;
+}
+
+static void package_anchor_for_side(const package_element_t *el,
+                                    anchor_side_t side, int *x, int *y)
+{
+    switch(side)
+    {
+        case ANCHOR_TOP:
+            *x = el->x + el->width / 2;
+            *y = el->y;
+            return;
+        case ANCHOR_RIGHT:
+            *x = el->x + el->width;
+            *y = el->y + el->height / 2;
+            return;
+        case ANCHOR_BOTTOM:
+            *x = el->x + el->width / 2;
+            *y = el->y + el->height;
+            return;
+        case ANCHOR_LEFT:
+            *x = el->x;
+            *y = el->y + el->height / 2;
+            return;
+        default:
+            *x = el->x + el->width / 2;
+            *y = el->y + el->height / 2;
+            return;
+    }
+}
+
+static void package_anchor_points(const package_element_t *from,
+                                  const package_element_t *to,
+                                  anchor_side_t from_side,
+                                  anchor_side_t to_side, int *x0, int *y0,
+                                  int *x1, int *y1)
+{
+    int from_cx = from->x + from->width / 2;
+    int from_cy = from->y + from->height / 2;
+    int to_cx = to->x + to->width / 2;
+    int to_cy = to->y + to->height / 2;
+    int dx = to_cx - from_cx;
+    int dy = to_cy - from_cy;
+
+    if(from_side != ANCHOR_AUTO)
+        package_anchor_for_side(from, from_side, x0, y0);
+    if(to_side != ANCHOR_AUTO)
+        package_anchor_for_side(to, to_side, x1, y1);
+    if(from_side != ANCHOR_AUTO && to_side != ANCHOR_AUTO)
+        return;
+
+    if(from_side == ANCHOR_AUTO && to_side == ANCHOR_AUTO && abs_i32(dx) > abs_i32(dy))
+    {
+        *x0 = dx >= 0 ? from->x + from->width : from->x;
+        *y0 = from_cy;
+        *x1 = dx >= 0 ? to->x : to->x + to->width;
+        *y1 = to_cy;
+    }
+    else
+    {
+        if(from_side == ANCHOR_AUTO)
+        {
+            *x0 = from_cx;
+            *y0 = dy >= 0 ? from->y + from->height : from->y;
+        }
+        if(to_side == ANCHOR_AUTO)
+        {
+            *x1 = to_cx;
+            *y1 = dy >= 0 ? to->y : to->y + to->height;
+        }
+    }
+}
+
+static void draw_package_frame(image_t *img, int x, int y, int w, int h,
+                               int radius, int tab_w, int tab_h, color_t fill,
+                               color_t header_fill, color_t stroke)
+{
+    fill_rect(img, aa_px(x), aa_px(y), aa_px(x + w), aa_px(y + h), fill);
+    draw_line(img, aa_px(x), aa_px(y), aa_px(x + tab_w), aa_px(y),
+              aa_stroke(UML_STROKE), stroke);
+    draw_line(img, aa_px(x + tab_w), aa_px(y), aa_px(x + tab_w), aa_px(y + tab_h),
+              aa_stroke(UML_STROKE), stroke);
+    draw_line(img, aa_px(x + tab_w), aa_px(y + tab_h), aa_px(x + w),
+              aa_px(y + tab_h), aa_stroke(UML_STROKE), stroke);
+    draw_line(img, aa_px(x + w), aa_px(y + tab_h), aa_px(x + w), aa_px(y + h),
+              aa_stroke(UML_STROKE), stroke);
+    draw_line(img, aa_px(x + w), aa_px(y + h), aa_px(x), aa_px(y + h),
+              aa_stroke(UML_STROKE), stroke);
+    draw_line(img, aa_px(x), aa_px(y + h), aa_px(x), aa_px(y),
+              aa_stroke(UML_STROKE), stroke);
+    fill_rect(img, aa_px(x), aa_px(y), aa_px(x + tab_w), aa_px(y + tab_h),
+              header_fill);
+    draw_line(img, aa_px(x), aa_px(y + tab_h), aa_px(x + tab_w), aa_px(y + tab_h),
+              aa_stroke(UML_STROKE), stroke);
+    (void)radius;
+}
+
+static void draw_package_element(image_t *img, const package_diagram_t *diagram,
+                                 const package_element_t *el)
+{
+    int tab_h = el->kind == PACKAGE_CONTAINER ? 28 : 24;
+    int tab_w = max_i32(80, text_width(el->label) + 18);
+    int label_y = el->y + 7;
+    char header[256];
+
+    if(el->stereotype[0] != '\0')
+        snprintf(header, sizeof(header), "<<%s>> %s", el->stereotype, el->label);
+    else
+        snprintf(header, sizeof(header), "%s", el->label);
+
+    tab_w = max_i32(tab_w, text_width(header) + 18);
+    draw_package_frame(img, el->x, el->y, el->width, el->height,
+                       (int)(diagram->box_radius * diagram->scale), tab_w, tab_h,
+                       el->fill, el->header_fill, el->stroke);
+    draw_text_styled(img, el->x + 8, label_y, header, el->text, UML_TEXT_SIZE,
+                     el->bold);
+}
+
+static void draw_package_dependency(image_t *img, const package_diagram_t *diagram,
+                                    const package_dependency_t *dep)
+{
+    const package_element_t *from = &diagram->elements[dep->from];
+    const package_element_t *to = &diagram->elements[dep->to];
+    int xs[20];
+    int ys[20];
+    int count = 0;
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+    int i;
+
+    package_anchor_points(from, to, dep->from_side, dep->to_side, &x0, &y0,
+                          &x1, &y1);
+    xs[count] = x0;
+    ys[count++] = y0;
+    for(i = 0; i < dep->point_count && count < 19; ++i)
+    {
+        xs[count] = dep->points_x[i];
+        ys[count] = dep->points_y[i] + (diagram->title[0] != '\0'
+                                            ? text_height_for_size(diagram->title_size) + 12
+                                            : 0);
+        count++;
+    }
+    xs[count] = x1;
+    ys[count++] = y1;
+
+    draw_dashed_polyline(img, xs, ys, count, dep->corner_radius, dep->color);
+    if(dep->label[0] != '\0')
+    {
+        int label_x = (xs[0] + xs[count - 1]) / 2 - text_width(dep->label) / 2;
+        int label_y = (ys[0] + ys[count - 1]) / 2 - text_height() - 8;
+        draw_edge_label(img, label_x, label_y, dep->label, dep->color);
+    }
+}
+
+static int render_package_file(const char *input_path, const char *output_path,
+                               const char *text)
+{
+    package_diagram_t diagram;
+    image_t image;
+    int logical_w;
+    int logical_h;
+    int i;
+
+    if(!parse_package_sectioned(&diagram, text))
+        return 1;
+    compute_package_layout(&diagram, &logical_w, &logical_h);
+
+    image.width = logical_w * UML_AA_SCALE;
+    image.height = logical_h * UML_AA_SCALE;
+    image.pixels = (unsigned char *)calloc((size_t)image.width *
+                                               (size_t)image.height * 4u,
+                                           1u);
+    if(!image.pixels)
+    {
+        set_errorf("out of memory");
+        return 1;
+    }
+
+    clear_image(&image, color_rgba(248, 250, 252, 255));
+    if(diagram.title[0] != '\0')
+        draw_title(&image, diagram.title, diagram.title_size, diagram.title_bold);
+    for(i = 0; i < diagram.element_count; ++i)
+        draw_package_element(&image, &diagram, &diagram.elements[i]);
+    for(i = 0; i < diagram.dependency_count; ++i)
+        draw_package_dependency(&image, &diagram, &diagram.dependencies[i]);
+    {
+        image_t out = downsample_image(&image, image.width / UML_AA_SCALE,
+                                       image.height / UML_AA_SCALE);
+        free(image.pixels);
+        if(!out.pixels)
+        {
+            set_errorf("out of memory");
+            return 1;
+        }
+        image = out;
+    }
+    if(!ensure_parent_dirs(output_path))
+    {
+        free(image.pixels);
+        return 1;
+    }
+    if(stbi_write_png(output_path, image.width, image.height, 4, image.pixels,
+                      image.width * 4) == 0)
+    {
+        free(image.pixels);
+        set_errorf("failed to write png: %s", output_path);
+        return 1;
+    }
+    free(image.pixels);
+    (void)input_path;
+    return 0;
+}
+
 static int render_class_file(const char *input_path, const char *output_path,
                              const char *text)
 {
@@ -4392,6 +5546,12 @@ int uml_render_file(const char *input_path, const char *output_path)
     if(kind == DIAGRAM_CLASS)
     {
         int rc = render_class_file(input_path, output_path, text);
+        free(text);
+        return rc;
+    }
+    if(kind == DIAGRAM_PACKAGE)
+    {
+        int rc = render_package_file(input_path, output_path, text);
         free(text);
         return rc;
     }

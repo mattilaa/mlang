@@ -6,6 +6,7 @@ renders a PNG for either:
 - UML activity/control-flow diagrams
 - UML-style sequence diagrams
 - UML class diagrams
+- UML package diagrams
 
 The renderer is implemented in C and writes PNGs directly with `stb`. No Java
 runtime is used.
@@ -136,11 +137,57 @@ from_multiplicity = "1"
 to_multiplicity = "*"
 ```
 
+Package example:
+
+```toml
+[settings]
+diagram = "package"
+title = "Layered application package view"
+title_size = 24
+title_bold = true
+scale = 1.0
+box_radius = 4
+edge_radius = 10
+
+[properties]
+container_fill = "#ffffff"
+container_header_fill = "#f8fafc"
+package_fill = "#ffffff"
+package_header_fill = "#f8fafc"
+model_fill = "#ffffff"
+model_header_fill = "#f8fafc"
+dependency_color = "#71717a"
+
+[[elements]]
+id = "app"
+kind = "container"
+label = "Layered Application"
+stereotype = "model"
+x = 40
+y = 40
+width = 600
+height = 560
+
+[[elements]]
+id = "business_layer"
+kind = "package"
+label = "Business Layer"
+x = 80
+y = 250
+width = 500
+height = 180
+
+[[dependencies]]
+from = "presentation_layer"
+to = "business_layer"
+waypoints = ["350,190", "350,250"]
+```
+
 ## Sections
 
 `[settings]`
 
-- `diagram = "activity"`, `diagram = "sequence"`, or `diagram = "class"`
+- `diagram = "activity"`, `diagram = "sequence"`, `diagram = "class"`, or `diagram = "package"`
 - `title = "Text"`
 - `title_size = 22`
 - `title_bold = true`
@@ -148,6 +195,7 @@ to_multiplicity = "*"
 - `box_radius = 8`
 - `edge_radius = 5` for activity/control-flow diagrams
 - `arrow_size = 12` for sequence diagrams
+- `edge_radius = 10` for package dependency routing defaults
 
 `[properties]`
 
@@ -179,6 +227,13 @@ Supported class defaults:
 - `class_bold`
 - `association_color`
 - `association_bold`
+
+Supported package defaults:
+
+- `container_fill`, `container_header_fill`, `container_stroke`, `container_text`, `container_bold`
+- `package_fill`, `package_header_fill`, `package_stroke`, `package_text`, `package_bold`
+- `model_fill`, `model_header_fill`, `model_stroke`, `model_text`, `model_bold`
+- `dependency_color`, `dependency_bold`
 
 ## Item Tables
 
@@ -212,6 +267,18 @@ Supported class defaults:
 - required: `from`, `to`
 - optional: `kind`, `from_multiplicity`, `to_multiplicity`, `label`, `color`, `bold`
 - supported `kind` values: `"association"`, `"aggregation"`, `"composition"`, `"generalization"`, `"inheritance"`, `"realization"`, `"dependency"`
+
+`[[elements]]`
+
+- required: `id`, `kind`
+- optional: `label`, `stereotype`, `x`, `y`, `width`, `height`, `fill`, `header_fill`, `stroke`, `text`, `bold`
+- supported `kind` values: `"container"`, `"package"`, `"model"`
+
+`[[dependencies]]`
+
+- required: `from`, `to`
+- optional: `label`, `color`, `bold`, `waypoints`, `corner_radius`
+- `waypoints` uses string points like `["350,190", "350,250"]`
 
 ## Color Rules
 
@@ -259,6 +326,12 @@ Render the bundled class diagram sample:
 ../../build/mlang pkg run render-class-sample
 ```
 
+Render the bundled package diagram sample:
+
+```sh
+../../build/mlang pkg run render-package-sample
+```
+
 Or run the binary directly:
 
 ```sh
@@ -266,4 +339,5 @@ Or run the binary directly:
 ./build/uml_ui_generator samples/multi_path_control_flow.toml build/generated/multi_path_control_flow.png
 ./build/uml_ui_generator samples/https_auth_sequence.toml build/generated/https_auth_sequence.png
 ./build/uml_ui_generator samples/online_golf_store_class.toml build/generated/online_golf_store_class.png
+./build/uml_ui_generator samples/layered_application_package.toml build/generated/layered_application_package.png
 ```

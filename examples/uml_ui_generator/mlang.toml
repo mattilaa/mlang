@@ -113,3 +113,12 @@ join_on = ["link-demo"]
 shell = [
   "exec {{build_dir}}/uml_ui_generator samples/online_golf_store_class.toml {{build_dir}}/generated/online_golf_store_class.png"
 ]
+
+[[task]]
+name = "render-package-sample"
+print = "[example] Rendering the bundled package diagram sample"
+workdir = "{{root}}"
+join_on = ["link-demo"]
+shell = [
+  "exec {{build_dir}}/uml_ui_generator samples/layered_application_package.toml {{build_dir}}/generated/layered_application_package.png"
+]

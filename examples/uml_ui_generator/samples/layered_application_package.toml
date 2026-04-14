@@ -1,0 +1,205 @@
+[settings]
+diagram = "package"
+title = "Layered Application"
+title_size = 24
+title_bold = true
+scale = 1.0
+box_radius = 4
+edge_radius = 0
+
+[properties]
+container_fill = "#ffffff"
+container_header_fill = "#e2e8f0"
+container_stroke = "#3f3f46"
+container_text = "#111827"
+package_fill = "#ffffff"
+package_header_fill = "#f3f4f6"
+package_stroke = "#3f3f46"
+package_text = "#111827"
+model_fill = "#ffffff"
+model_header_fill = "#f3f4f6"
+model_stroke = "#52525b"
+model_text = "#111827"
+dependency_color = "#52525b"
+
+[[elements]]
+id = "app"
+kind = "container"
+label = "Layered Application"
+stereotype = "model"
+x = 10
+y = 30
+width = 760
+height = 735
+
+[[elements]]
+id = "presentation_layer"
+kind = "package"
+parent = "app"
+label = "Presentation Layer"
+x = 155
+y = 70
+width = 430
+height = 150
+fill = "#eef6ff"
+header_fill = "#cfe6ff"
+
+[[elements]]
+id = "ui"
+kind = "model"
+parent = "presentation_layer"
+label = "User Interface"
+x = 200
+y = 142
+width = 135
+height = 72
+fill = "#f8fbff"
+header_fill = "#dbeafe"
+
+[[elements]]
+id = "presentation_logic"
+kind = "model"
+parent = "presentation_layer"
+label = "Presentation Logic"
+x = 420
+y = 142
+width = 155
+height = 72
+fill = "#f8fbff"
+header_fill = "#dbeafe"
+
+[[elements]]
+id = "business_layer"
+kind = "package"
+parent = "app"
+label = "Business Layer"
+x = 30
+y = 285
+width = 690
+height = 250
+fill = "#fff8e8"
+header_fill = "#fde7a8"
+
+[[elements]]
+id = "facade"
+kind = "model"
+parent = "business_layer"
+label = "Application Facade"
+x = 300
+y = 325
+width = 160
+height = 76
+fill = "#fffdf5"
+header_fill = "#fef3c7"
+
+[[elements]]
+id = "workflow"
+kind = "model"
+parent = "business_layer"
+label = "Business Workflow"
+x = 95
+y = 430
+width = 150
+height = 76
+fill = "#fffdf5"
+header_fill = "#fef3c7"
+
+[[elements]]
+id = "components"
+kind = "model"
+parent = "business_layer"
+label = "Business Components"
+x = 305
+y = 430
+width = 170
+height = 76
+fill = "#fffdf5"
+header_fill = "#fef3c7"
+
+[[elements]]
+id = "entities"
+kind = "model"
+parent = "business_layer"
+label = "Business Entities"
+x = 540
+y = 430
+width = 160
+height = 76
+fill = "#fffdf5"
+header_fill = "#fef3c7"
+
+[[elements]]
+id = "data_layer"
+kind = "package"
+parent = "app"
+label = "Data Layer"
+x = 120
+y = 570
+width = 500
+height = 130
+fill = "#eefcf3"
+header_fill = "#ccefd8"
+
+[[elements]]
+id = "data_access"
+kind = "model"
+parent = "data_layer"
+label = "Data Access"
+x = 170
+y = 628
+width = 150
+height = 72
+fill = "#f6fef9"
+header_fill = "#dcfce7"
+
+[[elements]]
+id = "service_agents"
+kind = "model"
+parent = "data_layer"
+label = "Service Agents"
+x = 425
+y = 628
+width = 160
+height = 72
+fill = "#f6fef9"
+header_fill = "#dcfce7"
+
+[[dependencies]]
+from = "presentation_layer"
+to = "business_layer"
+from_side = "bottom"
+to_side = "top"
+waypoints = ["370,245", "380,245"]
+corner_radius = 0
+
+[[dependencies]]
+from = "facade"
+to = "workflow"
+from_side = "left"
+to_side = "top"
+waypoints = ["185,365", "170,365"]
+corner_radius = 0
+
+[[dependencies]]
+from = "facade"
+to = "components"
+from_side = "bottom"
+to_side = "top"
+waypoints = []
+corner_radius = 0
+
+[[dependencies]]
+from = "facade"
+to = "entities"
+from_side = "right"
+to_side = "top"
+waypoints = ["575,365", "620,365"]
+corner_radius = 0
+
+[[dependencies]]
+from = "business_layer"
+to = "data_layer"
+from_side = "bottom"
+to_side = "top"
+waypoints = ["360,535"]
+corner_radius = 0
