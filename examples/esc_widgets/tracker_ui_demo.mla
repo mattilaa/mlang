@@ -1,3 +1,7 @@
+/// \file tracker_ui_demo.mla
+/// @ingroup examples
+/// \brief Terminal music tracker UI demo built on the esc_widgets toolkit.
+///
 mod std::esc;
 mod std::ascii;
 mod std::event_loop;

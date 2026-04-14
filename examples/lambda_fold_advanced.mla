@@ -1,3 +1,7 @@
+/// \file lambda_fold_advanced.mla
+/// @ingroup examples
+/// \brief Advanced fold/reduce demo with lambdas and closures.
+///
 fn main() -> i32 {
     // Computed lists (duplicated where needed to satisfy move semantics).
     var weights_for_sum: list<i32> = [];

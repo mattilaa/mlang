@@ -1,3 +1,7 @@
+/// \file borrow_patterns.mla
+/// @ingroup examples
+/// \brief Common borrow-checker patterns (immutable/mutable, scopes).
+///
 mod std::strbuf;
 use std::strbuf::*;
 

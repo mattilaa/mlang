@@ -1,3 +1,7 @@
+/// \file std_regex_demo.mla
+/// @ingroup examples
+/// \brief POSIX regular expression demo using std::regex.
+///
 mod std::regex;
 mod std::strbuf;
 

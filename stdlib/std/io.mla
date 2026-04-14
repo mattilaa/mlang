@@ -20,18 +20,22 @@ use std::strbuf::len;
 use std::strbuf::sub;
 /// \endcond
 
+/// @brief Tag type representing the process standard input stream.
 pub struct Stdin {
     var _tag: i32;
 };
 
+/// @brief Tag type representing the process standard output stream.
 pub struct Stdout {
     var _tag: i32;
 };
 
+/// @brief Tag type representing the process standard error stream.
 pub struct Stderr {
     var _tag: i32;
 };
 
+/// @brief Exclusive lock guard over stdout used to batch writes.
 pub struct StdoutLock {
     var _tag: i32;
 };
@@ -67,12 +71,23 @@ pub struct BufRead {
     var cursor: Cursor;
 };
 
-/// @brief Seek constants (same semantics as C stdio).
+/// @brief Seek constant: offsets measured from the start of the stream.
+/// @return Integer whence value.
 pub fn seek_set() -> i32 { return 0; }
+/// @brief Seek constant: offsets measured from the current position.
+/// @return Integer whence value.
 pub fn seek_cur() -> i32 { return 1; }
+/// @brief Seek constant: offsets measured from the end of the stream.
+/// @return Integer whence value.
 pub fn seek_end() -> i32 { return 2; }
+/// @brief Buffering mode: unbuffered (data flushed immediately).
+/// @return Integer buffering mode.
 pub fn buffering_unbuffered() -> i32 { return 0; }
+/// @brief Buffering mode: line-buffered (flush on newline).
+/// @return Integer buffering mode.
 pub fn buffering_line() -> i32 { return 1; }
+/// @brief Buffering mode: fully buffered (flush on buffer fill or close).
+/// @return Integer buffering mode.
 pub fn buffering_full() -> i32 { return 2; }
 
 /// @brief Return stdin handle.

@@ -1,3 +1,7 @@
+/// \file scope_exit_drop_demo.mla
+/// @ingroup examples
+/// \brief Scope-exit drop demo showing deterministic cleanup order.
+///
 mod std::strbuf;
 
 use std::strbuf::*;

@@ -1,3 +1,7 @@
+/// \file std_jsonrpc_runtime_demo.mla
+/// @ingroup examples
+/// \brief JSON-RPC runtime dispatcher demo using std::jsonrpc.
+///
 mod std::jsonrpc;
 mod std::io;
 mod std::strbuf;

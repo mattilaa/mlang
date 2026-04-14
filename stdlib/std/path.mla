@@ -98,7 +98,21 @@ pub fn normalize(p: str8) -> str8 {
 }
 
 // Compatibility names used by imported mlangpkg prototype.
+
+/// @brief Compatibility alias for `join(a, b)`.
+/// @param a Leading path segment.
+/// @param b Trailing path segment.
+/// @return Joined path.
 pub fn path_join(a: str8, b: str8) -> str8 { return join(a, b); }
+/// @brief Compatibility alias for `normalize(p)`.
+/// @param p Input path.
+/// @return Normalized path.
 pub fn path_normalize(p: str8) -> str8 { return normalize(p); }
+/// @brief Compatibility alias for `basename(p)`.
+/// @param p Input path.
+/// @return Final path component.
 pub fn path_basename(p: str8) -> str8 { return basename(p); }
+/// @brief Compatibility alias for `dirname(p)`.
+/// @param p Input path.
+/// @return Directory component of `p`.
 pub fn path_dirname(p: str8) -> str8 { return dirname(p); }

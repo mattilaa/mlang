@@ -1,3 +1,7 @@
+/// \file std_net_demo.mla
+/// @ingroup examples
+/// \brief Minimal TCP client/server demo using std::net.
+///
 mod std::net;
 mod std::strbuf;
 

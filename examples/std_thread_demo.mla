@@ -1,3 +1,7 @@
+/// \file std_thread_demo.mla
+/// @ingroup examples
+/// \brief std::thread spawn/join API demo.
+///
 mod std::thread;
 
 use std::thread::*;

@@ -1,3 +1,7 @@
+/// \file hello.mla
+/// @ingroup examples
+/// \brief Package-manager multi-binaries demo: hello entry point.
+///
 mod cjson;
 
 use cjson::*;

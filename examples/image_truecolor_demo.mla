@@ -1,3 +1,7 @@
+/// \file image_truecolor_demo.mla
+/// @ingroup examples
+/// \brief Truecolor terminal image rendering demo using std::image and std::esc.
+///
 mod std::env;
 mod std::image;
 mod std::io;

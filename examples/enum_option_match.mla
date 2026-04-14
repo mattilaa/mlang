@@ -1,3 +1,7 @@
+/// \file enum_option_match.mla
+/// @ingroup examples
+/// \brief Matching on enum Option-style variants.
+///
 enum Color {
     Red,
     Green,

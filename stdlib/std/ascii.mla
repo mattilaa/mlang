@@ -7,6 +7,7 @@
 ///
 ///   if keycode == AsciiKey::Esc { ... }
 
+/// @brief ASCII keycode enum values 0..127 for use in keyboard handlers.
 pub enum AsciiKey : i32 {
     Nul = 0,
     Soh = 1,

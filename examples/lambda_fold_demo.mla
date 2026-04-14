@@ -1,3 +1,7 @@
+/// \file lambda_fold_demo.mla
+/// @ingroup examples
+/// \brief Fold/reduce demo using lambda expressions.
+///
 fn main() -> i32 {
     var total: i32 = 0;
     var add_to_total = |x: i32| {

@@ -1,3 +1,7 @@
+/// \file std_term_demo.mla
+/// @ingroup examples
+/// \brief Terminal capability / size detection demo using std::term.
+///
 mod std::term;
 
 use std::term::TerminalCaps;

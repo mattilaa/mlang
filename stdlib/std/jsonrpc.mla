@@ -104,6 +104,8 @@ pub struct Runtime {
     var outbound_handle: i64;
 };
 
+/// @brief Return the last `std::jsonrpc` error message.
+/// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {
     return __mlang_std_jsonrpc_last_error();
 }

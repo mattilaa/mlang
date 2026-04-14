@@ -1,3 +1,7 @@
+/// \file block_pattern_demo.mla
+/// @ingroup examples
+/// \brief Block-pattern expression demo.
+///
 fn main() -> i32 {
     let A: str8 = "▀";
     let B: str8 = "▄";

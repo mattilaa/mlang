@@ -1,3 +1,7 @@
+/// \file std_protocol_demo.mla
+/// @ingroup examples
+/// \brief Length-prefixed framing demo using std::protocol.
+///
 mod std::net;
 mod std::protocol;
 mod std::strbuf;

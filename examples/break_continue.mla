@@ -1,3 +1,7 @@
+/// \file break_continue.mla
+/// @ingroup examples
+/// \brief `break`/`continue` inside loops demo.
+///
 fn main() -> i32 {
     for i in 0..10 {
         if i == 5: {

@@ -729,10 +729,19 @@ pub fn glob_recursive(root: str8, pattern: str8) -> list<str8> {
 }
 
 // Compatibility aliases used by imported mlangpkg prototype.
+
+/// @brief Compatibility alias for `file_exists(path)`.
+/// @param path Filesystem path to probe.
+/// @return 1 if the path exists, 0 otherwise.
 pub fn fs_exists(path: str8) -> i32 { return file_exists(path); }
+/// @brief Compatibility alias for `mkdir_p(path)` that discards the result.
+/// @param path Directory path to create.
 pub fn fs_mkdir_p(path: str8) -> void {
     let _ = mkdir_p(path);
 }
+/// @brief Compatibility alias for `read_all_text(path)` returning an empty string on error.
+/// @param path Input file path.
+/// @return File contents as UTF-8, or empty string on failure.
 pub fn fs_read_text(path: str8) -> str8 {
     let r: Result<str8, str8> = read_all_text(path);
     if r.is_err() {
@@ -740,12 +749,21 @@ pub fn fs_read_text(path: str8) -> str8 {
     }
     return r.unwrap();
 }
+/// @brief Compatibility alias for `write_all_text(path, content)` that discards errors.
+/// @param path Output file path.
+/// @param content New file contents.
 pub fn fs_write_text(path: str8, content: str8) -> void {
     let _ = write_all_text(path, content);
 }
+/// @brief Compatibility alias for `remove_tree(path)` that discards errors.
+/// @param path Directory to remove recursively.
 pub fn fs_remove_tree(path: str8) -> void {
     let _ = remove_tree(path);
 }
+/// @brief Compatibility alias for `glob_recursive(root, pattern)`.
+/// @param root Starting directory.
+/// @param pattern Glob pattern to match.
+/// @return Matching paths below `root`.
 pub fn fs_glob_recursive(root: str8, pattern: str8) -> list<str8> {
     return glob_recursive(root, pattern);
 }

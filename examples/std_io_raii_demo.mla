@@ -1,3 +1,7 @@
+/// \file std_io_raii_demo.mla
+/// @ingroup examples
+/// \brief File RAII demo: files close automatically when scope exits.
+///
 mod std::io;
 
 use std::io::*;

@@ -1,3 +1,7 @@
+/// \file switch_demo.mla
+/// @ingroup examples
+/// \brief Enum-dispatch style switch/match demo using std::strbuf.
+///
 mod std::strbuf;
 
 use std::strbuf::free;

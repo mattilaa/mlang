@@ -1,3 +1,7 @@
+/// \file utils.mla
+/// @ingroup examples
+/// \brief Shared helper functions reused by the top-level main.mla example.
+///
 pub fn max(a: i32, b: i32) -> i32 {
     if a > b: {
         return a;

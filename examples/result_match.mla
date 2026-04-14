@@ -1,3 +1,7 @@
+/// \file result_match.mla
+/// @ingroup examples
+/// \brief Pattern matching on Result<T,E> branches.
+///
 fn div(a: i32, b: i32) -> Result<i32, str8> {
     if b == 0: {
         return Err<i32, str8>("divide by zero");

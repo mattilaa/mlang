@@ -1,3 +1,7 @@
+/// \file std_io_traits_demo.mla
+/// @ingroup examples
+/// \brief Read/Write/Seek trait-like API demo from std::io.
+///
 mod std::io;
 mod std::strbuf;
 

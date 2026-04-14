@@ -1,3 +1,7 @@
+/// \file sieve_sundaram.mla
+/// @ingroup examples
+/// \brief Sieve of Sundaram prime number generator example.
+///
 /// Sundaram sieve example in MLang using real hash-set membership.
 ///
 /// C++ sample parity notes:

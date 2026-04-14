@@ -1,3 +1,7 @@
+/// \file std_net_mt_server.mla
+/// @ingroup examples
+/// \brief Multithreaded TCP echo server built on std::net and std::thread.
+///
 /// Multithreaded TCP echo server example for std::net.
 ///
 /// Runs until it has handled exactly two clients, then exits.

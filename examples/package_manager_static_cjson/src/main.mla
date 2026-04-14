@@ -1,3 +1,7 @@
+/// \file main.mla
+/// @ingroup examples
+/// \brief Package-manager demo consuming a statically linked cJSON library.
+///
 mod cjson;
 
 use cjson::*;

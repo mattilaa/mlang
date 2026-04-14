@@ -1,3 +1,7 @@
+/// \file tuple_example.mla
+/// @ingroup examples
+/// \brief Tuple basics: construction, indexing, and destructuring.
+///
 // Example: Tuples with bool and custom structs
 
 // Define a simple Point struct

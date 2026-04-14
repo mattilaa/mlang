@@ -1,3 +1,7 @@
+/// \file thread_basic.mla
+/// @ingroup examples
+/// \brief Spawning a single worker thread and joining it.
+///
 fn worker() -> void {
     println!("worker started");
 }

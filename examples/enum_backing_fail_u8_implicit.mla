@@ -1,3 +1,7 @@
+/// \file enum_backing_fail_u8_implicit.mla
+/// @ingroup examples
+/// \brief Expected-failure demo: enum value implicitly overflowing u8 backing.
+///
 // Expected compile error:
 // enum implicit value overflows backing type 'u8'
 

@@ -1,3 +1,7 @@
+/// \file client.mla
+/// @ingroup examples
+/// \brief Multithreaded std::protocol framed client demo.
+///
 /// Advanced protocol stack client-load demo.
 ///
 /// Spawns multiple client threads that talk to the multithreaded server.

@@ -1,3 +1,7 @@
+/// \file c_type_mappings.mla
+/// @ingroup examples
+/// \brief Mapping MLang primitive types onto C ABI types for FFI.
+///
 extern fn c_add_i32(a: i32, b: i32) -> i32;
 extern fn c_add_i64(a: i64, b: i64) -> i64;
 extern fn c_add_u32(a: u32, b: u32) -> u32;

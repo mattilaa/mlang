@@ -1,3 +1,7 @@
+/// \file widgets.mla
+/// @ingroup examples
+/// \brief Reusable TUI widget primitives (boxes, bars, labels) built on std::esc.
+///
 mod std::esc;
 mod std::music;
 mod std::strbuf;

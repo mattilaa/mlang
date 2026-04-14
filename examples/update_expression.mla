@@ -1,3 +1,7 @@
+/// \file update_expression.mla
+/// @ingroup examples
+/// \brief Struct update-expression syntax demo.
+///
 // Demonstrates prefix and postfix ++/-- operators
 
 fn main() -> i32 {

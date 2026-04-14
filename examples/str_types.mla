@@ -1,3 +1,7 @@
+/// \file str_types.mla
+/// @ingroup examples
+/// \brief str8 vs str16 string types and conversion demo.
+///
 extern fn dummy_str8(s: str8) -> i32;
 extern fn dummy_str16(s: str16) -> i32;
 extern fn dummy_string(s: str8) -> i32;

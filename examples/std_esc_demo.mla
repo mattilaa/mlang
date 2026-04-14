@@ -1,3 +1,7 @@
+/// \file std_esc_demo.mla
+/// @ingroup examples
+/// \brief ANSI escape sequence demo using std::esc.
+///
 mod std::esc;
 
 use std::esc::bg;

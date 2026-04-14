@@ -1,3 +1,7 @@
+/// \file closure_thread.mla
+/// @ingroup examples
+/// \brief Spawning a worker thread with a captured closure.
+///
 // Example: thread::spawn with closure syntax
 mod std::thread;
 use std::thread::*;

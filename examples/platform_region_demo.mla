@@ -1,3 +1,7 @@
+/// \file platform_region_demo.mla
+/// @ingroup examples
+/// \brief std::platform region/locale queries demo.
+///
 mod std::platform;
 
 use std::platform::*;

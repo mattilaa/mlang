@@ -1,3 +1,7 @@
+/// \file main.mla
+/// @ingroup examples
+/// \brief macOS stdio-driver TUI example using std::term/std::esc.
+///
 // macOS user-space driver-style demo controlled over stdio.
 // Intended to be started/stopped by the shell scripts in this directory.
 

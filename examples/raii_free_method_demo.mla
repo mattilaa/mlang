@@ -1,3 +1,7 @@
+/// \file raii_free_method_demo.mla
+/// @ingroup examples
+/// \brief RAII demo showing automatic resource cleanup via a free() method.
+///
 mod std::strbuf;
 
 use std::strbuf::*;

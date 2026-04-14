@@ -1,4 +1,5 @@
 /// \file mlang_attributes.mla
+/// @ingroup examples
 /// \brief Example combining \c #[test] and \c #[derive(Debug)] attributes.
 ///
 /// Shows how a struct with \c #[derive(Debug)] can be used inside a

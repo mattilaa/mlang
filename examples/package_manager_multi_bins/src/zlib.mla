@@ -1,1 +1,5 @@
+/// \file zlib.mla
+/// @ingroup examples
+/// \brief FFI bindings to zlib used by the multi-binaries package demo.
+///
 extern pub fn zlibVersion() -> str8;

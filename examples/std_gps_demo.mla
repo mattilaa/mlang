@@ -1,3 +1,7 @@
+/// \file std_gps_demo.mla
+/// @ingroup examples
+/// \brief std::gps GPS NMEA parsing / coordinate helpers demo.
+///
 mod std::gps;
 
 use std::gps::*;

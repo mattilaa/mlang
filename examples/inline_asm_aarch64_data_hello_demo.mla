@@ -1,3 +1,7 @@
+/// \file inline_asm_aarch64_data_hello_demo.mla
+/// @ingroup examples
+/// \brief AArch64 inline assembly writing a 'hello' message from a data section.
+///
 extern fn puts(s: str8) -> i32;
 
 fn main() -> i32 {

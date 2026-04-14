@@ -1,3 +1,7 @@
+/// \file pkg_workflow_main.mla
+/// @ingroup examples
+/// \brief Tiny main used to verify package-manager build workflow.
+///
 fn main() -> i32 {
     println!("pkg workflow ok");
     return 0;

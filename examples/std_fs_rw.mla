@@ -1,3 +1,7 @@
+/// \file std_fs_rw.mla
+/// @ingroup examples
+/// \brief std::fs read/write round-trip demo.
+///
 /// Demonstrates File::append and File::open_rw (in-place editing).
 ///
 /// Shows three open modes working together:

@@ -1,3 +1,7 @@
+/// \file std_time_demo.mla
+/// @ingroup examples
+/// \brief std::time clock/duration queries demo.
+///
 mod std::time;
 
 use std::time::Timer;

@@ -1,3 +1,7 @@
+/// \file exceptions_try_catch_demo.mla
+/// @ingroup examples
+/// \brief `throw`/`try`/`catch` exception-handling demo.
+///
 mod std::exceptions;
 
 use std::exceptions::*;

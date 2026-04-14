@@ -1,3 +1,7 @@
+/// \file jack2_drum_machine.mla
+/// @ingroup examples
+/// \brief JACK2 drum-machine sampler example with audio callback plumbing.
+///
 mod std::fs;
 mod std::event_loop;
 mod std::esc;

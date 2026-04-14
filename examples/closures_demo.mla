@@ -1,3 +1,7 @@
+/// \file closures_demo.mla
+/// @ingroup examples
+/// \brief Closure capture semantics and higher-order functions.
+///
 mod std::thread;
 use std::thread::*;
 

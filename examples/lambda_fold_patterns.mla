@@ -1,3 +1,7 @@
+/// \file lambda_fold_patterns.mla
+/// @ingroup examples
+/// \brief Common fold patterns expressed with lambdas.
+///
 fn main() -> i32 {
     // 1) Typed lambda with two parameters
     var accumulator: i32 = 0;

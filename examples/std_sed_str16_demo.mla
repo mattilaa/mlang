@@ -1,3 +1,7 @@
+/// \file std_sed_str16_demo.mla
+/// @ingroup examples
+/// \brief std::sed substitution demo on str16 (UTF-16) text.
+///
 mod std::sed;
 mod std::strbuf;
 

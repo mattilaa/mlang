@@ -1,3 +1,7 @@
+/// \file std_json_demo.mla
+/// @ingroup examples
+/// \brief Parsing and navigating a JSON document with std::json.
+///
 mod std::json;
 mod std::fs;
 mod std::strbuf;

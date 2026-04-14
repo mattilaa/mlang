@@ -1,3 +1,7 @@
+/// \file c_lib_text_parse_demo.mla
+/// @ingroup examples
+/// \brief Using a C text-parsing library from MLang via FFI.
+///
 extern fn sscanf(text: str8, format: str8, ...) -> i32;
 
 fn main() -> i32 {

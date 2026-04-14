@@ -1,3 +1,7 @@
+/// \file std_process_foreground_demo.mla
+/// @ingroup examples
+/// \brief std::process foreground child-process demo.
+///
 mod std::env;
 mod std::process;
 

@@ -1,3 +1,7 @@
+/// \file std_compiler_demo.mla
+/// @ingroup examples
+/// \brief Using std::compiler to query compiler metadata at runtime.
+///
 mod std::compiler;
 
 use std::compiler::Session;

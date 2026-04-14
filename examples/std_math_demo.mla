@@ -1,3 +1,7 @@
+/// \file std_math_demo.mla
+/// @ingroup examples
+/// \brief std::math numeric helpers demo (add/sub/sin/etc.).
+///
 mod std::math;
 
 use std::math::*;

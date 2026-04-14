@@ -1,3 +1,7 @@
+/// \file main.mla
+/// @ingroup examples
+/// \brief std::env::render_help CLI help-text rendering demo.
+///
 mod std::env;
 
 use std::env::HelpOption;

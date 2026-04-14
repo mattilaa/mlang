@@ -1,3 +1,7 @@
+/// \file thread_mutex_atomic.mla
+/// @ingroup examples
+/// \brief Threaded counter demo contrasting mutex and atomic operations.
+///
 fn worker(id: i64, total: Handle<Atomic64>, mtx: Handle<Mutex>, counter: Handle<Atomic64>) -> void {
     var local: i64 = 0;
     for i in 0..100000 {

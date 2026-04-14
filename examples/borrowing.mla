@@ -1,3 +1,7 @@
+/// \file borrowing.mla
+/// @ingroup examples
+/// \brief Core borrowing rules demonstration.
+///
 mod std::strbuf;
 
 use std::strbuf::*;

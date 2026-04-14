@@ -1,3 +1,7 @@
+/// \file notepad_demo.mla
+/// @ingroup examples
+/// \brief Minimal terminal notepad editor demo.
+///
 mod std::ascii;
 mod std::esc;
 mod std::fs;

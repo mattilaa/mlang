@@ -1,3 +1,7 @@
+/// \file enum_string_hex_demo.mla
+/// @ingroup examples
+/// \brief Printing enum values as strings and hex numbers.
+///
 // Demonstrates string-backed enums and hex-valued integer enums.
 
 enum HttpMethod: str8 {

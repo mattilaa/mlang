@@ -1,3 +1,7 @@
+/// \file minimal_vim_demo.mla
+/// @ingroup examples
+/// \brief Minimal vim-like modal text editor demo built on std::term.
+///
 mod std::ascii;
 mod std::env;
 mod std::esc;

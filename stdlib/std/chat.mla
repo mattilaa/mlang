@@ -31,14 +31,23 @@ extern pub fn __mlang_std_chat_scroll_to_bottom(handle: i64) -> i32;
 extern pub fn __mlang_std_chat_take_submitted(handle: i64) -> str8;
 extern pub fn __mlang_std_chat_render(handle: i64, rows: i32, cols: i32) -> str8;
 
+/// @brief Opaque handle wrapping a native chat UI state.
 pub struct ChatUi {
     var handle: i64;
 };
 
+/// @brief Line kind tag for standard chat lines.
+/// @return Integer discriminator for normal lines.
 pub fn line_normal() -> i32 { return 0; }
+/// @brief Line kind tag for system/status lines.
+/// @return Integer discriminator for system lines.
 pub fn line_system() -> i32 { return 1; }
+/// @brief Line kind tag for self-authored lines.
+/// @return Integer discriminator for self lines.
 pub fn line_self() -> i32 { return 2; }
 
+/// @brief Return the last native chat error message.
+/// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {
     return __mlang_std_chat_last_error();
 }

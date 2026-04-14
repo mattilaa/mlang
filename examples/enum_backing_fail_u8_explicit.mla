@@ -1,3 +1,7 @@
+/// \file enum_backing_fail_u8_explicit.mla
+/// @ingroup examples
+/// \brief Expected-failure demo: explicit u8 enum backing overflow.
+///
 // Expected compile error:
 // enum variant value '256' does not fit backing type 'u8'
 

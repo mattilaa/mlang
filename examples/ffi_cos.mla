@@ -1,3 +1,7 @@
+/// \file ffi_cos.mla
+/// @ingroup examples
+/// \brief FFI demo calling libm cos() from MLang.
+///
 extern fn cos(x : f64) -> f64;
 
 fn main() -> i32

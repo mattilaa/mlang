@@ -1,3 +1,7 @@
+/// \file std_process_demo.mla
+/// @ingroup examples
+/// \brief Spawning and collecting child processes via std::process.
+///
 mod std::process;
 mod std::strbuf;
 
