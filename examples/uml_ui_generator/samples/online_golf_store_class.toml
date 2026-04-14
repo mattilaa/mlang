@@ -19,6 +19,7 @@ x = 380
 y = 40
 attributes = []
 methods = ["+ checkout(customerId: Int): Order"]
+fill = "#f8fafc"
 
 [[classes]]
 id = "customer"
@@ -27,6 +28,7 @@ x = 20
 y = 220
 attributes = ["id", "name", "shippingAddress", "billingAddress"]
 methods = ["+ findById(id: Int): Customer", "+ placeOrder(): Order"]
+fill = "#dbeafe"
 
 [[classes]]
 id = "order"
@@ -35,6 +37,7 @@ x = 360
 y = 220
 attributes = ["- customer", "- salesTax", "- shipping", "- total"]
 methods = ["+ submit(): void", "- calculateShipping(zipCode: Int): Float"]
+fill = "#fef3c7"
 
 [[classes]]
 id = "payment_method"
@@ -43,6 +46,7 @@ x = 720
 y = 220
 attributes = ["- holderName"]
 methods = ["+ authorize(total: Float): bool"]
+fill = "#ede9fe"
 
 [[classes]]
 id = "address"
@@ -51,6 +55,7 @@ x = 20
 y = 520
 attributes = ["- street", "- zip", "- city", "- state"]
 methods = ["+ prettyPrint(): string"]
+fill = "#dcfce7"
 
 [[classes]]
 id = "credit_card"
@@ -59,6 +64,7 @@ x = 430
 y = 520
 attributes = ["- issuer", "- cardNumber", "- expirationDate"]
 methods = ["+ authorize(total: Float): bool"]
+fill = "#fee2e2"
 
 [[classes]]
 id = "fraud_service"
@@ -67,6 +73,7 @@ x = 760
 y = 520
 attributes = ["- endpoint"]
 methods = ["+ score(orderId: Int): int"]
+fill = "#e0f2fe"
 
 [[associations]]
 from = "store"
