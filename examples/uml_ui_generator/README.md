@@ -106,6 +106,7 @@ box_radius = 4
 
 [properties]
 class_fill = "#ffffff"
+class_header_fill = "#f4f4f5"
 class_stroke = "#18181b"
 class_text = "#18181b"
 association_color = "#3f3f46"
@@ -117,6 +118,7 @@ x = 40
 y = 180
 attributes = ["id", "name", "shippingAddress", "billingAddress"]
 methods = ["+ findById(): Customer"]
+header_fill = "#dbeafe"
 
 [[classes]]
 id = "order"
@@ -173,6 +175,7 @@ Supported sequence defaults:
 Supported class defaults:
 
 - `class_fill`, `class_stroke`, `class_text`
+- `class_header_fill`
 - `class_bold`
 - `association_color`
 - `association_bold`
@@ -202,7 +205,7 @@ Supported class defaults:
 `[[classes]]`
 
 - required: `id`
-- optional: `name`, `x`, `y`, `attributes`, `methods`, `fill`, `stroke`, `text`, `bold`
+- optional: `name`, `x`, `y`, `attributes`, `methods`, `fill`, `header_fill`, `stroke`, `text`, `bold`
 
 `[[associations]]`
 

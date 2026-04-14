@@ -151,6 +151,7 @@ typedef struct
     char methods[24][160];
     int method_count;
     color_t fill;
+    color_t header_fill;
     color_t stroke;
     color_t text;
     int bold;
@@ -640,6 +641,7 @@ typedef struct
     color_t message_color;
     int message_bold;
     color_t class_fill;
+    color_t class_header_fill;
     color_t class_stroke;
     color_t class_text;
     int class_bold;
@@ -708,6 +710,8 @@ typedef struct
     int method_count;
     color_t fill;
     int has_fill;
+    color_t header_fill;
+    int has_header_fill;
     color_t stroke;
     int has_stroke;
     color_t text;
@@ -772,6 +776,7 @@ static void init_style_defaults(style_defaults_t *defaults)
     defaults->message_color = color_rgba(71, 85, 105, 255);
     defaults->message_bold = 0;
     defaults->class_fill = color_rgba(255, 255, 255, 255);
+    defaults->class_header_fill = color_rgba(244, 244, 245, 255);
     defaults->class_stroke = color_rgba(24, 24, 27, 255);
     defaults->class_text = color_rgba(24, 24, 27, 255);
     defaults->class_bold = 1;
@@ -986,6 +991,9 @@ static int apply_property_color(style_defaults_t *defaults, const char *key,
     }
     if(eq_ci(key, "class_fill"))
         return parse_color(value, defaults->class_fill, &defaults->class_fill);
+    if(eq_ci(key, "class_header_fill"))
+        return parse_color(value, defaults->class_header_fill,
+                           &defaults->class_header_fill);
     if(eq_ci(key, "class_stroke"))
         return parse_color(value, defaults->class_stroke, &defaults->class_stroke);
     if(eq_ci(key, "class_text"))
@@ -1793,6 +1801,10 @@ static int parse_class_sectioned(class_diagram_t *diagram, const char *text)
             }
             else if(eq_ci(key, "fill"))
                 cls->has_fill = parse_color(value, defaults.class_fill, &cls->fill);
+            else if(eq_ci(key, "header_fill"))
+                cls->has_header_fill =
+                    parse_color(value, defaults.class_header_fill,
+                                &cls->header_fill);
             else if(eq_ci(key, "stroke"))
                 cls->has_stroke =
                     parse_color(value, defaults.class_stroke, &cls->stroke);
@@ -1896,6 +1908,9 @@ static int parse_class_sectioned(class_diagram_t *diagram, const char *text)
         memcpy(cls->methods, class_inputs[i].methods, sizeof(cls->methods));
         cls->fill = class_inputs[i].has_fill ? class_inputs[i].fill
                                              : defaults.class_fill;
+        cls->header_fill = class_inputs[i].has_header_fill
+                               ? class_inputs[i].header_fill
+                               : defaults.class_header_fill;
         cls->stroke = class_inputs[i].has_stroke ? class_inputs[i].stroke
                                                  : defaults.class_stroke;
         cls->text = class_inputs[i].has_text ? class_inputs[i].text
@@ -4026,12 +4041,23 @@ static void draw_class_box(image_t *img, const class_diagram_t *diagram,
     int y = cls->y + title_h + 8;
     int i;
     color_t shadow = color_rgba(15, 23, 42, 55);
+    int radius = (int)(diagram->box_radius * diagram->scale);
 
     draw_soft_box(img, cls->x + 4, cls->y + 4, cls->width, cls->height,
-                  (int)(diagram->box_radius * diagram->scale), shadow, shadow);
+                  radius, shadow, shadow);
     draw_soft_box(img, cls->x, cls->y, cls->width, cls->height,
-                  (int)(diagram->box_radius * diagram->scale), cls->fill,
-                  cls->stroke);
+                  radius, cls->fill, cls->stroke);
+    fill_rounded_rect(img, aa_px(cls->x), aa_px(cls->y), aa_px(cls->width),
+                      aa_px(title_h), aa_px(radius), cls->header_fill);
+    fill_rect(img, aa_px(cls->x), aa_px(cls->y + radius), aa_px(cls->x + cls->width),
+              aa_px(cls->y + title_h), cls->header_fill);
+    draw_line(img, aa_px(cls->x), aa_px(cls->y), aa_px(cls->x + cls->width),
+              aa_px(cls->y), aa_stroke(UML_STROKE), cls->stroke);
+    draw_line(img, aa_px(cls->x), aa_px(cls->y), aa_px(cls->x),
+              aa_px(cls->y + title_h), aa_stroke(UML_STROKE), cls->stroke);
+    draw_line(img, aa_px(cls->x + cls->width), aa_px(cls->y),
+              aa_px(cls->x + cls->width), aa_px(cls->y + title_h),
+              aa_stroke(UML_STROKE), cls->stroke);
     draw_line(img, aa_px(cls->x), aa_px(cls->y + title_h), aa_px(cls->x + cls->width),
               aa_px(cls->y + title_h), aa_stroke(UML_STROKE), cls->stroke);
     draw_line(img, aa_px(cls->x), aa_px(cls->y + title_h + attr_h),
