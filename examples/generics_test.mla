@@ -1,3 +1,7 @@
+/// \file generics_test.mla
+/// @ingroup examples
+/// \brief Generics edge-case regression test example.
+///
 // Test file for MLA generics
 // This tests the monomorphization implementation
 

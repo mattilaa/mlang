@@ -1,3 +1,7 @@
+/// \file lock_free_queue_post_demo.mla
+/// @ingroup examples
+/// \brief Lock-free queue producer/poster demo.
+///
 mod std::sync;
 mod std::thread;
 mod std::time;

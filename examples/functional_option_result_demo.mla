@@ -1,3 +1,7 @@
+/// \file functional_option_result_demo.mla
+/// @ingroup examples
+/// \brief Functional usage of Option/Result with map/and_then helpers.
+///
 mod std::exceptions;
 
 use std::exceptions::*;

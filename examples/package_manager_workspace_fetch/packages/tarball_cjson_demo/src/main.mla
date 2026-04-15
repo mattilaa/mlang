@@ -1,3 +1,7 @@
+/// \file main.mla
+/// @ingroup examples
+/// \brief Package-manager example: uses a tarball-fetched cJSON native dependency.
+///
 mod cjson;
 
 use cjson::*;

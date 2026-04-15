@@ -1,3 +1,7 @@
+/// \file std_hash_demo.mla
+/// @ingroup examples
+/// \brief std::hash hashing helpers demo.
+///
 mod std::hash;
 mod std::strbuf;
 

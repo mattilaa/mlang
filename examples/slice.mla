@@ -1,3 +1,7 @@
+/// \file slice.mla
+/// @ingroup examples
+/// \brief Slicing a list into borrowed ranges.
+///
 // slice.mla -- array/slice features in mlang
 //
 // Demonstrates:

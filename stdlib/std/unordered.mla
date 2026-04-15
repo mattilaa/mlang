@@ -40,85 +40,130 @@ extern pub fn __mlang_std_unordered_vecmap_i64_i64_len(handle: i64) -> i64;
 extern pub fn __mlang_std_unordered_vecmap_i64_i64_keys(handle: i64) -> list<i64>;
 extern pub fn __mlang_std_unordered_vecmap_i64_i64_values(handle: i64) -> list<i64>;
 
+/// @brief Hash-backed map from i64 keys to i64 values.
 pub struct HashMapI64I64 {
     var handle: i64;
 };
 
+/// @brief Hash-backed set of i64 keys.
 pub struct HashSetI64 {
     var handle: i64;
 };
 
+/// @brief Convenience wrapper over HashMapI64I64 with a short API.
 pub struct QuickMapI64I64 {
     var handle: i64;
 };
 
+/// @brief Vector-backed small map variant with a QuickMap-style API.
 pub struct QuickMapVecI64I64 {
     var handle: i64;
 };
 
 impl HashMapI64I64 {
+    /// @brief Create an empty hash map handle.
+    /// @return New `HashMapI64I64` wrapping a native map.
     pub fn new() -> HashMapI64I64 {
         return HashMapI64I64 { handle: __mlang_std_unordered_map_i64_i64_new() };
     }
 
+    /// @brief Release the underlying native map.
+    /// @return 0 on success.
     pub fn close(self: HashMapI64I64) -> i32 {
         return __mlang_std_unordered_map_i64_i64_free(self.handle);
     }
 
+    /// @brief Insert or update a key/value pair.
+    /// @param key Lookup key.
+    /// @param value Value to store.
+    /// @return 1 if a new entry was created, 0 if an existing key was updated.
     pub fn insert(self: HashMapI64I64, key: i64, value: i64) -> i32 {
         return __mlang_std_unordered_map_i64_i64_insert(self.handle, key, value);
     }
 
+    /// @brief Check whether the map contains a key.
+    /// @param key Key to search for.
+    /// @return 1 if present, 0 otherwise.
     pub fn contains(self: HashMapI64I64, key: i64) -> i32 {
         return __mlang_std_unordered_map_i64_i64_contains(self.handle, key);
     }
 
+    /// @brief Lookup a value with a fallback.
+    /// @param key Key to look up.
+    /// @param default_value Value returned when the key is missing.
+    /// @return Stored value or `default_value`.
     pub fn get_or(self: HashMapI64I64, key: i64, default_value: i64) -> i64 {
         return __mlang_std_unordered_map_i64_i64_get_or(self.handle, key, default_value);
     }
 
+    /// @brief Remove a key if present.
+    /// @param key Key to remove.
+    /// @return 1 if removed, 0 if missing.
     pub fn remove(self: HashMapI64I64, key: i64) -> i32 {
         return __mlang_std_unordered_map_i64_i64_remove(self.handle, key);
     }
 
+    /// @brief Return the number of entries.
+    /// @return Entry count.
     pub fn len(self: HashMapI64I64) -> i64 {
         return __mlang_std_unordered_map_i64_i64_len(self.handle);
     }
 
+    /// @brief Snapshot all keys into a new list.
+    /// @return Owned list of keys in unspecified order.
     pub fn keys(self: HashMapI64I64) -> list<i64> {
         return __mlang_std_unordered_map_i64_i64_keys(self.handle);
     }
 
+    /// @brief Snapshot all values into a new list.
+    /// @return Owned list of values in unspecified order.
     pub fn values(self: HashMapI64I64) -> list<i64> {
         return __mlang_std_unordered_map_i64_i64_values(self.handle);
     }
 }
 
 impl HashSetI64 {
+    /// @brief Create an empty hash set handle.
+    /// @return New `HashSetI64` wrapping a native set.
     pub fn new() -> HashSetI64 {
         return HashSetI64 { handle: __mlang_std_unordered_set_i64_new() };
     }
 
+    /// @brief Release the underlying native set.
+    /// @return 0 on success.
     pub fn close(self: HashSetI64) -> i32 {
         return __mlang_std_unordered_set_i64_free(self.handle);
     }
 
+    /// @brief Insert a key if not already present.
+    /// @param key Key to insert.
+    /// @return 1 if newly added, 0 if already present.
     pub fn insert(self: HashSetI64, key: i64) -> i32 {
         return __mlang_std_unordered_set_i64_insert(self.handle, key);
     }
 
+    /// @brief Check whether the set contains a key.
+    /// @param key Key to search for.
+    /// @return 1 if present, 0 otherwise.
     pub fn contains(self: HashSetI64, key: i64) -> i32 {
         return __mlang_std_unordered_set_i64_contains(self.handle, key);
     }
 
+    /// @brief Remove a key if present.
+    /// @param key Key to remove.
+    /// @return 1 if removed, 0 if missing.
     pub fn remove(self: HashSetI64, key: i64) -> i32 {
         return __mlang_std_unordered_set_i64_remove(self.handle, key);
     }
 
+    /// @brief Return the number of entries.
+    /// @return Entry count.
     pub fn len(self: HashSetI64) -> i64 {
         return __mlang_std_unordered_set_i64_len(self.handle);
     }
 
+    /// @brief Snapshot all keys into a new list.
+    /// @return Owned list of keys in unspecified order.
     pub fn keys(self: HashSetI64) -> list<i64> {
         return __mlang_std_unordered_set_i64_keys(self.handle);
     }
@@ -218,14 +263,17 @@ impl QuickMapVecI64I64 {
     }
 }
 
+/// @brief Compatibility wrapper around the language's built-in `map`.
 pub struct UnorderedMap<K, V> {
     var data: map<K, V>;
 };
 
+/// @brief Compatibility wrapper providing a set-like API over a `list`.
 pub struct UnorderedSet<T> {
     var data: list<T>;
 };
 
+/// @brief Compatibility wrapper providing a vector-like API over a `list`.
 pub struct Vector<T> {
     var data: list<T>;
 };

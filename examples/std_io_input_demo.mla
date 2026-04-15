@@ -1,3 +1,7 @@
+/// \file std_io_input_demo.mla
+/// @ingroup examples
+/// \brief std::io line-input demo reading from stdin.
+///
 mod std::io;
 mod std::strbuf;
 

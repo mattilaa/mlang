@@ -1,3 +1,7 @@
+/// \file stdio_driver_demo.mla
+/// @ingroup examples
+/// \brief Low-level stdio driver demo for raw terminal input/output.
+///
 // Minimal driver-style example using only stdio.
 // Commands:
 //   on

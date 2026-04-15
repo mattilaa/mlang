@@ -1,3 +1,7 @@
+/// \file generics_example.mla
+/// @ingroup examples
+/// \brief Generics basics: generic functions and structs.
+///
 // ===========================================
 // MLA Generics and Impl Blocks Example
 // ===========================================

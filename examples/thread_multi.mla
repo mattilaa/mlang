@@ -1,3 +1,7 @@
+/// \file thread_multi.mla
+/// @ingroup examples
+/// \brief Spawning multiple worker threads and joining them.
+///
 fn worker(id: i64) -> void {
     var sum: i64 = 0;
     for i in 0..1000 {

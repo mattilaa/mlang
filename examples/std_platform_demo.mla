@@ -1,3 +1,7 @@
+/// \file std_platform_demo.mla
+/// @ingroup examples
+/// \brief std::platform OS/arch detection demo.
+///
 mod std::platform;
 
 use std::platform::*;

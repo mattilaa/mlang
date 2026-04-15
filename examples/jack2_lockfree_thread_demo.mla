@@ -1,3 +1,7 @@
+/// \file jack2_lockfree_thread_demo.mla
+/// @ingroup examples
+/// \brief Lock-free thread producer/consumer demo modelled after JACK2 audio.
+///
 mod std::sync;
 mod std::time;
 

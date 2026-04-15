@@ -1,3 +1,7 @@
+/// \file inline_asm_aarch64_demo.mla
+/// @ingroup examples
+/// \brief Inline assembly demo targeting AArch64 (ARM64).
+///
 fn main() -> i32 {
     let base: i64 = 40;
     let delta: i64 = 2;

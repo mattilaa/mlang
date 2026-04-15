@@ -1,3 +1,7 @@
+/// \file main.mla
+/// @ingroup examples
+/// \brief Package-manager demo fetching cJSON from git and using it via FFI.
+///
 mod curl;
 
 use curl::*;

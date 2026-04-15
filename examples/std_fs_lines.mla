@@ -1,3 +1,7 @@
+/// \file std_fs_lines.mla
+/// @ingroup examples
+/// \brief std::fs line-by-line file reading demo.
+///
 /// Demonstrates BufReader line-by-line reading with filtering.
 ///
 /// Creates a CSV-like text file containing comment lines (starting with #),

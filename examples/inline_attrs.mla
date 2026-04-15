@@ -1,3 +1,7 @@
+/// \file inline_attrs.mla
+/// @ingroup examples
+/// \brief Demonstrates inline attributes (#[inline], etc.).
+///
 // Demonstrates #[inline], #[inline(always)], and #[inline(never)] attributes.
 // These map directly to LLVM InlineHint, AlwaysInline, and NoInline.
 

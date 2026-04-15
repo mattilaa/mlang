@@ -1,3 +1,7 @@
+/// \file std_net_mt_client.mla
+/// @ingroup examples
+/// \brief Multithreaded TCP client hitting the std_net_mt_server demo.
+///
 /// Multithreaded TCP client example for std::net.
 ///
 /// Spawns two client threads, each connecting to the server and verifying

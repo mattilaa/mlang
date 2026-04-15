@@ -1,3 +1,7 @@
+/// \file print_test.mla
+/// @ingroup examples
+/// \brief Quick println!/format! output test.
+///
 // Test file demonstrating Rust-like print macros in MLA
 // println! - print to stdout with newline
 // print!   - print to stdout without newline

@@ -32,38 +32,91 @@ fn ansi_enabled() -> i32 {
     return __mlang_std_term_stdout_supports_ansi();
 }
 
-/// @brief Color value helpers.
+/// @brief Sentinel color representing the terminal's default foreground/background.
+/// @return Opaque `Color` constant.
 pub fn color_default() -> Color { return 0; }
+/// @brief Standard ANSI black color.
+/// @return Opaque `Color` constant.
 pub fn color_black() -> Color { return 1; }
+/// @brief Standard ANSI red color.
+/// @return Opaque `Color` constant.
 pub fn color_red() -> Color { return 2; }
+/// @brief Standard ANSI green color.
+/// @return Opaque `Color` constant.
 pub fn color_green() -> Color { return 3; }
+/// @brief Standard ANSI yellow color.
+/// @return Opaque `Color` constant.
 pub fn color_yellow() -> Color { return 4; }
+/// @brief Standard ANSI blue color.
+/// @return Opaque `Color` constant.
 pub fn color_blue() -> Color { return 5; }
+/// @brief Standard ANSI magenta color.
+/// @return Opaque `Color` constant.
 pub fn color_magenta() -> Color { return 6; }
+/// @brief Standard ANSI cyan color.
+/// @return Opaque `Color` constant.
 pub fn color_cyan() -> Color { return 7; }
+/// @brief Standard ANSI white color.
+/// @return Opaque `Color` constant.
 pub fn color_white() -> Color { return 8; }
+/// @brief High-intensity ("bright") ANSI black color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_black() -> Color { return 9; }
+/// @brief High-intensity ANSI red color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_red() -> Color { return 10; }
+/// @brief High-intensity ANSI green color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_green() -> Color { return 11; }
+/// @brief High-intensity ANSI yellow color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_yellow() -> Color { return 12; }
+/// @brief High-intensity ANSI blue color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_blue() -> Color { return 13; }
+/// @brief High-intensity ANSI magenta color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_magenta() -> Color { return 14; }
+/// @brief High-intensity ANSI cyan color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_cyan() -> Color { return 15; }
+/// @brief High-intensity ANSI white color.
+/// @return Opaque `Color` constant.
 pub fn color_bright_white() -> Color { return 16; }
 
-/// @brief Cursor command value helpers.
+/// @brief Cursor command: move cursor to home position (row 1, col 1).
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_home() -> CursorCommand { return 0; }
+/// @brief Cursor command: erase entire screen.
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_clear_screen() -> CursorCommand { return 1; }
+/// @brief Cursor command: erase the current line.
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_clear_line() -> CursorCommand { return 2; }
+/// @brief Cursor command: hide the cursor.
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_hide() -> CursorCommand { return 3; }
+/// @brief Cursor command: show the cursor.
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_show() -> CursorCommand { return 4; }
+/// @brief Cursor command: save current cursor position.
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_save() -> CursorCommand { return 5; }
+/// @brief Cursor command: restore previously saved cursor position.
+/// @return Opaque `CursorCommand` value.
 pub fn cmd_restore() -> CursorCommand { return 6; }
 
-/// @brief Cursor direction value helpers.
+/// @brief Cursor direction: up.
+/// @return Opaque `CursorDirection` value.
 pub fn dir_up() -> CursorDirection { return 0; }
+/// @brief Cursor direction: down.
+/// @return Opaque `CursorDirection` value.
 pub fn dir_down() -> CursorDirection { return 1; }
+/// @brief Cursor direction: right.
+/// @return Opaque `CursorDirection` value.
 pub fn dir_right() -> CursorDirection { return 2; }
+/// @brief Cursor direction: left.
+/// @return Opaque `CursorDirection` value.
 pub fn dir_left() -> CursorDirection { return 3; }
 
 fn fg_code(c: Color) -> i32 {
@@ -258,8 +311,11 @@ pub fn clear_eol() -> str8 {
     return "\x1b[K";
 }
 
-/// @brief ncurses-style standout aliases.
+/// @brief ncurses-style "standout on" alias for inverse video.
+/// @return Borrowed/static escape string; do not free.
 pub fn standout_on() -> str8 { return inverse_on(); }
+/// @brief ncurses-style "standout off" alias for inverse-off.
+/// @return Borrowed/static escape string; do not free.
 pub fn standout_off() -> str8 { return inverse_off(); }
 
 /// @brief ncurses-style ACS line-drawing (ASCII-safe).
@@ -270,6 +326,8 @@ pub fn cursor_blink_bar() -> str8 {
     return "\x1b[5 q";
 }
 
+/// @brief Reset the cursor shape to the terminal default.
+/// @return Borrowed/static escape string; do not free.
 pub fn cursor_reset_shape() -> str8 {
     if ansi_enabled() == 0 { return ""; }
     return "\x1b[0 q";

@@ -1,3 +1,7 @@
+/// \file std_jsonrpc_stdio_loop_demo.mla
+/// @ingroup examples
+/// \brief JSON-RPC request/response loop over stdio using std::jsonrpc.
+///
 mod std::io;
 mod std::jsonrpc;
 mod std::strbuf;

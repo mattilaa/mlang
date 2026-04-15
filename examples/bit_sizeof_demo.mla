@@ -1,3 +1,7 @@
+/// \file bit_sizeof_demo.mla
+/// @ingroup examples
+/// \brief Bit-level sizeof() queries on primitive types.
+///
 mod std::bits;
 mod std::bitset;
 

@@ -1,3 +1,7 @@
+/// \file chat_tui_demo.mla
+/// @ingroup examples
+/// \brief Full-screen chat-style TUI demo driven by std::chat.
+///
 mod std::ascii;
 mod std::chat;
 mod std::esc;

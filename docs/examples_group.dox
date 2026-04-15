@@ -1,0 +1,7 @@
+/**
+ * @defgroup examples Examples
+ * @brief Curated MLang example programs shipped under `examples/`.
+ *
+ * Files tagged with `@ingroup examples` are collected under this group so
+ * they appear under the Examples tree in the Doxygen navigation.
+ */

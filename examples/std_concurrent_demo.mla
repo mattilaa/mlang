@@ -1,3 +1,7 @@
+/// \file std_concurrent_demo.mla
+/// @ingroup examples
+/// \brief std::concurrent high-level concurrency primitives demo.
+///
 mod std::concurrent;
 mod std::thread;
 mod std::time;

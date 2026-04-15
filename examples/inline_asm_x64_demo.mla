@@ -1,3 +1,7 @@
+/// \file inline_asm_x64_demo.mla
+/// @ingroup examples
+/// \brief Inline x86-64 assembly demo.
+///
 fn main() -> i32 {
     let value: i64 = 41;
     let one: i64 = 1;

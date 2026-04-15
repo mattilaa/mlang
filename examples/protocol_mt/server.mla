@@ -1,3 +1,7 @@
+/// \file server.mla
+/// @ingroup examples
+/// \brief Multithreaded std::protocol framed server demo.
+///
 /// Advanced protocol stack server demo (multithreaded, one worker per client).
 ///
 /// Uses std::protocol framed messages over TCP.

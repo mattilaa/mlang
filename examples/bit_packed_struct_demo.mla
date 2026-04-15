@@ -1,3 +1,7 @@
+/// \file bit_packed_struct_demo.mla
+/// @ingroup examples
+/// \brief Bit-packed struct fields and layout demo.
+///
 mod std::bits;
 
 use std::bits::OFF;

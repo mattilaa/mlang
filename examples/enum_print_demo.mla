@@ -1,3 +1,7 @@
+/// \file enum_print_demo.mla
+/// @ingroup examples
+/// \brief Pretty-printing enum variants.
+///
 // Demonstrates enum printing in println!/format!.
 
 enum Status: u8 {

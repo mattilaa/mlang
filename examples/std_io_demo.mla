@@ -1,3 +1,7 @@
+/// \file std_io_demo.mla
+/// @ingroup examples
+/// \brief std::io println/eprintln/read demo.
+///
 mod std::io;
 mod std::strbuf;
 

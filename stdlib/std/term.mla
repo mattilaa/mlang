@@ -28,11 +28,13 @@ extern pub fn __mlang_std_term_stdin_flush_input() -> i32;
 
 use type ColorLevel = i32;
 
+/// @brief Terminal size measured in rows and columns.
 pub struct TermSize {
     var rows: i32;
     var cols: i32;
 };
 
+/// @brief Snapshot of detected terminal capabilities for a given stream.
 pub struct TerminalCaps {
     var is_tty: i32;
     var rows: i32;
@@ -42,10 +44,17 @@ pub struct TerminalCaps {
     var term_name: str8;
 };
 
-/// @brief Color level constants.
+/// @brief Color level constant indicating no color support.
+/// @return `ColorLevel` zero.
 pub fn color_none() -> ColorLevel { return 0; }
+/// @brief Color level constant for 16-color ANSI support.
+/// @return `ColorLevel` = 16.
 pub fn color_16() -> ColorLevel { return 16; }
+/// @brief Color level constant for 256-color ANSI support.
+/// @return `ColorLevel` = 256.
 pub fn color_256() -> ColorLevel { return 256; }
+/// @brief Color level constant for 24-bit truecolor support.
+/// @return `ColorLevel` = 16777216.
 pub fn color_truecolor() -> ColorLevel { return 16777216; }
 
 /// @brief Terminal `$TERM` value, or `"unknown"`.
@@ -53,18 +62,26 @@ pub fn term_name() -> str8 {
     return __mlang_std_term_term_name();
 }
 
+/// @brief Return 1 if stdin is attached to a TTY, else 0.
+/// @return TTY flag.
 pub fn stdin_is_tty() -> i32 {
     return __mlang_std_term_stdin_is_tty();
 }
 
+/// @brief Return 1 if stdout is attached to a TTY, else 0.
+/// @return TTY flag.
 pub fn stdout_is_tty() -> i32 {
     return __mlang_std_term_stdout_is_tty();
 }
 
+/// @brief Return 1 if stderr is attached to a TTY, else 0.
+/// @return TTY flag.
 pub fn stderr_is_tty() -> i32 {
     return __mlang_std_term_stderr_is_tty();
 }
 
+/// @brief Query the terminal size associated with stdout.
+/// @return `TermSize` with rows and cols. Zero values mean "unknown".
 pub fn stdout_size() -> TermSize {
     return TermSize {
         rows: __mlang_std_term_stdout_rows(),
@@ -72,6 +89,8 @@ pub fn stdout_size() -> TermSize {
     };
 }
 
+/// @brief Query the terminal size associated with stderr.
+/// @return `TermSize` with rows and cols. Zero values mean "unknown".
 pub fn stderr_size() -> TermSize {
     return TermSize {
         rows: __mlang_std_term_stderr_rows(),
@@ -79,18 +98,26 @@ pub fn stderr_size() -> TermSize {
     };
 }
 
+/// @brief Detected color level for stdout.
+/// @return One of the `color_*()` constants.
 pub fn stdout_color_level() -> ColorLevel {
     return __mlang_std_term_stdout_color_level();
 }
 
+/// @brief Detected color level for stderr.
+/// @return One of the `color_*()` constants.
 pub fn stderr_color_level() -> ColorLevel {
     return __mlang_std_term_stderr_color_level();
 }
 
+/// @brief Return 1 if stdout supports 24-bit truecolor, else 0.
+/// @return Truecolor flag.
 pub fn stdout_truecolor() -> i32 {
     return __mlang_std_term_stdout_truecolor();
 }
 
+/// @brief Return 1 if stderr supports 24-bit truecolor, else 0.
+/// @return Truecolor flag.
 pub fn stderr_truecolor() -> i32 {
     return __mlang_std_term_stderr_truecolor();
 }

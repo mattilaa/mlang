@@ -1,3 +1,7 @@
+/// \file std_vec_demo.mla
+/// @ingroup examples
+/// \brief Demonstrates Vec<T> (std::vec) including vec![] literals and helpers.
+///
 /// std_vec_demo.mla
 /// Demonstrates Vec<T> from the MLang standard library.
 ///

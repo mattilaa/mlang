@@ -1,3 +1,7 @@
+/// \file c_lib_usage.mla
+/// @ingroup examples
+/// \brief Calling into a C library from MLang via FFI.
+///
 extern fn printf(format: str8, value: i32) -> i32;
 extern fn cos(x: f64) -> f64;
 

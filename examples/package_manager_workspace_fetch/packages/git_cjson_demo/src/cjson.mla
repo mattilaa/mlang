@@ -1,3 +1,7 @@
+/// \file cjson.mla
+/// @ingroup examples
+/// \brief FFI bindings for the git-fetched cJSON used by the workspace demo.
+///
 extern pub fn cJSON_Parse(text: str8) -> i64;
 extern pub fn cJSON_Delete(node: i64) -> void;
 extern pub fn cJSON_GetObjectItemCaseSensitive(obj: i64, key: str8) -> i64;

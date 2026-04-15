@@ -31,34 +31,54 @@ extern pub fn __mlang_std_json_value_as_string(value_handle: i64) -> str8;
 extern pub fn __mlang_std_json_stringify(doc_handle: i64, pretty: i32) -> str8;
 extern pub fn __mlang_std_json_object_key_at(value_handle: i64, index: i64) -> str8;
 
+/// @brief Owned handle to a parsed JSON document tree.
 pub struct JsonDoc {
     var handle: i64;
 };
 
+/// @brief Non-owning handle to a JSON value within a document.
 pub struct JsonValue {
     var handle: i64;
 };
 
+/// @brief Index-based iterator over the elements of a JSON array value.
 pub struct JsonArrayIter {
     var array: JsonValue;
     var index: i64;
     var len: i64;
 };
 
+/// @brief Index-based iterator over the members of a JSON object value.
 pub struct JsonObjectIter {
     var object: JsonValue;
     var index: i64;
     var len: i64;
 };
 
+/// @brief Kind tag returned for unusable/invalid values.
+/// @return Integer kind discriminator.
 pub fn kind_invalid() -> i32 { return 0; }
+/// @brief Kind tag for JSON null.
+/// @return Integer kind discriminator.
 pub fn kind_null() -> i32 { return 1; }
+/// @brief Kind tag for JSON booleans.
+/// @return Integer kind discriminator.
 pub fn kind_bool() -> i32 { return 2; }
+/// @brief Kind tag for JSON numbers.
+/// @return Integer kind discriminator.
 pub fn kind_number() -> i32 { return 3; }
+/// @brief Kind tag for JSON strings.
+/// @return Integer kind discriminator.
 pub fn kind_string() -> i32 { return 4; }
+/// @brief Kind tag for JSON arrays.
+/// @return Integer kind discriminator.
 pub fn kind_array() -> i32 { return 5; }
+/// @brief Kind tag for JSON objects.
+/// @return Integer kind discriminator.
 pub fn kind_object() -> i32 { return 6; }
 
+/// @brief Return the last JSON error message from the native layer.
+/// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {
     return __mlang_std_json_last_error();
 }
@@ -162,6 +182,8 @@ impl JsonValue {
         return Ok<JsonValue, str8>(JsonValue { handle: h });
     }
 
+    /// @brief Decode the value as a boolean.
+    /// @return `Ok(0|1)` when the value is a JSON bool, else `Err`.
     pub fn as_bool(self: JsonValue) -> Result<i32, str8> {
         if self.kind() != kind_bool() {
             return Err<i32, str8>("std::json as_bool: value is not bool");
@@ -169,6 +191,8 @@ impl JsonValue {
         return Ok<i32, str8>(__mlang_std_json_value_as_bool(self.handle));
     }
 
+    /// @brief Decode the value as a signed 64-bit integer.
+    /// @return `Ok(i64)` when the value is numeric, else `Err`.
     pub fn as_i64(self: JsonValue) -> Result<i64, str8> {
         if self.kind() != kind_number() {
             return Err<i64, str8>("std::json as_i64: value is not number");
@@ -176,6 +200,8 @@ impl JsonValue {
         return Ok<i64, str8>(__mlang_std_json_value_as_i64(self.handle));
     }
 
+    /// @brief Decode the value as a 64-bit floating point number.
+    /// @return `Ok(f64)` when the value is numeric, else `Err`.
     pub fn as_f64(self: JsonValue) -> Result<f64, str8> {
         if self.kind() != kind_number() {
             return Err<f64, str8>("std::json as_f64: value is not number");
@@ -183,6 +209,8 @@ impl JsonValue {
         return Ok<f64, str8>(__mlang_std_json_value_as_f64(self.handle));
     }
 
+    /// @brief Decode the value as an owned UTF-8 string.
+    /// @return `Ok(str8)` when the value is a JSON string, else `Err`.
     pub fn as_string(self: JsonValue) -> Result<str8, str8> {
         if self.kind() != kind_string() {
             return Err<str8, str8>("std::json as_string: value is not string");

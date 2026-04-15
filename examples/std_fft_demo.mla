@@ -1,3 +1,7 @@
+/// \file std_fft_demo.mla
+/// @ingroup examples
+/// \brief std::fft forward/inverse FFT demo with sample arrays.
+///
 /// Simple std::algorithm::fft usage demo.
 mod std::algorithm::fft;
 

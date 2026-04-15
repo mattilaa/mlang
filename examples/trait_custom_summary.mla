@@ -1,3 +1,7 @@
+/// \file trait_custom_summary.mla
+/// @ingroup examples
+/// \brief Custom trait impl providing a summary method.
+///
 trait Summary {
     fn summarize(&self) -> str8;
 }

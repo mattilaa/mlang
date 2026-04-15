@@ -13,14 +13,18 @@ extern pub fn __mlang_std_ssl_stream_set_read_timeout_ms(handle: i64, timeout_ms
 extern pub fn __mlang_std_ssl_stream_set_write_timeout_ms(handle: i64, timeout_ms: i64) -> i32;
 extern pub fn __mlang_std_ssl_stream_close(handle: i64) -> i32;
 
+/// @brief Owned handle to a TLS-accepting server socket.
 pub struct TlsListener {
     var handle: i64;
 };
 
+/// @brief Owned handle to a TLS-wrapped client/server stream.
 pub struct TlsStream {
     var handle: i64;
 };
 
+/// @brief Return the last `std::ssl` error message.
+/// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {
     return __mlang_std_ssl_last_error();
 }
@@ -35,6 +39,8 @@ impl TlsListener {
         return Ok<TlsListener, str8>(TlsListener { handle: h });
     }
 
+    /// @brief Return the port the listener is bound to.
+    /// @return `Ok(port)` or an error message.
     pub fn local_port(self: TlsListener) -> Result<i64, str8> {
         let p: i64 = __mlang_std_ssl_listener_local_port(self.handle);
         if p < 0 {
@@ -43,6 +49,8 @@ impl TlsListener {
         return Ok<i64, str8>(p);
     }
 
+    /// @brief Accept the next incoming TLS connection.
+    /// @return A ready-to-use `TlsStream` or an error message.
     pub fn accept(self: TlsListener) -> Result<TlsStream, str8> {
         let h: i64 = __mlang_std_ssl_listener_accept(self.handle);
         if h == 0 {
@@ -51,14 +59,21 @@ impl TlsListener {
         return Ok<TlsStream, str8>(TlsStream { handle: h });
     }
 
+    /// @brief Close the listener socket.
+    /// @return 0 on success.
     pub fn close(self: TlsListener) -> i32 {
         return __mlang_std_ssl_listener_close(self.handle);
     }
 
+    /// @brief Wrap an owned raw handle in a `TlsListener`.
+    /// @param handle Native handle previously produced by `std::ssl`.
+    /// @return Wrapping `TlsListener`.
     pub fn from_handle(handle: i64) -> TlsListener {
         return TlsListener { handle: handle };
     }
 
+    /// @brief Return the underlying raw handle.
+    /// @return Raw integer handle.
     pub fn raw_handle(self: TlsListener) -> i64 {
         return self.handle;
     }
@@ -80,6 +95,10 @@ impl TlsStream {
         return Ok<TlsStream, str8>(TlsStream { handle: h });
     }
 
+    /// @brief Read up to `capacity` bytes into `buf`.
+    /// @param buf Destination buffer (reused in-place).
+    /// @param capacity Maximum bytes to read.
+    /// @return Bytes read (0 = EOF) or an error message.
     pub fn read(self: TlsStream, buf: str8, capacity: i64) -> Result<i64, str8> {
         let n: i64 = __mlang_std_ssl_stream_read(self.handle, buf, capacity);
         if n < 0 {
@@ -88,6 +107,9 @@ impl TlsStream {
         return Ok<i64, str8>(n);
     }
 
+    /// @brief Write all bytes of `s` to the stream.
+    /// @param s Payload bytes.
+    /// @return Bytes written or an error message.
     pub fn write(self: TlsStream, s: str8) -> Result<i64, str8> {
         let n: i64 = __mlang_std_ssl_stream_write(self.handle, s);
         if n < 0 {
@@ -96,6 +118,9 @@ impl TlsStream {
         return Ok<i64, str8>(n);
     }
 
+    /// @brief Apply a read timeout in milliseconds (0 disables).
+    /// @param timeout_ms Timeout in milliseconds.
+    /// @return `Ok(0)` on success, else error message.
     pub fn set_read_timeout_ms(self: TlsStream, timeout_ms: i64) -> Result<i32, str8> {
         let rc: i32 = __mlang_std_ssl_stream_set_read_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
@@ -104,6 +129,9 @@ impl TlsStream {
         return Ok<i32, str8>(0);
     }
 
+    /// @brief Apply a write timeout in milliseconds (0 disables).
+    /// @param timeout_ms Timeout in milliseconds.
+    /// @return `Ok(0)` on success, else error message.
     pub fn set_write_timeout_ms(self: TlsStream, timeout_ms: i64) -> Result<i32, str8> {
         let rc: i32 = __mlang_std_ssl_stream_set_write_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
@@ -123,6 +151,8 @@ impl TlsStream {
         return self.handle;
     }
 
+    /// @brief Close the TLS stream, flushing any pending shutdown.
+    /// @return 0 on success, non-zero on error.
     pub fn close(self: TlsStream) -> i32 {
         return __mlang_std_ssl_stream_close(self.handle);
     }

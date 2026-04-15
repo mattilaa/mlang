@@ -1,3 +1,7 @@
+/// \file main_args.mla
+/// @ingroup examples
+/// \brief Reading command-line arguments via main(argv).
+///
 // Example: command line arguments
 fn main(argc: i32, args: list<str8>) -> i32 {
     println!("argc: {}", argc);

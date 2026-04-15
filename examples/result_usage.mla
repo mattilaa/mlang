@@ -1,3 +1,7 @@
+/// \file result_usage.mla
+/// @ingroup examples
+/// \brief Result<T,E> usage showing propagation and unwrap patterns.
+///
 // Example: Result<T, E>
 
 fn div(a: i32, b: i32) -> Result<i32, str8> {

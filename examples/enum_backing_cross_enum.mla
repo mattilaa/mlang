@@ -1,3 +1,7 @@
+/// \file enum_backing_cross_enum.mla
+/// @ingroup examples
+/// \brief Demonstrates enum values referencing other enum constants as backing.
+///
 // Cross-enum value reuse when target backing type is compatible.
 
 enum U8Enum : u8 {

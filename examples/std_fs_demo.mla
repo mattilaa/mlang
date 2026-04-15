@@ -1,3 +1,7 @@
+/// \file std_fs_demo.mla
+/// @ingroup examples
+/// \brief std::fs filesystem operations demo (read/write/stat).
+///
 mod std::fs;
 
 use std::fs::BufReader;

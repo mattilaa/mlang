@@ -1,3 +1,7 @@
+/// \file std_span_demo.mla
+/// @ingroup examples
+/// \brief Borrowed slice/span example using std::span.
+///
 mod std::span;
 mod std::vec;
 

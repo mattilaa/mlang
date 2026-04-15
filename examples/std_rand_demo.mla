@@ -1,3 +1,7 @@
+/// \file std_rand_demo.mla
+/// @ingroup examples
+/// \brief Pseudo-random number generation demo using std::rand.
+///
 mod std::rand;
 
 use std::rand::next_f64;

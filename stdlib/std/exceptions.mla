@@ -3,6 +3,11 @@
 
 extern pub fn __mlang_std_exceptions_string_free(s: str8) -> void;
 
+/// @brief Payload carried by a thrown exception.
+///
+/// Holds a short type tag, a human-readable message, the source line where
+/// the exception was thrown (optional), and an ownership flag which controls
+/// whether `free` releases the string fields.
 pub struct Exception {
     var type_name: str8;
     var message: str8;
@@ -10,6 +15,10 @@ pub struct Exception {
     var owned: bool;
 };
 
+/// @brief Construct a non-owning exception value.
+/// @param type_name Short type tag identifying the exception family.
+/// @param message Human-readable description of the failure.
+/// @return Exception with `source_line = 0` and `owned = false`.
 pub fn new(type_name: str8, message: str8) -> Exception {
     return Exception {
         type_name: type_name,
@@ -19,6 +28,11 @@ pub fn new(type_name: str8, message: str8) -> Exception {
     };
 }
 
+/// @brief Construct a non-owning exception value tagged with a source line.
+/// @param type_name Short type tag identifying the exception family.
+/// @param message Human-readable description of the failure.
+/// @param source_line 1-based line number where the exception was raised.
+/// @return Exception with the given `source_line` and `owned = false`.
 pub fn with_line(type_name: str8, message: str8, source_line: i32) -> Exception {
     return Exception {
         type_name: type_name,
@@ -28,6 +42,8 @@ pub fn with_line(type_name: str8, message: str8, source_line: i32) -> Exception 
     };
 }
 
+/// @brief Release strings owned by an exception.
+/// @param ex Exception to free. No-op when `ex.owned` is false.
 pub fn free(ex: Exception) -> void {
     if ex.owned {
         __mlang_std_exceptions_string_free(ex.type_name);

@@ -15,6 +15,8 @@ extern pub fn __mlang_std_regex_is_match(handle: i64, text: str8) -> i32;
 extern pub fn __mlang_std_regex_match_start(handle: i64, text: str8, group_index: i64) -> i64;
 extern pub fn __mlang_std_regex_match_end(handle: i64, text: str8, group_index: i64) -> i64;
 
+/// @ingroup algorithm_regex
+/// @brief Handle to a compiled POSIX regular expression.
 pub struct Regex {
     var handle: i64;
 };

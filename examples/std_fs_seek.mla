@@ -1,3 +1,7 @@
+/// \file std_fs_seek.mla
+/// @ingroup examples
+/// \brief std::fs seek/tell file-positioning demo.
+///
 /// Demonstrates File::seek, File::tell, File::size, and File::read_bytes.
 ///
 /// Creates a 20-byte file with known content, then reads chunks from

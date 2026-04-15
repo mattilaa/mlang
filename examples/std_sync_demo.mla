@@ -1,3 +1,7 @@
+/// \file std_sync_demo.mla
+/// @ingroup examples
+/// \brief Synchronization primitives demo (Mutex, atomics) from std::sync.
+///
 mod std::sync;
 mod std::strbuf;
 

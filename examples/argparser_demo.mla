@@ -1,3 +1,7 @@
+/// \file argparser_demo.mla
+/// @ingroup examples
+/// \brief Command-line argument parsing demo using std::argparser.
+///
 /// Demonstrates std::argparser -- C-style CLI argument parsing.
 ///
 /// Run:

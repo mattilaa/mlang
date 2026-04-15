@@ -15,14 +15,18 @@ extern pub fn __mlang_std_net_tcp_set_write_timeout_ms(handle: i64, timeout_ms: 
 extern pub fn __mlang_std_net_tcp_try_clone(handle: i64) -> i64;
 extern pub fn __mlang_std_net_tcp_set_listener_backlog(handle: i64, backlog: i64) -> i32;
 
+/// @brief Owned handle to a bound/listening TCP socket.
 pub struct TcpListener {
     var handle: i64;
 };
 
+/// @brief Owned handle to a connected TCP socket.
 pub struct TcpStream {
     var handle: i64;
 };
 
+/// @brief Return the most recent `std::net` error message.
+/// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {
     return __mlang_std_net_last_error();
 }
@@ -55,6 +59,8 @@ impl TcpListener {
         return Ok<i64, str8>(p);
     }
 
+    /// @brief Close the listening socket.
+    /// @return 0 on success, non-zero on error.
     pub fn close(self: TcpListener) -> i32 {
         return __mlang_std_net_tcp_close(self.handle);
     }
@@ -70,6 +76,10 @@ impl TcpListener {
 }
 
 impl TcpStream {
+    /// @brief Open a TCP connection to the given host/port.
+    /// @param addr Destination hostname or IP literal.
+    /// @param port Destination port number.
+    /// @return Connected stream, or an error message on failure.
     pub fn connect(addr: str8, port: i64) -> Result<TcpStream, str8> {
         let h: i64 = __mlang_std_net_tcp_connect(addr, port);
         if h == 0 {
@@ -78,6 +88,10 @@ impl TcpStream {
         return Ok<TcpStream, str8>(TcpStream { handle: h });
     }
 
+    /// @brief Read up to `capacity` bytes into `buf`.
+    /// @param buf Destination buffer (reused in-place).
+    /// @param capacity Maximum number of bytes to read.
+    /// @return Number of bytes read (0 = EOF) or an error message.
     pub fn read(self: TcpStream, buf: str8, capacity: i64) -> Result<i64, str8> {
         let n: i64 = __mlang_std_net_tcp_read(self.handle, buf, capacity);
         if n < 0 {
@@ -86,6 +100,9 @@ impl TcpStream {
         return Ok<i64, str8>(n);
     }
 
+    /// @brief Write the full contents of `s` to the socket.
+    /// @param s Bytes to send.
+    /// @return Number of bytes written, or an error message.
     pub fn write(self: TcpStream, s: str8) -> Result<i64, str8> {
         let n: i64 = __mlang_std_net_tcp_write(self.handle, s);
         if n < 0 {
@@ -94,10 +111,15 @@ impl TcpStream {
         return Ok<i64, str8>(n);
     }
 
+    /// @brief Close the underlying socket.
+    /// @return 0 on success, non-zero on error.
     pub fn close(self: TcpStream) -> i32 {
         return __mlang_std_net_tcp_close(self.handle);
     }
 
+    /// @brief Toggle non-blocking I/O on the socket.
+    /// @param enabled 1 to enable non-blocking mode, 0 to disable.
+    /// @return `Ok(0)` on success, else error message.
     pub fn set_nonblocking(self: TcpStream, enabled: i32) -> Result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_nonblocking(self.handle, enabled);
         if rc != 0 {
@@ -106,6 +128,9 @@ impl TcpStream {
         return Ok<i32, str8>(0);
     }
 
+    /// @brief Set a read timeout in milliseconds (0 disables).
+    /// @param timeout_ms Timeout in milliseconds.
+    /// @return `Ok(0)` on success, else error message.
     pub fn set_read_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_read_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {
@@ -114,6 +139,9 @@ impl TcpStream {
         return Ok<i32, str8>(0);
     }
 
+    /// @brief Set a write timeout in milliseconds (0 disables).
+    /// @param timeout_ms Timeout in milliseconds.
+    /// @return `Ok(0)` on success, else error message.
     pub fn set_write_timeout_ms(self: TcpStream, timeout_ms: i64) -> Result<i32, str8> {
         let rc: i32 = __mlang_std_net_tcp_set_write_timeout_ms(self.handle, timeout_ms);
         if rc != 0 {

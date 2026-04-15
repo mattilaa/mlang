@@ -1,3 +1,7 @@
+/// \file c_lib_file_io_demo.mla
+/// @ingroup examples
+/// \brief Using a C file-I/O library from MLang via FFI.
+///
 mod std::fs;
 mod std::strbuf;
 

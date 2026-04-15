@@ -1,3 +1,7 @@
+/// \file platform_inline_asm_demo.mla
+/// @ingroup examples
+/// \brief Platform-dispatched inline assembly selecting arch at compile time.
+///
 mod std::platform;
 
 use std::platform::*;

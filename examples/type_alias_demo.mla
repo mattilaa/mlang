@@ -1,3 +1,7 @@
+/// \file type_alias_demo.mla
+/// @ingroup examples
+/// \brief `use type` type-alias declaration demo.
+///
 /// Demonstrates type aliases:
 /// - concrete alias: use type Distance = f32;
 /// - implicit generic alias: use type SomeMap = map<K, V>;

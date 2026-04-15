@@ -15,10 +15,13 @@ extern pub fn __mlang_std_regex_is_match(handle: i64, text: str8) -> i32;
 extern pub fn __mlang_std_regex_match_start(handle: i64, text: str8, group_index: i64) -> i64;
 extern pub fn __mlang_std_regex_match_end(handle: i64, text: str8, group_index: i64) -> i64;
 
+/// @brief Handle to a compiled POSIX regular expression.
 pub struct Regex {
     var handle: i64;
 };
 
+/// @brief Return the last `std::regex` error message.
+/// @return UTF-8 error description, or empty string if none.
 pub fn last_error() -> str8 {
     return __mlang_std_regex_last_error();
 }

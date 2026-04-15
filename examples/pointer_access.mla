@@ -1,3 +1,7 @@
+/// \file pointer_access.mla
+/// @ingroup examples
+/// \brief Raw pointer access patterns and safety demonstration.
+///
 struct Foo {
     var value: i32;
 };

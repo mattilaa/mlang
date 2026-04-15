@@ -1,3 +1,7 @@
+/// \file std_sed_demo.mla
+/// @ingroup examples
+/// \brief Stream-editor style text substitution demo using std::sed.
+///
 mod std::sed;
 mod std::strbuf;
 
