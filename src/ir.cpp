@@ -9,6 +9,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <pthread.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/TargetParser/Host.h>
 #include <llvm/TargetParser/Triple.h>
@@ -2680,6 +2681,21 @@ void CodeGenerator::initializePthreadFunctions()
         llvm::FunctionType::get(intType, {ptrType}, false);
     pthreadMutexUnlockFunc = module->getOrInsertFunction(
         "pthread_mutex_unlock", pthreadMutexUnlockType);
+
+    llvm::FunctionType* pthreadMutexAttrInitType =
+        llvm::FunctionType::get(intType, {ptrType}, false);
+    pthreadMutexAttrInitFunc = module->getOrInsertFunction(
+        "pthread_mutexattr_init", pthreadMutexAttrInitType);
+
+    llvm::FunctionType* pthreadMutexAttrSetTypeType =
+        llvm::FunctionType::get(intType, {ptrType, intType}, false);
+    pthreadMutexAttrSetTypeFunc = module->getOrInsertFunction(
+        "pthread_mutexattr_settype", pthreadMutexAttrSetTypeType);
+
+    llvm::FunctionType* pthreadMutexAttrDestroyType =
+        llvm::FunctionType::get(intType, {ptrType}, false);
+    pthreadMutexAttrDestroyFunc = module->getOrInsertFunction(
+        "pthread_mutexattr_destroy", pthreadMutexAttrDestroyType);
 
     pthreadInitialized = true;
 }
@@ -17526,6 +17542,131 @@ llvm::Value* CodeGenerator::generateMutexCreate(FunctionCallNode* node)
     return buildHandleValue(handleTypeName, rawHandle, node->line);
 }
 
+llvm::Value* CodeGenerator::createInternalMutexHandle(
+    bool recursive, const std::string& namePrefix)
+{
+    initializePthreadFunctions();
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int32Type = llvm::Type::getInt32Ty(context);
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* mutexSize =
+        llvm::ConstantInt::get(int64Type, 64, false);
+    llvm::Value* mutexMem =
+        builder.CreateCall(mallocFunc, {mutexSize}, namePrefix + ".mutex.mem");
+    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(
+        llvm::cast<llvm::PointerType>(ptrType));
+
+    if(recursive)
+    {
+        llvm::Value* attrSize = llvm::ConstantInt::get(
+            int64Type, static_cast<uint64_t>(sizeof(pthread_mutexattr_t)),
+            false);
+        llvm::Value* attrMem =
+            builder.CreateCall(mallocFunc, {attrSize}, namePrefix + ".attr.mem");
+        builder.CreateCall(pthreadMutexAttrInitFunc, {attrMem});
+        builder.CreateCall(
+            pthreadMutexAttrSetTypeFunc,
+            {attrMem,
+             llvm::ConstantInt::get(
+                 int32Type, static_cast<uint64_t>(PTHREAD_MUTEX_RECURSIVE),
+                 false)});
+        builder.CreateCall(pthreadMutexInitFunc, {mutexMem, attrMem});
+        builder.CreateCall(pthreadMutexAttrDestroyFunc, {attrMem});
+        builder.CreateCall(freeFunc, {attrMem});
+    }
+    else
+    {
+        builder.CreateCall(pthreadMutexInitFunc, {mutexMem, nullPtr});
+    }
+
+    return builder.CreatePtrToInt(mutexMem, int64Type, namePrefix + ".handle");
+}
+
+void CodeGenerator::destroyInternalMutexHandle(llvm::Value* rawHandle,
+                                               const std::string& namePrefix)
+{
+    if(!rawHandle)
+        return;
+
+    initializePthreadFunctions();
+    initializeStdlibFunctions();
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+
+    llvm::Value* mutexPtr =
+        builder.CreateIntToPtr(rawHandle, ptrType, namePrefix + ".ptr");
+    builder.CreateCall(pthreadMutexDestroyFunc, {mutexPtr});
+    builder.CreateCall(freeFunc, {mutexPtr});
+}
+
+llvm::Value* CodeGenerator::ensurePropertyMutexHandle(
+    llvm::Value* handleSlotPtr, bool recursive, const std::string& namePrefix)
+{
+    if(!handleSlotPtr)
+        return nullptr;
+
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+    auto* currentHandle =
+        builder.CreateLoad(int64Type, handleSlotPtr, namePrefix + ".cur");
+    currentHandle->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
+
+    llvm::Function* curFn = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* entryBB = builder.GetInsertBlock();
+    llvm::BasicBlock* initBB =
+        llvm::BasicBlock::Create(context, namePrefix + ".init", curFn);
+    llvm::BasicBlock* doneBB =
+        llvm::BasicBlock::Create(context, namePrefix + ".done", curFn);
+    llvm::Value* hasHandle = builder.CreateICmpNE(
+        currentHandle, llvm::ConstantInt::get(int64Type, 0),
+        namePrefix + ".has_handle");
+    builder.CreateCondBr(hasHandle, doneBB, initBB);
+
+    builder.SetInsertPoint(initBB);
+    llvm::Value* candidate =
+        createInternalMutexHandle(recursive, namePrefix + ".new");
+    auto* cmpxchg = builder.CreateAtomicCmpXchg(
+        handleSlotPtr, llvm::ConstantInt::get(int64Type, 0), candidate,
+        llvm::MaybeAlign(), llvm::AtomicOrdering::SequentiallyConsistent,
+        llvm::AtomicOrdering::SequentiallyConsistent);
+    cmpxchg->setWeak(false);
+    llvm::Value* installed =
+        builder.CreateExtractValue(cmpxchg, 0, namePrefix + ".installed");
+    llvm::Value* success =
+        builder.CreateExtractValue(cmpxchg, 1, namePrefix + ".success");
+    llvm::BasicBlock* winnerBB =
+        llvm::BasicBlock::Create(context, namePrefix + ".winner", curFn);
+    llvm::BasicBlock* loserBB =
+        llvm::BasicBlock::Create(context, namePrefix + ".loser", curFn);
+    builder.CreateCondBr(success, winnerBB, loserBB);
+
+    builder.SetInsertPoint(winnerBB);
+    builder.CreateBr(doneBB);
+
+    builder.SetInsertPoint(loserBB);
+    destroyInternalMutexHandle(candidate, namePrefix + ".discard");
+    builder.CreateBr(doneBB);
+
+    builder.SetInsertPoint(doneBB);
+    auto* phi = builder.CreatePHI(int64Type, 3, namePrefix + ".handle");
+    phi->addIncoming(currentHandle, entryBB);
+    phi->addIncoming(candidate, winnerBB);
+    phi->addIncoming(installed, loserBB);
+    return phi;
+}
+
 llvm::Value* CodeGenerator::generateMutexLock(FunctionCallNode* node)
 {
     if(node->arguments.size() != 1)
@@ -18164,6 +18305,14 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         argIdx++;
     }
 
+    if(method->isMutexPropertyAccessor)
+    {
+        bool ok =
+            generateMutexPropertyMethodBody(structName, method, function);
+        activeTypeParamBindings = savedTypeParamBindings;
+        return ok ? function : nullptr;
+    }
+
     if(method->isAtomicPropertyAccessor)
     {
         bool ok =
@@ -18199,6 +18348,154 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     llvm::verifyFunction(*function);
     activeTypeParamBindings = savedTypeParamBindings;
     return function;
+}
+
+bool CodeGenerator::generateMutexPropertyMethodBody(
+    const std::string& structName, StructMethodNode* method,
+    llvm::Function* function)
+{
+    if(!method || !function || method->propertyFieldName.empty() ||
+       method->propertyLockFieldName.empty())
+    {
+        reportError(method ? method->line : 0,
+                    "invalid synthesized mutex property accessor");
+        return false;
+    }
+
+    auto memberIt = structMembers.find(structName);
+    if(memberIt == structMembers.end())
+    {
+        reportError(method->line, "unknown struct type: " + structName);
+        return false;
+    }
+
+    int fieldIndex = -1;
+    int lockFieldIndex = -1;
+    TypeNode* fieldType = nullptr;
+    const auto& members = memberIt->second;
+    for(size_t i = 0; i < members.size(); ++i)
+    {
+        if(members[i].first == method->propertyFieldName)
+        {
+            fieldIndex = static_cast<int>(i);
+            fieldType = members[i].second;
+        }
+        if(members[i].first == method->propertyLockFieldName)
+            lockFieldIndex = static_cast<int>(i);
+    }
+
+    if(fieldIndex < 0 || !fieldType)
+    {
+        reportError(method->line, "struct '" + structName +
+                                      "' has no field named '" +
+                                      method->propertyFieldName + "'");
+        return false;
+    }
+    if(lockFieldIndex < 0)
+    {
+        reportError(method->line, "struct '" + structName +
+                                      "' has no lock field named '" +
+                                      method->propertyLockFieldName + "'");
+        return false;
+    }
+
+    llvm::StructType* structType = getStructType(structName);
+    if(!structType)
+        return false;
+
+    const StructFieldLayout* fieldLayout =
+        getStructFieldLayout(structName, fieldIndex);
+    const StructFieldLayout* lockLayout =
+        getStructFieldLayout(structName, lockFieldIndex);
+    if(!fieldLayout || !lockLayout)
+        return false;
+    if(fieldLayout->packedBit)
+    {
+        reportError(method->line,
+                    "@property(mutex) is not supported on packed bit fields");
+        return false;
+    }
+
+    llvm::Value* selfStorage = namedValues["self"];
+    if(!selfStorage)
+    {
+        reportError(method->line,
+                    "internal error: missing self for mutex property method");
+        return false;
+    }
+
+    llvm::Value* selfPtr = selfStorage;
+    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(selfStorage))
+    {
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        if(allocaType->isPointerTy())
+            selfPtr = builder.CreateLoad(allocaType, alloca, "self.ptr");
+    }
+
+    llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
+    if(!llvmFieldType)
+    {
+        reportError(method->line,
+                    "unknown type: " + type_name_for_error(fieldType));
+        return false;
+    }
+
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, selfPtr, fieldLayout->storageIndex,
+        method->propertyFieldName + "_ptr");
+    llvm::Value* lockPtr = builder.CreateStructGEP(
+        structType, selfPtr, lockLayout->storageIndex,
+        method->propertyLockFieldName + "_ptr");
+    llvm::Value* rawHandle = ensurePropertyMutexHandle(
+        lockPtr, method->isRecursiveMutexPropertyAccessor,
+        method->propertyFieldName + ".mutex");
+    if(!rawHandle)
+        return false;
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Value* mutexPtr =
+        builder.CreateIntToPtr(rawHandle, ptrType,
+                               method->propertyFieldName + ".mutex.ptr");
+    builder.CreateCall(pthreadMutexLockFunc, {mutexPtr});
+
+    if(!method->isPropertySetter)
+    {
+        llvm::Value* loaded =
+            builder.CreateLoad(llvmFieldType, fieldPtr, "mutex.prop.load");
+        builder.CreateCall(pthreadMutexUnlockFunc, {mutexPtr});
+        exitCleanupScope();
+        if(currentFunctionExceptionFrame)
+            builder.CreateCall(exceptionsPopFrameFunc,
+                               {currentFunctionExceptionFrame});
+        builder.CreateRet(loaded);
+        llvm::verifyFunction(*function);
+        return true;
+    }
+
+    llvm::Value* valueStorage = namedValues["value"];
+    if(!valueStorage)
+    {
+        reportError(method->line,
+                    "internal error: missing setter value for mutex property");
+        return false;
+    }
+
+    llvm::Value* desired =
+        builder.CreateLoad(llvmFieldType, valueStorage, "mutex.prop.value");
+    builder.CreateStore(desired, fieldPtr);
+    builder.CreateCall(pthreadMutexUnlockFunc, {mutexPtr});
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRetVoid();
+    llvm::verifyFunction(*function);
+    return true;
 }
 
 bool CodeGenerator::generateAtomicPropertyMethodBody(
@@ -22394,8 +22691,13 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                     method->isSynthesizedPropertyAccessor;
                 newMethod->isAtomicPropertyAccessor =
                     method->isAtomicPropertyAccessor;
+                newMethod->isMutexPropertyAccessor =
+                    method->isMutexPropertyAccessor;
+                newMethod->isRecursiveMutexPropertyAccessor =
+                    method->isRecursiveMutexPropertyAccessor;
                 newMethod->isPropertySetter = method->isPropertySetter;
                 newMethod->propertyFieldName = method->propertyFieldName;
+                newMethod->propertyLockFieldName = method->propertyLockFieldName;
 
                 // Register the method (but don't generate code yet)
                 structMethods[mangledName][method->name] =
@@ -22433,8 +22735,13 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 method->isSynthesizedPropertyAccessor;
             newMethod->isAtomicPropertyAccessor =
                 method->isAtomicPropertyAccessor;
+            newMethod->isMutexPropertyAccessor =
+                method->isMutexPropertyAccessor;
+            newMethod->isRecursiveMutexPropertyAccessor =
+                method->isRecursiveMutexPropertyAccessor;
             newMethod->isPropertySetter = method->isPropertySetter;
             newMethod->propertyFieldName = method->propertyFieldName;
+            newMethod->propertyLockFieldName = method->propertyLockFieldName;
 
             // Register the method
             structMethods[mangledName][method->name] =
@@ -22481,8 +22788,13 @@ void CodeGenerator::monomorphizeImplBlock(
             method->isSynthesizedPropertyAccessor;
         newMethod->isAtomicPropertyAccessor =
             method->isAtomicPropertyAccessor;
+        newMethod->isMutexPropertyAccessor =
+            method->isMutexPropertyAccessor;
+        newMethod->isRecursiveMutexPropertyAccessor =
+            method->isRecursiveMutexPropertyAccessor;
         newMethod->isPropertySetter = method->isPropertySetter;
         newMethod->propertyFieldName = method->propertyFieldName;
+        newMethod->propertyLockFieldName = method->propertyLockFieldName;
 
         // Register the method
         structMethods[mangledStructName][method->name] =

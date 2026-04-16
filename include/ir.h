@@ -276,6 +276,9 @@ private:
     llvm::FunctionCallee pthreadMutexDestroyFunc;
     llvm::FunctionCallee pthreadMutexLockFunc;
     llvm::FunctionCallee pthreadMutexUnlockFunc;
+    llvm::FunctionCallee pthreadMutexAttrInitFunc;
+    llvm::FunctionCallee pthreadMutexAttrSetTypeFunc;
+    llvm::FunctionCallee pthreadMutexAttrDestroyFunc;
 
     // Loop control flow support (for break/continue)
     std::vector<llvm::BasicBlock*> loopBreakBlocks;
@@ -569,9 +572,19 @@ private:
                                               StructMethodNode* method);
     llvm::Function* generateMethodDefinition(const std::string& structName,
                                              StructMethodNode* method);
+    bool generateMutexPropertyMethodBody(const std::string& structName,
+                                         StructMethodNode* method,
+                                         llvm::Function* function);
     bool generateAtomicPropertyMethodBody(const std::string& structName,
                                           StructMethodNode* method,
                                           llvm::Function* function);
+    llvm::Value* createInternalMutexHandle(bool recursive,
+                                           const std::string& namePrefix);
+    llvm::Value* ensurePropertyMutexHandle(llvm::Value* handleSlotPtr,
+                                           bool recursive,
+                                           const std::string& namePrefix);
+    void destroyInternalMutexHandle(llvm::Value* rawHandle,
+                                    const std::string& namePrefix);
 
     // Track struct method info: struct name -> method name -> (isPublic, method
     // node)

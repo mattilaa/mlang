@@ -753,7 +753,15 @@ static void copyPropertyAccessorMetadata(StructMethodNode* method,
         return;
     method->isSynthesizedPropertyAccessor = true;
     method->isAtomicPropertyAccessor = member->isAtomicProperty;
+    method->isMutexPropertyAccessor = member->isMutexProperty;
+    method->isRecursiveMutexPropertyAccessor = member->isRecursiveProperty;
     method->propertyFieldName = member->name;
+    method->propertyLockFieldName = member->propertyLockFieldName;
+}
+
+static std::string makePropertyLockFieldName(const std::string& fieldName)
+{
+    return "__mlang_prop_lock_" + fieldName;
 }
 
 // Synthesize getter (and setter when not readonly) StructMethodNodes for each
@@ -773,6 +781,19 @@ static void synthesizePropertyMethods(StructDefNode* def)
     {
         if(!member || !member->isProperty || !member->type)
             continue;
+
+        if(member->isMutexProperty && member->propertyLockFieldName.empty())
+        {
+            member->propertyLockFieldName = makePropertyLockFieldName(member->name);
+            auto* lockField = new StructMemberNode(
+                /*isVar=*/true,
+                new TypeNode(TypeNode::TYPE_I64),
+                member->propertyLockFieldName,
+                nullptr);
+            lockField->isSynthesizedPropertyStorage = true;
+            lockField->line = member->line;
+            def->members->members.push_back(lockField);
+        }
 
         const std::string cap = capitalizeFirst(member->name);
 
@@ -957,14 +978,17 @@ ASTNode* create_struct_member_with_property_impl(int is_var, ASTNode* type,
                                                  char* name, ASTNode* init_expr,
                                                  int is_property,
                                                  int is_readonly,
-                                                 int is_atomic)
+                                                 int property_flags)
 {
     auto* node = new StructMemberNode(
         is_var != 0, static_cast<TypeNode*>(type), std::string(name),
         static_cast<ExpressionNode*>(init_expr));
     node->isProperty = (is_property != 0);
     node->isReadonly = (is_readonly != 0);
-    node->isAtomicProperty = (is_atomic != 0);
+    node->isAtomicProperty = (property_flags & PROPERTY_FLAG_ATOMIC) != 0;
+    node->isMutexProperty = (property_flags & PROPERTY_FLAG_MUTEX) != 0;
+    node->isRecursiveProperty =
+        (property_flags & PROPERTY_FLAG_RECURSIVE) != 0;
     return node;
 }
 

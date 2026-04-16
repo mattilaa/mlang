@@ -1657,7 +1657,7 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                               docCommentAboveLine(doc.text, st->line));
             if (st->members) {
                 for (StructMemberNode* member : st->members->members) {
-                    if (!member) {
+                    if (!member || member->isSynthesizedPropertyStorage) {
                         continue;
                     }
                     const int field_line = findStructMemberDeclLine(

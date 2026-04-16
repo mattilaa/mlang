@@ -1010,6 +1010,14 @@ public:
     std::string toString() const override;
 };
 
+enum PropertyFlags
+{
+    PROPERTY_FLAG_NONE = 0,
+    PROPERTY_FLAG_ATOMIC = 1 << 0,
+    PROPERTY_FLAG_MUTEX = 1 << 1,
+    PROPERTY_FLAG_RECURSIVE = 1 << 2,
+};
+
 // Struct-related nodes
 class StructMemberNode : public ASTNode
 {
@@ -1021,6 +1029,10 @@ public:
     bool isProperty = false;  // @property
     bool isReadonly = false;  // #[property(readonly)] — suppress setter
     bool isAtomicProperty = false; // @property(atomic)
+    bool isMutexProperty = false; // @property(mutex)
+    bool isRecursiveProperty = false; // @property(mutex, recursive)
+    bool isSynthesizedPropertyStorage = false;
+    std::string propertyLockFieldName;
 
     StructMemberNode(bool v, TypeNode* t, const std::string& n,
                      ExpressionNode* e)
@@ -1046,8 +1058,11 @@ public:
     bool isStatic; // static methods don't have 'self' parameter
     bool isSynthesizedPropertyAccessor = false;
     bool isAtomicPropertyAccessor = false;
+    bool isMutexPropertyAccessor = false;
+    bool isRecursiveMutexPropertyAccessor = false;
     bool isPropertySetter = false;
     std::string propertyFieldName;
+    std::string propertyLockFieldName;
 
     StructMethodNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
                      StatementListNode* b, bool pub = false, bool stat = false)
