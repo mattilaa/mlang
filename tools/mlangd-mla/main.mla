@@ -2090,6 +2090,7 @@ fn load_document_symbols(target_uri: str8) -> list<DocumentSymbol> {
                 name: String::new(),
                 type_info: String::new(),
                 signature: String::new(),
+                documentation: String::new(),
                 kind: 0,
                 line: 0,
                 column: 0
@@ -2191,8 +2192,13 @@ fn completion_symbol_meta_from_symbols(label: str8,
         }
 
         var doc: str8 = String::new();
+        if len(sym.documentation) > 0 {
+            doc = sym.documentation;
+        }
         if len(text_cache) > 0 {
-            doc = doc_comment_above_symbol(text_cache, sym.line);
+            if len(doc) == 0 {
+                doc = doc_comment_above_symbol(text_cache, sym.line);
+            }
         }
         if len(doc) == 0 {
             if len(sym.type_info) > 0 {
@@ -2880,6 +2886,7 @@ fn handle_document_symbol(payload: str8) -> str8 {
                 name: String::new(),
                 type_info: String::new(),
                 signature: String::new(),
+                documentation: String::new(),
                 kind: 0,
                 line: 0,
                 column: 0
@@ -3008,6 +3015,7 @@ fn handle_signature_help(payload: str8) -> str8 {
                                         name: String::new(),
                                         type_info: String::new(),
                                         signature: String::new(),
+                                        documentation: String::new(),
                                         kind: 0,
                                         line: 0,
                                         column: 0
@@ -3246,6 +3254,7 @@ fn handle_workspace_symbol(payload: str8) -> str8 {
                     name: String::new(),
                     type_info: String::new(),
                     signature: String::new(),
+                    documentation: String::new(),
                     kind: 0,
                     line: 0,
                     column: 0
@@ -3355,6 +3364,7 @@ fn handle_semantic_tokens_full(payload: str8) -> str8 {
                 name: String::new(),
                 type_info: String::new(),
                 signature: String::new(),
+                documentation: String::new(),
                 kind: 0,
                 line: 0,
                 column: 0

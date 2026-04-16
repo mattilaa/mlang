@@ -28,6 +28,7 @@ extern pub fn __mlang_std_compiler_document_symbol_column(handle: i64, uri: str8
 extern pub fn __mlang_std_compiler_document_symbol_id(handle: i64, uri: str8, index: i32) -> str8;
 extern pub fn __mlang_std_compiler_document_symbol_type(handle: i64, uri: str8, index: i32) -> str8;
 extern pub fn __mlang_std_compiler_document_symbol_signature(handle: i64, uri: str8, index: i32) -> str8;
+extern pub fn __mlang_std_compiler_document_symbol_documentation(handle: i64, uri: str8, index: i32) -> str8;
 extern pub fn __mlang_std_compiler_document_definition_line(handle: i64, uri: str8, line: i32, column: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_definition_column(handle: i64, uri: str8, line: i32, column: i32) -> i32;
 extern pub fn __mlang_std_compiler_document_definition_name(handle: i64, uri: str8, line: i32, column: i32) -> str8;
@@ -74,6 +75,7 @@ pub struct DocumentSymbol {
     var name: str8;
     var type_info: str8;
     var signature: str8;
+    var documentation: str8;
     var kind: i32;
     var line: i32;
     var column: i32;
@@ -285,11 +287,16 @@ impl Session {
         if last_status() != 0 {
             return Err<DocumentSymbol, str8>(last_error());
         }
+        let documentation: str8 = __mlang_std_compiler_document_symbol_documentation(self.handle, uri, index);
+        if last_status() != 0 {
+            return Err<DocumentSymbol, str8>(last_error());
+        }
         return Ok<DocumentSymbol, str8>(DocumentSymbol {
             id: id,
             name: name,
             type_info: type_info,
             signature: signature,
+            documentation: documentation,
             kind: kind,
             line: line,
             column: column
@@ -565,11 +572,16 @@ impl SessionRef {
         if last_status() != 0 {
             return Err<DocumentSymbol, str8>(last_error());
         }
+        let documentation: str8 = __mlang_std_compiler_document_symbol_documentation(self.handle, uri, index);
+        if last_status() != 0 {
+            return Err<DocumentSymbol, str8>(last_error());
+        }
         return Ok<DocumentSymbol, str8>(DocumentSymbol {
             id: id,
             name: name,
             type_info: type_info,
             signature: signature,
+            documentation: documentation,
             kind: kind,
             line: line,
             column: column
