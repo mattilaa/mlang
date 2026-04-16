@@ -59,6 +59,7 @@ ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members, i
 ASTNode* create_struct_member_list_impl(ASTNode* member);
 ASTNode* add_struct_member_impl(ASTNode* list, ASTNode* member);
 ASTNode* create_struct_member_impl(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* create_struct_member_with_property_impl(int is_var, ASTNode* type, char* name, ASTNode* init_expr, int is_property, int is_readonly, int is_atomic);
 ASTNode* create_struct_method_impl(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* add_struct_method_impl(ASTNode* list, ASTNode* method);
 ASTNode* create_struct_init_impl(char* type_name, char* var_name);

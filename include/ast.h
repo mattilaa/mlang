@@ -1018,6 +1018,9 @@ public:
     TypeNode* type;
     std::string name;
     ExpressionNode* initExpr;
+    bool isProperty = false;  // @property
+    bool isReadonly = false;  // #[property(readonly)] — suppress setter
+    bool isAtomicProperty = false; // @property(atomic)
 
     StructMemberNode(bool v, TypeNode* t, const std::string& n,
                      ExpressionNode* e)
@@ -1041,6 +1044,10 @@ public:
     StatementListNode* body;
     bool isPublic;
     bool isStatic; // static methods don't have 'self' parameter
+    bool isSynthesizedPropertyAccessor = false;
+    bool isAtomicPropertyAccessor = false;
+    bool isPropertySetter = false;
+    std::string propertyFieldName;
 
     StructMethodNode(TypeNode* rt, const std::string& n, ParameterListNode* p,
                      StatementListNode* b, bool pub = false, bool stat = false)

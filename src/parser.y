@@ -409,6 +409,7 @@ ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int i
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_member_with_property(int is_var, ASTNode* type, char* name, ASTNode* init_expr, int is_property, int is_readonly, int is_atomic);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_trait_def(char* name, int line);
@@ -418,6 +419,7 @@ ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_member_with_property(int is_var, ASTNode* type, char* name, ASTNode* init_expr, int is_property, int is_readonly, int is_atomic);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_struct_init(char* type_name, char* var_name);
@@ -623,6 +625,8 @@ enum UpdatePosition
 %token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token PROPERTY_ATTR
+%token PROPERTY_ATOMIC_ATTR
 %token X86_64_ATTR
 %token AARCH64_ATTR
 %token INLINE_ATTR
@@ -922,6 +926,14 @@ struct_member
         { $$ = mla_ast_struct_member(0, $4, $2, $6); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = mla_ast_struct_member(1, $4, $2, NULL); }
+    | PROPERTY_ATTR VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = mla_ast_struct_member_with_property(1, $5, $3, NULL, 1, 0, 0); }
+    | PROPERTY_ATTR LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = mla_ast_struct_member_with_property(0, $5, $3, $7, 1, 1, 0); }
+    | PROPERTY_ATOMIC_ATTR VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = mla_ast_struct_member_with_property(1, $5, $3, NULL, 1, 0, 1); }
+    | PROPERTY_ATOMIC_ATTR LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = mla_ast_struct_member_with_property(0, $5, $3, $7, 1, 1, 1); }
     | enum_def
         { $$ = $1; }
     ;

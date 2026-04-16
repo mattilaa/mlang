@@ -8,6 +8,46 @@ fn worker(id: i64) -> i32 {
     return id == 7 ? 0 : 1;
 }
 
+struct AtomicPropertySlot {
+    @property(atomic)
+    var value: i64;
+};
+
+fn shared_atomic_property_slot(next: i64, write: i32) -> i64 {
+    static var slot: AtomicPropertySlot = AtomicPropertySlot { value: 0 };
+    if write != 0 {
+        slot.setValue(next);
+    }
+    return slot.getValue();
+}
+
+fn atomic_property_pattern(id: i64) -> i64 {
+    if id == 0: { return 1111111111111111111; }
+    if id == 1: { return 2222222222222222222; }
+    if id == 2: { return 3333333333333333333; }
+    return 4444444444444444444;
+}
+
+fn is_valid_atomic_property_value(value: i64) -> i32 {
+    if value == 0 { return 1; }
+    if value == 1111111111111111111 { return 1; }
+    if value == 2222222222222222222 { return 1; }
+    if value == 3333333333333333333 { return 1; }
+    if value == 4444444444444444444 { return 1; }
+    return 0;
+}
+
+fn atomic_property_writer(id: i64, iterations: i64) -> i32 {
+    let value: i64 = atomic_property_pattern(id);
+    var i: i64 = 0;
+    while i < iterations {
+        let observed: i64 = shared_atomic_property_slot(value, 1);
+        if is_valid_atomic_property_value(observed) == 0: { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
 #[test]
 fn test_thread_join_helper() {
     let h: Handle<Thread> = thread_spawn(worker, 7);
@@ -31,3 +71,35 @@ fn test_mutex_atomic_helpers() {
     if now != 8: { verify(false); }
     }
 
+#[test]
+fn test_atomic_property_accessors() {
+    let before: i64 = shared_atomic_property_slot(0, 0);
+    verify(before == 0);
+
+    let after_set: i64 = shared_atomic_property_slot(99, 1);
+    let after_get: i64 = shared_atomic_property_slot(0, 0);
+    verify(after_set == 99);
+    verify(after_get == 99);
+}
+
+#[test]
+fn test_atomic_property_parallel_writers() {
+    let _ = shared_atomic_property_slot(0, 1);
+
+    let h1: Handle<Thread> = thread_spawn(atomic_property_writer, 0, 20000);
+    let h2: Handle<Thread> = thread_spawn(atomic_property_writer, 1, 20000);
+    let h3: Handle<Thread> = thread_spawn(atomic_property_writer, 2, 20000);
+    let h4: Handle<Thread> = thread_spawn(atomic_property_writer, 3, 20000);
+
+    let rc1: i32 = join(h1);
+    let rc2: i32 = join(h2);
+    let rc3: i32 = join(h3);
+    let rc4: i32 = join(h4);
+    let final_value: i64 = shared_atomic_property_slot(0, 0);
+
+    verify(rc1 == 0);
+    verify(rc2 == 0);
+    verify(rc3 == 0);
+    verify(rc4 == 0);
+    verify(is_valid_atomic_property_value(final_value) == 1);
+}

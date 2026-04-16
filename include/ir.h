@@ -569,6 +569,9 @@ private:
                                               StructMethodNode* method);
     llvm::Function* generateMethodDefinition(const std::string& structName,
                                              StructMethodNode* method);
+    bool generateAtomicPropertyMethodBody(const std::string& structName,
+                                          StructMethodNode* method,
+                                          llvm::Function* function);
 
     // Track struct method info: struct name -> method name -> (isPublic, method
     // node)

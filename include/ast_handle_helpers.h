@@ -49,6 +49,7 @@ ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_member_with_property(int is_var, ASTNode* type, char* name, ASTNode* init_expr, int is_property, int is_readonly, int is_atomic);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_type_alias(char* name, ASTNode* type_params, ASTNode* aliased_type);

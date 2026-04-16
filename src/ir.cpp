@@ -18164,6 +18164,14 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
         argIdx++;
     }
 
+    if(method->isAtomicPropertyAccessor)
+    {
+        bool ok =
+            generateAtomicPropertyMethodBody(structName, method, function);
+        activeTypeParamBindings = savedTypeParamBindings;
+        return ok ? function : nullptr;
+    }
+
     // Generate body
     for(auto stmt : method->body->statements)
     {
@@ -18191,6 +18199,164 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     llvm::verifyFunction(*function);
     activeTypeParamBindings = savedTypeParamBindings;
     return function;
+}
+
+bool CodeGenerator::generateAtomicPropertyMethodBody(
+    const std::string& structName, StructMethodNode* method,
+    llvm::Function* function)
+{
+    if(!method || !function || method->propertyFieldName.empty())
+    {
+        reportError(method ? method->line : 0,
+                    "invalid synthesized atomic property accessor");
+        return false;
+    }
+
+    auto memberIt = structMembers.find(structName);
+    if(memberIt == structMembers.end())
+    {
+        reportError(method->line, "unknown struct type: " + structName);
+        return false;
+    }
+
+    int fieldIndex = -1;
+    TypeNode* fieldType = nullptr;
+    const auto& members = memberIt->second;
+    for(size_t i = 0; i < members.size(); ++i)
+    {
+        if(members[i].first == method->propertyFieldName)
+        {
+            fieldIndex = static_cast<int>(i);
+            fieldType = members[i].second;
+            break;
+        }
+    }
+
+    if(fieldIndex < 0 || !fieldType)
+    {
+        reportError(method->line, "struct '" + structName +
+                                      "' has no field named '" +
+                                      method->propertyFieldName + "'");
+        return false;
+    }
+
+    switch(fieldType->kind)
+    {
+    case TypeNode::TYPE_BOOL:
+    case TypeNode::TYPE_INT:
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+        break;
+    default:
+        reportError(method->line,
+                    "@property(atomic) only supports bool and integer "
+                    "primitive fields");
+        return false;
+    }
+
+    llvm::StructType* structType = getStructType(structName);
+    if(!structType)
+        return false;
+
+    const StructFieldLayout* layout =
+        getStructFieldLayout(structName, fieldIndex);
+    if(!layout)
+        return false;
+    if(layout->packedBit)
+    {
+        reportError(method->line,
+                    "@property(atomic) is not supported on packed bit "
+                    "fields");
+        return false;
+    }
+
+    llvm::Value* selfStorage = namedValues["self"];
+    if(!selfStorage)
+    {
+        reportError(method->line,
+                    "internal error: missing self for atomic property method");
+        return false;
+    }
+
+    llvm::Value* selfPtr = selfStorage;
+    if(auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(selfStorage))
+    {
+        llvm::Type* allocaType = alloca->getAllocatedType();
+        if(allocaType->isPointerTy())
+            selfPtr = builder.CreateLoad(allocaType, alloca, "self.ptr");
+    }
+
+    llvm::Type* llvmFieldType = getLLVMTypeFromNode(fieldType);
+    if(!llvmFieldType)
+    {
+        reportError(method->line,
+                    "unknown type: " + type_name_for_error(fieldType));
+        return false;
+    }
+
+    llvm::Value* fieldPtr = builder.CreateStructGEP(
+        structType, selfPtr, layout->storageIndex,
+        method->propertyFieldName + "_ptr");
+
+    if(!method->isPropertySetter)
+    {
+        auto* loadInst =
+            builder.CreateLoad(llvmFieldType, fieldPtr, "atomic.prop.load");
+        loadInst->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
+        exitCleanupScope();
+        if(currentFunctionExceptionFrame)
+            builder.CreateCall(exceptionsPopFrameFunc,
+                               {currentFunctionExceptionFrame});
+        builder.CreateRet(loadInst);
+        llvm::verifyFunction(*function);
+        return true;
+    }
+
+    llvm::Value* valueStorage = namedValues["value"];
+    if(!valueStorage)
+    {
+        reportError(method->line,
+                    "internal error: missing setter value for atomic property");
+        return false;
+    }
+
+    llvm::Value* desired = builder.CreateLoad(llvmFieldType, valueStorage,
+                                              "atomic.prop.desired");
+    llvm::Function* curFn = builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* loopBB =
+        llvm::BasicBlock::Create(context, "atomic.prop.cas", curFn);
+    llvm::BasicBlock* doneBB =
+        llvm::BasicBlock::Create(context, "atomic.prop.done", curFn);
+
+    builder.CreateBr(loopBB);
+    builder.SetInsertPoint(loopBB);
+
+    auto* expected =
+        builder.CreateLoad(llvmFieldType, fieldPtr, "atomic.prop.expected");
+    expected->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);
+    auto* cmpxchg = builder.CreateAtomicCmpXchg(
+        fieldPtr, expected, desired, llvm::MaybeAlign(),
+        llvm::AtomicOrdering::SequentiallyConsistent,
+        llvm::AtomicOrdering::SequentiallyConsistent);
+    cmpxchg->setWeak(false);
+    llvm::Value* success =
+        builder.CreateExtractValue(cmpxchg, 1, "atomic.prop.success");
+    builder.CreateCondBr(success, doneBB, loopBB);
+
+    builder.SetInsertPoint(doneBB);
+    exitCleanupScope();
+    if(currentFunctionExceptionFrame)
+        builder.CreateCall(exceptionsPopFrameFunc,
+                           {currentFunctionExceptionFrame});
+    builder.CreateRetVoid();
+    llvm::verifyFunction(*function);
+    return true;
 }
 
 llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
@@ -19697,6 +19863,27 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
 
     bool isPublic = methodIt->second.first;
     StructMethodNode* methodNode = methodIt->second.second;
+    (void)isPublic;
+
+    std::vector<ParameterNode*> declaredParams;
+    if(methodNode && methodNode->parameters)
+    {
+        for(auto* param : methodNode->parameters->parameters)
+        {
+            if(param && param->name != "self")
+                declaredParams.push_back(param);
+        }
+    }
+
+    if(node->arguments.size() != declaredParams.size())
+    {
+        reportError(node->line,
+                    "method '" + node->methodName + "' expects " +
+                        std::to_string(declaredParams.size()) +
+                        " argument(s), but " +
+                        std::to_string(node->arguments.size()) + " provided");
+        return nullptr;
+    }
 
     // Check visibility - if calling from outside the struct's module, must be
     // public For now, we allow all calls within the same compilation unit
@@ -19823,15 +20010,129 @@ llvm::Value* CodeGenerator::generateMethodCall(MethodCallNode* node)
                                          receiverOwner))
         return nullptr;
 
-    // Add other arguments
-    for(auto arg : node->arguments)
+    // Add other arguments with the same coercion rules as normal function
+    // calls so synthesized setters and typed methods receive well-formed IR.
+    for(size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex)
     {
+        auto* arg = node->arguments[argIndex];
         llvm::Value* argVal = generateExpression(arg);
         if(!argVal)
             return nullptr;
-        consumeMoveFromExpression(arg, node->line,
-                                  "passing argument to method '" +
-                                      node->methodName + "'");
+
+        if(argIndex < declaredParams.size())
+        {
+            auto* declParam = declaredParams[argIndex];
+            llvm::Type* expectedType = callee->getArg(
+                static_cast<unsigned>(argIndex + 1))->getType();
+            llvm::Type* actualType = argVal->getType();
+
+            if(actualType != expectedType)
+            {
+                if(actualType->isIntegerTy() && expectedType->isIntegerTy())
+                {
+                    unsigned actualBits = actualType->getIntegerBitWidth();
+                    unsigned expectedBits = expectedType->getIntegerBitWidth();
+                    if(actualBits > expectedBits)
+                    {
+                        argVal =
+                            builder.CreateTrunc(argVal, expectedType, "trunc");
+                    }
+                    else if(actualBits < expectedBits)
+                    {
+                        argVal =
+                            builder.CreateSExt(argVal, expectedType, "sext");
+                    }
+                }
+                else if(actualType->isIntegerTy() &&
+                        expectedType->isFloatingPointTy())
+                {
+                    argVal =
+                        builder.CreateSIToFP(argVal, expectedType, "sitofp");
+                }
+                else if(actualType->isFloatingPointTy() &&
+                        expectedType->isIntegerTy())
+                {
+                    argVal =
+                        builder.CreateFPToSI(argVal, expectedType, "fptosi");
+                }
+                else if(actualType->isFloatingPointTy() &&
+                        expectedType->isFloatingPointTy())
+                {
+                    argVal =
+                        builder.CreateFPCast(argVal, expectedType, "fpcast");
+                }
+                else if(!(actualType->isPointerTy() &&
+                          expectedType->isPointerTy()))
+                {
+                    std::string actualStr, expectedStr;
+
+                    if(actualType->isStructTy())
+                        actualStr = actualType->getStructName().str().empty()
+                                        ? "struct"
+                                        : actualType->getStructName().str();
+                    else if(actualType->isIntegerTy())
+                        actualStr = "i" + std::to_string(
+                                              actualType->getIntegerBitWidth());
+                    else if(actualType->isFloatTy())
+                        actualStr = "float";
+                    else if(actualType->isDoubleTy())
+                        actualStr = "double";
+                    else
+                        actualStr = "unknown";
+
+                    if(expectedType->isStructTy())
+                        expectedStr =
+                            expectedType->getStructName().str().empty()
+                                ? "struct"
+                                : expectedType->getStructName().str();
+                    else if(expectedType->isIntegerTy())
+                        expectedStr =
+                            "i" +
+                            std::to_string(expectedType->getIntegerBitWidth());
+                    else if(expectedType->isFloatTy())
+                        expectedStr = "float";
+                    else if(expectedType->isDoubleTy())
+                        expectedStr = "double";
+                    else
+                        expectedStr = "unknown";
+
+                    reportError(node->line,
+                                "argument " +
+                                    std::to_string(argIndex + 1) +
+                                    " of method '" + node->methodName +
+                                    "' has wrong type: expected '" +
+                                    expectedStr + "', got '" + actualStr +
+                                    "'");
+                    return nullptr;
+                }
+            }
+
+            if(auto* refType =
+                   dynamic_cast<ReferenceTypeNode*>(declParam->type))
+            {
+                if(refType->isMutable)
+                {
+                    auto* unary = dynamic_cast<UnaryOpNode*>(arg);
+                    bool isRefMut =
+                        unary && unary->op == UnaryOpNode::OP_ADDR_MUT;
+                    if(!isRefMut)
+                    {
+                        reportError(node->line, "parameter '" +
+                                                    declParam->name +
+                                                    "' expects &mut argument");
+                        return nullptr;
+                    }
+                }
+            }
+
+            if(!dynamic_cast<ReferenceTypeNode*>(declParam->type))
+            {
+                consumeMoveFromExpression(arg, node->line,
+                                          "passing argument to method '" +
+                                              node->methodName + "'");
+            }
+        }
+
         args.push_back(argVal);
     }
 
@@ -22089,6 +22390,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
                 auto* newMethod = new StructMethodNode(
                     newReturnType, method->name, newParams, method->body,
                     method->isPublic, method->isStatic);
+                newMethod->isSynthesizedPropertyAccessor =
+                    method->isSynthesizedPropertyAccessor;
+                newMethod->isAtomicPropertyAccessor =
+                    method->isAtomicPropertyAccessor;
+                newMethod->isPropertySetter = method->isPropertySetter;
+                newMethod->propertyFieldName = method->propertyFieldName;
 
                 // Register the method (but don't generate code yet)
                 structMethods[mangledName][method->name] =
@@ -22122,6 +22429,12 @@ void CodeGenerator::monomorphizeStruct(const std::string& genericName,
             auto* newMethod = new StructMethodNode(
                 newReturnType, method->name, newParams, method->body,
                 method->isPublic, method->isStatic);
+            newMethod->isSynthesizedPropertyAccessor =
+                method->isSynthesizedPropertyAccessor;
+            newMethod->isAtomicPropertyAccessor =
+                method->isAtomicPropertyAccessor;
+            newMethod->isPropertySetter = method->isPropertySetter;
+            newMethod->propertyFieldName = method->propertyFieldName;
 
             // Register the method
             structMethods[mangledName][method->name] =
@@ -22164,6 +22477,12 @@ void CodeGenerator::monomorphizeImplBlock(
         auto* newMethod = new StructMethodNode(
             newReturnType, method->name, newParams, method->body,
             method->isPublic, method->isStatic);
+        newMethod->isSynthesizedPropertyAccessor =
+            method->isSynthesizedPropertyAccessor;
+        newMethod->isAtomicPropertyAccessor =
+            method->isAtomicPropertyAccessor;
+        newMethod->isPropertySetter = method->isPropertySetter;
+        newMethod->propertyFieldName = method->propertyFieldName;
 
         // Register the method
         structMethods[mangledStructName][method->name] =
