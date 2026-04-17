@@ -76,16 +76,41 @@ static ASTNode* create_pipe_call(ASTNode* value, char* callee, ASTNode* args,
 }
 
 static std::vector<ASTNode*> g_hoistedNestedFunctions;
+static std::vector<ASTNode*> g_hoistedInlineStructs;
 
 static ASTNode* append_hoisted_nested_functions(ASTNode* topLevelList)
 {
     ASTNode* list = topLevelList;
+    for(ASTNode* st : g_hoistedInlineStructs)
+    {
+        list = mla_ast_add_to_top_level_list(list, st);
+    }
+    g_hoistedInlineStructs.clear();
     for(ASTNode* fn : g_hoistedNestedFunctions)
     {
         list = mla_ast_add_to_top_level_list(list, fn);
     }
     g_hoistedNestedFunctions.clear();
     return list;
+}
+
+static ASTNode* create_inline_struct_type(char* name, ASTNode* members, int line)
+{
+    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
+    if(def)
+        def->line = line;
+    g_hoistedInlineStructs.push_back(def);
+    return mla_ast_struct_type_ref(strdup(name));
+}
+
+static char* join_field_path(char* left, char* right)
+{
+    size_t len = strlen(left) + 1 + strlen(right) + 1;
+    char* out = (char*)malloc(len);
+    if(!out)
+        return left;
+    snprintf(out, len, "%s.%s", left, right);
+    return out;
 }
 
 static ASTNode* make_nested_fn_noop_statement()
@@ -685,6 +710,7 @@ enum UpdatePosition
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
 %type <ival> arch_attr arch_attr_list
 %type <ival> property_options_opt property_option_list property_option
+%type <sval> field_path
 
 %left PIPE_PIPE
 %left PIPE_GT
@@ -1142,6 +1168,8 @@ type
     | U16    { $$ = mla_ast_type_node(TypeNode::TYPE_U16); }
     | U32    { $$ = mla_ast_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = mla_ast_type_node(TypeNode::TYPE_U64); }
+    | STRUCT IDENTIFIER LBRACE struct_member_list RBRACE
+        { $$ = create_inline_struct_type($2, $4, yylineno); }
     | module_path { $$ = mla_ast_struct_type_ref($1); }
     | module_path GENERIC_LT type_list GT
         {
@@ -2042,19 +2070,24 @@ struct_literal
         { $$ = mla_ast_struct_literal($1, $3, $6, yylineno); }
     ;
 
+field_path
+    : IDENTIFIER { $$ = $1; }
+    | field_path DOT IDENTIFIER { $$ = join_field_path($1, $3); }
+    ;
+
 struct_field_init_list
     : /* empty */ { $$ = NULL; }
-    | IDENTIFIER COLON_BLOCK map_entries RBRACE
+    | field_path COLON_BLOCK map_entries RBRACE
         { $$ = mla_ast_struct_field_init_list($1, mla_ast_map_literal($3)); }
-    | IDENTIFIER COLON_BLOCK RBRACE
+    | field_path COLON_BLOCK RBRACE
         { $$ = mla_ast_struct_field_init_list($1, mla_ast_map_literal(NULL)); }
-    | IDENTIFIER COLON expression
+    | field_path COLON expression
         { $$ = mla_ast_struct_field_init_list($1, $3); }
-    | struct_field_init_list COMMA IDENTIFIER COLON_BLOCK map_entries RBRACE
+    | struct_field_init_list COMMA field_path COLON_BLOCK map_entries RBRACE
         { $$ = mla_ast_struct_field_init_list_add($1, $3, mla_ast_map_literal($5)); }
-    | struct_field_init_list COMMA IDENTIFIER COLON_BLOCK RBRACE
+    | struct_field_init_list COMMA field_path COLON_BLOCK RBRACE
         { $$ = mla_ast_struct_field_init_list_add($1, $3, mla_ast_map_literal(NULL)); }
-    | struct_field_init_list COMMA IDENTIFIER COLON expression
+    | struct_field_init_list COMMA field_path COLON expression
         { $$ = mla_ast_struct_field_init_list_add($1, $3, $5); }
     ;
 

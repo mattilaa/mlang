@@ -5452,6 +5452,65 @@ void CodeGenerator::generateCode(ProgramNode* program)
                 }
             }
 
+            std::function<void(TypeNode*)> processMemberType =
+                [&](TypeNode* type)
+            {
+                if(!type)
+                    return;
+                if(auto* refType = dynamic_cast<ReferenceTypeNode*>(type))
+                {
+                    processMemberType(refType->elementType);
+                    return;
+                }
+                if(auto* ptrType = dynamic_cast<PointerTypeNode*>(type))
+                {
+                    processMemberType(ptrType->elementType);
+                    return;
+                }
+                if(auto* tupleType = dynamic_cast<TupleTypeNode*>(type))
+                {
+                    if(tupleType->elementTypes)
+                    {
+                        for(auto* elem : tupleType->elementTypes->types)
+                            processMemberType(elem);
+                    }
+                    return;
+                }
+                if(auto* listType = dynamic_cast<GenericListTypeNode*>(type))
+                {
+                    processMemberType(listType->elementType);
+                    return;
+                }
+                if(auto* mapType = dynamic_cast<MapTypeNode*>(type))
+                {
+                    processMemberType(mapType->keyType);
+                    processMemberType(mapType->valueType);
+                    return;
+                }
+                if(auto* genStructRef =
+                       dynamic_cast<GenericStructTypeRefNode*>(type))
+                {
+                    for(auto* arg : genStructRef->typeArgs)
+                        processMemberType(arg);
+                    return;
+                }
+                if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+                {
+                    auto depIt = structMap.find(structRef->structName);
+                    if(depIt != structMap.end() && depIt->second != structDef)
+                        processStruct(depIt->second);
+                }
+            };
+
+            if(structDef->members)
+            {
+                for(auto* member : structDef->members->members)
+                {
+                    if(member)
+                        processMemberType(member->type);
+                }
+            }
+
             // Track struct visibility
             structVisibility[structDef->name] =
                 std::make_pair(structDef->isPublic, structDef->sourceModule);
@@ -21300,20 +21359,115 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
     }
     const auto& members = memberIt->second;
 
-    // Build the struct value
-    llvm::Value* structVal = llvm::Constant::getNullValue(structType);
-
-    // Process each field initialization
-    for(const auto& fieldInit : node->fields)
+    auto convertStructLiteralFieldValue =
+        [&](llvm::Value* fieldValue, llvm::Type* expectedType,
+            const std::string& fullFieldName) -> llvm::Value*
     {
-        const std::string& fieldName = fieldInit.first;
-        ExpressionNode* valueExpr = fieldInit.second;
+        if(!fieldValue)
+            return nullptr;
 
-        // Find the member index
-        int memberIndex = -1;
-        for(size_t i = 0; i < members.size(); ++i)
+        llvm::Type* actualType = fieldValue->getType();
+        if(actualType == expectedType)
+            return fieldValue;
+
+        if(actualType->isIntegerTy() && expectedType->isIntegerTy())
         {
-            if(members[i].first == fieldName)
+            unsigned actualBits = actualType->getIntegerBitWidth();
+            unsigned expectedBits = expectedType->getIntegerBitWidth();
+            if(actualBits > expectedBits)
+                return builder.CreateTrunc(fieldValue, expectedType, "trunc");
+            if(actualBits < expectedBits)
+                return builder.CreateSExt(fieldValue, expectedType, "sext");
+            return fieldValue;
+        }
+
+        if(actualType->isFloatingPointTy() && expectedType->isFloatingPointTy())
+            return builder.CreateFPCast(fieldValue, expectedType, "fpcast");
+
+        if(actualType->isIntegerTy() && expectedType->isFloatingPointTy())
+            return builder.CreateSIToFP(fieldValue, expectedType, "sitofp");
+
+        if(actualType->isFloatingPointTy() && expectedType->isIntegerTy())
+            return builder.CreateFPToSI(fieldValue, expectedType, "fptosi");
+
+        std::string actualTypeStr;
+        std::string expectedTypeStr;
+
+        if(actualType->isIntegerTy())
+            actualTypeStr =
+                "i" + std::to_string(actualType->getIntegerBitWidth());
+        else if(actualType->isFloatTy())
+            actualTypeStr = "float";
+        else if(actualType->isDoubleTy())
+            actualTypeStr = "double";
+        else if(actualType->isPointerTy())
+            actualTypeStr = "pointer";
+        else if(actualType->isStructTy())
+            actualTypeStr = actualType->getStructName().str().empty()
+                                ? "struct"
+                                : actualType->getStructName().str();
+        else
+            actualTypeStr = "unknown";
+
+        if(expectedType->isIntegerTy())
+            expectedTypeStr =
+                "i" + std::to_string(expectedType->getIntegerBitWidth());
+        else if(expectedType->isFloatTy())
+            expectedTypeStr = "float";
+        else if(expectedType->isDoubleTy())
+            expectedTypeStr = "double";
+        else if(expectedType->isPointerTy())
+            expectedTypeStr = "pointer";
+        else if(expectedType->isStructTy())
+            expectedTypeStr = expectedType->getStructName().str().empty()
+                                  ? "struct"
+                                  : expectedType->getStructName().str();
+        else
+            expectedTypeStr = "unknown";
+
+        reportError(node->line, "type mismatch for field '" + fullFieldName +
+                                    "' in struct '" + structTypeName +
+                                    "': expected '" + expectedTypeStr +
+                                    "', got '" + actualTypeStr + "'");
+        return nullptr;
+    };
+
+    std::function<std::string(TypeNode*)> getNestedStructTypeName =
+        [&](TypeNode* type) -> std::string
+    {
+        if(!type)
+            return "";
+
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+            return structRef->structName;
+
+        if(auto* genericRef = dynamic_cast<GenericStructTypeRefNode*>(type))
+            return getOrCreateMonomorphizedStruct(genericRef->structName,
+                                                 genericRef->typeArgs);
+
+        return "";
+    };
+
+    std::function<llvm::Value*(const std::string&, llvm::StructType*,
+                               const std::vector<std::pair<std::string, TypeNode*>>&,
+                               llvm::Value*, const std::vector<std::string>&,
+                               size_t, ExpressionNode*, const std::string&)>
+        applyNestedFieldInit =
+            [&](const std::string& currentStructName,
+                llvm::StructType* currentStructType,
+                const std::vector<std::pair<std::string, TypeNode*>>& currentMembers,
+                llvm::Value* currentStructVal,
+                const std::vector<std::string>& fieldParts, size_t partIndex,
+                ExpressionNode* valueExpr,
+                const std::string& fullFieldName) -> llvm::Value*
+    {
+        if(partIndex >= fieldParts.size())
+            return currentStructVal;
+
+        int memberIndex = -1;
+        for(size_t i = 0; i < currentMembers.size(); ++i)
+        {
+            if(currentMembers[i].first == fieldParts[partIndex])
             {
                 memberIndex = static_cast<int>(i);
                 break;
@@ -21322,153 +21476,164 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
         if(memberIndex < 0)
         {
-            reportError(node->line, "unknown field '" + fieldName +
-                                        "' in struct '" + structTypeName + "'");
-            return nullptr;
-        }
-
-        // Generate the field value
-        llvm::Value* fieldValue = generateExpression(valueExpr);
-        if(!fieldValue)
-        {
-            reportError(node->line, "failed to generate value for field '" +
-                                        fieldName + "'");
+            reportError(node->line, "unknown field '" + fieldParts[partIndex] +
+                                        "' in struct '" + currentStructName + "'");
             return nullptr;
         }
 
         const StructFieldLayout* layout =
-            getStructFieldLayout(structTypeName, memberIndex);
+            getStructFieldLayout(currentStructName, memberIndex);
         if(!layout)
         {
-            reportError(node->line, "missing field layout for '" + fieldName +
-                                        "' in struct '" + structTypeName + "'");
+            reportError(node->line,
+                        "missing field layout for '" + fieldParts[partIndex] +
+                            "' in struct '" + currentStructName + "'");
             return nullptr;
         }
 
-        // Get the expected field type from the struct storage
-        llvm::Type* expectedType = layout->packedBit
-                                       ? llvm::Type::getInt1Ty(context)
-                                       : structType->getElementType(
-                                             layout->storageIndex);
-        llvm::Type* actualType = fieldValue->getType();
-
-        // Convert value to expected type if needed
-        if(actualType != expectedType)
+        if(partIndex + 1 == fieldParts.size())
         {
-            if(actualType->isIntegerTy() && expectedType->isIntegerTy())
+            llvm::Value* fieldValue = generateExpression(valueExpr);
+            if(!fieldValue)
             {
-                unsigned actualBits = actualType->getIntegerBitWidth();
-                unsigned expectedBits = expectedType->getIntegerBitWidth();
-                if(actualBits > expectedBits)
-                {
-                    fieldValue =
-                        builder.CreateTrunc(fieldValue, expectedType, "trunc");
-                }
-                else if(actualBits < expectedBits)
-                {
-                    fieldValue =
-                        builder.CreateSExt(fieldValue, expectedType, "sext");
-                }
-            }
-            else if(actualType->isFloatingPointTy() &&
-                    expectedType->isFloatingPointTy())
-            {
-                fieldValue =
-                    builder.CreateFPCast(fieldValue, expectedType, "fpcast");
-            }
-            else if(actualType->isIntegerTy() &&
-                    expectedType->isFloatingPointTy())
-            {
-                fieldValue =
-                    builder.CreateSIToFP(fieldValue, expectedType, "sitofp");
-            }
-            else if(actualType->isFloatingPointTy() &&
-                    expectedType->isIntegerTy())
-            {
-                fieldValue =
-                    builder.CreateFPToSI(fieldValue, expectedType, "fptosi");
-            }
-            else
-            {
-                // Types are incompatible - report error
-                std::string actualTypeStr, expectedTypeStr;
-
-                // Get actual type name
-                if(actualType->isIntegerTy())
-                    actualTypeStr =
-                        "i" + std::to_string(actualType->getIntegerBitWidth());
-                else if(actualType->isFloatTy())
-                    actualTypeStr = "float";
-                else if(actualType->isDoubleTy())
-                    actualTypeStr = "double";
-                else if(actualType->isPointerTy())
-                    actualTypeStr = "pointer";
-                else if(actualType->isStructTy())
-                    actualTypeStr = actualType->getStructName().str().empty()
-                                        ? "struct"
-                                        : actualType->getStructName().str();
-                else
-                    actualTypeStr = "unknown";
-
-                // Get expected type name
-                if(expectedType->isIntegerTy())
-                    expectedTypeStr =
-                        "i" +
-                        std::to_string(expectedType->getIntegerBitWidth());
-                else if(expectedType->isFloatTy())
-                    expectedTypeStr = "float";
-                else if(expectedType->isDoubleTy())
-                    expectedTypeStr = "double";
-                else if(expectedType->isPointerTy())
-                    expectedTypeStr = "pointer";
-                else if(expectedType->isStructTy())
-                    expectedTypeStr =
-                        expectedType->getStructName().str().empty()
-                            ? "struct"
-                            : expectedType->getStructName().str();
-                else
-                    expectedTypeStr = "unknown";
-
-                reportError(node->line, "type mismatch for field '" +
-                                            fieldName + "' in struct '" +
-                                            structTypeName + "': expected '" +
-                                            expectedTypeStr + "', got '" +
-                                            actualTypeStr + "'");
+                reportError(node->line,
+                            "failed to generate value for field '" +
+                                fullFieldName + "'");
                 return nullptr;
             }
+
+            llvm::Type* expectedType = layout->packedBit
+                                           ? llvm::Type::getInt1Ty(context)
+                                           : currentStructType->getElementType(
+                                                 layout->storageIndex);
+            fieldValue = convertStructLiteralFieldValue(fieldValue, expectedType,
+                                                        fullFieldName);
+            if(!fieldValue)
+                return nullptr;
+
+            if(layout->packedBit)
+            {
+                llvm::Type* storageType =
+                    currentStructType->getElementType(layout->storageIndex);
+                llvm::Value* currentStorage = builder.CreateExtractValue(
+                    currentStructVal, {layout->storageIndex},
+                    currentStructName + "." + fullFieldName + ".storage");
+                llvm::Value* zextValue = builder.CreateZExt(
+                    fieldValue, storageType,
+                    currentStructName + "." + fullFieldName + ".zext");
+                llvm::Value* shifted = builder.CreateShl(
+                    zextValue,
+                    llvm::ConstantInt::get(storageType, layout->bitOffset),
+                    currentStructName + "." + fullFieldName + ".shift");
+                llvm::Value* mask = llvm::ConstantInt::get(
+                    storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
+                llvm::Value* cleared = builder.CreateAnd(
+                    currentStorage, builder.CreateNot(mask),
+                    currentStructName + "." + fullFieldName + ".clear");
+                llvm::Value* combined = builder.CreateOr(
+                    cleared, shifted,
+                    currentStructName + "." + fullFieldName + ".combine");
+                return builder.CreateInsertValue(
+                    currentStructVal, combined, {layout->storageIndex},
+                    currentStructName + "." + fullFieldName);
+            }
+
+            fieldValue = applyStructCopySemantics(
+                fieldValue, currentMembers[memberIndex].second);
+            return builder.CreateInsertValue(currentStructVal, fieldValue,
+                                             {layout->storageIndex},
+                                             currentStructName + "." +
+                                                 fullFieldName);
         }
 
-        // Insert the value into the struct
         if(layout->packedBit)
         {
-            llvm::Type* storageType = structType->getElementType(layout->storageIndex);
-            llvm::Value* currentStorage = builder.CreateExtractValue(
-                structVal, {layout->storageIndex},
-                structTypeName + "." + fieldName + ".storage");
-            llvm::Value* zextValue = builder.CreateZExt(
-                fieldValue, storageType, structTypeName + "." + fieldName + ".zext");
-            llvm::Value* shifted = builder.CreateShl(
-                zextValue, llvm::ConstantInt::get(storageType, layout->bitOffset),
-                structTypeName + "." + fieldName + ".shift");
-            llvm::Value* mask = llvm::ConstantInt::get(
-                storageType, static_cast<uint64_t>(1u) << layout->bitOffset);
-            llvm::Value* cleared = builder.CreateAnd(
-                currentStorage, builder.CreateNot(mask),
-                structTypeName + "." + fieldName + ".clear");
-            llvm::Value* combined = builder.CreateOr(
-                cleared, shifted, structTypeName + "." + fieldName + ".combine");
-            structVal = builder.CreateInsertValue(
-                structVal, combined, {layout->storageIndex},
-                structTypeName + "." + fieldName);
+            reportError(node->line, "field '" + fieldParts[partIndex] +
+                                        "' in struct '" + currentStructName +
+                                        "' is not a nested struct");
+            return nullptr;
         }
-        else
+
+        std::string nestedStructName =
+            getNestedStructTypeName(currentMembers[memberIndex].second);
+        if(nestedStructName.empty())
         {
-            fieldValue =
-                applyStructCopySemantics(fieldValue, members[memberIndex].second);
-            structVal = builder.CreateInsertValue(
-                structVal, fieldValue, {layout->storageIndex},
-                structTypeName + "." + fieldName);
+            reportError(node->line, "field '" + fieldParts[partIndex] +
+                                        "' in struct '" + currentStructName +
+                                        "' is not a nested struct");
+            return nullptr;
         }
+
+        auto nestedMembersIt = structMembers.find(nestedStructName);
+        if(nestedMembersIt == structMembers.end())
+        {
+            reportError(node->line, "no member info for struct: " +
+                                        nestedStructName);
+            return nullptr;
+        }
+
+        llvm::Type* storageType =
+            currentStructType->getElementType(layout->storageIndex);
+        auto* nestedStructType = llvm::dyn_cast<llvm::StructType>(storageType);
+        if(!nestedStructType)
+        {
+            reportError(node->line, "field '" + fieldParts[partIndex] +
+                                        "' in struct '" + currentStructName +
+                                        "' is not stored as a struct");
+            return nullptr;
+        }
+
+        llvm::Value* nestedValue = builder.CreateExtractValue(
+            currentStructVal, {layout->storageIndex},
+            currentStructName + "." + fieldParts[partIndex] + ".extract");
+        nestedValue =
+            applyNestedFieldInit(nestedStructName, nestedStructType,
+                                 nestedMembersIt->second, nestedValue, fieldParts,
+                                 partIndex + 1, valueExpr, fullFieldName);
+        if(!nestedValue)
+            return nullptr;
+
+        nestedValue = applyStructCopySemantics(
+            nestedValue, currentMembers[memberIndex].second);
+        return builder.CreateInsertValue(currentStructVal, nestedValue,
+                                         {layout->storageIndex},
+                                         currentStructName + "." +
+                                             fieldParts[partIndex]);
+    };
+
+    // Build the struct value
+    llvm::Value* structVal = llvm::Constant::getNullValue(structType);
+
+    // Process each field initialization
+    for(const auto& fieldInit : node->fields)
+    {
+        const std::string& fieldName = fieldInit.first;
+        ExpressionNode* valueExpr = fieldInit.second;
+        std::vector<std::string> fieldParts;
+        size_t start = 0;
+        while(start <= fieldName.size())
+        {
+            size_t dot = fieldName.find('.', start);
+            if(dot == std::string::npos)
+            {
+                fieldParts.push_back(fieldName.substr(start));
+                break;
+            }
+            fieldParts.push_back(fieldName.substr(start, dot - start));
+            start = dot + 1;
+        }
+
+        if(fieldParts.empty())
+        {
+            reportError(node->line, "invalid field path in struct literal");
+            return nullptr;
+        }
+
+        structVal = applyNestedFieldInit(structTypeName, structType, members,
+                                         structVal, fieldParts, 0, valueExpr,
+                                         fieldName);
+        if(!structVal)
+            return nullptr;
     }
 
     return structVal;
