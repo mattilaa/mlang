@@ -2724,6 +2724,11 @@ void CodeGenerator::initializeStdlibFunctions()
         llvm::FunctionType::get(intType, {ptrType, ptrType}, false);
     strcmpFunc = module->getOrInsertFunction("strcmp", strcmpType);
 
+    llvm::FunctionType* jsonEscapeType =
+        llvm::FunctionType::get(ptrType, {ptrType}, false);
+    jsonEscapeFunc = module->getOrInsertFunction(
+        "__mlang_std_strbuf_json_escape", jsonEscapeType);
+
     llvm::FunctionType* abortType =
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), {}, false);
     abortFunc = module->getOrInsertFunction("abort", abortType);
@@ -3007,6 +3012,7 @@ std::string CodeGenerator::convertFormatString(
 
             bool debug = false;
             bool pretty = false;
+            bool json = false;
             char align = '\0';
             ExpressionNode* widthExpr = nullptr;
             if(!spec.empty())
@@ -3016,6 +3022,15 @@ std::string CodeGenerator::convertFormatString(
                 else if(spec == "#?")
                 {
                     debug = true;
+                    pretty = true;
+                }
+                else if(spec == "json")
+                {
+                    json = true;
+                }
+                else if(spec == "#json")
+                {
+                    json = true;
                     pretty = true;
                 }
                 else
@@ -3123,7 +3138,7 @@ std::string CodeGenerator::convertFormatString(
                 }
                 else
                 {
-                    appendFormatValue(argExpr, argVal, debug, pretty, cFormat,
+                    appendFormatValue(argExpr, argVal, debug, pretty, json, cFormat,
                                       argValues, line);
                 }
             }
@@ -4135,17 +4150,25 @@ llvm::Value* CodeGenerator::generateSizeofExpression(SizeofExpressionNode* node)
 }
 
 void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
-                                      bool debug, bool pretty,
+                                      bool debug, bool pretty, bool json,
                                       std::string& cFormat,
                                       std::vector<llvm::Value*>& argValues,
                                       int line)
 {
+    auto escapeJsonStringValue = [&](llvm::Value* strVal) -> llvm::Value*
+    {
+        if(!json)
+            return strVal;
+        return builder.CreateCall(jsonEscapeFunc, {strVal}, "json.escape");
+    };
+
     llvm::Type* argType = value->getType();
     std::string enumTypeName = getEnumTypeName(expr, line);
     if(!enumTypeName.empty())
     {
-        cFormat += "%s";
-        argValues.push_back(buildEnumString(value, enumTypeName, line));
+        cFormat += json ? "\"%s\"" : "%s";
+        llvm::Value* enumStr = buildEnumString(value, enumTypeName, line);
+        argValues.push_back(escapeJsonStringValue(enumStr));
         return;
     }
 
@@ -4172,8 +4195,12 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
                 reportError(line, "struct '" + structName +
                                       "' does not derive Debug");
             }
-            llvm::Value* dbg = buildStructDebugString(
-                value, structName, debug ? pretty : false, line);
+            llvm::Value* dbg = json
+                                   ? buildStructJsonString(
+                                         value, structName, pretty, line)
+                                   : buildStructDebugString(
+                                         value, structName,
+                                         debug ? pretty : false, line);
             cFormat += "%s";
             argValues.push_back(dbg);
             return;
@@ -4187,10 +4214,26 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
 
     if(argType->isIntegerTy(1))
     {
-        cFormat += "%d";
-        llvm::Value* intVal = builder.CreateZExt(
-            value, llvm::Type::getInt32Ty(context), "booltoInt");
-        argValues.push_back(intVal);
+        if(json)
+        {
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* trueStr = builder.CreateGlobalString("true", "json.true");
+            llvm::Value* falseStr = builder.CreateGlobalString("false", "json.false");
+#else
+            llvm::Value* trueStr = builder.CreateGlobalStringPtr("true", "json.true");
+            llvm::Value* falseStr = builder.CreateGlobalStringPtr("false", "json.false");
+#endif
+            cFormat += "%s";
+            argValues.push_back(builder.CreateSelect(value, trueStr, falseStr,
+                                                     "json.bool"));
+        }
+        else
+        {
+            cFormat += "%d";
+            llvm::Value* intVal = builder.CreateZExt(
+                value, llvm::Type::getInt32Ty(context), "booltoInt");
+            argValues.push_back(intVal);
+        }
     }
     else if(argType->isIntegerTy(8))
     {
@@ -4250,8 +4293,8 @@ void CodeGenerator::appendFormatValue(ExpressionNode* expr, llvm::Value* value,
     }
     else if(argType->isPointerTy())
     {
-        cFormat += "%s";
-        argValues.push_back(value);
+        cFormat += json ? "\"%s\"" : "%s";
+        argValues.push_back(escapeJsonStringValue(value));
     }
     else if(argType->isStructTy())
     {
@@ -4760,7 +4803,7 @@ llvm::Value* CodeGenerator::buildDebugString(ExpressionNode* expr, bool pretty,
 
     std::vector<llvm::Value*> argValues;
     std::string cFormat;
-    appendFormatValue(expr, val, false, false, cFormat, argValues, line);
+    appendFormatValue(expr, val, false, false, false, cFormat, argValues, line);
 
 #if LLVM_VERSION_MAJOR >= 21
     llvm::Value* formatStr = builder.CreateGlobalString(cFormat, "dbgfmt");
@@ -4961,6 +5004,178 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
     llvm::Value* size =
         builder.CreateAdd(len64, llvm::ConstantInt::get(int64Type, 1), "dbgsz");
     llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "dbgbuf");
+    std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
+    writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
+    builder.CreateCall(snprintfFunc, writeArgs);
+    return buffer;
+}
+
+llvm::Value*
+CodeGenerator::buildStructJsonString(llvm::Value* structVal,
+                                     const std::string& structName,
+                                     bool pretty, int line)
+{
+    initializeFormatFunctions();
+
+    auto escapeJsonStringValue = [&](llvm::Value* strVal) -> llvm::Value*
+    {
+        return builder.CreateCall(jsonEscapeFunc, {strVal}, "json.escape");
+    };
+
+    auto it = structMembers.find(structName);
+    if(it == structMembers.end())
+    {
+        reportError(line, "unknown struct for json debug: " + structName);
+        return builder.CreateGlobalStringPtr("{}");
+    }
+
+    std::string displayName = structName;
+    if(auto mit = mangledToGenericName.find(structName);
+       mit != mangledToGenericName.end())
+    {
+        displayName = mit->second;
+    }
+
+    std::string innerSep = pretty ? ",\n  " : ",";
+    std::string fmt = "{";
+    if(pretty)
+        fmt += "\n  ";
+    fmt += "\"type\":\"" + displayName + "\"";
+    std::vector<llvm::Value*> argValues;
+
+    for(size_t idx = 0; idx < it->second.size(); ++idx)
+    {
+        const auto& member = it->second[idx];
+        const std::string& memberName = member.first;
+        TypeNode* memberType = member.second;
+        llvm::Value* fieldVal = builder.CreateExtractValue(
+            structVal, static_cast<unsigned>(idx), "jsonfield");
+
+        fmt += innerSep + "\"" + memberName + "\":";
+
+        bool handled = false;
+
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(memberType))
+        {
+            std::string resolvedEnumName =
+                resolveVisibleEnumName(structRef->structName);
+            if(!resolvedEnumName.empty())
+            {
+                fmt += "\"%s\"";
+                llvm::Value* enumStr =
+                    buildEnumString(fieldVal, resolvedEnumName, line);
+                argValues.push_back(escapeJsonStringValue(enumStr));
+                handled = true;
+            }
+            else
+            {
+                std::string fieldStruct = structRef->structName;
+                if(!debugStructs.count(fieldStruct))
+                {
+                    reportError(line, "struct '" + fieldStruct +
+                                          "' does not derive Debug");
+                }
+                llvm::Value* fieldStr =
+                    buildStructJsonString(fieldVal, fieldStruct, pretty, line);
+                fmt += "%s";
+                argValues.push_back(fieldStr);
+                handled = true;
+            }
+        }
+
+        if(handled)
+            continue;
+
+        switch(memberType ? memberType->kind : TypeNode::TYPE_VOID)
+        {
+        case TypeNode::TYPE_BOOL:
+        {
+#if LLVM_VERSION_MAJOR >= 21
+            llvm::Value* trueStr = builder.CreateGlobalString("true", "json.true");
+            llvm::Value* falseStr = builder.CreateGlobalString("false", "json.false");
+#else
+            llvm::Value* trueStr = builder.CreateGlobalStringPtr("true", "json.true");
+            llvm::Value* falseStr = builder.CreateGlobalStringPtr("false", "json.false");
+#endif
+            fmt += "%s";
+            argValues.push_back(builder.CreateSelect(fieldVal, trueStr, falseStr,
+                                                     "json.field.bool"));
+            break;
+        }
+        case TypeNode::TYPE_I8:
+        case TypeNode::TYPE_I16:
+        case TypeNode::TYPE_INT:
+        case TypeNode::TYPE_I32:
+            fmt += "%d";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_I64:
+            fmt += "%lld";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_U8:
+        case TypeNode::TYPE_U16:
+        case TypeNode::TYPE_U32:
+            fmt += "%u";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_U64:
+            fmt += "%llu";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_FLOAT:
+        {
+            fmt += "%f";
+            llvm::Value* doubleVal = builder.CreateFPExt(
+                fieldVal, llvm::Type::getDoubleTy(context), "json.float");
+            argValues.push_back(doubleVal);
+            break;
+        }
+        case TypeNode::TYPE_DOUBLE:
+            fmt += "%f";
+            argValues.push_back(fieldVal);
+            break;
+        case TypeNode::TYPE_STR8:
+        case TypeNode::TYPE_STR16:
+        case TypeNode::TYPE_PTR:
+            fmt += "\"%s\"";
+            argValues.push_back(escapeJsonStringValue(fieldVal));
+            break;
+        default:
+            fmt += "\"<unsupported>\"";
+            break;
+        }
+    }
+
+    if(pretty)
+        fmt += "\n";
+    fmt += "}";
+
+#if LLVM_VERSION_MAJOR >= 21
+    llvm::Value* formatStr = builder.CreateGlobalString(fmt, "jsondbgfmt");
+#else
+    llvm::Value* formatStr = builder.CreateGlobalStringPtr(fmt, "jsondbgfmt");
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+    llvm::Type* ptrType = llvm::PointerType::get(context, 0);
+#else
+    llvm::Type* ptrType =
+        llvm::PointerType::get(llvm::Type::getInt8Ty(context), 0);
+#endif
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(context);
+
+    llvm::Value* nullPtr =
+        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrType));
+    llvm::Value* zero = llvm::ConstantInt::get(int64Type, 0);
+    std::vector<llvm::Value*> sizeArgs = {nullPtr, zero, formatStr};
+    sizeArgs.insert(sizeArgs.end(), argValues.begin(), argValues.end());
+    llvm::Value* len32 = builder.CreateCall(snprintfFunc, sizeArgs, "jsondbglen");
+    llvm::Value* len64 =
+        builder.CreateSExt(len32, int64Type, "jsondbglen64");
+    llvm::Value* size = builder.CreateAdd(
+        len64, llvm::ConstantInt::get(int64Type, 1), "jsondbgsz");
+    llvm::Value* buffer = builder.CreateCall(mallocFunc, {size}, "jsondbgbuf");
     std::vector<llvm::Value*> writeArgs = {buffer, size, formatStr};
     writeArgs.insert(writeArgs.end(), argValues.begin(), argValues.end());
     builder.CreateCall(snprintfFunc, writeArgs);

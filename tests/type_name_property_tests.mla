@@ -41,6 +41,11 @@ struct DebugFoo {
     @property var tag: i32;
 };
 
+#[derive(Debug)]
+struct DebugText {
+    var text: str8;
+};
+
 #[test]
 fn test_type_name_property_primitive() {
     let i: i32 = 12;
@@ -114,4 +119,34 @@ fn test_derive_debug_prints_nested_inline_structs() {
     verify(contains(dbg, "i: 15") == 1);
     verify(contains(dbg, "x: 33") == 1);
     verify(contains(dbg, "tag: 9") == 1);
+}
+
+#[test]
+fn test_json_debug_format_prints_nested_inline_structs() {
+    var foo: DebugFoo = DebugFoo { b.c.i: 11, b.x: 22, tag: 7 };
+    foo.b.c.setI(15);
+    foo.b.setX(33);
+    foo.setTag(9);
+
+    let json_dbg: str8 = format!("{:json}", foo);
+    println(json_dbg);
+
+    verify(contains(json_dbg, "\"type\":\"DebugFoo\"") == 1);
+    verify(contains(json_dbg, "\"b\":{") == 1);
+    verify(contains(json_dbg, "\"type\":\"DebugBar\"") == 1);
+    verify(contains(json_dbg, "\"type\":\"DebugCar\"") == 1);
+    verify(contains(json_dbg, "\"i\":15") == 1);
+    verify(contains(json_dbg, "\"x\":33") == 1);
+    verify(contains(json_dbg, "\"tag\":9") == 1);
+}
+
+#[test]
+fn test_json_debug_format_escapes_string_values() {
+    let value: DebugText = DebugText { text: "he said \"hi\"\\path\nnext\tend" };
+    let json_dbg: str8 = format!("{:json}", value);
+    println(json_dbg);
+
+    verify(contains(json_dbg, "\"type\":\"DebugText\"") == 1);
+    verify(contains(json_dbg,
+                    "\"text\":\"he said \\\"hi\\\"\\\\path\\nnext\\tend\"") == 1);
 }

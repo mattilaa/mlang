@@ -257,6 +257,7 @@ private:
     llvm::FunctionCallee mallocFunc;
     llvm::FunctionCallee freeFunc;
     llvm::FunctionCallee strcmpFunc;
+    llvm::FunctionCallee jsonEscapeFunc;
     llvm::FunctionCallee abortFunc;
     llvm::FunctionCallee exceptionsPushFrameFunc;
     llvm::FunctionCallee exceptionsFrameEnvFunc;
@@ -541,6 +542,9 @@ private:
     llvm::Value* buildStructDebugString(llvm::Value* structVal,
                                         const std::string& structName,
                                         bool pretty, int line);
+    llvm::Value* buildStructJsonString(llvm::Value* structVal,
+                                       const std::string& structName,
+                                       bool pretty, int line);
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);
@@ -558,7 +562,7 @@ private:
                                           TypeNode* semanticType);
     TypeNode* inferExpressionTypeNode(ExpressionNode* expr, int line);
     void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
-                           bool pretty, std::string& cFormat,
+                           bool pretty, bool json, std::string& cFormat,
                            std::vector<llvm::Value*>& argValues, int line);
 
     void generateEnumDefinition(EnumDefNode* node);

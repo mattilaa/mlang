@@ -717,7 +717,7 @@ enum UpdatePosition
 %token LET VAR
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE AS TYPE_KW COLONCOLON
-%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
+%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
 %token X64_MACRO AARCH64_MACRO
 %token PLUS_PLUS MINUS_MINUS
@@ -1608,6 +1608,12 @@ print_statement
         { $$ = mla_ast_debug_print_stmt($3, NULL, yylineno); }
     | DEBUGPRINT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_debug_print_stmt($3, $5, yylineno); }
+    | DEBUGJSONPRINT LPAREN expression RPAREN SEMICOLON
+        {
+            ASTNode* arg = mla_ast_format_argument(NULL, $3);
+            ASTNode* args = mla_ast_format_argument_list_create(arg);
+            $$ = mla_ast_debug_print_stmt((char*)"{:json}", args, yylineno);
+        }
     ;
 
 assert_eq_statement
