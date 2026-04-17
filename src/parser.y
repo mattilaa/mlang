@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unordered_set>
 #include <vector>
 #include "ast.h"
 #include "ast_handle_helpers.h"
@@ -78,6 +79,63 @@ static ASTNode* create_pipe_call(ASTNode* value, char* callee, ASTNode* args,
 static std::vector<ASTNode*> g_hoistedNestedFunctions;
 static std::vector<ASTNode*> g_hoistedInlineStructs;
 
+static StructDefNode* find_hoisted_inline_struct_def(const std::string& name)
+{
+    for(ASTNode* node : g_hoistedInlineStructs)
+    {
+        auto* def = dynamic_cast<StructDefNode*>(node);
+        if(def && def->name == name)
+            return def;
+    }
+    return nullptr;
+}
+
+static void propagate_derive_debug_to_inline_structs(StructDefNode* def)
+{
+    if(!def || !def->deriveDebug || !def->members)
+        return;
+
+    std::vector<std::string> pending;
+    std::unordered_set<std::string> visited;
+
+    auto enqueue_nested = [&](TypeNode* type)
+    {
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+        {
+            if(find_hoisted_inline_struct_def(structRef->structName))
+                pending.push_back(structRef->structName);
+        }
+    };
+
+    for(auto* member : def->members->members)
+    {
+        if(member)
+            enqueue_nested(member->type);
+    }
+
+    while(!pending.empty())
+    {
+        std::string name = pending.back();
+        pending.pop_back();
+        if(!visited.insert(name).second)
+            continue;
+
+        StructDefNode* nested = find_hoisted_inline_struct_def(name);
+        if(!nested)
+            continue;
+
+        nested->deriveDebug = true;
+        if(!nested->members)
+            continue;
+
+        for(auto* member : nested->members->members)
+        {
+            if(member)
+                enqueue_nested(member->type);
+        }
+    }
+}
+
 static ASTNode* append_hoisted_nested_functions(ASTNode* topLevelList)
 {
     ASTNode* list = topLevelList;
@@ -101,6 +159,16 @@ static ASTNode* create_inline_struct_type(char* name, ASTNode* members, int line
         def->line = line;
     g_hoistedInlineStructs.push_back(def);
     return mla_ast_struct_type_ref(strdup(name));
+}
+
+static ASTNode* finalize_struct_def_ast(ASTNode* node, int line)
+{
+    if(!node)
+        return nullptr;
+    node->line = line;
+    if(auto* def = dynamic_cast<StructDefNode*>(node))
+        propagate_derive_debug_to_inline_structs(def);
+    return node;
 }
 
 static char* join_field_path(char* left, char* right)
@@ -788,30 +856,30 @@ type_alias_def
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($2, NULL, $4, 0, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, NULL, $4, 0, 0), yylineno); }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($2, $4, $6, 0, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, $4, $6, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, NULL, $5, 1, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 1, 0), yylineno); }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, $5, $7, 1, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 1, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, NULL, $5, 0, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 0, 1), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, $5, $7, 0, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 0, 1), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($4, NULL, $6, 1, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 1, 1), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($4, $6, $8, 1, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 1, 1), yylineno); }
     /* Generic struct definitions */
     | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1), yylineno); }
     ;
 
 enum_def
