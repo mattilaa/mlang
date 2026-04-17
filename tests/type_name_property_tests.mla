@@ -1,6 +1,8 @@
 mod std::testing;
 mod std::strbuf;
+mod std::env;
 
+use std::env::println;
 use std::strbuf::*;
 use std::testing::verify;
 
@@ -16,6 +18,16 @@ struct Foo {
         var x: i32;
     };
     var tag: i32;
+};
+
+struct PropertyFoo {
+    var b: struct PropertyBar {
+        var c: struct PropertyCar {
+            @property var i: i32;
+        };
+        @property var x: i32;
+    };
+    @property var tag: i32;
 };
 
 #[test]
@@ -49,4 +61,28 @@ fn test_nested_inline_struct_definition_and_dotted_init() {
     verify(eq(foo.name, "Foo") == 1);
     verify(eq(foo.b.name, "Bar") == 1);
     verify(eq(foo.b.c.name, "Car") == 1);
+}
+
+#[test]
+fn test_nested_inline_struct_property_accessors() {
+    var foo: PropertyFoo = PropertyFoo { b.c.i: 11, b.x: 22, tag: 7 };
+
+    println(format!("nested property before i={} x={} tag={}",
+                    foo.b.c.getI(), foo.b.getX(), foo.getTag()));
+
+    verify(foo.b.c.getI() == 11);
+    verify(foo.b.getX() == 22);
+    verify(foo.getTag() == 7);
+    verify(eq(foo.b.c.name, "PropertyCar") == 1);
+
+    foo.b.c.setI(15);
+    foo.b.setX(33);
+    foo.setTag(9);
+
+    println(format!("nested property after i={} x={} tag={}",
+                    foo.b.c.getI(), foo.b.getX(), foo.getTag()));
+
+    verify(foo.b.c.getI() == 15);
+    verify(foo.b.getX() == 33);
+    verify(foo.getTag() == 9);
 }
