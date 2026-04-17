@@ -1,3 +1,55 @@
+/// \file types.mla
+/// \brief Doxygen reference for MLang built-in types and keywords.
+///
+/// This file is documentation-only. It is used by editor tooling and to expose
+/// a generated Doxygen page for the language's built-in types.
+///
+/// \page builtin_types Built-in Types
+/// \brief Reference for primitive, generic, handle, and sum types built into MLang.
+///
+/// \section builtin_types_primitive Primitive Types
+/// - `void`: no value; primarily used as a function return type.
+/// - `bool`: boolean truth value (`true` or `false`).
+/// - `bit`: one-bit logical domain (`0` or `1`), with normal ABI byte sizing.
+/// - `i8`, `i16`, `i32`, `i64`: signed integer types.
+/// - `u8`, `u16`, `u32`, `u64`: unsigned integer types.
+/// - `f32`, `f64`: floating-point types.
+///
+/// \section builtin_types_string String Types
+/// - `str8`: UTF-8 string type.
+/// - `str16`: UTF-16 string type.
+/// - `String` is the compiler-provided wrapper namespace for `str8` helpers and
+///   is not a distinct runtime type.
+///
+/// \section builtin_types_generic Generic Built-ins
+/// - `list<T>`: growable sequence container.
+/// - `map<K, V>`: associative container.
+/// - `tuple<T1, T2, ...>`: fixed-size heterogeneous product type.
+/// - `ptr<T>`: pointer type.
+/// - `Handle<T>`: opaque runtime handle wrapper.
+/// - `sizeof(Type)` / `sizeof(expr)`: ABI size query returning `i64`.
+///
+/// \section builtin_types_runtime Runtime Marker Types
+/// - `Thread`: opaque payload marker used with `Handle<Thread>`.
+/// - `Mutex`: opaque payload marker used with `Handle<Mutex>`.
+/// - `Atomic64`: opaque payload marker used with `Handle<Atomic64>`.
+///
+/// \section builtin_types_sum Sum Types
+/// - `Result<T, E>` with constructors `Ok<T, E>(value)` and
+///   `Err<T, E>(error)`.
+/// - `Option<T>` with constructors `Some<T>(value)` and `None<T>()`.
+///
+/// \section builtin_types_inline_asm Inline Assembly Keywords
+/// - `asm`
+/// - `x86`
+/// - `x64`
+/// - `aarch64`
+///
+/// \section builtin_types_notes Notes
+/// - This page documents language built-ins, not importable stdlib modules.
+/// - The `?` operator propagates `Err` values and enriches
+///   `Result<_, str8>` error stacks with call-site context.
+
 // MLang built-in types
 // This module is documentation-only and is used by editor tooling.
 // It is not meant to be imported at runtime.

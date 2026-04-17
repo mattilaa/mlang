@@ -253,6 +253,15 @@ ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* i
     return create_struct_member_impl(is_var, type, name, init_expr);
 }
 
+ASTNode* mla_ast_struct_member_with_property(int is_var, ASTNode* type, char* name,
+                                             ASTNode* init_expr, int is_property,
+                                             int is_readonly, int property_flags)
+{
+    return create_struct_member_with_property_impl(is_var, type, name, init_expr,
+                                                   is_property, is_readonly,
+                                                   property_flags);
+}
+
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static)
 {
     return create_struct_method_impl(type, name, params, body, is_public, is_static);

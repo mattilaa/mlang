@@ -722,6 +722,141 @@ ASTNode* add_struct_to_list_impl(ASTNode* list, ASTNode* struct_def)
     return structList;
 }
 
+static std::string capitalizeFirst(const std::string& name)
+{
+    if(name.empty())
+        return name;
+    std::string out = name;
+    out[0] = static_cast<char>(std::toupper(
+        static_cast<unsigned char>(out[0])));
+    return out;
+}
+
+static TypeNode* cloneMemberType(TypeNode* t)
+{
+    if(!t)
+        return nullptr;
+    if(auto* s = dynamic_cast<StructTypeRefNode*>(t))
+        return new StructTypeRefNode(s->structName);
+    if(auto* r = dynamic_cast<ReferenceTypeNode*>(t))
+        return new ReferenceTypeNode(cloneMemberType(r->elementType),
+                                     r->isMutable);
+    // Primitive / simple TypeNode — a shallow copy of kind is sufficient for
+    // parameter / return type usage.
+    return new TypeNode(t->kind);
+}
+
+static void copyPropertyAccessorMetadata(StructMethodNode* method,
+                                         StructMemberNode* member)
+{
+    if(!method || !member)
+        return;
+    method->isSynthesizedPropertyAccessor = true;
+    method->isAtomicPropertyAccessor = member->isAtomicProperty;
+    method->isMutexPropertyAccessor = member->isMutexProperty;
+    method->isRecursiveMutexPropertyAccessor = member->isRecursiveProperty;
+    method->propertyFieldName = member->name;
+    method->propertyLockFieldName = member->propertyLockFieldName;
+}
+
+static std::string makePropertyLockFieldName(const std::string& fieldName)
+{
+    return "__mlang_prop_lock_" + fieldName;
+}
+
+// Synthesize getter (and setter when not readonly) StructMethodNodes for each
+// member tagged with @property. The generated
+// methods participate in the normal struct-method pipeline: IR codegen treats
+// them like any other method, and they surface in mlangd completion via the
+// semantic-symbol collector.
+static void synthesizePropertyMethods(StructDefNode* def)
+{
+    if(!def || !def->members)
+        return;
+
+    // Snapshot the member list so we don't iterate over methods we just added.
+    std::vector<StructMemberNode*> snapshot = def->members->members;
+
+    for(StructMemberNode* member : snapshot)
+    {
+        if(!member || !member->isProperty || !member->type)
+            continue;
+
+        if(member->isMutexProperty && member->propertyLockFieldName.empty())
+        {
+            member->propertyLockFieldName = makePropertyLockFieldName(member->name);
+            auto* lockField = new StructMemberNode(
+                /*isVar=*/true,
+                new TypeNode(TypeNode::TYPE_I64),
+                member->propertyLockFieldName,
+                nullptr);
+            lockField->isSynthesizedPropertyStorage = true;
+            lockField->line = member->line;
+            def->members->members.push_back(lockField);
+        }
+
+        const std::string cap = capitalizeFirst(member->name);
+
+        // Getter: fn get<Member>(self: StructName) -> T { return self.<m>; }
+        {
+            auto* paramList = new ParameterListNode();
+            auto* selfParam = new ParameterNode(
+                new StructTypeRefNode(def->name), "self");
+            paramList->parameters.push_back(selfParam);
+
+            auto* body = new StatementListNode();
+            auto* access = new FieldAccessNode(std::string("self"),
+                                               member->name);
+            body->statements.push_back(new ReturnNode(access));
+
+            auto* getter = new StructMethodNode(
+                cloneMemberType(member->type),
+                std::string("get") + cap,
+                paramList, body,
+                /*isPublic=*/true,
+                /*isStatic=*/false);
+            copyPropertyAccessorMetadata(getter, member);
+            getter->isPropertySetter = false;
+            getter->line = member->line;
+            def->members->methods.push_back(getter);
+        }
+
+        if(member->isReadonly || !member->isVar)
+            continue;
+
+        // Setter: fn set<Member>(self: &mut StructName, value: T) -> void {
+        //             self.<m> = value;
+        //         }
+        {
+            auto* paramList = new ParameterListNode();
+            auto* selfRefType = new ReferenceTypeNode(
+                new StructTypeRefNode(def->name), /*isMutable=*/true);
+            auto* selfParam = new ParameterNode(selfRefType, "self");
+            auto* valueParam =
+                new ParameterNode(cloneMemberType(member->type), "value");
+            paramList->parameters.push_back(selfParam);
+            paramList->parameters.push_back(valueParam);
+
+            auto* body = new StatementListNode();
+            auto* valueExpr = new IdentifierNode("value");
+            auto* assign = new FieldAssignmentNode(
+                std::string("self"), member->name, valueExpr);
+            body->statements.push_back(assign);
+
+            auto* setter = new StructMethodNode(
+                new TypeNode(TypeNode::TYPE_VOID),
+                std::string("set") + cap,
+                paramList, body,
+                /*isPublic=*/true,
+                /*isStatic=*/false);
+            copyPropertyAccessorMetadata(setter, member);
+            setter->isPropertySetter = true;
+            setter->line = member->line;
+            def->members->methods.push_back(setter);
+        }
+    }
+}
+
 ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
                                 int is_public, int derive_debug)
 {
@@ -741,6 +876,8 @@ ASTNode* create_struct_def_impl(char* name, char* base_name, ASTNode* members,
             }
         }
     }
+
+    synthesizePropertyMethods(def);
 
     return def;
 }
@@ -835,6 +972,24 @@ ASTNode* create_struct_member_impl(int is_var, ASTNode* type, char* name,
     return new StructMemberNode(is_var != 0, static_cast<TypeNode*>(type),
                                 std::string(name),
                                 static_cast<ExpressionNode*>(init_expr));
+}
+
+ASTNode* create_struct_member_with_property_impl(int is_var, ASTNode* type,
+                                                 char* name, ASTNode* init_expr,
+                                                 int is_property,
+                                                 int is_readonly,
+                                                 int property_flags)
+{
+    auto* node = new StructMemberNode(
+        is_var != 0, static_cast<TypeNode*>(type), std::string(name),
+        static_cast<ExpressionNode*>(init_expr));
+    node->isProperty = (is_property != 0);
+    node->isReadonly = (is_readonly != 0);
+    node->isAtomicProperty = (property_flags & PROPERTY_FLAG_ATOMIC) != 0;
+    node->isMutexProperty = (property_flags & PROPERTY_FLAG_MUTEX) != 0;
+    node->isRecursiveProperty =
+        (property_flags & PROPERTY_FLAG_RECURSIVE) != 0;
+    return node;
 }
 
 ASTNode* create_struct_method_impl(ASTNode* type, char* name, ASTNode* params,
@@ -2773,6 +2928,8 @@ ASTNode* create_generic_struct_def_impl(char* name, char* base_name,
         auto* paramList = static_cast<TypeParamListNode*>(type_params);
         node->typeParams = paramList->params;
     }
+
+    synthesizePropertyMethods(node);
 
     return node;
 }

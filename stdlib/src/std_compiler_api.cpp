@@ -114,6 +114,12 @@ int __mlang_compiler_document_symbol_signature_get(mlang_compiler_session* sessi
                                                    char* out_signature,
                                                    int out_signature_capacity,
                                                    int* out_signature_length);
+int __mlang_compiler_document_symbol_documentation_get(mlang_compiler_session* session,
+                                                       const char* uri,
+                                                       int index,
+                                                       char* out_documentation,
+                                                       int out_documentation_capacity,
+                                                       int* out_documentation_length);
 int __mlang_compiler_document_resolve_symbol(mlang_compiler_session* session,
                                              const char* uri,
                                              int line,
@@ -712,6 +718,26 @@ char* __mlang_std_compiler_document_symbol_signature(std::int64_t handle,
     char buffer[kBufferCap];
     const int status = __mlang_compiler_document_symbol_signature_get(
         session, uri, index, buffer, kBufferCap, &signature_len);
+    set_last_status(status);
+    if(status != static_cast<int>(CompilerStatus::Ok))
+        return nullptr;
+    return dup_string(std::string(buffer));
+}
+
+char* __mlang_std_compiler_document_symbol_documentation(std::int64_t handle,
+                                                         const char* uri,
+                                                         int index)
+{
+    mlang_compiler_session* session = session_from_handle(handle);
+    if(!session)
+    {
+        set_last_status(static_cast<int>(CompilerStatus::InvalidSession));
+        return nullptr;
+    }
+    int documentation_len = 0;
+    char buffer[kBufferCap];
+    const int status = __mlang_compiler_document_symbol_documentation_get(
+        session, uri, index, buffer, kBufferCap, &documentation_len);
     set_last_status(status);
     if(status != static_cast<int>(CompilerStatus::Ok))
         return nullptr;

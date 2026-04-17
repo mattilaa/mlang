@@ -72,6 +72,7 @@ struct SemanticSymbol {
     int depth = 0;
     std::string type_info;
     std::string signature;
+    std::string documentation;
 };
 
 struct UseDecl {
@@ -273,6 +274,69 @@ static std::vector<std::string_view> splitLines(std::string_view text) {
     return lines;
 }
 
+static std::string trimTextWs(std::string_view s);
+
+static std::string docCommentAboveLine(std::string_view text, int line_no) {
+    if (line_no <= 1 || text.empty()) {
+        return {};
+    }
+
+    const std::vector<std::string_view> lines = splitLines(text);
+    if (lines.empty()) {
+        return {};
+    }
+
+    int idx = line_no - 2;
+    std::string out;
+    bool found = false;
+    while (idx >= 0) {
+        const std::string trimmed = trimTextWs(lines[static_cast<size_t>(idx)]);
+        if (startsWith(trimmed, "///")) {
+            std::string body = trimTextWs(
+                std::string_view(trimmed).substr(3));
+            if (found) {
+                out = body + "\n" + out;
+            } else {
+                out = std::move(body);
+            }
+            found = true;
+            --idx;
+            continue;
+        }
+        if (found) {
+            break;
+        }
+        if (trimmed.empty()) {
+            --idx;
+            continue;
+        }
+        break;
+    }
+    return out;
+}
+
+static std::string propertyAccessorDocumentation(std::string_view text,
+                                                 const StructMemberNode* member,
+                                                 bool is_setter,
+                                                 int field_line = 0) {
+    if (!member && field_line <= 0) {
+        return {};
+    }
+    const int doc_line = field_line > 0 ? field_line : member->line;
+    const std::string field_doc = docCommentAboveLine(text, doc_line);
+    if (field_doc.empty()) {
+        return {};
+    }
+    if (is_setter) {
+        return "Synthesized setter for @property field `" +
+               (member ? member->name : std::string()) +
+               "`.\n" + field_doc;
+    }
+    return "Synthesized getter for @property field `" +
+           (member ? member->name : std::string()) +
+           "`.\n" + field_doc;
+}
+
 struct TextLayoutInfo {
     std::uint64_t size = 0;
     std::uint64_t align = 1;
@@ -301,7 +365,21 @@ static std::uint64_t alignUpText(std::uint64_t value, std::uint64_t align) {
 
 static std::optional<std::string> extractStructFieldType(std::string_view line,
                                                          std::string* out_name = nullptr) {
-    const std::string trimmed = trimTextWs(line);
+    std::string trimmed = trimTextWs(line);
+    if (startsWith(trimmed, "@property")) {
+        size_t attr_end = std::string::npos;
+        if (startsWith(trimmed, "@property(")) {
+            attr_end = trimmed.find(')');
+            if (attr_end != std::string::npos) {
+                ++attr_end;
+            }
+        } else {
+            attr_end = std::string("@property").size();
+        }
+        if (attr_end != std::string::npos && attr_end < trimmed.size()) {
+            trimmed = trimTextWs(std::string_view(trimmed).substr(attr_end));
+        }
+    }
     if (!(startsWith(trimmed, "var ") || startsWith(trimmed, "let "))) {
         return std::nullopt;
     }
@@ -1158,7 +1236,8 @@ static void addSemanticSymbol(DocumentSemantic& out,
                               int line_no,
                               int depth,
                               std::string type_info,
-                              std::string signature) {
+                              std::string signature,
+                              std::string documentation = {}) {
     SemanticSymbol s;
     s.name = std::move(name);
     s.kind = kind;
@@ -1227,6 +1306,7 @@ static void addSemanticSymbol(DocumentSemantic& out,
     s.depth = depth;
     s.type_info = std::move(type_info);
     s.signature = std::move(signature);
+    s.documentation = std::move(documentation);
 
     if (s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size()) {
         s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)], s.name);
@@ -1247,7 +1327,8 @@ static void addSemanticSymbolAtLine(DocumentSemantic& out,
                                     int line_no,
                                     int depth,
                                     std::string type_info,
-                                    std::string signature) {
+                                    std::string signature,
+                                    std::string documentation = {}) {
     SemanticSymbol s;
     s.name = std::move(name);
     s.kind = kind;
@@ -1256,6 +1337,7 @@ static void addSemanticSymbolAtLine(DocumentSemantic& out,
     s.depth = depth;
     s.type_info = std::move(type_info);
     s.signature = std::move(signature);
+    s.documentation = std::move(documentation);
 
     if (s.line > 0 && static_cast<size_t>(s.line - 1) < lines.size()) {
         s.column = findIdentifierColumn(lines[static_cast<size_t>(s.line - 1)], s.name);
@@ -1309,6 +1391,33 @@ static int findStructDeclLine(const std::vector<std::string_view>& lines,
         }
     }
     return 1;
+}
+
+static int findStructMemberDeclLine(const std::vector<std::string_view>& lines,
+                                    const std::vector<int>& line_depths,
+                                    std::string_view struct_name,
+                                    std::string_view member_name) {
+    if (member_name.empty()) {
+        return 1;
+    }
+    const int struct_line = findStructDeclLine(lines, struct_name);
+    const size_t struct_idx = struct_line > 0 ? static_cast<size_t>(struct_line - 1) : 0;
+    const int struct_depth =
+        struct_idx < line_depths.size() ? line_depths[struct_idx] : 0;
+    for (size_t i = struct_idx + 1; i < lines.size(); ++i) {
+        const int depth_here = i < line_depths.size() ? line_depths[i] : 0;
+        if (depth_here <= struct_depth && lines[i].find('}') != std::string_view::npos) {
+            break;
+        }
+        std::string found_name;
+        if (!extractStructFieldType(lines[i], &found_name).has_value()) {
+            continue;
+        }
+        if (found_name == member_name) {
+            return static_cast<int>(i) + 1;
+        }
+    }
+    return struct_line;
 }
 
 static int findEnumDeclLine(const std::vector<std::string_view>& lines,
@@ -1507,7 +1616,8 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             }
             out.mods.push_back(mod->moduleName);
             addSemanticSymbol(out, lines, mod->moduleName, 4,
-                              mod->line > 0 ? mod->line : 1, 0, {}, {});
+                              mod->line > 0 ? mod->line : 1, 0, {}, {},
+                              docCommentAboveLine(doc.text, mod->line));
         }
     }
 
@@ -1531,7 +1641,8 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             }
             addSemanticSymbol(out, lines, alias->name, 5,
                               alias->line > 0 ? alias->line : 1, 0,
-                              typeToString(alias->aliasedType), {});
+                              typeToString(alias->aliasedType), {},
+                              docCommentAboveLine(doc.text, alias->line));
         }
     }
 
@@ -1542,19 +1653,19 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             }
             std::string structSummary = structLayoutSummary(st, program);
             addSemanticSymbol(out, lines, st->name, 3,
-                              st->line > 0 ? st->line : 1, 0, structSummary, {});
+                              st->line > 0 ? st->line : 1, 0, structSummary, {},
+                              docCommentAboveLine(doc.text, st->line));
             if (st->members) {
                 for (StructMemberNode* member : st->members->members) {
-                    if (!member) {
+                    if (!member || member->isSynthesizedPropertyStorage) {
                         continue;
                     }
-                    const int field_line = member->line > 0
-                                               ? member->line
-                                               : (st->line > 0 ? st->line
-                                                               : findStructDeclLine(lines, st->name));
+                    const int field_line = findStructMemberDeclLine(
+                        lines, out.line_depths, st->name, member->name);
                     addSemanticSymbolAtLine(out, lines, member->name, 2, field_line, 1,
                                             typeToString(member->type),
-                                            "field " + st->name + "::" + member->name);
+                                            "field " + st->name + "::" + member->name,
+                                            docCommentAboveLine(doc.text, field_line));
                 }
                 for (StructMethodNode* method : st->members->methods) {
                     if (!method) {
@@ -1562,10 +1673,32 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                     }
                     const int method_line = method->line > 0 ? method->line
                                                              : (st->line > 0 ? st->line : 1);
+                    std::string method_doc;
+                    if (method->isSynthesizedPropertyAccessor) {
+                        StructMemberNode* source_member = nullptr;
+                        int source_member_line = 0;
+                        for (StructMemberNode* member : st->members->members) {
+                            if (!member) {
+                                continue;
+                            }
+                            if (member->name == method->propertyFieldName) {
+                                source_member = member;
+                                source_member_line = findStructMemberDeclLine(
+                                    lines, out.line_depths, st->name, member->name);
+                                break;
+                            }
+                        }
+                        method_doc = propertyAccessorDocumentation(
+                            doc.text, source_member, method->isPropertySetter,
+                            source_member_line);
+                    } else {
+                        method_doc = docCommentAboveLine(doc.text, method_line);
+                    }
                     const size_t method_sym_idx = out.symbols.size();
                     addSemanticSymbol(out, lines, method->name, 1, method_line, 1,
                                       typeToString(method->returnType),
-                                      methodSignatureFromAst(st->name, method));
+                                      methodSignatureFromAst(st->name, method),
+                                      std::move(method_doc));
                     int method_decl_line = method_line;
                     if (out.symbols.size() > method_sym_idx) {
                         method_decl_line = out.symbols.back().line;
@@ -1591,7 +1724,8 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                 continue;
             }
             const int enum_line = en->line > 0 ? en->line : findEnumDeclLine(lines, en->name);
-            addSemanticSymbol(out, lines, en->name, 3, enum_line, 0, {}, {});
+            addSemanticSymbol(out, lines, en->name, 3, enum_line, 0, {}, {},
+                              docCommentAboveLine(doc.text, enum_line));
             if (en->variants) {
                 for (EnumVariantNode* variant : en->variants->variants) {
                     if (!variant) {
@@ -1599,7 +1733,8 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                     }
                     const int variant_line = variant->line > 0 ? variant->line : enum_line;
                     addSemanticSymbolAtLine(out, lines, variant->name, 2, variant_line, 1, {},
-                                            "variant " + en->name + "::" + variant->name);
+                                            "variant " + en->name + "::" + variant->name,
+                                            docCommentAboveLine(doc.text, variant_line));
                 }
             }
         }
@@ -1619,7 +1754,8 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
                 const size_t method_sym_idx = out.symbols.size();
                 addSemanticSymbol(out, lines, method->name, 1, method_line, 1,
                                   typeToString(method->returnType),
-                                  methodSignatureFromAst(impl->structName, method));
+                                  methodSignatureFromAst(impl->structName, method),
+                                  docCommentAboveLine(doc.text, method_line));
                 int method_decl_line = method_line;
                 if (out.symbols.size() > method_sym_idx) {
                     method_decl_line = out.symbols.back().line;
@@ -1647,7 +1783,8 @@ buildDocumentSemanticFromAst(const DocumentState& doc) {
             const size_t fn_sym_idx = out.symbols.size();
             addSemanticSymbol(out, lines, fn->name, 1, fn_line, 0,
                               typeToString(fn->returnType),
-                              functionSignatureFromAst(fn));
+                              functionSignatureFromAst(fn),
+                              docCommentAboveLine(doc.text, fn_line));
             int fn_decl_line = fn_line;
             if (out.symbols.size() > fn_sym_idx) {
                 fn_decl_line = out.symbols.back().line;
@@ -4325,6 +4462,41 @@ int __mlang_compiler_document_symbol_signature_get(mlang_compiler_session* sessi
         std::memcpy(out_signature, signature.data(), copy_len);
     }
     out_signature[copy_len] = '\0';
+    return static_cast<int>(mlang::compiler_api::Status::Ok);
+}
+
+int __mlang_compiler_document_symbol_documentation_get(mlang_compiler_session* session,
+                                                       const char* uri,
+                                                       int index,
+                                                       char* out_documentation,
+                                                       int out_documentation_capacity,
+                                                       int* out_documentation_length) {
+    if (session == nullptr || uri == nullptr || out_documentation == nullptr ||
+        out_documentation_capacity <= 0 || out_documentation_length == nullptr) {
+        return static_cast<int>(mlang::compiler_api::Status::InvalidArgument);
+    }
+
+    std::shared_ptr<mlang::compiler_api::SessionStore> store;
+    std::vector<mlang::compiler_api::DocumentSemantic> sem_docs;
+    const mlang::compiler_api::DocumentSemantic* current = nullptr;
+    const int prep = prepare_semantic_query(session, uri, store, sem_docs, &current);
+    if (prep != static_cast<int>(mlang::compiler_api::Status::Ok)) {
+        return prep;
+    }
+
+    if (index < 0 || static_cast<size_t>(index) >= current->symbols.size()) {
+        return static_cast<int>(mlang::compiler_api::Status::OutOfRange);
+    }
+
+    const std::string& documentation =
+        current->symbols[static_cast<size_t>(index)].documentation;
+    *out_documentation_length = static_cast<int>(documentation.size());
+    const size_t copy_len = std::min(
+        static_cast<size_t>(out_documentation_capacity - 1), documentation.size());
+    if (copy_len > 0) {
+        std::memcpy(out_documentation, documentation.data(), copy_len);
+    }
+    out_documentation[copy_len] = '\0';
     return static_cast<int>(mlang::compiler_api::Status::Ok);
 }
 

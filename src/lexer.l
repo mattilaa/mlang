@@ -207,6 +207,7 @@ static int is_try_question_context()
 "vec!"          { return VEC_MACRO; }
 "#[derive(Debug)]"    { return DERIVE_DEBUG; }
 "#[test]"             { return TEST_ATTR; }
+"@property"           { return PROPERTY_ATTR; }
 "#[x86-64]"          { return X86_64_ATTR; }
 "#[aarch64]"         { return AARCH64_ATTR; }
 "#[inline(always)]"   { return INLINE_ALWAYS_ATTR; }

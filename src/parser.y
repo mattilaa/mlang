@@ -337,6 +337,24 @@ static int parser_arch_attr_matches(long long mask)
     return 0;
 }
 
+static int validate_property_flags(int flags)
+{
+    if((flags & PROPERTY_FLAG_RECURSIVE) &&
+       !(flags & PROPERTY_FLAG_MUTEX))
+    {
+        parseHadError = true;
+        yyerror("@property(recursive) requires mutex");
+        return PROPERTY_FLAG_NONE;
+    }
+    if((flags & PROPERTY_FLAG_ATOMIC) && (flags & PROPERTY_FLAG_MUTEX))
+    {
+        parseHadError = true;
+        yyerror("@property(atomic) cannot be combined with mutex");
+        return PROPERTY_FLAG_NONE;
+    }
+    return flags;
+}
+
 // Source file name used in error messages (set by main before yyparse())
 const char* g_sourceFile = "<input>";
 const char* g_targetArchForParse = "";
@@ -409,6 +427,7 @@ ASTNode* mla_ast_struct_def(char* name, char* base_name, ASTNode* members, int i
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_member_with_property(int is_var, ASTNode* type, char* name, ASTNode* init_expr, int is_property, int is_readonly, int property_flags);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_trait_def(char* name, int line);
@@ -418,6 +437,7 @@ ASTNode* mla_ast_impl_add_method(ASTNode* impl, ASTNode* method);
 ASTNode* mla_ast_struct_member_list(ASTNode* member);
 ASTNode* mla_ast_struct_member_list_add(ASTNode* list, ASTNode* member);
 ASTNode* mla_ast_struct_member(int is_var, ASTNode* type, char* name, ASTNode* init_expr);
+ASTNode* mla_ast_struct_member_with_property(int is_var, ASTNode* type, char* name, ASTNode* init_expr, int is_property, int is_readonly, int property_flags);
 ASTNode* mla_ast_struct_method(ASTNode* type, char* name, ASTNode* params, ASTNode* body, int is_public, int is_static);
 ASTNode* mla_ast_struct_member_add_method(ASTNode* list, ASTNode* method);
 ASTNode* mla_ast_struct_init(char* type_name, char* var_name);
@@ -623,6 +643,7 @@ enum UpdatePosition
 %token VEC_MACRO
 %token DERIVE_DEBUG
 %token TEST_ATTR
+%token PROPERTY_ATTR
 %token X86_64_ATTR
 %token AARCH64_ATTR
 %token INLINE_ATTR
@@ -663,6 +684,7 @@ enum UpdatePosition
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
 %type <ival> arch_attr arch_attr_list
+%type <ival> property_options_opt property_option_list property_option
 
 %left PIPE_PIPE
 %left PIPE_GT
@@ -922,8 +944,40 @@ struct_member
         { $$ = mla_ast_struct_member(0, $4, $2, $6); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = mla_ast_struct_member(1, $4, $2, NULL); }
+    | PROPERTY_ATTR property_options_opt VAR IDENTIFIER COLON type SEMICOLON
+        { $$ = mla_ast_struct_member_with_property(1, $6, $4, NULL, 1, 0, validate_property_flags($2)); }
+    | PROPERTY_ATTR property_options_opt LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        { $$ = mla_ast_struct_member_with_property(0, $6, $4, $8, 1, 1, validate_property_flags($2)); }
     | enum_def
         { $$ = $1; }
+    ;
+
+property_options_opt
+    : /* empty */ { $$ = PROPERTY_FLAG_NONE; }
+    | LPAREN property_option_list RPAREN { $$ = validate_property_flags($2); }
+    ;
+
+property_option_list
+    : property_option { $$ = $1; }
+    | property_option_list COMMA property_option { $$ = $1 | $3; }
+    ;
+
+property_option
+    : IDENTIFIER
+        {
+            if(strcmp($1, "atomic") == 0)
+                $$ = PROPERTY_FLAG_ATOMIC;
+            else if(strcmp($1, "mutex") == 0)
+                $$ = PROPERTY_FLAG_MUTEX;
+            else if(strcmp($1, "recursive") == 0)
+                $$ = PROPERTY_FLAG_RECURSIVE;
+            else
+            {
+                parseHadError = true;
+                yyerror("unknown @property option");
+                $$ = PROPERTY_FLAG_NONE;
+            }
+        }
     ;
 
 struct_method
