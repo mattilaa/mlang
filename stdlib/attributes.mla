@@ -1,53 +1,94 @@
-// MLang built-in attributes
-// This module is documentation-only and is used by editor tooling.
-// It is not meant to be imported at runtime.
+/// \file attributes.mla
+/// \brief MLang built-in attributes and conditional regions.
+///
+/// This module is documentation-only. The `// @builtin_attribute` and
+/// `// @builtin_region` lines are consumed by the compiler and by editor
+/// tooling (syntax highlighter, LSP) to discover the set of built-in
+/// attributes; do not rename them.
+
+/// \page builtin_attributes Built-in Attributes
+/// \brief Compiler-recognized `#[...]` annotations applied to declarations.
+///
+/// \section attr_derive_debug #[derive(Debug)]
+/// Auto-generate Debug formatting for a struct so it works with
+/// `debug!` and `debug_json!`.
+/// \code{.mla}
+/// #[derive(Debug)]
+/// struct Point { var x: i32; var y: i32; };
+/// \endcode
+///
+/// \section attr_test #[test]
+/// Mark a function as a unit test runnable via `mlang test`.
+/// \code{.mla}
+/// #[test]
+/// fn test_add() -> i32 { return 0; }
+/// \endcode
+///
+/// \section attr_inline #[inline]
+/// Hint to LLVM that the function should be inlined (InlineHint).
+/// \code{.mla}
+/// #[inline]
+/// fn add(a: i64, b: i64) -> i64 { return a + b; }
+/// \endcode
+///
+/// \section attr_inline_always #[inline(always)]
+/// Force LLVM to inline the function at every call site (AlwaysInline).
+///
+/// \section attr_inline_never #[inline(never)]
+/// Prevent LLVM from inlining the function (NoInline).
+///
+/// \section attr_x86_64 #[x86-64]
+/// Include the following function only on x86-64 builds/hosts.
+/// \code{.mla}
+/// #[x86-64]
+/// fn arch_add(a: i64, b: i64) -> i64 { ... }
+/// \endcode
+///
+/// \section attr_aarch64 #[aarch64]
+/// Include the following function only on AArch64 builds/hosts.
+/// \code{.mla}
+/// #[aarch64]
+/// fn arch_add(a: i64, b: i64) -> i64 { ... }
+/// \endcode
+
+/// \page builtin_regions Conditional Regions
+/// \brief `[name] ... [/name]` blocks that gate source on the target.
+///
+/// \section reg_windows [windows] ... [/windows]
+/// Include the enclosed source only on Windows targets.
+/// \code{.mla}
+/// [windows]
+/// fn platform_name() -> str8 { return "windows"; }
+/// [/windows]
+/// \endcode
+///
+/// \section reg_posix [posix] ... [/posix]
+/// Include the enclosed source only on POSIX-style targets.
+/// \code{.mla}
+/// [posix]
+/// fn platform_name() -> str8 { return "posix"; }
+/// [/posix]
+/// \endcode
+///
+/// \section reg_linux [linux] ... [/linux]
+/// Include the enclosed source only on Linux targets.
+///
+/// \section reg_macos [macos] ... [/macos]
+/// Include the enclosed source only on macOS targets.
+///
+/// \section reg_x86_64 [x86-64] ... [/x86-64]
+/// Include the enclosed source only on x86-64 targets.
+///
+/// \section reg_aarch64 [aarch64] ... [/aarch64]
+/// Include the enclosed source only on AArch64 targets.
 
 // @builtin_attribute derive
-// Enables debug formatting support for structs.
-// Usage:
-// #[derive(Debug)]
-// struct Point { var x: i32; var y: i32; };
-
 // @builtin_attribute test
-// Marks a function as a test callable by `mlang test`.
-// Usage:
-// #[test]
-// fn test_add() -> i32 { return 0; }
-
 // @builtin_attribute x86-64
-// Includes the following function only on x86-64 builds/hosts.
-// Usage:
-// #[x86-64]
-// fn arch_add(a: i64, b: i64) -> i64 { ... }
-
 // @builtin_attribute aarch64
-// Includes the following function only on AArch64 builds/hosts.
-// Usage:
-// #[aarch64]
-// fn arch_add(a: i64, b: i64) -> i64 { ... }
-
 // @builtin_region windows
-// Includes the enclosed source only on Windows.
-// Usage:
-// [windows]
-// fn platform_name() -> str8 { return "windows"; }
-// [/windows]
-
 // @builtin_region posix
-// Includes the enclosed source only on POSIX systems.
-// Usage:
-// [posix]
-// fn platform_name() -> str8 { return "posix"; }
-// [/posix]
-
 // @builtin_region linux
-// Includes the enclosed source only on Linux.
-
 // @builtin_region macos
-// Includes the enclosed source only on macOS.
-
 // @builtin_region x86-64
-// Includes the enclosed source only on x86-64 targets.
-
 // @builtin_region aarch64
-// Includes the enclosed source only on AArch64 targets.

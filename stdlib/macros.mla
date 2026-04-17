@@ -1,69 +1,138 @@
-// MLang built-in macros
-// This module is documentation-only and is used by editor tooling.
-// It is not meant to be imported at runtime.
+/// \file macros.mla
+/// \brief MLang built-in macros.
+///
+/// This module is documentation-only. The `// @builtin_macro` lines are
+/// consumed by the compiler and by editor tooling (syntax highlighter,
+/// LSP) to discover the set of built-in macros; do not rename them.
+
+/// \page builtin_macros Built-in Macros
+/// \brief Compiler-provided macros that expand at parse or IR time.
+///
+/// All names below are case-sensitive and end with `!` at the call site
+/// (except when referenced by their marker/attribute form).
+///
+/// \section mac_println println!
+/// Print formatted text to stdout and append a newline.
+/// \code{.mla}
+/// println!("format {}", value);
+/// \endcode
+///
+/// \section mac_print print!
+/// Print formatted text to stdout without a trailing newline.
+/// \code{.mla}
+/// print!("format {}", value);
+/// \endcode
+///
+/// \section mac_eprintln eprintln!
+/// Print formatted text to stderr and append a newline.
+/// \code{.mla}
+/// eprintln!("format {}", value);
+/// \endcode
+///
+/// \section mac_eprint eprint!
+/// Print formatted text to stderr without a trailing newline.
+/// \code{.mla}
+/// eprint!("format {}", value);
+/// \endcode
+///
+/// \section mac_debug debug!
+/// Debug-only print to stderr. Emitted only when `--debug` is enabled.
+/// \code{.mla}
+/// debug!("value: {}", value);
+/// \endcode
+///
+/// \section mac_debug_json debug_json!
+/// Debug-only JSON-style print to stderr. Works best with
+/// `#[derive(Debug)]` structs. Emitted only when `--debug` is enabled.
+/// \code{.mla}
+/// debug_json!(value);
+/// \endcode
+///
+/// \section mac_format format!
+/// Return a formatted string.
+/// \code{.mla}
+/// let s: str8 = format!("{}", value);
+/// \endcode
+///
+/// \section mac_assert_eq assert_eq!
+/// Assert that two values are equal. Debug-only by default; aborts on
+/// mismatch.
+/// \code{.mla}
+/// assert_eq!(left, right);
+/// \endcode
+///
+/// \section mac_assert assert!
+/// Assert that a condition is true; aborts on failure.
+/// \code{.mla}
+/// assert!(cond);
+/// \endcode
+///
+/// \section mac_static_assert static_assert!
+/// Compile-time assertion. The compiler rejects the program if the
+/// condition is false.
+/// \code{.mla}
+/// static_assert!(x64!() || aarch64!());
+/// \endcode
+///
+/// \section mac_windows windows!
+/// Returns compile-time `true` on Windows targets/hosts, else `false`.
+/// \code{.mla}
+/// if windows!() { ... }
+/// \endcode
+///
+/// \section mac_posix posix!
+/// Returns compile-time `true` on POSIX-style targets/hosts, else
+/// `false`.
+/// \code{.mla}
+/// static_assert!(windows!() || posix!());
+/// \endcode
+///
+/// \section mac_linux linux!
+/// Returns compile-time `true` on Linux targets/hosts, else `false`.
+/// \code{.mla}
+/// if linux!() { ... }
+/// \endcode
+///
+/// \section mac_macos macos!
+/// Returns compile-time `true` on macOS targets/hosts, else `false`.
+/// \code{.mla}
+/// if macos!() { ... }
+/// \endcode
+///
+/// \section mac_x64 x64!
+/// Returns compile-time `true` on x86-64 targets/hosts, else `false`.
+/// \code{.mla}
+/// if x64!() { ... }
+/// \endcode
+///
+/// \section mac_aarch64 aarch64!
+/// Returns compile-time `true` on AArch64 targets/hosts, else `false`.
+/// \code{.mla}
+/// if aarch64!() { ... }
+/// \endcode
+///
+/// \section mac_vec vec!
+/// Create a `Vec<T>` (alias for `list<T>`) from a literal or fill
+/// expression.
+/// \code{.mla}
+/// vec![a, b, c]   // list from elements
+/// vec![val; N]    // N copies of val
+/// \endcode
 
 // @builtin_macro println
-// Prints to stdout with a newline.
-// Usage: println!("format {}", value)
-
 // @builtin_macro print
-// Prints to stdout without a newline.
-// Usage: print!("format {}", value)
-
 // @builtin_macro eprintln
-// Prints to stderr with a newline.
-// Usage: eprintln!("format {}", value)
-
 // @builtin_macro eprint
-// Prints to stderr without a newline.
-// Usage: eprint!("format {}", value)
-
 // @builtin_macro debug
-// Debug-only print to stderr. Printed only when --debug is enabled.
-// Usage: debug!("value: {}", value)
-
 // @builtin_macro debug_json
-// Debug-only JSON-style print to stderr. Printed only when --debug is enabled.
-// Works best with `#[derive(Debug)]` structs.
-// Usage: debug_json!(value)
-
 // @builtin_macro format
-// Returns a formatted string.
-// Usage: let s: str8 = format!("{}", value);
-
 // @builtin_macro assert_eq
-// Asserts that two values are equal. Debug-only by default.
-// Usage: assert_eq!(left, right);
-
+// @builtin_macro assert
+// @builtin_macro static_assert
 // @builtin_macro windows
-// Returns compile-time `true` on Windows targets/hosts, else `false`.
-// Usage: if windows!() { ... }
-
 // @builtin_macro posix
-// Returns compile-time `true` on POSIX-style targets/hosts, else `false`.
-// Usage: static_assert!(windows!() || posix!());
-
 // @builtin_macro linux
-// Returns compile-time `true` on Linux targets/hosts, else `false`.
-// Usage: if linux!() { ... }
-
 // @builtin_macro macos
-// Returns compile-time `true` on macOS targets/hosts, else `false`.
-// Usage: if macos!() { ... }
-
 // @builtin_macro x64
-// Returns compile-time `true` on x86-64 targets/hosts, else `false`.
-// Usage: if x64!() { ... }
-
 // @builtin_macro aarch64
-// Returns compile-time `true` on AArch64 targets/hosts, else `false`.
-// Usage: if aarch64!() { ... }
-
 // @builtin_macro vec
-// Creates a Vec<T> (list<T>) from a literal or fill expression.
-// Usage: vec![a, b, c]   -- list from elements
-// Usage: vec![val; N]    -- N copies of val
-
-// Built-in attributes (compiler-recognized)
-// Usage: #[derive(Debug)] struct Foo { ... };
-// Usage: #[test] fn test_name() -> i32 { return 0; }

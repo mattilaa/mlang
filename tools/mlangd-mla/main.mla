@@ -2067,6 +2067,186 @@ fn completion_documentation(label: str8) -> str8 {
     if eq(label, "match") == 1 {
         return "Pattern matching expression over enum/option/result and literals.";
     }
+    if eq(label, "struct") == 1 {
+        return "Declare an aggregate type with named fields. Usage: struct Name { var x: i32; var y: i32; }";
+    }
+    if eq(label, "enum") == 1 {
+        return "Declare a tagged enumeration with named variants. Usage: enum Shape { Circle(f64), Square(f64) }";
+    }
+    if eq(label, "trait") == 1 {
+        return "Declare an interface of method signatures that types can implement via impl blocks.";
+    }
+    if eq(label, "impl") == 1 {
+        return "Attach methods to a type or implement a trait. Usage: impl Point { fn len(self) -> f64 { ... } }";
+    }
+    if eq(label, "mod") == 1 {
+        return "Declare the current module path. Usage: mod std::io; (typically the first non-comment line in a file).";
+    }
+    if eq(label, "use") == 1 {
+        return "Import items from another module. Usage: use std::io::*; or use std::io::println;";
+    }
+    if eq(label, "pub") == 1 {
+        return "Mark a declaration as publicly visible outside its module.";
+    }
+    if eq(label, "extern") == 1 {
+        return "Declare an external symbol implemented in another language, typically C. Usage: extern fn puts(s: str8) -> i32;";
+    }
+    if eq(label, "type") == 1 {
+        return "Introduce a type alias. Usage: type Bytes = list<u8>;";
+    }
+    if eq(label, "while") == 1 {
+        return "Loop while a condition holds. Usage: while cond: { ... }";
+    }
+    if eq(label, "break") == 1 {
+        return "Exit the innermost enclosing loop immediately.";
+    }
+    if eq(label, "continue") == 1 {
+        return "Skip to the next iteration of the innermost enclosing loop.";
+    }
+    if eq(label, "in") == 1 {
+        return "Separator used in for-loops between the binding and the iterable. Usage: for x in items { ... }";
+    }
+    if eq(label, "mut") == 1 {
+        return "Makes a borrow exclusive and the referent mutable. Usage: &mut value  (also appears in &mut T types).";
+    }
+    if eq(label, "as") == 1 {
+        return "Numeric cast between primitive types. Usage: let x: i64 = a as i64;";
+    }
+    if eq(label, "try") == 1 {
+        return "Begin a try/catch block for propagating or handling fallible operations.";
+    }
+    if eq(label, "catch") == 1 {
+        return "Handle an error raised inside a preceding try block.";
+    }
+    if eq(label, "throw") == 1 {
+        return "Raise an error that propagates to the nearest enclosing catch.";
+    }
+    if eq(label, "switch") == 1 {
+        return "Multi-way branch on a scalar value using case/default arms.";
+    }
+    if eq(label, "case") == 1 {
+        return "A labeled arm inside a switch block.";
+    }
+    if eq(label, "default") == 1 {
+        return "The fallback arm inside a switch block when no case matches.";
+    }
+    if eq(label, "unsafe") == 1 {
+        return "Opt-in block or declaration that permits operations the checker would otherwise reject.";
+    }
+    if eq(label, "sizeof") == 1 {
+        return "Compile-time operator returning the size in bytes of a type or value.";
+    }
+    if eq(label, "static") == 1 {
+        return "Declare a value with static storage duration and a fixed address.";
+    }
+    if eq(label, "true") == 1 {
+        return "Boolean literal representing the true value.";
+    }
+    if eq(label, "false") == 1 {
+        return "Boolean literal representing the false value.";
+    }
+    if eq(label, "debug!") == 1 {
+        return "Print formatted text to stderr. Emitted only when debug output is enabled.";
+    }
+    if eq(label, "debug_json!") == 1 {
+        return "Print a value as JSON-style debug output to stderr. Works best with #[derive(Debug)] structs.";
+    }
+    if eq(label, "format!") == 1 {
+        return "Return a formatted string: let s: str8 = format!(\"{}\", value);";
+    }
+    if eq(label, "assert_eq!") == 1 {
+        return "Assert that two values are equal, aborting on mismatch. Debug-only by default.";
+    }
+    if eq(label, "assert!") == 1 {
+        return "Assert that a condition is true, aborting on failure.";
+    }
+    if eq(label, "static_assert!") == 1 {
+        return "Compile-time assertion: the compiler rejects the program if the condition is false.";
+    }
+    if eq(label, "vec!") == 1 {
+        return "Create a Vec<T>. Usage: vec![a, b, c] for explicit elements, vec![val; N] for N copies of val.";
+    }
+    if eq(label, "windows!") == 1 {
+        return "Compile-time macro that returns true on Windows targets and false otherwise.";
+    }
+    if eq(label, "posix!") == 1 {
+        return "Compile-time macro that returns true on POSIX-style targets (Linux, macOS, BSD) and false otherwise.";
+    }
+    if eq(label, "linux!") == 1 {
+        return "Compile-time macro that returns true on Linux targets and false otherwise.";
+    }
+    if eq(label, "macos!") == 1 {
+        return "Compile-time macro that returns true on macOS targets and false otherwise.";
+    }
+    if eq(label, "x64!") == 1 {
+        return "Compile-time macro that returns true on x86-64 targets and false otherwise.";
+    }
+    if eq(label, "aarch64!") == 1 {
+        return "Compile-time macro that returns true on AArch64 targets and false otherwise.";
+    }
+    if eq(label, "u8") == 1 {
+        return "Unsigned 8-bit integer (0..=255).";
+    }
+    if eq(label, "u16") == 1 {
+        return "Unsigned 16-bit integer (0..=65535).";
+    }
+    if eq(label, "u32") == 1 {
+        return "Unsigned 32-bit integer.";
+    }
+    if eq(label, "u64") == 1 {
+        return "Unsigned 64-bit integer.";
+    }
+    if eq(label, "i8") == 1 {
+        return "Signed 8-bit integer (-128..=127).";
+    }
+    if eq(label, "i16") == 1 {
+        return "Signed 16-bit integer (-32768..=32767).";
+    }
+    if eq(label, "str8") == 1 {
+        return "UTF-8 string type (alias for `string`).";
+    }
+    if eq(label, "str16") == 1 {
+        return "UTF-16 string type.";
+    }
+    if eq(label, "void") == 1 {
+        return "The empty/unit return type. Use on functions that return no value.";
+    }
+    if eq(label, "bit") == 1 {
+        return "Single-bit value used by bitset storage and bit-packed fields.";
+    }
+    if eq(label, "list") == 1 {
+        return "Dynamic array type. Use list<T> or [T; N] syntax.";
+    }
+    if eq(label, "map") == 1 {
+        return "Hash map keyed by arbitrary hashable types. Use map<K, V>.";
+    }
+    if eq(label, "tuple") == 1 {
+        return "Fixed-length heterogeneous sequence type. Use tuple<T1, T2, ...>.";
+    }
+    if eq(label, "ptr") == 1 {
+        return "Raw pointer type. Use ptr<T>; prefer &T / &mut T for safe borrows.";
+    }
+    if eq(label, "#[test]") == 1 {
+        return "Mark a function as a unit test runnable via `mlang test`.";
+    }
+    if eq(label, "#[derive(Debug)]") == 1 {
+        return "Auto-generate Debug formatting for a struct so it works with debug! / debug_json!.";
+    }
+    if eq(label, "#[inline]") == 1 {
+        return "Hint to LLVM that this function should be inlined (InlineHint).";
+    }
+    if eq(label, "#[inline(always)]") == 1 {
+        return "Force LLVM to inline this function at every call site (AlwaysInline).";
+    }
+    if eq(label, "#[inline(never)]") == 1 {
+        return "Prevent LLVM from inlining this function (NoInline).";
+    }
+    if eq(label, "#[aarch64]") == 1 {
+        return "Conditional compilation attribute: include this function only on AArch64 builds.";
+    }
+    if eq(label, "#[x86-64]") == 1 {
+        return "Conditional compilation attribute: include this function only on x86-64 builds.";
+    }
     return String::new();
 }
 
