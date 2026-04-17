@@ -78,6 +78,12 @@ find_enum_key(std::string_view key,
     return it->first;
 }
 
+static bool isSynthesizedPropertyLockFieldName(const std::string& fieldName)
+{
+    constexpr std::string_view prefix = "__mlang_prop_lock_";
+    return fieldName.compare(0, prefix.size(), prefix) == 0;
+}
+
 template <typename Enum, size_t N>
 static std::optional<std::string_view> find_enum_text(
     Enum key, const std::array<std::pair<Enum, std::string_view>, N>& mappings)
@@ -1487,17 +1493,9 @@ CodeGenerator::classifyOwnership(TypeNode* typeNode)
                 }
             }
             visitingStructs.erase(structName);
-            // Handle<T> and stdlib single-i64 handle wrappers are Copy.
-            // These types wrap OS/runtime handles (file descriptors, mutex
-            // handles, etc.) where copying the handle integer is safe.
-            if(structName == "Handle" || structName.rfind("Handle_", 0) == 0 ||
-               structName == "Mutex" || structName == "Condvar" ||
-               structName == "Channel")
-                return OwnershipClass::Copy;
-            // User-defined structs are MoveOnly by default (Rust semantics).
-            // Even if all fields are Copy the struct itself does not implement
-            // Copy unless explicitly annotated (not yet supported).
-            return OwnershipClass::MoveOnly;
+            // Structs are Copy when all stored fields are Copy. This includes
+            // user-defined value types and synthesized property lock slots.
+            return OwnershipClass::Copy;
         };
 
         if(auto* structRef = dynamic_cast<StructTypeRefNode*>(t))
@@ -3274,6 +3272,7 @@ void CodeGenerator::storeStructFieldValue(const std::string& structTypeName,
 
     if(!layout->packedBit)
     {
+        value = applyStructCopySemantics(value, fieldType);
         builder.CreateStore(value, fieldPtr);
         return;
     }
@@ -3850,6 +3849,97 @@ TypeNode* CodeGenerator::getPointerElementType(ExpressionNode* expr, int line)
 
     reportError(line, "dereference requires a pointer value");
     return nullptr;
+}
+
+llvm::Value* CodeGenerator::resetCopiedStructState(llvm::Value* value,
+                                                   const std::string& structName)
+{
+    if(!value)
+        return nullptr;
+
+    auto* structType = llvm::dyn_cast<llvm::StructType>(value->getType());
+    if(!structType || structName.empty())
+        return value;
+
+    auto memberIt = structMembers.find(structName);
+    if(memberIt == structMembers.end())
+        return value;
+
+    llvm::Value* adjusted = value;
+    const auto& members = memberIt->second;
+    for(size_t i = 0; i < members.size(); ++i)
+    {
+        const StructFieldLayout* layout =
+            getStructFieldLayout(structName, static_cast<int>(i));
+        if(!layout || layout->packedBit)
+            continue;
+
+        const std::string& fieldName = members[i].first;
+        TypeNode* fieldType = members[i].second;
+        llvm::Type* storageType =
+            structType->getElementType(layout->storageIndex);
+
+        if(isSynthesizedPropertyLockFieldName(fieldName))
+        {
+            adjusted = builder.CreateInsertValue(
+                adjusted, llvm::Constant::getNullValue(storageType),
+                {layout->storageIndex}, structName + "." + fieldName + ".copy");
+            continue;
+        }
+
+        std::string nestedStructName;
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(fieldType))
+            nestedStructName = structRef->structName;
+        else if(auto* genStructRef =
+                    dynamic_cast<GenericStructTypeRefNode*>(fieldType))
+            nestedStructName = getOrCreateMonomorphizedStruct(
+                genStructRef->structName, genStructRef->typeArgs);
+
+        if(nestedStructName.empty() || !storageType->isStructTy())
+            continue;
+
+        llvm::Value* nestedValue = builder.CreateExtractValue(
+            adjusted, {layout->storageIndex},
+            structName + "." + fieldName + ".copy.extract");
+        llvm::Value* nestedAdjusted =
+            resetCopiedStructState(nestedValue, nestedStructName);
+        adjusted = builder.CreateInsertValue(
+            adjusted, nestedAdjusted, {layout->storageIndex},
+            structName + "." + fieldName + ".copy.insert");
+    }
+
+    return adjusted;
+}
+
+llvm::Value* CodeGenerator::applyStructCopySemantics(llvm::Value* value,
+                                                     TypeNode* semanticType)
+{
+    if(!value)
+        return nullptr;
+
+    if(auto* structRef = dynamic_cast<StructTypeRefNode*>(semanticType))
+        return resetCopiedStructState(value, structRef->structName);
+
+    if(auto* genStructRef = dynamic_cast<GenericStructTypeRefNode*>(semanticType))
+    {
+        return resetCopiedStructState(
+            value, getOrCreateMonomorphizedStruct(genStructRef->structName,
+                                                  genStructRef->typeArgs));
+    }
+
+    return applyStructCopySemantics(value);
+}
+
+llvm::Value* CodeGenerator::applyStructCopySemantics(llvm::Value* value)
+{
+    if(!value)
+        return nullptr;
+
+    auto* structType = llvm::dyn_cast<llvm::StructType>(value->getType());
+    if(!structType || !structType->hasName())
+        return value;
+
+    return resetCopiedStructState(value, structType->getName().str());
 }
 
 TypeNode* CodeGenerator::inferExpressionTypeNode(ExpressionNode* expr, int line)
@@ -6438,7 +6528,10 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         // Allocate space for parameters so they can be modified
         llvm::AllocaInst* alloca = builder.CreateAlloca(
             arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
-        builder.CreateStore(&arg, alloca);
+        llvm::Value* paramValue = &arg;
+        if(arg.getType()->isStructTy())
+            paramValue = applyStructCopySemantics(paramValue);
+        builder.CreateStore(paramValue, alloca);
         namedValues[std::string(arg.getName())] = alloca;
         recordVariableScopeDepth(std::string(arg.getName()));
 
@@ -10859,6 +10952,7 @@ void CodeGenerator::generateReturnStatement(ReturnNode* node)
         if(!returnValue)
             return;
         consumeMoveFromExpression(node->expression, node->line, "return");
+        returnValue = applyStructCopySemantics(returnValue);
 
         llvm::Type* actualType = returnValue->getType();
 
@@ -12915,6 +13009,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                                          node->name)
                 : builder.CreateAlloca(initValue->getType(), nullptr,
                                        node->name);
+        initValue = applyStructCopySemantics(initValue);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
 
@@ -13235,6 +13330,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
 
         llvm::AllocaInst* alloca = createEntryBlockAlloca(
             builder.GetInsertBlock()->getParent(), structType, node->name);
+        initValue = applyStructCopySemantics(initValue, genStructRef);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
         variableTypes[node->name] = TypeNode::TYPE_STRUCT;
@@ -13492,6 +13588,7 @@ void CodeGenerator::generateLetDeclaration(LetDeclNode* node)
                     }
                 }
 
+                initValue = applyStructCopySemantics(initValue, node->type);
                 builder.CreateStore(initValue, alloca);
                 namedValues[node->name] = alloca;
                 variableTypes[node->name] = baseKind;
@@ -13827,6 +13924,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
                                          node->name)
                 : builder.CreateAlloca(initValue->getType(), nullptr,
                                        node->name);
+        initValue = applyStructCopySemantics(initValue);
         builder.CreateStore(initValue, alloca);
         namedValues[node->name] = alloca;
 
@@ -14085,6 +14183,7 @@ void CodeGenerator::generateVarDeclaration(VarDeclNode* node)
             llvm::Value* initValue = generateExpression(node->initExpr);
             if(initValue)
             {
+                initValue = applyStructCopySemantics(initValue, genStructRef);
                 builder.CreateStore(initValue, alloca);
             }
         }
@@ -14580,6 +14679,7 @@ void CodeGenerator::generateAssignment(AssignmentNode* node)
         }
     }
 
+    value = applyStructCopySemantics(value);
     builder.CreateStore(value, variable);
     clearMovedVariable(node->name);
     if(targetType->isPointerTy())
@@ -15233,6 +15333,7 @@ CodeGenerator::getStructPtrAndType(ExpressionNode* expr, int line)
 
             llvm::AllocaInst* tmp =
                 builder.CreateAlloca(value->getType(), nullptr, "field.tmp");
+            value = applyStructCopySemantics(value);
             builder.CreateStore(value, tmp);
             return {tmp, structTypeName};
         }
@@ -16295,6 +16396,7 @@ llvm::Value* CodeGenerator::generateFunctionCall(FunctionCallNode* node)
 
                 llvm::AllocaInst* alloca = builder.CreateAlloca(
                     expectedType, nullptr, param->name + ".lam.addr");
+                argVal = applyStructCopySemantics(argVal, param->type);
                 builder.CreateStore(argVal, alloca);
                 namedValues[param->name] = alloca;
                 recordVariableScopeDepth(param->name);
@@ -18204,7 +18306,10 @@ CodeGenerator::generateMethodDefinition(const std::string& structName,
     {
         llvm::AllocaInst* alloca = builder.CreateAlloca(
             arg.getType(), nullptr, std::string(arg.getName()) + ".addr");
-        builder.CreateStore(&arg, alloca);
+        llvm::Value* paramValue = &arg;
+        if(arg.getType()->isStructTy())
+            paramValue = applyStructCopySemantics(paramValue);
+        builder.CreateStore(paramValue, alloca);
         namedValues[std::string(arg.getName())] = alloca;
         recordVariableScopeDepth(std::string(arg.getName()));
 
@@ -21358,6 +21463,8 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
         }
         else
         {
+            fieldValue =
+                applyStructCopySemantics(fieldValue, members[memberIndex].second);
             structVal = builder.CreateInsertValue(
                 structVal, fieldValue, {layout->storageIndex},
                 structTypeName + "." + fieldName);

@@ -553,6 +553,9 @@ private:
     llvm::Value* getLValuePointer(ExpressionNode* expr, int line);
     TypeNode* getLValueType(ExpressionNode* expr, int line);
     TypeNode* getPointerElementType(ExpressionNode* expr, int line);
+    llvm::Value* applyStructCopySemantics(llvm::Value* value);
+    llvm::Value* applyStructCopySemantics(llvm::Value* value,
+                                          TypeNode* semanticType);
     TypeNode* inferExpressionTypeNode(ExpressionNode* expr, int line);
     void appendFormatValue(ExpressionNode* expr, llvm::Value* value, bool debug,
                            bool pretty, std::string& cFormat,
@@ -585,6 +588,8 @@ private:
                                            const std::string& namePrefix);
     void destroyInternalMutexHandle(llvm::Value* rawHandle,
                                     const std::string& namePrefix);
+    llvm::Value* resetCopiedStructState(llvm::Value* value,
+                                        const std::string& structName);
 
     // Track struct method info: struct name -> method name -> (isPublic, method
     // node)

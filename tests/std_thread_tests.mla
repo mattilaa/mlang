@@ -228,3 +228,24 @@ fn test_recursive_mutex_property_accessors() {
     verify(after == 123);
     verify(recursive_mutex_property_slot(0, 0) == 123);
 }
+
+#[test]
+fn test_mutex_property_struct_copy_after_lock_init() {
+    var original: MutexPropertySlot = MutexPropertySlot {
+        stamp: mutex_property_stamp(5)
+    };
+
+    let initialized: PairStamp = original.getStamp();
+    verify(pair_stamp_eq(initialized, mutex_property_stamp(5)) == 1);
+
+    var copied: MutexPropertySlot = original;
+    let copied_before: PairStamp = copied.getStamp();
+    verify(pair_stamp_eq(copied_before, mutex_property_stamp(5)) == 1);
+
+    copied.setStamp(mutex_property_stamp(6));
+
+    let original_after: PairStamp = original.getStamp();
+    let copied_after: PairStamp = copied.getStamp();
+    verify(pair_stamp_eq(original_after, mutex_property_stamp(5)) == 1);
+    verify(pair_stamp_eq(copied_after, mutex_property_stamp(6)) == 1);
+}
