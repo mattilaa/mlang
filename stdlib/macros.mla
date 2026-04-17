@@ -22,6 +22,11 @@
 // Debug-only print to stderr. Printed only when --debug is enabled.
 // Usage: debug!("value: {}", value)
 
+// @builtin_macro debug_json
+// Debug-only JSON-style print to stderr. Printed only when --debug is enabled.
+// Works best with `#[derive(Debug)]` structs.
+// Usage: debug_json!(value)
+
 // @builtin_macro format
 // Returns a formatted string.
 // Usage: let s: str8 = format!("{}", value);

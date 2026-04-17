@@ -211,6 +211,7 @@ static void write_mlang_commands_json(
         "eprintln!",
         "eprint!",
         "debug!",
+        "debug_json!",
         "format!",
         "assert!",
         "windows!",

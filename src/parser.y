@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unordered_set>
 #include <vector>
 #include "ast.h"
 #include "ast_handle_helpers.h"
@@ -76,16 +77,108 @@ static ASTNode* create_pipe_call(ASTNode* value, char* callee, ASTNode* args,
 }
 
 static std::vector<ASTNode*> g_hoistedNestedFunctions;
+static std::vector<ASTNode*> g_hoistedInlineStructs;
+
+static StructDefNode* find_hoisted_inline_struct_def(const std::string& name)
+{
+    for(ASTNode* node : g_hoistedInlineStructs)
+    {
+        auto* def = dynamic_cast<StructDefNode*>(node);
+        if(def && def->name == name)
+            return def;
+    }
+    return nullptr;
+}
+
+static void propagate_derive_debug_to_inline_structs(StructDefNode* def)
+{
+    if(!def || !def->deriveDebug || !def->members)
+        return;
+
+    std::vector<std::string> pending;
+    std::unordered_set<std::string> visited;
+
+    auto enqueue_nested = [&](TypeNode* type)
+    {
+        if(auto* structRef = dynamic_cast<StructTypeRefNode*>(type))
+        {
+            if(find_hoisted_inline_struct_def(structRef->structName))
+                pending.push_back(structRef->structName);
+        }
+    };
+
+    for(auto* member : def->members->members)
+    {
+        if(member)
+            enqueue_nested(member->type);
+    }
+
+    while(!pending.empty())
+    {
+        std::string name = pending.back();
+        pending.pop_back();
+        if(!visited.insert(name).second)
+            continue;
+
+        StructDefNode* nested = find_hoisted_inline_struct_def(name);
+        if(!nested)
+            continue;
+
+        nested->deriveDebug = true;
+        if(!nested->members)
+            continue;
+
+        for(auto* member : nested->members->members)
+        {
+            if(member)
+                enqueue_nested(member->type);
+        }
+    }
+}
 
 static ASTNode* append_hoisted_nested_functions(ASTNode* topLevelList)
 {
     ASTNode* list = topLevelList;
+    for(ASTNode* st : g_hoistedInlineStructs)
+    {
+        list = mla_ast_add_to_top_level_list(list, st);
+    }
+    g_hoistedInlineStructs.clear();
     for(ASTNode* fn : g_hoistedNestedFunctions)
     {
         list = mla_ast_add_to_top_level_list(list, fn);
     }
     g_hoistedNestedFunctions.clear();
     return list;
+}
+
+static ASTNode* create_inline_struct_type(char* name, ASTNode* members, int line)
+{
+    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
+    if(def)
+        def->line = line;
+    g_hoistedInlineStructs.push_back(def);
+    return mla_ast_struct_type_ref(strdup(name));
+}
+
+static ASTNode* finalize_struct_def_ast(ASTNode* node, int line)
+{
+    if(!node)
+        return nullptr;
+    node->line = line;
+    if(auto* def = dynamic_cast<StructDefNode*>(node))
+        propagate_derive_debug_to_inline_structs(def);
+    return node;
+}
+
+static char* join_field_path(char* left, char* right)
+{
+    size_t len = strlen(left) + 1 + strlen(right) + 1;
+    char* out = (char*)malloc(len);
+    if(!out)
+        return left;
+    snprintf(out, len, "%s.%s", left, right);
+    return out;
 }
 
 static ASTNode* make_nested_fn_noop_statement()
@@ -624,7 +717,7 @@ enum UpdatePosition
 %token LET VAR
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE AS TYPE_KW COLONCOLON
-%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
+%token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
 %token WINDOWS_MACRO POSIX_MACRO LINUX_MACRO MACOS_MACRO
 %token X64_MACRO AARCH64_MACRO
 %token PLUS_PLUS MINUS_MINUS
@@ -685,6 +778,7 @@ enum UpdatePosition
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
 %type <ival> arch_attr arch_attr_list
 %type <ival> property_options_opt property_option_list property_option
+%type <sval> field_path
 
 %left PIPE_PIPE
 %left PIPE_GT
@@ -762,30 +856,30 @@ type_alias_def
 
 struct_def
     : STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($2, NULL, $4, 0, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, NULL, $4, 0, 0), yylineno); }
     | STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($2, $4, $6, 0, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($2, $4, $6, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, NULL, $5, 1, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 1, 0), yylineno); }
     | PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, $5, $7, 1, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 1, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, NULL, $5, 0, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, NULL, $5, 0, 1), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($3, $5, $7, 0, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($3, $5, $7, 0, 1), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($4, NULL, $6, 1, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, NULL, $6, 1, 1), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER COLON IDENTIFIER LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_struct_def($4, $6, $8, 1, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_struct_def($4, $6, $8, 1, 1), yylineno); }
     /* Generic struct definitions */
     | STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($2, NULL, $4, $7, 0, 0), yylineno); }
     | PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 1, 0), yylineno); }
     | DERIVE_DEBUG STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($3, NULL, $5, $8, 0, 1), yylineno); }
     | DERIVE_DEBUG PUB STRUCT IDENTIFIER GENERIC_LT type_param_list GT LBRACE struct_member_list RBRACE SEMICOLON
-        { auto* node = mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1); node->line = yylineno; $$ = node; }
+        { $$ = finalize_struct_def_ast(mla_ast_generic_struct_def($4, NULL, $6, $9, 1, 1), yylineno); }
     ;
 
 enum_def
@@ -1142,6 +1236,8 @@ type
     | U16    { $$ = mla_ast_type_node(TypeNode::TYPE_U16); }
     | U32    { $$ = mla_ast_type_node(TypeNode::TYPE_U32); }
     | U64    { $$ = mla_ast_type_node(TypeNode::TYPE_U64); }
+    | STRUCT IDENTIFIER LBRACE struct_member_list RBRACE
+        { $$ = create_inline_struct_type($2, $4, yylineno); }
     | module_path { $$ = mla_ast_struct_type_ref($1); }
     | module_path GENERIC_LT type_list GT
         {
@@ -1512,6 +1608,12 @@ print_statement
         { $$ = mla_ast_debug_print_stmt($3, NULL, yylineno); }
     | DEBUGPRINT LPAREN STRING_LITERAL COMMA format_argument_list RPAREN SEMICOLON
         { $$ = mla_ast_debug_print_stmt($3, $5, yylineno); }
+    | DEBUGJSONPRINT LPAREN expression RPAREN SEMICOLON
+        {
+            ASTNode* arg = mla_ast_format_argument(NULL, $3);
+            ASTNode* args = mla_ast_format_argument_list_create(arg);
+            $$ = mla_ast_debug_print_stmt((char*)"{:json}", args, yylineno);
+        }
     ;
 
 assert_eq_statement
@@ -2042,19 +2144,24 @@ struct_literal
         { $$ = mla_ast_struct_literal($1, $3, $6, yylineno); }
     ;
 
+field_path
+    : IDENTIFIER { $$ = $1; }
+    | field_path DOT IDENTIFIER { $$ = join_field_path($1, $3); }
+    ;
+
 struct_field_init_list
     : /* empty */ { $$ = NULL; }
-    | IDENTIFIER COLON_BLOCK map_entries RBRACE
+    | field_path COLON_BLOCK map_entries RBRACE
         { $$ = mla_ast_struct_field_init_list($1, mla_ast_map_literal($3)); }
-    | IDENTIFIER COLON_BLOCK RBRACE
+    | field_path COLON_BLOCK RBRACE
         { $$ = mla_ast_struct_field_init_list($1, mla_ast_map_literal(NULL)); }
-    | IDENTIFIER COLON expression
+    | field_path COLON expression
         { $$ = mla_ast_struct_field_init_list($1, $3); }
-    | struct_field_init_list COMMA IDENTIFIER COLON_BLOCK map_entries RBRACE
+    | struct_field_init_list COMMA field_path COLON_BLOCK map_entries RBRACE
         { $$ = mla_ast_struct_field_init_list_add($1, $3, mla_ast_map_literal($5)); }
-    | struct_field_init_list COMMA IDENTIFIER COLON_BLOCK RBRACE
+    | struct_field_init_list COMMA field_path COLON_BLOCK RBRACE
         { $$ = mla_ast_struct_field_init_list_add($1, $3, mla_ast_map_literal(NULL)); }
-    | struct_field_init_list COMMA IDENTIFIER COLON expression
+    | struct_field_init_list COMMA field_path COLON expression
         { $$ = mla_ast_struct_field_init_list_add($1, $3, $5); }
     ;
 

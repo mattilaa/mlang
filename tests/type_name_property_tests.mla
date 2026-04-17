@@ -1,11 +1,49 @@
 mod std::testing;
 mod std::strbuf;
+mod std::env;
 
+use std::env::println;
 use std::strbuf::*;
 use std::testing::verify;
 
 struct Person {
     var name: str8;
+};
+
+struct Foo {
+    var b: struct Bar {
+        var c: struct Car {
+            var i: i32;
+        };
+        var x: i32;
+    };
+    var tag: i32;
+};
+
+struct PropertyFoo {
+    var b: struct PropertyBar {
+        var c: struct PropertyCar {
+            @property var i: i32;
+        };
+        @property var x: i32;
+    };
+    @property var tag: i32;
+};
+
+#[derive(Debug)]
+struct DebugFoo {
+    var b: struct DebugBar {
+        var c: struct DebugCar {
+            @property var i: i32;
+        };
+        @property var x: i32;
+    };
+    @property var tag: i32;
+};
+
+#[derive(Debug)]
+struct DebugText {
+    var text: str8;
 };
 
 #[test]
@@ -28,4 +66,87 @@ fn test_type_name_property_does_not_break_real_name_field() {
     let p: Person = Person { name: "Ada" };
     verify(!(eq(p.name, "Ada") != 1));
     verify(eq(p.name.name, "str8") == 1);
+}
+
+#[test]
+fn test_nested_inline_struct_definition_and_dotted_init() {
+    let foo = Foo { b.c.i: 11, b.x: 22, tag: 7 };
+    verify(foo.b.c.i == 11);
+    verify(foo.b.x == 22);
+    verify(foo.tag == 7);
+    verify(eq(foo.name, "Foo") == 1);
+    verify(eq(foo.b.name, "Bar") == 1);
+    verify(eq(foo.b.c.name, "Car") == 1);
+}
+
+#[test]
+fn test_nested_inline_struct_property_accessors() {
+    var foo: PropertyFoo = PropertyFoo { b.c.i: 11, b.x: 22, tag: 7 };
+
+    println(format!("nested property before i={} x={} tag={}",
+                    foo.b.c.getI(), foo.b.getX(), foo.getTag()));
+
+    verify(foo.b.c.getI() == 11);
+    verify(foo.b.getX() == 22);
+    verify(foo.getTag() == 7);
+    verify(eq(foo.b.c.name, "PropertyCar") == 1);
+
+    foo.b.c.setI(15);
+    foo.b.setX(33);
+    foo.setTag(9);
+
+    println(format!("nested property after i={} x={} tag={}",
+                    foo.b.c.getI(), foo.b.getX(), foo.getTag()));
+
+    verify(foo.b.c.getI() == 15);
+    verify(foo.b.getX() == 33);
+    verify(foo.getTag() == 9);
+}
+
+#[test]
+fn test_derive_debug_prints_nested_inline_structs() {
+    var foo: DebugFoo = DebugFoo { b.c.i: 11, b.x: 22, tag: 7 };
+    foo.b.c.setI(15);
+    foo.b.setX(33);
+    foo.setTag(9);
+
+    let dbg: str8 = format!("{:?}", foo);
+    println(dbg);
+
+    verify(contains(dbg, "DebugFoo") == 1);
+    verify(contains(dbg, "DebugBar") == 1);
+    verify(contains(dbg, "DebugCar") == 1);
+    verify(contains(dbg, "i: 15") == 1);
+    verify(contains(dbg, "x: 33") == 1);
+    verify(contains(dbg, "tag: 9") == 1);
+}
+
+#[test]
+fn test_json_debug_format_prints_nested_inline_structs() {
+    var foo: DebugFoo = DebugFoo { b.c.i: 11, b.x: 22, tag: 7 };
+    foo.b.c.setI(15);
+    foo.b.setX(33);
+    foo.setTag(9);
+
+    let json_dbg: str8 = format!("{:json}", foo);
+    println(json_dbg);
+
+    verify(contains(json_dbg, "\"type\":\"DebugFoo\"") == 1);
+    verify(contains(json_dbg, "\"b\":{") == 1);
+    verify(contains(json_dbg, "\"type\":\"DebugBar\"") == 1);
+    verify(contains(json_dbg, "\"type\":\"DebugCar\"") == 1);
+    verify(contains(json_dbg, "\"i\":15") == 1);
+    verify(contains(json_dbg, "\"x\":33") == 1);
+    verify(contains(json_dbg, "\"tag\":9") == 1);
+}
+
+#[test]
+fn test_json_debug_format_escapes_string_values() {
+    let value: DebugText = DebugText { text: "he said \"hi\"\\path\nnext\tend" };
+    let json_dbg: str8 = format!("{:json}", value);
+    println(json_dbg);
+
+    verify(contains(json_dbg, "\"type\":\"DebugText\"") == 1);
+    verify(contains(json_dbg,
+                    "\"text\":\"he said \\\"hi\\\"\\\\path\\nnext\\tend\"") == 1);
 }

@@ -194,6 +194,7 @@ static int is_try_question_context()
 "eprintln!"     { return EPRINTLN; }
 "eprint!"       { return EPRINT; }
 "debug!"        { return DEBUGPRINT; }
+"debug_json!"   { return DEBUGJSONPRINT; }
 "format!"       { return FORMAT; }
 "assert_eq!"    { return ASSERT_EQ; }
 "assert!"       { return ASSERT; }
