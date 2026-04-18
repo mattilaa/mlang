@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cctype>
 #include <unordered_set>
 #include <vector>
 #include <map>
@@ -527,6 +528,286 @@ public:
         return "switch-case-list";
     }
 };
+
+class BuilderSpecNode : public ExpressionNode
+{
+public:
+    std::string typeHint;
+    bool isBuilderRoot = false;
+    std::vector<std::pair<std::string, ExpressionNode*>> fields;
+
+    BuilderSpecNode(const std::string& hint = "", bool root = false)
+        : typeHint(hint), isBuilderRoot(root)
+    {
+    }
+
+    void addField(const std::string& name, ExpressionNode* value)
+    {
+        fields.push_back({name, value});
+    }
+
+    ExpressionNode* getFieldValue(const std::string& name) const
+    {
+        for(const auto& field : fields)
+        {
+            if(field.first == name)
+                return field.second;
+        }
+        return nullptr;
+    }
+
+    std::string toString() const override
+    {
+        return "builder-spec";
+    }
+};
+
+class BuilderArgListParseNode : public ASTNode
+{
+public:
+    std::vector<ASTNode*> items;
+
+    void addItem(ASTNode* item)
+    {
+        if(item)
+            items.push_back(item);
+    }
+
+    std::string toString() const override
+    {
+        return "builder-arg-list";
+    }
+};
+
+static std::string builder_lower_camel_name(const std::string& text)
+{
+    std::string out;
+    bool upperNext = false;
+    for(char ch : text)
+    {
+        unsigned char uch = static_cast<unsigned char>(ch);
+        if(std::isalnum(uch))
+        {
+            if(out.empty())
+                out.push_back(static_cast<char>(std::tolower(uch)));
+            else if(upperNext)
+                out.push_back(static_cast<char>(std::toupper(uch)));
+            else
+                out.push_back(ch);
+            upperNext = false;
+        }
+        else
+        {
+            upperNext = !out.empty();
+        }
+    }
+    return out;
+}
+
+static char* builder_type_hint_from_type_args(ASTNode* typeArgs)
+{
+    auto* typeList = dynamic_cast<TypeListNode*>(typeArgs);
+    if(!typeList || typeList->types.empty() || !typeList->types[0])
+        return strdup("");
+    return strdup(typeList->types[0]->toString().c_str());
+}
+
+static ExpressionNode* materialize_builder_expression(ExpressionNode* expr,
+                                                      int line);
+
+static StructLiteralNode* materialize_builder_spec(BuilderSpecNode* spec,
+                                                   int line)
+{
+    if(!spec)
+        return nullptr;
+
+    auto* lit = new StructLiteralNode("");
+    lit->line = line;
+    for(const auto& field : spec->fields)
+    {
+        ExpressionNode* value = materialize_builder_expression(field.second, line);
+        lit->addField(field.first, value);
+    }
+    return materialize_anonymous_object_literal(lit, line);
+}
+
+static ExpressionNode* materialize_builder_expression(ExpressionNode* expr,
+                                                      int line)
+{
+    if(!expr)
+        return nullptr;
+
+    if(auto* builder = dynamic_cast<BuilderSpecNode*>(expr))
+        return materialize_builder_spec(builder, line);
+
+    if(auto* lit = dynamic_cast<StructLiteralNode*>(expr))
+    {
+        if(lit->structName.empty())
+            return materialize_anonymous_object_literal(lit, line);
+    }
+
+    return expr;
+}
+
+static ASTNode* create_builder_clause(char* name, ASTNode* value, int line)
+{
+    auto* spec = new BuilderSpecNode();
+    spec->line = line;
+    spec->addField(builder_lower_camel_name(name),
+                   materialize_builder_expression(
+                       static_cast<ExpressionNode*>(value), line));
+    return spec;
+}
+
+static std::string derive_builder_child_field_name(BuilderSpecNode* child)
+{
+    if(!child)
+        return "";
+
+    if(auto* nameExpr = dynamic_cast<StringLiteralNode*>(child->getFieldValue("name")))
+    {
+        std::string derived = builder_lower_camel_name(nameExpr->value);
+        if(!derived.empty())
+            return derived;
+    }
+
+    return builder_lower_camel_name(child->typeHint);
+}
+
+static BuilderSpecNode* merge_builder_specs(BuilderSpecNode* lhs,
+                                            BuilderSpecNode* rhs, int line)
+{
+    if(!lhs || !rhs)
+        return lhs ? lhs : rhs;
+
+    if(rhs->isBuilderRoot)
+    {
+        std::string childName = derive_builder_child_field_name(rhs);
+        if(childName.empty())
+        {
+            parseHadError = true;
+            const std::string msg =
+                "builder child must provide a Name{...} clause or a type hint";
+            fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                    yycolumn_token > 0 ? yycolumn_token : 1,
+                    mlang::diag::format_message_with_code("MLANG-E1012", msg)
+                        .c_str());
+            return lhs;
+        }
+
+        lhs->addField(childName, rhs);
+        return lhs;
+    }
+
+    for(const auto& field : rhs->fields)
+        lhs->addField(field.first, field.second);
+    return lhs;
+}
+
+static std::string derive_struct_literal_name_field(StructLiteralNode* lit)
+{
+    if(!lit)
+        return "";
+
+    for(const auto& field : lit->fields)
+    {
+        if(field.first != "name")
+            continue;
+        if(auto* nameExpr = dynamic_cast<StringLiteralNode*>(field.second))
+            return builder_lower_camel_name(nameExpr->value);
+    }
+
+    return "";
+}
+
+static ASTNode* create_builder_root(char* typeHint, ASTNode* args, int line)
+{
+    auto* spec = new BuilderSpecNode(typeHint ? typeHint : "", true);
+    spec->line = line;
+
+    if(!args)
+        return spec;
+
+    std::vector<ASTNode*> items;
+    if(auto* builderArgs = dynamic_cast<BuilderArgListParseNode*>(args))
+        items = builderArgs->items;
+    else if(auto* exprArgs = dynamic_cast<ArgumentListNode*>(args))
+    {
+        for(auto* arg : exprArgs->args)
+            items.push_back(arg);
+    }
+    else
+    {
+        parseHadError = true;
+        const std::string msg = "invalid builder argument list";
+        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                yycolumn_token > 0 ? yycolumn_token : 1,
+                mlang::diag::format_message_with_code("MLANG-E1013", msg)
+                    .c_str());
+        return spec;
+    }
+
+    for(ASTNode* item : items)
+    {
+        if(auto* child = dynamic_cast<BuilderSpecNode*>(item))
+        {
+            merge_builder_specs(spec, child, line);
+            continue;
+        }
+
+        if(auto* lit = dynamic_cast<StructLiteralNode*>(item))
+        {
+            if(lit->fields.size() <= 1)
+            {
+                for(const auto& field : lit->fields)
+                    spec->addField(field.first, field.second);
+            }
+            else
+            {
+                std::string childName = derive_struct_literal_name_field(lit);
+                if(childName.empty())
+                    childName = builder_lower_camel_name(spec->typeHint);
+                spec->addField(childName, lit);
+            }
+            continue;
+        }
+
+        parseHadError = true;
+        const std::string msg =
+            "builder arguments must be builder clauses or nested add<...>(...) "
+            "expressions";
+        fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                yycolumn_token > 0 ? yycolumn_token : 1,
+                mlang::diag::format_message_with_code("MLANG-E1013", msg)
+                    .c_str());
+        break;
+    }
+
+    return spec;
+}
+
+static ASTNode* create_builder_arg_list(ASTNode* item)
+{
+    auto* list = new BuilderArgListParseNode();
+    list->addItem(item);
+    return list;
+}
+
+static ASTNode* add_builder_arg(ASTNode* listNode, ASTNode* item)
+{
+    auto* list = dynamic_cast<BuilderArgListParseNode*>(listNode);
+    if(list)
+        list->addItem(item);
+    return listNode;
+}
+
+static ASTNode* make_builder_clause_tuple_value(ASTNode* elements)
+{
+    auto* list = dynamic_cast<ListElementsNode*>(elements);
+    if(list && list->elements.size() == 1)
+        return list->elements[0];
+    return mla_ast_tuple_literal(elements);
+}
 
 static int g_switchTempCounter = 0;
 
@@ -1072,6 +1353,7 @@ enum UpdatePosition
 %type <ast> map_iterator
 %type <ast> type_param_list impl_block impl_method_list struct_literal struct_field_init_list trait_def trait_method_decl_list trait_method_decl
 %type <ast> match_expression match_arm_list match_arm match_pattern match_target match_atom match_binary_expression
+%type <ast> builder_arg_list builder_arg builder_clause builder_clause_value builder_clause_value_list
 %type <ival> enum_base_type_opt enum_backing_type enum_int_type
 %type <ival> arch_attr arch_attr_list
 %type <ival> property_options_opt property_option_list property_option
@@ -2103,7 +2385,27 @@ block_condition_logical_and
 
 block_condition_bitor
     : block_condition_bitor PIPE block_condition_bitxor
-        { $$ = mla_ast_binary_op(PIPE, $1, $3); }
+        {
+            auto* lhsBuilder = dynamic_cast<BuilderSpecNode*>(
+                static_cast<ExpressionNode*>($1));
+            auto* rhsBuilder = dynamic_cast<BuilderSpecNode*>(
+                static_cast<ExpressionNode*>($3));
+            if(lhsBuilder && rhsBuilder)
+                $$ = merge_builder_specs(lhsBuilder, rhsBuilder, yylineno);
+            else
+                $$ = mla_ast_binary_op(PIPE, $1, $3);
+        }
+    | block_condition_bitor PIPE builder_arg
+        {
+            auto* lhsBuilder = dynamic_cast<BuilderSpecNode*>(
+                static_cast<ExpressionNode*>($1));
+            auto* rhsBuilder = dynamic_cast<BuilderSpecNode*>(
+                static_cast<ExpressionNode*>($3));
+            if(lhsBuilder && rhsBuilder)
+                $$ = merge_builder_specs(lhsBuilder, rhsBuilder, yylineno);
+            else
+                $$ = mla_ast_binary_op(PIPE, $1, $3);
+        }
     | block_condition_bitxor
     ;
 
@@ -2350,6 +2652,7 @@ ternary_expression
     | struct_literal
         { $$ = $1; }
     | block_condition_expression
+        { $$ = materialize_builder_expression(static_cast<ExpressionNode*>($1), yylineno); }
     ;
 
 unary_expression
@@ -2514,6 +2817,24 @@ primary_expression
         }
     ;
 
+builder_clause
+    : IDENTIFIER LBRACE builder_clause_value RBRACE
+        { $$ = create_builder_clause($1, $3, yylineno); }
+    ;
+
+builder_clause_value
+    : expression { $$ = $1; }
+    | LBRACE builder_clause_value_list RBRACE
+        { $$ = make_builder_clause_tuple_value($2); }
+    ;
+
+builder_clause_value_list
+    : expression
+        { $$ = mla_ast_list_element_list(materialize_builder_expression(static_cast<ExpressionNode*>($1), yylineno)); }
+    | builder_clause_value_list COMMA expression
+        { $$ = mla_ast_list_element_list_add($1, materialize_builder_expression(static_cast<ExpressionNode*>($3), yylineno)); }
+    ;
+
 /* Struct literal: StructName { field: value, ... } */
 struct_literal
     : IDENTIFIER LBRACE struct_field_init_list RBRACE
@@ -2585,9 +2906,46 @@ function_call
     | module_path LPAREN argument_list RPAREN
         { $$ = mla_ast_function_call_from_list($1, $3, yylineno); }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN RPAREN
-        { $$ = mla_ast_result_constructor($1, $3, NULL, yylineno); }
+        {
+            if(strcmp($1, "add") == 0)
+                $$ = create_builder_root(builder_type_hint_from_type_args($3), NULL, yylineno);
+            else
+                $$ = mla_ast_result_constructor($1, $3, NULL, yylineno);
+        }
+    | IDENTIFIER GENERIC_LT type_list GT LPAREN builder_arg_list RPAREN
+        {
+            if(strcmp($1, "add") == 0)
+                $$ = create_builder_root(builder_type_hint_from_type_args($3), $6, yylineno);
+            else
+            {
+                parseHadError = true;
+                const std::string msg =
+                    "generic calls with builder clauses are only supported for add<...>(...)";
+                fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile,
+                        yylineno, yycolumn_token > 0 ? yycolumn_token : 1,
+                        mlang::diag::format_message_with_code("MLANG-E1014", msg)
+                            .c_str());
+                $$ = mla_ast_result_constructor($1, $3, NULL, yylineno);
+            }
+        }
     | IDENTIFIER GENERIC_LT type_list GT LPAREN argument_list RPAREN
-        { $$ = mla_ast_result_constructor($1, $3, $6, yylineno); }
+        {
+            if(strcmp($1, "add") == 0)
+                $$ = create_builder_root(builder_type_hint_from_type_args($3), $6, yylineno);
+            else
+                $$ = mla_ast_result_constructor($1, $3, $6, yylineno);
+        }
+    ;
+
+builder_arg_list
+    : builder_arg { $$ = create_builder_arg_list($1); }
+    | builder_arg_list COMMA builder_arg
+        { $$ = add_builder_arg($1, $3); }
+    ;
+
+builder_arg
+    : builder_clause { $$ = $1; }
+    | function_call { $$ = $1; }
     ;
 
 cast_expression

@@ -80,3 +80,30 @@ fn test_infer_anonymous_object_literal_for_var_mutation() {
     verify(!(state.counter != 2));
     verify(!(state.nested.enabled != false));
 }
+
+#[test]
+fn test_infer_builder_style_object_tree_and_nested_access() {
+    let view = add<View>()
+        | Name{"MainView"}
+        | Width{1024}
+        | Height{768}
+        | BoundingBox{{0, 0, 1024, 768}}
+        | Title{"Main Application View"}
+        | add<View>(
+            Name{"Header"},
+            Height{60},
+            Title{"Header View"},
+            add<Widget>(
+                Name{"AppTitle"},
+                Width{200},
+                Text{"My App"}
+            )
+        );
+
+    let bbox = view.boundingBox;
+    verify(!(view.width != 1024));
+    verify(!(bbox.2 != 1024));
+    verify(!(view.header.height != 60));
+    verify(!(view.header.appTitle.width != 200));
+    verify(!(eq(view.header.appTitle.text, "My App") != 1));
+}
