@@ -1,13 +1,16 @@
 # Package Manager + Steinberg VST3 SDK Bridge
 
 This example shows how to fetch the official Steinberg VST3 SDK with
-`mlang pkg`, compile a small C++ bridge against the SDK headers, and call that
-bridge from MLang.
+`mlang pkg`, initialize its required git submodules, compile a small C++
+bridge against the SDK headers, and call that bridge from MLang.
 
 The goal is not to build a full `.vst3` plug-in bundle yet. The goal is to
 show the integration seam:
 
-- `mlang pkg fetch` downloads the VST3 SDK source tree into `build/deps/vst3sdk`
+- `mlang pkg fetch` clones the `vst3sdk` repository into `build/deps/vst3sdk`
+- a preparation task runs `git submodule update --init --recursive` inside that
+  checkout so `pluginterfaces`, `base`, `public.sdk`, and other SDK parts are
+  present
 - a `language = 'c++'` task compiles `src/vst3_bridge.cpp` against the SDK
 - `src/main.mla` calls plain `extern fn` bridge functions
 - the MLang side reshapes the returned SDK metadata into a builder object and
@@ -15,11 +18,9 @@ show the integration seam:
 
 ## Upstream SDK
 
-This manifest fetches the official Steinberg GitHub repository tarball:
+This manifest fetches the official Steinberg GitHub repository:
 
 - Repository: `https://github.com/steinbergmedia/vst3sdk`
-- Archive URL used in the manifest:
-  `https://github.com/steinbergmedia/vst3sdk/archive/refs/heads/master.tar.gz`
 
 As of April 18, 2026, Steinberg documents the VST3 SDK from that repository and
 the online interface reference describes:
@@ -29,6 +30,14 @@ the online interface reference describes:
   `pluginterfaces/vst/ivstaudioprocessor.h`
 
 Those are the symbols this example exposes through the bridge.
+
+The GitHub repository uses submodules. Steinberg's own build instructions say
+to clone it recursively. This example mirrors that requirement by running a
+task that executes:
+
+```sh
+git -C build/deps/vst3sdk submodule update --init --recursive
+```
 
 ## Build
 
@@ -76,5 +85,6 @@ Or run the linked binary directly:
 - To evolve this into an actual VST3 plug-in target, the next step would be a
   dedicated C++ target that uses Steinberg's SDK CMake helpers or a matching
   hand-written bundle build per platform.
-- The VST3 SDK repository uses submodules for some optional parts. This example
-  does not rely on them.
+- The VST3 SDK repository uses submodules for required SDK parts such as
+  `pluginterfaces`, so a plain GitHub tarball is not sufficient for this
+  example.
