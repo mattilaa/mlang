@@ -216,11 +216,45 @@ means a task can act as a one-command workflow entrypoint: `pkg run <task>`
 will fetch dependencies if needed, then execute the task's `depends_on` /
 `join_on` chain, then launch the final command.
 
+To inspect the planned task chain without running any commands, use:
+
+```sh
+./build/mlang pkg run <task> --tasks
+./build/mlang pkg run <task> --tasks --color
+```
+
+This prints:
+
+- an ASCII task tree rooted at `<task>` using `tree`-style connectors
+- dependency edges under `depends_on:`
+- follow-up edges under `next:`
+- execution-order numbers on each task node
+- a linear execution order list showing the same sequence after dependency
+  expansion
+- optional ANSI branch colors when `--color` is passed; parallel child branches
+  are colorized separately
+
+So the package-manager workflow can be used in either style:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg run preview-square
+```
+
+or with one command:
+
+```sh
+./build/mlang pkg run preview-square
+```
+
 The VST3 CoreAudio example in this repository uses that pattern:
 
 ```sh
 cd examples/package_manager_vst3_coreaudio_synth
 ../../build/mlang pkg run preview-square
+../../build/mlang pkg run preview-square --tasks
+../../build/mlang pkg run preview-square --tasks --color
 ```
 
 In that example, one command:

@@ -94,9 +94,16 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
-              << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
+              << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
               << "  " << programName
               << " pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]\n"
+              << "  Separate steps: " << programName << " pkg fetch ; "
+              << programName << " pkg build ; " << programName
+              << " pkg run <task>\n"
+              << "  One command: " << programName
+              << " pkg run <task>    # fetches if needed, then runs the task chain\n"
+              << "  Show task tree: " << programName
+              << " pkg run <task> --tasks [--color]\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -1086,6 +1093,13 @@ static std::optional<int> run_mlang_pkg_frontend(int argc, char** argv)
         if(arg == "--config" || arg.rfind("--config=", 0) == 0)
             return std::nullopt;
         break;
+    }
+    if(argc >= subIndex + 1 &&
+       (std::string(argv[subIndex]) == "--help" ||
+        std::string(argv[subIndex]) == "-h" ||
+        std::string(argv[subIndex]) == "help"))
+    {
+        return std::nullopt;
     }
     if(argc >= subIndex + 1 && std::string(argv[subIndex]) == "init")
         return std::nullopt;

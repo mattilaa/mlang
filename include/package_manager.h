@@ -9,7 +9,10 @@
  * manifest dependency edges such as `depends_on`, `join_on`, and phase-based
  * scheduling. The pkg CLI also accepts `--config <file>` (or
  * `--config=<file>`) before the subcommand to target an alternate manifest
- * instead of the default `mlang.toml`. `mlang pkg run` also accepts
+ * instead of the default `mlang.toml`. `mlang pkg run <task> --tasks` prints
+ * an ASCII task tree and the resolved linear execution order without running
+ * commands. Passing `--color` additionally colorizes parallel branches in that
+ * tree view. `mlang pkg run` also accepts
  * `--option key=value` overrides for values declared under
  * `[tool.mlang.options]`, which are exposed to task text through placeholders
  * such as `{{option.userspace}}`. Tasks may also opt into
