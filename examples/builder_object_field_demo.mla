@@ -1,0 +1,46 @@
+// Builder JSON demo — Option B: leaf clauses are declared with the compact
+// `field` keyword (desugars to a single-field struct). Container types are
+// regular `struct` declarations. The domain is a shop order with line items,
+// showing that value types can be strings, integers, and floats — all
+// enforced by the compiler.
+
+field Id:       i32;
+field Customer: str8;
+field Notes:    str8;
+field Name:     str8;
+field Price:    f64;
+field Quantity: i32;
+
+struct LineItem {
+    var name:     str8;
+    var price:    f64;
+    var quantity: i32;
+};
+
+struct Order {
+    var id:       i32;
+    var customer: str8;
+    var notes:    str8;
+    var items:    list<LineItem>;
+};
+
+fn main() -> i32 {
+    let order = add<Order>()
+        | Id{1001}
+        | Customer{"Alice"}
+        | Notes{"gift wrap"}
+        | add<LineItem>(
+            Name{"widget"},
+            Price{9.99},
+            Quantity{2}
+        )
+        | add<LineItem>(
+            Name{"gizmo"},
+            Price{19.95},
+            Quantity{1}
+        );
+
+    println!("{:json}", order);
+    println!("{:#json}", order);
+    return 0;
+}

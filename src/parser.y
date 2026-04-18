@@ -88,6 +88,24 @@ static std::vector<ASTNode*> g_hoistedInlineStructs;
 static int g_anonymousObjectCounter = 0;
 static ASTNode* finalize_struct_def_ast(ASTNode* node, int line);
 
+// Registry of declared structs for builder validation. Every top-level
+// `struct` and desugared `field` definition is registered here by name so
+// builder_root/builder_clause productions can validate that the types they
+// reference have been declared before use.
+static std::map<std::string, StructDefNode*> g_parsedStructDefs;
+
+static StructDefNode* lookup_parsed_struct_def(const std::string& name)
+{
+    auto it = g_parsedStructDefs.find(name);
+    return it != g_parsedStructDefs.end() ? it->second : nullptr;
+}
+
+static void register_parsed_struct_def(StructDefNode* def)
+{
+    if(def && !def->name.empty())
+        g_parsedStructDefs[def->name] = def;
+}
+
 class AnonymousObjectShape
 {
 public:
@@ -473,7 +491,10 @@ static ASTNode* finalize_struct_def_ast(ASTNode* node, int line)
         return nullptr;
     node->line = line;
     if(auto* def = dynamic_cast<StructDefNode*>(node))
+    {
         propagate_derive_debug_to_inline_structs(def);
+        register_parsed_struct_def(def);
+    }
     return node;
 }
 
@@ -658,13 +679,193 @@ static ExpressionNode* materialize_builder_expression(ExpressionNode* expr,
     return expr;
 }
 
+static void emit_builder_error(const std::string& code,
+                               const std::string& msg, int line)
+{
+    parseHadError = true;
+    fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+            yycolumn_token > 0 ? yycolumn_token : 1,
+            mlang::diag::format_message_with_code(code, msg).c_str());
+}
+
+static bool is_integer_type_kind(TypeNode::TypeKind k)
+{
+    switch(k)
+    {
+    case TypeNode::TYPE_I8:
+    case TypeNode::TYPE_I16:
+    case TypeNode::TYPE_I32:
+    case TypeNode::TYPE_I64:
+    case TypeNode::TYPE_U8:
+    case TypeNode::TYPE_U16:
+    case TypeNode::TYPE_U32:
+    case TypeNode::TYPE_U64:
+    case TypeNode::TYPE_INT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_string_type_kind(TypeNode::TypeKind k)
+{
+    return k == TypeNode::TYPE_STRING || k == TypeNode::TYPE_STR8 ||
+           k == TypeNode::TYPE_STR16;
+}
+
+static bool is_float_type_kind(TypeNode::TypeKind k)
+{
+    return k == TypeNode::TYPE_FLOAT || k == TypeNode::TYPE_DOUBLE;
+}
+
+static std::string builder_type_description(TypeNode* type)
+{
+    if(!type)
+        return "<unknown>";
+    if(auto* sref = dynamic_cast<StructTypeRefNode*>(type))
+        return sref->structName;
+    if(auto* gref = dynamic_cast<GenericStructTypeRefNode*>(type))
+        return gref->structName;
+    switch(type->kind)
+    {
+    case TypeNode::TYPE_BOOL:   return "bool";
+    case TypeNode::TYPE_I8:     return "i8";
+    case TypeNode::TYPE_I16:    return "i16";
+    case TypeNode::TYPE_I32:    return "i32";
+    case TypeNode::TYPE_I64:    return "i64";
+    case TypeNode::TYPE_U8:     return "u8";
+    case TypeNode::TYPE_U16:    return "u16";
+    case TypeNode::TYPE_U32:    return "u32";
+    case TypeNode::TYPE_U64:    return "u64";
+    case TypeNode::TYPE_INT:    return "int";
+    case TypeNode::TYPE_FLOAT:  return "f32";
+    case TypeNode::TYPE_DOUBLE: return "f64";
+    case TypeNode::TYPE_STRING: return "string";
+    case TypeNode::TYPE_STR8:   return "str8";
+    case TypeNode::TYPE_STR16:  return "str16";
+    case TypeNode::TYPE_LIST:   return "list";
+    case TypeNode::TYPE_MAP:    return "map";
+    case TypeNode::TYPE_TUPLE:  return "tuple";
+    default:                    return "<type>";
+    }
+}
+
+static std::string builder_expr_value_description(ExpressionNode* expr, int line)
+{
+    TypeNode* t = infer_anonymous_object_field_type(expr, line);
+    if(!t)
+        return "<expression>";
+    return builder_type_description(t);
+}
+
+static bool builder_value_matches_declared_type(ExpressionNode* value,
+                                                TypeNode* declared, int line)
+{
+    if(!declared)
+        return true; // nothing to check
+    if(!value)
+        return false;
+
+    // Declared is a struct — accept a struct literal (named or anonymous) or
+    // a builder spec targeting the same type.
+    if(declared->kind == TypeNode::TYPE_STRUCT)
+    {
+        std::string declaredName;
+        if(auto* sref = dynamic_cast<StructTypeRefNode*>(declared))
+            declaredName = sref->structName;
+        else if(auto* gref = dynamic_cast<GenericStructTypeRefNode*>(declared))
+            declaredName = gref->structName;
+
+        if(auto* builder = dynamic_cast<BuilderSpecNode*>(value))
+            return builder->typeHint.empty() || builder->typeHint == declaredName;
+
+        if(auto* lit = dynamic_cast<StructLiteralNode*>(value))
+        {
+            if(lit->displayTypeName == declaredName)
+                return true;
+            if(!lit->structName.empty() && lit->structName == declaredName)
+                return true;
+            // An unnamed anonymous struct literal is acceptable — field-level
+            // checks happen in IR, not here.
+            return lit->structName.empty() && lit->displayTypeName.empty();
+        }
+        // Allow plain identifier expressions (forward reference to typed values).
+        return true;
+    }
+
+    TypeNode* inferred = infer_anonymous_object_field_type(value, line);
+    if(!inferred)
+        return true; // can't verify — trust
+
+    if(declared->kind == inferred->kind)
+        return true;
+
+    if(is_integer_type_kind(declared->kind) &&
+       is_integer_type_kind(inferred->kind))
+        return true;
+
+    if(is_string_type_kind(declared->kind) &&
+       is_string_type_kind(inferred->kind))
+        return true;
+
+    if(is_float_type_kind(declared->kind) && is_float_type_kind(inferred->kind))
+        return true;
+
+    return false;
+}
+
 static ASTNode* create_builder_clause(char* name, ASTNode* value, int line)
 {
     auto* spec = new BuilderSpecNode();
     spec->line = line;
-    spec->addField(builder_lower_camel_name(name),
-                   materialize_builder_expression(
-                       static_cast<ExpressionNode*>(value), line));
+
+    const std::string rawName = name ? name : "";
+    ExpressionNode* valueExpr =
+        materialize_builder_expression(static_cast<ExpressionNode*>(value), line);
+
+    if(rawName.empty())
+    {
+        emit_builder_error("MLANG-E1015",
+                           "builder clause is missing its type name", line);
+    }
+    else
+    {
+        StructDefNode* def = lookup_parsed_struct_def(rawName);
+        if(!def)
+        {
+            std::string msg =
+                "builder clause '" + rawName +
+                "' refers to a type that has not been declared; declare it "
+                "with `struct " + rawName + " { value: <type> }` or `field " +
+                rawName + ": <type>;` before use";
+            emit_builder_error("MLANG-E1014", msg, line);
+        }
+        else if(!def->members || def->members->members.size() != 1)
+        {
+            size_t n = def->members ? def->members->members.size() : 0;
+            std::string msg =
+                "builder clause '" + rawName +
+                "' must reference a single-field struct, but '" + rawName +
+                "' has " + std::to_string(n) + " fields";
+            emit_builder_error("MLANG-E1014", msg, line);
+        }
+        else
+        {
+            StructMemberNode* field = def->members->members[0];
+            if(field && field->type &&
+               !builder_value_matches_declared_type(valueExpr, field->type,
+                                                    line))
+            {
+                std::string msg =
+                    "builder clause '" + rawName + "' expects value of type '" +
+                    builder_type_description(field->type) + "' but got '" +
+                    builder_expr_value_description(valueExpr, line) + "'";
+                emit_builder_error("MLANG-E1014", msg, line);
+            }
+        }
+    }
+
+    spec->addField(builder_lower_camel_name(rawName), valueExpr);
     return spec;
 }
 
@@ -733,6 +934,25 @@ static ASTNode* create_builder_root(char* typeHint, ASTNode* args, int line)
 {
     auto* spec = new BuilderSpecNode(typeHint ? typeHint : "", true);
     spec->line = line;
+
+    if(typeHint && *typeHint)
+    {
+        if(!lookup_parsed_struct_def(typeHint))
+        {
+            std::string msg = std::string("builder root 'add<") + typeHint +
+                              ">' refers to a type that has not been declared; "
+                              "declare `struct " + typeHint +
+                              " { ... }` before use";
+            emit_builder_error("MLANG-E1014", msg, line);
+        }
+    }
+    else
+    {
+        emit_builder_error("MLANG-E1015",
+                           "builder root `add<...>` requires an explicit type "
+                           "argument",
+                           line);
+    }
 
     if(!args)
         return spec;
@@ -1291,7 +1511,7 @@ enum UpdatePosition
 %token <ival> INT_LITERAL
 %token <fval> FLOAT_LITERAL
 %token <dval> DOUBLE_LITERAL
-%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM
+%token FUNCTION RETURN IF ELSE VOID BOOL BIT FLOAT DOUBLE STR8 STR16 LIST MAP TUPLE PTR STRUCT ENUM FIELD
 %token QUESTION TRY_QUESTION
 %token ELLIPSIS
 %token MATCH TRY CATCH THROW SWITCH CASE DEFAULT
@@ -1334,7 +1554,7 @@ enum UpdatePosition
 %type <ast> inline_function_def
 %type <ast> arch_gated_function_def arch_gated_test_function_def arch_gated_inline_function_def
 %type <ast> type_alias_def
-%type <ast> struct_def enum_def enum_variant_list enum_variant
+%type <ast> struct_def field_def enum_def enum_variant_list enum_variant
 %type <ast> function_def type parameter_list parameters parameter
 %type <ast> statement_list statement expression ternary_expression cast_expression
 %type <ast> switch_subject_expression switch_case_value
@@ -1397,6 +1617,7 @@ top_level_list
 
 top_level_item
     : struct_def
+    | field_def
     | enum_def
     | trait_def
     | function_def
@@ -1440,6 +1661,23 @@ type_alias_def
         { auto* node = mla_ast_type_alias($3, NULL, $5); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
     | USE TYPE_KW IDENTIFIER GENERIC_LT type_param_list GT ASSIGN type SEMICOLON
         { auto* node = mla_ast_type_alias($3, $5, $8); node->line = yylineno; node->col = yycolumn_token; $$ = node; }
+    ;
+
+field_def
+    : FIELD IDENTIFIER COLON type SEMICOLON
+        {
+            ASTNode* member = mla_ast_struct_member(1, $4, strdup("value"), NULL);
+            ASTNode* memberList = mla_ast_struct_member_list(member);
+            $$ = finalize_struct_def_ast(
+                mla_ast_struct_def($2, NULL, memberList, 0, 1), yylineno);
+        }
+    | PUB FIELD IDENTIFIER COLON type SEMICOLON
+        {
+            ASTNode* member = mla_ast_struct_member(1, $5, strdup("value"), NULL);
+            ASTNode* memberList = mla_ast_struct_member_list(member);
+            $$ = finalize_struct_def_ast(
+                mla_ast_struct_def($3, NULL, memberList, 1, 1), yylineno);
+        }
     ;
 
 struct_def

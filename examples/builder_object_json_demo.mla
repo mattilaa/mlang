@@ -1,7 +1,30 @@
+// Builder JSON demo — Option A: every builder clause and container type is a
+// full `struct` declaration. Leaf clauses (Method, Url, Name, Value, Text,
+// Priority) are single-field structs whose `value` field's type is enforced
+// by the compiler. Builder roots (HttpRequest, Header, Body) are regular
+// structs.
+
+struct Method   { var value: str8; };
+struct Url      { var value: str8; };
+struct Name     { var value: str8; };
+struct Value    { var value: str8; };
+struct Text     { var value: str8; };
+struct Priority { var value: i32;  };
+
+struct Header { var name: str8; var value: str8; };
+struct Body   { var text: str8; };
+struct HttpRequest {
+    var method:   str8;
+    var url:      str8;
+    var body:     Body;
+    var priority: i32;
+};
+
 fn main() -> i32 {
     let request = add<HttpRequest>()
         | Method{"POST"}
         | Url{"https://api.example.com/v1/messages"}
+        | Priority{7}
         | add<Body>(
             Text{"hello"}
         )
