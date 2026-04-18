@@ -182,6 +182,7 @@ static int is_try_question_context()
 "tuple"         { return TUPLE; }
 "ptr"           { return PTR; }
 "struct"        { return STRUCT; }
+"field"         { return FIELD; }
 "i8"            { return I8; }
 "i16"           { return I16; }
 "i32"           { return I32; }

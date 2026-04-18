@@ -24,9 +24,9 @@ fn build_example_program() -> Program {
     var map_entries = MapEntryList::new();
     map_entries = map_entries.push(entry);
 
-    let field = StructFieldInit::new("field", ExpressionNode::new("literal"));
+    let field_init = StructFieldInit::new("field", ExpressionNode::new("literal"));
     var field_list = StructFieldInitList::new();
-    field_list = field_list.push(field);
+    field_list = field_list.push(field_init);
 
     let top_item = TopLevelItem::new("function", "compute", "payload");
     var top_list = TopLevelList::new();
