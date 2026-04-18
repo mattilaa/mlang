@@ -303,7 +303,8 @@ static bool insert_anonymous_object_shape(AnonymousObjectShape* root,
 }
 
 static TypeNode* hoist_anonymous_object_shape(AnonymousObjectShape* shape,
-                                              int line);
+                                              int line,
+                                              const std::string& displayName = "");
 
 static StructMemberListNode* build_anonymous_object_members(
     AnonymousObjectShape* shape, int line)
@@ -347,13 +348,17 @@ static StructMemberListNode* build_anonymous_object_members(
 }
 
 static TypeNode* hoist_anonymous_object_shape(AnonymousObjectShape* shape,
-                                              int line)
+                                              int line,
+                                              const std::string& displayName)
 {
     char* name = make_anonymous_object_name(line);
     StructMemberListNode* members = build_anonymous_object_members(shape, line);
     ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
     if(auto* structDef = dynamic_cast<StructDefNode*>(def))
+    {
         structDef->deriveDebug = true;
+        structDef->debugDisplayName = displayName;
+    }
     g_hoistedInlineStructs.push_back(finalize_struct_def_ast(def, line));
     return new StructTypeRefNode(name);
 }
@@ -371,7 +376,8 @@ static StructLiteralNode* materialize_anonymous_object_literal(
             return lit;
     }
 
-    TypeNode* rootType = hoist_anonymous_object_shape(&root, line);
+    TypeNode* rootType = hoist_anonymous_object_shape(&root, line,
+                                                      lit->displayTypeName);
     if(auto* rootStruct = dynamic_cast<StructTypeRefNode*>(rootType))
         lit->structName = rootStruct->structName;
     return lit;
@@ -625,6 +631,7 @@ static StructLiteralNode* materialize_builder_spec(BuilderSpecNode* spec,
 
     auto* lit = new StructLiteralNode("");
     lit->line = line;
+    lit->displayTypeName = spec->typeHint;
     for(const auto& field : spec->fields)
     {
         ExpressionNode* value = materialize_builder_expression(field.second, line);

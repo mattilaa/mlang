@@ -4850,6 +4850,11 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
     }
 
     std::string displayName = structName;
+    if(auto dit = structDebugDisplayNames.find(structName);
+       dit != structDebugDisplayNames.end())
+    {
+        displayName = dit->second;
+    }
     if(auto mit = mangledToGenericName.find(structName);
        mit != mangledToGenericName.end())
     {
@@ -5030,6 +5035,11 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     }
 
     std::string displayName = structName;
+    if(auto dit = structDebugDisplayNames.find(structName);
+       dit != structDebugDisplayNames.end())
+    {
+        displayName = dit->second;
+    }
     if(auto mit = mangledToGenericName.find(structName);
        mit != mangledToGenericName.end())
     {
@@ -11787,6 +11797,8 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
     structFieldLayouts[node->name] = layouts;
+    if(!node->debugDisplayName.empty())
+        structDebugDisplayNames[node->name] = node->debugDisplayName;
 
     // Track per-field default initializers so that struct-literal
     // construction can fill in unspecified fields from declaration-site

@@ -1100,6 +1100,7 @@ class StructDefNode : public ASTNode
 public:
     std::string name;
     std::string baseName;
+    std::string debugDisplayName;
     StructMemberListNode* members;
     bool isPublic;
     bool deriveDebug = false;
@@ -1246,6 +1247,7 @@ class StructLiteralNode : public ExpressionNode
 {
 public:
     std::string structName;
+    std::string displayTypeName;
     std::vector<std::string> typeArgs; // For generic types like Box<int>
     std::vector<std::pair<std::string, ExpressionNode*>> fields;
 

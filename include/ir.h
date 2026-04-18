@@ -203,6 +203,7 @@ private:
     // Track enum backing integer kind per enum name.
     std::map<std::string, TypeNode::TypeKind> enumBaseTypes;
     std::set<std::string> debugStructs;
+    std::map<std::string, std::string> structDebugDisplayNames;
     bool hasError;
     bool debugEnabled;
     bool testMode = false;             ///< Compile and run \c #[test] functions.
