@@ -173,5 +173,7 @@ fn test_infer_builder_style_object_json_and_pretty_json_formatting() {
     verify(!(contains(compact, "\"method\":\"GET\"") != 1));
     verify(!(contains(compact, "\"authorization\"") != 1));
     verify(!(contains(pretty, "\n") != 1));
+    verify(!(contains(pretty, "\n    \"type\":\"Header\"") != 1));
+    verify(!(contains(pretty, "\n  },") != 1));
     verify(!(contains(pretty, "\"contentType\"") != 1));
 }

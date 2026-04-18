@@ -550,7 +550,8 @@ private:
                                         bool pretty, int line);
     llvm::Value* buildStructJsonString(llvm::Value* structVal,
                                        const std::string& structName,
-                                       bool pretty, int line);
+                                       bool pretty, int line,
+                                       int indentLevel = 0);
     bool isStringExpression(ExpressionNode* expr) const;
     std::string getStructTypeName(ExpressionNode* expr) const;
     std::string getEnumTypeName(ExpressionNode* expr, int line);

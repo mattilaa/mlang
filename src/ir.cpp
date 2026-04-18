@@ -5018,7 +5018,8 @@ CodeGenerator::buildStructDebugString(llvm::Value* structVal,
 llvm::Value*
 CodeGenerator::buildStructJsonString(llvm::Value* structVal,
                                      const std::string& structName,
-                                     bool pretty, int line)
+                                     bool pretty, int line,
+                                     int indentLevel)
 {
     initializeFormatFunctions();
 
@@ -5046,10 +5047,12 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
         displayName = mit->second;
     }
 
-    std::string innerSep = pretty ? ",\n  " : ",";
+    std::string currentIndent(indentLevel * 2, ' ');
+    std::string childIndent((indentLevel + 1) * 2, ' ');
+    std::string innerSep = pretty ? ",\n" + childIndent : ",";
     std::string fmt = "{";
     if(pretty)
-        fmt += "\n  ";
+        fmt += "\n" + childIndent;
     fmt += "\"type\":\"" + displayName + "\"";
     std::vector<llvm::Value*> argValues;
 
@@ -5086,7 +5089,8 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
                                           "' does not derive Debug");
                 }
                 llvm::Value* fieldStr =
-                    buildStructJsonString(fieldVal, fieldStruct, pretty, line);
+                    buildStructJsonString(fieldVal, fieldStruct, pretty, line,
+                                          indentLevel + 1);
                 fmt += "%s";
                 argValues.push_back(fieldStr);
                 handled = true;
@@ -5158,7 +5162,7 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     }
 
     if(pretty)
-        fmt += "\n";
+        fmt += "\n" + currentIndent;
     fmt += "}";
 
 #if LLVM_VERSION_MAJOR >= 21
