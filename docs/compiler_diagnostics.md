@@ -37,7 +37,10 @@ Unexpected end of file while parsing, typically caused by an unclosed delimiter.
 Unexpected `,`, often caused by a missing expression before or after the comma.
 
 ### `MLANG-E1008`
-A `let` struct field was declared without an initializer. `let` fields are immutable so they require a value at declaration time. Either provide an initializer (`let x: i32 = 0;`) or make the field mutable with `var`.
+A `let` struct field was declared without an initializer. `let` fields are immutable so they require a value at declaration time. Either provide an initializer (`let x: i32 = 0;` or `let x: i32{0};`) or make the field mutable with `var`.
+
+### `MLANG-E1009`
+A `var` struct field used `=` for a declaration-site default. Use brace-init instead (`var x: T{0};`), which reads as "construct in place" and parallels struct-literal syntax.
 
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.

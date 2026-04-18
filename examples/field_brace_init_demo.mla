@@ -1,0 +1,73 @@
+/// \file field_brace_init_demo.mla
+/// @ingroup examples
+/// \brief Struct-field declaration-site defaults via brace-init.
+///
+/// - `let x: T{EXPR};` declares a readonly field with an inline default.
+/// - `var x: T{EXPR};` does the same for a mutable field.
+/// - For nested struct types, use struct-literal syntax inside the braces,
+///   including dotted paths for deeper fields:
+///     `let v: View{origin.x: 10, origin.y: 20};`
+///
+/// Any field omitted from a struct literal keeps its declaration-site
+/// default. A plain `let x: T;` (no default) is rejected as MLANG-E1008,
+/// and `var x: T = EXPR;` is rejected as MLANG-E1009 with a fix-it to the
+/// brace-init form.
+
+struct Point {
+    var x: i32;
+    var y: i32;
+};
+
+struct View {
+    var origin: Point;
+    var tag: i32;
+};
+
+struct Config {
+    // Scalar brace-init: reads as "construct this field with 7".
+    let max_retries: i32{7};
+
+    // Nested struct brace-init: field inits use struct-literal syntax.
+    let home: Point{x: 100, y: 200};
+
+    // `var` fields can use the same form; callers may still overwrite.
+    var cursor: Point{x: 0, y: 0};
+
+    // Dotted-path inits reach into nested struct defaults.
+    var screen: View{origin.x: 640, origin.y: 480, tag: 1};
+
+    // A plain `var` with no default is zero-initialized as before.
+    var status: i32;
+};
+
+fn main() -> i32 {
+    // The same brace-init syntax also works at the statement level.
+    let max_retries: i32{7};
+    var cursor: Point{x: 0, y: 0};
+    println!("local max_retries = {}", max_retries);            // 7
+    println!("local cursor = ({}, {})", cursor.x, cursor.y);    // (0, 0)
+
+    // Build from declaration defaults: only `status` is set explicitly.
+    let cfg: Config = Config { status: 42 };
+
+    println!("max_retries = {}", cfg.max_retries);      // 7
+    println!("home = ({}, {})", cfg.home.x, cfg.home.y); // (100, 200)
+    println!("cursor = ({}, {})", cfg.cursor.x, cfg.cursor.y); // (0, 0)
+    println!("screen.origin = ({}, {})",
+             cfg.screen.origin.x, cfg.screen.origin.y); // (640, 480)
+    println!("screen.tag = {}", cfg.screen.tag);         // 1
+    println!("status = {}", cfg.status);                 // 42
+
+    // A literal can override any default, including partial overrides via
+    // dotted paths — unspecified parts keep the declaration default.
+    let cfg2: Config = Config {
+        cursor.x: 5,
+        screen.origin.y: 100,
+        status: 0
+    };
+    println!("cfg2.cursor = ({}, {})", cfg2.cursor.x, cfg2.cursor.y); // (5, 0)
+    println!("cfg2.screen.origin = ({}, {})",
+             cfg2.screen.origin.x, cfg2.screen.origin.y); // (640, 100)
+
+    return 0;
+}

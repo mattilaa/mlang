@@ -156,6 +156,11 @@ private:
     std::map<std::string, std::vector<std::pair<std::string, TypeNode*>>>
         structMembers;
     std::map<std::string, std::vector<StructFieldLayout>> structFieldLayouts;
+    // Per-struct member default initializers (from `var x: T{expr};` /
+    // `let x: T = expr;` field declarations). Missing entries mean the field
+    // is zero-initialized at struct-literal construction.
+    std::map<std::string, std::map<std::string, ExpressionNode*>>
+        structMemberDefaults;
     // Track struct inheritance: derived struct name -> base struct name
     std::map<std::string, std::string> structBases;
     std::set<std::string> constantVariables;

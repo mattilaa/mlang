@@ -1036,6 +1036,14 @@ struct_member_list
 struct_member
     : LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
         { $$ = mla_ast_struct_member(0, $4, $2, $6); }
+    | LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = mla_ast_struct_member(0, $4, $2, $6); }
+    | LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+        {
+            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($4);
+            $$ = mla_ast_struct_member(0, typeRef, $2, lit);
+        }
     | LET IDENTIFIER COLON type SEMICOLON
         {
             parseHadError = true;
@@ -1044,9 +1052,10 @@ struct_member
                 dynamic_cast<StructTypeRefNode*>($4) != nullptr ||
                 dynamic_cast<GenericStructTypeRefNode*>($4) != nullptr;
             const std::string suggestion = isStructType
-                ? ("provide an initializer, e.g. '" + std::string($2) +
-                   ": " + typeStr + " = " + typeStr + "{...};'")
-                : ("'let " + std::string($2) + ": " + typeStr + " = 0;'");
+                ? ("'let " + std::string($2) + ": " + typeStr + "{...};'")
+                : ("'let " + std::string($2) + ": " + typeStr +
+                   " = 0;' or 'let " + std::string($2) + ": " + typeStr +
+                   "{0};'");
             const std::string msg =
                 "'let' struct field '" + std::string($2) +
                 "' must be initialized (use 'var' for a default-initialized "
@@ -1060,6 +1069,28 @@ struct_member
         }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = mla_ast_struct_member(1, $4, $2, NULL); }
+    | VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = mla_ast_struct_member(1, $4, $2, $6); }
+    | VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+        {
+            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($4);
+            $$ = mla_ast_struct_member(1, typeRef, $2, lit);
+        }
+    | VAR IDENTIFIER COLON type ASSIGN expression SEMICOLON
+        {
+            parseHadError = true;
+            const std::string msg =
+                "'var' struct field '" + std::string($2) +
+                "' cannot use '=' for declaration-site defaults; write '" +
+                std::string($2) + ": " + $4->toString() +
+                "{EXPR};' instead (brace-init reads as 'construct in place')";
+            fprintf(stderr, "%s:%d:%d: error: %s\n",
+                    g_sourceFile, yylineno,
+                    yycolumn_token > 0 ? yycolumn_token : 1,
+                    mlang::diag::format_message_with_code("MLANG-E1009", msg).c_str());
+            $$ = mla_ast_struct_member(1, $4, $2, $6);
+        }
     | PROPERTY_ATTR property_options_opt VAR IDENTIFIER COLON type SEMICOLON
         { $$ = mla_ast_struct_member_with_property(1, $6, $4, NULL, 1, 0, validate_property_flags($2)); }
     | PROPERTY_ATTR property_options_opt LET IDENTIFIER COLON type ASSIGN expression SEMICOLON
@@ -1349,6 +1380,14 @@ let_statement
         { $$ = create_let_declaration($4, $2, $6); }
     | LET IDENTIFIER ASSIGN expression SEMICOLON
         { $$ = create_let_declaration(NULL, $2, $4); }
+    | LET IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = create_let_declaration($4, $2, $6); }
+    | LET IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+        {
+            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($4);
+            $$ = create_let_declaration(typeRef, $2, lit);
+        }
     ;
 
 var_statement
@@ -1358,6 +1397,14 @@ var_statement
         { $$ = mla_ast_var_declaration(NULL, $2, $4); }
     | VAR IDENTIFIER COLON type SEMICOLON
         { $$ = mla_ast_var_declaration($4, $2, NULL); }
+    | VAR IDENTIFIER COLON type LBRACE expression RBRACE SEMICOLON
+        { $$ = mla_ast_var_declaration($4, $2, $6); }
+    | VAR IDENTIFIER COLON IDENTIFIER LBRACE struct_field_init_list RBRACE SEMICOLON
+        {
+            ASTNode* lit = mla_ast_struct_literal($4, NULL, $6, yylineno);
+            ASTNode* typeRef = mla_ast_struct_type_ref($4);
+            $$ = mla_ast_var_declaration(typeRef, $2, lit);
+        }
     ;
 
 global_var_statement
