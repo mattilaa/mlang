@@ -1,0 +1,93 @@
+[package]
+name = "vst3_sdk_demo"
+version = "0.1.0"
+
+[dependencies]
+vst3sdk = { url = "https://github.com/steinbergmedia/vst3sdk/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none", spinner = false }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+[[task]]
+name = "toolchain-check"
+print = "[example] Checking MLang, C++, and archiver toolchains"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
+  "sh -c 'for tool in c++ ar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "prepare-build-tree"
+print = "[example] Preparing build output directories"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}/obj {{build_dir}}/lib"
+]
+
+[[task]]
+name = "compile-mlang-main"
+phase = "compile"
+print = "[example] Compiling the MLang entrypoint"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/main_mlang.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "compile-vst3-bridge"
+phase = "compile"
+print = "[example] Compiling the VST3 C++ bridge against fetched SDK headers"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+language = "c++"
+source = "src/vst3_bridge.cpp"
+output = "{{build_dir}}/obj/vst3_bridge.o"
+compile_only = true
+compiler_flags = [
+  "-std=c++17",
+  "-O2",
+  "-I{{deps_dir}}/vst3sdk",
+]
+commands = [
+  "ar rcs {{build_dir}}/lib/libvst3_bridge.a {{build_dir}}/obj/vst3_bridge.o",
+]
+
+[[task]]
+name = "link-demo"
+phase = "build"
+print = "[example] Linking the MLang + VST3 bridge demo"
+workdir = "{{root}}"
+depends_on = ["compile-mlang-main", "compile-vst3-bridge"]
+language = "c++"
+output = "{{build_dir}}/vst3_sdk_demo"
+inputs = [
+  "{{build_dir}}/obj/main_mlang.o",
+  "{{build_dir}}/lib/libvst3_bridge.a"
+]
+lib_paths = ["../../build"]
+libs = ["mlang_std"]
+
+[task.host.linux]
+libs = [
+  "pthread",
+  "dl",
+  "m",
+]
+
+[[task]]
+name = "demo"
+print = "[example] Running the VST3 SDK bridge demo"
+workdir = "{{root}}"
+depends_on = ["link-demo"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/vst3_sdk_demo"
+]

@@ -1,0 +1,58 @@
+/// \file main.mla
+/// \ingroup examples
+/// \brief Fetch the Steinberg VST3 SDK with `mlang pkg`, compile a C++ bridge,
+///        and consume that bridge from MLang.
+///
+/// The C++ side exposes a few canonical SDK symbols as plain `extern "C"`
+/// functions. The MLang side reshapes them into a builder object so the result
+/// can be inspected with dot access and printed as JSON.
+
+struct Name               { var value: str8; };
+struct Vendor             { var value: str8; };
+struct SdkVersion         { var value: str8; };
+struct ClassCategory      { var value: str8; };
+struct SubCategory        { var value: str8; };
+struct SpeakerArrangement { var value: i64;  };
+
+struct Vst3PluginInfo {
+    var name:               str8;
+    var vendor:             str8;
+    var sdkVersion:         str8;
+    var classCategory:      str8;
+    var subCategory:        str8;
+    var speakerArrangement: i64;
+};
+
+extern fn ml_vst3_sdk_version() -> str8;
+extern fn ml_vst3_audio_effect_class() -> str8;
+extern fn ml_vst3_fx_subcategory() -> str8;
+extern fn ml_vst3_stereo_speaker_arrangement() -> i64;
+extern fn ml_vst3_print_bridge_summary() -> i32;
+
+fn main() -> i32 {
+    var plugin = add<Vst3PluginInfo>()
+        | Name{"MLang Gain"}
+        | Vendor{"MLang Example"}
+        | SdkVersion{""}
+        | ClassCategory{""}
+        | SubCategory{""}
+        | SpeakerArrangement{0};
+
+    plugin.sdkVersion = ml_vst3_sdk_version();
+    plugin.classCategory = ml_vst3_audio_effect_class();
+    plugin.subCategory = ml_vst3_fx_subcategory();
+    plugin.speakerArrangement = ml_vst3_stereo_speaker_arrangement();
+
+    println!("[mlang] VST3 SDK metadata fetched through a C++ bridge.");
+    println!("[mlang] SDK version: {}", plugin.sdkVersion);
+    println!("[mlang] Component class: {}", plugin.classCategory);
+    println!("[mlang] Sub-category: {}", plugin.subCategory);
+    println!("[mlang] Stereo arrangement bitset: {}", plugin.speakerArrangement);
+    println!("{:#json}", plugin);
+
+    if ml_vst3_print_bridge_summary() != 0 {
+        return 1;
+    }
+
+    return 0;
+}
