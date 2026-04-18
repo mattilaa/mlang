@@ -23,7 +23,7 @@ extern fn __env_cwd() -> str8;
 extern fn __env_println(msg: str8) -> void;
 
 extern fn __toml_get_string(obj: i64, key: str8, fallback: str8) -> str8;
-extern fn __toml_set_inline_table(obj: i64, key: str8, field: str8, value: str8) -> void;
+extern fn __toml_set_inline_table(obj: i64, key: str8, field_name: str8, value: str8) -> void;
 extern fn __toml_stringify(obj: i64) -> str8;
 
 fn env_args() -> list<str8> {

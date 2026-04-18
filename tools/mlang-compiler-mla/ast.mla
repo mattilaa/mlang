@@ -400,17 +400,17 @@ impl StructFieldInitList {
         return StructFieldInitList { fields: [] };
     }
 
-    pub fn push(self: StructFieldInitList, field: StructFieldInit) -> StructFieldInitList {
+    pub fn push(self: StructFieldInitList, entry: StructFieldInit) -> StructFieldInitList {
         var fields = self.fields;
-        fields.push(field);
+        fields.push(entry);
         return StructFieldInitList { fields: fields };
     }
 }
 
 pub fn make_struct_field_init_list(fields: list<StructFieldInit>) -> StructFieldInitList {
     var result: StructFieldInitList = StructFieldInitList::new();
-    for field in fields {
-        result.fields.push(field);
+    for entry in fields {
+        result.fields.push(entry);
     }
     return result;
 }

@@ -5,7 +5,7 @@
 
 extern pub fn __toml_parse(text: str8) -> i64;
 extern pub fn __toml_get_string(obj: i64, key: str8, fallback: str8) -> str8;
-extern pub fn __toml_set_inline_table(obj: i64, key: str8, field: str8, value: str8) -> void;
+extern pub fn __toml_set_inline_table(obj: i64, key: str8, field_name: str8, value: str8) -> void;
 extern pub fn __toml_stringify(obj: i64) -> str8;
 
 /// @brief Opaque TOML document handle.
@@ -24,8 +24,8 @@ pub fn get_string(doc: &TomlDoc, key: str8, fallback: str8) -> str8 {
 }
 
 /// @brief Set `key.field = "value"` style inline table entry.
-pub fn set_inline_table(doc: &TomlDoc, key: str8, field: str8, value: str8) -> void {
-    __toml_set_inline_table(doc.handle, key, field, value);
+pub fn set_inline_table(doc: &TomlDoc, key: str8, field_name: str8, value: str8) -> void {
+    __toml_set_inline_table(doc.handle, key, field_name, value);
 }
 
 /// @brief Serialize document back to TOML text.
@@ -45,12 +45,12 @@ pub fn toml_parse(text: str8) -> TomlDoc { return parse(text); }
 /// @param fallback Value returned when the key is missing.
 /// @return Stored string or `fallback`.
 pub fn toml_get_string(doc: &TomlDoc, key: str8, fallback: str8) -> str8 { return get_string(doc, key, fallback); }
-/// @brief Compatibility alias for `set_inline_table(doc, key, field, value)`.
+/// @brief Compatibility alias for `set_inline_table(doc, key, field_name, value)`.
 /// @param doc Parsed document reference.
 /// @param key Table name.
-/// @param field Field name inside the inline table.
+/// @param field_name Field name inside the inline table.
 /// @param value New string value.
-pub fn toml_set_inline_table(doc: &TomlDoc, key: str8, field: str8, value: str8) -> void { set_inline_table(doc, key, field, value); }
+pub fn toml_set_inline_table(doc: &TomlDoc, key: str8, field_name: str8, value: str8) -> void { set_inline_table(doc, key, field_name, value); }
 /// @brief Compatibility alias for `stringify(doc)`.
 /// @param doc Parsed document reference.
 /// @return Serialized TOML text.
