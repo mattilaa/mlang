@@ -17,7 +17,7 @@ name = "toolchain-check"
 print = "[example] Checking macOS, MLang, CMake, C++, Git, and archiver toolchains"
 workdir = "{{root}}"
 commands = [
-  "sh -c 'if [ \"$(uname -s)\" != Darwin ]; then echo This example is macOS-only because it includes a CoreAudio preview target.; exit 1; fi'",
+  "sh -c 'if [ $(uname -s) != Darwin ]; then echo This example is macOS-only because it includes a CoreAudio preview target.; exit 1; fi'",
   "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
   "sh -c 'for tool in cmake c++ git ar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
 ]
@@ -57,7 +57,7 @@ print = "[example] Configuring the local CMake project for VST3 and CoreAudio ta
 workdir = "{{root}}"
 depends_on = ["prepare-vst3-sdk", "compile-mlang-dsp"]
 commands = [
-  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLANG_DSP_OBJECT={{root}}/{{build_dir}}/obj/mlang_oscillator.o"
+  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLANG_DSP_OBJECT={{build_dir}}/obj/mlang_oscillator.o"
 ]
 
 [[task]]
@@ -77,7 +77,7 @@ workdir = "{{root}}"
 depends_on = ["build-artifacts"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/cmake/mlang_coreaudio_preview sine"
+  "exec {{build_dir}}/cmake/bin/Release/mlang_coreaudio_preview sine"
 ]
 
 [[task]]
@@ -87,5 +87,5 @@ workdir = "{{root}}"
 depends_on = ["build-artifacts"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/cmake/mlang_coreaudio_preview square"
+  "exec {{build_dir}}/cmake/bin/Release/mlang_coreaudio_preview square"
 ]

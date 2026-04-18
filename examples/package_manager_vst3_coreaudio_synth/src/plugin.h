@@ -27,6 +27,14 @@ class Plugin : public Steinberg::Vst::SingleComponentEffect
     Steinberg::tresult PLUGIN_API setState(Steinberg::IBStream* state) SMTG_OVERRIDE;
     Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream* state) SMTG_OVERRIDE;
 
+    // Preview helpers for the standalone CoreAudio host in this example.
+    void previewSetWaveform(Waveform waveform);
+    void previewNoteOn(Steinberg::int32 midiNote, float velocity = 1.0f);
+    void previewNoteOff();
+    void previewRender(float** channels,
+                       Steinberg::int32 numChannels,
+                       Steinberg::int32 numSamples);
+
   private:
     void applyWaveformParam(Steinberg::Vst::ParamValue normalizedValue);
     void handleParameterChanges(Steinberg::Vst::IParameterChanges* changes);

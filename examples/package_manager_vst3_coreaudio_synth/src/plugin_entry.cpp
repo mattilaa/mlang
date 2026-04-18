@@ -1,5 +1,6 @@
 #include "plugin.h"
 #include "plug_ids.h"
+#include "version.h"
 
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "public.sdk/source/main/pluginfactory.h"

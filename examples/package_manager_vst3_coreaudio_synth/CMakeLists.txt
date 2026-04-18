@@ -23,7 +23,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
 set(SMTG_RUN_VST_VALIDATOR OFF CACHE BOOL "" FORCE)
-set(SMTG_ADD_VST3_UTILITIES OFF CACHE BOOL "" FORCE)
+set(SMTG_ADD_VST3_UTILITIES ON CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
@@ -34,7 +34,14 @@ set(vst3sdk_SOURCE_DIR "${VST3_SDK_ROOT}")
 add_subdirectory(${vst3sdk_SOURCE_DIR} ${PROJECT_BINARY_DIR}/vst3sdk)
 smtg_enable_vst3_sdk()
 
-set(MLANG_DSP_OBJECT_FILE "${MLANG_DSP_OBJECT}")
+get_filename_component(MLANG_DSP_OBJECT_FILE
+    "${MLANG_DSP_OBJECT}"
+    ABSOLUTE
+    BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(NOT EXISTS "${MLANG_DSP_OBJECT_FILE}")
+    message(FATAL_ERROR "Resolved MLANG_DSP_OBJECT does not exist: ${MLANG_DSP_OBJECT_FILE}")
+endif()
 set_source_files_properties("${MLANG_DSP_OBJECT_FILE}"
     PROPERTIES
         EXTERNAL_OBJECT TRUE
@@ -48,7 +55,10 @@ if(NOT EXISTS "${MLANG_STD_LIBRARY}")
 endif()
 
 smtg_add_vst3plugin(MLangMiniSynth
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/vstsinglecomponenteffect.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/vstsinglecomponenteffect.h
     src/plug_ids.h
+    src/version.h
     src/mlang_osc_bridge.h
     src/mlang_osc_bridge.cpp
     src/plugin.h
@@ -75,7 +85,9 @@ smtg_target_set_bundle(MLangMiniSynth
 )
 
 add_executable(mlang_coreaudio_preview
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/vstsinglecomponenteffect.cpp
     src/coreaudio_preview.cpp
+    src/plugin.cpp
     src/mlang_osc_bridge.cpp
     "${MLANG_DSP_OBJECT_FILE}"
 )
@@ -91,6 +103,7 @@ find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 
 target_link_libraries(mlang_coreaudio_preview
     PRIVATE
+        sdk
         "${MLANG_STD_LIBRARY}"
         ${AUDIOTOOLBOX_FRAMEWORK}
         ${COREAUDIO_FRAMEWORK}

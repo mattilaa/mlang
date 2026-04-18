@@ -21,7 +21,8 @@ example in a practical way, this example builds:
 - `MLangMiniSynth.vst3`: a VST3 instrument that responds to note-on/note-off
   events and emits either a sine or square wave
 - `mlang_coreaudio_preview`: a tiny standalone Audio Queue Services app that
-  previews the same oscillator without needing a DAW
+  instantiates the VST3 processor class directly, drives its realtime
+  `process()` loop, and previews it without needing a DAW
 
 Both targets call into the same compiled MLang oscillator object through
 `src/mlang_osc_bridge.cpp`.
@@ -68,13 +69,13 @@ The manifest will:
 
 ## Preview The Oscillator
 
-Play a sine wave:
+Play the VST3 processor as a sine wave:
 
 ```sh
 ../../build/mlang pkg run preview-sine
 ```
 
-Play a square wave:
+Play the VST3 processor as a square wave:
 
 ```sh
 ../../build/mlang pkg run preview-square
@@ -101,6 +102,8 @@ Steinberg, including `Contents/MacOS/` and `Contents/Resources/`.
   - `Square`
 - monophonic note handling for clarity
 - one shared oscillator implementation in MLang
+- the standalone preview app triggers a note-on, runs the plug-in's realtime
+  render loop for about 3 seconds through CoreAudio, then exits
 
 ## Notes
 

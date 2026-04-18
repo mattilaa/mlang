@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "plug_ids.h"
+#include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstevents.h"
 
 namespace mlang_vst3_example {
@@ -169,6 +170,38 @@ tresult PLUGIN_API Plugin::setState(IBStream*)
 tresult PLUGIN_API Plugin::getState(IBStream*)
 {
     return kResultOk;
+}
+
+void Plugin::previewSetWaveform(Waveform waveform)
+{
+    applyWaveformParam(waveform == Waveform::Square ? 1.0 : 0.0);
+}
+
+void Plugin::previewNoteOn(int32 midiNote, float velocity)
+{
+    bridge_.noteOn(midiNote, velocity);
+}
+
+void Plugin::previewNoteOff()
+{
+    bridge_.noteOff();
+}
+
+void Plugin::previewRender(float** channels, int32 numChannels, int32 numSamples)
+{
+    AudioBusBuffers outBus {};
+    outBus.numChannels = numChannels;
+    outBus.channelBuffers32 = channels;
+    outBus.silenceFlags = 0;
+
+    ProcessData data {};
+    data.processMode = kRealtime;
+    data.symbolicSampleSize = kSample32;
+    data.numSamples = numSamples;
+    data.numOutputs = 1;
+    data.outputs = &outBus;
+
+    process(data);
 }
 
 } // namespace mlang_vst3_example
