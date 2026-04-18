@@ -1819,6 +1819,7 @@ struct DepSpec
     std::string subdir;
     int stripComponents = 1;
     bool spinner = true;
+    bool submodules = false;
 };
 
 struct LinkFlags
@@ -2133,6 +2134,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
             dep.stripComponents = parse_int_or_default(it->second, 1);
         if(auto it = kv.find("spinner"); it != kv.end())
             dep.spinner = parse_toml_bool_value(it->second);
+        if(auto it = kv.find("submodules"); it != kv.end())
+            dep.submodules = parse_toml_bool_value(it->second);
         if(dep.archiveType.empty() && !dep.url.empty())
         {
             if(dep.url.size() >= 7 &&
@@ -2247,6 +2250,7 @@ static std::string make_dependency_manifest_line(const std::string& name,
                                                  const std::string& archiveType,
                                                  const std::string& rev,
                                                  const std::string& tag,
+                                                 bool gitSubmodules,
                                                  const std::string& depSubdir,
                                                  int stripComponents)
 {
@@ -2270,6 +2274,8 @@ static std::string make_dependency_manifest_line(const std::string& name,
             line += ", rev = \"" + rev + "\"";
         if(!tag.empty())
             line += ", tag = \"" + tag + "\"";
+        if(gitSubmodules)
+            line += ", submodules = true";
         if(!depSubdir.empty())
             line += ", subdir = \"" + depSubdir + "\"";
         line += " }";
@@ -3101,6 +3107,21 @@ static int fetch_git_dep(const DepSpec& dep,
                                          fetchCmd, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
+    }
+
+    if(dep.submodules)
+    {
+        std::string updateSubmodulesCmd =
+            "git -C " + shell_quote(path.string()) +
+            " submodule update --init --recursive";
+        if(run_status_command_with_paths(
+               execution_step_label("Initializing submodules for '" + dep.name +
+                                    "'"),
+               updateSubmodulesCmd, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
+        {
+            return 1;
+        }
     }
 
     if(!dep.rev.empty())
@@ -4082,6 +4103,8 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
             steps += 1;
         else if(updateExisting)
             steps += 1;
+        if(dep.submodules)
+            steps += 1;
         if(!dep.rev.empty() || !dep.tag.empty())
             steps += 1;
         return steps;
@@ -4871,7 +4894,7 @@ int PackageManager::run(int argc, char** argv)
         if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]\n"
+                      << " pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
                       << "       " << argv[0]
                       << " pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
                       << "       " << argv[0]
@@ -4887,6 +4910,7 @@ int PackageManager::run(int argc, char** argv)
         std::string archiveType;
         std::string rev;
         std::string tag;
+        bool gitSubmodules = false;
         std::string depSubdir;
         std::string pkgConfig;
         std::string addLibProjectDir;
@@ -4907,6 +4931,8 @@ int PackageManager::run(int argc, char** argv)
                 rev = argv[++i];
             else if(arg == "--tag" && i + 1 < argc)
                 tag = argv[++i];
+            else if(arg == "--submodules")
+                gitSubmodules = true;
             else if(arg == "--subdir" && i + 1 < argc)
                 depSubdir = argv[++i];
             else if(arg == "--strip-components" && i + 1 < argc)
@@ -4962,7 +4988,8 @@ int PackageManager::run(int argc, char** argv)
         else
         {
             line = make_dependency_manifest_line(name, gitUrl, archiveUrl,
-                                                 archiveType, rev, tag,
+                                                archiveType, rev, tag,
+                                                 gitSubmodules,
                                                  depSubdir, stripComponents);
         }
 

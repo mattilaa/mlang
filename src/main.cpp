@@ -82,7 +82,7 @@ void printUsage(const char* programName)
               << "\nPackage manager:\n"
               << "  " << programName << " pkg [--config FILE] init\n"
               << "  " << programName << " pkg [--config FILE] add <name> [--git URL] [--rev "
-                 "REV] [--tag TAG]\n"
+                 "REV] [--tag TAG] [--submodules]\n"
               << "  " << programName
               << " pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
               << "  " << programName

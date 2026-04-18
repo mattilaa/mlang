@@ -29,6 +29,7 @@
  *
  * [dependencies]
  * miniaudio = { url = "https://github.com/mackron/miniaudio/archive/refs/heads/master.tar.gz", archive = "tar.gz", strip_components = "1", build = "none" }
+ * vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true, build = "none" }
  *
  * [[task]]
  * name = "compile-c-bridge"
@@ -71,6 +72,22 @@
  * are supported in these task fields. TOML `#` comments are supported on
  * their own line and at the end of an assignment line as long as the `#`
  * appears outside quoted string content.
+ *
+ * Git source dependencies may additionally declare `submodules = true`. When
+ * present, `mlang pkg fetch` runs `git submodule update --init --recursive`
+ * after cloning or updating that dependency. This is useful for repositories
+ * such as the Steinberg VST3 SDK that keep required source trees in git
+ * submodules.
+ *
+ * Git dependency example with submodules:
+ * \code{.toml}
+ * [dependencies]
+ * vst3sdk = {
+ *   git = "https://github.com/steinbergmedia/vst3sdk.git",
+ *   submodules = true,
+ *   build = "none",
+ * }
+ * \endcode
  *
  * Command-token example:
  * \code{.toml}
