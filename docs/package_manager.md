@@ -81,6 +81,19 @@ Git dependency:
 ./build/mlang pkg --config arm64.toml add cjson --git https://github.com/DaveGamble/cJSON.git
 ```
 
+Git dependency with recursive submodules:
+
+```sh
+./build/mlang pkg add vst3sdk --git https://github.com/steinbergmedia/vst3sdk.git --submodules
+```
+
+This writes:
+
+```toml
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true }
+```
+
 Generate a complete subproject package automatically:
 
 ```sh
@@ -132,6 +145,15 @@ For example, a dependency named `cjson` is fetched into:
 ```text
 build/deps/cjson
 ```
+
+If a git dependency declares `submodules = true`, `pkg fetch` also runs:
+
+```sh
+git -C build/deps/<name> submodule update --init --recursive
+```
+
+This is useful for repositories such as the Steinberg VST3 SDK that keep
+required source trees in git submodules.
 
 ### `pkg build`
 
@@ -1036,6 +1058,13 @@ cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
 [c-dependencies]
 ```
 
+If the generated dependency needs git submodules, the manifest line can use:
+
+```toml
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true }
+```
+
 Then build from the root:
 
 ```sh
@@ -1068,6 +1097,9 @@ Workspace example in this repository:
   Demonstrates a task-driven single-binary build that compiles MLang, C, and
   C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and
   links the results together.
+- `examples/package_manager_vst3_sdk_example`
+  Demonstrates a git dependency that uses `submodules = true` so the fetched
+  Steinberg VST3 SDK checkout includes required submodule content.
 - `examples/package_manager_linux_aarch64_qemu`
   Demonstrates a fetch-only Linux kernel dependency plus `[[task]]` commands
   for AArch64 kernel build and QEMU boot flow.
