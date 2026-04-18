@@ -2,7 +2,9 @@ fn main() -> i32 {
     let request = add<HttpRequest>()
         | Method{"POST"}
         | Url{"https://api.example.com/v1/messages"}
-        | Body{"{\"text\":\"hello\"}"}
+        | add<Body>(
+            Text{"hello"}
+        )
         | add<Header>(
             Name{"Authorization"},
             Value{"Bearer token-123"}

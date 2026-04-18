@@ -156,6 +156,9 @@ fn test_infer_builder_style_object_json_and_pretty_json_formatting() {
     let request = add<HttpRequest>()
         | Method{"GET"}
         | Url{"https://api.example.com/v1/items"}
+        | add<Body>(
+            Text{"hello"}
+        )
         | add<Header>(
             Name{"Authorization"},
             Value{"Bearer token-123"}
@@ -168,12 +171,15 @@ fn test_infer_builder_style_object_json_and_pretty_json_formatting() {
     let compact: str8 = format!("{:json}", request);
     let pretty: str8 = format!("{:#json}", request);
 
-    verify(!(contains(compact, "\"type\":\"HttpRequest\"") != 1));
-    verify(!(contains(compact, "\"authorization\":{\"type\":\"Header\"") != 1));
-    verify(!(contains(compact, "\"method\":\"GET\"") != 1));
+    verify(!(contains(compact, "\"type\": \"HttpRequest\"") != 1));
+    verify(!(contains(compact, "\"body\": {\"type\": \"Body\",\"text\": \"hello\"}") != 1));
+    verify(!(contains(compact, "\"authorization\": {\"type\": \"Header\"") != 1));
+    verify(!(contains(compact, "\"method\": \"GET\"") != 1));
     verify(!(contains(compact, "\"authorization\"") != 1));
     verify(!(contains(pretty, "\n") != 1));
-    verify(!(contains(pretty, "\n    \"type\":\"Header\"") != 1));
+    verify(!(contains(pretty, "\n  \"body\": {") != 1));
+    verify(!(contains(pretty, "\n    \"type\": \"Body\"") != 1));
+    verify(!(contains(pretty, "\n    \"type\": \"Header\"") != 1));
     verify(!(contains(pretty, "\n  },") != 1));
     verify(!(contains(pretty, "\"contentType\"") != 1));
 }

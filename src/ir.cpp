@@ -5053,7 +5053,7 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
     std::string fmt = "{";
     if(pretty)
         fmt += "\n" + childIndent;
-    fmt += "\"type\":\"" + displayName + "\"";
+    fmt += "\"type\": \"" + displayName + "\"";
     std::vector<llvm::Value*> argValues;
 
     for(size_t idx = 0; idx < it->second.size(); ++idx)
@@ -5064,7 +5064,7 @@ CodeGenerator::buildStructJsonString(llvm::Value* structVal,
         llvm::Value* fieldVal = builder.CreateExtractValue(
             structVal, static_cast<unsigned>(idx), "jsonfield");
 
-        fmt += innerSep + "\"" + memberName + "\":";
+        fmt += innerSep + "\"" + memberName + "\": ";
 
         bool handled = false;
 
