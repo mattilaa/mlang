@@ -1,3 +1,21 @@
+/// \file builder_object_field_demo.mla
+/// \ingroup examples
+/// \brief Builder object JSON demo — Option B: clause keys are declared with
+///        the compact `field` keyword.
+///
+/// Same builder syntax as \ref builder_object_json_demo.mla, but demonstrates
+/// the compact `field Name: Type;` form that desugars to a single-field
+/// struct. The example uses a shop-order domain so each value type exercises
+/// a different kind of primitive (`str8`, `i32`, `f64`), and all types are
+/// checked by the compiler at parse time.
+///
+/// See \ref builder_syntax "Builder Syntax" for the full language rules.
+///
+/// Run with:
+/// \code
+///   mlang run examples/builder_object_field_demo.mla
+/// \endcode
+
 // Builder JSON demo — Option B: leaf clauses are declared with the compact
 // `field` keyword (desugars to a single-field struct). Container types are
 // regular `struct` declarations. The domain is a shop order with line items,

@@ -1,3 +1,21 @@
+/// \file builder_object_json_demo.mla
+/// \ingroup examples
+/// \brief Builder object JSON demo — Option A: every clause key and container
+///        type is declared as a full `struct`.
+///
+/// Shows the declarative `add<T>()` builder form with `|` clause chaining,
+/// printed via `{:json}` and `{:#json}`. All clause keys (`Method`, `Url`,
+/// `Name`, `Value`, `Text`, `Priority`) are single-field structs, so their
+/// value types are enforced by the compiler — here one of them uses `i32`
+/// (`Priority{7}`) alongside the string-valued clauses.
+///
+/// See \ref builder_syntax "Builder Syntax" for the full language rules.
+///
+/// Run with:
+/// \code
+///   mlang run examples/builder_object_json_demo.mla
+/// \endcode
+
 // Builder JSON demo — Option A: every builder clause and container type is a
 // full `struct` declaration. Leaf clauses (Method, Url, Name, Value, Text,
 // Priority) are single-field structs whose `value` field's type is enforced

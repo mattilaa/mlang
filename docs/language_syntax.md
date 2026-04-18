@@ -631,3 +631,174 @@ static_assert!(sizeof(view) == sizeof(list<i32>));
 Important distinction:
 - `list<bool>` is a normal list container with ordinary element storage
 - `std::bitset::BitSet` stores values densely at one bit per entry
+
+## Builder Syntax (`add<T>(...)` and clause keys) {#builder_syntax}
+
+MLang has a declarative builder syntax for constructing object trees that
+serialize well (for example to JSON via `{:json}` / `{:#json}`). A builder
+expression starts with `add<T>()` and chains clauses using the `|`
+pipe operator. Every type name used in the expression must be declared
+first — the compiler enforces that the "functional-looking" types in a
+builder are real types with real fields.
+
+### Forms
+
+- `add<T>()` — starts a builder producing a value of container type `T`.
+- `Name{value}` — a clause that sets a single typed field. `Name` is either
+  a full `struct Name { ... }` declaration with exactly one field (the field
+  is conventionally called `value`), or a compact `field Name: Type;`
+  declaration (see below).
+- `add<Child>(clause, clause, ...)` — a nested builder that becomes a child
+  field in the enclosing object. The child field's name is derived from its
+  `Name{"..."}` clause when present, otherwise from the lowercased child
+  type hint.
+
+All three are chained together with `|`:
+
+```mla
+add<Outer>()
+    | ClauseA{valueA}
+    | add<Inner>(ClauseB{valueB})
+```
+
+### Declaring clause types
+
+**Option A — full `struct` declaration** (explicit, works for any number of
+fields):
+
+```mla
+struct Method   { var value: str8; };
+struct Url      { var value: str8; };
+struct Priority { var value: i32;  };
+```
+
+**Option B — `field` keyword** (compact, desugars to a single-field struct
+named `value`):
+
+```mla
+field Method:   str8;
+field Url:      str8;
+field Priority: i32;
+```
+
+`field Foo: T;` is exactly equivalent to
+`struct Foo { var value: T; };` with `#[derive(Debug)]` applied. Use `pub
+field Foo: T;` to export the desugared struct.
+
+### Value types
+
+Builder clause values are not limited to strings. The compiler checks the
+supplied value against the clause's declared field type. The following are
+supported:
+
+- Strings (`str8` / `str16` / `string`).
+- All integer widths (`i8`..`i64`, `u8`..`u64`).
+- Floats (`f32`, `f64`).
+- Declared structs — e.g. passing an `add<Inner>(...)` or a struct literal
+  to a clause whose field type is a declared struct.
+
+Numeric literals widen across integer widths (`i64` literal → `i32` field
+is accepted), and string literals widen across string encodings.
+
+### Worked example — full `struct` form
+
+```mla
+struct Method   { var value: str8; };
+struct Url      { var value: str8; };
+struct Name     { var value: str8; };
+struct Value    { var value: str8; };
+struct Text     { var value: str8; };
+struct Priority { var value: i32;  };
+
+struct Header { var name: str8; var value: str8; };
+struct Body   { var text: str8; };
+struct HttpRequest {
+    var method:   str8;
+    var url:      str8;
+    var body:     Body;
+    var priority: i32;
+};
+
+fn main() -> i32 {
+    let request = add<HttpRequest>()
+        | Method{"POST"}
+        | Url{"https://api.example.com/v1/messages"}
+        | Priority{7}
+        | add<Body>(Text{"hello"})
+        | add<Header>(Name{"Authorization"}, Value{"Bearer token-123"})
+        | add<Header>(Name{"ContentType"}, Value{"application/json"});
+
+    println!("{:#json}", request);
+    return 0;
+}
+```
+
+See @ref examples/builder_object_json_demo.mla "builder_object_json_demo.mla"
+for the complete runnable program.
+
+### Worked example — `field` form
+
+```mla
+field Id:       i32;
+field Customer: str8;
+field Notes:    str8;
+field Name:     str8;
+field Price:    f64;
+field Quantity: i32;
+
+struct LineItem {
+    var name:     str8;
+    var price:    f64;
+    var quantity: i32;
+};
+
+struct Order {
+    var id:       i32;
+    var customer: str8;
+    var notes:    str8;
+    var items:    list<LineItem>;
+};
+
+fn main() -> i32 {
+    let order = add<Order>()
+        | Id{1001}
+        | Customer{"Alice"}
+        | Notes{"gift wrap"}
+        | add<LineItem>(Name{"widget"}, Price{9.99},  Quantity{2})
+        | add<LineItem>(Name{"gizmo"},  Price{19.95}, Quantity{1});
+
+    println!("{:#json}", order);
+    return 0;
+}
+```
+
+See @ref examples/builder_object_field_demo.mla
+"builder_object_field_demo.mla".
+
+### Diagnostics
+
+The compiler rejects ill-formed builders at parse time. Common mistakes:
+
+- `add<Undeclared>()` — `struct Undeclared` has not been declared yet
+  (MLANG-E1014).
+- `Method{42}` when `field Method: str8;` — value type mismatch
+  (MLANG-E1014 — `"builder clause 'Method' expects value of type 'str8'
+  but got 'i64'"`).
+- `struct TwoFields { var a: str8; var b: str8; };` followed by
+  `TwoFields{"x"}` — clause structs must have exactly one field
+  (MLANG-E1014).
+- `add<T>` without the `<T>` — missing type argument (MLANG-E1015).
+
+Because validation is parse-order sensitive, **put type declarations above
+the builder expressions that reference them** (typically at the top of the
+file).
+
+### The nested-sibling name-collision rule
+
+Each nested `add<Child>(...)` becomes a field in its parent. The field name
+is taken from the child's `Name{"..."}` clause, falling back to the
+lowercased child type hint. Two siblings of the same type therefore need
+distinct `Name{...}` clauses, otherwise parsing fails with MLANG-E1010
+(`"duplicate or conflicting field path"`). In the HTTP example, the two
+`add<Header>` siblings are distinguished by `Name{"Authorization"}` vs.
+`Name{"ContentType"}`.

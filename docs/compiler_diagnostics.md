@@ -42,6 +42,24 @@ A `let` struct field was declared without an initializer. `let` fields are immut
 ### `MLANG-E1009`
 A `var` struct field used `=` for a declaration-site default. Use brace-init instead (`var x: T{0};`), which reads as "construct in place" and parallels struct-literal syntax.
 
+### `MLANG-E1010`
+A builder or anonymous object literal had two entries for the same field path, or a sub-path collided with an existing leaf.
+
+### `MLANG-E1011`
+An anonymous object field's type could not be inferred from its initializer. Initialize it with a typed struct literal instead.
+
+### `MLANG-E1012`
+A nested `add<...>(...)` builder child could not resolve a distinct name. Either add a `Name{"..."}` clause or give the nested builder a unique type hint.
+
+### `MLANG-E1013`
+A builder root received an invalid argument list — builder arguments must be clause expressions (`Name{value}`) or nested `add<...>(...)` expressions.
+
+### `MLANG-E1014`
+A builder expression referenced a type that is either undeclared, not a single-field struct (for clause keys), or whose declared field type does not match the supplied value. Declare the type as `struct Name { ... }` or, for one-field clauses, as `field Name: <type>;`. See @ref language_syntax "Builder Syntax" for the full rules.
+
+### `MLANG-E1015`
+A builder root was missing an explicit type argument or a builder clause was missing its type name. Write `add<Type>()` / `Name{value}` with a concrete identifier.
+
 ### `MLANG-E1100`
 Unexpected character produced by the lexer before parsing could continue.
 
