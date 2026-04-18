@@ -150,3 +150,26 @@ fn test_infer_builder_style_var_tree_mutation_updates_nested_data() {
     verify(!(view.header.height != 72));
     verify(!(eq(view.header.appTitle.text, "New Title") != 1));
 }
+
+#[test]
+fn test_infer_builder_style_object_json_and_pretty_json_formatting() {
+    let request = add<HttpRequest>()
+        | Method{"GET"}
+        | Url{"https://api.example.com/v1/items"}
+        | add<Header>(
+            Name{"Authorization"},
+            Value{"Bearer token-123"}
+        )
+        | add<Header>(
+            Name{"ContentType"},
+            Value{"application/json"}
+        );
+
+    let compact: str8 = format!("{:json}", request);
+    let pretty: str8 = format!("{:#json}", request);
+
+    verify(!(contains(compact, "\"method\":\"GET\"") != 1));
+    verify(!(contains(compact, "\"authorization\"") != 1));
+    verify(!(contains(pretty, "\n") != 1));
+    verify(!(contains(pretty, "\"contentType\"") != 1));
+}

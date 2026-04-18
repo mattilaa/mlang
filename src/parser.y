@@ -352,6 +352,8 @@ static TypeNode* hoist_anonymous_object_shape(AnonymousObjectShape* shape,
     char* name = make_anonymous_object_name(line);
     StructMemberListNode* members = build_anonymous_object_members(shape, line);
     ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
+    if(auto* structDef = dynamic_cast<StructDefNode*>(def))
+        structDef->deriveDebug = true;
     g_hoistedInlineStructs.push_back(finalize_struct_def_ast(def, line));
     return new StructTypeRefNode(name);
 }
