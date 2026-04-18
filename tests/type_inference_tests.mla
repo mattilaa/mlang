@@ -53,3 +53,30 @@ fn test_infer_string_alloc_style() {
     var capbuf = String::with_capacity(32);
     String::free(capbuf);
     }
+
+#[test]
+fn test_infer_anonymous_object_literal_and_nested_access() {
+    let view = object {
+        width: 1024,
+        header.title: "My App",
+        header.height: 60
+    };
+
+    verify(!(view.width != 1024));
+    verify(!(eq(view.header.title, "My App") != 1));
+    verify(!(view.header.height != 60));
+}
+
+#[test]
+fn test_infer_anonymous_object_literal_for_var_mutation() {
+    var state = object {
+        counter: 1,
+        nested.enabled: true
+    };
+
+    state.counter = state.counter + 1;
+    state.nested.enabled = false;
+
+    verify(!(state.counter != 2));
+    verify(!(state.nested.enabled != false));
+}

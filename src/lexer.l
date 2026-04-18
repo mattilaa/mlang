@@ -164,6 +164,7 @@ static int is_try_question_context()
 "use"           { return USE; }
 "as"            { return AS; }
 "type"          { return TYPE_KW; }
+"object"        { return OBJECT; }
 "let"           { return LET; }
 "var"           { return VAR; }
 "void"          { return VOID; }

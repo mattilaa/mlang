@@ -4,12 +4,18 @@
 #include <string.h>
 #include <unordered_set>
 #include <vector>
+#include <map>
 #include "ast.h"
 #include "ast_handle_helpers.h"
 #include "diagnostics.h"
 
 ASTNode* create_identifier_at(char* name, int line, int col);
 ASTNode* mla_ast_enum_literal(char* enum_name, char* variant_name, int line);
+extern int yycolumn_token;
+extern const char* g_sourceFile;
+extern "C" {
+    extern bool parseHadError;
+}
 
 static char* join_module_path(char* left, char* right)
 {
@@ -78,6 +84,15 @@ static ASTNode* create_pipe_call(ASTNode* value, char* callee, ASTNode* args,
 
 static std::vector<ASTNode*> g_hoistedNestedFunctions;
 static std::vector<ASTNode*> g_hoistedInlineStructs;
+static int g_anonymousObjectCounter = 0;
+static ASTNode* finalize_struct_def_ast(ASTNode* node, int line);
+
+class AnonymousObjectShape
+{
+public:
+    std::map<std::string, AnonymousObjectShape*> children;
+    ExpressionNode* value = nullptr;
+};
 
 static StructDefNode* find_hoisted_inline_struct_def(const std::string& name)
 {
@@ -159,6 +174,288 @@ static ASTNode* create_inline_struct_type(char* name, ASTNode* members, int line
         def->line = line;
     g_hoistedInlineStructs.push_back(def);
     return mla_ast_struct_type_ref(strdup(name));
+}
+
+static char* make_anonymous_object_name(int line)
+{
+    char buf[96];
+    snprintf(buf, sizeof(buf), "__AnonObject_%d_%d", line,
+             g_anonymousObjectCounter++);
+    return strdup(buf);
+}
+
+static TypeNode* infer_anonymous_object_field_type(ExpressionNode* expr, int line);
+
+static TypeNode* type_node_from_simple_name(const std::string& name)
+{
+    if(name == "void")
+        return new TypeNode(TypeNode::TYPE_VOID);
+    if(name == "bool")
+        return new TypeNode(TypeNode::TYPE_BOOL);
+    if(name == "bit")
+        return new TypeNode(TypeNode::TYPE_BIT);
+    if(name == "float" || name == "f32")
+        return new TypeNode(TypeNode::TYPE_FLOAT);
+    if(name == "double" || name == "f64")
+        return new TypeNode(TypeNode::TYPE_DOUBLE);
+    if(name == "str8")
+        return new TypeNode(TypeNode::TYPE_STR8);
+    if(name == "str16")
+        return new TypeNode(TypeNode::TYPE_STR16);
+    if(name == "i8")
+        return new TypeNode(TypeNode::TYPE_I8);
+    if(name == "i16")
+        return new TypeNode(TypeNode::TYPE_I16);
+    if(name == "i32")
+        return new TypeNode(TypeNode::TYPE_I32);
+    if(name == "i64")
+        return new TypeNode(TypeNode::TYPE_I64);
+    if(name == "u8")
+        return new TypeNode(TypeNode::TYPE_U8);
+    if(name == "u16")
+        return new TypeNode(TypeNode::TYPE_U16);
+    if(name == "u32")
+        return new TypeNode(TypeNode::TYPE_U32);
+    if(name == "u64")
+        return new TypeNode(TypeNode::TYPE_U64);
+    return new StructTypeRefNode(name);
+}
+
+static TypeNode* infer_type_node_from_type_arg_text(const std::string& text)
+{
+    return type_node_from_simple_name(text);
+}
+
+static std::vector<std::string> split_field_path_parts(const std::string& path)
+{
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while(start <= path.size())
+    {
+        size_t dot = path.find('.', start);
+        if(dot == std::string::npos)
+        {
+            parts.push_back(path.substr(start));
+            break;
+        }
+        parts.push_back(path.substr(start, dot - start));
+        start = dot + 1;
+    }
+    return parts;
+}
+
+static bool insert_anonymous_object_shape(AnonymousObjectShape* root,
+                                          const std::string& fieldPath,
+                                          ExpressionNode* value, int line)
+{
+    if(!root)
+        return false;
+
+    std::vector<std::string> parts = split_field_path_parts(fieldPath);
+    if(parts.empty())
+        return false;
+
+    AnonymousObjectShape* cur = root;
+    for(size_t i = 0; i < parts.size(); ++i)
+    {
+        const std::string& part = parts[i];
+        if(part.empty())
+            return false;
+
+        AnonymousObjectShape*& slot = cur->children[part];
+        if(!slot)
+            slot = new AnonymousObjectShape();
+
+        cur = slot;
+        if(i + 1 == parts.size())
+        {
+            if(!cur->children.empty() || cur->value)
+            {
+                parseHadError = true;
+                const std::string msg =
+                    "duplicate or conflicting field path '" + fieldPath +
+                    "' in anonymous object literal";
+                fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                        yycolumn_token > 0 ? yycolumn_token : 1,
+                        mlang::diag::format_message_with_code("MLANG-E1010", msg)
+                            .c_str());
+                return false;
+            }
+            cur->value = value;
+        }
+        else if(cur->value)
+        {
+            parseHadError = true;
+            const std::string msg =
+                "field path '" + fieldPath +
+                "' conflicts with an existing leaf field in anonymous object "
+                "literal";
+            fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                    yycolumn_token > 0 ? yycolumn_token : 1,
+                    mlang::diag::format_message_with_code("MLANG-E1010", msg)
+                        .c_str());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static TypeNode* hoist_anonymous_object_shape(AnonymousObjectShape* shape,
+                                              int line);
+
+static StructMemberListNode* build_anonymous_object_members(
+    AnonymousObjectShape* shape, int line)
+{
+    auto* members = new StructMemberListNode();
+    if(!shape)
+        return members;
+
+    for(auto& entry : shape->children)
+    {
+        TypeNode* fieldType = nullptr;
+        AnonymousObjectShape* child = entry.second;
+        if(child && !child->children.empty())
+        {
+            fieldType = hoist_anonymous_object_shape(child, line);
+        }
+        else if(child)
+        {
+            fieldType = infer_anonymous_object_field_type(child->value, line);
+        }
+
+        if(!fieldType)
+        {
+            parseHadError = true;
+            const std::string msg =
+                "cannot infer type for field '" + entry.first +
+                "' in anonymous object literal; use a typed struct "
+                "initializer here";
+            fprintf(stderr, "%s:%d:%d: error: %s\n", g_sourceFile, line,
+                    yycolumn_token > 0 ? yycolumn_token : 1,
+                    mlang::diag::format_message_with_code("MLANG-E1011", msg)
+                        .c_str());
+            fieldType = new TypeNode(TypeNode::TYPE_INT);
+        }
+
+        members->addMember(new StructMemberNode(
+            /*isVar=*/0, fieldType, entry.first, /*initExpr=*/nullptr));
+    }
+
+    return members;
+}
+
+static TypeNode* hoist_anonymous_object_shape(AnonymousObjectShape* shape,
+                                              int line)
+{
+    char* name = make_anonymous_object_name(line);
+    StructMemberListNode* members = build_anonymous_object_members(shape, line);
+    ASTNode* def = mla_ast_struct_def(name, NULL, members, 0, 0);
+    g_hoistedInlineStructs.push_back(finalize_struct_def_ast(def, line));
+    return new StructTypeRefNode(name);
+}
+
+static StructLiteralNode* materialize_anonymous_object_literal(
+    StructLiteralNode* lit, int line)
+{
+    if(!lit || !lit->structName.empty())
+        return lit;
+
+    AnonymousObjectShape root;
+    for(auto& field : lit->fields)
+    {
+        if(!insert_anonymous_object_shape(&root, field.first, field.second, line))
+            return lit;
+    }
+
+    TypeNode* rootType = hoist_anonymous_object_shape(&root, line);
+    if(auto* rootStruct = dynamic_cast<StructTypeRefNode*>(rootType))
+        lit->structName = rootStruct->structName;
+    return lit;
+}
+
+static TypeNode* infer_anonymous_object_field_type(ExpressionNode* expr, int line)
+{
+    if(!expr)
+        return nullptr;
+
+    if(dynamic_cast<IntLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_I64);
+    if(dynamic_cast<BoolLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_BOOL);
+    if(dynamic_cast<FloatLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_FLOAT);
+    if(dynamic_cast<DoubleLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_DOUBLE);
+    if(dynamic_cast<StringLiteralNode*>(expr))
+        return new TypeNode(TypeNode::TYPE_STR8);
+
+    if(auto* list = dynamic_cast<ListLiteralNode*>(expr))
+    {
+        TypeNode* elemType = new TypeNode(TypeNode::TYPE_I64);
+        if(list->elements && !list->elements->elements.empty())
+        {
+            TypeNode* inferred =
+                infer_anonymous_object_field_type(list->elements->elements[0],
+                                                  line);
+            if(inferred)
+                elemType = inferred;
+        }
+        return new GenericListTypeNode(elemType);
+    }
+
+    if(auto* map = dynamic_cast<MapLiteralNode*>(expr))
+    {
+        TypeNode* keyType = new TypeNode(TypeNode::TYPE_STR8);
+        TypeNode* valueType = new TypeNode(TypeNode::TYPE_I64);
+        if(map->entries && !map->entries->entries.empty())
+        {
+            auto* first = map->entries->entries[0];
+            if(TypeNode* inferredKey =
+                   infer_anonymous_object_field_type(first->key, line))
+                keyType = inferredKey;
+            if(TypeNode* inferredValue =
+                   infer_anonymous_object_field_type(first->value, line))
+                valueType = inferredValue;
+        }
+        return new MapTypeNode(keyType, valueType);
+    }
+
+    if(auto* tuple = dynamic_cast<TupleLiteralNode*>(expr))
+    {
+        auto* types = new TypeListNode();
+        if(tuple->elements)
+        {
+            for(auto* element : tuple->elements->elements)
+            {
+                TypeNode* inferred =
+                    infer_anonymous_object_field_type(element, line);
+                if(!inferred)
+                    return nullptr;
+                types->addType(inferred);
+            }
+        }
+        return new TupleTypeNode(types);
+    }
+
+    if(auto* lit = dynamic_cast<StructLiteralNode*>(expr))
+    {
+        if(lit->structName.empty())
+            lit = materialize_anonymous_object_literal(lit, line);
+
+        if(lit->structName.empty())
+            return nullptr;
+
+        if(lit->typeArgs.empty())
+            return new StructTypeRefNode(lit->structName);
+
+        auto* generic = new GenericStructTypeRefNode(lit->structName);
+        for(const auto& arg : lit->typeArgs)
+            generic->typeArgs.push_back(infer_type_node_from_type_arg_text(arg));
+        return generic;
+    }
+
+    return nullptr;
 }
 
 static ASTNode* finalize_struct_def_ast(ASTNode* node, int line)
@@ -714,7 +1011,7 @@ enum UpdatePosition
 %token ASM VOLATILE SIZEOF
 %token TRUE_LIT FALSE_LIT
 %token I8 I16 I32 I64 U8 U16 U32 U64
-%token LET VAR
+%token LET VAR OBJECT
 %token FOR WHILE IN DOTDOT DOTDOTEQ BREAK CONTINUE
 %token MOD USE AS TYPE_KW COLONCOLON
 %token PRINTLN PRINT EPRINTLN EPRINT DEBUGPRINT DEBUGJSONPRINT FORMAT ASSERT_EQ ASSERT STATIC_ASSERT UNSAFE
@@ -1998,6 +2295,12 @@ condition_primary
         }
     | SIZEOF LPAREN block_condition_expression RPAREN
         { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
+    | OBJECT LBRACE struct_field_init_list RBRACE
+        {
+            auto* lit = static_cast<StructLiteralNode*>(
+                mla_ast_struct_literal(strdup(""), NULL, $3, yylineno));
+            $$ = materialize_anonymous_object_literal(lit, yylineno);
+        }
     | asm_expression { $$ = $1; }
     ;
 
@@ -2203,6 +2506,12 @@ primary_expression
     | SIZEOF LPAREN expression RPAREN
         { $$ = mla_ast_sizeof_value_expression($3, yylineno); }
     | asm_expression { $$ = $1; }
+    | OBJECT LBRACE struct_field_init_list RBRACE
+        {
+            auto* lit = static_cast<StructLiteralNode*>(
+                mla_ast_struct_literal(strdup(""), NULL, $3, yylineno));
+            $$ = materialize_anonymous_object_literal(lit, yylineno);
+        }
     ;
 
 /* Struct literal: StructName { field: value, ... } */

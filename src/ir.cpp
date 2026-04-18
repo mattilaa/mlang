@@ -21720,7 +21720,33 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
         if(partIndex + 1 == fieldParts.size())
         {
-            llvm::Value* fieldValue = generateExpression(valueExpr);
+            llvm::Value* fieldValue = nullptr;
+            if(auto* nestedLit = dynamic_cast<StructLiteralNode*>(valueExpr))
+            {
+                if(nestedLit->structName.empty())
+                {
+                    std::string expectedStructName =
+                        getNestedStructTypeName(currentMembers[memberIndex].second);
+                    if(expectedStructName.empty())
+                    {
+                        reportError(node->line,
+                                    "field '" + fullFieldName +
+                                        "' in struct '" + currentStructName +
+                                        "' does not accept an anonymous object "
+                                        "literal");
+                        return nullptr;
+                    }
+
+                    StructLiteralNode contextual(expectedStructName);
+                    contextual.line = nestedLit->line;
+                    contextual.fields = nestedLit->fields;
+                    contextual.typeArgs = nestedLit->typeArgs;
+                    fieldValue = generateStructLiteral(&contextual);
+                }
+            }
+
+            if(!fieldValue)
+                fieldValue = generateExpression(valueExpr);
             if(!fieldValue)
             {
                 reportError(node->line,

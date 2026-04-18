@@ -39,6 +39,16 @@ struct TestOuterState {
     var inner: TestInnerState;
 };
 
+struct ToolbarTitle {
+    let title: str8 = "";
+    let height: i32 = 0;
+};
+
+struct ScreenLayout {
+    let header: ToolbarTitle = ToolbarTitle { title: "", height: 0 };
+    let body_width: i32 = 0;
+};
+
 #[test]
 fn test_struct_field_list_mutation_methods() {
     var st: TestInnerState = TestInnerState { values: [] };
@@ -62,6 +72,19 @@ fn test_nested_struct_field_list_mutation_methods() {
     verify_eq(2, st.inner.values.len());
     verify_eq(22, st.inner.values.pop());
     verify_eq(1, st.inner.values.len());
+}
+
+#[test]
+fn test_typed_struct_init_accepts_contextual_nested_object_literal() {
+    let view: ScreenLayout{
+        header.title: "Main",
+        header.height: 48,
+        body_width: 900
+    };
+
+    verify_true(eq(view.header.title, "Main") == 1);
+    verify_eq_i32(48, view.header.height);
+    verify_eq_i32(900, view.body_width);
 }
 
 struct ParseStateLike {
