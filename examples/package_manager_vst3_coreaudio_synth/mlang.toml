@@ -65,6 +65,9 @@ commands = [
 name = "preview-sine"
 print = "[example] Running the CoreAudio sine-wave preview"
 workdir = "{{root}}"
+# `mlang pkg run preview-sine` forms a one-command workflow:
+# pkg run will fetch dependencies first if needed, then this task pulls in
+# the sequential build chain via `depends_on = ["build-artifacts"]`.
 depends_on = ["build-artifacts"]
 log_output = false
 shell = [
@@ -75,6 +78,8 @@ shell = [
 name = "preview-square"
 print = "[example] Running the CoreAudio square-wave preview"
 workdir = "{{root}}"
+# Same one-command workflow as `preview-sine`, but launches the square-wave
+# variant after the build chain completes.
 depends_on = ["build-artifacts"]
 log_output = false
 shell = [

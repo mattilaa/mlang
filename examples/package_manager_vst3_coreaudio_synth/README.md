@@ -67,6 +67,32 @@ The manifest will:
 4. configure a local CMake project that uses Steinberg's SDK helpers
 5. build the VST3 bundle target and the CoreAudio preview app
 
+## One-Command Workflow
+
+You do not need to run `pkg fetch` and `pkg build` manually first. This
+example is also set up so a single `pkg run` command performs the whole flow
+sequentially:
+
+```sh
+../../build/mlang pkg run preview-square
+```
+
+That one command will:
+
+1. fetch or update `vst3sdk` if needed
+2. initialize its git submodules because the dependency declares
+   `submodules = true`
+3. run the build dependency chain for `preview-square`
+4. launch the standalone CoreAudio preview app
+
+The separate commands are still useful when you want finer control:
+
+```sh
+../../build/mlang pkg fetch
+../../build/mlang pkg build
+../../build/mlang pkg run preview-square
+```
+
 ## Preview The Oscillator
 
 Play the VST3 processor as a sine wave:

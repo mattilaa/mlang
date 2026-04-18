@@ -211,6 +211,26 @@ Tasks can model a small workflow graph with:
 - `command` / `commands`
 - `shell` / `script`
 
+`pkg run` also performs dependency fetching before the task graph runs. That
+means a task can act as a one-command workflow entrypoint: `pkg run <task>`
+will fetch dependencies if needed, then execute the task's `depends_on` /
+`join_on` chain, then launch the final command.
+
+The VST3 CoreAudio example in this repository uses that pattern:
+
+```sh
+cd examples/package_manager_vst3_coreaudio_synth
+../../build/mlang pkg run preview-square
+```
+
+In that example, one command:
+
+1. fetches `vst3sdk`
+2. initializes git submodules because the dependency declares
+   `submodules = true`
+3. builds the VST3/CoreAudio artifacts through the task dependency chain
+4. runs the preview app
+
 ### `pkg clean`
 
 Remove the package-local artifact tree created by `fetch` and `build`:
