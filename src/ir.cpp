@@ -11787,6 +11787,18 @@ void CodeGenerator::generateStructDefinition(StructDefNode* node)
     structTypes[node->name] = structType;
     structMembers[node->name] = members;
     structFieldLayouts[node->name] = layouts;
+
+    // Track per-field default initializers so that struct-literal
+    // construction can fill in unspecified fields from declaration-site
+    // defaults (e.g. `let x: i32{7};` or `let p: Point{x: 3};`).
+    {
+        auto& defaults = structMemberDefaults[node->name];
+        for(auto* member : node->members->members)
+        {
+            if(member && member->initExpr)
+                defaults[member->name] = member->initExpr;
+        }
+    }
     if(node->deriveDebug)
         debugStructs.insert(node->name);
 
@@ -21818,6 +21830,24 @@ llvm::Value* CodeGenerator::generateStructLiteral(StructLiteralNode* node)
 
     // Build the struct value
     llvm::Value* structVal = llvm::Constant::getNullValue(structType);
+
+    // Apply per-member defaults (from `var x: T{expr};` or
+    // `let x: T = expr;` field declarations). Explicit field initializers in
+    // the literal below will overwrite anything set here.
+    {
+        auto defaultsIt = structMemberDefaults.find(structTypeName);
+        if(defaultsIt != structMemberDefaults.end())
+        {
+            for(const auto& kv : defaultsIt->second)
+            {
+                structVal = applyNestedFieldInit(
+                    structTypeName, structType, members, structVal,
+                    {kv.first}, 0, kv.second, kv.first);
+                if(!structVal)
+                    return nullptr;
+            }
+        }
+    }
 
     // Process each field initialization
     for(const auto& fieldInit : node->fields)
