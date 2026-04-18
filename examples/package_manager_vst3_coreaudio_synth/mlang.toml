@@ -1,0 +1,91 @@
+[package]
+name = "vst3_coreaudio_mlang_synth"
+version = "0.1.0"
+
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", build = "none", spinner = false }
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.0"
+build_dir = "build"
+deps_dir = "build/deps"
+
+[[task]]
+name = "toolchain-check"
+print = "[example] Checking macOS, MLang, CMake, C++, Git, and archiver toolchains"
+workdir = "{{root}}"
+commands = [
+  "sh -c 'if [ \"$(uname -s)\" != Darwin ]; then echo This example is macOS-only because it includes a CoreAudio preview target.; exit 1; fi'",
+  "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
+  "sh -c 'for tool in cmake c++ git ar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
+]
+
+[[task]]
+name = "prepare-build-tree"
+print = "[example] Preparing build output directories"
+workdir = "{{root}}"
+commands = [
+  "mkdir -p {{build_dir}}/obj {{build_dir}}/cmake"
+]
+
+[[task]]
+name = "prepare-vst3-sdk"
+print = "[example] Initializing VST3 SDK submodules"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+commands = [
+  "git -C {{deps_dir}}/vst3sdk submodule update --init --recursive"
+]
+
+[[task]]
+name = "compile-mlang-dsp"
+phase = "compile"
+print = "[example] Compiling the MLang oscillator DSP object"
+workdir = "{{root}}"
+depends_on = ["toolchain-check", "prepare-build-tree"]
+language = "mlang"
+source = "src/mlang_oscillator.mla"
+output = "{{build_dir}}/obj/mlang_oscillator.o"
+compile_only = true
+opt_level = "O2"
+
+[[task]]
+name = "configure-cmake"
+print = "[example] Configuring the local CMake project for VST3 and CoreAudio targets"
+workdir = "{{root}}"
+depends_on = ["prepare-vst3-sdk", "compile-mlang-dsp"]
+commands = [
+  "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLANG_DSP_OBJECT={{root}}/{{build_dir}}/obj/mlang_oscillator.o"
+]
+
+[[task]]
+name = "build-artifacts"
+phase = "build"
+print = "[example] Building the VST3 instrument bundle and CoreAudio preview app"
+workdir = "{{root}}"
+depends_on = ["configure-cmake"]
+commands = [
+  "cmake --build {{build_dir}}/cmake --target MLangMiniSynth mlang_coreaudio_preview -j4"
+]
+
+[[task]]
+name = "preview-sine"
+print = "[example] Running the CoreAudio sine-wave preview"
+workdir = "{{root}}"
+depends_on = ["build-artifacts"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/cmake/mlang_coreaudio_preview sine"
+]
+
+[[task]]
+name = "preview-square"
+print = "[example] Running the CoreAudio square-wave preview"
+workdir = "{{root}}"
+depends_on = ["build-artifacts"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/cmake/mlang_coreaudio_preview square"
+]

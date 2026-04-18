@@ -1,0 +1,78 @@
+/// \file mlang_oscillator.mla
+/// \ingroup examples
+/// \brief Tiny monophonic oscillator DSP written in MLang.
+///
+/// The C++ bridge calls the compiled symbols from both the VST3 plug-in and
+/// the CoreAudio preview app.
+
+extern fn sin(x: f64) -> f64;
+extern fn pow(x: f64, y: f64) -> f64;
+
+var kTwoPi: f64 = 6.28318530717958647692;
+
+var g_sampleRate: f64 = 48000.0;
+var g_phase: f64 = 0.0;
+var g_frequency: f64 = 440.0;
+var g_velocity: f32 = 0.0f;
+var g_waveform: i32 = 0;
+var g_active: bool = false;
+
+fn midi_note_to_frequency(note: i32) -> f64 {
+    let semitones: f64 = f64(note - 69) / 12.0;
+    return 440.0 * pow(2.0, semitones);
+}
+
+fn mlang_vst3_reset() {
+    g_sampleRate = 48000.0;
+    g_phase = 0.0;
+    g_frequency = 440.0;
+    g_velocity = 0.0f;
+    g_waveform = 0;
+    g_active = false;
+}
+
+fn mlang_vst3_set_sample_rate(sampleRate: f32) {
+    if sampleRate > 1000.0f {
+        g_sampleRate = f64(sampleRate);
+    }
+}
+
+fn mlang_vst3_set_waveform(kind: i32) {
+    g_waveform = kind;
+}
+
+fn mlang_vst3_note_on(note: i32, velocity: f32) {
+    g_frequency = midi_note_to_frequency(note);
+    g_velocity = velocity;
+    g_active = true;
+}
+
+fn mlang_vst3_note_off() {
+    g_active = false;
+}
+
+fn mlang_vst3_next_sample() -> f32 {
+    if !g_active {
+        return 0.0f;
+    }
+
+    let sineValue: f64 = sin(g_phase);
+    var out: f32 = f32(sineValue) * 0.20f;
+
+    if g_waveform != 0 {
+        if sineValue >= 0.0 {
+            out = 0.20f;
+        } else {
+            out = -0.20f;
+        }
+    }
+
+    out = out * g_velocity;
+
+    g_phase = g_phase + (kTwoPi * g_frequency / g_sampleRate);
+    if g_phase >= kTwoPi {
+        g_phase = g_phase - kTwoPi;
+    }
+
+    return out;
+}
