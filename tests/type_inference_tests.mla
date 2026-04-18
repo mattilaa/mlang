@@ -107,3 +107,46 @@ fn test_infer_builder_style_object_tree_and_nested_access() {
     verify(!(view.header.appTitle.width != 200));
     verify(!(eq(view.header.appTitle.text, "My App") != 1));
 }
+
+#[test]
+fn test_infer_builder_style_http_request_example_with_headers() {
+    let request = add<HttpRequest>()
+        | Method{"GET"}
+        | Url{"https://api.example.com/v1/items"}
+        | add<Header>(
+            Name{"Authorization"},
+            Value{"Bearer token-123"}
+        )
+        | add<Header>(
+            Name{"ContentType"},
+            Value{"application/json"}
+        );
+
+    verify(!(eq(request.method, "GET") != 1));
+    verify(!(eq(request.url, "https://api.example.com/v1/items") != 1));
+    verify(!(eq(request.authorization.value, "Bearer token-123") != 1));
+    verify(!(eq(request.contentType.value, "application/json") != 1));
+}
+
+#[test]
+fn test_infer_builder_style_var_tree_mutation_updates_nested_data() {
+    var view = add<View>()
+        | Name{"MainView"}
+        | Title{"Before"}
+        | add<View>(
+            Name{"Header"},
+            Height{60},
+            add<Widget>(
+                Name{"AppTitle"},
+                Text{"Old Title"}
+            )
+        );
+
+    view.title = "After";
+    view.header.height = 72;
+    view.header.appTitle.text = "New Title";
+
+    verify(!(eq(view.title, "After") != 1));
+    verify(!(view.header.height != 72));
+    verify(!(eq(view.header.appTitle.text, "New Title") != 1));
+}
