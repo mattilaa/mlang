@@ -4514,6 +4514,16 @@ static std::string colorize_tree_text(const std::string& text, bool enableColor,
     return branch_color_code(*colorInfo) + text + "\033[0m";
 }
 
+static std::string colorize_host_label(const std::string& hostName,
+                                       bool enableColor)
+{
+    if(!enableColor)
+        return hostName;
+    if(terminal_supports_truecolor())
+        return "\033[38;2;255;215;0m" + hostName + "\033[0m";
+    return std::string("\033[33m") + hostName + "\033[0m";
+}
+
 static std::string build_task_tree_prefix(
     const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
     bool enableColor, std::optional<BranchColorInfo> colorInfo)
@@ -4674,7 +4684,8 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
 
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
-    pkg_info_line("Task tree for '" + taskName + "' (" + hostName + "):");
+    pkg_info_line("Task tree for '" + taskName + "' ("
+                  + colorize_host_label(hostName, enableColor) + "):");
     std::vector<std::string> treeStack;
     print_task_tree_ascii_node(tasks, hostName, taskName, orderMap, {}, true,
                                true, enableColor, std::nullopt, treeStack);
@@ -4683,7 +4694,16 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
     pkg_info_line("Execution order:");
     for(size_t i = 0; i < order.size(); ++i)
     {
-        pkg_info_line("  " + std::to_string(i + 1) + ". " + order[i]);
+        std::string line = "  " + std::to_string(i + 1) + ". " + order[i];
+        if(enableColor)
+        {
+            line = colorize_tree_text(
+                line, true,
+                BranchColorInfo{ i, std::max<size_t>(order.size(), 1),
+                                 i, std::max<size_t>(order.size(), 1),
+                                 false, 1.0 });
+        }
+        pkg_info_line(line);
     }
     return 0;
 }
@@ -4733,12 +4753,13 @@ static int print_task_overview_for_manifest(const PackageManifest& pkg,
     const auto entrypoints = find_manifest_task_entrypoints(tasks, hostName);
     if(entrypoints.empty())
     {
-        pkg_info_line("No runnable tasks for host '" + hostName + "'.");
+        pkg_info_line("No runnable tasks for host '"
+                      + colorize_host_label(hostName, enableColor) + "'.");
         return 0;
     }
 
     pkg_info_line("Runnable task entrypoints for '" + pkg.manifestPath.string() +
-                  "' (" + hostName + "):");
+                  "' (" + colorize_host_label(hostName, enableColor) + "):");
     for(size_t i = 0; i < entrypoints.size(); ++i)
     {
         if(i > 0)
