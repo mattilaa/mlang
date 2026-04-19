@@ -1,7 +1,10 @@
 #include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudio/CoreAudio.h>
+#include <CoreFoundation/CoreFoundation.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
@@ -33,6 +36,7 @@ struct PlaybackState
 {
     AudioQueueRef queue {nullptr};
     StereoWav wav;
+    std::string outputDeviceName;
     std::atomic<std::uint64_t> frameCursor {0};
     std::atomic<std::uint64_t> totalFrames {0};
     std::atomic<std::uint32_t> sampleRate {0};
@@ -53,6 +57,16 @@ constexpr std::uint32_t kFramesPerBuffer = 512;
 constexpr std::uint32_t kBufferCount = 3;
 constexpr std::uint32_t kRingCapacity = 32768;
 
+struct OutputDeviceInfo
+{
+    AudioDeviceID id {kAudioObjectUnknown};
+    std::string uid;
+    std::string name;
+    std::uint32_t outputChannels {0};
+    Float64 nominalSampleRate {0.0};
+    bool isDefaultOutput {false};
+};
+
 void setLastError(const char* text)
 {
     g_state.lastError = text ? text : "unknown error";
@@ -61,6 +75,15 @@ void setLastError(const char* text)
 void clearLastError()
 {
     g_state.lastError.clear();
+}
+
+char* dupString(const std::string& s)
+{
+    char* out = static_cast<char*>(std::malloc(s.size() + 1));
+    if(!out)
+        return nullptr;
+    std::memcpy(out, s.c_str(), s.size() + 1);
+    return out;
 }
 
 void setAudioError(const char* stage, OSStatus status)
@@ -111,6 +134,230 @@ float clampUnit(float x)
     if(x < -1.0f)
         return -1.0f;
     return x;
+}
+
+std::string cfStringToUtf8(CFStringRef s)
+{
+    if(!s)
+        return {};
+    const CFIndex length = CFStringGetLength(s);
+    const CFIndex maxSize =
+        CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+    std::string out(static_cast<std::size_t>(maxSize), '\0');
+    if(!CFStringGetCString(s, out.data(), maxSize, kCFStringEncodingUTF8))
+        return {};
+    out.resize(std::strlen(out.c_str()));
+    return out;
+}
+
+std::string asciiLower(std::string s)
+{
+    for(char& c : s)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+bool hasOutputStreams(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress addr {
+        kAudioDevicePropertyStreams,
+        kAudioDevicePropertyScopeOutput,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    const OSStatus rc =
+        AudioObjectGetPropertyDataSize(id, &addr, 0, nullptr, &size);
+    return rc == noErr && size > 0;
+}
+
+std::uint32_t outputChannelCount(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress addr {
+        kAudioDevicePropertyStreamConfiguration,
+        kAudioDevicePropertyScopeOutput,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(id, &addr, 0, nullptr, &size) != noErr || size == 0)
+        return 0;
+
+    std::vector<std::uint8_t> bytes(size);
+    auto* bufferList = reinterpret_cast<AudioBufferList*>(bytes.data());
+    if(AudioObjectGetPropertyData(id, &addr, 0, nullptr, &size, bufferList) != noErr)
+        return 0;
+
+    std::uint32_t channels = 0;
+    for(UInt32 i = 0; i < bufferList->mNumberBuffers; ++i)
+        channels += bufferList->mBuffers[i].mNumberChannels;
+    return channels;
+}
+
+Float64 deviceNominalSampleRate(AudioDeviceID id)
+{
+    AudioObjectPropertyAddress addr {
+        kAudioDevicePropertyNominalSampleRate,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    Float64 rate = 0.0;
+    UInt32 size = sizeof(rate);
+    if(AudioObjectGetPropertyData(id, &addr, 0, nullptr, &size, &rate) != noErr)
+        return 0.0;
+    return rate;
+}
+
+AudioDeviceID defaultOutputDeviceId()
+{
+    AudioObjectPropertyAddress addr {
+        kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    AudioDeviceID id = kAudioObjectUnknown;
+    UInt32 size = sizeof(id);
+    if(AudioObjectGetPropertyData(kAudioObjectSystemObject,
+                                  &addr, 0, nullptr, &size, &id) != noErr)
+        return kAudioObjectUnknown;
+    return id;
+}
+
+std::vector<OutputDeviceInfo> listOutputDevicesInternal()
+{
+    AudioObjectPropertyAddress devicesAddr {
+        kAudioHardwarePropertyDevices,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    if(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject,
+                                      &devicesAddr, 0, nullptr, &size) != noErr ||
+       size == 0)
+        return {};
+
+    std::vector<AudioDeviceID> ids(size / sizeof(AudioDeviceID));
+    if(AudioObjectGetPropertyData(kAudioObjectSystemObject,
+                                  &devicesAddr, 0, nullptr, &size, ids.data()) != noErr)
+        return {};
+
+    const AudioDeviceID defaultOutput = defaultOutputDeviceId();
+    std::vector<OutputDeviceInfo> out;
+    out.reserve(ids.size());
+    for(AudioDeviceID id : ids)
+    {
+        if(id == kAudioObjectUnknown || !hasOutputStreams(id))
+            continue;
+
+        AudioObjectPropertyAddress nameAddr {
+            kAudioObjectPropertyName,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        AudioObjectPropertyAddress uidAddr {
+            kAudioDevicePropertyDeviceUID,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+
+        CFStringRef nameRef = nullptr;
+        CFStringRef uidRef = nullptr;
+        UInt32 nameSize = sizeof(nameRef);
+        UInt32 uidSize = sizeof(uidRef);
+        if(AudioObjectGetPropertyData(id, &nameAddr, 0, nullptr, &nameSize, &nameRef) != noErr)
+            continue;
+        if(AudioObjectGetPropertyData(id, &uidAddr, 0, nullptr, &uidSize, &uidRef) != noErr)
+        {
+            if(nameRef)
+                CFRelease(nameRef);
+            continue;
+        }
+
+        OutputDeviceInfo info;
+        info.id = id;
+        info.name = cfStringToUtf8(nameRef);
+        info.uid = cfStringToUtf8(uidRef);
+        info.outputChannels = outputChannelCount(id);
+        info.nominalSampleRate = deviceNominalSampleRate(id);
+        info.isDefaultOutput = (id == defaultOutput);
+        out.push_back(std::move(info));
+
+        if(nameRef)
+            CFRelease(nameRef);
+        if(uidRef)
+            CFRelease(uidRef);
+    }
+    return out;
+}
+
+bool resolveOutputDevice(const char* selector, OutputDeviceInfo& out)
+{
+    if(!selector || !selector[0])
+        return false;
+
+    const std::string wanted = selector;
+    const std::string wantedLower = asciiLower(wanted);
+    const std::vector<OutputDeviceInfo> devices = listOutputDevicesInternal();
+
+    for(const auto& device : devices)
+    {
+        if(device.uid == wanted)
+        {
+            out = device;
+            return true;
+        }
+    }
+    for(const auto& device : devices)
+    {
+        if(asciiLower(device.name) == wantedLower)
+        {
+            out = device;
+            return true;
+        }
+    }
+    for(const auto& device : devices)
+    {
+        if(asciiLower(device.name).find(wantedLower) != std::string::npos)
+        {
+            out = device;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool setQueueOutputDevice(AudioQueueRef queue, const char* selector)
+{
+    if(!selector || !selector[0])
+    {
+        g_state.outputDeviceName.clear();
+        return true;
+    }
+
+    OutputDeviceInfo device;
+    if(!resolveOutputDevice(selector, device))
+    {
+        setLastError("output device not found");
+        return false;
+    }
+
+    CFStringRef uid = CFStringCreateWithCString(
+        kCFAllocatorDefault, device.uid.c_str(), kCFStringEncodingUTF8);
+    if(!uid)
+    {
+        setLastError("failed to create audio device UID");
+        return false;
+    }
+
+    const OSStatus rc = AudioQueueSetProperty(
+        queue, kAudioQueueProperty_CurrentDevice, &uid, sizeof(uid));
+    CFRelease(uid);
+    if(rc != noErr)
+    {
+        setAudioError("AudioQueueSetProperty(CurrentDevice)", rc);
+        return false;
+    }
+
+    g_state.outputDeviceName = device.name;
+    return true;
 }
 
 bool loadWav(const char* path, StereoWav& out)
@@ -317,6 +564,16 @@ void writeRingSample(float left, float right)
         (g_state.ringWrite + 1u) % static_cast<std::uint32_t>(g_state.ringLeft.size());
 }
 
+void clearVisualizationState()
+{
+    std::lock_guard<std::mutex> lock(g_state.ringMutex);
+    std::fill(g_state.ringLeft.begin(), g_state.ringLeft.end(), 0.0f);
+    std::fill(g_state.ringRight.begin(), g_state.ringRight.end(), 0.0f);
+    g_state.ringWrite = 0;
+    g_state.levelLeft.store(0.0f);
+    g_state.levelRight.store(0.0f);
+}
+
 void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer)
 {
     float* samples = static_cast<float*>(buffer->mAudioData);
@@ -372,7 +629,8 @@ void outputCallback(void* userData, AudioQueueRef queue, AudioQueueBufferRef buf
 
 } // namespace
 
-extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath)
+extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath,
+                                           mlang_string outputDeviceSelector)
 {
     if(!wavPath || !wavPath[0])
     {
@@ -394,9 +652,7 @@ extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath)
     g_state.running.store(1);
     g_state.ringLeft.assign(kRingCapacity, 0.0f);
     g_state.ringRight.assign(kRingCapacity, 0.0f);
-    g_state.ringWrite = 0;
-    g_state.levelLeft.store(0.0f);
-    g_state.levelRight.store(0.0f);
+    clearVisualizationState();
 
     AudioStreamBasicDescription format {};
     format.mSampleRate = static_cast<Float64>(g_state.wav.sampleRate);
@@ -413,6 +669,12 @@ extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath)
     if(createRc != noErr)
     {
         setAudioError("AudioQueueNewOutput", createRc);
+        stopPlayback();
+        return -1;
+    }
+
+    if(!setQueueOutputDevice(g_state.queue, outputDeviceSelector))
+    {
         stopPlayback();
         return -1;
     }
@@ -470,9 +732,90 @@ extern "C" int64_t oscilloscope_demo_current_frame(void)
     return static_cast<std::int64_t>(g_state.frameCursor.load());
 }
 
+extern "C" int64_t oscilloscope_demo_seek_abs_frames(int64_t frame)
+{
+    const std::uint64_t totalFrames = g_state.totalFrames.load();
+    if(totalFrames == 0)
+        return 0;
+
+    std::int64_t clamped = frame;
+    if(clamped < 0)
+        clamped = 0;
+    const std::int64_t maxFrame = static_cast<std::int64_t>(totalFrames);
+    if(clamped > maxFrame)
+        clamped = maxFrame;
+
+    g_state.frameCursor.store(static_cast<std::uint64_t>(clamped));
+    g_state.finished.store(clamped >= maxFrame ? 1 : 0);
+    clearVisualizationState();
+    clearLastError();
+    return clamped;
+}
+
+extern "C" int64_t oscilloscope_demo_seek_rel_frames(int64_t delta)
+{
+    const std::int64_t current =
+        static_cast<std::int64_t>(g_state.frameCursor.load());
+    return oscilloscope_demo_seek_abs_frames(current + delta);
+}
+
 extern "C" mlang_string oscilloscope_demo_last_error(void)
 {
     return g_state.lastError.empty() ? "" : g_state.lastError.c_str();
+}
+
+extern "C" mlang_string oscilloscope_demo_output_device(void)
+{
+    return g_state.outputDeviceName.empty() ? "" : g_state.outputDeviceName.c_str();
+}
+
+extern "C" mlang_string oscilloscope_demo_list_output_devices(void)
+{
+    const std::vector<OutputDeviceInfo> devices = listOutputDevicesInternal();
+    std::string out;
+    for(const auto& device : devices)
+    {
+        out += device.name;
+        if(!device.uid.empty())
+        {
+            out += "  [uid: ";
+            out += device.uid;
+            out += "]";
+        }
+        out += '\n';
+    }
+    if(out.empty())
+        out = "No CoreAudio output devices found.\n";
+    return dupString(out);
+}
+
+extern "C" mlang_string oscilloscope_demo_list_output_devices_verbose(void)
+{
+    const std::vector<OutputDeviceInfo> devices = listOutputDevicesInternal();
+    std::string out;
+    for(const auto& device : devices)
+    {
+        out += device.name.empty() ? "(unnamed device)" : device.name;
+        if(device.isDefaultOutput)
+            out += "  [default output]";
+        out += '\n';
+
+        out += "  uid: ";
+        out += device.uid.empty() ? "(none)" : device.uid;
+        out += '\n';
+
+        char info[128];
+        std::snprintf(info, sizeof(info),
+                      "  id: %u\n  output channels: %u\n  nominal sample rate: %.0f Hz\n",
+                      static_cast<unsigned>(device.id),
+                      static_cast<unsigned>(device.outputChannels),
+                      device.nominalSampleRate);
+        out += info;
+        out += '\n';
+    }
+    if(out.empty())
+        out = "No CoreAudio output devices found.\n";
+    return dupString(out);
 }
 
 extern "C" mlang_list_t oscilloscope_demo_snapshot_i64(int32_t channel, int64_t window)

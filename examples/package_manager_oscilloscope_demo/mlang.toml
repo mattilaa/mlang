@@ -14,6 +14,7 @@ deps_dir = "build/deps"
 
 [tool.mlang.options]
 wav_path = "../fft_example/illusion.wav"
+audio_output = ""
 
 [[task]]
 name = "toolchain-check"
@@ -79,6 +80,7 @@ libs = ["mlang_std"]
 
 [task.host.darwin]
 linker_flags = [
+  "-framework CoreAudio",
   "-framework AudioToolbox",
   "-framework CoreFoundation"
 ]
@@ -90,5 +92,25 @@ workdir = "{{root}}"
 depends_on = ["link-demo"]
 log_output = false
 shell = [
-  "exec {{build_dir}}/oscilloscope_demo {{option.wav_path}}"
+  "exec {{build_dir}}/oscilloscope_demo '{{option.wav_path}}'"
+]
+
+[[task]]
+name = "list-devices"
+print = "[example] Listing CoreAudio output devices"
+workdir = "{{root}}"
+depends_on = ["link-demo"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/oscilloscope_demo --list-devices"
+]
+
+[[task]]
+name = "list-devices-verbose"
+print = "[example] Listing verbose CoreAudio output devices"
+workdir = "{{root}}"
+depends_on = ["link-demo"]
+log_output = false
+shell = [
+  "exec {{build_dir}}/oscilloscope_demo --list-devices --verbose"
 ]
