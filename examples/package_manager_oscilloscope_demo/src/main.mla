@@ -18,7 +18,12 @@ use std::esc::acs_meter;
 use std::esc::bg_rgb;
 use std::esc::bold_on;
 use std::esc::acs_hline;
+use std::esc::acs_llcorner;
+use std::esc::acs_lrcorner;
 use std::esc::acs_ssquare;
+use std::esc::acs_ulcorner;
+use std::esc::acs_urcorner;
+use std::esc::acs_vline;
 use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
 use std::esc::cmd_home;
@@ -36,6 +41,7 @@ use std::strbuf::builder_free;
 use std::strbuf::builder_new;
 use std::strbuf::builder_take_string;
 use std::strbuf::free;
+use std::strbuf::len;
 use std::term::TermSize;
 use std::term::stdin_enable_raw;
 use std::term::stdin_is_tty;
@@ -64,36 +70,64 @@ fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 {
 }
 
 fn viewport_width(cols: i32) -> i64 {
-    let width: i64 = cols - 18;
+    let width: i64 = cols - 22;
     return clamp_i64(width, 24, 148);
 }
 
 fn viewport_height(rows: i32) -> i64 {
-    let height: i64 = rows - 10;
+    let height: i64 = rows - 12;
     return clamp_i64(height, 8, 36);
 }
 
 fn sample_subrow(sample: i64, height: i64) -> i64 {
-    let clamped: i64 = clamp_i64(sample, -1000, 1000);
+    let clamped: i64 = clamp_i64(sample,-1000, 1000);
     let grid: i64 = height * 4;
-    return ((1000 - clamped) * (grid - 1)) / 2000;
+    return((1000 - clamped) * (grid - 1)) / 2000;
 }
 
 fn abs_i64(x: i64) -> i64 {
-    return x < 0 ? 0 - x : x;
+    return x < 0 ? 0 - x: x;
 }
 
 fn min_i64(a: i64, b: i64) -> i64 {
-    return a < b ? a : b;
+    return a < b ? a: b;
 }
 
 fn bput(builder: i64, s: str8) {
     let _ = builder_append(builder, s);
 }
 
+fn repeat_glyph(builder: i64, glyph: str8, count: i64) {
+    for _i in 0..count {
+        bput(builder, glyph);
+    }
+}
+
+fn draw_titled_box_top(builder: i64, left: str8, line: str8, right: str8,
+title: str8, width: i64) {
+    let titleLen: i64 = len(title);
+    let inner: i64 = width;
+    if titleLen <= 0 || titleLen >= inner - 2 {
+        bput(builder, left);
+        repeat_glyph(builder, line, inner);
+        bput(builder, right);
+        return;
+    }
+    let freeSpace: i64 = inner - titleLen - 2;
+    let leftFill: i64 = freeSpace / 2;
+    let rightFill: i64 = freeSpace - leftFill;
+    bput(builder, left);
+    repeat_glyph(builder, line, leftFill);
+    bput(builder, " ");
+    bput(builder, title);
+    bput(builder, " ");
+    repeat_glyph(builder, line, rightFill);
+    bput(builder, right);
+}
+
 fn segment_distance(rowSub: i64, a: i64, b: i64) -> i64 {
     let lo: i64 = min_i64(a, b);
-    let hi: i64 = a > b ? a : b;
+    let hi: i64 = a > b ? a: b;
     if rowSub >= lo && rowSub <= hi {
         return 0;
     }
@@ -151,6 +185,11 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     let farGlyph: str8 = acs_dot();
     let nearGlyph: str8 = acs_bullet();
     let coreGlyph: str8 = acs_ssquare();
+    let ul: str8 = acs_ulcorner();
+    let ur: str8 = acs_urcorner();
+    let ll: str8 = acs_llcorner();
+    let lr: str8 = acs_lrcorner();
+    let vl: str8 = acs_vline();
     bput(builder, cursor(cmd_home()));
     bput(builder, bg_rgb(13, 34, 52));
     bput(builder, fg_rgb(255, 170, 84));
@@ -158,7 +197,7 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     bput(builder, "Realtime Oscilloscope Demo");
     bput(builder, reset());
     let header: str8 = format!("  CoreAudio WAV output  sr={}Hz  frame={}/{}  progress={}%  L={}  R={}",
-                               sr, current, total, progressPct, levelLeft, levelRight);
+    sr, current, total, progressPct, levelLeft, levelRight);
     bput(builder, header);
     free(header);
     bput(builder, "\r\n");
@@ -170,12 +209,29 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     free(pathLine);
     bput(builder, "\r\n\r\n");
 
+    bput(builder, "  ");
+    bput(builder, fg_rgb(104, 142, 168));
+    draw_titled_box_top(builder, ul, axisGlyph, ur, "VU", 3);
+    bput(builder, "  ");
+    draw_titled_box_top(builder, ul, axisGlyph, ur, "Oscilloscope", width);
+    bput(builder, reset());
+    bput(builder, "\r\n");
+
     for row in 0..height {
         bput(builder, "  ");
+        bput(builder, fg_rgb(104, 142, 168));
+        bput(builder, vl);
+        bput(builder, reset());
         draw_meter_cell(builder, row, height, levelLeft);
         bput(builder, " ");
         draw_meter_cell(builder, row, height, levelRight);
+        bput(builder, fg_rgb(104, 142, 168));
+        bput(builder, vl);
+        bput(builder, reset());
         bput(builder, "  ");
+        bput(builder, fg_rgb(104, 142, 168));
+        bput(builder, vl);
+        bput(builder, reset());
         let center: i64 = height / 2;
         for col in 0..width {
             let base: i64 = col * 2;
@@ -187,9 +243,9 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
             let rightNext: i64 = sample_subrow(rightSamples[base + 2], height);
             let rowSub: i64 = row * 4 + 1;
             let leftDist: i64 = min_i64(segment_distance(rowSub, leftPrev, leftCur),
-                                        segment_distance(rowSub, leftCur, leftNext));
+            segment_distance(rowSub, leftCur, leftNext));
             let rightDist: i64 = min_i64(segment_distance(rowSub, rightPrev, rightCur),
-                                         segment_distance(rowSub, rightCur, rightNext));
+            segment_distance(rowSub, rightCur, rightNext));
             if leftDist == 0 && rightDist == 0 {
                 bput(builder, fg_rgb(248, 214, 132));
                 bput(builder, coreGlyph);
@@ -226,8 +282,32 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
                 bput(builder, " ");
             }
         }
+        bput(builder, fg_rgb(104, 142, 168));
+        bput(builder, vl);
+        bput(builder, reset());
         bput(builder, "\r\n");
     }
+
+    bput(builder, "  ");
+    bput(builder, fg_rgb(104, 142, 168));
+    bput(builder, ll);
+    repeat_glyph(builder, axisGlyph, 3);
+    bput(builder, lr);
+    bput(builder, "  ");
+    bput(builder, ll);
+    repeat_glyph(builder, axisGlyph, width);
+    bput(builder, lr);
+    bput(builder, reset());
+    bput(builder, "\r\n");
+
+    bput(builder, "   ");
+    bput(builder, fg_rgb(116, 240, 120));
+    bput(builder, "L");
+    bput(builder, " ");
+    bput(builder, fg_rgb(255, 110, 84));
+    bput(builder, "R");
+    bput(builder, reset());
+    bput(builder, "\r\n");
 
     bput(builder, "\r\n");
     bput(builder, fg_rgb(216, 220, 228));
@@ -250,6 +330,11 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     free(farGlyph);
     free(nearGlyph);
     free(coreGlyph);
+    free(ul);
+    free(ur);
+    free(ll);
+    free(lr);
+    free(vl);
     free(frame);
     builder_free(builder);
 }
