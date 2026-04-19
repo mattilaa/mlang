@@ -4538,8 +4538,8 @@ static std::string colorize_host_label(const std::string& hostName,
     if(!enableColor)
         return hostName;
     if(terminal_supports_truecolor())
-        return "\033[38;2;255;215;0m" + hostName + "\033[0m";
-    return std::string("\033[33m") + hostName + "\033[0m";
+        return "\033[38;2;255;140;0m" + hostName + "\033[0m";
+    return std::string("\033[38;5;208m") + hostName + "\033[0m";
 }
 
 static std::string build_task_tree_prefix(
