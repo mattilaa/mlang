@@ -4456,22 +4456,18 @@ static void print_task_tree_ascii_node(
     bool enableColor, std::optional<size_t> colorIndex,
     std::vector<std::string>& stack, bool printSelf = true)
 {
-    std::vector<bool> connectorAncestors = ancestorHasMore;
-    if(!isRoot && !printSelf && !connectorAncestors.empty())
-        connectorAncestors.pop_back();
-
     const auto taskOpt = find_task_spec(tasks, taskName);
     if(!taskOpt.has_value())
     {
         const std::string prefix = build_task_tree_prefix(
-            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
         std::cout << prefix << taskName << " (missing)\n";
         return;
     }
     if(std::find(stack.begin(), stack.end(), taskName) != stack.end())
     {
         const std::string prefix = build_task_tree_prefix(
-            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
         std::cout << prefix << taskName << " (cycle)\n";
         return;
     }
@@ -4481,7 +4477,7 @@ static void print_task_tree_ascii_node(
     if(printSelf)
     {
         const std::string prefix = build_task_tree_prefix(
-            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
         std::cout << prefix
                   << format_task_tree_numbered_label(taskName, orderMap,
                                                      edges.parallel)
@@ -4499,7 +4495,7 @@ static void print_task_tree_ascii_node(
     for(size_t i = 0; i < children.size(); ++i)
     {
         const bool childIsLast = i + 1 == children.size();
-        std::vector<bool> childAncestors = connectorAncestors;
+        std::vector<bool> childAncestors = ancestorHasMore;
         if(!isRoot)
             childAncestors.push_back(!isLast);
         std::optional<size_t> childColorIndex =
