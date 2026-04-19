@@ -12,8 +12,6 @@ mod std::time;
 use std::ascii::AsciiKey;
 use std::esc::acs_bullet;
 use std::esc::acs_dot;
-use std::esc::alt_screen_off;
-use std::esc::alt_screen_on;
 use std::esc::acs_meter;
 use std::esc::bg_rgb;
 use std::esc::bold_on;
@@ -27,6 +25,8 @@ use std::esc::acs_vline;
 use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
 use std::esc::cmd_home;
+use std::esc::cmd_restore;
+use std::esc::cmd_save;
 use std::esc::cmd_show;
 use std::esc::cursor;
 use std::esc::cursor_pos;
@@ -38,6 +38,7 @@ use std::io::stdin;
 use std::io::stdout;
 use std::io::write;
 use std::strbuf::builder_append;
+use std::strbuf::builder_append_char;
 use std::strbuf::builder_free;
 use std::strbuf::builder_new;
 use std::strbuf::builder_take_string;
@@ -111,6 +112,23 @@ fn lerp_i64(a: i64, b: i64, t: i64, scale: i64) -> i64 {
 
 fn bput(builder: i64, s: str8) {
     let _ = builder_append(builder, s);
+}
+
+fn esc_prefixed(suffix: str8) -> str8 {
+    let b: i64 = builder_new(len(suffix) + 4);
+    let _ = builder_append_char(b, 27);
+    let _ = builder_append(b, suffix);
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn alt_screen_on_real() -> str8 {
+    return esc_prefixed("[?1049h");
+}
+
+fn alt_screen_off_real() -> str8 {
+    return esc_prefixed("[?1049l");
 }
 
 fn repeat_glyph(builder: i64, glyph: str8, count: i64) {
@@ -567,6 +585,19 @@ fn draw_transport_row(builder: i64, totalWidth: i64, current: i64, total: i64, s
     free(endPad);
 }
 
+fn restore_terminal(rawEnabled: i32) {
+    if rawEnabled == 1 {
+        let _ = stdin_restore();
+    }
+    let off: str8 = alt_screen_off_real();
+    let _ = write(stdout(), off);
+    let _ = write(stdout(), reset());
+    let _ = write(stdout(), cursor(cmd_restore()));
+    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = flush(stdout());
+    free(off);
+}
+
 fn render_frame(path: str8, outputDevice: str8, leftSamples: list<i64>,
 rightSamples: list<i64>, term: TermSize) {
     let width: i64 = viewport_width(term.cols);
@@ -830,10 +861,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
 
-    let _ = write(stdout(), alt_screen_on());
+    let _ = write(stdout(), cursor(cmd_save()));
+    let on: str8 = alt_screen_on_real();
+    let _ = write(stdout(), on);
     let _ = write(stdout(), cursor(cmd_hide()));
     let _ = write(stdout(), cursor(cmd_home()));
     let _ = write(stdout(), cursor(cmd_clear_screen()));
+    let _ = flush(stdout());
+    free(on);
 
     if rawEnabled == 1 {
         let chosen: str8 = choose_output_device(stdout_size(), outputDevice);
@@ -841,12 +876,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     }
 
     if oscilloscope_demo_start(wavPath, outputDevice) != 0 {
-        if rawEnabled == 1 {
-            let _ = stdin_restore();
-        }
-        let _ = write(stdout(), reset());
-        let _ = write(stdout(), cursor(cmd_show()));
-        let _ = write(stdout(), alt_screen_off());
+        restore_terminal(rawEnabled);
         eprintln!("oscilloscope demo start failed: {}", oscilloscope_demo_last_error());
         return 1;
     }
@@ -867,19 +897,14 @@ fn main(argc: i32, args: list<str8>) -> i32 {
             let sr: i64 = oscilloscope_demo_sample_rate();
             let delta: i64 = sr * 5;
             if key == 1003 {
-                let _ = oscilloscope_demo_seek_rel_frames(0 - delta);
-            } else {
                 let _ = oscilloscope_demo_seek_rel_frames(delta);
+            } else {
+                let _ = oscilloscope_demo_seek_rel_frames(0 - delta);
             }
         }
         sleep_ms(16);
     }
 
-    if rawEnabled == 1 {
-        let _ = stdin_restore();
-    }
-    let _ = write(stdout(), alt_screen_off());
-    let _ = write(stdout(), reset());
-    let _ = write(stdout(), cursor(cmd_show()));
+    restore_terminal(rawEnabled);
     return 0;
 }
