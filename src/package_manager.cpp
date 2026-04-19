@@ -1239,9 +1239,9 @@ static void print_pkg_usage(const std::string& programName)
     std::cerr << "Usage: " << tool
               << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n"
               << "       " << tool
-              << " pkg --tests <manifest.toml> [--tasks] [--color]\n"
+              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
               << "       " << tool
-              << " pkg <manifest.toml> --tasks [--color]\n"
+              << " pkg [--tasks] [--color] <manifest.toml>...\n"
               << "\nCommands:\n"
               << "  " << tool << " pkg init\n"
               << "  " << tool
@@ -1257,7 +1257,9 @@ static void print_pkg_usage(const std::string& programName)
               << "  " << tool
               << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
               << "  " << tool
-              << " pkg --tests <manifest.toml> [--tasks] [--color]\n"
+              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
+              << "  " << tool
+              << " pkg [--tasks] [--color] <manifest.toml>...\n"
               << "  " << tool
               << " pkg run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--option KEY=VALUE]\n"
               << "  " << tool
@@ -1271,11 +1273,14 @@ static void print_pkg_usage(const std::string& programName)
               << " pkg run <task>    # fetches dependencies if needed, then runs the task chain\n"
               << "\nTask tree:\n"
               << "  " << tool
-              << " pkg --tests <manifest.toml> --tasks [--color]   # show test-task execution order without running commands\n"
+              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
+              << "      show test-task execution order without running commands\n"
               << "  " << tool
-              << " pkg run <task> --tasks [--color]   # show dependency/next-task execution order without running commands\n"
+              << " pkg run <task> --tasks [--color]\n"
+              << "      show dependency/next-task execution order without running commands\n"
               << "  " << tool
-              << " pkg <manifest.toml> --tasks [--color]   # show runnable task entrypoints for a manifest\n"
+              << " pkg [--tasks] [--color] <manifest.toml>...\n"
+              << "      show runnable task entrypoints for one or more manifests\n"
               << "\nExample:\n"
               << "  cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square --tasks --color\n"
               << "  ./build/mlang pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml --tasks --color\n";
@@ -5224,48 +5229,66 @@ int PackageManager::run(int argc, char** argv)
     std::string sub = argv[subIndex];
     const std::string manifestLabel = manifestPath.string();
 
-    if(sub != "--help" && sub != "-h" && sub != "help" &&
-       sub != "--tests" &&
-       sub != "init" && sub != "add" && sub != "fetch" && sub != "build" &&
-       sub != "run" && sub != "clean")
+    const auto is_pkg_subcommand = [](const std::string& value) {
+        return value == "--help" || value == "-h" || value == "help" ||
+               value == "--tests" || value == "init" || value == "add" ||
+               value == "fetch" || value == "build" || value == "run" ||
+               value == "clean";
+    };
+
+    if(!is_pkg_subcommand(sub))
     {
-        const std::filesystem::path shorthandManifest = sub;
         bool printTasks = false;
         bool colorTasks = false;
         bool shorthandArgsOk = true;
-        for(int i = subIndex + 1; i < argc; ++i)
+        bool sawManifest = false;
+        std::vector<std::filesystem::path> shorthandManifests;
+        for(int i = subIndex; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "--tasks")
+            if(!sawManifest && arg == "--tasks")
                 printTasks = true;
-            else if(arg == "--color")
+            else if(!sawManifest && arg == "--color")
                 colorTasks = true;
-            else
+            else if(!sawManifest && !arg.empty() && arg[0] == '-')
                 shorthandArgsOk = false;
+            else if(arg.size() < 5 || arg.substr(arg.size() - 5) != ".toml")
+                shorthandArgsOk = false;
+            else
+            {
+                sawManifest = true;
+                shorthandManifests.push_back(arg);
+            }
+            if(!shorthandArgsOk)
+                break;
         }
-        if(shorthandArgsOk && printTasks)
+        if(shorthandArgsOk && printTasks && !shorthandManifests.empty())
         {
-            manifestPath = shorthandManifest;
-            if(!std::filesystem::exists(manifestPath))
+            for(const auto& shorthandManifest : shorthandManifests)
             {
-                std::cerr << manifestPath.string()
-                          << " not found. Run 'mlang pkg init' first.\n";
-                return 1;
-            }
-            auto manifests = collect_target_manifests(manifestPath);
-            if(manifests.empty())
-            {
-                std::cerr << "No package manifests found for task overview.\n";
-                return 1;
-            }
-            for(const auto& pkg : manifests)
-            {
-                BuildConfig buildConfig = parse_build_config(pkg.content);
-                buildConfig.compilerProgram = compilerProgram;
-                if(print_task_overview_for_manifest(pkg, buildConfig,
-                                                   colorTasks) != 0)
+                manifestPath = shorthandManifest;
+                if(!std::filesystem::exists(manifestPath))
                 {
+                    std::cerr << manifestPath.string()
+                              << " not found. Run 'mlang pkg init' first.\n";
                     return 1;
+                }
+                auto manifests = collect_target_manifests(manifestPath);
+                if(manifests.empty())
+                {
+                    std::cerr << "No package manifests found for task overview in "
+                              << manifestPath.string() << ".\n";
+                    return 1;
+                }
+                for(const auto& pkg : manifests)
+                {
+                    BuildConfig buildConfig = parse_build_config(pkg.content);
+                    buildConfig.compilerProgram = compilerProgram;
+                    if(print_task_overview_for_manifest(pkg, buildConfig,
+                                                        colorTasks) != 0)
+                    {
+                        return 1;
+                    }
                 }
             }
             return 0;
@@ -5283,111 +5306,129 @@ int PackageManager::run(int argc, char** argv)
         if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg --tests <manifest.toml> [--tasks] [--color]\n";
+                      << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
             return 1;
         }
 
-        manifestPath = argv[subIndex + 1];
-        const std::string testsManifestLabel = manifestPath.string();
         bool printTasks = false;
         bool colorTasks = false;
-        for(int i = subIndex + 2; i < argc; ++i)
+        std::vector<std::filesystem::path> testManifestPaths;
+        bool sawManifest = false;
+        for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "--tasks")
+            if(!sawManifest && arg == "--tasks")
                 printTasks = true;
-            else if(arg == "--color")
+            else if(!sawManifest && arg == "--color")
                 colorTasks = true;
-            else
+            else if(!arg.empty() && arg[0] == '-' && !sawManifest)
             {
                 std::cerr << "Unknown option for 'pkg --tests': " << arg
                           << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg --tests <manifest.toml> [--tasks] [--color]\n";
+                          << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
                 return 1;
+            }
+            else
+            {
+                sawManifest = true;
+                testManifestPaths.push_back(arg);
             }
         }
 
-        if(!std::filesystem::exists(manifestPath))
+        if(testManifestPaths.empty())
         {
-            std::cerr << testsManifestLabel << " not found.\n";
-            return 1;
-        }
-
-        auto manifests = collect_target_manifests(manifestPath);
-        if(manifests.empty())
-        {
-            std::cerr << "No package manifests found for tests.\n";
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
             return 1;
         }
 
         bool foundTests = false;
-        for(const auto& pkg : manifests)
+        for(const auto& testManifestPath : testManifestPaths)
         {
-            BuildConfig buildConfig = parse_build_config(pkg.content);
-            buildConfig.compilerProgram = compilerProgram;
-            const auto tasks = parse_task_specs(pkg.content);
-            const std::string hostName = current_host_name();
-            const std::vector<std::string> testRoots =
-                task_roots_for_phase(tasks, hostName, "test",
-                                     std::vector<std::string> { "tests",
-                                                                "test" });
-            if(testRoots.empty())
-                continue;
-
-            foundTests = true;
-            if(printTasks)
+            if(!std::filesystem::exists(testManifestPath))
             {
-                for(const auto& taskName : testRoots)
-                {
-                    const int rc = print_task_plan_for_manifest(
-                        pkg, taskName, buildConfig, colorTasks);
-                    if(rc != 0)
-                        return 1;
-                }
-                continue;
-            }
-
-            int rc = 0;
-            {
-                ScopedPackageLogState scopedLogs(
-                    make_package_log_state(pkg.packageDir, buildConfig));
-                const auto deps = parse_source_deps(pkg.content);
-                size_t totalSteps = 0;
-                const std::filesystem::path depsDir =
-                    package_deps_dir(pkg.packageDir, buildConfig);
-                for(const auto& dep : deps)
-                {
-                    totalSteps += count_fetch_dep_steps(
-                        dep, depsDir, /*updateExisting=*/true);
-                }
-                totalSteps +=
-                    count_reachable_task_steps(tasks, hostName, testRoots);
-                ScopedExecutionProgressState scopedProgress(totalSteps);
-                if(fetch_for_manifest(pkg, buildConfig) != 0)
-                    return 1;
-                std::map<std::string, TaskRunState> taskStates;
-                std::mutex taskMutex;
-                std::condition_variable taskCv;
-                std::vector<std::string> taskStack;
-                for(const auto& taskName : testRoots)
-                {
-                    rc = run_task_for_manifest_impl(
-                        pkg, tasks, buildConfig, hostName, taskStates,
-                        taskMutex, taskCv, taskName, taskStack);
-                    if(rc != 0)
-                        break;
-                }
-            }
-            if(rc != 0)
+                std::cerr << testManifestPath.string() << " not found.\n";
                 return 1;
-        }
+            }
 
-        if(!foundTests)
-        {
-            std::cerr << "No phase=\"test\" tasks found in "
-                      << testsManifestLabel << "\n";
-            return 1;
+            auto manifests = collect_target_manifests(testManifestPath);
+            if(manifests.empty())
+            {
+                std::cerr << "No package manifests found for tests in "
+                          << testManifestPath.string() << ".\n";
+                return 1;
+            }
+
+            bool foundTestsInManifest = false;
+            for(const auto& pkg : manifests)
+            {
+                BuildConfig buildConfig = parse_build_config(pkg.content);
+                buildConfig.compilerProgram = compilerProgram;
+                const auto tasks = parse_task_specs(pkg.content);
+                const std::string hostName = current_host_name();
+                const std::vector<std::string> testRoots =
+                    task_roots_for_phase(tasks, hostName, "test",
+                                         std::vector<std::string> { "tests",
+                                                                    "test" });
+                if(testRoots.empty())
+                    continue;
+
+                foundTests = true;
+                foundTestsInManifest = true;
+                if(printTasks)
+                {
+                    for(const auto& taskName : testRoots)
+                    {
+                        const int rc = print_task_plan_for_manifest(
+                            pkg, taskName, buildConfig, colorTasks);
+                        if(rc != 0)
+                            return 1;
+                    }
+                    continue;
+                }
+
+                int rc = 0;
+                {
+                    ScopedPackageLogState scopedLogs(
+                        make_package_log_state(pkg.packageDir, buildConfig));
+                    const auto deps = parse_source_deps(pkg.content);
+                    size_t totalSteps = 0;
+                    const std::filesystem::path depsDir =
+                        package_deps_dir(pkg.packageDir, buildConfig);
+                    for(const auto& dep : deps)
+                    {
+                        totalSteps += count_fetch_dep_steps(
+                            dep, depsDir, /*updateExisting=*/true);
+                    }
+                    totalSteps +=
+                        count_reachable_task_steps(tasks, hostName, testRoots);
+                    ScopedExecutionProgressState scopedProgress(totalSteps);
+                    if(fetch_for_manifest(pkg, buildConfig) != 0)
+                        return 1;
+                    std::map<std::string, TaskRunState> taskStates;
+                    std::mutex taskMutex;
+                    std::condition_variable taskCv;
+                    std::vector<std::string> taskStack;
+                    for(const auto& taskName : testRoots)
+                    {
+                        rc = run_task_for_manifest_impl(
+                            pkg, tasks, buildConfig, hostName, taskStates,
+                            taskMutex, taskCv, taskName, taskStack);
+                        if(rc != 0)
+                            break;
+                    }
+                }
+                if(rc != 0)
+                    return 1;
+            }
+
+            if(!foundTestsInManifest)
+            {
+                std::cerr << "No phase=\"test\" tasks found in "
+                          << testManifestPath.string() << "\n";
+                return 1;
+            }
         }
         return 0;
     }

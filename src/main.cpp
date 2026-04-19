@@ -94,7 +94,7 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
-              << " pkg --tests <manifest.toml> [--tasks] [--color]\n"
+              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
               << "  " << programName
               << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
               << "  " << programName
@@ -107,7 +107,9 @@ void printUsage(const char* programName)
               << "  Show task tree: " << programName
               << " pkg run <task> --tasks [--color]\n"
               << "  Test manifest: " << programName
-              << " pkg --tests tests/mla_tests.toml [--tasks] [--color]\n"
+              << " pkg --tests --tasks --color tests/mla_tests.toml\n"
+              << "  Manifest overview: " << programName
+              << " pkg --tasks --color tests/mla_tests.toml\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -1424,13 +1426,30 @@ int main(int argc, char** argv)
         std::string impl = implEnv ? implEnv : "";
         bool preferMla = impl.empty() || impl == "mla";
         bool forceCpp = impl == "cpp";
+        int pkgArgIndex = 2;
+        while(pkgArgIndex < argc)
+        {
+            const std::string arg = argv[pkgArgIndex];
+            if(arg == "--config" && pkgArgIndex + 1 < argc)
+            {
+                pkgArgIndex += 2;
+                continue;
+            }
+            if(arg.rfind("--config=", 0) == 0)
+            {
+                ++pkgArgIndex;
+                continue;
+            }
+            break;
+        }
+        const std::string firstPkgArg =
+            pkgArgIndex < argc ? std::string(argv[pkgArgIndex]) : "";
         const bool shorthandManifestTasks =
-            argc >= 4 &&
-            std::string(argv[2]).size() >= 5 &&
-            std::string(argv[2]).substr(std::string(argv[2]).size() - 5) ==
-                ".toml";
+            firstPkgArg == "--tasks" || firstPkgArg == "--color" ||
+            (firstPkgArg.size() >= 5 &&
+             firstPkgArg.substr(firstPkgArg.size() - 5) == ".toml");
         const bool shorthandTests =
-            argc >= 4 && std::string(argv[2]) == "--tests";
+            firstPkgArg == "--tests";
 
         if(preferMla && !forceCpp && !shorthandManifestTasks &&
            !shorthandTests)

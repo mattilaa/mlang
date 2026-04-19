@@ -11,10 +11,16 @@
  * `--config=<file>`) before the subcommand to target an alternate manifest
  * instead of the default `mlang.toml`. `mlang pkg run <task> --tasks` prints
  * an ASCII task tree and the resolved linear execution order without running
- * commands. `mlang pkg --tests <manifest.toml>` resolves every `phase = "test"`
- * task root from that manifest and runs those test workflows after their
- * dependencies. Passing `--color` additionally colorizes parallel branches in
- * the tree view. `mlang pkg run` also accepts
+ * commands. `mlang pkg [--tasks] [--color] <manifest.toml>...` prints runnable
+ * task entrypoints for one or more manifests. `mlang pkg --tests [--tasks]
+ * [--color] <manifest.toml>...`
+ * resolves every `phase = "test"` task root from each listed manifest and
+ * runs those test workflows after their dependencies. The `--tests` options
+ * are parsed before the manifest path list so multiple manifests can be passed
+ * in one command. The top-level manifest-overview shorthand accepts the same
+ * option-first ordering, and `--tasks` / `--color` may appear in any order
+ * before the manifest path list. Passing `--color` additionally colorizes
+ * parallel branches in the tree view. `mlang pkg run` also accepts
  * `--option key=value` overrides for values declared under
  * `[tool.mlang.options]`, which are exposed to task text through placeholders
  * such as `{{option.userspace}}`. Tasks may also opt into

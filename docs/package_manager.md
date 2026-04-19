@@ -34,10 +34,11 @@ under `[tool.mlang.options]`. Tasks can then read those values through
 `{{option.name}}` placeholders, which is useful for switching runtime modes
 without duplicating whole manifests.
 
-`mlang pkg --tests <manifest.toml>` runs test-phase tasks from a dedicated test
-manifest. This is useful for repository-wide suites where the manifest should
-build prerequisites first and then invoke the test runner from a single
-command.
+`mlang pkg --tests [--tasks] [--color] <manifest.toml>...` runs test-phase
+tasks from one or more dedicated test manifests. `mlang pkg [--tasks]
+[--color] <manifest.toml>...` prints runnable task entrypoints for one or more
+manifests. Both forms parse `--tasks` and `--color` before the manifest path
+list, in any order.
 
 ## Subcommands
 
@@ -270,19 +271,30 @@ In that example, one command:
 3. builds the VST3/CoreAudio artifacts through the task dependency chain
 4. runs the preview app
 
+Top-level task-overview shorthand also accepts option-first ordering and
+multiple manifests:
+
+```sh
+./build/mlang pkg tests/mla_tests.toml --tasks --color
+./build/mlang pkg --color --tasks tests/mla_tests.toml
+./build/mlang pkg --tasks tests/mla_tests.toml tests/other_suite.toml
+```
+
 ### `pkg --tests`
 
 Run test-phase tasks declared in a TOML manifest:
 
 ```sh
 ./build/mlang pkg --tests tests/mla_tests.toml
-./build/mlang pkg --tests tests/mla_tests.toml --tasks
-./build/mlang pkg --tests tests/mla_tests.toml --tasks --color
+./build/mlang pkg --tests --tasks tests/mla_tests.toml
+./build/mlang pkg --tests --tasks --color tests/mla_tests.toml
+./build/mlang pkg --tests --tasks tests/mla_tests.toml tests/other_suite.toml
 ```
 
 This command resolves all tasks whose `phase = "test"` and runs them after
 their declared dependencies. That makes the manifest itself responsible for the
-build-before-test workflow.
+build-before-test workflow. Flags are parsed before the manifest path list, so
+`--tasks` and `--color` must appear before the `.toml` files.
 
 The repository now includes [tests/mla_tests.toml](../tests/mla_tests.toml),
 which:
@@ -307,7 +319,8 @@ shell = [
 ```
 
 Like `pkg run <task> --tasks`, the `--tasks` form prints the resolved test-task
-tree and execution order without running commands.
+tree and execution order without running commands. When multiple manifests are
+listed, `mlang pkg --tests` processes them in the given order.
 
 ### `pkg clean`
 
