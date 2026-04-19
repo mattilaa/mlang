@@ -134,7 +134,9 @@ Steinberg, including `Contents/MacOS/` and `Contents/Resources/`.
 ## Notes
 
 - This example is intentionally macOS-only because the standalone preview path
-  uses CoreAudio's Audio Queue Services.
+  uses CoreAudio's Audio Queue Services. The manifest declares that with
+  `supported_hosts = ["darwin"]`, so `mlang pkg` now fails early with:
+  `Only macOS CoreAudio is supported now`.
 - The VST3 target is built via the SDK's official CMake helpers instead of a
   hand-written bundle command. That keeps the example close to Steinberg's own
   recommended build flow.

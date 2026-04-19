@@ -810,6 +810,8 @@ Supported task keys:
 - `name`
 - `print`
 - `message`
+- `supported_hosts`
+- `unsupported_message`
 - `workdir`
 - `parallel`
 - `depends_on`
@@ -818,6 +820,25 @@ Supported task keys:
 - `env`
 - `shell`
 - `command`
+
+Use `supported_hosts` when a task graph only works on specific platforms and
+you want `mlang pkg` to fail before launching shell commands:
+
+```toml
+[[task]]
+name = "toolchain-check"
+supported_hosts = ["darwin"]
+unsupported_message = "Only macOS CoreAudio is supported now"
+commands = [
+  "sh -c 'command -v cmake >/dev/null 2>&1 || { echo Missing cmake; exit 1; }'"
+]
+```
+
+Supported host names are currently:
+
+- `darwin`
+- `linux`
+- `windows`
 - `commands`
 
 Host-conditional task overrides:

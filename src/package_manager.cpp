@@ -66,6 +66,8 @@ enum class TaskTomlKey
     Name,
     Message,
     Print,
+    SupportedHosts,
+    UnsupportedMessage,
     Phase,
     Workdir,
     Language,
@@ -174,10 +176,13 @@ enum class TaskLanguage
     Cpp,
 };
 
-static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 36>
+static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 38>
     kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
                     { TaskTomlKey::Message, "message" },
                     { TaskTomlKey::Print, "print" },
+                    { TaskTomlKey::SupportedHosts, "supported_hosts" },
+                    { TaskTomlKey::UnsupportedMessage,
+                      "unsupported_message" },
                     { TaskTomlKey::Phase, "phase" },
                     { TaskTomlKey::Workdir, "workdir" },
                     { TaskTomlKey::Language, "language" },
@@ -910,6 +915,8 @@ struct TaskSpec
     std::string name;
     std::string message;
     std::string print;
+    std::vector<std::string> supportedHosts;
+    std::string unsupportedMessage;
     std::string phase;
     std::string workdir;
     std::string language;
@@ -936,6 +943,8 @@ struct TaskSpec
     {
         std::string message;
         std::string print;
+        std::vector<std::string> supportedHosts;
+        std::string unsupportedMessage;
         std::string phase;
         std::string workdir;
         std::string language;
@@ -1636,6 +1645,12 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 break;
             case TaskTomlKey::Print:
                 target.print = unquote_preserve(taskValue);
+                break;
+            case TaskTomlKey::SupportedHosts:
+                append_toml_string_list_value(taskValue, target.supportedHosts);
+                break;
+            case TaskTomlKey::UnsupportedMessage:
+                target.unsupportedMessage = unquote_preserve(taskValue);
                 break;
             case TaskTomlKey::Phase:
                 target.phase = unquote(taskValue);
@@ -4070,6 +4085,34 @@ static std::optional<TaskSpec> find_task_spec(const std::vector<TaskSpec>& tasks
     return std::nullopt;
 }
 
+static bool host_supported_by_task(const TaskSpec& task,
+                                   const std::string& hostName)
+{
+    if(task.supportedHosts.empty())
+        return true;
+    return std::find(task.supportedHosts.begin(), task.supportedHosts.end(),
+                     hostName) != task.supportedHosts.end();
+}
+
+static std::string task_unsupported_host_message(const TaskSpec& task,
+                                                 const std::string& hostName)
+{
+    if(!task.unsupportedMessage.empty())
+        return task.unsupportedMessage;
+
+    std::ostringstream out;
+    out << "Task '" << task.name << "' does not support host '" << hostName
+        << "'";
+    if(!task.supportedHosts.empty())
+    {
+        out << " (supported:";
+        for(size_t i = 0; i < task.supportedHosts.size(); ++i)
+            out << (i == 0 ? " " : ", ") << task.supportedHosts[i];
+        out << ")";
+    }
+    return out.str();
+}
+
 static std::optional<std::filesystem::path>
 write_task_script(const PackageManifest& pkg, const std::string& taskName,
                   const std::vector<std::string>& shellLines,
@@ -4283,6 +4326,11 @@ static bool append_task_execution_order(
     if(!taskOpt.has_value())
     {
         error = "Task not found: " + taskName;
+        return false;
+    }
+    if(!host_supported_by_task(*taskOpt, hostName))
+    {
+        error = task_unsupported_host_message(*taskOpt, hostName);
         return false;
     }
 
@@ -4540,6 +4588,12 @@ static int run_task_for_manifest_impl(
     {
         if(task.name != taskName)
             continue;
+        if(!host_supported_by_task(task, hostName))
+        {
+            std::cerr << task_unsupported_host_message(task, hostName)
+                      << " in " << pkg.manifestPath.string() << "\n";
+            return 1;
+        }
         auto hostIt = task.hostOverrides.find(hostName);
         const TaskSpec::HostOverride* hostOverride =
             hostIt == task.hostOverrides.end() ? nullptr : &hostIt->second;

@@ -15,9 +15,10 @@ deps_dir = "build/deps"
 [[task]]
 name = "toolchain-check"
 print = "[example] Checking macOS, MLang, CMake, C++, Git, and archiver toolchains"
+supported_hosts = ["darwin"]
+unsupported_message = "Only macOS CoreAudio is supported now"
 workdir = "{{root}}"
 commands = [
-  "sh -c 'if [ $(uname -s) != Darwin ]; then echo This example is macOS-only because it includes a CoreAudio preview target.; exit 1; fi'",
   "sh -c 'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi'",
   "sh -c 'for tool in cmake c++ git ar; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done'"
 ]

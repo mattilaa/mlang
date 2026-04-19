@@ -76,6 +76,12 @@
  * their own line and at the end of an assignment line as long as the `#`
  * appears outside quoted string content.
  *
+ * Tasks may also declare `supported_hosts = ["darwin", "linux", "windows"]`
+ * and an optional `unsupported_message = "..."`. When the current host is not
+ * listed, `mlang pkg` stops before running task commands and reports that
+ * message directly. This is useful for examples that only support one runtime
+ * stack so far, such as a CoreAudio-only macOS workflow.
+ *
  * Git source dependencies may additionally declare `submodules = true`. When
  * present, `mlang pkg fetch` runs `git submodule update --init --recursive`
  * after cloning or updating that dependency. This is useful for repositories
