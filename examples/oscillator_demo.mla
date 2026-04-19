@@ -3,13 +3,19 @@
 /// \brief CoreAudio WAV oscilloscope demo rendered with std::esc.
 ///
 mod std::esc;
+mod std::ascii;
 mod std::io;
 mod std::strbuf;
 mod std::term;
 mod std::time;
 
+use std::ascii::AsciiKey;
+use std::esc::acs_bullet;
+use std::esc::acs_dot;
 use std::esc::bg_rgb;
 use std::esc::bold_on;
+use std::esc::acs_hline;
+use std::esc::acs_ssquare;
 use std::esc::cmd_clear_screen;
 use std::esc::cmd_hide;
 use std::esc::cmd_home;
@@ -27,7 +33,6 @@ use std::strbuf::builder_free;
 use std::strbuf::builder_new;
 use std::strbuf::builder_take_string;
 use std::strbuf::free;
-use std::strbuf::len;
 use std::term::TermSize;
 use std::term::stdin_enable_raw;
 use std::term::stdin_is_tty;
@@ -69,23 +74,62 @@ fn sample_row(sample: i64, height: i64) -> i64 {
     return ((1000 - clamped) * (height - 1)) / 2000;
 }
 
+fn sample_subrow(sample: i64, height: i64) -> i64 {
+    let clamped: i64 = clamp_i64(sample, -1000, 1000);
+    let grid: i64 = height * 4;
+    return ((1000 - clamped) * (grid - 1)) / 2000;
+}
+
+fn abs_i64(x: i64) -> i64 {
+    return x < 0 ? 0 - x : x;
+}
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a : b;
+}
+
 fn bput(builder: i64, s: str8) {
     let _ = builder_append(builder, s);
 }
 
-fn draw_waveform(builder: i64, samples: list<i64>, width: i64, height: i64) {
+fn segment_distance(rowSub: i64, a: i64, b: i64) -> i64 {
+    let lo: i64 = min_i64(a, b);
+    let hi: i64 = a > b ? a : b;
+    if rowSub >= lo && rowSub <= hi {
+        return 0;
+    }
+    return min_i64(abs_i64(rowSub - a), abs_i64(rowSub - b));
+}
+
+fn draw_waveform(builder: i64, samples: list<i64>, width: i64, height: i64,
+                 axisGlyph: str8, farGlyph: str8, nearGlyph: str8, coreGlyph: str8) {
     let center: i64 = height / 2;
     for row in 0..height {
         bput(builder, "  ");
         for col in 0..width {
-            let waveformRow: i64 = sample_row(samples[col], height);
-            if waveformRow == row {
-                bput(builder, fg_rgb(90, 236, 165));
-                bput(builder, "█");
+            let base: i64 = col * 2;
+            let prevSub: i64 = sample_subrow(samples[base], height);
+            let curSub: i64 = sample_subrow(samples[base + 1], height);
+            let nextSub: i64 = sample_subrow(samples[base + 2], height);
+            let rowSub: i64 = row * 4 + 1;
+            let d0: i64 = segment_distance(rowSub, prevSub, curSub);
+            let d1: i64 = segment_distance(rowSub, curSub, nextSub);
+            let dist: i64 = min_i64(d0, d1);
+            if dist == 0 {
+                bput(builder, fg_rgb(188, 255, 232));
+                bput(builder, coreGlyph);
+                bput(builder, reset());
+            } else if dist <= 1 {
+                bput(builder, fg_rgb(130, 220, 205));
+                bput(builder, nearGlyph);
+                bput(builder, reset());
+            } else if dist <= 3 {
+                bput(builder, fg_rgb(94, 158, 166));
+                bput(builder, farGlyph);
                 bput(builder, reset());
             } else if row == center {
-                bput(builder, fg_rgb(60, 82, 112));
-                bput(builder, "─");
+                bput(builder, fg_rgb(58, 84, 112));
+                bput(builder, axisGlyph);
                 bput(builder, reset());
             } else {
                 bput(builder, " ");
@@ -107,9 +151,13 @@ fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
     }
 
     let builder: i64 = builder_new(16384);
+    let axisGlyph: str8 = acs_hline();
+    let farGlyph: str8 = acs_dot();
+    let nearGlyph: str8 = acs_bullet();
+    let coreGlyph: str8 = acs_ssquare();
     bput(builder, cursor(cmd_home()));
     bput(builder, cursor(cmd_clear_screen()));
-    bput(builder, bg_rgb(8, 10, 18));
+    bput(builder, bg_rgb(13, 34, 52));
     bput(builder, fg_rgb(255, 170, 84));
     bput(builder, bold_on());
     bput(builder, "Realtime Oscillator Demo");
@@ -127,7 +175,7 @@ fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
     free(pathLine);
     bput(builder, "\r\n\r\n");
 
-    draw_waveform(builder, samples, width, height);
+    draw_waveform(builder, samples, width, height, axisGlyph, farGlyph, nearGlyph, coreGlyph);
 
     bput(builder, "\r\n");
     bput(builder, fg_rgb(216, 220, 228));
@@ -146,6 +194,10 @@ fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
     let frame: str8 = builder_take_string(builder);
     let _ = write(stdout(), frame);
     let _ = flush(stdout());
+    free(axisGlyph);
+    free(farGlyph);
+    free(nearGlyph);
+    free(coreGlyph);
     free(frame);
     builder_free(builder);
 }
@@ -182,20 +234,20 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     while oscillator_demo_running() == 1 {
         let term: TermSize = stdout_size();
         let width: i64 = viewport_width(term.cols);
-        let samples: list<i64> = oscillator_demo_snapshot_i64(width);
+        let samples: list<i64> = oscillator_demo_snapshot_i64(width * 2 + 2);
         render_frame(wavPath, samples, term);
 
         let key: i32 = read_keycode_nonblocking(stdin());
-        if key == 113 || key == 81 || key == 27 {
+        if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
             let _ = oscillator_demo_stop();
             break;
         }
-        sleep_ms(33);
+        sleep_ms(16);
     }
 
     let finalTerm: TermSize = stdout_size();
     let finalWidth: i64 = viewport_width(finalTerm.cols);
-    let finalSamples: list<i64> = oscillator_demo_snapshot_i64(finalWidth);
+    let finalSamples: list<i64> = oscillator_demo_snapshot_i64(finalWidth * 2 + 2);
     render_frame(wavPath, finalSamples, finalTerm);
     println!("");
 
