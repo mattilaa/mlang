@@ -4409,7 +4409,29 @@ struct BranchColorInfo
     size_t shadePosition = 0;
     size_t shadeTotal = 1;
     bool useNeutralHue = false;
+    double brightnessScale = 1.0;
 };
+
+static BranchColorInfo make_child_branch_color(
+    std::optional<BranchColorInfo> parentColor, bool isParallelGroup,
+    size_t childIndex, size_t childCount)
+{
+    const BranchColorInfo parent =
+        parentColor.value_or(BranchColorInfo{ 0, 1, 0, 1, true, 1.0 });
+    BranchColorInfo child = parent;
+    child.brightnessScale = std::max(0.42, parent.brightnessScale * 0.75);
+
+    if(isParallelGroup && childCount > 1)
+    {
+        child.position = childIndex;
+        child.total = childCount;
+        child.useNeutralHue = false;
+    }
+
+    child.shadePosition = childIndex;
+    child.shadeTotal = std::max<size_t>(childCount, 1);
+    return child;
+}
 
 static bool terminal_supports_truecolor()
 {
@@ -4441,7 +4463,8 @@ static std::string branch_color_code(const BranchColorInfo& colorInfo)
             : static_cast<double>(
                   std::min(colorInfo.shadePosition, shadeLast))
                   / static_cast<double>(shadeLast);
-    const double brightness = 0.72 + (shadeT * 0.36);
+    const double shadeFactor = 0.92 + (shadeT * 0.08);
+    const double brightness = colorInfo.brightnessScale * shadeFactor;
 
     double baseRed = colorInfo.useNeutralHue ? 0.0 : 255.0 * (1.0 - t);
     double baseGreen = colorInfo.useNeutralHue ? 200.0 : 255.0 * t;
@@ -4586,18 +4609,11 @@ static void print_task_tree_ascii_node(
         if(!isRoot)
             childAncestors.push_back(!isLast);
         std::optional<BranchColorInfo> childColorInfo = colorInfo;
-        if(enableColor && edges.parallel && children.size() > 1)
+        if(enableColor)
         {
-            childColorInfo =
-                BranchColorInfo{ i, children.size(), 0, 1, false };
-        }
-        else if(enableColor && children.size() > 1)
-        {
-            const BranchColorInfo baseColor =
-                colorInfo.value_or(BranchColorInfo{ 0, 1, 0, 1, true });
-            childColorInfo = baseColor;
-            childColorInfo->shadePosition = i;
-            childColorInfo->shadeTotal = children.size();
+            childColorInfo = make_child_branch_color(
+                colorInfo, edges.parallel && children.size() > 1, i,
+                children.size());
         }
 
         const std::string edgePrefix = build_task_tree_prefix(
