@@ -43,8 +43,8 @@ vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = 
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 That produces:
@@ -59,7 +59,7 @@ build/vst3_sdk_demo
 ## Run
 
 ```sh
-../../build/mlang pkg run demo
+mlang pkg run demo
 ```
 
 Or run the linked binary directly:

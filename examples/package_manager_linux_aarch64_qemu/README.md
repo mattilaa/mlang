@@ -159,20 +159,20 @@ export CROSS_COMPILE=aarch64-linux-gnu-
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg run boot-flow
+mlang pkg fetch
+mlang pkg run boot-flow
 ```
 
 Run the default BusyBox userspace explicitly with:
 
 ```sh
-../../build/mlang pkg run qemu-run --option userspace=busybox
+mlang pkg run qemu-run --option userspace=busybox
 ```
 
 Run the wider GNU userspace with:
 
 ```sh
-../../build/mlang pkg run qemu-run --option userspace=gnu
+mlang pkg run qemu-run --option userspace=gnu
 ```
 
 In GNU mode, the initramfs builder writes `/bin/guest-login` and starts QEMU at
@@ -258,8 +258,8 @@ vim /etc/passwd
 To only compile the Linux kernel image for AArch64 without booting QEMU:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 For this example, `pkg build` runs tasks tagged with `phase = "build"`, which
@@ -268,15 +268,15 @@ maps to the `kernel-build` task.
 Or step-by-step:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg run toolchain-check
-../../build/mlang pkg run kernel-defconfig
-../../build/mlang pkg run kernel-build
-../../build/mlang pkg run initramfs
-../../build/mlang pkg run qemu-run
+mlang pkg fetch
+mlang pkg run toolchain-check
+mlang pkg run kernel-defconfig
+mlang pkg run kernel-build
+mlang pkg run initramfs
+mlang pkg run qemu-run
 ```
 
-Running `../../build/mlang pkg run qemu-run` directly also works after
+Running `mlang pkg run qemu-run` directly also works after
 `pkg fetch`. Because `qemu-run` declares
 `join_on = ["kernel-build", "initramfs"]`, the package manager runs those
 tasks first and only starts QEMU after both succeed.
@@ -332,7 +332,7 @@ tasks first and only starts QEMU after both succeed.
   `-Wno-error=incompatible-pointer-types` to get past known Homebrew
   `libelf` typedef mismatches in kernel host tools such as `scripts/sorttable`.
   If an earlier broken `file2alias.c` patch was already written into the fetched
-  kernel tree, rerun `../../build/mlang pkg run darwin-native-prepare` once to
+  kernel tree, rerun `mlang pkg run darwin-native-prepare` once to
   repair it in place before retrying `kernel-build`.
 - This native Darwin path is based on the approach documented by Seiya Nuta:
   <https://seiya.me/blog/building-linux-on-macos-natively>

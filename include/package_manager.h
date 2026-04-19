@@ -97,7 +97,7 @@
  * depends_on = ["build-mlang-test-runner"]
  * workdir = "{{root}}/.."
  * shell = [
- *   "./build/mlang --tests {{option.suite_dir}}",
+ *   "mlang --tests {{option.suite_dir}}",
  * ]
  * \endcode
  *
@@ -141,7 +141,7 @@
  *   [
  *     'sh',
  *     '-c',
- *     'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+ *     'if [ ! -x mlang ]; then echo Missing mlang.; exit 1; fi',
  *   ],
  * ]
  * commands += [
@@ -222,8 +222,8 @@
  * Build and run the example from
  * `examples/package_manager_linux_aarch64_qemu/` with:
  * \code{.sh}
- * ../../build/mlang pkg run qemu-run --option userspace=busybox
- * ../../build/mlang pkg run qemu-run --option userspace=gnu
+ * mlang pkg run qemu-run --option userspace=busybox
+ * mlang pkg run qemu-run --option userspace=gnu
  * \endcode
  *
  * The first command boots a minimal BusyBox shell. The second command overlays

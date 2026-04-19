@@ -162,9 +162,9 @@ The repository includes complete examples:
 From `examples/uml_ui_generator/`:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
-../../build/mlang pkg run render-package-sample
+mlang pkg fetch
+mlang pkg build
+mlang pkg run render-package-sample
 ```
 
 Or run the binary directly:

@@ -34,8 +34,8 @@ fast to download but still clearly tied to those upstream repositories.
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 That runs the phased task graph and produces:
@@ -50,7 +50,7 @@ build/multilanguage_audio_demo
 ## Run
 
 ```sh
-../../build/mlang pkg run play-sample
+mlang pkg run play-sample
 ```
 
 Or run the already linked binary directly:

@@ -48,11 +48,11 @@ checks that `ninja` exists before starting the build.
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ./build/hello
 ./build/inspect
-../../build/mlang pkg clean
+mlang pkg clean
 ```
 
 Expected output:

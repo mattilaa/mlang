@@ -25,10 +25,10 @@ dependencies via their `.a` archive files instead of using dynamic lookup via
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ./build/static_cjson_demo
-../../build/mlang pkg clean
+mlang pkg clean
 ```
 
 Or run:
