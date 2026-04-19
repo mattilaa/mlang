@@ -4484,12 +4484,12 @@ static void print_task_tree_ascii_node(
                   << "\n";
     }
 
-    std::vector<std::pair<std::string, std::string>> children;
+    std::vector<std::string> children;
     children.reserve(edges.dependsOn.size() + edges.next.size());
     for(const auto& dep : edges.dependsOn)
-        children.push_back({ "depends_on", dep });
+        children.push_back(dep);
     for(const auto& nextTask : edges.next)
-        children.push_back({ "next", nextTask });
+        children.push_back(nextTask);
 
     stack.push_back(taskName);
     for(size_t i = 0; i < children.size(); ++i)
@@ -4506,17 +4506,15 @@ static void print_task_tree_ascii_node(
             childAncestors, childIsLast, false, enableColor, childColorIndex);
         std::ostringstream edgeLine;
         edgeLine << edgePrefix
-                 << colorize_tree_text(children[i].first + ": ", enableColor,
-                                       childColorIndex)
-                 << children[i].second;
-        auto orderIt = orderMap.find(children[i].second);
+                 << children[i];
+        auto orderIt = orderMap.find(children[i]);
         if(orderIt != orderMap.end())
             edgeLine << " [" << orderIt->second << "]";
         std::cout << edgeLine.str() << "\n";
 
         std::vector<bool> nestedAncestors = childAncestors;
         nestedAncestors.push_back(!childIsLast);
-        print_task_tree_ascii_node(tasks, hostName, children[i].second,
+        print_task_tree_ascii_node(tasks, hostName, children[i],
                                    orderMap, nestedAncestors, true, false,
                                    enableColor, childColorIndex, stack, false);
     }
