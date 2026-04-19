@@ -1,0 +1,209 @@
+/// \file oscillator_demo.mla
+/// @ingroup examples
+/// \brief CoreAudio WAV oscilloscope demo rendered with std::esc.
+///
+mod std::esc;
+mod std::io;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use std::esc::bg_rgb;
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::fg_rgb;
+use std::esc::reset;
+use std::io::flush;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::strbuf::builder_append;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+use std::strbuf::free;
+use std::strbuf::len;
+use std::term::TermSize;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::sleep_ms;
+
+extern fn oscillator_demo_start(wav_path: str8) -> i32;
+extern fn oscillator_demo_stop() -> i32;
+extern fn oscillator_demo_running() -> i32;
+extern fn oscillator_demo_sample_rate() -> i64;
+extern fn oscillator_demo_total_frames() -> i64;
+extern fn oscillator_demo_current_frame() -> i64;
+extern fn oscillator_demo_last_error() -> str8;
+extern fn oscillator_demo_snapshot_i64(window: i64) -> list<i64>;
+
+fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 {
+    if x < lo {
+        return lo;
+    }
+    if x > hi {
+        return hi;
+    }
+    return x;
+}
+
+fn viewport_width(cols: i32) -> i64 {
+    let width: i64 = cols - 8;
+    return clamp_i64(width, 24, 160);
+}
+
+fn viewport_height(rows: i32) -> i64 {
+    let height: i64 = rows - 10;
+    return clamp_i64(height, 8, 36);
+}
+
+fn sample_row(sample: i64, height: i64) -> i64 {
+    let clamped: i64 = clamp_i64(sample, -1000, 1000);
+    return ((1000 - clamped) * (height - 1)) / 2000;
+}
+
+fn bput(builder: i64, s: str8) {
+    let _ = builder_append(builder, s);
+}
+
+fn draw_waveform(builder: i64, samples: list<i64>, width: i64, height: i64) {
+    let center: i64 = height / 2;
+    for row in 0..height {
+        bput(builder, "  ");
+        for col in 0..width {
+            let waveformRow: i64 = sample_row(samples[col], height);
+            if waveformRow == row {
+                bput(builder, fg_rgb(90, 236, 165));
+                bput(builder, "█");
+                bput(builder, reset());
+            } else if row == center {
+                bput(builder, fg_rgb(60, 82, 112));
+                bput(builder, "─");
+                bput(builder, reset());
+            } else {
+                bput(builder, " ");
+            }
+        }
+        bput(builder, "\r\n");
+    }
+}
+
+fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
+    let width: i64 = viewport_width(term.cols);
+    let height: i64 = viewport_height(term.rows);
+    let current: i64 = oscillator_demo_current_frame();
+    let total: i64 = oscillator_demo_total_frames();
+    let sr: i64 = oscillator_demo_sample_rate();
+    var progressPct: i64 = 0;
+    if total > 0 {
+        progressPct = (current * 100) / total;
+    }
+
+    let builder: i64 = builder_new(16384);
+    bput(builder, cursor(cmd_home()));
+    bput(builder, cursor(cmd_clear_screen()));
+    bput(builder, bg_rgb(8, 10, 18));
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, bold_on());
+    bput(builder, "Realtime Oscillator Demo");
+    bput(builder, reset());
+    let header: str8 = format!("  CoreAudio WAV output  sr={}Hz  frame={}/{}  progress={}%",
+                               sr, current, total, progressPct);
+    bput(builder, header);
+    free(header);
+    bput(builder, "\r\n");
+
+    let pathLine: str8 = format!("  source: {}", path);
+    bput(builder, fg_rgb(150, 156, 176));
+    bput(builder, pathLine);
+    bput(builder, reset());
+    free(pathLine);
+    bput(builder, "\r\n\r\n");
+
+    draw_waveform(builder, samples, width, height);
+
+    bput(builder, "\r\n");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, "  ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "q");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, " / ");
+    bput(builder, fg_rgb(255, 170, 84));
+    bput(builder, "Esc");
+    bput(builder, fg_rgb(216, 220, 228));
+    bput(builder, " stops playback");
+    bput(builder, reset());
+    bput(builder, "\r\n");
+
+    let frame: str8 = builder_take_string(builder);
+    let _ = write(stdout(), frame);
+    let _ = flush(stdout());
+    free(frame);
+    builder_free(builder);
+}
+
+fn main(argc: i32, args: list<str8>) -> i32 {
+    var wavPath: str8 = "examples/fft_example/illusion.wav";
+    if argc > 1 {
+        let arg1: str8 = args[1];
+        if arg1 == "-h" || arg1 == "--help" {
+            println!("Usage: oscillator_demo [WAV_PATH]");
+            println!("Example:");
+            println!("  ./examples/oscillator_demo_run.sh examples/fft_example/illusion.wav");
+            return 0;
+        }
+        wavPath = arg1;
+    }
+
+    if oscillator_demo_start(wavPath) != 0 {
+        eprintln!("oscillator demo start failed: {}", oscillator_demo_last_error());
+        return 1;
+    }
+
+    var rawEnabled: i32 = 0;
+    if stdin_is_tty() == 1 {
+        if stdin_enable_raw() == 0 {
+            rawEnabled = 1;
+        }
+    }
+
+    let _ = write(stdout(), cursor(cmd_hide()));
+    let _ = write(stdout(), cursor(cmd_home()));
+    let _ = write(stdout(), cursor(cmd_clear_screen()));
+
+    while oscillator_demo_running() == 1 {
+        let term: TermSize = stdout_size();
+        let width: i64 = viewport_width(term.cols);
+        let samples: list<i64> = oscillator_demo_snapshot_i64(width);
+        render_frame(wavPath, samples, term);
+
+        let key: i32 = read_keycode_nonblocking(stdin());
+        if key == 113 || key == 81 || key == 27 {
+            let _ = oscillator_demo_stop();
+            break;
+        }
+        sleep_ms(33);
+    }
+
+    let finalTerm: TermSize = stdout_size();
+    let finalWidth: i64 = viewport_width(finalTerm.cols);
+    let finalSamples: list<i64> = oscillator_demo_snapshot_i64(finalWidth);
+    render_frame(wavPath, finalSamples, finalTerm);
+    println!("");
+
+    if rawEnabled == 1 {
+        let _ = stdin_restore();
+    }
+    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), reset());
+    let _ = write(stdout(), "\n");
+    return 0;
+}
