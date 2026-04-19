@@ -1,0 +1,25 @@
+[package]
+name = "mla_tests"
+version = "0.1.0"
+
+[tool.mlang.options]
+suite_dir = "tests"
+
+[[task]]
+name = "build-mlang-test-runner"
+message = "[tests] Building the mlang test runner"
+phase = "build"
+workdir = "{{root}}/.."
+shell = [
+  "cmake --build build --target mlang -j4",
+]
+
+[[task]]
+name = "run-mla-tests"
+message = "[tests] Running all .mla tests in {{option.suite_dir}}"
+phase = "test"
+depends_on = ["build-mlang-test-runner"]
+workdir = "{{root}}/.."
+shell = [
+  "./build/mlang --tests {{option.suite_dir}}",
+]

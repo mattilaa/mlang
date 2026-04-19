@@ -34,6 +34,11 @@ under `[tool.mlang.options]`. Tasks can then read those values through
 `{{option.name}}` placeholders, which is useful for switching runtime modes
 without duplicating whole manifests.
 
+`mlang pkg --tests <manifest.toml>` runs test-phase tasks from a dedicated test
+manifest. This is useful for repository-wide suites where the manifest should
+build prerequisites first and then invoke the test runner from a single
+command.
+
 ## Subcommands
 
 ### `pkg init`
@@ -264,6 +269,45 @@ In that example, one command:
    `submodules = true`
 3. builds the VST3/CoreAudio artifacts through the task dependency chain
 4. runs the preview app
+
+### `pkg --tests`
+
+Run test-phase tasks declared in a TOML manifest:
+
+```sh
+./build/mlang pkg --tests tests/mla_tests.toml
+./build/mlang pkg --tests tests/mla_tests.toml --tasks
+./build/mlang pkg --tests tests/mla_tests.toml --tasks --color
+```
+
+This command resolves all tasks whose `phase = "test"` and runs them after
+their declared dependencies. That makes the manifest itself responsible for the
+build-before-test workflow.
+
+The repository now includes [tests/mla_tests.toml](../tests/mla_tests.toml),
+which:
+
+1. builds the `mlang` test runner with `cmake --build build --target mlang -j4`
+2. runs `./build/mlang --tests tests`
+
+The suite location is configurable through `[tool.mlang.options]`:
+
+```toml
+[tool.mlang.options]
+suite_dir = "tests"
+
+[[task]]
+name = "run-mla-tests"
+phase = "test"
+depends_on = ["build-mlang-test-runner"]
+workdir = "{{root}}/.."
+shell = [
+  "./build/mlang --tests {{option.suite_dir}}",
+]
+```
+
+Like `pkg run <task> --tasks`, the `--tasks` form prints the resolved test-task
+tree and execution order without running commands.
 
 ### `pkg clean`
 

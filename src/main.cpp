@@ -94,6 +94,8 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]\n"
               << "  " << programName
+              << " pkg --tests <manifest.toml> [--tasks] [--color]\n"
+              << "  " << programName
               << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
               << "  " << programName
               << " pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]\n"
@@ -104,6 +106,8 @@ void printUsage(const char* programName)
               << " pkg run <task>    # fetches if needed, then runs the task chain\n"
               << "  Show task tree: " << programName
               << " pkg run <task> --tasks [--color]\n"
+              << "  Test manifest: " << programName
+              << " pkg --tests tests/mla_tests.toml [--tasks] [--color]\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -1425,8 +1429,11 @@ int main(int argc, char** argv)
             std::string(argv[2]).size() >= 5 &&
             std::string(argv[2]).substr(std::string(argv[2]).size() - 5) ==
                 ".toml";
+        const bool shorthandTests =
+            argc >= 4 && std::string(argv[2]) == "--tests";
 
-        if(preferMla && !forceCpp && !shorthandManifestTasks)
+        if(preferMla && !forceCpp && !shorthandManifestTasks &&
+           !shorthandTests)
         {
             if(auto rc = run_mlang_pkg_frontend(argc, argv); rc.has_value())
                 return *rc;

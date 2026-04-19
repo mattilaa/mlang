@@ -11,8 +11,10 @@
  * `--config=<file>`) before the subcommand to target an alternate manifest
  * instead of the default `mlang.toml`. `mlang pkg run <task> --tasks` prints
  * an ASCII task tree and the resolved linear execution order without running
- * commands. Passing `--color` additionally colorizes parallel branches in that
- * tree view. `mlang pkg run` also accepts
+ * commands. `mlang pkg --tests <manifest.toml>` resolves every `phase = "test"`
+ * task root from that manifest and runs those test workflows after their
+ * dependencies. Passing `--color` additionally colorizes parallel branches in
+ * the tree view. `mlang pkg run` also accepts
  * `--option key=value` overrides for values declared under
  * `[tool.mlang.options]`, which are exposed to task text through placeholders
  * such as `{{option.userspace}}`. Tasks may also opt into
@@ -64,6 +66,33 @@
  *
  * [tool.mlang.options]
  * userspace = "busybox"
+ * \endcode
+ *
+ * Dedicated test-manifest example:
+ * \code{.toml}
+ * [package]
+ * name = "mla_tests"
+ * version = "0.1.0"
+ *
+ * [tool.mlang.options]
+ * suite_dir = "tests"
+ *
+ * [[task]]
+ * name = "build-mlang-test-runner"
+ * phase = "build"
+ * workdir = "{{root}}/.."
+ * shell = [
+ *   "cmake --build build --target mlang -j4",
+ * ]
+ *
+ * [[task]]
+ * name = "run-mla-tests"
+ * phase = "test"
+ * depends_on = ["build-mlang-test-runner"]
+ * workdir = "{{root}}/.."
+ * shell = [
+ *   "./build/mlang --tests {{option.suite_dir}}",
+ * ]
  * \endcode
  *
  * Task array values such as `inputs`, `libs`, `compiler_flags`,
