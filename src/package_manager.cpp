@@ -4402,27 +4402,98 @@ static bool append_task_execution_order(
     return true;
 }
 
-static const char* branch_color_code(size_t index)
+struct BranchColorInfo
 {
-    static const char* kColors[] = {
-        "\033[31m", "\033[32m", "\033[33m",
-        "\033[34m", "\033[35m", "\033[36m"
+    size_t position = 0;
+    size_t total = 1;
+    size_t shadePosition = 0;
+    size_t shadeTotal = 1;
+    bool useNeutralHue = false;
+};
+
+static bool terminal_supports_truecolor()
+{
+    const char* colorTerm = std::getenv("COLORTERM");
+    if(colorTerm == nullptr)
+        return false;
+    std::string value = colorTerm;
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) {
+                       return static_cast<char>(std::tolower(ch));
+                   });
+    return value.find("truecolor") != std::string::npos
+           || value.find("24bit") != std::string::npos;
+}
+
+static std::string branch_color_code(const BranchColorInfo& colorInfo)
+{
+    const size_t total = std::max<size_t>(colorInfo.total, 1);
+    const size_t last = total > 0 ? total - 1 : 0;
+    const double t = last == 0
+                         ? 0.0
+                         : static_cast<double>(std::min(colorInfo.position, last))
+                               / static_cast<double>(last);
+    const size_t shadeTotal = std::max<size_t>(colorInfo.shadeTotal, 1);
+    const size_t shadeLast = shadeTotal > 0 ? shadeTotal - 1 : 0;
+    const double shadeT =
+        shadeLast == 0
+            ? 0.5
+            : static_cast<double>(
+                  std::min(colorInfo.shadePosition, shadeLast))
+                  / static_cast<double>(shadeLast);
+    const double brightness = 0.72 + (shadeT * 0.36);
+
+    double baseRed = colorInfo.useNeutralHue ? 0.0 : 255.0 * (1.0 - t);
+    double baseGreen = colorInfo.useNeutralHue ? 200.0 : 255.0 * t;
+    double baseBlue = colorInfo.useNeutralHue ? 200.0 : 0.0;
+    const int red =
+        static_cast<int>(std::clamp(std::lround(baseRed * brightness), 0L, 255L));
+    const int green = static_cast<int>(
+        std::clamp(std::lround(baseGreen * brightness), 0L, 255L));
+    const int blue = static_cast<int>(
+        std::clamp(std::lround(baseBlue * brightness), 0L, 255L));
+    if(terminal_supports_truecolor())
+    {
+        return "\033[38;2;" + std::to_string(red) + ";"
+               + std::to_string(green) + ";" + std::to_string(blue) + "m";
+    }
+
+    const auto toCube = [](int channel) {
+        static const int kLevels[] = { 0, 95, 135, 175, 215, 255 };
+        size_t bestIndex = 0;
+        int bestDistance = std::abs(channel - kLevels[0]);
+        for(size_t i = 1; i < sizeof(kLevels) / sizeof(kLevels[0]); ++i)
+        {
+            const int distance = std::abs(channel - kLevels[i]);
+            if(distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+        return bestIndex;
     };
-    return kColors[index % (sizeof(kColors) / sizeof(kColors[0]))];
+    const size_t cubeRed = toCube(red);
+    const size_t cubeGreen = toCube(green);
+    const size_t cubeBlue = toCube(blue);
+    const size_t paletteIndex =
+        16 + (36 * cubeRed) + (6 * cubeGreen) + cubeBlue;
+    return "\033[38;5;" + std::to_string(paletteIndex) + "m";
 }
 
 static std::string colorize_tree_text(const std::string& text, bool enableColor,
-                                      std::optional<size_t> colorIndex)
+                                      std::optional<BranchColorInfo> colorInfo)
 {
     if(!enableColor)
         return text;
-    const size_t index = colorIndex.value_or(5);
-    return std::string(branch_color_code(index)) + text + "\033[0m";
+    if(!colorInfo.has_value())
+        return std::string("\033[36m") + text + "\033[0m";
+    return branch_color_code(*colorInfo) + text + "\033[0m";
 }
 
 static std::string build_task_tree_prefix(
     const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
-    bool enableColor, std::optional<size_t> colorIndex)
+    bool enableColor, std::optional<BranchColorInfo> colorInfo)
 {
     if(isRoot)
         return "";
@@ -4432,7 +4503,7 @@ static std::string build_task_tree_prefix(
         out += hasMore ? "\xE2\x94\x82   " : "    ";
     out += isLast ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 "
                   : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
-    return colorize_tree_text(out, enableColor, colorIndex);
+    return colorize_tree_text(out, enableColor, colorInfo);
 }
 
 static std::string format_task_tree_numbered_label(
@@ -4463,7 +4534,7 @@ static void print_task_tree_ascii_node(
     const std::vector<TaskSpec>& tasks, const std::string& hostName,
     const std::string& taskName, const std::map<std::string, size_t>& orderMap,
     const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
-    bool enableColor, std::optional<size_t> colorIndex,
+    bool enableColor, std::optional<BranchColorInfo> colorInfo,
     std::vector<std::string>& stack, bool printSelf = true,
     bool unpredictableParallelOrder = false)
 {
@@ -4471,14 +4542,14 @@ static void print_task_tree_ascii_node(
     if(!taskOpt.has_value())
     {
         const std::string prefix = build_task_tree_prefix(
-            ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix << taskName << " (missing)\n";
         return;
     }
     if(std::find(stack.begin(), stack.end(), taskName) != stack.end())
     {
         const std::string prefix = build_task_tree_prefix(
-            ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix << taskName << " (cycle)\n";
         return;
     }
@@ -4488,7 +4559,7 @@ static void print_task_tree_ascii_node(
     if(printSelf)
     {
         const std::string prefix = build_task_tree_prefix(
-            ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix
                   << format_task_tree_numbered_label(taskName, orderMap,
                                                      edges.parallel,
@@ -4514,12 +4585,23 @@ static void print_task_tree_ascii_node(
         std::vector<bool> childAncestors = ancestorHasMore;
         if(!isRoot)
             childAncestors.push_back(!isLast);
-        std::optional<size_t> childColorIndex =
-            enableColor ? std::optional<size_t>(edges.parallel ? i : 5)
-                        : colorIndex;
+        std::optional<BranchColorInfo> childColorInfo = colorInfo;
+        if(enableColor && edges.parallel && children.size() > 1)
+        {
+            childColorInfo =
+                BranchColorInfo{ i, children.size(), 0, 1, false };
+        }
+        else if(enableColor && children.size() > 1)
+        {
+            const BranchColorInfo baseColor =
+                colorInfo.value_or(BranchColorInfo{ 0, 1, 0, 1, true });
+            childColorInfo = baseColor;
+            childColorInfo->shadePosition = i;
+            childColorInfo->shadeTotal = children.size();
+        }
 
         const std::string edgePrefix = build_task_tree_prefix(
-            childAncestors, childIsLast, false, enableColor, childColorIndex);
+            childAncestors, childIsLast, false, enableColor, childColorInfo);
         std::ostringstream edgeLine;
         edgeLine << edgePrefix;
         if(children[i].second)
@@ -4542,7 +4624,7 @@ static void print_task_tree_ascii_node(
         nestedAncestors.push_back(!childIsLast);
         print_task_tree_ascii_node(tasks, hostName, children[i].first,
                                    orderMap, nestedAncestors, true, false,
-                                   enableColor, childColorIndex, stack, false,
+                                   enableColor, childColorInfo, stack, false,
                                    children[i].second);
     }
     stack.pop_back();
