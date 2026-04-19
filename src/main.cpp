@@ -79,7 +79,8 @@ void printUsage(const char* programName)
               << "  --debug       Enable debug-only logging\n"
               << "  --version     Show version and exit\n"
               << "  -h, --help    Show this help message\n"
-              << "\nPackage manager:\n"
+              << "\nPackage manager (flag order is flexible; --config may\n"
+              << "appear anywhere; --color alone implies --tasks output):\n"
               << "  " << programName << " pkg [--config FILE] init\n"
               << "  " << programName << " pkg [--config FILE] add <name> [--git URL] [--rev "
                  "REV] [--tag TAG] [--submodules]\n"
@@ -96,6 +97,8 @@ void printUsage(const char* programName)
               << "  " << programName
               << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
               << "  " << programName
+              << " pkg [--tasks] [--color] <manifest.toml>...\n"
+              << "  " << programName
               << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
               << "  " << programName
               << " pkg [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]\n"
@@ -109,7 +112,7 @@ void printUsage(const char* programName)
               << "  Test manifest: " << programName
               << " pkg --tests --tasks --color tests/mla_tests.toml\n"
               << "  Manifest overview: " << programName
-              << " pkg --tasks --color tests/mla_tests.toml\n"
+              << " pkg --color tests/mla_tests.toml   # --tasks implied\n"
               << "\nTesting:\n"
               << "  " << programName << " --tests [path]\n"
               << "  " << programName << " test [path]\n"
@@ -968,9 +971,10 @@ static bool ensure_compiled_mla_tool(const char* argv0,
                   " -Wno-colon-if -Wno-colon-while -L " +
                   shell_quote(stdlibLibDir.string()) + " -lmlang_std -o " +
                   shell_quote(outBin.string());
-#ifdef __APPLE__
-    compileCmd += " -framework CoreFoundation -framework CoreGraphics -framework ImageIO";
-#endif
+    // The mlang compiler auto-adds CoreFoundation/CoreGraphics/ImageIO on
+    // macOS when assembling default link args, so they do not need to be
+    // forwarded here. Forwarding them as `-framework` CLI args would be
+    // rejected as unknown options.
 
     int compileRc = std::system(compileCmd.c_str());
     std::error_code ecCheck;
@@ -1426,30 +1430,27 @@ int main(int argc, char** argv)
         std::string impl = implEnv ? implEnv : "";
         bool preferMla = impl.empty() || impl == "mla";
         bool forceCpp = impl == "cpp";
-        int pkgArgIndex = 2;
-        while(pkgArgIndex < argc)
+        // Scan every pkg arg (not just the leading ones) so the user can
+        // place --config and the shorthand flags (--tasks, --color, --tests,
+        // bare .toml manifests) in any position.
+        bool shorthandManifestTasks = false;
+        bool shorthandTests = false;
+        for(int i = 2; i < argc; ++i)
         {
-            const std::string arg = argv[pkgArgIndex];
-            if(arg == "--config" && pkgArgIndex + 1 < argc)
+            const std::string arg = argv[i];
+            if(arg == "--config" && i + 1 < argc)
             {
-                pkgArgIndex += 2;
+                ++i;
                 continue;
             }
             if(arg.rfind("--config=", 0) == 0)
-            {
-                ++pkgArgIndex;
                 continue;
-            }
-            break;
+            if(arg == "--tasks" || arg == "--color" ||
+               (arg.size() >= 5 && arg.substr(arg.size() - 5) == ".toml"))
+                shorthandManifestTasks = true;
+            if(arg == "--tests")
+                shorthandTests = true;
         }
-        const std::string firstPkgArg =
-            pkgArgIndex < argc ? std::string(argv[pkgArgIndex]) : "";
-        const bool shorthandManifestTasks =
-            firstPkgArg == "--tasks" || firstPkgArg == "--color" ||
-            (firstPkgArg.size() >= 5 &&
-             firstPkgArg.substr(firstPkgArg.size() - 5) == ".toml");
-        const bool shorthandTests =
-            firstPkgArg == "--tests";
 
         if(preferMla && !forceCpp && !shorthandManifestTasks &&
            !shorthandTests)

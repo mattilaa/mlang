@@ -1236,54 +1236,72 @@ task_roots_for_phase(const std::vector<TaskSpec>& tasks,
 static void print_pkg_usage(const std::string& programName)
 {
     const std::string tool = programName.empty() ? "mlang" : programName;
-    std::cerr << "Usage: " << tool
-              << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n"
-              << "       " << tool
-              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
-              << "       " << tool
-              << " pkg [--tasks] [--color] <manifest.toml>...\n"
-              << "\nCommands:\n"
-              << "  " << tool << " pkg init\n"
-              << "  " << tool
-              << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
-              << "  " << tool
-              << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
-              << "  " << tool
-              << " pkg add <name> [--pkg-config NAME] [--system]\n"
-              << "  " << tool
-              << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
-              << "  " << tool
-              << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-              << "  " << tool
-              << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-              << "  " << tool
-              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
-              << "  " << tool
-              << " pkg [--tasks] [--color] <manifest.toml>...\n"
-              << "  " << tool
-              << " pkg run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--option KEY=VALUE]\n"
-              << "  " << tool
-              << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--deps]\n"
-              << "\nSeparate steps:\n"
-              << "  " << tool << " pkg fetch\n"
-              << "  " << tool << " pkg build\n"
-              << "  " << tool << " pkg run <task>\n"
-              << "\nOne-command workflow:\n"
-              << "  " << tool
-              << " pkg run <task>    # fetches dependencies if needed, then runs the task chain\n"
-              << "\nTask tree:\n"
-              << "  " << tool
-              << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
-              << "      show test-task execution order without running commands\n"
-              << "  " << tool
-              << " pkg run <task> --tasks [--color]\n"
-              << "      show dependency/next-task execution order without running commands\n"
-              << "  " << tool
-              << " pkg [--tasks] [--color] <manifest.toml>...\n"
-              << "      show runnable task entrypoints for one or more manifests\n"
-              << "\nExample:\n"
-              << "  cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square --tasks --color\n"
-              << "  ./build/mlang pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml --tasks --color\n";
+    std::cerr
+        << "Usage: " << tool
+        << " pkg [--config FILE] <init|add|fetch|build|run|clean> [options...]\n"
+        << "       " << tool
+        << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
+        << "       " << tool
+        << " pkg [--tasks] [--color] <manifest.toml>...\n"
+        << "\nNote: --config, --tasks, --color and per-subcommand flags may\n"
+        << "appear in any order. `--color` alone implies task-tree output.\n"
+        << "\nCommands:\n"
+        << "  " << tool << " pkg init\n"
+        << "      Scaffold mlang.toml and src/main.mla in the current dir.\n"
+        << "  " << tool
+        << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
+        << "  " << tool
+        << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+        << "  " << tool
+        << " pkg add <name> [--pkg-config NAME] [--system]\n"
+        << "  " << tool
+        << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
+        << "      Append a dependency entry to the manifest.\n"
+        << "  " << tool
+        << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log]\n"
+        << "      Fetch dependencies without building.\n"
+        << "  " << tool
+        << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]\n"
+        << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log]\n"
+        << "      Build all configured targets.\n"
+        << "  " << tool
+        << " pkg run <task> [--tasks] [--color]\n"
+        << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
+        << "      Run a named task (fetches dependencies first if needed).\n"
+        << "      With --tasks, print the dependency/execution tree instead.\n"
+        << "  " << tool
+        << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
+        << "      Compile and execute phase=\"test\" tasks in the given\n"
+        << "      manifests. With --tasks, print the test-task tree instead.\n"
+        << "  " << tool
+        << " pkg [--tasks] [--color] <manifest.toml>...\n"
+        << "      Show runnable task entrypoints for one or more manifests\n"
+        << "      (no commands are executed).\n"
+        << "  " << tool
+        << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log] [--deps]\n"
+        << "      Remove build artifacts (add --deps to also remove fetched deps).\n"
+        << "\nWorkflows:\n"
+        << "  Separate:   " << tool << " pkg fetch ; " << tool
+        << " pkg build ; " << tool << " pkg run <task>\n"
+        << "  One-shot:   " << tool
+        << " pkg run <task>   # fetches if needed, then runs the task chain\n"
+        << "\nExamples:\n"
+        << "  cd examples/package_manager_vst3_coreaudio_synth && \\\n"
+        << "      ../../build/mlang pkg run preview-square --tasks --color\n"
+        << "  " << tool
+        << " pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml --tasks --color\n"
+        << "  " << tool
+        << " pkg --color tests/mla_tests.toml            # implies --tasks\n"
+        << "  " << tool
+        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n";
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -5331,35 +5349,50 @@ int PackageManager::run(int argc, char** argv)
     std::string compilerProgram = argv[0] ? std::string(argv[0]) : "mlang";
     if(!compilerProgram.empty() && compilerProgram.find('/') != std::string::npos)
         compilerProgram = std::filesystem::absolute(compilerProgram).string();
-    int subIndex = 2;
-    while(subIndex < argc)
+
+    // Extract `--config FILE` / `--config=FILE` from any position in the pkg
+    // arguments so flag ordering is flexible. Build a filtered argv that the
+    // rest of the dispatcher and subcommand handlers can consume as usual.
+    std::vector<std::string> argStorage;
+    argStorage.reserve(static_cast<size_t>(argc));
+    argStorage.emplace_back(argv[0] ? argv[0] : "mlang");
+    argStorage.emplace_back(argv[1] ? argv[1] : "pkg");
+    for(int i = 2; i < argc; ++i)
     {
-        std::string arg = argv[subIndex];
+        std::string arg = argv[i];
         if(arg == "--config")
         {
-            if(subIndex + 1 >= argc)
+            if(i + 1 >= argc)
             {
                 std::cerr << "--config requires a manifest path\n";
                 return 1;
             }
-            manifestPath = argv[subIndex + 1];
-            subIndex += 2;
+            manifestPath = argv[i + 1];
+            ++i;
             continue;
         }
         if(arg.rfind("--config=", 0) == 0)
         {
-            manifestPath = arg.substr(std::string("--config=").size());
-            if(manifestPath.empty())
+            std::string value = arg.substr(std::string("--config=").size());
+            if(value.empty())
             {
                 std::cerr << "--config requires a manifest path\n";
                 return 1;
             }
-            ++subIndex;
+            manifestPath = value;
             continue;
         }
-        break;
+        argStorage.push_back(std::move(arg));
     }
 
+    std::vector<char*> argPtrs;
+    argPtrs.reserve(argStorage.size());
+    for(auto& s : argStorage)
+        argPtrs.push_back(s.data());
+    argc = static_cast<int>(argPtrs.size());
+    argv = argPtrs.data();
+
+    int subIndex = 2;
     if(subIndex >= argc)
     {
         print_pkg_usage(programName);
@@ -5381,28 +5414,24 @@ int PackageManager::run(int argc, char** argv)
         bool printTasks = false;
         bool colorTasks = false;
         bool shorthandArgsOk = true;
-        bool sawManifest = false;
         std::vector<std::filesystem::path> shorthandManifests;
         for(int i = subIndex; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(!sawManifest && arg == "--tasks")
+            if(arg == "--tasks")
                 printTasks = true;
-            else if(!sawManifest && arg == "--color")
+            else if(arg == "--color")
                 colorTasks = true;
-            else if(!sawManifest && !arg.empty() && arg[0] == '-')
-                shorthandArgsOk = false;
-            else if(arg.size() < 5 || arg.substr(arg.size() - 5) != ".toml")
-                shorthandArgsOk = false;
+            else if(arg.size() >= 5 && arg.substr(arg.size() - 5) == ".toml")
+                shorthandManifests.push_back(arg);
             else
             {
-                sawManifest = true;
-                shorthandManifests.push_back(arg);
-            }
-            if(!shorthandArgsOk)
+                shorthandArgsOk = false;
                 break;
+            }
         }
-        if(shorthandArgsOk && printTasks && !shorthandManifests.empty())
+        if(shorthandArgsOk && (printTasks || colorTasks) &&
+           !shorthandManifests.empty())
         {
             for(const auto& shorthandManifest : shorthandManifests)
             {
@@ -5453,15 +5482,14 @@ int PackageManager::run(int argc, char** argv)
         bool printTasks = false;
         bool colorTasks = false;
         std::vector<std::filesystem::path> testManifestPaths;
-        bool sawManifest = false;
         for(int i = subIndex + 1; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(!sawManifest && arg == "--tasks")
+            if(arg == "--tasks")
                 printTasks = true;
-            else if(!sawManifest && arg == "--color")
+            else if(arg == "--color")
                 colorTasks = true;
-            else if(!arg.empty() && arg[0] == '-' && !sawManifest)
+            else if(!arg.empty() && arg[0] == '-')
             {
                 std::cerr << "Unknown option for 'pkg --tests': " << arg
                           << "\n"
@@ -5471,7 +5499,6 @@ int PackageManager::run(int argc, char** argv)
             }
             else
             {
-                sawManifest = true;
                 testManifestPaths.push_back(arg);
             }
         }
