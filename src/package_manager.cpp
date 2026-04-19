@@ -4437,13 +4437,23 @@ static std::string build_task_tree_prefix(
 
 static std::string format_task_tree_numbered_label(
     const std::string& taskName, const std::map<std::string, size_t>& orderMap,
-    bool parallel)
+    bool parallel, bool unpredictableParallelOrder, bool enableColor)
 {
     std::ostringstream out;
     out << taskName;
-    auto it = orderMap.find(taskName);
-    if(it != orderMap.end())
-        out << " [" << it->second << "]";
+    if(unpredictableParallelOrder)
+    {
+        if(enableColor)
+            out << " \033[33m[*]\033[0m";
+        else
+            out << " [*]";
+    }
+    else
+    {
+        auto it = orderMap.find(taskName);
+        if(it != orderMap.end())
+            out << " [" << it->second << "]";
+    }
     if(parallel)
         out << " [parallel]";
     return out.str();
@@ -4454,7 +4464,8 @@ static void print_task_tree_ascii_node(
     const std::string& taskName, const std::map<std::string, size_t>& orderMap,
     const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
     bool enableColor, std::optional<size_t> colorIndex,
-    std::vector<std::string>& stack, bool printSelf = true)
+    std::vector<std::string>& stack, bool printSelf = true,
+    bool unpredictableParallelOrder = false)
 {
     const auto taskOpt = find_task_spec(tasks, taskName);
     if(!taskOpt.has_value())
@@ -4480,16 +4491,21 @@ static void print_task_tree_ascii_node(
             ancestorHasMore, isLast, isRoot, enableColor, colorIndex);
         std::cout << prefix
                   << format_task_tree_numbered_label(taskName, orderMap,
-                                                     edges.parallel)
+                                                     edges.parallel,
+                                                     unpredictableParallelOrder,
+                                                     enableColor)
                   << "\n";
     }
 
-    std::vector<std::string> children;
+    std::vector<std::pair<std::string, bool>> children;
     children.reserve(edges.dependsOn.size() + edges.next.size());
+    const bool parallelDepends =
+        edges.parallel && edges.dependsOn.size() > 1;
     for(const auto& dep : edges.dependsOn)
-        children.push_back(dep);
+        children.push_back({ dep, parallelDepends });
+    const bool parallelNext = edges.parallel && edges.next.size() > 1;
     for(const auto& nextTask : edges.next)
-        children.push_back(nextTask);
+        children.push_back({ nextTask, parallelNext });
 
     stack.push_back(taskName);
     for(size_t i = 0; i < children.size(); ++i)
@@ -4505,18 +4521,29 @@ static void print_task_tree_ascii_node(
         const std::string edgePrefix = build_task_tree_prefix(
             childAncestors, childIsLast, false, enableColor, childColorIndex);
         std::ostringstream edgeLine;
-        edgeLine << edgePrefix
-                 << children[i];
-        auto orderIt = orderMap.find(children[i]);
-        if(orderIt != orderMap.end())
-            edgeLine << " [" << orderIt->second << "]";
+        edgeLine << edgePrefix;
+        if(children[i].second)
+        {
+            if(enableColor)
+                edgeLine << children[i].first << " \033[33m[*]\033[0m";
+            else
+                edgeLine << children[i].first << " [*]";
+        }
+        else
+        {
+            edgeLine << children[i].first;
+            auto orderIt = orderMap.find(children[i].first);
+            if(orderIt != orderMap.end())
+                edgeLine << " [" << orderIt->second << "]";
+        }
         std::cout << edgeLine.str() << "\n";
 
         std::vector<bool> nestedAncestors = childAncestors;
         nestedAncestors.push_back(!childIsLast);
-        print_task_tree_ascii_node(tasks, hostName, children[i],
+        print_task_tree_ascii_node(tasks, hostName, children[i].first,
                                    orderMap, nestedAncestors, true, false,
-                                   enableColor, childColorIndex, stack, false);
+                                   enableColor, childColorIndex, stack, false,
+                                   children[i].second);
     }
     stack.pop_back();
 }
