@@ -93,6 +93,10 @@ fn min_i64(a: i64, b: i64) -> i64 {
     return a < b ? a: b;
 }
 
+fn lerp_i64(a: i64, b: i64, t: i64, scale: i64) -> i64 {
+    return a + ((b - a) * t) / scale;
+}
+
 fn bput(builder: i64, s: str8) {
     let _ = builder_append(builder, s);
 }
@@ -145,6 +149,60 @@ fn meter_color(level: i64) -> str8 {
         return fg_rgb(255, 214, 92);
     }
     return fg_rgb(116, 240, 120);
+}
+
+fn oscilloscope_bg_r(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1 : (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    if t < 350 {
+        let local: i64 = (t * 1000) / 350;
+        return lerp_i64(16, 64, local, 1000);
+    }
+    if t < 700 {
+        let local: i64 = ((t - 350) * 1000) / 350;
+        return lerp_i64(64, 164, local, 1000);
+    }
+    let local: i64 = ((t - 700) * 1000) / 300;
+    return lerp_i64(164, 255, local, 1000);
+}
+
+fn oscilloscope_bg_g(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1 : (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    if t < 350 {
+        let local: i64 = (t * 1000) / 350;
+        return lerp_i64(20, 34, local, 1000);
+    }
+    if t < 700 {
+        let local: i64 = ((t - 350) * 1000) / 350;
+        return lerp_i64(34, 76, local, 1000);
+    }
+    let local: i64 = ((t - 700) * 1000) / 300;
+    return lerp_i64(76, 164, local, 1000);
+}
+
+fn oscilloscope_bg_b(row: i64, height: i64) -> i64 {
+    let scale: i64 = height <= 1 ? 1 : (height - 1);
+    let t: i64 = (row * 1000) / scale;
+    if t < 350 {
+        let local: i64 = (t * 1000) / 350;
+        return lerp_i64(46, 72, local, 1000);
+    }
+    if t < 700 {
+        let local: i64 = ((t - 350) * 1000) / 350;
+        return lerp_i64(72, 88, local, 1000);
+    }
+    let local: i64 = ((t - 700) * 1000) / 300;
+    return lerp_i64(88, 92, local, 1000);
+}
+
+fn oscilloscope_trace_color(row: i64, height: i64, r: i64, g: i64, b: i64) -> str8 {
+    let br: i64 = oscilloscope_bg_r(row, height);
+    let bg: i64 = oscilloscope_bg_g(row, height);
+    let bb: i64 = oscilloscope_bg_b(row, height);
+    return fg_rgb(lerp_i64(br, r, 740, 1000),
+                  lerp_i64(bg, g, 740, 1000),
+                  lerp_i64(bb, b, 740, 1000));
 }
 
 fn draw_meter_cell(builder: i64, row: i64, height: i64, level: i64) {
@@ -218,6 +276,9 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     bput(builder, "\r\n");
 
     for row in 0..height {
+        let bgR: i64 = oscilloscope_bg_r(row, height);
+        let bgG: i64 = oscilloscope_bg_g(row, height);
+        let bgB: i64 = oscilloscope_bg_b(row, height);
         bput(builder, "  ");
         bput(builder, fg_rgb(104, 142, 168));
         bput(builder, vl);
@@ -247,39 +308,49 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
             let rightDist: i64 = min_i64(segment_distance(rowSub, rightPrev, rightCur),
             segment_distance(rowSub, rightCur, rightNext));
             if leftDist == 0 && rightDist == 0 {
-                bput(builder, fg_rgb(248, 214, 132));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 248, 214, 132));
                 bput(builder, coreGlyph);
                 bput(builder, reset());
             } else if rightDist == 0 {
-                bput(builder, fg_rgb(255, 110, 84));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 255, 110, 84));
                 bput(builder, coreGlyph);
                 bput(builder, reset());
             } else if leftDist == 0 {
-                bput(builder, fg_rgb(120, 248, 132));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 120, 248, 132));
                 bput(builder, coreGlyph);
                 bput(builder, reset());
             } else if rightDist <= 1 {
-                bput(builder, fg_rgb(255, 164, 112));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 255, 164, 112));
                 bput(builder, nearGlyph);
                 bput(builder, reset());
             } else if leftDist <= 1 {
-                bput(builder, fg_rgb(150, 232, 166));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 150, 232, 166));
                 bput(builder, nearGlyph);
                 bput(builder, reset());
             } else if rightDist <= 3 {
-                bput(builder, fg_rgb(156, 88, 78));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 156, 88, 78));
                 bput(builder, farGlyph);
                 bput(builder, reset());
             } else if leftDist <= 3 {
-                bput(builder, fg_rgb(74, 148, 94));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 74, 148, 94));
                 bput(builder, farGlyph);
                 bput(builder, reset());
             } else if row == center {
-                bput(builder, fg_rgb(58, 84, 112));
+                bput(builder, bg_rgb(bgR, bgG, bgB));
+                bput(builder, oscilloscope_trace_color(row, height, 58, 84, 112));
                 bput(builder, axisGlyph);
                 bput(builder, reset());
             } else {
+                bput(builder, bg_rgb(bgR, bgG, bgB));
                 bput(builder, " ");
+                bput(builder, reset());
             }
         }
         bput(builder, fg_rgb(104, 142, 168));
