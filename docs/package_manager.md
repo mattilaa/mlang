@@ -81,6 +81,19 @@ Git dependency:
 ./build/mlang pkg --config arm64.toml add cjson --git https://github.com/DaveGamble/cJSON.git
 ```
 
+Git dependency with recursive submodules:
+
+```sh
+./build/mlang pkg add vst3sdk --git https://github.com/steinbergmedia/vst3sdk.git --submodules
+```
+
+This writes:
+
+```toml
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true }
+```
+
 Generate a complete subproject package automatically:
 
 ```sh
@@ -132,6 +145,15 @@ For example, a dependency named `cjson` is fetched into:
 ```text
 build/deps/cjson
 ```
+
+If a git dependency declares `submodules = true`, `pkg fetch` also runs:
+
+```sh
+git -C build/deps/<name> submodule update --init --recursive
+```
+
+This is useful for repositories such as the Steinberg VST3 SDK that keep
+required source trees in git submodules.
 
 ### `pkg build`
 
@@ -188,6 +210,60 @@ Tasks can model a small workflow graph with:
 - `parallel`
 - `command` / `commands`
 - `shell` / `script`
+
+`pkg run` also performs dependency fetching before the task graph runs. That
+means a task can act as a one-command workflow entrypoint: `pkg run <task>`
+will fetch dependencies if needed, then execute the task's `depends_on` /
+`join_on` chain, then launch the final command.
+
+To inspect the planned task chain without running any commands, use:
+
+```sh
+./build/mlang pkg run <task> --tasks
+./build/mlang pkg run <task> --tasks --color
+```
+
+This prints:
+
+- an ASCII task tree rooted at `<task>` using `tree`-style connectors
+- dependency edges under `depends_on:`
+- follow-up edges under `next:`
+- execution-order numbers on each task node
+- a linear execution order list showing the same sequence after dependency
+  expansion
+- optional ANSI branch colors when `--color` is passed; parallel child branches
+  are colorized separately
+
+So the package-manager workflow can be used in either style:
+
+```sh
+./build/mlang pkg fetch
+./build/mlang pkg build
+./build/mlang pkg run preview-square
+```
+
+or with one command:
+
+```sh
+./build/mlang pkg run preview-square
+```
+
+The VST3 CoreAudio example in this repository uses that pattern:
+
+```sh
+cd examples/package_manager_vst3_coreaudio_synth
+../../build/mlang pkg run preview-square
+../../build/mlang pkg run preview-square --tasks
+../../build/mlang pkg run preview-square --tasks --color
+```
+
+In that example, one command:
+
+1. fetches `vst3sdk`
+2. initializes git submodules because the dependency declares
+   `submodules = true`
+3. builds the VST3/CoreAudio artifacts through the task dependency chain
+4. runs the preview app
 
 ### `pkg clean`
 
@@ -1036,6 +1112,13 @@ cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
 [c-dependencies]
 ```
 
+If the generated dependency needs git submodules, the manifest line can use:
+
+```toml
+[dependencies]
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true }
+```
+
 Then build from the root:
 
 ```sh
@@ -1068,6 +1151,9 @@ Workspace example in this repository:
   Demonstrates a task-driven single-binary build that compiles MLang, C, and
   C++ sources in separate phases, fetches `miniaudio` and `AudioFile`, and
   links the results together.
+- `examples/package_manager_vst3_sdk_example`
+  Demonstrates a git dependency that uses `submodules = true` so the fetched
+  Steinberg VST3 SDK checkout includes required submodule content.
 - `examples/package_manager_linux_aarch64_qemu`
   Demonstrates a fetch-only Linux kernel dependency plus `[[task]]` commands
   for AArch64 kernel build and QEMU boot flow.

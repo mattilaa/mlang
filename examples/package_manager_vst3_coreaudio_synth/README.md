@@ -3,7 +3,7 @@
 This example shows a fuller integration path than the SDK metadata bridge:
 
 - fetch the official Steinberg VST3 SDK with `mlang pkg`
-- initialize the SDK submodules required by the VST3 headers and CMake helpers
+- initialize the SDK submodules required by the VST3 headers and CMake helpers automatically
 - compile a small oscillator DSP object from MLang
 - wrap that DSP object with a thin C++ bridge
 - build a minimal VST3 instrument plug-in on macOS
@@ -62,10 +62,36 @@ From this directory:
 The manifest will:
 
 1. clone `vst3sdk`
-2. initialize its submodules recursively
+2. initialize its submodules recursively because the dependency declares `submodules = true`
 3. compile `src/mlang_oscillator.mla` to an object file
 4. configure a local CMake project that uses Steinberg's SDK helpers
 5. build the VST3 bundle target and the CoreAudio preview app
+
+## One-Command Workflow
+
+You do not need to run `pkg fetch` and `pkg build` manually first. This
+example is also set up so a single `pkg run` command performs the whole flow
+sequentially:
+
+```sh
+../../build/mlang pkg run preview-square
+```
+
+That one command will:
+
+1. fetch or update `vst3sdk` if needed
+2. initialize its git submodules because the dependency declares
+   `submodules = true`
+3. run the build dependency chain for `preview-square`
+4. launch the standalone CoreAudio preview app
+
+The separate commands are still useful when you want finer control:
+
+```sh
+../../build/mlang pkg fetch
+../../build/mlang pkg build
+../../build/mlang pkg run preview-square
+```
 
 ## Preview The Oscillator
 

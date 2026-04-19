@@ -3,7 +3,7 @@ name = "vst3_coreaudio_mlang_synth"
 version = "0.1.0"
 
 [dependencies]
-vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", build = "none", spinner = false }
+vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = true, build = "none", spinner = false }
 
 [c-dependencies]
 
@@ -31,15 +31,6 @@ commands = [
 ]
 
 [[task]]
-name = "prepare-vst3-sdk"
-print = "[example] Initializing VST3 SDK submodules"
-workdir = "{{root}}"
-depends_on = ["toolchain-check", "prepare-build-tree"]
-commands = [
-  "git -C {{deps_dir}}/vst3sdk submodule update --init --recursive"
-]
-
-[[task]]
 name = "compile-mlang-dsp"
 phase = "compile"
 print = "[example] Compiling the MLang oscillator DSP object"
@@ -55,7 +46,7 @@ opt_level = "O2"
 name = "configure-cmake"
 print = "[example] Configuring the local CMake project for VST3 and CoreAudio targets"
 workdir = "{{root}}"
-depends_on = ["prepare-vst3-sdk", "compile-mlang-dsp"]
+depends_on = ["compile-mlang-dsp"]
 commands = [
   "cmake -S {{root}} -B {{build_dir}}/cmake -DCMAKE_BUILD_TYPE=Release -DVST3_SDK_ROOT={{deps_dir}}/vst3sdk -DMLANG_DSP_OBJECT={{build_dir}}/obj/mlang_oscillator.o"
 ]
@@ -74,6 +65,9 @@ commands = [
 name = "preview-sine"
 print = "[example] Running the CoreAudio sine-wave preview"
 workdir = "{{root}}"
+# `mlang pkg run preview-sine` forms a one-command workflow:
+# pkg run will fetch dependencies first if needed, then this task pulls in
+# the sequential build chain via `depends_on = ["build-artifacts"]`.
 depends_on = ["build-artifacts"]
 log_output = false
 shell = [
@@ -84,6 +78,8 @@ shell = [
 name = "preview-square"
 print = "[example] Running the CoreAudio square-wave preview"
 workdir = "{{root}}"
+# Same one-command workflow as `preview-sine`, but launches the square-wave
+# variant after the build chain completes.
 depends_on = ["build-artifacts"]
 log_output = false
 shell = [

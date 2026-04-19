@@ -1199,6 +1199,43 @@ task_names_for_phases(const std::vector<TaskSpec>& tasks,
     return names;
 }
 
+static void print_pkg_usage(const std::string& programName)
+{
+    const std::string tool = programName.empty() ? "mlang" : programName;
+    std::cerr << "Usage: " << tool
+              << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n"
+              << "\nCommands:\n"
+              << "  " << tool << " pkg init\n"
+              << "  " << tool
+              << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
+              << "  " << tool
+              << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+              << "  " << tool
+              << " pkg add <name> [--pkg-config NAME] [--system]\n"
+              << "  " << tool
+              << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
+              << "  " << tool
+              << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+              << "  " << tool
+              << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+              << "  " << tool
+              << " pkg run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--option KEY=VALUE]\n"
+              << "  " << tool
+              << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--deps]\n"
+              << "\nSeparate steps:\n"
+              << "  " << tool << " pkg fetch\n"
+              << "  " << tool << " pkg build\n"
+              << "  " << tool << " pkg run <task>\n"
+              << "\nOne-command workflow:\n"
+              << "  " << tool
+              << " pkg run <task>    # fetches dependencies if needed, then runs the task chain\n"
+              << "\nTask tree:\n"
+              << "  " << tool
+              << " pkg run <task> --tasks [--color]   # show dependency/next-task execution order without running commands\n"
+              << "\nExample:\n"
+              << "  cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square --tasks --color\n";
+}
+
 static BuildConfig merge_build_config(const BuildConfig& base,
                                       const BuildConfig& overrideCfg)
 {
@@ -1819,6 +1856,7 @@ struct DepSpec
     std::string subdir;
     int stripComponents = 1;
     bool spinner = true;
+    bool submodules = false;
 };
 
 struct LinkFlags
@@ -2133,6 +2171,8 @@ static std::vector<DepSpec> parse_source_deps(const std::string& content)
             dep.stripComponents = parse_int_or_default(it->second, 1);
         if(auto it = kv.find("spinner"); it != kv.end())
             dep.spinner = parse_toml_bool_value(it->second);
+        if(auto it = kv.find("submodules"); it != kv.end())
+            dep.submodules = parse_toml_bool_value(it->second);
         if(dep.archiveType.empty() && !dep.url.empty())
         {
             if(dep.url.size() >= 7 &&
@@ -2247,6 +2287,7 @@ static std::string make_dependency_manifest_line(const std::string& name,
                                                  const std::string& archiveType,
                                                  const std::string& rev,
                                                  const std::string& tag,
+                                                 bool gitSubmodules,
                                                  const std::string& depSubdir,
                                                  int stripComponents)
 {
@@ -2270,6 +2311,8 @@ static std::string make_dependency_manifest_line(const std::string& name,
             line += ", rev = \"" + rev + "\"";
         if(!tag.empty())
             line += ", tag = \"" + tag + "\"";
+        if(gitSubmodules)
+            line += ", submodules = true";
         if(!depSubdir.empty())
             line += ", subdir = \"" + depSubdir + "\"";
         line += " }";
@@ -3101,6 +3144,21 @@ static int fetch_git_dep(const DepSpec& dep,
                                          fetchCmd, pathEntries, dep.spinner,
                                          dep.spinner, dep.spinner) != 0)
             return 1;
+    }
+
+    if(dep.submodules)
+    {
+        std::string updateSubmodulesCmd =
+            "git -C " + shell_quote(path.string()) +
+            " submodule update --init --recursive";
+        if(run_status_command_with_paths(
+               execution_step_label("Initializing submodules for '" + dep.name +
+                                    "'"),
+               updateSubmodulesCmd, pathEntries, dep.spinner, dep.spinner,
+               dep.spinner) != 0)
+        {
+            return 1;
+        }
     }
 
     if(!dep.rev.empty())
@@ -4082,6 +4140,8 @@ static size_t count_fetch_dep_steps(const DepSpec& dep,
             steps += 1;
         else if(updateExisting)
             steps += 1;
+        if(dep.submodules)
+            steps += 1;
         if(!dep.rev.empty() || !dep.tag.empty())
             steps += 1;
         return steps;
@@ -4129,27 +4189,28 @@ static size_t count_build_dep_steps(const DepSpec& dep,
     return 0;
 }
 
-static void collect_reachable_task_names(
-    const std::vector<TaskSpec>& tasks, const std::string& hostName,
-    const std::string& taskName, std::unordered_set<std::string>& visited)
+struct EffectiveTaskEdges
 {
-    if(taskName.empty() || !visited.insert(taskName).second)
-        return;
+    std::vector<std::string> dependsOn;
+    std::vector<std::string> next;
+    bool parallel = false;
+};
 
-    const auto taskOpt = find_task_spec(tasks, taskName);
-    if(!taskOpt.has_value())
-        return;
-    const auto& task = *taskOpt;
+static EffectiveTaskEdges resolve_effective_task_edges(
+    const TaskSpec& task, const std::vector<TaskSpec>& tasks,
+    const std::string& hostName)
+{
+    EffectiveTaskEdges edges;
     auto hostIt = task.hostOverrides.find(hostName);
     const TaskSpec::HostOverride* hostOverride =
         hostIt == task.hostOverrides.end() ? nullptr : &hostIt->second;
 
-    std::vector<std::string> effectiveDependsOn = task.dependsOn;
+    edges.dependsOn = task.dependsOn;
     if(hostOverride)
     {
-        effectiveDependsOn.insert(effectiveDependsOn.end(),
-                                  hostOverride->dependsOn.begin(),
-                                  hostOverride->dependsOn.end());
+        edges.dependsOn.insert(edges.dependsOn.end(),
+                               hostOverride->dependsOn.begin(),
+                               hostOverride->dependsOn.end());
     }
     std::vector<std::string> effectivePhaseDependsOn = task.phaseDependsOn;
     if(hostOverride)
@@ -4159,13 +4220,14 @@ static void collect_reachable_task_names(
                                        hostOverride->phaseDependsOn.end());
     }
     append_unique_strings(
-        effectiveDependsOn,
+        edges.dependsOn,
         task_names_for_phases(tasks, effectivePhaseDependsOn, hostName));
 
     std::vector<std::string> effectiveJoinOn = task.joinOn;
     if(hostOverride)
     {
-        effectiveJoinOn.insert(effectiveJoinOn.end(), hostOverride->joinOn.begin(),
+        effectiveJoinOn.insert(effectiveJoinOn.end(),
+                               hostOverride->joinOn.begin(),
                                hostOverride->joinOn.end());
     }
     std::vector<std::string> effectivePhaseJoinOn = task.phaseJoinOn;
@@ -4178,13 +4240,13 @@ static void collect_reachable_task_names(
     append_unique_strings(
         effectiveJoinOn,
         task_names_for_phases(tasks, effectivePhaseJoinOn, hostName));
-    append_unique_strings(effectiveDependsOn, effectiveJoinOn);
+    append_unique_strings(edges.dependsOn, effectiveJoinOn);
 
-    std::vector<std::string> effectiveNext = task.nextTasks;
+    edges.next = task.nextTasks;
     if(hostOverride)
     {
-        effectiveNext.insert(effectiveNext.end(), hostOverride->nextTasks.begin(),
-                             hostOverride->nextTasks.end());
+        edges.next.insert(edges.next.end(), hostOverride->nextTasks.begin(),
+                          hostOverride->nextTasks.end());
     }
     std::vector<std::string> effectiveNextPhases = task.nextPhases;
     if(hostOverride)
@@ -4194,11 +4256,246 @@ static void collect_reachable_task_names(
                                    hostOverride->nextPhases.end());
     }
     append_unique_strings(
-        effectiveNext, task_names_for_phases(tasks, effectiveNextPhases, hostName));
+        edges.next, task_names_for_phases(tasks, effectiveNextPhases, hostName));
 
-    for(const auto& dep : effectiveDependsOn)
+    edges.parallel = hostOverride && hostOverride->parallel.has_value()
+                         ? hostOverride->parallel.value()
+                         : task.parallel.value_or(false);
+    return edges;
+}
+
+static bool append_task_execution_order(
+    const std::vector<TaskSpec>& tasks, const std::string& hostName,
+    const std::string& taskName, std::vector<std::string>& stack,
+    std::unordered_set<std::string>& emitted, std::vector<std::string>& order,
+    std::string& error)
+{
+    if(taskName.empty())
+        return true;
+    if(std::find(stack.begin(), stack.end(), taskName) != stack.end())
+    {
+        error = "Detected cyclic task dependency while expanding '" + taskName +
+                "'";
+        return false;
+    }
+
+    const auto taskOpt = find_task_spec(tasks, taskName);
+    if(!taskOpt.has_value())
+    {
+        error = "Task not found: " + taskName;
+        return false;
+    }
+
+    stack.push_back(taskName);
+    const EffectiveTaskEdges edges =
+        resolve_effective_task_edges(*taskOpt, tasks, hostName);
+    for(const auto& dep : edges.dependsOn)
+    {
+        if(!append_task_execution_order(tasks, hostName, dep, stack, emitted,
+                                        order, error))
+        {
+            stack.pop_back();
+            return false;
+        }
+    }
+    if(emitted.insert(taskName).second)
+        order.push_back(taskName);
+    for(const auto& nextTask : edges.next)
+    {
+        if(!append_task_execution_order(tasks, hostName, nextTask, stack,
+                                        emitted, order, error))
+        {
+            stack.pop_back();
+            return false;
+        }
+    }
+    stack.pop_back();
+    return true;
+}
+
+static const char* branch_color_code(size_t index)
+{
+    static const char* kColors[] = {
+        "\033[31m", "\033[32m", "\033[33m",
+        "\033[34m", "\033[35m", "\033[36m"
+    };
+    return kColors[index % (sizeof(kColors) / sizeof(kColors[0]))];
+}
+
+static std::string colorize_tree_text(const std::string& text, bool enableColor,
+                                      std::optional<size_t> colorIndex)
+{
+    if(!enableColor)
+        return text;
+    const size_t index = colorIndex.value_or(5);
+    return std::string(branch_color_code(index)) + text + "\033[0m";
+}
+
+static std::string build_task_tree_prefix(
+    const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
+    bool enableColor, std::optional<size_t> colorIndex)
+{
+    if(isRoot)
+        return "";
+
+    std::string out;
+    for(bool hasMore : ancestorHasMore)
+        out += hasMore ? "\xE2\x94\x82   " : "    ";
+    out += isLast ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 "
+                  : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
+    return colorize_tree_text(out, enableColor, colorIndex);
+}
+
+static std::string format_task_tree_numbered_label(
+    const std::string& taskName, const std::map<std::string, size_t>& orderMap,
+    bool parallel)
+{
+    std::ostringstream out;
+    out << taskName;
+    auto it = orderMap.find(taskName);
+    if(it != orderMap.end())
+        out << " [" << it->second << "]";
+    if(parallel)
+        out << " [parallel]";
+    return out.str();
+}
+
+static void print_task_tree_ascii_node(
+    const std::vector<TaskSpec>& tasks, const std::string& hostName,
+    const std::string& taskName, const std::map<std::string, size_t>& orderMap,
+    const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
+    bool enableColor, std::optional<size_t> colorIndex,
+    std::vector<std::string>& stack, bool printSelf = true)
+{
+    std::vector<bool> connectorAncestors = ancestorHasMore;
+    if(!isRoot && !printSelf && !connectorAncestors.empty())
+        connectorAncestors.pop_back();
+
+    const auto taskOpt = find_task_spec(tasks, taskName);
+    if(!taskOpt.has_value())
+    {
+        const std::string prefix = build_task_tree_prefix(
+            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+        std::cout << prefix << taskName << " (missing)\n";
+        return;
+    }
+    if(std::find(stack.begin(), stack.end(), taskName) != stack.end())
+    {
+        const std::string prefix = build_task_tree_prefix(
+            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+        std::cout << prefix << taskName << " (cycle)\n";
+        return;
+    }
+
+    const EffectiveTaskEdges edges =
+        resolve_effective_task_edges(*taskOpt, tasks, hostName);
+    if(printSelf)
+    {
+        const std::string prefix = build_task_tree_prefix(
+            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+        std::cout << prefix
+                  << format_task_tree_numbered_label(taskName, orderMap,
+                                                     edges.parallel)
+                  << "\n";
+    }
+
+    std::vector<std::pair<std::string, std::string>> children;
+    children.reserve(edges.dependsOn.size() + edges.next.size());
+    for(const auto& dep : edges.dependsOn)
+        children.push_back({ "depends_on", dep });
+    for(const auto& nextTask : edges.next)
+        children.push_back({ "next", nextTask });
+
+    stack.push_back(taskName);
+    for(size_t i = 0; i < children.size(); ++i)
+    {
+        const bool childIsLast = i + 1 == children.size();
+        std::vector<bool> childAncestors = connectorAncestors;
+        if(!isRoot)
+            childAncestors.push_back(!isLast);
+        std::optional<size_t> childColorIndex =
+            enableColor ? std::optional<size_t>(edges.parallel ? i : 5)
+                        : colorIndex;
+
+        const std::string edgePrefix = build_task_tree_prefix(
+            childAncestors, childIsLast, false, enableColor, childColorIndex);
+        std::ostringstream edgeLine;
+        edgeLine << edgePrefix
+                 << colorize_tree_text(children[i].first + ": ", enableColor,
+                                       childColorIndex)
+                 << children[i].second;
+        auto orderIt = orderMap.find(children[i].second);
+        if(orderIt != orderMap.end())
+            edgeLine << " [" << orderIt->second << "]";
+        std::cout << edgeLine.str() << "\n";
+
+        std::vector<bool> nestedAncestors = childAncestors;
+        nestedAncestors.push_back(!childIsLast);
+        print_task_tree_ascii_node(tasks, hostName, children[i].second,
+                                   orderMap, nestedAncestors, true, false,
+                                   enableColor, childColorIndex, stack, false);
+    }
+    stack.pop_back();
+}
+
+static int print_task_plan_for_manifest(const PackageManifest& pkg,
+                                        const std::string& taskName,
+                                        const BuildConfig& buildConfig,
+                                        bool enableColor)
+{
+    const auto tasks = parse_task_specs(pkg.content);
+    const std::string hostName = current_host_name();
+    const auto taskOpt = find_task_spec(tasks, taskName);
+    if(!taskOpt.has_value())
+        return -1;
+
+    std::vector<std::string> order;
+    std::unordered_set<std::string> emitted;
+    std::vector<std::string> orderStack;
+    std::string error;
+    if(!append_task_execution_order(tasks, hostName, taskName, orderStack,
+                                    emitted, order, error))
+    {
+        pkg_error_line(error + " in " + pkg.manifestPath.string());
+        return 1;
+    }
+
+    std::map<std::string, size_t> orderMap;
+    for(size_t i = 0; i < order.size(); ++i)
+        orderMap[order[i]] = i + 1;
+
+    ScopedPackageLogState scopedLogs(
+        make_package_log_state(pkg.packageDir, buildConfig));
+    pkg_info_line("Task tree for '" + taskName + "' (" + hostName + "):");
+    std::vector<std::string> treeStack;
+    print_task_tree_ascii_node(tasks, hostName, taskName, orderMap, {}, true,
+                               true, enableColor, std::nullopt, treeStack);
+
+    pkg_info_line("");
+    pkg_info_line("Execution order:");
+    for(size_t i = 0; i < order.size(); ++i)
+    {
+        pkg_info_line("  " + std::to_string(i + 1) + ". " + order[i]);
+    }
+    return 0;
+}
+
+static void collect_reachable_task_names(
+    const std::vector<TaskSpec>& tasks, const std::string& hostName,
+    const std::string& taskName, std::unordered_set<std::string>& visited)
+{
+    if(taskName.empty() || !visited.insert(taskName).second)
+        return;
+
+    const auto taskOpt = find_task_spec(tasks, taskName);
+    if(!taskOpt.has_value())
+        return;
+    const EffectiveTaskEdges edges =
+        resolve_effective_task_edges(*taskOpt, tasks, hostName);
+
+    for(const auto& dep : edges.dependsOn)
         collect_reachable_task_names(tasks, hostName, dep, visited);
-    for(const auto& nextTask : effectiveNext)
+    for(const auto& nextTask : edges.next)
         collect_reachable_task_names(tasks, hostName, nextTask, visited);
 }
 
@@ -4246,6 +4543,8 @@ static int run_task_for_manifest_impl(
         auto hostIt = task.hostOverrides.find(hostName);
         const TaskSpec::HostOverride* hostOverride =
             hostIt == task.hostOverrides.end() ? nullptr : &hostIt->second;
+        const EffectiveTaskEdges edges =
+            resolve_effective_task_edges(task, tasks, hostName);
 
         std::vector<std::string> effectiveEnv = task.env;
         if(hostOverride)
@@ -4259,64 +4558,8 @@ static int run_task_for_manifest_impl(
                 ? hostOverride->shellLines
                 : task.shellLines;
 
-        std::vector<std::string> effectiveDependsOn = task.dependsOn;
-        if(hostOverride)
-        {
-            effectiveDependsOn.insert(effectiveDependsOn.end(),
-                                      hostOverride->dependsOn.begin(),
-                                      hostOverride->dependsOn.end());
-        }
-        std::vector<std::string> effectivePhaseDependsOn = task.phaseDependsOn;
-        if(hostOverride)
-        {
-            effectivePhaseDependsOn.insert(
-                effectivePhaseDependsOn.end(),
-                hostOverride->phaseDependsOn.begin(),
-                hostOverride->phaseDependsOn.end());
-        }
-        append_unique_strings(
-            effectiveDependsOn,
-            task_names_for_phases(tasks, effectivePhaseDependsOn, hostName));
-
-        std::vector<std::string> effectiveJoinOn = task.joinOn;
-        if(hostOverride)
-        {
-            effectiveJoinOn.insert(effectiveJoinOn.end(),
-                                   hostOverride->joinOn.begin(),
-                                   hostOverride->joinOn.end());
-        }
-        std::vector<std::string> effectivePhaseJoinOn = task.phaseJoinOn;
-        if(hostOverride)
-        {
-            effectivePhaseJoinOn.insert(
-                effectivePhaseJoinOn.end(),
-                hostOverride->phaseJoinOn.begin(),
-                hostOverride->phaseJoinOn.end());
-        }
-        append_unique_strings(
-            effectiveJoinOn,
-            task_names_for_phases(tasks, effectivePhaseJoinOn, hostName));
-        effectiveDependsOn.insert(effectiveDependsOn.end(),
-                                  effectiveJoinOn.begin(),
-                                  effectiveJoinOn.end());
-
-        std::vector<std::string> effectiveNext = task.nextTasks;
-        if(hostOverride)
-        {
-            effectiveNext.insert(effectiveNext.end(),
-                                 hostOverride->nextTasks.begin(),
-                                 hostOverride->nextTasks.end());
-        }
-        std::vector<std::string> effectiveNextPhases = task.nextPhases;
-        if(hostOverride)
-        {
-            effectiveNextPhases.insert(effectiveNextPhases.end(),
-                                       hostOverride->nextPhases.begin(),
-                                       hostOverride->nextPhases.end());
-        }
-        append_unique_strings(
-            effectiveNext,
-            task_names_for_phases(tasks, effectiveNextPhases, hostName));
+        const std::vector<std::string>& effectiveDependsOn = edges.dependsOn;
+        const std::vector<std::string>& effectiveNext = edges.next;
 
         std::vector<std::string> effectiveCommands =
             (hostOverride && !hostOverride->commands.empty())
@@ -4359,10 +4602,7 @@ static int run_task_for_manifest_impl(
             hostOverride && hostOverride->compileOnly.has_value()
                 ? hostOverride->compileOnly.value()
                 : task.compileOnly.value_or(false);
-        bool effectiveParallel =
-            hostOverride && hostOverride->parallel.has_value()
-                ? hostOverride->parallel.value()
-                : task.parallel.value_or(false);
+        bool effectiveParallel = edges.parallel;
         bool effectiveLogOutput =
             hostOverride && hostOverride->logOutput.has_value()
                 ? hostOverride->logOutput.value()
@@ -4781,10 +5021,11 @@ static bool parse_pkg_option_argument(const std::string& text,
 
 int PackageManager::run(int argc, char** argv)
 {
+    const std::string programName =
+        argv[0] ? std::string(argv[0]) : "mlang";
     if(argc < 3)
     {
-        std::cerr << "Usage: " << argv[0]
-                  << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n";
+        print_pkg_usage(programName);
         return 1;
     }
 
@@ -4823,13 +5064,17 @@ int PackageManager::run(int argc, char** argv)
 
     if(subIndex >= argc)
     {
-        std::cerr << "Usage: " << argv[0]
-                  << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n";
+        print_pkg_usage(programName);
         return 1;
     }
 
     std::string sub = argv[subIndex];
     const std::string manifestLabel = manifestPath.string();
+    if(sub == "--help" || sub == "-h" || sub == "help")
+    {
+        print_pkg_usage(programName);
+        return 0;
+    }
 
     if(sub == "init")
     {
@@ -4871,7 +5116,7 @@ int PackageManager::run(int argc, char** argv)
         if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]\n"
+                      << " pkg [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
                       << "       " << argv[0]
                       << " pkg [--config FILE] add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
                       << "       " << argv[0]
@@ -4887,6 +5132,7 @@ int PackageManager::run(int argc, char** argv)
         std::string archiveType;
         std::string rev;
         std::string tag;
+        bool gitSubmodules = false;
         std::string depSubdir;
         std::string pkgConfig;
         std::string addLibProjectDir;
@@ -4907,6 +5153,8 @@ int PackageManager::run(int argc, char** argv)
                 rev = argv[++i];
             else if(arg == "--tag" && i + 1 < argc)
                 tag = argv[++i];
+            else if(arg == "--submodules")
+                gitSubmodules = true;
             else if(arg == "--subdir" && i + 1 < argc)
                 depSubdir = argv[++i];
             else if(arg == "--strip-components" && i + 1 < argc)
@@ -4962,7 +5210,8 @@ int PackageManager::run(int argc, char** argv)
         else
         {
             line = make_dependency_manifest_line(name, gitUrl, archiveUrl,
-                                                 archiveType, rev, tag,
+                                                archiveType, rev, tag,
+                                                 gitSubmodules,
                                                  depSubdir, stripComponents);
         }
 
@@ -5201,7 +5450,7 @@ int PackageManager::run(int argc, char** argv)
         if(subIndex + 1 >= argc)
         {
             std::cerr << "Usage: " << argv[0]
-                      << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
+                      << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE]"
                       << " [--stderr-log FILE] [--warn-log FILE]"
                       << " [--task-print-to-stdout-log]"
                       << " [--option KEY=VALUE]\n";
@@ -5223,10 +5472,16 @@ int PackageManager::run(int argc, char** argv)
 
         const std::string taskName = argv[subIndex + 1];
         PkgCliOverrides overrides;
+        bool printTasks = false;
+        bool colorTasks = false;
         for(int i = subIndex + 2; i < argc; ++i)
         {
             std::string arg = argv[i];
-            if(arg == "--log-dir" && i + 1 < argc)
+            if(arg == "--tasks")
+                printTasks = true;
+            else if(arg == "--color")
+                colorTasks = true;
+            else if(arg == "--log-dir" && i + 1 < argc)
                 overrides.logDir = argv[++i];
             else if(arg == "--stdout-log" && i + 1 < argc)
                 overrides.stdoutLog = argv[++i];
@@ -5267,7 +5522,7 @@ int PackageManager::run(int argc, char** argv)
             {
                 std::cerr << "Unknown option for 'pkg run': " << arg << "\n"
                           << "Usage: " << argv[0]
-                          << " pkg [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR]"
+                          << " pkg [--config FILE] run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR]"
                           << " [--log-dir DIR] [--stdout-log FILE]"
                           << " [--stderr-log FILE] [--warn-log FILE]"
                           << " [--task-print-to-stdout-log]"
@@ -5281,6 +5536,18 @@ int PackageManager::run(int argc, char** argv)
             BuildConfig buildConfig = parse_build_config(pkg.content);
             buildConfig.compilerProgram = compilerProgram;
             apply_cli_overrides(buildConfig, overrides);
+            if(printTasks)
+            {
+                const int rc =
+                    print_task_plan_for_manifest(pkg, taskName, buildConfig,
+                                                 colorTasks);
+                if(rc == -1)
+                    continue;
+                found = true;
+                if(rc != 0)
+                    return 1;
+                continue;
+            }
             int rc;
             {
                 ScopedPackageLogState scopedLogs(
