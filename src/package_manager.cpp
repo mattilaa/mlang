@@ -1213,6 +1213,8 @@ static void print_pkg_usage(const std::string& programName)
     const std::string tool = programName.empty() ? "mlang" : programName;
     std::cerr << "Usage: " << tool
               << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n"
+              << "       " << tool
+              << " pkg <manifest.toml> --tasks [--color]\n"
               << "\nCommands:\n"
               << "  " << tool << " pkg init\n"
               << "  " << tool
@@ -1241,8 +1243,11 @@ static void print_pkg_usage(const std::string& programName)
               << "\nTask tree:\n"
               << "  " << tool
               << " pkg run <task> --tasks [--color]   # show dependency/next-task execution order without running commands\n"
+              << "  " << tool
+              << " pkg <manifest.toml> --tasks [--color]   # show runnable task entrypoints for a manifest\n"
               << "\nExample:\n"
-              << "  cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square --tasks --color\n";
+              << "  cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square --tasks --color\n"
+              << "  ./build/mlang pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml --tasks --color\n";
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -4528,6 +4533,69 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
     return 0;
 }
 
+static std::vector<std::string>
+find_manifest_task_entrypoints(const std::vector<TaskSpec>& tasks,
+                               const std::string& hostName)
+{
+    std::vector<std::string> entrypoints;
+    std::unordered_set<std::string> referenced;
+    for(const auto& task : tasks)
+    {
+        if(!host_supported_by_task(task, hostName))
+            continue;
+        const EffectiveTaskEdges edges =
+            resolve_effective_task_edges(task, tasks, hostName);
+        for(const auto& dep : edges.dependsOn)
+            referenced.insert(dep);
+        for(const auto& nextTask : edges.next)
+            referenced.insert(nextTask);
+    }
+
+    for(const auto& task : tasks)
+    {
+        if(!host_supported_by_task(task, hostName))
+            continue;
+        if(referenced.find(task.name) == referenced.end())
+            entrypoints.push_back(task.name);
+    }
+    if(entrypoints.empty())
+    {
+        for(const auto& task : tasks)
+        {
+            if(host_supported_by_task(task, hostName))
+                entrypoints.push_back(task.name);
+        }
+    }
+    return entrypoints;
+}
+
+static int print_task_overview_for_manifest(const PackageManifest& pkg,
+                                            const BuildConfig& buildConfig,
+                                            bool enableColor)
+{
+    const auto tasks = parse_task_specs(pkg.content);
+    const std::string hostName = current_host_name();
+    const auto entrypoints = find_manifest_task_entrypoints(tasks, hostName);
+    if(entrypoints.empty())
+    {
+        pkg_info_line("No runnable tasks for host '" + hostName + "'.");
+        return 0;
+    }
+
+    pkg_info_line("Runnable task entrypoints for '" + pkg.manifestPath.string() +
+                  "' (" + hostName + "):");
+    for(size_t i = 0; i < entrypoints.size(); ++i)
+    {
+        if(i > 0)
+            pkg_info_line("");
+        const int rc = print_task_plan_for_manifest(pkg, entrypoints[i],
+                                                    buildConfig, enableColor);
+        if(rc != 0)
+            return rc;
+    }
+    return 0;
+}
+
 static void collect_reachable_task_names(
     const std::vector<TaskSpec>& tasks, const std::string& hostName,
     const std::string& taskName, std::unordered_set<std::string>& visited)
@@ -5124,6 +5192,54 @@ int PackageManager::run(int argc, char** argv)
 
     std::string sub = argv[subIndex];
     const std::string manifestLabel = manifestPath.string();
+
+    if(sub != "--help" && sub != "-h" && sub != "help" &&
+       sub != "init" && sub != "add" && sub != "fetch" && sub != "build" &&
+       sub != "run" && sub != "clean")
+    {
+        const std::filesystem::path shorthandManifest = sub;
+        bool printTasks = false;
+        bool colorTasks = false;
+        bool shorthandArgsOk = true;
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--tasks")
+                printTasks = true;
+            else if(arg == "--color")
+                colorTasks = true;
+            else
+                shorthandArgsOk = false;
+        }
+        if(shorthandArgsOk && printTasks)
+        {
+            manifestPath = shorthandManifest;
+            if(!std::filesystem::exists(manifestPath))
+            {
+                std::cerr << manifestPath.string()
+                          << " not found. Run 'mlang pkg init' first.\n";
+                return 1;
+            }
+            auto manifests = collect_target_manifests(manifestPath);
+            if(manifests.empty())
+            {
+                std::cerr << "No package manifests found for task overview.\n";
+                return 1;
+            }
+            for(const auto& pkg : manifests)
+            {
+                BuildConfig buildConfig = parse_build_config(pkg.content);
+                buildConfig.compilerProgram = compilerProgram;
+                if(print_task_overview_for_manifest(pkg, buildConfig,
+                                                   colorTasks) != 0)
+                {
+                    return 1;
+                }
+            }
+            return 0;
+        }
+    }
+
     if(sub == "--help" || sub == "-h" || sub == "help")
     {
         print_pkg_usage(programName);

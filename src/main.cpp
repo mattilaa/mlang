@@ -1420,8 +1420,13 @@ int main(int argc, char** argv)
         std::string impl = implEnv ? implEnv : "";
         bool preferMla = impl.empty() || impl == "mla";
         bool forceCpp = impl == "cpp";
+        const bool shorthandManifestTasks =
+            argc >= 4 &&
+            std::string(argv[2]).size() >= 5 &&
+            std::string(argv[2]).substr(std::string(argv[2]).size() - 5) ==
+                ".toml";
 
-        if(preferMla && !forceCpp)
+        if(preferMla && !forceCpp && !shorthandManifestTasks)
         {
             if(auto rc = run_mlang_pkg_frontend(argc, argv); rc.has_value())
                 return *rc;
