@@ -12,6 +12,8 @@ mod std::time;
 use std::ascii::AsciiKey;
 use std::esc::acs_bullet;
 use std::esc::acs_dot;
+use std::esc::alt_screen_off;
+use std::esc::alt_screen_on;
 use std::esc::bg_rgb;
 use std::esc::bold_on;
 use std::esc::acs_hline;
@@ -186,7 +188,6 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     let nearGlyph: str8 = acs_bullet();
     let coreGlyph: str8 = acs_ssquare();
     bput(builder, cursor(cmd_home()));
-    bput(builder, cursor(cmd_clear_screen()));
     bput(builder, bg_rgb(13, 34, 52));
     bput(builder, fg_rgb(255, 170, 84));
     bput(builder, bold_on());
@@ -314,6 +315,7 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         }
     }
 
+    let _ = write(stdout(), alt_screen_on());
     let _ = write(stdout(), cursor(cmd_hide()));
     let _ = write(stdout(), cursor(cmd_home()));
     let _ = write(stdout(), cursor(cmd_clear_screen()));
@@ -343,8 +345,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     if rawEnabled == 1 {
         let _ = stdin_restore();
     }
-    let _ = write(stdout(), cursor(cmd_show()));
     let _ = write(stdout(), reset());
-    let _ = write(stdout(), "\n");
+    let _ = write(stdout(), cursor(cmd_show()));
+    let _ = write(stdout(), alt_screen_off());
     return 0;
 }
