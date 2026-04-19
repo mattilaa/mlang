@@ -1,5 +1,5 @@
-/// \file oscillator_demo.mla
-/// @ingroup examples
+/// \file main.mla
+/// \ingroup examples
 /// \brief CoreAudio WAV oscilloscope demo rendered with std::esc.
 ///
 mod std::esc;
@@ -14,6 +14,7 @@ use std::esc::acs_bullet;
 use std::esc::acs_dot;
 use std::esc::alt_screen_off;
 use std::esc::alt_screen_on;
+use std::esc::acs_meter;
 use std::esc::bg_rgb;
 use std::esc::bold_on;
 use std::esc::acs_hline;
@@ -42,15 +43,15 @@ use std::term::stdin_restore;
 use std::term::stdout_size;
 use std::time::sleep_ms;
 
-extern fn oscillator_demo_start(wav_path: str8) -> i32;
-extern fn oscillator_demo_stop() -> i32;
-extern fn oscillator_demo_running() -> i32;
-extern fn oscillator_demo_sample_rate() -> i64;
-extern fn oscillator_demo_total_frames() -> i64;
-extern fn oscillator_demo_current_frame() -> i64;
-extern fn oscillator_demo_last_error() -> str8;
-extern fn oscillator_demo_snapshot_i64(channel: i32, window: i64) -> list<i64>;
-extern fn oscillator_demo_level_i64(channel: i32) -> i64;
+extern fn oscilloscope_demo_start(wav_path: str8) -> i32;
+extern fn oscilloscope_demo_stop() -> i32;
+extern fn oscilloscope_demo_running() -> i32;
+extern fn oscilloscope_demo_sample_rate() -> i64;
+extern fn oscilloscope_demo_total_frames() -> i64;
+extern fn oscilloscope_demo_current_frame() -> i64;
+extern fn oscilloscope_demo_last_error() -> str8;
+extern fn oscilloscope_demo_snapshot_i64(channel: i32, window: i64) -> list<i64>;
+extern fn oscilloscope_demo_level_i64(channel: i32) -> i64;
 
 fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 {
     if x < lo {
@@ -70,11 +71,6 @@ fn viewport_width(cols: i32) -> i64 {
 fn viewport_height(rows: i32) -> i64 {
     let height: i64 = rows - 10;
     return clamp_i64(height, 8, 36);
-}
-
-fn sample_row(sample: i64, height: i64) -> i64 {
-    let clamped: i64 = clamp_i64(sample, -1000, 1000);
-    return ((1000 - clamped) * (height - 1)) / 2000;
 }
 
 fn sample_subrow(sample: i64, height: i64) -> i64 {
@@ -104,44 +100,6 @@ fn segment_distance(rowSub: i64, a: i64, b: i64) -> i64 {
     return min_i64(abs_i64(rowSub - a), abs_i64(rowSub - b));
 }
 
-fn draw_waveform(builder: i64, samples: list<i64>, width: i64, height: i64,
-                 axisGlyph: str8, farGlyph: str8, nearGlyph: str8, coreGlyph: str8) {
-    let center: i64 = height / 2;
-    for row in 0..height {
-        bput(builder, "  ");
-        for col in 0..width {
-            let base: i64 = col * 2;
-            let prevSub: i64 = sample_subrow(samples[base], height);
-            let curSub: i64 = sample_subrow(samples[base + 1], height);
-            let nextSub: i64 = sample_subrow(samples[base + 2], height);
-            let rowSub: i64 = row * 4 + 1;
-            let d0: i64 = segment_distance(rowSub, prevSub, curSub);
-            let d1: i64 = segment_distance(rowSub, curSub, nextSub);
-            let dist: i64 = min_i64(d0, d1);
-            if dist == 0 {
-                bput(builder, fg_rgb(188, 255, 232));
-                bput(builder, coreGlyph);
-                bput(builder, reset());
-            } else if dist <= 1 {
-                bput(builder, fg_rgb(130, 220, 205));
-                bput(builder, nearGlyph);
-                bput(builder, reset());
-            } else if dist <= 3 {
-                bput(builder, fg_rgb(94, 158, 166));
-                bput(builder, farGlyph);
-                bput(builder, reset());
-            } else if row == center {
-                bput(builder, fg_rgb(58, 84, 112));
-                bput(builder, axisGlyph);
-                bput(builder, reset());
-            } else {
-                bput(builder, " ");
-            }
-        }
-        bput(builder, "\r\n");
-    }
-}
-
 fn meter_color(level: i64) -> str8 {
     if level >= 850 {
         return fg_rgb(255, 96, 76);
@@ -155,28 +113,34 @@ fn meter_color(level: i64) -> str8 {
     return fg_rgb(116, 240, 120);
 }
 
-fn draw_meter_cell(builder: i64, row: i64, height: i64, level: i64, blockGlyph: str8) {
-    let threshold: i64 = ((height - row) * 1000) / height;
-    if level >= threshold {
+fn draw_meter_cell(builder: i64, row: i64, height: i64, level: i64) {
+    let totalSubrows: i64 = height * 4;
+    let filledSubrows: i64 = (level * totalSubrows) / 1000;
+    let rowBase: i64 = (height - 1 - row) * 4;
+    let fill: i64 = clamp_i64(filledSubrows - rowBase, 0, 4);
+    let glyph: str8 = acs_meter(fill);
+    if fill > 0 {
+        let threshold: i64 = ((rowBase + 2) * 1000) / totalSubrows;
         let color: str8 = meter_color(threshold);
         bput(builder, color);
-        bput(builder, blockGlyph);
+        bput(builder, glyph);
         bput(builder, reset());
     } else {
         bput(builder, fg_rgb(22, 58, 42));
-        bput(builder, blockGlyph);
+        bput(builder, glyph);
         bput(builder, reset());
     }
+    free(glyph);
 }
 
 fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, term: TermSize) {
     let width: i64 = viewport_width(term.cols);
     let height: i64 = viewport_height(term.rows);
-    let current: i64 = oscillator_demo_current_frame();
-    let total: i64 = oscillator_demo_total_frames();
-    let sr: i64 = oscillator_demo_sample_rate();
-    let levelLeft: i64 = oscillator_demo_level_i64(0);
-    let levelRight: i64 = oscillator_demo_level_i64(1);
+    let current: i64 = oscilloscope_demo_current_frame();
+    let total: i64 = oscilloscope_demo_total_frames();
+    let sr: i64 = oscilloscope_demo_sample_rate();
+    let levelLeft: i64 = oscilloscope_demo_level_i64(0);
+    let levelRight: i64 = oscilloscope_demo_level_i64(1);
     var progressPct: i64 = 0;
     if total > 0 {
         progressPct = (current * 100) / total;
@@ -191,7 +155,7 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
     bput(builder, bg_rgb(13, 34, 52));
     bput(builder, fg_rgb(255, 170, 84));
     bput(builder, bold_on());
-    bput(builder, "Realtime Oscillator Demo");
+    bput(builder, "Realtime Oscilloscope Demo");
     bput(builder, reset());
     let header: str8 = format!("  CoreAudio WAV output  sr={}Hz  frame={}/{}  progress={}%  L={}  R={}",
                                sr, current, total, progressPct, levelLeft, levelRight);
@@ -208,9 +172,9 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
 
     for row in 0..height {
         bput(builder, "  ");
-        draw_meter_cell(builder, row, height, levelLeft, coreGlyph);
+        draw_meter_cell(builder, row, height, levelLeft);
         bput(builder, " ");
-        draw_meter_cell(builder, row, height, levelRight, coreGlyph);
+        draw_meter_cell(builder, row, height, levelRight);
         bput(builder, "  ");
         let center: i64 = height / 2;
         for col in 0..width {
@@ -291,20 +255,20 @@ fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, ter
 }
 
 fn main(argc: i32, args: list<str8>) -> i32 {
-    var wavPath: str8 = "examples/fft_example/illusion.wav";
+    var wavPath: str8 = "../fft_example/illusion.wav";
     if argc > 1 {
         let arg1: str8 = args[1];
         if arg1 == "-h" || arg1 == "--help" {
-            println!("Usage: oscillator_demo [WAV_PATH]");
+            println!("Usage: oscilloscope_demo [WAV_PATH]");
             println!("Example:");
-            println!("  ./examples/oscillator_demo_run.sh examples/fft_example/illusion.wav");
+            println!("  ../../build/mlang pkg run demo --option wav_path=../fft_example/illusion.wav");
             return 0;
         }
         wavPath = arg1;
     }
 
-    if oscillator_demo_start(wavPath) != 0 {
-        eprintln!("oscillator demo start failed: {}", oscillator_demo_last_error());
+    if oscilloscope_demo_start(wavPath) != 0 {
+        eprintln!("oscilloscope demo start failed: {}", oscilloscope_demo_last_error());
         return 1;
     }
 
@@ -320,16 +284,16 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     let _ = write(stdout(), cursor(cmd_home()));
     let _ = write(stdout(), cursor(cmd_clear_screen()));
 
-    while oscillator_demo_running() == 1 {
+    while oscilloscope_demo_running() == 1 {
         let term: TermSize = stdout_size();
         let width: i64 = viewport_width(term.cols);
-        let leftSamples: list<i64> = oscillator_demo_snapshot_i64(0, width * 2 + 2);
-        let rightSamples: list<i64> = oscillator_demo_snapshot_i64(1, width * 2 + 2);
+        let leftSamples: list<i64> = oscilloscope_demo_snapshot_i64(0, width * 2 + 2);
+        let rightSamples: list<i64> = oscilloscope_demo_snapshot_i64(1, width * 2 + 2);
         render_frame(wavPath, leftSamples, rightSamples, term);
 
         let key: i32 = read_keycode_nonblocking(stdin());
         if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
-            let _ = oscillator_demo_stop();
+            let _ = oscilloscope_demo_stop();
             break;
         }
         sleep_ms(16);
@@ -337,8 +301,8 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     let finalTerm: TermSize = stdout_size();
     let finalWidth: i64 = viewport_width(finalTerm.cols);
-    let finalLeft: list<i64> = oscillator_demo_snapshot_i64(0, finalWidth * 2 + 2);
-    let finalRight: list<i64> = oscillator_demo_snapshot_i64(1, finalWidth * 2 + 2);
+    let finalLeft: list<i64> = oscilloscope_demo_snapshot_i64(0, finalWidth * 2 + 2);
+    let finalRight: list<i64> = oscilloscope_demo_snapshot_i64(1, finalWidth * 2 + 2);
     render_frame(wavPath, finalLeft, finalRight, finalTerm);
     println!("");
 

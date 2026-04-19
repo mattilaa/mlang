@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "../include/mlang_c_types.h"
+#include "../../../include/mlang_c_types.h"
 
 namespace {
 
@@ -372,7 +372,7 @@ void outputCallback(void* userData, AudioQueueRef queue, AudioQueueBufferRef buf
 
 } // namespace
 
-extern "C" int32_t oscillator_demo_start(mlang_string wavPath)
+extern "C" int32_t oscilloscope_demo_start(mlang_string wavPath)
 {
     if(!wavPath || !wavPath[0])
     {
@@ -443,39 +443,39 @@ extern "C" int32_t oscillator_demo_start(mlang_string wavPath)
     return 0;
 }
 
-extern "C" int32_t oscillator_demo_stop(void)
+extern "C" int32_t oscilloscope_demo_stop(void)
 {
     stopPlayback();
     clearLastError();
     return 0;
 }
 
-extern "C" int32_t oscillator_demo_running(void)
+extern "C" int32_t oscilloscope_demo_running(void)
 {
     return g_state.running.load() != 0 ? 1 : 0;
 }
 
-extern "C" int64_t oscillator_demo_sample_rate(void)
+extern "C" int64_t oscilloscope_demo_sample_rate(void)
 {
     return static_cast<std::int64_t>(g_state.sampleRate.load());
 }
 
-extern "C" int64_t oscillator_demo_total_frames(void)
+extern "C" int64_t oscilloscope_demo_total_frames(void)
 {
     return static_cast<std::int64_t>(g_state.totalFrames.load());
 }
 
-extern "C" int64_t oscillator_demo_current_frame(void)
+extern "C" int64_t oscilloscope_demo_current_frame(void)
 {
     return static_cast<std::int64_t>(g_state.frameCursor.load());
 }
 
-extern "C" mlang_string oscillator_demo_last_error(void)
+extern "C" mlang_string oscilloscope_demo_last_error(void)
 {
     return g_state.lastError.empty() ? "" : g_state.lastError.c_str();
 }
 
-extern "C" mlang_list_t oscillator_demo_snapshot_i64(int32_t channel, int64_t window)
+extern "C" mlang_list_t oscilloscope_demo_snapshot_i64(int32_t channel, int64_t window)
 {
     if(window <= 0)
         return {0, nullptr};
@@ -508,7 +508,7 @@ extern "C" mlang_list_t oscillator_demo_snapshot_i64(int32_t channel, int64_t wi
     return {window, out};
 }
 
-extern "C" int64_t oscillator_demo_level_i64(int32_t channel)
+extern "C" int64_t oscilloscope_demo_level_i64(int32_t channel)
 {
     const float level = channel == 1 ? g_state.levelRight.load() : g_state.levelLeft.load();
     return static_cast<int64_t>(std::lrint(clampUnit(level) * 1000.0f));
