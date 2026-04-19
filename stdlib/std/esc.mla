@@ -365,3 +365,11 @@ pub fn acs_dot() -> str8 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyp
 pub fn acs_bullet() -> str8 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::Bullet)); }
 /// @brief Small filled square glyph. Returns an owned formatted string.
 pub fn acs_ssquare() -> str8 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::BlackSmallSquare)); }
+/// @brief Meter fill glyph with 0..4 sub-row fill using braille patterns.
+pub fn acs_meter(fill: i32) -> str8 {
+    if fill <= 0 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::BrailleBlank)); }
+    if fill == 1 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::BrailleBottom1)); }
+    if fill == 2 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::BrailleBottom2)); }
+    if fill == 3 { return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::BrailleBottom3)); }
+    return format!("{}", unicode_box_glyph(UnicodeBoxGlyph::BrailleFull));
+}
