@@ -31,7 +31,7 @@ branch tasks are complete before concatenating their outputs.
 Run:
 
 ```sh
-../../build/mlang pkg run workflow
+mlang pkg run workflow
 cat build/joined.txt
 ```
 
@@ -80,7 +80,7 @@ commands = [
 Run it with:
 
 ```sh
-../../build/mlang pkg run phase-workflow
+mlang pkg run phase-workflow
 cat build/phase-joined.txt
 ```
 

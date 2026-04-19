@@ -7,7 +7,7 @@ Primary LSP servers:
 - `build/mlangd-mla` (Mlang)
 
 ```sh
-./build/mlangd --stdio
+mlangd --stdio
 ```
 
 ## C++ LSP
@@ -16,13 +16,13 @@ C++ LSP server target is `mlangd` (stdio).
 ```sh
 cmake -S . -B build
 cmake --build build
-./build/mlangd --stdio
+mlangd --stdio
 ```
 
 Use with UVim:
 
 ```sh
-uvim --mlang-lsp --mlang-lsp-path ./build/mlangd
+uvim --mlang-lsp --mlang-lsp-path /path/to/mlangd
 ```
 
 UVim `<leader>f` formatting works through `textDocument/formatting`; `mlangd`
@@ -32,19 +32,19 @@ formatting.
 Enable LSP debug telemetry (`cache clears`, `active docs`, `evictions`):
 
 ```sh
-MLANG_LSP_DEBUG=1 ./build/mlangd --stdio
+MLANG_LSP_DEBUG=1 /path/to/mlangd --stdio
 ```
 
 Write debug output to a file:
 
 ```sh
-MLANG_LSP_DEBUG=1 MLANG_LSP_DEBUG_LOG=/tmp/mlangd_telemetry.log ./build/mlangd --stdio
+MLANG_LSP_DEBUG=1 MLANG_LSP_DEBUG_LOG=/tmp/mlangd_telemetry.log /path/to/mlangd --stdio
 ```
 
 Tune semantic cache clear cadence for long-running sessions:
 
 ```sh
-MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 ./build/mlangd --stdio
+MLANGD_COMPILER_CACHE_CLEAR_INTERVAL=180 path/to/mlangd --stdio
 ```
 
 ## Mlangd (Mlang Scaffold)
@@ -55,13 +55,13 @@ It uses `std::jsonrpc::run_stdio_loop(...)` and a Mlang dispatcher hook:
 Build object:
 
 ```sh
-./build/mlang -c tools/mlangd-mla/main.mla -L ./build -lmlang_std
+mlang -c tools/mlangd-mla/main.mla -L ./build -lmlang_std
 ```
 
 Build executable:
 
 ```sh
-./build/mlang tools/mlangd-mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd-mla
+mlang tools/mlangd-mla/main.mla -L ./build -lmlang_std -o /tmp/mlangd-mla
 /tmp/mlangd-mla --stdio
 ```
 
@@ -75,18 +75,18 @@ Current scope:
 - pkg frontend binary caching (skip recompilation when cached tool is up-to-date)
 
 ```sh
-./build/mlang tools/mlang-frontend-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-frontend-mla
-/tmp/mlang-frontend-mla --backend ./build/mlang --help
-/tmp/mlang-frontend-mla --backend ./build/mlang examples/main.mla -o /tmp/main_bin
-/tmp/mlang-frontend-mla --backend ./build/mlang test tests
-/tmp/mlang-frontend-mla --backend ./build/mlang run tests tests
-/tmp/mlang-frontend-mla --backend ./build/mlang bench tests --bench-iters 200 --bench-warmup 20
+mlang tools/mlang-frontend-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-frontend-mla
+/tmp/mlang-frontend-mla --backend mlang --help
+/tmp/mlang-frontend-mla --backend mlang examples/main.mla -o /tmp/main_bin
+/tmp/mlang-frontend-mla --backend mlang test tests
+/tmp/mlang-frontend-mla --backend mlang run tests tests
+/tmp/mlang-frontend-mla --backend mlang bench tests --bench-iters 200 --bench-warmup 20
 ```
 
 You can route `mlang` itself through the MLang frontend implementation:
 
 ```sh
-MLANG_FRONTEND_IMPL=mla ./build/mlang examples/main.mla -o /tmp/main_bin
+MLANG_FRONTEND_IMPL=mla mlang examples/main.mla -o /tmp/main_bin
 ```
 
 After install (`./scripts/build_install.sh`), prefer:
@@ -132,8 +132,8 @@ backend if needed.
 Force backend selection with:
 
 ```sh
-MLANG_PKG_IMPL=mla ./build/mlang pkg init
-MLANG_PKG_IMPL=cpp ./build/mlang pkg init
+MLANG_PKG_IMPL=mla mlang pkg init
+MLANG_PKG_IMPL=cpp mlang pkg init
 ```
 
 `mlang pkg init` now scaffolds both `mlang.toml` and `src/main.mla`, so a new
@@ -145,33 +145,33 @@ default `mlang.toml` behavior intact while allowing per-architecture manifests
 such as `arm64.toml` and `x64.toml` in the same directory:
 
 ```sh
-./build/mlang pkg --config arm64.toml fetch
-./build/mlang pkg --config arm64.toml build
-./build/mlang pkg --config x64.toml build
-./build/mlang pkg --config qemu-aarch64.toml run qemu-run
+mlang pkg --config arm64.toml fetch
+mlang pkg --config arm64.toml build
+mlang pkg --config x64.toml build
+mlang pkg --config qemu-aarch64.toml run qemu-run
 ```
 
 Build and run:
 
 ```sh
-./build/mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
-/tmp/mlang-pkg-mla --backend ./build/mlang init
-/tmp/mlang-pkg-mla --backend ./build/mlang --config arm64.toml build -O2
-/tmp/mlang-pkg-mla --backend ./build/mlang add cjson --git https://github.com/DaveGamble/cJSON.git
-/tmp/mlang-pkg-mla --backend ./build/mlang fetch
-/tmp/mlang-pkg-mla --backend ./build/mlang build -O2
-/tmp/mlang-pkg-mla --backend ./build/mlang build --build-dir build-release --deps-dir .pkg/deps
-/tmp/mlang-pkg-mla --backend ./build/mlang clean
-/tmp/mlang-pkg-mla --backend ./build/mlang clean --deps
+mlang tools/mlang-pkg-mla/main.mla -L ./build -lmlang_std -o /tmp/mlang-pkg-mla
+/tmp/mlang-pkg-mla --backend mlang init
+/tmp/mlang-pkg-mla --backend mlang --config arm64.toml build -O2
+/tmp/mlang-pkg-mla --backend mlang add cjson --git https://github.com/DaveGamble/cJSON.git
+/tmp/mlang-pkg-mla --backend mlang fetch
+/tmp/mlang-pkg-mla --backend mlang build -O2
+/tmp/mlang-pkg-mla --backend mlang build --build-dir build-release --deps-dir .pkg/deps
+/tmp/mlang-pkg-mla --backend mlang clean
+/tmp/mlang-pkg-mla --backend mlang clean --deps
 # Optional for CMake-based deps:
-/tmp/mlang-pkg-mla --backend ./build/mlang build -O2 --ninja
+/tmp/mlang-pkg-mla --backend mlang build -O2 --ninja
 ```
 
 Generate a complete subproject package automatically:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
-./build/mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
 ```
 
 `mlang pkg clean` removes the configured build directory. When `deps_dir`
@@ -193,13 +193,13 @@ print = "Booting QEMU with {{option.userspace}} userspace"
 ```
 
 ```sh
-./build/mlang pkg run qemu-run --option userspace=gnu
+mlang pkg run qemu-run --option userspace=gnu
 ```
 
 Custom task workflows can be declared in `mlang.toml` and run with:
 
 ```sh
-./build/mlang pkg run <task-name>
+mlang pkg run <task-name>
 ```
 
 Current task graph features:
@@ -274,7 +274,7 @@ commands = ["sh -c 'cat {{build_dir}}/left.txt {{build_dir}}/right.txt > {{build
 Run it from `examples/package_manager_task_graph`:
 
 ```sh
-../../build/mlang pkg run workflow
+mlang pkg run workflow
 cat build/joined.txt
 ```
 
@@ -287,7 +287,7 @@ commands = [
   [
     'sh',
     '-c',
-    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+    'if ! command -v mlang >/dev/null; then echo Missing mlang.; exit 1; fi',
   ],
 ]
 commands += [
@@ -404,13 +404,13 @@ from the file/workspace hierarchy.
 
 ```sh
 # Print formatted output
-mlang-format path/to/file.mla
+mlang-format /path/to/file.mla
 
 # In-place rewrite (clang-format style)
-mlang-format -i path/to/file.mla
+mlang-format -i /path/to/file.mla
 
 # From stdin with style lookup anchored to a file path
-cat path/to/file.mla | mlang-format --assume-filename path/to/file.mla
+cat /path/to/file.mla | mlang-format --assume-filename /path/to/file.mla
 ```
 
 Current Mlang port scope:
@@ -430,9 +430,9 @@ example, and run it (the program uses libcurl to fetch a URL).
 
 # Run package-manager demo
 cd examples/package_manager_git_cjson
-../../build/mlang pkg fetch
-../../build/mlang pkg build
-# Or: ../../build/mlang pkg build -O3 --ninja
+mlang pkg fetch
+mlang pkg build
+# Or: mlang pkg build -O3 --ninja
 ./build/cjson_demo
 # Optional URL override:
 # ./build/cjson_demo --url https://www.someplace.com
@@ -536,11 +536,11 @@ cmake -S . -B build
 cmake --build build -j
 
 # Terminal 1: start server
-./build/mlang examples/std_net_mt_server.mla -o /tmp/std_net_mt_server_bin
+mlang examples/std_net_mt_server.mla -o /tmp/std_net_mt_server_bin
 /tmp/std_net_mt_server_bin --port 18788
 
 # Terminal 2: run client
-./build/mlang examples/std_net_mt_client.mla -o /tmp/std_net_mt_client_bin
+mlang examples/std_net_mt_client.mla -o /tmp/std_net_mt_client_bin
 /tmp/std_net_mt_client_bin --port 18788
 ```
 
@@ -566,11 +566,11 @@ Manual run (separate terminals):
 
 ```sh
 # Terminal 1
-./build/mlang examples/protocol_mt/server.mla -o /tmp/protocol_mt_server
+mlang examples/protocol_mt/server.mla -o /tmp/protocol_mt_server
 /tmp/protocol_mt_server --port 19095 --clients 4 --rounds 3
 
 # Terminal 2
-./build/mlang examples/protocol_mt/client.mla -o /tmp/protocol_mt_client
+mlang examples/protocol_mt/client.mla -o /tmp/protocol_mt_client
 /tmp/protocol_mt_client --port 19095 --clients 1 --rounds 7 --delay-min-ms 500 --delay-max-ms 1000
 ```
 
@@ -675,7 +675,7 @@ Build:
 ```sh
 cc -O2 -I./include $(pkg-config --cflags jack) -c examples/jack2_queue_bridge.c -o /tmp/jack2_queue_bridge.o
 ar rcs /tmp/libjack2_mlang_bridge.a /tmp/jack2_queue_bridge.o
-./build/mlang examples/jack2_lockfree_thread_demo.mla -L /tmp -ljack2_mlang_bridge $(pkg-config --libs jack) -o /tmp/jack2_lockfree_demo
+mlang examples/jack2_lockfree_thread_demo.mla -L /tmp -ljack2_mlang_bridge $(pkg-config --libs jack) -o /tmp/jack2_lockfree_demo
 ```
 
 Run:
@@ -709,7 +709,7 @@ Build:
 ```sh
 cc -O2 -I./include $(pkg-config --cflags jack) -c examples/sampler_example/jack2_drum_machine_bridge.c -o /tmp/jack2_drum_machine_bridge.o
 ar rcs /tmp/libjack2_drum_machine.a /tmp/jack2_drum_machine_bridge.o
-./build/mlang examples/sampler_example/jack2_drum_machine.mla -L /tmp -ljack2_drum_machine $(pkg-config --libs jack) -o /tmp/jack2_drum_machine_demo
+mlang examples/sampler_example/jack2_drum_machine.mla -L /tmp -ljack2_drum_machine $(pkg-config --libs jack) -o /tmp/jack2_drum_machine_demo
 ```
 
 Run:
@@ -1069,9 +1069,9 @@ opt_level = "O2"
 Run from the workspace root:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
-./build/mlang pkg clean
+mlang pkg fetch
+mlang pkg build
+mlang pkg clean
 ```
 
 Source dependencies can now come from Git or from a `tar.gz` URL:
@@ -1107,7 +1107,7 @@ built-in dependency builders during `mlang pkg build`.
 Override the generated location with:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
 ```
 
 ## Package Workspaces And Fetched Subprojects
@@ -1169,8 +1169,8 @@ cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.t
 Run from the workspace root:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 See:
@@ -1201,7 +1201,7 @@ entry = "src/main.mla"
 Run:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
 ```
 
 Generated layout:
@@ -1240,8 +1240,8 @@ cjson = { git = "https://github.com/DaveGamble/cJSON.git" }
 Then build from the root:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 Packages can also declare shell-driven custom tasks:
@@ -1262,15 +1262,15 @@ make_program = "gmake"
 Run a task with:
 
 ```sh
-./build/mlang pkg run kernel-build
+mlang pkg run kernel-build
 ```
 
 Linux AArch64 kernel example sequence:
 
 ```sh
 cd examples/package_manager_linux_aarch64_qemu
-../../build/mlang pkg fetch
-../../build/mlang pkg run boot-flow
+mlang pkg fetch
+mlang pkg run boot-flow
 ```
 
 Linux AArch64 kernel example installation on macOS:
@@ -1381,8 +1381,8 @@ CLI overrides are available on `pkg fetch`, `pkg build`, `pkg run`, and
 single project root keeps multiple manifests, for example:
 
 ```sh
-./build/mlang pkg --config build-arm64.toml build
-./build/mlang pkg --config build-x64.toml build
+mlang pkg --config build-arm64.toml build
+mlang pkg --config build-x64.toml build
 ```
 
 If `--config` is omitted, the package manager still uses `mlang.toml`.
@@ -1410,14 +1410,14 @@ still the supported host for reproducible full-kernel builds.
 Example workflow with config-driven defaults:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 # Override only the optimization level from the CLI:
-./build/mlang pkg build -O3
-./build/mlang pkg build -Og
-./build/mlang pkg build -Os
-./build/mlang pkg build -Oz
-./build/mlang pkg clean
+mlang pkg build -O3
+mlang pkg build -Og
+mlang pkg build -Os
+mlang pkg build -Oz
+mlang pkg clean
 ```
 
 Workspace example:
@@ -1459,14 +1459,14 @@ Supported architecture names are `x86`, `x64`, and `aarch64`. The compiler
 target can be selected with `--target-arch`:
 
 ```bash
-./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo
-./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_hello_demo
-./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_data_hello_demo
-./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_demo.ll
-./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_hello_demo.ll
-./build/mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_data_hello_demo.ll
-./build/mlang tools/mlang-frontend-mla/main.mla -L build -lmlang_std -o /tmp/mlang-frontend-mla
-/tmp/mlang-frontend-mla --backend ./build/mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo_frontend
+mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo
+mlang --target-arch aarch64 examples/inline_asm_aarch64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_hello_demo
+mlang --target-arch aarch64 examples/inline_asm_aarch64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_data_hello_demo
+mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_demo.ll
+mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_hello_demo.ll
+mlang --target-arch x64 -emit-llvm examples/inline_asm_x64_data_hello_demo.mla -L build -lmlang_std -o /tmp/inline_asm_x64_data_hello_demo.ll
+mlang tools/mlang-frontend-mla/main.mla -L build -lmlang_std -o /tmp/mlang-frontend-mla
+/tmp/mlang-frontend-mla --backend mlang --target-arch aarch64 examples/inline_asm_aarch64_demo.mla -L build -lmlang_std -o /tmp/inline_asm_aarch64_demo_frontend
 ```
 
 If an asm block is tagged for the wrong architecture, compilation fails with an
@@ -1479,7 +1479,7 @@ locally unless you also have the matching toolchain and runtime available.
 Benchmark commands:
 
 ```bash
-./build/mlang bench tests/inline_asm_bench_tests.mla --bench-iters 200000 --bench-warmup 20000 -L build -lmlang_std
-./build/mlang --tests tests/inline_asm_target_arch_tests.mla -L build -lmlang_std
-./build/mlang --tests tests/multiline_string_tests.mla -L build -lmlang_std -o /tmp/multiline_string_tests_bin && /tmp/multiline_string_tests_bin
+mlang bench tests/inline_asm_bench_tests.mla --bench-iters 200000 --bench-warmup 20000 -L build -lmlang_std
+mlang --tests tests/inline_asm_target_arch_tests.mla -L build -lmlang_std
+mlang --tests tests/multiline_string_tests.mla -L build -lmlang_std -o /tmp/multiline_string_tests_bin && /tmp/multiline_string_tests_bin
 ```

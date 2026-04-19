@@ -1,11 +1,41 @@
 /// \file main.mla
-/// \brief Native MLang implementation of package manager frontend/backend.
+/// \brief Native MLang implementation of the package manager frontend.
 ///
-/// Usage:
-///   mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>] <init|add|fetch|build|clean> [args...]
+/// Handles the simple `mlang pkg` subcommands — `init`, `add`, `fetch`,
+/// `build`, and `clean` — for manifests that only need the MLang-native
+/// workflow. Manifests that require the richer C++ backend (tasks, run,
+/// tests, task trees, CMake/Ninja orchestration, log files, per-manifest
+/// build configs, etc.) are detected and delegated transparently via
+/// `delegate_pkg_to_cpp`.
 ///
-/// `--backend` selects the compiler binary used by `build` (default: `mlang`).
-/// `--config` overrides the manifest path (default: `mlang.toml`).
+/// \section usage Usage
+/// \code
+///   mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>]
+///                 <init|add|fetch|build|clean> [args...]
+/// \endcode
+///
+/// - `--backend <mlang_bin>` selects the compiler binary used by `build`
+///   and for delegation to the C++ backend (default: `mlang`).
+/// - `--config <manifest>` (or `--config=<manifest>`) overrides the manifest
+///   path (default: `mlang.toml`). May appear in any position — before or
+///   after the subcommand and its arguments.
+///
+/// \section subcommands Subcommands
+/// - \b init — Scaffold a new `mlang.toml` (and `src/main.mla` stub).
+/// - \b add — Append a dependency entry (git, tag/rev, pkg-config, system).
+/// - \b fetch — Fetch Git dependencies into the deps directory.
+/// - \b build — Compile the package (delegates to the C++ backend for
+///   multi-target / CMake manifests).
+/// - \b clean — Remove the build directory.
+///
+/// \section flags Flag ordering
+/// All dashed flags may appear in any order relative to the subcommand and
+/// its positional arguments. For example:
+/// \code
+///   mlang pkg fetch --config examples/foo/mlang.toml
+///   mlang pkg --config examples/foo/mlang.toml fetch
+/// \endcode
+/// are equivalent.
 
 /// \cond INTERNAL_IMPORTS
 mod std::compiler;
@@ -64,14 +94,46 @@ fn print_usage() -> void {
     println!("Usage:");
     println!("  mlang-pkg-mla [--backend <mlang_bin>] [--config <manifest>] <subcommand> [args...]");
     println!("");
+    println!("Global options (may appear in any position):");
+    println!("  --backend <bin>       Compiler binary used by build/delegate (default: mlang)");
+    println!("  --config <file>       Manifest path (default: mlang.toml)");
+    println!("  --config=<file>       Same, inline form");
+    println!("");
     println!("Subcommands:");
-    println!("  [--config FILE] init");
-    println!("  [--config FILE] add <name> [--git URL] [--rev REV] [--tag TAG]");
-    println!("  [--config FILE] add <name> [--pkg-config NAME] [--system]");
-    println!("  [--config FILE] fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("  [--config FILE] build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log]");
-    println!("  [--config FILE] run <task> [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--option KEY=VALUE]");
-    println!("  [--config FILE] clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE] [--task-print-to-stdout-log] [--deps]");
+    println!("  init                  Scaffold mlang.toml and src/main.mla");
+    println!("  add <name> [--git URL [--rev REV] [--tag TAG] [--submodules]]");
+    println!("             [--url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]]");
+    println!("             [--pkg-config NAME] [--system]");
+    println!("             [--add-lib [--project-dir DIR]]");
+    println!("  fetch     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
+    println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
+    println!("            [--task-print-to-stdout-log]");
+    println!("  build     [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]");
+    println!("            [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
+    println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
+    println!("            [--task-print-to-stdout-log]");
+    println!("  run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR]");
+    println!("            [--log-dir DIR] [--stdout-log FILE] [--stderr-log FILE]");
+    println!("            [--warn-log FILE] [--task-print-to-stdout-log]");
+    println!("            [--option KEY=VALUE]");
+    println!("            (delegated to the C++ backend)");
+    println!("  clean     [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]");
+    println!("            [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]");
+    println!("            [--task-print-to-stdout-log] [--deps]");
+    println!("");
+    println!("Task-tree overview (delegated to the C++ backend):");
+    println!("  --tests [--tasks] [--color] <manifest.toml>...");
+    println!("  [--tasks] [--color] <manifest.toml>...");
+    println!("");
+    println!("Examples:");
+    println!("  mlang pkg init");
+    println!("  mlang pkg add serde --git https://github.com/serde-rs/serde --tag v1.0");
+    println!("  mlang pkg fetch");
+    println!("  mlang pkg build -O2 --ninja");
+    println!("  mlang pkg run preview-sine --tasks --color");
+    println!("  mlang pkg --tasks --color tests/mla_tests.toml");
+    println!("");
+    println!("Flags may appear in any order. `--color` alone implies task-tree output.");
 }
 
 fn run_inherit(program: str8, args: list<str8>) -> i32 {
@@ -913,8 +975,8 @@ fn run_init(manifest_path: str8) -> i32 {
     return 0;
 }
 
-fn run_add(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8) -> i32 {
-    if (start_idx + 1 >= argc) {
+fn run_add(argv: list<str8>, start_idx: i64, manifest_path: str8) -> i32 {
+    if (start_idx + 1 >= argv.len()) {
         println!("Usage: mlang-pkg-mla add <name> [--git URL] [--rev REV] [--tag TAG]");
         println!("       mlang-pkg-mla add <name> [--pkg-config NAME] [--system]");
         return 1;
@@ -1026,7 +1088,7 @@ fn run_fetch(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
     return 0;
 }
 
-fn run_build(argc: i32, argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str8) -> i32 {
+fn run_build(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str8) -> i32 {
     var opt_flag: str8 = "";
     var use_ninja: i32 = 0;
     let n: i64 = argv.len();
@@ -1191,9 +1253,9 @@ fn run_clean(argv: list<str8>, start_idx: i64, manifest_path: str8, backend: str
 }
 
 fn main(argc: i32, args: list<str8>) -> i32 {
-    var argv: list<str8> = [];
+    var raw: list<str8> = [];
     for a in args {
-        argv.push(format!("{}", a));
+        raw.push(format!("{}", a));
     }
 
     if (argc < 2) {
@@ -1203,46 +1265,53 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     var backend: str8 = "mlang";
     var manifest: str8 = "mlang.toml";
-    var idx: i64 = 1;
 
-    if (argv.len() > 1 && eq(argv[1], "--backend") == 1) {
-        if (argv.len() < 4) {
+    // Extract --backend (leading only, pass-through) and --config from any
+    // position so flag ordering is flexible.
+    var argv: list<str8> = [];
+    argv.push(raw[0]);
+    var start: i64 = 1;
+    if (raw.len() > 1 && eq(raw[1], "--backend") == 1) {
+        if (raw.len() < 4) {
             println!("--backend requires a value and subcommand");
             print_usage();
             return 1;
         }
-        backend = argv[2];
-        idx = 3;
+        backend = raw[2];
+        start = 3;
+    }
+    var j: i64 = start;
+    while (j < raw.len()) {
+        let cur: str8 = raw[j];
+        if (eq(cur, "--config") == 1) {
+            if (j + 1 >= raw.len()) {
+                println!("--config requires a manifest path");
+                print_usage();
+                return 1;
+            }
+            manifest = raw[j + 1];
+            j = j + 2;
+        } else if (starts_with(cur, "--config=") == 1) {
+            manifest = sub(cur, 9, len(cur) - 9);
+            if (len(manifest) == 0) {
+                println!("--config requires a manifest path");
+                print_usage();
+                return 1;
+            }
+            j = j + 1;
+        } else {
+            argv.push(cur);
+            j = j + 1;
+        }
     }
 
+    var idx: i64 = 1;
     if (idx >= argv.len()) {
         print_usage();
         return 1;
     }
 
     if (eq(argv[idx], "pkg") == 1) {
-        idx = idx + 1;
-    }
-    if (idx >= argv.len()) {
-        print_usage();
-        return 1;
-    }
-
-    if (eq(argv[idx], "--config") == 1) {
-        if (idx + 1 >= argv.len()) {
-            println!("--config requires a manifest path");
-            print_usage();
-            return 1;
-        }
-        manifest = argv[idx + 1];
-        idx = idx + 2;
-    } else if (starts_with(argv[idx], "--config=") == 1) {
-        manifest = sub(argv[idx], 9, len(argv[idx]) - 9);
-        if (len(manifest) == 0) {
-            println!("--config requires a manifest path");
-            print_usage();
-            return 1;
-        }
         idx = idx + 1;
     }
     if (idx >= argv.len()) {
@@ -1260,13 +1329,13 @@ fn main(argc: i32, args: list<str8>) -> i32 {
         return run_init(manifest);
     }
     if (eq(sub, "add") == 1) {
-        return run_add(argc, argv, idx, manifest);
+        return run_add(argv, idx, manifest);
     }
     if (eq(sub, "fetch") == 1) {
         return run_fetch(argv, idx, manifest, backend);
     }
     if (eq(sub, "build") == 1) {
-        return run_build(argc, argv, idx, manifest, backend);
+        return run_build(argv, idx, manifest, backend);
     }
     if (eq(sub, "clean") == 1) {
         return run_clean(argv, idx, manifest, backend);

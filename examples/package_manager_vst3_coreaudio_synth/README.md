@@ -55,8 +55,8 @@ Apple:
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 The manifest will:
@@ -74,7 +74,7 @@ example is also set up so a single `pkg run` command performs the whole flow
 sequentially:
 
 ```sh
-../../build/mlang pkg run preview-square
+mlang pkg run preview-square
 ```
 
 That one command will:
@@ -88,9 +88,9 @@ That one command will:
 The separate commands are still useful when you want finer control:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
-../../build/mlang pkg run preview-square
+mlang pkg fetch
+mlang pkg build
+mlang pkg run preview-square
 ```
 
 ## Preview The Oscillator
@@ -98,13 +98,13 @@ The separate commands are still useful when you want finer control:
 Play the VST3 processor as a sine wave:
 
 ```sh
-../../build/mlang pkg run preview-sine
+mlang pkg run preview-sine
 ```
 
 Play the VST3 processor as a square wave:
 
 ```sh
-../../build/mlang pkg run preview-square
+mlang pkg run preview-square
 ```
 
 ## Finding The Built Plug-In
@@ -134,7 +134,9 @@ Steinberg, including `Contents/MacOS/` and `Contents/Resources/`.
 ## Notes
 
 - This example is intentionally macOS-only because the standalone preview path
-  uses CoreAudio's Audio Queue Services.
+  uses CoreAudio's Audio Queue Services. The manifest declares that with
+  `supported_hosts = ["darwin"]`, so `mlang pkg` now fails early with:
+  `Only macOS CoreAudio is supported now`.
 - The VST3 target is built via the SDK's official CMake helpers instead of a
   hand-written bundle command. That keeps the example close to Steinberg's own
   recommended build flow.

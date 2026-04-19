@@ -11,8 +11,16 @@
  * `--config=<file>`) before the subcommand to target an alternate manifest
  * instead of the default `mlang.toml`. `mlang pkg run <task> --tasks` prints
  * an ASCII task tree and the resolved linear execution order without running
- * commands. Passing `--color` additionally colorizes parallel branches in that
- * tree view. `mlang pkg run` also accepts
+ * commands. `mlang pkg [--tasks] [--color] <manifest.toml>...` prints runnable
+ * task entrypoints for one or more manifests. `mlang pkg --tests [--tasks]
+ * [--color] <manifest.toml>...`
+ * resolves every `phase = "test"` task root from each listed manifest and
+ * runs those test workflows after their dependencies. The `--tests` options
+ * are parsed before the manifest path list so multiple manifests can be passed
+ * in one command. The top-level manifest-overview shorthand accepts the same
+ * option-first ordering, and `--tasks` / `--color` may appear in any order
+ * before the manifest path list. Passing `--color` additionally colorizes
+ * parallel branches in the tree view. `mlang pkg run` also accepts
  * `--option key=value` overrides for values declared under
  * `[tool.mlang.options]`, which are exposed to task text through placeholders
  * such as `{{option.userspace}}`. Tasks may also opt into
@@ -66,6 +74,33 @@
  * userspace = "busybox"
  * \endcode
  *
+ * Dedicated test-manifest example:
+ * \code{.toml}
+ * [package]
+ * name = "mla_tests"
+ * version = "0.1.0"
+ *
+ * [tool.mlang.options]
+ * suite_dir = "tests"
+ *
+ * [[task]]
+ * name = "build-mlang-test-runner"
+ * phase = "build"
+ * workdir = "{{root}}/.."
+ * shell = [
+ *   "cmake --build build --target mlang -j4",
+ * ]
+ *
+ * [[task]]
+ * name = "run-mla-tests"
+ * phase = "test"
+ * depends_on = ["build-mlang-test-runner"]
+ * workdir = "{{root}}/.."
+ * shell = [
+ *   "mlang --tests {{option.suite_dir}}",
+ * ]
+ * \endcode
+ *
  * Task array values such as `inputs`, `libs`, `compiler_flags`,
  * `linker_flags`, `commands`, `shell`, and `path_entries` accept multiline
  * comma-separated TOML arrays. `command` may also be written as a token array
@@ -75,6 +110,12 @@
  * are supported in these task fields. TOML `#` comments are supported on
  * their own line and at the end of an assignment line as long as the `#`
  * appears outside quoted string content.
+ *
+ * Tasks may also declare `supported_hosts = ["darwin", "linux", "windows"]`
+ * and an optional `unsupported_message = "..."`. When the current host is not
+ * listed, `mlang pkg` stops before running task commands and reports that
+ * message directly. This is useful for examples that only support one runtime
+ * stack so far, such as a CoreAudio-only macOS workflow.
  *
  * Git source dependencies may additionally declare `submodules = true`. When
  * present, `mlang pkg fetch` runs `git submodule update --init --recursive`
@@ -100,7 +141,7 @@
  *   [
  *     'sh',
  *     '-c',
- *     'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+ *     'if [ ! -x mlang ]; then echo Missing mlang.; exit 1; fi',
  *   ],
  * ]
  * commands += [
@@ -181,8 +222,8 @@
  * Build and run the example from
  * `examples/package_manager_linux_aarch64_qemu/` with:
  * \code{.sh}
- * ../../build/mlang pkg run qemu-run --option userspace=busybox
- * ../../build/mlang pkg run qemu-run --option userspace=gnu
+ * mlang pkg run qemu-run --option userspace=busybox
+ * mlang pkg run qemu-run --option userspace=gnu
  * \endcode
  *
  * The first command boots a minimal BusyBox shell. The second command overlays

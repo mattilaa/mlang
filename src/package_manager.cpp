@@ -34,6 +34,7 @@ namespace {
 
 struct PackageManifest;
 struct BuildConfig;
+struct TaskSpec;
 
 static std::vector<std::string> split_toml_array(std::string_view input);
 static std::string shell_quote(const std::string& s);
@@ -58,6 +59,8 @@ static int run_task_for_manifest(const PackageManifest& pkg,
 static int run_task_for_manifest(const PackageManifest& pkg,
                                  const std::string& taskName,
                                  const BuildConfig& buildConfig);
+static bool task_list_contains_name(const std::vector<TaskSpec>& tasks,
+                                    const std::string& name);
 static void append_toml_string_list_value_preserve(const std::string& value,
                                                    std::vector<std::string>& out);
 
@@ -66,6 +69,8 @@ enum class TaskTomlKey
     Name,
     Message,
     Print,
+    SupportedHosts,
+    UnsupportedMessage,
     Phase,
     Workdir,
     Language,
@@ -174,10 +179,13 @@ enum class TaskLanguage
     Cpp,
 };
 
-static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 36>
+static constexpr std::array<std::pair<TaskTomlKey, std::string_view>, 38>
     kTaskTomlKeys {{{ TaskTomlKey::Name, "name" },
                     { TaskTomlKey::Message, "message" },
                     { TaskTomlKey::Print, "print" },
+                    { TaskTomlKey::SupportedHosts, "supported_hosts" },
+                    { TaskTomlKey::UnsupportedMessage,
+                      "unsupported_message" },
                     { TaskTomlKey::Phase, "phase" },
                     { TaskTomlKey::Workdir, "workdir" },
                     { TaskTomlKey::Language, "language" },
@@ -910,6 +918,8 @@ struct TaskSpec
     std::string name;
     std::string message;
     std::string print;
+    std::vector<std::string> supportedHosts;
+    std::string unsupportedMessage;
     std::string phase;
     std::string workdir;
     std::string language;
@@ -936,6 +946,8 @@ struct TaskSpec
     {
         std::string message;
         std::string print;
+        std::vector<std::string> supportedHosts;
+        std::string unsupportedMessage;
         std::string phase;
         std::string workdir;
         std::string language;
@@ -1199,41 +1211,97 @@ task_names_for_phases(const std::vector<TaskSpec>& tasks,
     return names;
 }
 
+static std::vector<std::string>
+task_roots_for_phase(const std::vector<TaskSpec>& tasks,
+                     const std::string& hostName, const std::string& phase,
+                     const std::vector<std::string>& fallbackNames = {})
+{
+    std::vector<std::string> roots =
+        task_names_for_phases(tasks, std::vector<std::string> { phase },
+                              hostName);
+    if(roots.empty())
+    {
+        for(const auto& fallback : fallbackNames)
+        {
+            if(task_list_contains_name(tasks, fallback))
+            {
+                roots.push_back(fallback);
+                break;
+            }
+        }
+    }
+    return roots;
+}
+
 static void print_pkg_usage(const std::string& programName)
 {
     const std::string tool = programName.empty() ? "mlang" : programName;
-    std::cerr << "Usage: " << tool
-              << " pkg [--config FILE] <init|add|fetch|build|run|clean>\n"
-              << "\nCommands:\n"
-              << "  " << tool << " pkg init\n"
-              << "  " << tool
-              << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
-              << "  " << tool
-              << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
-              << "  " << tool
-              << " pkg add <name> [--pkg-config NAME] [--system]\n"
-              << "  " << tool
-              << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
-              << "  " << tool
-              << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-              << "  " << tool
-              << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
-              << "  " << tool
-              << " pkg run <task> [--tasks] [--color] [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--option KEY=VALUE]\n"
-              << "  " << tool
-              << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR] [--deps]\n"
-              << "\nSeparate steps:\n"
-              << "  " << tool << " pkg fetch\n"
-              << "  " << tool << " pkg build\n"
-              << "  " << tool << " pkg run <task>\n"
-              << "\nOne-command workflow:\n"
-              << "  " << tool
-              << " pkg run <task>    # fetches dependencies if needed, then runs the task chain\n"
-              << "\nTask tree:\n"
-              << "  " << tool
-              << " pkg run <task> --tasks [--color]   # show dependency/next-task execution order without running commands\n"
-              << "\nExample:\n"
-              << "  cd examples/package_manager_vst3_coreaudio_synth && ../../build/mlang pkg run preview-square --tasks --color\n";
+    std::cerr
+        << "Usage: " << tool
+        << " pkg [--config FILE] <init|add|fetch|build|run|clean> [options...]\n"
+        << "       " << tool
+        << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
+        << "       " << tool
+        << " pkg [--tasks] [--color] <manifest.toml>...\n"
+        << "\nNote: --config, --tasks, --color and per-subcommand flags may\n"
+        << "appear in any order. `--color` alone implies task-tree output.\n"
+        << "\nCommands:\n"
+        << "  " << tool << " pkg init\n"
+        << "      Scaffold mlang.toml and src/main.mla in the current dir.\n"
+        << "  " << tool
+        << " pkg add <name> [--git URL] [--rev REV] [--tag TAG] [--submodules]\n"
+        << "  " << tool
+        << " pkg add <name> --url URL [--archive tar.gz] [--strip-components N] [--subdir DIR]\n"
+        << "  " << tool
+        << " pkg add <name> [--pkg-config NAME] [--system]\n"
+        << "  " << tool
+        << " pkg add <name> [--git URL|--url URL] --add-lib [--project-dir DIR]\n"
+        << "      Append a dependency entry to the manifest.\n"
+        << "  " << tool
+        << " pkg fetch [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log]\n"
+        << "      Fetch dependencies without building.\n"
+        << "  " << tool
+        << " pkg build [-O0|-Og|-O1|-O2|-O3|-Os|-Oz] [--ninja]\n"
+        << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log]\n"
+        << "      Build all configured targets.\n"
+        << "  " << tool
+        << " pkg run <task> [--tasks] [--color]\n"
+        << "           [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log] [--option KEY=VALUE]\n"
+        << "      Run a named task (fetches dependencies first if needed).\n"
+        << "      With --tasks, print the dependency/execution tree instead.\n"
+        << "  " << tool
+        << " pkg --tests [--tasks] [--color] <manifest.toml>...\n"
+        << "      Compile and execute phase=\"test\" tasks in the given\n"
+        << "      manifests. With --tasks, print the test-task tree instead.\n"
+        << "  " << tool
+        << " pkg [--tasks] [--color] <manifest.toml>...\n"
+        << "      Show runnable task entrypoints for one or more manifests\n"
+        << "      (no commands are executed).\n"
+        << "  " << tool
+        << " pkg clean [--build-dir DIR] [--deps-dir DIR] [--log-dir DIR]\n"
+        << "           [--stdout-log FILE] [--stderr-log FILE] [--warn-log FILE]\n"
+        << "           [--task-print-to-stdout-log] [--deps]\n"
+        << "      Remove build artifacts (add --deps to also remove fetched deps).\n"
+        << "\nWorkflows:\n"
+        << "  Separate:   " << tool << " pkg fetch ; " << tool
+        << " pkg build ; " << tool << " pkg run <task>\n"
+        << "  One-shot:   " << tool
+        << " pkg run <task>   # fetches if needed, then runs the task chain\n"
+        << "\nExamples:\n"
+        << "  cd examples/package_manager_vst3_coreaudio_synth && \\\n"
+        << "      ../../build/mlang pkg run preview-square --tasks --color\n"
+        << "  " << tool
+        << " pkg examples/package_manager_vst3_coreaudio_synth/mlang.toml --tasks --color\n"
+        << "  " << tool
+        << " pkg --color tests/mla_tests.toml            # implies --tasks\n"
+        << "  " << tool
+        << " pkg fetch --config examples/foo/mlang.toml  # --config anywhere\n";
 }
 
 static BuildConfig merge_build_config(const BuildConfig& base,
@@ -1636,6 +1704,12 @@ static std::vector<TaskSpec> parse_task_specs(const std::string& content)
                 break;
             case TaskTomlKey::Print:
                 target.print = unquote_preserve(taskValue);
+                break;
+            case TaskTomlKey::SupportedHosts:
+                append_toml_string_list_value(taskValue, target.supportedHosts);
+                break;
+            case TaskTomlKey::UnsupportedMessage:
+                target.unsupportedMessage = unquote_preserve(taskValue);
                 break;
             case TaskTomlKey::Phase:
                 target.phase = unquote(taskValue);
@@ -4070,6 +4144,34 @@ static std::optional<TaskSpec> find_task_spec(const std::vector<TaskSpec>& tasks
     return std::nullopt;
 }
 
+static bool host_supported_by_task(const TaskSpec& task,
+                                   const std::string& hostName)
+{
+    if(task.supportedHosts.empty())
+        return true;
+    return std::find(task.supportedHosts.begin(), task.supportedHosts.end(),
+                     hostName) != task.supportedHosts.end();
+}
+
+static std::string task_unsupported_host_message(const TaskSpec& task,
+                                                 const std::string& hostName)
+{
+    if(!task.unsupportedMessage.empty())
+        return task.unsupportedMessage;
+
+    std::ostringstream out;
+    out << "Task '" << task.name << "' does not support host '" << hostName
+        << "'";
+    if(!task.supportedHosts.empty())
+    {
+        out << " (supported:";
+        for(size_t i = 0; i < task.supportedHosts.size(); ++i)
+            out << (i == 0 ? " " : ", ") << task.supportedHosts[i];
+        out << ")";
+    }
+    return out.str();
+}
+
 static std::optional<std::filesystem::path>
 write_task_script(const PackageManifest& pkg, const std::string& taskName,
                   const std::vector<std::string>& shellLines,
@@ -4285,6 +4387,11 @@ static bool append_task_execution_order(
         error = "Task not found: " + taskName;
         return false;
     }
+    if(!host_supported_by_task(*taskOpt, hostName))
+    {
+        error = task_unsupported_host_message(*taskOpt, hostName);
+        return false;
+    }
 
     stack.push_back(taskName);
     const EffectiveTaskEdges edges =
@@ -4313,27 +4420,131 @@ static bool append_task_execution_order(
     return true;
 }
 
-static const char* branch_color_code(size_t index)
+struct BranchColorInfo
 {
-    static const char* kColors[] = {
-        "\033[31m", "\033[32m", "\033[33m",
-        "\033[34m", "\033[35m", "\033[36m"
+    size_t position = 0;
+    size_t total = 1;
+    size_t shadePosition = 0;
+    size_t shadeTotal = 1;
+    bool useNeutralHue = false;
+    double brightnessScale = 1.0;
+};
+
+static BranchColorInfo make_child_branch_color(
+    std::optional<BranchColorInfo> parentColor, bool isParallelGroup,
+    size_t childIndex, size_t childCount)
+{
+    const BranchColorInfo parent =
+        parentColor.value_or(BranchColorInfo{ 0, 1, 0, 1, true, 1.0 });
+    BranchColorInfo child = parent;
+    child.brightnessScale = std::max(0.42, parent.brightnessScale * 0.75);
+
+    if(isParallelGroup && childCount > 1)
+    {
+        child.position = childIndex;
+        child.total = childCount;
+        child.useNeutralHue = false;
+    }
+
+    child.shadePosition = childIndex;
+    child.shadeTotal = std::max<size_t>(childCount, 1);
+    return child;
+}
+
+static bool terminal_supports_truecolor()
+{
+    const char* colorTerm = std::getenv("COLORTERM");
+    if(colorTerm == nullptr)
+        return false;
+    std::string value = colorTerm;
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) {
+                       return static_cast<char>(std::tolower(ch));
+                   });
+    return value.find("truecolor") != std::string::npos
+           || value.find("24bit") != std::string::npos;
+}
+
+static std::string branch_color_code(const BranchColorInfo& colorInfo)
+{
+    const size_t total = std::max<size_t>(colorInfo.total, 1);
+    const size_t last = total > 0 ? total - 1 : 0;
+    const double t = last == 0
+                         ? 0.0
+                         : static_cast<double>(std::min(colorInfo.position, last))
+                               / static_cast<double>(last);
+    const size_t shadeTotal = std::max<size_t>(colorInfo.shadeTotal, 1);
+    const size_t shadeLast = shadeTotal > 0 ? shadeTotal - 1 : 0;
+    const double shadeT =
+        shadeLast == 0
+            ? 0.5
+            : static_cast<double>(
+                  std::min(colorInfo.shadePosition, shadeLast))
+                  / static_cast<double>(shadeLast);
+    const double shadeFactor = 0.92 + (shadeT * 0.08);
+    const double brightness = colorInfo.brightnessScale * shadeFactor;
+
+    double baseRed = colorInfo.useNeutralHue ? 0.0 : 255.0 * (1.0 - t);
+    double baseGreen = colorInfo.useNeutralHue ? 200.0 : 255.0 * t;
+    double baseBlue = colorInfo.useNeutralHue ? 200.0 : 0.0;
+    const int red =
+        static_cast<int>(std::clamp(std::lround(baseRed * brightness), 0L, 255L));
+    const int green = static_cast<int>(
+        std::clamp(std::lround(baseGreen * brightness), 0L, 255L));
+    const int blue = static_cast<int>(
+        std::clamp(std::lround(baseBlue * brightness), 0L, 255L));
+    if(terminal_supports_truecolor())
+    {
+        return "\033[38;2;" + std::to_string(red) + ";"
+               + std::to_string(green) + ";" + std::to_string(blue) + "m";
+    }
+
+    const auto toCube = [](int channel) {
+        static const int kLevels[] = { 0, 95, 135, 175, 215, 255 };
+        size_t bestIndex = 0;
+        int bestDistance = std::abs(channel - kLevels[0]);
+        for(size_t i = 1; i < sizeof(kLevels) / sizeof(kLevels[0]); ++i)
+        {
+            const int distance = std::abs(channel - kLevels[i]);
+            if(distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+        return bestIndex;
     };
-    return kColors[index % (sizeof(kColors) / sizeof(kColors[0]))];
+    const size_t cubeRed = toCube(red);
+    const size_t cubeGreen = toCube(green);
+    const size_t cubeBlue = toCube(blue);
+    const size_t paletteIndex =
+        16 + (36 * cubeRed) + (6 * cubeGreen) + cubeBlue;
+    return "\033[38;5;" + std::to_string(paletteIndex) + "m";
 }
 
 static std::string colorize_tree_text(const std::string& text, bool enableColor,
-                                      std::optional<size_t> colorIndex)
+                                      std::optional<BranchColorInfo> colorInfo)
 {
     if(!enableColor)
         return text;
-    const size_t index = colorIndex.value_or(5);
-    return std::string(branch_color_code(index)) + text + "\033[0m";
+    if(!colorInfo.has_value())
+        return std::string("\033[36m") + text + "\033[0m";
+    return branch_color_code(*colorInfo) + text + "\033[0m";
+}
+
+static std::string colorize_host_label(const std::string& hostName,
+                                       bool enableColor)
+{
+    if(!enableColor)
+        return hostName;
+    if(terminal_supports_truecolor())
+        return "\033[38;2;255;215;0m" + hostName + "\033[0m";
+    return std::string("\033[33m") + hostName + "\033[0m";
 }
 
 static std::string build_task_tree_prefix(
     const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
-    bool enableColor, std::optional<size_t> colorIndex)
+    bool enableColor, std::optional<BranchColorInfo> colorInfo)
 {
     if(isRoot)
         return "";
@@ -4343,18 +4554,28 @@ static std::string build_task_tree_prefix(
         out += hasMore ? "\xE2\x94\x82   " : "    ";
     out += isLast ? "\xE2\x94\x94\xE2\x94\x80\xE2\x94\x80 "
                   : "\xE2\x94\x9C\xE2\x94\x80\xE2\x94\x80 ";
-    return colorize_tree_text(out, enableColor, colorIndex);
+    return colorize_tree_text(out, enableColor, colorInfo);
 }
 
 static std::string format_task_tree_numbered_label(
     const std::string& taskName, const std::map<std::string, size_t>& orderMap,
-    bool parallel)
+    bool parallel, bool unpredictableParallelOrder, bool enableColor)
 {
     std::ostringstream out;
     out << taskName;
-    auto it = orderMap.find(taskName);
-    if(it != orderMap.end())
-        out << " [" << it->second << "]";
+    if(unpredictableParallelOrder)
+    {
+        if(enableColor)
+            out << " \033[33m[*]\033[0m";
+        else
+            out << " [*]";
+    }
+    else
+    {
+        auto it = orderMap.find(taskName);
+        if(it != orderMap.end())
+            out << " [" << it->second << "]";
+    }
     if(parallel)
         out << " [parallel]";
     return out.str();
@@ -4364,25 +4585,22 @@ static void print_task_tree_ascii_node(
     const std::vector<TaskSpec>& tasks, const std::string& hostName,
     const std::string& taskName, const std::map<std::string, size_t>& orderMap,
     const std::vector<bool>& ancestorHasMore, bool isLast, bool isRoot,
-    bool enableColor, std::optional<size_t> colorIndex,
-    std::vector<std::string>& stack, bool printSelf = true)
+    bool enableColor, std::optional<BranchColorInfo> colorInfo,
+    std::vector<std::string>& stack, bool printSelf = true,
+    bool unpredictableParallelOrder = false)
 {
-    std::vector<bool> connectorAncestors = ancestorHasMore;
-    if(!isRoot && !printSelf && !connectorAncestors.empty())
-        connectorAncestors.pop_back();
-
     const auto taskOpt = find_task_spec(tasks, taskName);
     if(!taskOpt.has_value())
     {
         const std::string prefix = build_task_tree_prefix(
-            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix << taskName << " (missing)\n";
         return;
     }
     if(std::find(stack.begin(), stack.end(), taskName) != stack.end())
     {
         const std::string prefix = build_task_tree_prefix(
-            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix << taskName << " (cycle)\n";
         return;
     }
@@ -4392,48 +4610,66 @@ static void print_task_tree_ascii_node(
     if(printSelf)
     {
         const std::string prefix = build_task_tree_prefix(
-            connectorAncestors, isLast, isRoot, enableColor, colorIndex);
+            ancestorHasMore, isLast, isRoot, enableColor, colorInfo);
         std::cout << prefix
                   << format_task_tree_numbered_label(taskName, orderMap,
-                                                     edges.parallel)
+                                                     edges.parallel,
+                                                     unpredictableParallelOrder,
+                                                     enableColor)
                   << "\n";
     }
 
-    std::vector<std::pair<std::string, std::string>> children;
+    std::vector<std::pair<std::string, bool>> children;
     children.reserve(edges.dependsOn.size() + edges.next.size());
+    const bool parallelDepends =
+        edges.parallel && edges.dependsOn.size() > 1;
     for(const auto& dep : edges.dependsOn)
-        children.push_back({ "depends_on", dep });
+        children.push_back({ dep, parallelDepends });
+    const bool parallelNext = edges.parallel && edges.next.size() > 1;
     for(const auto& nextTask : edges.next)
-        children.push_back({ "next", nextTask });
+        children.push_back({ nextTask, parallelNext });
 
     stack.push_back(taskName);
     for(size_t i = 0; i < children.size(); ++i)
     {
         const bool childIsLast = i + 1 == children.size();
-        std::vector<bool> childAncestors = connectorAncestors;
+        std::vector<bool> childAncestors = ancestorHasMore;
         if(!isRoot)
             childAncestors.push_back(!isLast);
-        std::optional<size_t> childColorIndex =
-            enableColor ? std::optional<size_t>(edges.parallel ? i : 5)
-                        : colorIndex;
+        std::optional<BranchColorInfo> childColorInfo = colorInfo;
+        if(enableColor)
+        {
+            childColorInfo = make_child_branch_color(
+                colorInfo, edges.parallel && children.size() > 1, i,
+                children.size());
+        }
 
         const std::string edgePrefix = build_task_tree_prefix(
-            childAncestors, childIsLast, false, enableColor, childColorIndex);
+            childAncestors, childIsLast, false, enableColor, childColorInfo);
         std::ostringstream edgeLine;
-        edgeLine << edgePrefix
-                 << colorize_tree_text(children[i].first + ": ", enableColor,
-                                       childColorIndex)
-                 << children[i].second;
-        auto orderIt = orderMap.find(children[i].second);
-        if(orderIt != orderMap.end())
-            edgeLine << " [" << orderIt->second << "]";
+        edgeLine << edgePrefix;
+        if(children[i].second)
+        {
+            if(enableColor)
+                edgeLine << children[i].first << " \033[33m[*]\033[0m";
+            else
+                edgeLine << children[i].first << " [*]";
+        }
+        else
+        {
+            edgeLine << children[i].first;
+            auto orderIt = orderMap.find(children[i].first);
+            if(orderIt != orderMap.end())
+                edgeLine << " [" << orderIt->second << "]";
+        }
         std::cout << edgeLine.str() << "\n";
 
         std::vector<bool> nestedAncestors = childAncestors;
         nestedAncestors.push_back(!childIsLast);
-        print_task_tree_ascii_node(tasks, hostName, children[i].second,
+        print_task_tree_ascii_node(tasks, hostName, children[i].first,
                                    orderMap, nestedAncestors, true, false,
-                                   enableColor, childColorIndex, stack, false);
+                                   enableColor, childColorInfo, stack, false,
+                                   children[i].second);
     }
     stack.pop_back();
 }
@@ -4466,7 +4702,8 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
 
     ScopedPackageLogState scopedLogs(
         make_package_log_state(pkg.packageDir, buildConfig));
-    pkg_info_line("Task tree for '" + taskName + "' (" + hostName + "):");
+    pkg_info_line("Task tree for '" + taskName + "' ("
+                  + colorize_host_label(hostName, enableColor) + "):");
     std::vector<std::string> treeStack;
     print_task_tree_ascii_node(tasks, hostName, taskName, orderMap, {}, true,
                                true, enableColor, std::nullopt, treeStack);
@@ -4475,7 +4712,80 @@ static int print_task_plan_for_manifest(const PackageManifest& pkg,
     pkg_info_line("Execution order:");
     for(size_t i = 0; i < order.size(); ++i)
     {
-        pkg_info_line("  " + std::to_string(i + 1) + ". " + order[i]);
+        std::string line = "  " + std::to_string(i + 1) + ". " + order[i];
+        if(enableColor)
+        {
+            line = colorize_tree_text(
+                line, true,
+                BranchColorInfo{ i, std::max<size_t>(order.size(), 1),
+                                 i, std::max<size_t>(order.size(), 1),
+                                 false, 1.0 });
+        }
+        pkg_info_line(line);
+    }
+    return 0;
+}
+
+static std::vector<std::string>
+find_manifest_task_entrypoints(const std::vector<TaskSpec>& tasks,
+                               const std::string& hostName)
+{
+    std::vector<std::string> entrypoints;
+    std::unordered_set<std::string> referenced;
+    for(const auto& task : tasks)
+    {
+        if(!host_supported_by_task(task, hostName))
+            continue;
+        const EffectiveTaskEdges edges =
+            resolve_effective_task_edges(task, tasks, hostName);
+        for(const auto& dep : edges.dependsOn)
+            referenced.insert(dep);
+        for(const auto& nextTask : edges.next)
+            referenced.insert(nextTask);
+    }
+
+    for(const auto& task : tasks)
+    {
+        if(!host_supported_by_task(task, hostName))
+            continue;
+        if(referenced.find(task.name) == referenced.end())
+            entrypoints.push_back(task.name);
+    }
+    if(entrypoints.empty())
+    {
+        for(const auto& task : tasks)
+        {
+            if(host_supported_by_task(task, hostName))
+                entrypoints.push_back(task.name);
+        }
+    }
+    return entrypoints;
+}
+
+static int print_task_overview_for_manifest(const PackageManifest& pkg,
+                                            const BuildConfig& buildConfig,
+                                            bool enableColor)
+{
+    const auto tasks = parse_task_specs(pkg.content);
+    const std::string hostName = current_host_name();
+    const auto entrypoints = find_manifest_task_entrypoints(tasks, hostName);
+    if(entrypoints.empty())
+    {
+        pkg_info_line("No runnable tasks for host '"
+                      + colorize_host_label(hostName, enableColor) + "'.");
+        return 0;
+    }
+
+    pkg_info_line("Runnable task entrypoints for '" + pkg.manifestPath.string() +
+                  "' (" + colorize_host_label(hostName, enableColor) + "):");
+    for(size_t i = 0; i < entrypoints.size(); ++i)
+    {
+        if(i > 0)
+            pkg_info_line("");
+        const int rc = print_task_plan_for_manifest(pkg, entrypoints[i],
+                                                    buildConfig, enableColor);
+        if(rc != 0)
+            return rc;
     }
     return 0;
 }
@@ -4540,6 +4850,12 @@ static int run_task_for_manifest_impl(
     {
         if(task.name != taskName)
             continue;
+        if(!host_supported_by_task(task, hostName))
+        {
+            std::cerr << task_unsupported_host_message(task, hostName)
+                      << " in " << pkg.manifestPath.string() << "\n";
+            return 1;
+        }
         auto hostIt = task.hostOverrides.find(hostName);
         const TaskSpec::HostOverride* hostOverride =
             hostIt == task.hostOverrides.end() ? nullptr : &hostIt->second;
@@ -5033,35 +5349,50 @@ int PackageManager::run(int argc, char** argv)
     std::string compilerProgram = argv[0] ? std::string(argv[0]) : "mlang";
     if(!compilerProgram.empty() && compilerProgram.find('/') != std::string::npos)
         compilerProgram = std::filesystem::absolute(compilerProgram).string();
-    int subIndex = 2;
-    while(subIndex < argc)
+
+    // Extract `--config FILE` / `--config=FILE` from any position in the pkg
+    // arguments so flag ordering is flexible. Build a filtered argv that the
+    // rest of the dispatcher and subcommand handlers can consume as usual.
+    std::vector<std::string> argStorage;
+    argStorage.reserve(static_cast<size_t>(argc));
+    argStorage.emplace_back(argv[0] ? argv[0] : "mlang");
+    argStorage.emplace_back(argv[1] ? argv[1] : "pkg");
+    for(int i = 2; i < argc; ++i)
     {
-        std::string arg = argv[subIndex];
+        std::string arg = argv[i];
         if(arg == "--config")
         {
-            if(subIndex + 1 >= argc)
+            if(i + 1 >= argc)
             {
                 std::cerr << "--config requires a manifest path\n";
                 return 1;
             }
-            manifestPath = argv[subIndex + 1];
-            subIndex += 2;
+            manifestPath = argv[i + 1];
+            ++i;
             continue;
         }
         if(arg.rfind("--config=", 0) == 0)
         {
-            manifestPath = arg.substr(std::string("--config=").size());
-            if(manifestPath.empty())
+            std::string value = arg.substr(std::string("--config=").size());
+            if(value.empty())
             {
                 std::cerr << "--config requires a manifest path\n";
                 return 1;
             }
-            ++subIndex;
+            manifestPath = value;
             continue;
         }
-        break;
+        argStorage.push_back(std::move(arg));
     }
 
+    std::vector<char*> argPtrs;
+    argPtrs.reserve(argStorage.size());
+    for(auto& s : argStorage)
+        argPtrs.push_back(s.data());
+    argc = static_cast<int>(argPtrs.size());
+    argv = argPtrs.data();
+
+    int subIndex = 2;
     if(subIndex >= argc)
     {
         print_pkg_usage(programName);
@@ -5070,9 +5401,202 @@ int PackageManager::run(int argc, char** argv)
 
     std::string sub = argv[subIndex];
     const std::string manifestLabel = manifestPath.string();
+
+    const auto is_pkg_subcommand = [](const std::string& value) {
+        return value == "--help" || value == "-h" || value == "help" ||
+               value == "--tests" || value == "init" || value == "add" ||
+               value == "fetch" || value == "build" || value == "run" ||
+               value == "clean";
+    };
+
+    if(!is_pkg_subcommand(sub))
+    {
+        bool printTasks = false;
+        bool colorTasks = false;
+        bool shorthandArgsOk = true;
+        std::vector<std::filesystem::path> shorthandManifests;
+        for(int i = subIndex; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--tasks")
+                printTasks = true;
+            else if(arg == "--color")
+                colorTasks = true;
+            else if(arg.size() >= 5 && arg.substr(arg.size() - 5) == ".toml")
+                shorthandManifests.push_back(arg);
+            else
+            {
+                shorthandArgsOk = false;
+                break;
+            }
+        }
+        if(shorthandArgsOk && (printTasks || colorTasks) &&
+           !shorthandManifests.empty())
+        {
+            for(const auto& shorthandManifest : shorthandManifests)
+            {
+                manifestPath = shorthandManifest;
+                if(!std::filesystem::exists(manifestPath))
+                {
+                    std::cerr << manifestPath.string()
+                              << " not found. Run 'mlang pkg init' first.\n";
+                    return 1;
+                }
+                auto manifests = collect_target_manifests(manifestPath);
+                if(manifests.empty())
+                {
+                    std::cerr << "No package manifests found for task overview in "
+                              << manifestPath.string() << ".\n";
+                    return 1;
+                }
+                for(const auto& pkg : manifests)
+                {
+                    BuildConfig buildConfig = parse_build_config(pkg.content);
+                    buildConfig.compilerProgram = compilerProgram;
+                    if(print_task_overview_for_manifest(pkg, buildConfig,
+                                                        colorTasks) != 0)
+                    {
+                        return 1;
+                    }
+                }
+            }
+            return 0;
+        }
+    }
+
     if(sub == "--help" || sub == "-h" || sub == "help")
     {
         print_pkg_usage(programName);
+        return 0;
+    }
+
+    if(sub == "--tests")
+    {
+        if(subIndex + 1 >= argc)
+        {
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
+            return 1;
+        }
+
+        bool printTasks = false;
+        bool colorTasks = false;
+        std::vector<std::filesystem::path> testManifestPaths;
+        for(int i = subIndex + 1; i < argc; ++i)
+        {
+            std::string arg = argv[i];
+            if(arg == "--tasks")
+                printTasks = true;
+            else if(arg == "--color")
+                colorTasks = true;
+            else if(!arg.empty() && arg[0] == '-')
+            {
+                std::cerr << "Unknown option for 'pkg --tests': " << arg
+                          << "\n"
+                          << "Usage: " << argv[0]
+                          << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
+                return 1;
+            }
+            else
+            {
+                testManifestPaths.push_back(arg);
+            }
+        }
+
+        if(testManifestPaths.empty())
+        {
+            std::cerr << "Usage: " << argv[0]
+                      << " pkg --tests [--tasks] [--color] <manifest.toml>...\n";
+            return 1;
+        }
+
+        bool foundTests = false;
+        for(const auto& testManifestPath : testManifestPaths)
+        {
+            if(!std::filesystem::exists(testManifestPath))
+            {
+                std::cerr << testManifestPath.string() << " not found.\n";
+                return 1;
+            }
+
+            auto manifests = collect_target_manifests(testManifestPath);
+            if(manifests.empty())
+            {
+                std::cerr << "No package manifests found for tests in "
+                          << testManifestPath.string() << ".\n";
+                return 1;
+            }
+
+            bool foundTestsInManifest = false;
+            for(const auto& pkg : manifests)
+            {
+                BuildConfig buildConfig = parse_build_config(pkg.content);
+                buildConfig.compilerProgram = compilerProgram;
+                const auto tasks = parse_task_specs(pkg.content);
+                const std::string hostName = current_host_name();
+                const std::vector<std::string> testRoots =
+                    task_roots_for_phase(tasks, hostName, "test",
+                                         std::vector<std::string> { "tests",
+                                                                    "test" });
+                if(testRoots.empty())
+                    continue;
+
+                foundTests = true;
+                foundTestsInManifest = true;
+                if(printTasks)
+                {
+                    for(const auto& taskName : testRoots)
+                    {
+                        const int rc = print_task_plan_for_manifest(
+                            pkg, taskName, buildConfig, colorTasks);
+                        if(rc != 0)
+                            return 1;
+                    }
+                    continue;
+                }
+
+                int rc = 0;
+                {
+                    ScopedPackageLogState scopedLogs(
+                        make_package_log_state(pkg.packageDir, buildConfig));
+                    const auto deps = parse_source_deps(pkg.content);
+                    size_t totalSteps = 0;
+                    const std::filesystem::path depsDir =
+                        package_deps_dir(pkg.packageDir, buildConfig);
+                    for(const auto& dep : deps)
+                    {
+                        totalSteps += count_fetch_dep_steps(
+                            dep, depsDir, /*updateExisting=*/true);
+                    }
+                    totalSteps +=
+                        count_reachable_task_steps(tasks, hostName, testRoots);
+                    ScopedExecutionProgressState scopedProgress(totalSteps);
+                    if(fetch_for_manifest(pkg, buildConfig) != 0)
+                        return 1;
+                    std::map<std::string, TaskRunState> taskStates;
+                    std::mutex taskMutex;
+                    std::condition_variable taskCv;
+                    std::vector<std::string> taskStack;
+                    for(const auto& taskName : testRoots)
+                    {
+                        rc = run_task_for_manifest_impl(
+                            pkg, tasks, buildConfig, hostName, taskStates,
+                            taskMutex, taskCv, taskName, taskStack);
+                        if(rc != 0)
+                            break;
+                    }
+                }
+                if(rc != 0)
+                    return 1;
+            }
+
+            if(!foundTestsInManifest)
+            {
+                std::cerr << "No phase=\"test\" tasks found in "
+                          << testManifestPath.string() << "\n";
+                return 1;
+            }
+        }
         return 0;
     }
 

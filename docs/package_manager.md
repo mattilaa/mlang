@@ -9,8 +9,8 @@ by package builds.
 frontend:
 
 ```sh
-./build/mlang pkg <subcommand>
-./build/mlang pkg --config arm64.toml <subcommand>
+mlang pkg <subcommand>
+mlang pkg --config arm64.toml <subcommand>
 ```
 
 By default, `mlang pkg` prefers the MLang implementation in
@@ -20,19 +20,28 @@ needed.
 You can force backend selection with:
 
 ```sh
-MLANG_PKG_IMPL=mla ./build/mlang pkg build
-MLANG_PKG_IMPL=cpp ./build/mlang pkg build
+MLANG_PKG_IMPL=mla mlang pkg build
+MLANG_PKG_IMPL=cpp mlang pkg build
 ```
 
 If `--config` is omitted, the package manager uses `mlang.toml`. Supplying
-`--config FILE` or `--config=FILE` before the subcommand lets one project root
-keep multiple manifests, such as separate files per CPU architecture or build
-workflow.
+`--config FILE` or `--config=FILE` lets one project root keep multiple
+manifests, such as separate files per CPU architecture or build workflow.
+`--config` may appear in any position — before the subcommand, after it, or
+even after a positional argument such as a task name.
 
 `mlang pkg run` also accepts `--option key=value` to override values declared
 under `[tool.mlang.options]`. Tasks can then read those values through
 `{{option.name}}` placeholders, which is useful for switching runtime modes
 without duplicating whole manifests.
+
+`mlang pkg --tests [--tasks] [--color] <manifest.toml>...` runs test-phase
+tasks from one or more dedicated test manifests. `mlang pkg [--tasks]
+[--color] <manifest.toml>...` prints runnable task entrypoints for one or more
+manifests. `--tasks`, `--color`, and the manifest paths may appear in any
+order. Passing `--color` on its own implies `--tasks`, so
+`mlang pkg --color my.toml` is equivalent to `mlang pkg --tasks --color
+my.toml`.
 
 ## Subcommands
 
@@ -44,8 +53,8 @@ Create a new `mlang.toml` manifest in the current directory by default. When
 creates `src/main.mla` so the package can build immediately:
 
 ```sh
-./build/mlang pkg init
-./build/mlang pkg --config arm64.toml init
+mlang pkg init
+mlang pkg --config arm64.toml init
 ```
 
 The generated manifest contains:
@@ -77,14 +86,14 @@ is `mlang.toml`.
 Git dependency:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
-./build/mlang pkg --config arm64.toml add cjson --git https://github.com/DaveGamble/cJSON.git
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
+mlang pkg --config arm64.toml add cjson --git https://github.com/DaveGamble/cJSON.git
 ```
 
 Git dependency with recursive submodules:
 
 ```sh
-./build/mlang pkg add vst3sdk --git https://github.com/steinbergmedia/vst3sdk.git --submodules
+mlang pkg add vst3sdk --git https://github.com/steinbergmedia/vst3sdk.git --submodules
 ```
 
 This writes:
@@ -97,22 +106,22 @@ vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = 
 Generate a complete subproject package automatically:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
-./build/mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+mlang pkg add zlib --url https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz --archive tar.gz --add-lib
 ```
 
 Optional pinning:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --tag v1.7.18
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --rev <commit>
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --tag v1.7.18
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --rev <commit>
 ```
 
 System / pkg-config dependency:
 
 ```sh
-./build/mlang pkg add curl --pkg-config libcurl
-./build/mlang pkg add zlib --system
+mlang pkg add curl --pkg-config libcurl
+mlang pkg add zlib --system
 ```
 
 `--add-lib` creates a subproject under `packages/<name>/`, adds the dependency
@@ -122,7 +131,7 @@ root manifest contains `[workspace] members = ["packages"]`.
 Override the generated subproject location with:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib --project-dir packages/json/cjson_demo
 ```
 
 ### `pkg fetch`
@@ -134,10 +143,10 @@ If you do not set `build_dir`, `deps_dir`, or any CLI overrides, `pkg fetch`
 uses the legacy default layout and stores dependencies under `build/deps/`.
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg --config arm64.toml fetch
-./build/mlang pkg fetch --deps-dir .pkg/deps
-./build/mlang pkg fetch --build-dir build-release
+mlang pkg fetch
+mlang pkg --config arm64.toml fetch
+mlang pkg fetch --deps-dir .pkg/deps
+mlang pkg fetch --build-dir build-release
 ```
 
 For example, a dependency named `cjson` is fetched into:
@@ -160,14 +169,14 @@ required source trees in git submodules.
 Build the package entry defined by the selected manifest:
 
 ```sh
-./build/mlang pkg build
-./build/mlang pkg --config arm64.toml build
-./build/mlang pkg build -Og
-./build/mlang pkg build -O3
-./build/mlang pkg build -Os
-./build/mlang pkg build -Oz
-./build/mlang pkg build --ninja
-./build/mlang pkg build --build-dir build-release --deps-dir .pkg/deps
+mlang pkg build
+mlang pkg --config arm64.toml build
+mlang pkg build -Og
+mlang pkg build -O3
+mlang pkg build -Os
+mlang pkg build -Oz
+mlang pkg build --ninja
+mlang pkg build --build-dir build-release --deps-dir .pkg/deps
 ```
 
 Current CLI options:
@@ -195,8 +204,8 @@ read from `build/deps/`.
 Run a custom package task declared with `[[task]]`:
 
 ```sh
-./build/mlang pkg run kernel-build
-./build/mlang pkg --config qemu-aarch64.toml run qemu-run
+mlang pkg run kernel-build
+mlang pkg --config qemu-aarch64.toml run qemu-run
 ```
 
 Tasks can model a small workflow graph with:
@@ -219,8 +228,8 @@ will fetch dependencies if needed, then execute the task's `depends_on` /
 To inspect the planned task chain without running any commands, use:
 
 ```sh
-./build/mlang pkg run <task> --tasks
-./build/mlang pkg run <task> --tasks --color
+mlang pkg run <task> --tasks
+mlang pkg run <task> --tasks --color
 ```
 
 This prints:
@@ -237,24 +246,24 @@ This prints:
 So the package-manager workflow can be used in either style:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
-./build/mlang pkg run preview-square
+mlang pkg fetch
+mlang pkg build
+mlang pkg run preview-square
 ```
 
 or with one command:
 
 ```sh
-./build/mlang pkg run preview-square
+mlang pkg run preview-square
 ```
 
 The VST3 CoreAudio example in this repository uses that pattern:
 
 ```sh
 cd examples/package_manager_vst3_coreaudio_synth
-../../build/mlang pkg run preview-square
-../../build/mlang pkg run preview-square --tasks
-../../build/mlang pkg run preview-square --tasks --color
+mlang pkg run preview-square
+mlang pkg run preview-square --tasks
+mlang pkg run preview-square --tasks --color
 ```
 
 In that example, one command:
@@ -265,15 +274,66 @@ In that example, one command:
 3. builds the VST3/CoreAudio artifacts through the task dependency chain
 4. runs the preview app
 
+Top-level task-overview shorthand also accepts option-first ordering and
+multiple manifests:
+
+```sh
+mlang pkg tests/mla_tests.toml --tasks --color
+mlang pkg --color --tasks tests/mla_tests.toml
+mlang pkg --tasks tests/mla_tests.toml tests/other_suite.toml
+```
+
+### `pkg --tests`
+
+Run test-phase tasks declared in a TOML manifest:
+
+```sh
+mlang pkg --tests tests/mla_tests.toml
+mlang pkg --tests --tasks tests/mla_tests.toml
+mlang pkg --tests --tasks --color tests/mla_tests.toml
+mlang pkg --tests --tasks tests/mla_tests.toml tests/other_suite.toml
+```
+
+This command resolves all tasks whose `phase = "test"` and runs them after
+their declared dependencies. That makes the manifest itself responsible for the
+build-before-test workflow. Flags are parsed before the manifest path list, so
+`--tasks` and `--color` must appear before the `.toml` files.
+
+The repository now includes [tests/mla_tests.toml](../tests/mla_tests.toml),
+which:
+
+1. builds the `mlang` test runner with `cmake --build build --target mlang -j4`
+2. runs `mlang --tests tests`
+
+The suite location is configurable through `[tool.mlang.options]`:
+
+```toml
+[tool.mlang.options]
+suite_dir = "tests"
+
+[[task]]
+name = "run-mla-tests"
+phase = "test"
+depends_on = ["build-mlang-test-runner"]
+workdir = "{{root}}/.."
+shell = [
+  "mlang --tests {{option.suite_dir}}",
+]
+```
+
+Like `pkg run <task> --tasks`, the `--tasks` form prints the resolved test-task
+tree and execution order without running commands. When multiple manifests are
+listed, `mlang pkg --tests` processes them in the given order.
+
 ### `pkg clean`
 
 Remove the package-local artifact tree created by `fetch` and `build`:
 
 ```sh
-./build/mlang pkg clean
-./build/mlang pkg --config arm64.toml clean
-./build/mlang pkg clean --build-dir build-release
-./build/mlang pkg clean --deps
+mlang pkg clean
+mlang pkg --config arm64.toml clean
+mlang pkg clean --build-dir build-release
+mlang pkg clean --deps
 ```
 
 By default this removes the configured build directory:
@@ -463,9 +523,9 @@ warn_log = "pkg.warn.log"
 ```
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
-./build/mlang pkg build --build-dir build-release
+mlang pkg fetch
+mlang pkg build
+mlang pkg build --build-dir build-release
 ```
 
 This produces:
@@ -595,7 +655,7 @@ commands = [
   [
     'sh',
     '-c',
-    'if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang.; exit 1; fi',
+    'if [ ! -x mlang ]; then echo Missing mlang.; exit 1; fi',
   ],
 ]
 commands += [
@@ -642,7 +702,7 @@ commands = [
 Running:
 
 ```sh
-./build/mlang pkg run workflow
+mlang pkg run workflow
 ```
 
 starts `left`, `right`, and `merge`. The `merge` task waits until both branch
@@ -783,14 +843,14 @@ commands = [
 make_program = "gmake"
 ```
 
-Run them with `./build/mlang pkg run <task>`.
+Run them with `mlang pkg run <task>`.
 
 Linux AArch64 kernel example sequence:
 
 ```sh
 cd examples/package_manager_linux_aarch64_qemu
-../../build/mlang pkg fetch
-../../build/mlang pkg run boot-flow
+mlang pkg fetch
+mlang pkg run boot-flow
 ```
 
 Linux AArch64 kernel example installation on macOS:
@@ -810,6 +870,8 @@ Supported task keys:
 - `name`
 - `print`
 - `message`
+- `supported_hosts`
+- `unsupported_message`
 - `workdir`
 - `parallel`
 - `depends_on`
@@ -818,6 +880,25 @@ Supported task keys:
 - `env`
 - `shell`
 - `command`
+
+Use `supported_hosts` when a task graph only works on specific platforms and
+you want `mlang pkg` to fail before launching shell commands:
+
+```toml
+[[task]]
+name = "toolchain-check"
+supported_hosts = ["darwin"]
+unsupported_message = "Only macOS CoreAudio is supported now"
+commands = [
+  "sh -c 'command -v cmake >/dev/null 2>&1 || { echo Missing cmake; exit 1; }'"
+]
+```
+
+Supported host names are currently:
+
+- `darwin`
+- `linux`
+- `windows`
 - `commands`
 
 Host-conditional task overrides:
@@ -865,7 +946,7 @@ print = "Booting QEMU with {{option.userspace}} userspace"
 ```
 
 ```sh
-./build/mlang pkg run qemu-run --option userspace=gnu
+mlang pkg run qemu-run --option userspace=gnu
 ```
 
 Permission-fixup example:
@@ -988,9 +1069,9 @@ opt_level = "O2"
 Run from the workspace root:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
-./build/mlang pkg clean
+mlang pkg fetch
+mlang pkg build
+mlang pkg clean
 ```
 
 ### Workspace With Fetched Subprojects
@@ -1050,8 +1131,8 @@ cjson = { url = "https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.18.t
 Run from the workspace root:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 See `examples/package_manager_workspace_fetch` for a complete working example.
@@ -1076,7 +1157,7 @@ entry = "src/main.mla"
 Run:
 
 ```sh
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git --add-lib
 ```
 
 Generated layout:
@@ -1122,19 +1203,19 @@ vst3sdk = { git = "https://github.com/steinbergmedia/vst3sdk.git", submodules = 
 Then build from the root:
 
 ```sh
-./build/mlang pkg fetch
-./build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ```
 
 ## Example Workflow
 
 ```sh
-./build/mlang pkg init
-./build/mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
-./build/mlang pkg add curl --pkg-config libcurl
-./build/mlang pkg fetch
-./build/mlang pkg build
-./build/mlang pkg clean
+mlang pkg init
+mlang pkg add cjson --git https://github.com/DaveGamble/cJSON.git
+mlang pkg add curl --pkg-config libcurl
+mlang pkg fetch
+mlang pkg build
+mlang pkg clean
 ```
 
 Workspace example in this repository:

@@ -33,11 +33,11 @@ parse JSON at runtime.
 From this directory:
 
 ```sh
-../../build/mlang pkg fetch
-../../build/mlang pkg build
+mlang pkg fetch
+mlang pkg build
 ./packages/git_cjson_demo/build/git_cjson_demo
 ./packages/tarball_cjson_demo/build/tarball_cjson_demo
-../../build/mlang pkg clean
+mlang pkg clean
 ```
 
 Or run the helper script:
