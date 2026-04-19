@@ -39,8 +39,11 @@ struct PlaybackState
     std::atomic<int> running {0};
     std::atomic<int> finished {0};
     std::mutex ringMutex;
-    std::vector<float> ring;
+    std::vector<float> ringLeft;
+    std::vector<float> ringRight;
     std::uint32_t ringWrite {0};
+    std::atomic<float> levelLeft {0.0f};
+    std::atomic<float> levelRight {0.0f};
     std::string lastError;
 };
 
@@ -302,13 +305,16 @@ void stopPlayback()
     g_state.finished.store(1);
 }
 
-void writeRingSample(float v)
+void writeRingSample(float left, float right)
 {
     std::lock_guard<std::mutex> lock(g_state.ringMutex);
-    if(g_state.ring.empty())
+    if(g_state.ringLeft.empty() || g_state.ringRight.empty())
         return;
-    g_state.ring[static_cast<std::size_t>(g_state.ringWrite)] = clampUnit(v);
-    g_state.ringWrite = (g_state.ringWrite + 1u) % static_cast<std::uint32_t>(g_state.ring.size());
+    const std::size_t idx = static_cast<std::size_t>(g_state.ringWrite);
+    g_state.ringLeft[idx] = clampUnit(left);
+    g_state.ringRight[idx] = clampUnit(right);
+    g_state.ringWrite =
+        (g_state.ringWrite + 1u) % static_cast<std::uint32_t>(g_state.ringLeft.size());
 }
 
 void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer)
@@ -329,6 +335,8 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer)
 
     const std::uint32_t renderFrames = static_cast<std::uint32_t>(
         std::min<std::uint64_t>(kFramesPerBuffer, totalFrames - frameCursor));
+    float peakLeft = 0.0f;
+    float peakRight = 0.0f;
     for(std::uint32_t i = 0; i < renderFrames; ++i)
     {
         const std::size_t idx = static_cast<std::size_t>(frameCursor + i);
@@ -336,8 +344,14 @@ void fillBuffer(AudioQueueRef queue, AudioQueueBufferRef buffer)
         const float right = g_state.wav.right[idx];
         samples[i * 2] = left;
         samples[i * 2 + 1] = right;
-        writeRingSample((left + right) * 0.5f);
+        peakLeft = std::max(peakLeft, std::fabs(left));
+        peakRight = std::max(peakRight, std::fabs(right));
+        writeRingSample(left, right);
     }
+    const float heldLeft = g_state.levelLeft.load();
+    const float heldRight = g_state.levelRight.load();
+    g_state.levelLeft.store(std::max(peakLeft, heldLeft * 0.90f));
+    g_state.levelRight.store(std::max(peakRight, heldRight * 0.90f));
 
     if(renderFrames < kFramesPerBuffer)
     {
@@ -378,8 +392,11 @@ extern "C" int32_t oscillator_demo_start(mlang_string wavPath)
     g_state.sampleRate.store(g_state.wav.sampleRate);
     g_state.finished.store(0);
     g_state.running.store(1);
-    g_state.ring.assign(kRingCapacity, 0.0f);
+    g_state.ringLeft.assign(kRingCapacity, 0.0f);
+    g_state.ringRight.assign(kRingCapacity, 0.0f);
     g_state.ringWrite = 0;
+    g_state.levelLeft.store(0.0f);
+    g_state.levelRight.store(0.0f);
 
     AudioStreamBasicDescription format {};
     format.mSampleRate = static_cast<Float64>(g_state.wav.sampleRate);
@@ -458,7 +475,7 @@ extern "C" mlang_string oscillator_demo_last_error(void)
     return g_state.lastError.empty() ? "" : g_state.lastError.c_str();
 }
 
-extern "C" mlang_list_t oscillator_demo_snapshot_i64(int64_t window)
+extern "C" mlang_list_t oscillator_demo_snapshot_i64(int32_t channel, int64_t window)
 {
     if(window <= 0)
         return {0, nullptr};
@@ -469,7 +486,9 @@ extern "C" mlang_list_t oscillator_demo_snapshot_i64(int64_t window)
         return {0, nullptr};
 
     std::lock_guard<std::mutex> lock(g_state.ringMutex);
-    const std::uint32_t ringSize = static_cast<std::uint32_t>(g_state.ring.size());
+    const std::vector<float>& ring =
+        channel == 1 ? g_state.ringRight : g_state.ringLeft;
+    const std::uint32_t ringSize = static_cast<std::uint32_t>(ring.size());
     if(ringSize == 0)
     {
         std::memset(out, 0, static_cast<std::size_t>(window) * sizeof(std::int64_t));
@@ -481,10 +500,16 @@ extern "C" mlang_list_t oscillator_demo_snapshot_i64(int64_t window)
         const std::uint32_t offset = static_cast<std::uint32_t>(window - i);
         const std::uint32_t idx =
             (g_state.ringWrite + ringSize - (offset % ringSize)) % ringSize;
-        const float sample = g_state.ring[idx];
+        const float sample = ring[idx];
         out[static_cast<std::size_t>(i)] =
             static_cast<std::int64_t>(std::lrint(sample * 1000.0f));
     }
 
     return {window, out};
+}
+
+extern "C" int64_t oscillator_demo_level_i64(int32_t channel)
+{
+    const float level = channel == 1 ? g_state.levelRight.load() : g_state.levelLeft.load();
+    return static_cast<int64_t>(std::lrint(clampUnit(level) * 1000.0f));
 }

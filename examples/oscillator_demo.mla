@@ -47,7 +47,8 @@ extern fn oscillator_demo_sample_rate() -> i64;
 extern fn oscillator_demo_total_frames() -> i64;
 extern fn oscillator_demo_current_frame() -> i64;
 extern fn oscillator_demo_last_error() -> str8;
-extern fn oscillator_demo_snapshot_i64(window: i64) -> list<i64>;
+extern fn oscillator_demo_snapshot_i64(channel: i32, window: i64) -> list<i64>;
+extern fn oscillator_demo_level_i64(channel: i32) -> i64;
 
 fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 {
     if x < lo {
@@ -60,8 +61,8 @@ fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 {
 }
 
 fn viewport_width(cols: i32) -> i64 {
-    let width: i64 = cols - 8;
-    return clamp_i64(width, 24, 160);
+    let width: i64 = cols - 18;
+    return clamp_i64(width, 24, 148);
 }
 
 fn viewport_height(rows: i32) -> i64 {
@@ -139,12 +140,41 @@ fn draw_waveform(builder: i64, samples: list<i64>, width: i64, height: i64,
     }
 }
 
-fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
+fn meter_color(level: i64) -> str8 {
+    if level >= 850 {
+        return fg_rgb(255, 96, 76);
+    }
+    if level >= 700 {
+        return fg_rgb(255, 144, 70);
+    }
+    if level >= 520 {
+        return fg_rgb(255, 214, 92);
+    }
+    return fg_rgb(116, 240, 120);
+}
+
+fn draw_meter_cell(builder: i64, row: i64, height: i64, level: i64, blockGlyph: str8) {
+    let threshold: i64 = ((height - row) * 1000) / height;
+    if level >= threshold {
+        let color: str8 = meter_color(threshold);
+        bput(builder, color);
+        bput(builder, blockGlyph);
+        bput(builder, reset());
+    } else {
+        bput(builder, fg_rgb(22, 58, 42));
+        bput(builder, blockGlyph);
+        bput(builder, reset());
+    }
+}
+
+fn render_frame(path: str8, leftSamples: list<i64>, rightSamples: list<i64>, term: TermSize) {
     let width: i64 = viewport_width(term.cols);
     let height: i64 = viewport_height(term.rows);
     let current: i64 = oscillator_demo_current_frame();
     let total: i64 = oscillator_demo_total_frames();
     let sr: i64 = oscillator_demo_sample_rate();
+    let levelLeft: i64 = oscillator_demo_level_i64(0);
+    let levelRight: i64 = oscillator_demo_level_i64(1);
     var progressPct: i64 = 0;
     if total > 0 {
         progressPct = (current * 100) / total;
@@ -162,8 +192,8 @@ fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
     bput(builder, bold_on());
     bput(builder, "Realtime Oscillator Demo");
     bput(builder, reset());
-    let header: str8 = format!("  CoreAudio WAV output  sr={}Hz  frame={}/{}  progress={}%",
-                               sr, current, total, progressPct);
+    let header: str8 = format!("  CoreAudio WAV output  sr={}Hz  frame={}/{}  progress={}%  L={}  R={}",
+                               sr, current, total, progressPct, levelLeft, levelRight);
     bput(builder, header);
     free(header);
     bput(builder, "\r\n");
@@ -175,7 +205,64 @@ fn render_frame(path: str8, samples: list<i64>, term: TermSize) {
     free(pathLine);
     bput(builder, "\r\n\r\n");
 
-    draw_waveform(builder, samples, width, height, axisGlyph, farGlyph, nearGlyph, coreGlyph);
+    for row in 0..height {
+        bput(builder, "  ");
+        draw_meter_cell(builder, row, height, levelLeft, coreGlyph);
+        bput(builder, " ");
+        draw_meter_cell(builder, row, height, levelRight, coreGlyph);
+        bput(builder, "  ");
+        let center: i64 = height / 2;
+        for col in 0..width {
+            let base: i64 = col * 2;
+            let leftPrev: i64 = sample_subrow(leftSamples[base], height);
+            let leftCur: i64 = sample_subrow(leftSamples[base + 1], height);
+            let leftNext: i64 = sample_subrow(leftSamples[base + 2], height);
+            let rightPrev: i64 = sample_subrow(rightSamples[base], height);
+            let rightCur: i64 = sample_subrow(rightSamples[base + 1], height);
+            let rightNext: i64 = sample_subrow(rightSamples[base + 2], height);
+            let rowSub: i64 = row * 4 + 1;
+            let leftDist: i64 = min_i64(segment_distance(rowSub, leftPrev, leftCur),
+                                        segment_distance(rowSub, leftCur, leftNext));
+            let rightDist: i64 = min_i64(segment_distance(rowSub, rightPrev, rightCur),
+                                         segment_distance(rowSub, rightCur, rightNext));
+            if leftDist == 0 && rightDist == 0 {
+                bput(builder, fg_rgb(248, 214, 132));
+                bput(builder, coreGlyph);
+                bput(builder, reset());
+            } else if rightDist == 0 {
+                bput(builder, fg_rgb(255, 110, 84));
+                bput(builder, coreGlyph);
+                bput(builder, reset());
+            } else if leftDist == 0 {
+                bput(builder, fg_rgb(120, 248, 132));
+                bput(builder, coreGlyph);
+                bput(builder, reset());
+            } else if rightDist <= 1 {
+                bput(builder, fg_rgb(255, 164, 112));
+                bput(builder, nearGlyph);
+                bput(builder, reset());
+            } else if leftDist <= 1 {
+                bput(builder, fg_rgb(150, 232, 166));
+                bput(builder, nearGlyph);
+                bput(builder, reset());
+            } else if rightDist <= 3 {
+                bput(builder, fg_rgb(156, 88, 78));
+                bput(builder, farGlyph);
+                bput(builder, reset());
+            } else if leftDist <= 3 {
+                bput(builder, fg_rgb(74, 148, 94));
+                bput(builder, farGlyph);
+                bput(builder, reset());
+            } else if row == center {
+                bput(builder, fg_rgb(58, 84, 112));
+                bput(builder, axisGlyph);
+                bput(builder, reset());
+            } else {
+                bput(builder, " ");
+            }
+        }
+        bput(builder, "\r\n");
+    }
 
     bput(builder, "\r\n");
     bput(builder, fg_rgb(216, 220, 228));
@@ -234,8 +321,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
     while oscillator_demo_running() == 1 {
         let term: TermSize = stdout_size();
         let width: i64 = viewport_width(term.cols);
-        let samples: list<i64> = oscillator_demo_snapshot_i64(width * 2 + 2);
-        render_frame(wavPath, samples, term);
+        let leftSamples: list<i64> = oscillator_demo_snapshot_i64(0, width * 2 + 2);
+        let rightSamples: list<i64> = oscillator_demo_snapshot_i64(1, width * 2 + 2);
+        render_frame(wavPath, leftSamples, rightSamples, term);
 
         let key: i32 = read_keycode_nonblocking(stdin());
         if key == AsciiKey::LowerQ || key == AsciiKey::UpperQ || key == AsciiKey::Esc {
@@ -247,8 +335,9 @@ fn main(argc: i32, args: list<str8>) -> i32 {
 
     let finalTerm: TermSize = stdout_size();
     let finalWidth: i64 = viewport_width(finalTerm.cols);
-    let finalSamples: list<i64> = oscillator_demo_snapshot_i64(finalWidth * 2 + 2);
-    render_frame(wavPath, finalSamples, finalTerm);
+    let finalLeft: list<i64> = oscillator_demo_snapshot_i64(0, finalWidth * 2 + 2);
+    let finalRight: list<i64> = oscillator_demo_snapshot_i64(1, finalWidth * 2 + 2);
+    render_frame(wavPath, finalLeft, finalRight, finalTerm);
     println!("");
 
     if rawEnabled == 1 {
