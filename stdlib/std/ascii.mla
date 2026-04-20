@@ -176,6 +176,13 @@ pub enum UnicodeBoxGlyph : i32 {
     LightShade = 9617,           // U+2591
     MediumShade = 9618,          // U+2592
     DarkShade = 9619,            // U+2593
+    BlackSmallSquare = 9642,     // U+25AA
+    BlackSquare = 9632,          // U+25A0
+    BrailleBlank = 10240,        // U+2800
+    BrailleBottom1 = 10432,      // U+28C0
+    BrailleBottom2 = 10468,      // U+28E4
+    BrailleBottom3 = 10486,      // U+28F6
+    BrailleFull = 10495,         // U+28FF
     Bullet = 8226,               // U+2022
     Dot = 183,                   // U+00B7
     LeftArrow = 8592,            // U+2190
@@ -220,6 +227,13 @@ pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::LightShade: { return "░"; }
     if g == UnicodeBoxGlyph::MediumShade: { return "▒"; }
     if g == UnicodeBoxGlyph::DarkShade: { return "▓"; }
+    if g == UnicodeBoxGlyph::BlackSmallSquare: { return "▪"; }
+    if g == UnicodeBoxGlyph::BlackSquare: { return "■"; }
+    if g == UnicodeBoxGlyph::BrailleBlank: { return "⠀"; }
+    if g == UnicodeBoxGlyph::BrailleBottom1: { return "⣀"; }
+    if g == UnicodeBoxGlyph::BrailleBottom2: { return "⣤"; }
+    if g == UnicodeBoxGlyph::BrailleBottom3: { return "⣶"; }
+    if g == UnicodeBoxGlyph::BrailleFull: { return "⣿"; }
     if g == UnicodeBoxGlyph::Bullet: { return "•"; }
     if g == UnicodeBoxGlyph::Dot: { return "·"; }
     if g == UnicodeBoxGlyph::LeftArrow: { return "←"; }
@@ -239,7 +253,7 @@ pub fn ascii_box_fallback(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::LightVerticalRight || g == UnicodeBoxGlyph::LightVerticalLeft || g == UnicodeBoxGlyph::LightDownHorizontal || g == UnicodeBoxGlyph::LightUpHorizontal || g == UnicodeBoxGlyph::LightVerticalHorizontal: { return "+"; }
     if g == UnicodeBoxGlyph::DoubleDownRight || g == UnicodeBoxGlyph::DoubleDownLeft || g == UnicodeBoxGlyph::DoubleUpRight || g == UnicodeBoxGlyph::DoubleUpLeft: { return "+"; }
     if g == UnicodeBoxGlyph::DoubleVerticalRight || g == UnicodeBoxGlyph::DoubleVerticalLeft || g == UnicodeBoxGlyph::DoubleDownHorizontal || g == UnicodeBoxGlyph::DoubleUpHorizontal || g == UnicodeBoxGlyph::DoubleVerticalHorizontal: { return "+"; }
-    if g == UnicodeBoxGlyph::UpperHalfBlock || g == UnicodeBoxGlyph::LowerHalfBlock || g == UnicodeBoxGlyph::FullBlock || g == UnicodeBoxGlyph::LeftHalfBlock || g == UnicodeBoxGlyph::RightHalfBlock: { return "#"; }
+    if g == UnicodeBoxGlyph::UpperHalfBlock || g == UnicodeBoxGlyph::LowerHalfBlock || g == UnicodeBoxGlyph::FullBlock || g == UnicodeBoxGlyph::LeftHalfBlock || g == UnicodeBoxGlyph::RightHalfBlock || g == UnicodeBoxGlyph::BlackSmallSquare || g == UnicodeBoxGlyph::BlackSquare || g == UnicodeBoxGlyph::BrailleBottom1 || g == UnicodeBoxGlyph::BrailleBottom2 || g == UnicodeBoxGlyph::BrailleBottom3 || g == UnicodeBoxGlyph::BrailleFull: { return "#"; }
     if g == UnicodeBoxGlyph::LightShade: { return "."; }
     if g == UnicodeBoxGlyph::MediumShade: { return ":"; }
     if g == UnicodeBoxGlyph::DarkShade: { return "#"; }
