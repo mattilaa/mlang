@@ -1,0 +1,53 @@
+use boot::uart::write_byte;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+
+fn write_freq_label() -> void {
+    write_str("freq: ");
+}
+
+fn write_ticks_label() -> void {
+    write_byte(116);
+    write_byte(105);
+    write_byte(99);
+    write_byte(107);
+    write_byte(115);
+    write_byte(58);
+    write_byte(32);
+}
+
+pub fn counter_frequency() -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "mov $0, xzr\nmrs x9, CNTFRQ_EL0\nmov $0, x9",
+        0
+    );
+}
+
+pub fn counter_ticks() -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "mov $0, xzr\nmrs x9, CNTPCT_EL0\nmov $0, x9",
+        0
+    );
+}
+
+pub fn timer_print_summary() -> void {
+    write_str("timer: freq=");
+    write_hex64(counter_frequency());
+    write_str(" ticks=");
+    write_hex64(counter_ticks());
+    write_crlf();
+}
+
+pub fn timer_shell() -> void {
+    write_line("timer");
+    write_freq_label();
+    write_hex64(counter_frequency());
+    write_crlf();
+    write_ticks_label();
+    write_hex64(counter_ticks());
+    write_crlf();
+}

@@ -15,3 +15,27 @@ pub fn current_el() -> i64 {
         0
     );
 }
+
+pub fn esr_el1() -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "mov $0, xzr\nmrs x9, ESR_EL1\nmov $0, x9",
+        0
+    );
+}
+
+pub fn elr_el1() -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "mov $0, xzr\nmrs x9, ELR_EL1\nmov $0, x9",
+        0
+    );
+}
+
+pub fn far_el1() -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "mov $0, xzr\nmrs x9, FAR_EL1\nmov $0, x9",
+        0
+    );
+}

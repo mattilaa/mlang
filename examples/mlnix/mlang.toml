@@ -51,7 +51,7 @@ compiler_flags = ["--freestanding"]
 
 [[task]]
 name = "build-entry-shim"
-print = "[mlnix] Assembling the raw AArch64 entry shim"
+print = "[mlnix] Assembling the raw AArch64 entry and vector shims"
 depends_on = ["toolchain-check"]
 workdir = "{{root}}"
 commands = [
@@ -61,6 +61,13 @@ commands = [
     "src/boot/entry.S",
     "-o",
     "{{build_dir}}/obj/entry.o"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-c",
+    "src/boot/vectors.S",
+    "-o",
+    "{{build_dir}}/obj/vectors.o"
   ]
 ]
 
@@ -82,6 +89,7 @@ commands = [
     "linker.ld",
     "-Wl,-Map,{{build_dir}}/mlnix.map",
     "{{build_dir}}/obj/entry.o",
+    "{{build_dir}}/obj/vectors.o",
     "{{build_dir}}/obj/mlnix_boot.o",
     "-o",
     "{{build_dir}}/mlnix.elf"

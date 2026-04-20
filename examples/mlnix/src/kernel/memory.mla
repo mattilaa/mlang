@@ -1,0 +1,32 @@
+use boot::constants::qemu_mmio_base;
+use boot::constants::qemu_ram_base;
+use boot::constants::qemu_ram_size;
+use boot::constants::qemu_virt_load_addr;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+
+fn print_region(name: str8, base: i64, size: i64) -> void {
+    write_str(name);
+    write_str(" base=");
+    write_hex64(base);
+    write_str(" size=");
+    write_hex64(size);
+    write_crlf();
+}
+
+pub fn memory_map_print_summary() -> void {
+    write_line("memory: qemu virt layout");
+    print_region("  ram", qemu_ram_base(), qemu_ram_size());
+    print_region("  image", qemu_virt_load_addr(), 0x00005000);
+    print_region("  mmio", qemu_mmio_base(), 0x01000000);
+}
+
+pub fn memory_map_shell() -> void {
+    write_line("memory map");
+    print_region("ram", qemu_ram_base(), qemu_ram_size());
+    print_region("image", qemu_virt_load_addr(), 0x00005000);
+    print_region("uart", 0x09000000, 0x00001000);
+    print_region("mmio-window", qemu_mmio_base(), 0x01000000);
+}

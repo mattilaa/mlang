@@ -1,6 +1,7 @@
 use boot::constants::uart0_base;
 use boot::constants::uart_dr_offset;
 use boot::constants::uart_fr_offset;
+use boot::constants::uart_fr_rxfe;
 use boot::constants::uart_fr_txff;
 use boot::cpu::relax;
 use boot::mmio::read32;
@@ -39,6 +40,19 @@ pub fn write_byte(value: i64) -> void {
     write32(uart0_base() + uart_dr_offset(), i32(value));
 }
 
+pub fn read_byte() -> i64 {
+    while true {
+        let flags: i32 = read32(uart0_base() + uart_fr_offset());
+        if (flags & 0x10) == 0 {
+            let value: i32 = read32(uart0_base() + uart_dr_offset());
+            let masked: i32 = value & 0xFF;
+            let result: i64 = masked;
+            return result;
+        }
+        relax();
+    }
+}
+
 pub fn write_crlf() -> void {
     write_byte(13);
     write_byte(10);
@@ -59,6 +73,14 @@ pub fn write_str(text: str8) -> void {
 pub fn write_line(text: str8) -> void {
     write_str(text);
     write_crlf();
+}
+
+pub fn echo_byte(value: i64) -> void {
+    if value == 13 || value == 10 {
+        write_crlf();
+        return;
+    }
+    write_byte(value);
 }
 
 pub fn write_hex64(value: i64) -> void {

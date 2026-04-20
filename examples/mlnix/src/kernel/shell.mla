@@ -1,0 +1,94 @@
+mod kernel::memory;
+mod kernel::timer;
+
+use boot::cpu::current_el;
+use boot::uart::echo_byte;
+use boot::uart::read_byte;
+use boot::uart::write_byte;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::memory::memory_map_shell;
+use kernel::timer::timer_shell;
+
+fn print_help() -> void {
+    write_line("commands");
+    write_line("  h help");
+    write_line("  m memory map");
+    write_line("  t timer");
+    write_line("  e current el");
+    write_line("  b banner");
+    write_line("  x trigger brk exception");
+}
+
+fn print_prompt() -> void {
+    write_byte(109);
+    write_byte(108);
+    write_byte(110);
+    write_byte(105);
+    write_byte(120);
+    write_byte(62);
+    write_byte(32);
+}
+
+fn banner_shell() -> void {
+    write_line("mlnix shell ready");
+}
+
+fn run_command(command: i64) -> void {
+    if command == 104 {
+        print_help();
+        return;
+    }
+    if command == 109 {
+        memory_map_shell();
+        return;
+    }
+    if command == 116 {
+        timer_shell();
+        return;
+    }
+    if command == 101 {
+        write_str("el: ");
+        write_hex64(current_el());
+        write_crlf();
+        return;
+    }
+    if command == 98 {
+        banner_shell();
+        return;
+    }
+    if command == 120 {
+        write_line("triggering brk");
+        asm volatile aarch64(void, "brk #0");
+        return;
+    }
+    write_line("unknown command");
+}
+
+pub fn shell_run() -> void {
+    print_help();
+    while true {
+        print_prompt();
+        let command: i64 = read_byte();
+        echo_byte(command);
+
+        if command == 13 || command == 10 {
+            continue;
+        }
+
+        let lower: i64 = command >= 65 && command <= 90 ? command + 32 : command;
+
+        while true {
+            let trailing: i64 = read_byte();
+            if trailing == 13 || trailing == 10 {
+                echo_byte(trailing);
+                break;
+            }
+            echo_byte(trailing);
+        }
+
+        run_command(lower);
+    }
+}

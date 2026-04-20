@@ -3,14 +3,22 @@ mod boot::constants;
 mod boot::cpu;
 mod boot::mmio;
 mod boot::uart;
+mod boot::vectors;
+mod kernel::memory;
 mod kernel::main;
+mod kernel::shell;
+mod kernel::timer;
 
 use boot::cpu::halt_forever;
 use boot::uart::uart0_init;
+use boot::vectors::vectors_init;
 use kernel::main::kernel_main;
+use kernel::shell::shell_run;
 
 fn boot_entry() -> void {
     uart0_init();
+    vectors_init();
     kernel_main();
+    shell_run();
     halt_forever();
 }

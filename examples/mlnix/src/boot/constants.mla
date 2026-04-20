@@ -14,6 +14,22 @@ pub fn uart_fr_txff() -> i64 {
     return 1 << 5;
 }
 
+pub fn uart_fr_rxfe() -> i64 {
+    return 1 << 4;
+}
+
 pub fn qemu_virt_load_addr() -> i64 {
     return 0x40080000;
+}
+
+pub fn qemu_ram_base() -> i64 {
+    return 0x40000000;
+}
+
+pub fn qemu_ram_size() -> i64 {
+    return 0x10000000;
+}
+
+pub fn qemu_mmio_base() -> i64 {
+    return 0x08000000;
 }

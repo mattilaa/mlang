@@ -7,5 +7,5 @@ pub fn subtitle() -> str8 {
 }
 
 pub fn next_step() -> str8 {
-    return "next: exception vectors, timer, memory map, shell";
+    return "next: shell can inspect vectors, timer, and memory";
 }
