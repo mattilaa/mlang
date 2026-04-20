@@ -1,0 +1,98 @@
+extern fn mlnix_state_get(slot: i64) -> i64;
+extern fn mlnix_state_set(slot: i64, value: i64) -> void;
+
+fn timer_interval_slot() -> i64 {
+    return 0;
+}
+
+fn timer_irq_count_slot() -> i64 {
+    return 1;
+}
+
+fn scheduler_ticks_slot() -> i64 {
+    return 2;
+}
+
+fn last_irq_id_slot() -> i64 {
+    return 3;
+}
+
+fn last_irq_vector_slot() -> i64 {
+    return 4;
+}
+
+fn timeslice_ticks_slot() -> i64 {
+    return 5;
+}
+
+fn slice_ticks_left_slot() -> i64 {
+    return 6;
+}
+
+fn reschedule_pending_slot() -> i64 {
+    return 7;
+}
+
+pub fn state_timer_interval_get() -> i64 {
+    return mlnix_state_get(timer_interval_slot());
+}
+
+pub fn state_timer_interval_set(value: i64) -> void {
+    mlnix_state_set(timer_interval_slot(), value);
+}
+
+pub fn state_timer_irq_count_get() -> i64 {
+    return mlnix_state_get(timer_irq_count_slot());
+}
+
+pub fn state_timer_irq_count_set(value: i64) -> void {
+    mlnix_state_set(timer_irq_count_slot(), value);
+}
+
+pub fn state_scheduler_ticks_get() -> i64 {
+    return mlnix_state_get(scheduler_ticks_slot());
+}
+
+pub fn state_scheduler_ticks_set(value: i64) -> void {
+    mlnix_state_set(scheduler_ticks_slot(), value);
+}
+
+pub fn state_last_irq_id_get() -> i64 {
+    return mlnix_state_get(last_irq_id_slot());
+}
+
+pub fn state_last_irq_id_set(value: i64) -> void {
+    mlnix_state_set(last_irq_id_slot(), value);
+}
+
+pub fn state_last_irq_vector_get() -> i64 {
+    return mlnix_state_get(last_irq_vector_slot());
+}
+
+pub fn state_last_irq_vector_set(value: i64) -> void {
+    mlnix_state_set(last_irq_vector_slot(), value);
+}
+
+pub fn state_timeslice_ticks_get() -> i64 {
+    return mlnix_state_get(timeslice_ticks_slot());
+}
+
+pub fn state_timeslice_ticks_set(value: i64) -> void {
+    mlnix_state_set(timeslice_ticks_slot(), value);
+}
+
+pub fn state_slice_ticks_left_get() -> i64 {
+    return mlnix_state_get(slice_ticks_left_slot());
+}
+
+pub fn state_slice_ticks_left_set(value: i64) -> void {
+    mlnix_state_set(slice_ticks_left_slot(), value);
+}
+
+pub fn state_reschedule_pending_get() -> i64 {
+    return mlnix_state_get(reschedule_pending_slot());
+}
+
+pub fn state_reschedule_pending_set(value: i64) -> void {
+    mlnix_state_set(reschedule_pending_slot(), value);
+}

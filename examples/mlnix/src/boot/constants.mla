@@ -33,3 +33,15 @@ pub fn qemu_ram_size() -> i64 {
 pub fn qemu_mmio_base() -> i64 {
     return 0x08000000;
 }
+
+pub fn qemu_gic_dist_base() -> i64 {
+    return 0x08000000;
+}
+
+pub fn qemu_gic_cpu_base() -> i64 {
+    return 0x08010000;
+}
+
+pub fn qemu_gic_size() -> i64 {
+    return 0x00010000;
+}

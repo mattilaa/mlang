@@ -1,0 +1,65 @@
+mod boot::constants;
+mod boot::mmio;
+
+use boot::constants::qemu_gic_cpu_base;
+use boot::constants::qemu_gic_dist_base;
+use boot::mmio::read32;
+use boot::mmio::write32;
+
+fn gicd_ctlr_offset() -> i64 {
+    return 0x000;
+}
+
+fn gicd_isenabler0_offset() -> i64 {
+    return 0x100;
+}
+
+fn gicc_ctlr_offset() -> i64 {
+    return 0x0000;
+}
+
+fn gicc_pmr_offset() -> i64 {
+    return 0x0004;
+}
+
+fn gicc_iar_offset() -> i64 {
+    return 0x000c;
+}
+
+fn gicc_eoir_offset() -> i64 {
+    return 0x0010;
+}
+
+pub fn gic_timer_irq_id() -> i64 {
+    return 30;
+}
+
+pub fn gic_spurious_irq_id() -> i64 {
+    return 1023;
+}
+
+pub fn gic_init() -> void {
+    write32(qemu_gic_dist_base() + gicd_ctlr_offset(), 0);
+    write32(qemu_gic_cpu_base() + gicc_ctlr_offset(), 0);
+    write32(qemu_gic_cpu_base() + gicc_pmr_offset(), 0xff);
+    write32(
+        qemu_gic_dist_base() + gicd_isenabler0_offset(),
+        i32(1 << gic_timer_irq_id())
+    );
+    write32(qemu_gic_dist_base() + gicd_ctlr_offset(), 1);
+    write32(qemu_gic_cpu_base() + gicc_ctlr_offset(), 1);
+}
+
+pub fn gic_acknowledge() -> i64 {
+    let raw: i32 = read32(qemu_gic_cpu_base() + gicc_iar_offset());
+    let value: i64 = raw;
+    return value;
+}
+
+pub fn gic_irq_id(iar: i64) -> i64 {
+    return iar & 0x3ff;
+}
+
+pub fn gic_complete(iar: i64) -> void {
+    write32(qemu_gic_cpu_base() + gicc_eoir_offset(), i32(iar));
+}

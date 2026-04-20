@@ -1,0 +1,163 @@
+mod boot::uart;
+mod kernel::state;
+
+use boot::uart::write_crlf;
+use boot::uart::write_byte;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::state::state_last_irq_id_get;
+use kernel::state::state_last_irq_id_set;
+use kernel::state::state_last_irq_vector_get;
+use kernel::state::state_last_irq_vector_set;
+use kernel::state::state_reschedule_pending_get;
+use kernel::state::state_reschedule_pending_set;
+use kernel::state::state_scheduler_ticks_get;
+use kernel::state::state_scheduler_ticks_set;
+use kernel::state::state_slice_ticks_left_get;
+use kernel::state::state_slice_ticks_left_set;
+use kernel::state::state_timeslice_ticks_get;
+use kernel::state::state_timeslice_ticks_set;
+
+fn write_vector_label() -> void {
+    write_byte(108);
+    write_byte(97);
+    write_byte(115);
+    write_byte(116);
+    write_byte(32);
+    write_byte(118);
+    write_byte(101);
+    write_byte(99);
+    write_byte(116);
+    write_byte(111);
+    write_byte(114);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_pending_label() -> void {
+    write_byte(114);
+    write_byte(101);
+    write_byte(115);
+    write_byte(99);
+    write_byte(104);
+    write_byte(101);
+    write_byte(100);
+    write_byte(32);
+    write_byte(112);
+    write_byte(101);
+    write_byte(110);
+    write_byte(100);
+    write_byte(105);
+    write_byte(110);
+    write_byte(103);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_timeslice_label() -> void {
+    write_byte(116);
+    write_byte(105);
+    write_byte(109);
+    write_byte(101);
+    write_byte(115);
+    write_byte(108);
+    write_byte(105);
+    write_byte(99);
+    write_byte(101);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_slice_left_label() -> void {
+    write_byte(115);
+    write_byte(108);
+    write_byte(105);
+    write_byte(99);
+    write_byte(101);
+    write_byte(32);
+    write_byte(108);
+    write_byte(101);
+    write_byte(102);
+    write_byte(116);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_last_irq_label() -> void {
+    write_byte(108);
+    write_byte(97);
+    write_byte(115);
+    write_byte(116);
+    write_byte(32);
+    write_byte(105);
+    write_byte(114);
+    write_byte(113);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_bool_value(flag: i64) -> void {
+    if flag == 0 {
+        write_line("no");
+        return;
+    }
+    write_line("yes");
+}
+
+pub fn scheduler_init(timeslice_ticks: i64) -> void {
+    state_scheduler_ticks_set(0);
+    state_last_irq_id_set(-1);
+    state_last_irq_vector_set(-1);
+    state_timeslice_ticks_set(timeslice_ticks);
+    state_slice_ticks_left_set(timeslice_ticks);
+    state_reschedule_pending_set(0);
+}
+
+pub fn scheduler_record_irq(irq_id: i64, vector_kind: i64) -> void {
+    state_last_irq_id_set(irq_id);
+    state_last_irq_vector_set(vector_kind);
+}
+
+pub fn scheduler_on_timer_irq(irq_id: i64, vector_kind: i64) -> void {
+    let next_ticks: i64 = state_scheduler_ticks_get() + 1;
+    let slice_left: i64 = state_slice_ticks_left_get();
+    state_scheduler_ticks_set(next_ticks);
+    state_last_irq_id_set(irq_id);
+    state_last_irq_vector_set(vector_kind);
+
+    if slice_left > 1 {
+        state_slice_ticks_left_set(slice_left - 1);
+        return;
+    }
+
+    state_reschedule_pending_set(1);
+    state_slice_ticks_left_set(state_timeslice_ticks_get());
+}
+
+pub fn scheduler_shell() -> void {
+    write_line("scheduler");
+
+    write_str("ticks: ");
+    write_hex64(state_scheduler_ticks_get());
+    write_crlf();
+
+    write_timeslice_label();
+    write_hex64(state_timeslice_ticks_get());
+    write_crlf();
+
+    write_slice_left_label();
+    write_hex64(state_slice_ticks_left_get());
+    write_crlf();
+
+    write_last_irq_label();
+    write_hex64(state_last_irq_id_get());
+    write_crlf();
+
+    write_vector_label();
+    write_hex64(state_last_irq_vector_get());
+    write_crlf();
+
+    write_pending_label();
+    write_bool_value(state_reschedule_pending_get());
+}

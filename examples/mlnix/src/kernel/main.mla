@@ -1,4 +1,5 @@
 mod kernel::memory;
+mod kernel::scheduler;
 mod kernel::timer;
 
 use boot::banner::next_step;
@@ -7,11 +8,13 @@ use boot::banner::title;
 use boot::constants::qemu_virt_load_addr;
 use boot::constants::uart0_base;
 use boot::cpu::current_el;
+use boot::uart::write_byte;
 use boot::uart::write_crlf;
 use boot::uart::write_hex64;
 use boot::uart::write_line;
 use boot::uart::write_str;
 use kernel::memory::memory_map_print_summary;
+use kernel::scheduler::scheduler_shell;
 use kernel::timer::timer_print_summary;
 
 fn write_uart_label() -> void {
@@ -48,7 +51,8 @@ pub fn kernel_main() -> void {
     write_crlf();
 
     timer_print_summary();
+    scheduler_shell();
     memory_map_print_summary();
-    write_line("shell: h help | m map | t timer | e el | x exception");
+    write_line("shell: h help | m map | t timer | s sched | e el | x exception");
     write_line(next_step());
 }

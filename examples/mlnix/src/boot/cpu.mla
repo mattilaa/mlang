@@ -39,3 +39,11 @@ pub fn far_el1() -> i64 {
         0
     );
 }
+
+pub fn irq_enable() -> void {
+    asm volatile aarch64(void, "msr DAIFClr, #2\nisb");
+}
+
+pub fn irq_disable() -> void {
+    asm volatile aarch64(void, "msr DAIFSet, #2\nisb");
+}

@@ -1,0 +1,53 @@
+mod boot::cpu;
+mod boot::gic;
+mod kernel::scheduler;
+mod kernel::timer;
+
+use boot::cpu::irq_disable;
+use boot::cpu::irq_enable;
+use boot::gic::gic_acknowledge;
+use boot::gic::gic_complete;
+use boot::gic::gic_init;
+use boot::gic::gic_irq_id;
+use boot::gic::gic_spurious_irq_id;
+use boot::gic::gic_timer_irq_id;
+use kernel::scheduler::scheduler_init;
+use kernel::scheduler::scheduler_on_timer_irq;
+use kernel::scheduler::scheduler_record_irq;
+use kernel::timer::timer_init;
+use kernel::timer::timer_on_irq;
+
+fn scheduler_timeslice_ticks() -> i64 {
+    return 5;
+}
+
+fn qemu_virt_timer_interval_ticks() -> i64 {
+    return 0x005f5e10;
+}
+
+pub fn interrupts_init() -> void {
+    irq_disable();
+    gic_init();
+    scheduler_init(scheduler_timeslice_ticks());
+    timer_init(qemu_virt_timer_interval_ticks());
+    irq_enable();
+}
+
+pub fn irq_handle(kind: i64) -> void {
+    let iar: i64 = gic_acknowledge();
+    let irq_id: i64 = gic_irq_id(iar);
+
+    if irq_id == gic_spurious_irq_id() {
+        return;
+    }
+
+    if irq_id == gic_timer_irq_id() {
+        timer_on_irq();
+        scheduler_on_timer_irq(irq_id, kind);
+        gic_complete(iar);
+        return;
+    }
+
+    scheduler_record_irq(irq_id, kind);
+    gic_complete(iar);
+}

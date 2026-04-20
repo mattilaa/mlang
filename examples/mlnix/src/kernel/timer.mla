@@ -1,11 +1,22 @@
+mod kernel::state;
+
 use boot::uart::write_byte;
 use boot::uart::write_crlf;
 use boot::uart::write_hex64;
 use boot::uart::write_line;
 use boot::uart::write_str;
+use kernel::state::state_timer_interval_get;
+use kernel::state::state_timer_interval_set;
+use kernel::state::state_timer_irq_count_get;
+use kernel::state::state_timer_irq_count_set;
 
 fn write_freq_label() -> void {
-    write_str("freq: ");
+    write_byte(102);
+    write_byte(114);
+    write_byte(101);
+    write_byte(113);
+    write_byte(58);
+    write_byte(32);
 }
 
 fn write_ticks_label() -> void {
@@ -16,6 +27,36 @@ fn write_ticks_label() -> void {
     write_byte(115);
     write_byte(58);
     write_byte(32);
+}
+
+fn write_interval_label() -> void {
+    write_byte(105);
+    write_byte(110);
+    write_byte(116);
+    write_byte(101);
+    write_byte(114);
+    write_byte(118);
+    write_byte(97);
+    write_byte(108);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_irq_count_label() -> void {
+    write_byte(105);
+    write_byte(114);
+    write_byte(113);
+    write_byte(115);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn timer_write_tval(value: i64) -> void {
+    asm volatile aarch64(void, "mov x9, $0\nmsr CNTP_TVAL_EL0, x9\nisb", value);
+}
+
+fn timer_write_ctl(value: i64) -> void {
+    asm volatile aarch64(void, "mov x9, $0\nmsr CNTP_CTL_EL0, x9\nisb", value);
 }
 
 pub fn counter_frequency() -> i64 {
@@ -34,11 +75,44 @@ pub fn counter_ticks() -> i64 {
     );
 }
 
+pub fn timer_interval_ticks() -> i64 {
+    return state_timer_interval_get();
+}
+
+pub fn timer_irq_count() -> i64 {
+    return state_timer_irq_count_get();
+}
+
+pub fn timer_arm_next() -> void {
+    timer_write_tval(timer_interval_ticks());
+}
+
+pub fn timer_enable_irq() -> void {
+    timer_write_ctl(1);
+}
+
+pub fn timer_init(interval_ticks: i64) -> void {
+    state_timer_interval_set(interval_ticks);
+    state_timer_irq_count_set(0);
+    timer_arm_next();
+    timer_enable_irq();
+}
+
+pub fn timer_on_irq() -> void {
+    state_timer_irq_count_set(timer_irq_count() + 1);
+    timer_arm_next();
+    timer_enable_irq();
+}
+
 pub fn timer_print_summary() -> void {
     write_str("timer: freq=");
     write_hex64(counter_frequency());
+    write_str(" interval=");
+    write_hex64(timer_interval_ticks());
     write_str(" ticks=");
     write_hex64(counter_ticks());
+    write_str(" irqs=");
+    write_hex64(timer_irq_count());
     write_crlf();
 }
 
@@ -49,5 +123,11 @@ pub fn timer_shell() -> void {
     write_crlf();
     write_ticks_label();
     write_hex64(counter_ticks());
+    write_crlf();
+    write_interval_label();
+    write_hex64(timer_interval_ticks());
+    write_crlf();
+    write_irq_count_label();
+    write_hex64(timer_irq_count());
     write_crlf();
 }

@@ -68,6 +68,13 @@ commands = [
     "src/boot/vectors.S",
     "-o",
     "{{build_dir}}/obj/vectors.o"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-c",
+    "src/boot/state.S",
+    "-o",
+    "{{build_dir}}/obj/state.o"
   ]
 ]
 
@@ -90,6 +97,7 @@ commands = [
     "-Wl,-Map,{{build_dir}}/mlnix.map",
     "{{build_dir}}/obj/entry.o",
     "{{build_dir}}/obj/vectors.o",
+    "{{build_dir}}/obj/state.o",
     "{{build_dir}}/obj/mlnix_boot.o",
     "-o",
     "{{build_dir}}/mlnix.elf"
