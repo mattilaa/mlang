@@ -59,6 +59,7 @@ void printUsage(const char* programName)
               << "  -emit-llvm    Emit LLVM IR file (.ll)\n"
               << "  -emit-bc      Emit LLVM bitcode file (.bc)\n"
               << "  --target-arch <arch>  Set target arch: x86, x64, aarch64\n"
+              << "  --freestanding  Emit ELF-style freestanding code and disable implicit exception frames\n"
               << "  -O0           No optimization\n"
               << "  -Og           Debug-friendly optimization\n"
               << "  -O1           Basic optimization\n"
@@ -179,11 +180,22 @@ static std::string normalize_target_arch_name(const std::string& arch)
     return "";
 }
 
-static std::string target_triple_for_arch_override(const std::string& arch)
+static std::string target_triple_for_arch_override(const std::string& arch,
+                                                   bool freestanding = false)
 {
     const std::string normalized = normalize_target_arch_name(arch);
     if(normalized.empty())
         return "";
+
+    if(freestanding)
+    {
+        if(normalized == "x86")
+            return "i386-none-elf";
+        if(normalized == "x64")
+            return "x86_64-none-elf";
+        if(normalized == "aarch64")
+            return "aarch64-none-elf";
+    }
 
     llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
     if(normalized == "x86")
@@ -1522,6 +1534,7 @@ int main(int argc, char** argv)
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
+    bool freestanding = false;
     std::string targetArch;
     std::vector<std::string> linkArgs;
 
@@ -1569,6 +1582,10 @@ int main(int argc, char** argv)
                           << " (expected x86, x64, or aarch64)" << std::endl;
                 return 1;
             }
+        }
+        else if(arg == "--freestanding")
+        {
+            freestanding = true;
         }
         else if(arg == "-L" && i + 1 < argc)
         {
@@ -1793,7 +1810,7 @@ int main(int argc, char** argv)
     if(!targetArch.empty())
     {
         const std::string targetTriple =
-            target_triple_for_arch_override(targetArch);
+            target_triple_for_arch_override(targetArch, freestanding);
 #if LLVM_VERSION_MAJOR >= 21
         module->setTargetTriple(llvm::Triple(targetTriple));
 #else
@@ -1920,7 +1937,8 @@ int main(int argc, char** argv)
         }
 
         // Initialize code generator
-        CodeGenerator generator(context, builder, module, debugMode);
+        CodeGenerator generator(context, builder, module, debugMode,
+                                freestanding);
         generator.setSourceFile(inputFile);
         generator.setTestMode(testMode);
         generator.setBenchmarkMode(benchmarkMode);

@@ -25,10 +25,12 @@ public:
     };
 
     CodeGenerator(llvm::LLVMContext& ctx, llvm::IRBuilder<>& b,
-                  std::unique_ptr<llvm::Module>& m, bool debug = false)
+                  std::unique_ptr<llvm::Module>& m, bool debug = false,
+                  bool freestanding = false)
         : context(ctx), builder(b), module(m), hasError(false),
           stdioInitialized(false), stdlibInitialized(false),
-          pthreadInitialized(false), debugEnabled(debug)
+          pthreadInitialized(false), debugEnabled(debug),
+          freestandingMode(freestanding)
     {
     }
 
@@ -215,6 +217,7 @@ private:
     bool warnPlainColonIf = true;
     bool warnPlainColonWhile = true;
     bool warnResultUnwrap = true;
+    bool freestandingMode = false;
     std::string sourceFileName;        ///< Source file path for default suite name derivation.
     /// \brief Substring filter for selecting individual tests.
     ///

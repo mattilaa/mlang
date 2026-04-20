@@ -6792,22 +6792,33 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
     initializeStdlibFunctions();
     llvm::BasicBlock* functionBodyBB =
         llvm::BasicBlock::Create(context, "fn.body", function);
-    llvm::BasicBlock* functionExceptionBB =
-        llvm::BasicBlock::Create(context, "fn.exc", function);
-    currentFunctionExceptionFrame =
-        builder.CreateCall(exceptionsPushFrameFunc, {}, "fn.exc.frame");
-    llvm::Value* functionExceptionEnv = builder.CreateCall(
-        exceptionsFrameEnvFunc, {currentFunctionExceptionFrame}, "fn.exc.env");
-    auto* functionSetjmpCall = builder.CreateCall(
-        exceptionsSetjmpFunc, {functionExceptionEnv}, "fn.exc.state");
-    functionSetjmpCall->setCanReturnTwice();
-    llvm::Value* functionExceptionState = functionSetjmpCall;
-    llvm::Value* enteredNormally = builder.CreateICmpEQ(
-        functionExceptionState,
-        llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
-        "fn.exc.ok");
-    builder.CreateCondBr(enteredNormally, functionBodyBB, functionExceptionBB);
-    builder.SetInsertPoint(functionBodyBB);
+    llvm::BasicBlock* functionExceptionBB = nullptr;
+    if(freestandingMode)
+    {
+        builder.CreateBr(functionBodyBB);
+        builder.SetInsertPoint(functionBodyBB);
+    }
+    else
+    {
+        functionExceptionBB =
+            llvm::BasicBlock::Create(context, "fn.exc", function);
+        currentFunctionExceptionFrame =
+            builder.CreateCall(exceptionsPushFrameFunc, {}, "fn.exc.frame");
+        llvm::Value* functionExceptionEnv =
+            builder.CreateCall(exceptionsFrameEnvFunc,
+                               {currentFunctionExceptionFrame}, "fn.exc.env");
+        auto* functionSetjmpCall = builder.CreateCall(
+            exceptionsSetjmpFunc, {functionExceptionEnv}, "fn.exc.state");
+        functionSetjmpCall->setCanReturnTwice();
+        llvm::Value* functionExceptionState = functionSetjmpCall;
+        llvm::Value* enteredNormally = builder.CreateICmpEQ(
+            functionExceptionState,
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),
+            "fn.exc.ok");
+        builder.CreateCondBr(enteredNormally, functionBodyBB,
+                             functionExceptionBB);
+        builder.SetInsertPoint(functionBodyBB);
+    }
 
     // Set up parameters
     unsigned paramIdx = 0;
@@ -7000,17 +7011,20 @@ llvm::Function* CodeGenerator::generateFunctionDefinition(FunctionDefNode* node)
         }
     }
 
-    builder.SetInsertPoint(functionExceptionBB);
-    if(currentFunctionExceptionFrame)
-        builder.CreateCall(exceptionsPopFrameFunc,
-                           {currentFunctionExceptionFrame});
-    namedValues = exceptionNamedValues;
-    structVariableTypes = exceptionStructVariableTypes;
-    cleanupScopes = exceptionCleanupScopes;
-    movedVariables = exceptionMovedVariables;
-    emitAllActiveCleanups();
-    builder.CreateCall(exceptionsRethrowFunc, {});
-    builder.CreateUnreachable();
+    if(functionExceptionBB)
+    {
+        builder.SetInsertPoint(functionExceptionBB);
+        if(currentFunctionExceptionFrame)
+            builder.CreateCall(exceptionsPopFrameFunc,
+                               {currentFunctionExceptionFrame});
+        namedValues = exceptionNamedValues;
+        structVariableTypes = exceptionStructVariableTypes;
+        cleanupScopes = exceptionCleanupScopes;
+        movedVariables = exceptionMovedVariables;
+        emitAllActiveCleanups();
+        builder.CreateCall(exceptionsRethrowFunc, {});
+        builder.CreateUnreachable();
+    }
     currentFunctionExceptionFrame = nullptr;
 
     // Restore the previous module context
