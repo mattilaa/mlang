@@ -220,6 +220,13 @@ pub fn scheduler_return_to_shell() -> void {
     state_scheduler_switches_set(state_scheduler_switches_get() + 1);
 }
 
+pub fn scheduler_request_service() -> void {
+    if scheduler_current_domain() == scheduler_domain_service() {
+        return;
+    }
+    state_reschedule_pending_set(1);
+}
+
 pub fn scheduler_shell() -> void {
     write_line("scheduler");
 

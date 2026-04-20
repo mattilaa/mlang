@@ -5,6 +5,7 @@ mod boot::gic;
 mod boot::mmio;
 mod boot::uart;
 mod boot::vectors;
+mod kernel::console;
 mod kernel::core;
 mod kernel::interrupts;
 mod kernel::memory;

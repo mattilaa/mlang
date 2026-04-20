@@ -1,20 +1,15 @@
+mod kernel::console;
 mod kernel::memory;
 mod kernel::scheduler;
 mod kernel::services;
 mod kernel::state;
 mod kernel::timer;
 
-use boot::cpu::current_el;
+use kernel::console::console_submit;
+use kernel::console::print_help;
 use boot::uart::echo_byte;
 use boot::uart::try_read_byte;
 use boot::uart::write_byte;
-use boot::uart::write_crlf;
-use boot::uart::write_hex64;
-use boot::uart::write_line;
-use boot::uart::write_str;
-use kernel::memory::memory_map_shell;
-use kernel::scheduler::scheduler_shell;
-use kernel::services::services_shell;
 use kernel::state::state_shell_command_get;
 use kernel::state::state_shell_command_set;
 use kernel::state::state_shell_command_valid_get;
@@ -23,21 +18,6 @@ use kernel::state::state_shell_discard_input_get;
 use kernel::state::state_shell_discard_input_set;
 use kernel::state::state_shell_prompt_needed_get;
 use kernel::state::state_shell_prompt_needed_set;
-use kernel::timer::timer_shell;
-
-fn print_help() -> void {
-    write_line("commands");
-    write_line("  h help");
-    write_line("  m memory map");
-    write_line("  t timer");
-    write_line("  s scheduler");
-    write_line("  v services");
-    write_line("  k core");
-    write_line("  e current el");
-    write_line("  b banner");
-    write_line("  x trigger brk exception");
-}
-
 fn print_prompt() -> void {
     write_byte(109);
     write_byte(108);
@@ -46,54 +26,6 @@ fn print_prompt() -> void {
     write_byte(120);
     write_byte(62);
     write_byte(32);
-}
-
-fn banner_shell() -> void {
-    write_line("mlnix shell ready");
-}
-
-fn run_command(command: i64) -> void {
-    if command == 104 {
-        print_help();
-        return;
-    }
-    if command == 109 {
-        memory_map_shell();
-        return;
-    }
-    if command == 116 {
-        timer_shell();
-        return;
-    }
-    if command == 115 {
-        scheduler_shell();
-        return;
-    }
-    if command == 118 {
-        services_shell();
-        return;
-    }
-    if command == 107 {
-        scheduler_shell();
-        services_shell();
-        return;
-    }
-    if command == 101 {
-        write_str("el: ");
-        write_hex64(current_el());
-        write_crlf();
-        return;
-    }
-    if command == 98 {
-        banner_shell();
-        return;
-    }
-    if command == 120 {
-        write_line("triggering brk");
-        asm volatile aarch64(void, "brk #0");
-        return;
-    }
-    write_line("unknown command");
 }
 
 pub fn shell_init() -> void {
@@ -118,7 +50,7 @@ pub fn shell_poll() -> void {
 
     if command == 13 || command == 10 {
         if state_shell_command_valid_get() != 0 {
-            run_command(state_shell_command_get());
+            console_submit(state_shell_command_get());
         }
         state_shell_command_valid_set(0);
         state_shell_discard_input_set(0);

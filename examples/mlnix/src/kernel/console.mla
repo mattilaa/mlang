@@ -1,0 +1,98 @@
+mod boot::banner;
+mod kernel::memory;
+mod kernel::scheduler;
+mod kernel::services;
+mod kernel::state;
+mod kernel::timer;
+
+use boot::banner::subtitle;
+use boot::cpu::current_el;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::memory::memory_map_shell;
+use kernel::scheduler::scheduler_request_service;
+use kernel::scheduler::scheduler_shell;
+use kernel::services::services_shell;
+use kernel::state::state_console_request_code_get;
+use kernel::state::state_console_request_code_set;
+use kernel::state::state_console_request_pending_get;
+use kernel::state::state_console_request_pending_set;
+use kernel::timer::timer_shell;
+
+pub fn print_help() -> void {
+    write_line("commands");
+    write_line("  h help");
+    write_line("  m memory map");
+    write_line("  t timer");
+    write_line("  s scheduler");
+    write_line("  v services");
+    write_line("  k core");
+    write_line("  e current el");
+    write_line("  b banner");
+    write_line("  x trigger brk exception");
+}
+
+fn banner_shell() -> void {
+    write_line("mlnix shell ready");
+    write_line(subtitle());
+}
+
+fn run_command(command: i64) -> void {
+    if command == 104 {
+        print_help();
+        return;
+    }
+    if command == 109 {
+        memory_map_shell();
+        return;
+    }
+    if command == 116 {
+        timer_shell();
+        return;
+    }
+    if command == 115 {
+        scheduler_shell();
+        return;
+    }
+    if command == 118 {
+        services_shell();
+        return;
+    }
+    if command == 107 {
+        scheduler_shell();
+        services_shell();
+        return;
+    }
+    if command == 101 {
+        write_str("el: ");
+        write_hex64(current_el());
+        write_crlf();
+        return;
+    }
+    if command == 98 {
+        banner_shell();
+        return;
+    }
+    if command == 120 {
+        write_line("triggering brk");
+        asm volatile aarch64(void, "brk #0");
+        return;
+    }
+    write_line("unknown command");
+}
+
+pub fn console_submit(command: i64) -> void {
+    state_console_request_code_set(command);
+    state_console_request_pending_set(1);
+    scheduler_request_service();
+}
+
+pub fn console_execute_pending() -> void {
+    if state_console_request_pending_get() == 0 {
+        return;
+    }
+    state_console_request_pending_set(0);
+    run_command(state_console_request_code_get());
+}

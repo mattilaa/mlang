@@ -69,6 +69,14 @@ fn shell_command_valid_slot() -> i64 {
     return 16;
 }
 
+fn console_request_code_slot() -> i64 {
+    return 17;
+}
+
+fn console_request_pending_slot() -> i64 {
+    return 18;
+}
+
 pub fn state_timer_interval_get() -> i64 {
     return mlnix_state_get(timer_interval_slot());
 }
@@ -203,4 +211,20 @@ pub fn state_shell_command_valid_get() -> i64 {
 
 pub fn state_shell_command_valid_set(value: i64) -> void {
     mlnix_state_set(shell_command_valid_slot(), value);
+}
+
+pub fn state_console_request_code_get() -> i64 {
+    return mlnix_state_get(console_request_code_slot());
+}
+
+pub fn state_console_request_code_set(value: i64) -> void {
+    mlnix_state_set(console_request_code_slot(), value);
+}
+
+pub fn state_console_request_pending_get() -> i64 {
+    return mlnix_state_get(console_request_pending_slot());
+}
+
+pub fn state_console_request_pending_set(value: i64) -> void {
+    mlnix_state_set(console_request_pending_slot(), value);
 }

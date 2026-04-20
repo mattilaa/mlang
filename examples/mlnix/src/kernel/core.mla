@@ -1,5 +1,6 @@
 mod boot::cpu;
 mod boot::uart;
+mod kernel::console;
 mod kernel::scheduler;
 mod kernel::services;
 mod kernel::shell;
@@ -10,6 +11,7 @@ use boot::uart::write_crlf;
 use boot::uart::write_hex64;
 use boot::uart::write_line;
 use boot::uart::write_str;
+use kernel::console::console_execute_pending;
 use kernel::scheduler::scheduler_apply_pending;
 use kernel::scheduler::scheduler_current_domain;
 use kernel::scheduler::scheduler_domain_service;
@@ -73,6 +75,7 @@ pub fn kernel_core_run() -> void {
         scheduler_apply_pending();
 
         if scheduler_current_domain() == scheduler_domain_service() {
+            console_execute_pending();
             services_step();
             continue;
         }
