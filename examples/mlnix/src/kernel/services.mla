@@ -1,0 +1,130 @@
+mod boot::uart;
+mod kernel::scheduler;
+mod kernel::state;
+
+use boot::uart::write_crlf;
+use boot::uart::write_byte;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::scheduler::scheduler_current_domain;
+use kernel::scheduler::scheduler_domain_service;
+use kernel::scheduler::scheduler_domain_shell;
+use kernel::scheduler::scheduler_return_to_shell;
+use kernel::state::state_scheduler_ticks_get;
+use kernel::state::state_services_last_tick_get;
+use kernel::state::state_services_last_tick_set;
+use kernel::state::state_services_pending_ticks_get;
+use kernel::state::state_services_pending_ticks_set;
+use kernel::state::state_services_runs_get;
+use kernel::state::state_services_runs_set;
+
+fn write_runs_label() -> void {
+    write_str("runs: ");
+}
+
+fn write_services_pending_label() -> void {
+    write_byte(112);
+    write_byte(101);
+    write_byte(110);
+    write_byte(100);
+    write_byte(105);
+    write_byte(110);
+    write_byte(103);
+    write_byte(32);
+    write_byte(116);
+    write_byte(105);
+    write_byte(99);
+    write_byte(107);
+    write_byte(115);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_last_tick_label() -> void {
+    write_byte(108);
+    write_byte(97);
+    write_byte(115);
+    write_byte(116);
+    write_byte(32);
+    write_byte(116);
+    write_byte(105);
+    write_byte(99);
+    write_byte(107);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_active_domain_label() -> void {
+    write_byte(97);
+    write_byte(99);
+    write_byte(116);
+    write_byte(105);
+    write_byte(118);
+    write_byte(101);
+    write_byte(32);
+    write_byte(100);
+    write_byte(111);
+    write_byte(109);
+    write_byte(97);
+    write_byte(105);
+    write_byte(110);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn services_write_domain_name(domain: i64) -> void {
+    if domain == scheduler_domain_shell() {
+        write_line("shell");
+        return;
+    }
+    if domain == scheduler_domain_service() {
+        write_line("service");
+        return;
+    }
+    write_line("idle");
+}
+
+pub fn services_init() -> void {
+    state_services_pending_ticks_set(0);
+    state_services_runs_set(0);
+    state_services_last_tick_set(0);
+}
+
+pub fn services_pending_ticks() -> i64 {
+    return state_services_pending_ticks_get();
+}
+
+pub fn services_on_timer_tick() -> void {
+    state_services_pending_ticks_set(state_services_pending_ticks_get() + 1);
+}
+
+pub fn services_step() -> void {
+    state_services_runs_set(state_services_runs_get() + 1);
+
+    if state_services_pending_ticks_get() > 0 {
+        state_services_pending_ticks_set(0);
+        state_services_last_tick_set(state_scheduler_ticks_get());
+    }
+
+    scheduler_return_to_shell();
+}
+
+pub fn services_shell() -> void {
+    write_line("services");
+
+    write_runs_label();
+    write_hex64(state_services_runs_get());
+    write_crlf();
+
+    write_services_pending_label();
+    write_hex64(state_services_pending_ticks_get());
+    write_crlf();
+
+    write_last_tick_label();
+    write_hex64(state_services_last_tick_get());
+    write_crlf();
+
+    write_active_domain_label();
+    services_write_domain_name(scheduler_current_domain());
+}

@@ -1,10 +1,12 @@
 mod kernel::memory;
 mod kernel::scheduler;
+mod kernel::services;
+mod kernel::state;
 mod kernel::timer;
 
 use boot::cpu::current_el;
 use boot::uart::echo_byte;
-use boot::uart::read_byte;
+use boot::uart::try_read_byte;
 use boot::uart::write_byte;
 use boot::uart::write_crlf;
 use boot::uart::write_hex64;
@@ -12,6 +14,15 @@ use boot::uart::write_line;
 use boot::uart::write_str;
 use kernel::memory::memory_map_shell;
 use kernel::scheduler::scheduler_shell;
+use kernel::services::services_shell;
+use kernel::state::state_shell_command_get;
+use kernel::state::state_shell_command_set;
+use kernel::state::state_shell_command_valid_get;
+use kernel::state::state_shell_command_valid_set;
+use kernel::state::state_shell_discard_input_get;
+use kernel::state::state_shell_discard_input_set;
+use kernel::state::state_shell_prompt_needed_get;
+use kernel::state::state_shell_prompt_needed_set;
 use kernel::timer::timer_shell;
 
 fn print_help() -> void {
@@ -20,6 +31,8 @@ fn print_help() -> void {
     write_line("  m memory map");
     write_line("  t timer");
     write_line("  s scheduler");
+    write_line("  v services");
+    write_line("  k core");
     write_line("  e current el");
     write_line("  b banner");
     write_line("  x trigger brk exception");
@@ -56,6 +69,15 @@ fn run_command(command: i64) -> void {
         scheduler_shell();
         return;
     }
+    if command == 118 {
+        services_shell();
+        return;
+    }
+    if command == 107 {
+        scheduler_shell();
+        services_shell();
+        return;
+    }
     if command == 101 {
         write_str("el: ");
         write_hex64(current_el());
@@ -74,28 +96,42 @@ fn run_command(command: i64) -> void {
     write_line("unknown command");
 }
 
-pub fn shell_run() -> void {
+pub fn shell_init() -> void {
+    state_shell_prompt_needed_set(1);
+    state_shell_discard_input_set(0);
+    state_shell_command_valid_set(0);
     print_help();
-    while true {
+}
+
+pub fn shell_poll() -> void {
+    if state_shell_prompt_needed_get() != 0 {
         print_prompt();
-        let command: i64 = read_byte();
-        echo_byte(command);
-
-        if command == 13 || command == 10 {
-            continue;
-        }
-
-        let lower: i64 = command >= 65 && command <= 90 ? command + 32 : command;
-
-        while true {
-            let trailing: i64 = read_byte();
-            if trailing == 13 || trailing == 10 {
-                echo_byte(trailing);
-                break;
-            }
-            echo_byte(trailing);
-        }
-
-        run_command(lower);
+        state_shell_prompt_needed_set(0);
     }
+
+    let command: i64 = try_read_byte();
+    if command < 0 {
+        return;
+    }
+
+    echo_byte(command);
+
+    if command == 13 || command == 10 {
+        if state_shell_command_valid_get() != 0 {
+            run_command(state_shell_command_get());
+        }
+        state_shell_command_valid_set(0);
+        state_shell_discard_input_set(0);
+        state_shell_prompt_needed_set(1);
+        return;
+    }
+
+    if state_shell_discard_input_get() != 0 {
+        return;
+    }
+
+    let lower: i64 = command >= 65 && command <= 90 ? command + 32 : command;
+    state_shell_command_set(lower);
+    state_shell_command_valid_set(1);
+    state_shell_discard_input_set(1);
 }

@@ -33,6 +33,42 @@ fn reschedule_pending_slot() -> i64 {
     return 7;
 }
 
+fn scheduler_domain_slot() -> i64 {
+    return 8;
+}
+
+fn scheduler_switches_slot() -> i64 {
+    return 9;
+}
+
+fn services_pending_ticks_slot() -> i64 {
+    return 10;
+}
+
+fn services_runs_slot() -> i64 {
+    return 11;
+}
+
+fn services_last_tick_slot() -> i64 {
+    return 12;
+}
+
+fn shell_prompt_needed_slot() -> i64 {
+    return 13;
+}
+
+fn shell_discard_input_slot() -> i64 {
+    return 14;
+}
+
+fn shell_command_slot() -> i64 {
+    return 15;
+}
+
+fn shell_command_valid_slot() -> i64 {
+    return 16;
+}
+
 pub fn state_timer_interval_get() -> i64 {
     return mlnix_state_get(timer_interval_slot());
 }
@@ -95,4 +131,76 @@ pub fn state_reschedule_pending_get() -> i64 {
 
 pub fn state_reschedule_pending_set(value: i64) -> void {
     mlnix_state_set(reschedule_pending_slot(), value);
+}
+
+pub fn state_scheduler_domain_get() -> i64 {
+    return mlnix_state_get(scheduler_domain_slot());
+}
+
+pub fn state_scheduler_domain_set(value: i64) -> void {
+    mlnix_state_set(scheduler_domain_slot(), value);
+}
+
+pub fn state_scheduler_switches_get() -> i64 {
+    return mlnix_state_get(scheduler_switches_slot());
+}
+
+pub fn state_scheduler_switches_set(value: i64) -> void {
+    mlnix_state_set(scheduler_switches_slot(), value);
+}
+
+pub fn state_services_pending_ticks_get() -> i64 {
+    return mlnix_state_get(services_pending_ticks_slot());
+}
+
+pub fn state_services_pending_ticks_set(value: i64) -> void {
+    mlnix_state_set(services_pending_ticks_slot(), value);
+}
+
+pub fn state_services_runs_get() -> i64 {
+    return mlnix_state_get(services_runs_slot());
+}
+
+pub fn state_services_runs_set(value: i64) -> void {
+    mlnix_state_set(services_runs_slot(), value);
+}
+
+pub fn state_services_last_tick_get() -> i64 {
+    return mlnix_state_get(services_last_tick_slot());
+}
+
+pub fn state_services_last_tick_set(value: i64) -> void {
+    mlnix_state_set(services_last_tick_slot(), value);
+}
+
+pub fn state_shell_prompt_needed_get() -> i64 {
+    return mlnix_state_get(shell_prompt_needed_slot());
+}
+
+pub fn state_shell_prompt_needed_set(value: i64) -> void {
+    mlnix_state_set(shell_prompt_needed_slot(), value);
+}
+
+pub fn state_shell_discard_input_get() -> i64 {
+    return mlnix_state_get(shell_discard_input_slot());
+}
+
+pub fn state_shell_discard_input_set(value: i64) -> void {
+    mlnix_state_set(shell_discard_input_slot(), value);
+}
+
+pub fn state_shell_command_get() -> i64 {
+    return mlnix_state_get(shell_command_slot());
+}
+
+pub fn state_shell_command_set(value: i64) -> void {
+    mlnix_state_set(shell_command_slot(), value);
+}
+
+pub fn state_shell_command_valid_get() -> i64 {
+    return mlnix_state_get(shell_command_valid_slot());
+}
+
+pub fn state_shell_command_valid_set(value: i64) -> void {
+    mlnix_state_set(shell_command_valid_slot(), value);
 }

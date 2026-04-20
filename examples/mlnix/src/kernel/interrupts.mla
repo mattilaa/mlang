@@ -1,5 +1,6 @@
 mod boot::cpu;
 mod boot::gic;
+mod kernel::core;
 mod kernel::scheduler;
 mod kernel::timer;
 
@@ -11,11 +12,10 @@ use boot::gic::gic_init;
 use boot::gic::gic_irq_id;
 use boot::gic::gic_spurious_irq_id;
 use boot::gic::gic_timer_irq_id;
+use kernel::core::kernel_core_on_external_irq;
+use kernel::core::kernel_core_on_timer_irq;
 use kernel::scheduler::scheduler_init;
-use kernel::scheduler::scheduler_on_timer_irq;
-use kernel::scheduler::scheduler_record_irq;
 use kernel::timer::timer_init;
-use kernel::timer::timer_on_irq;
 
 fn scheduler_timeslice_ticks() -> i64 {
     return 5;
@@ -42,12 +42,11 @@ pub fn irq_handle(kind: i64) -> void {
     }
 
     if irq_id == gic_timer_irq_id() {
-        timer_on_irq();
-        scheduler_on_timer_irq(irq_id, kind);
+        kernel_core_on_timer_irq(irq_id, kind);
         gic_complete(iar);
         return;
     }
 
-    scheduler_record_irq(irq_id, kind);
+    kernel_core_on_external_irq(irq_id, kind);
     gic_complete(iar);
 }

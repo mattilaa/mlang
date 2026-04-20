@@ -10,12 +10,16 @@ use kernel::state::state_last_irq_id_get;
 use kernel::state::state_last_irq_id_set;
 use kernel::state::state_last_irq_vector_get;
 use kernel::state::state_last_irq_vector_set;
+use kernel::state::state_scheduler_domain_get;
+use kernel::state::state_scheduler_domain_set;
 use kernel::state::state_reschedule_pending_get;
 use kernel::state::state_reschedule_pending_set;
 use kernel::state::state_scheduler_ticks_get;
 use kernel::state::state_scheduler_ticks_set;
 use kernel::state::state_slice_ticks_left_get;
 use kernel::state::state_slice_ticks_left_set;
+use kernel::state::state_scheduler_switches_get;
+use kernel::state::state_scheduler_switches_set;
 use kernel::state::state_timeslice_ticks_get;
 use kernel::state::state_timeslice_ticks_set;
 
@@ -51,6 +55,30 @@ fn write_pending_label() -> void {
     write_byte(105);
     write_byte(110);
     write_byte(103);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_domain_label() -> void {
+    write_byte(100);
+    write_byte(111);
+    write_byte(109);
+    write_byte(97);
+    write_byte(105);
+    write_byte(110);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_switches_label() -> void {
+    write_byte(115);
+    write_byte(119);
+    write_byte(105);
+    write_byte(116);
+    write_byte(99);
+    write_byte(104);
+    write_byte(101);
+    write_byte(115);
     write_byte(58);
     write_byte(32);
 }
@@ -105,12 +133,38 @@ fn write_bool_value(flag: i64) -> void {
     write_line("yes");
 }
 
+fn write_domain_name(domain: i64) -> void {
+    if domain == scheduler_domain_shell() {
+        write_line("shell");
+        return;
+    }
+    if domain == scheduler_domain_service() {
+        write_line("service");
+        return;
+    }
+    write_line("idle");
+}
+
+pub fn scheduler_domain_idle() -> i64 {
+    return 0;
+}
+
+pub fn scheduler_domain_shell() -> i64 {
+    return 1;
+}
+
+pub fn scheduler_domain_service() -> i64 {
+    return 2;
+}
+
 pub fn scheduler_init(timeslice_ticks: i64) -> void {
     state_scheduler_ticks_set(0);
     state_last_irq_id_set(-1);
     state_last_irq_vector_set(-1);
     state_timeslice_ticks_set(timeslice_ticks);
     state_slice_ticks_left_set(timeslice_ticks);
+    state_scheduler_domain_set(scheduler_domain_shell());
+    state_scheduler_switches_set(0);
     state_reschedule_pending_set(0);
 }
 
@@ -135,12 +189,46 @@ pub fn scheduler_on_timer_irq(irq_id: i64, vector_kind: i64) -> void {
     state_slice_ticks_left_set(state_timeslice_ticks_get());
 }
 
+pub fn scheduler_current_domain() -> i64 {
+    return state_scheduler_domain_get();
+}
+
+pub fn scheduler_switches() -> i64 {
+    return state_scheduler_switches_get();
+}
+
+pub fn scheduler_apply_pending() -> void {
+    if state_reschedule_pending_get() == 0 {
+        return;
+    }
+
+    if scheduler_current_domain() == scheduler_domain_shell() {
+        state_scheduler_domain_set(scheduler_domain_service());
+    } else {
+        state_scheduler_domain_set(scheduler_domain_shell());
+    }
+
+    state_scheduler_switches_set(state_scheduler_switches_get() + 1);
+    state_reschedule_pending_set(0);
+}
+
+pub fn scheduler_return_to_shell() -> void {
+    if scheduler_current_domain() == scheduler_domain_shell() {
+        return;
+    }
+    state_scheduler_domain_set(scheduler_domain_shell());
+    state_scheduler_switches_set(state_scheduler_switches_get() + 1);
+}
+
 pub fn scheduler_shell() -> void {
     write_line("scheduler");
 
     write_str("ticks: ");
     write_hex64(state_scheduler_ticks_get());
     write_crlf();
+
+    write_domain_label();
+    write_domain_name(scheduler_current_domain());
 
     write_timeslice_label();
     write_hex64(state_timeslice_ticks_get());
@@ -156,6 +244,10 @@ pub fn scheduler_shell() -> void {
 
     write_vector_label();
     write_hex64(state_last_irq_vector_get());
+    write_crlf();
+
+    write_switches_label();
+    write_hex64(scheduler_switches());
     write_crlf();
 
     write_pending_label();

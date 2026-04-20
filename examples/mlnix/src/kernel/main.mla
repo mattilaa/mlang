@@ -1,5 +1,6 @@
 mod kernel::memory;
 mod kernel::scheduler;
+mod kernel::services;
 mod kernel::timer;
 
 use boot::banner::next_step;
@@ -15,6 +16,7 @@ use boot::uart::write_line;
 use boot::uart::write_str;
 use kernel::memory::memory_map_print_summary;
 use kernel::scheduler::scheduler_shell;
+use kernel::services::services_shell;
 use kernel::timer::timer_print_summary;
 
 fn write_uart_label() -> void {
@@ -52,7 +54,8 @@ pub fn kernel_main() -> void {
 
     timer_print_summary();
     scheduler_shell();
+    services_shell();
     memory_map_print_summary();
-    write_line("shell: h help | m map | t timer | s sched | e el | x exception");
+    write_line("shell: h help | m map | t timer | s sched | v svc | k core | e el | x exception");
     write_line(next_step());
 }

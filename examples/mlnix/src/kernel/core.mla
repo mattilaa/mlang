@@ -1,0 +1,83 @@
+mod boot::cpu;
+mod boot::uart;
+mod kernel::scheduler;
+mod kernel::services;
+mod kernel::shell;
+mod kernel::timer;
+
+use boot::cpu::relax;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::scheduler::scheduler_apply_pending;
+use kernel::scheduler::scheduler_current_domain;
+use kernel::scheduler::scheduler_domain_service;
+use kernel::scheduler::scheduler_domain_shell;
+use kernel::scheduler::scheduler_on_timer_irq;
+use kernel::scheduler::scheduler_record_irq;
+use kernel::services::services_init;
+use kernel::services::services_on_timer_tick;
+use kernel::services::services_pending_ticks;
+use kernel::services::services_step;
+use kernel::shell::shell_init;
+use kernel::shell::shell_poll;
+use kernel::timer::timer_on_irq;
+
+fn write_core_domain_label() -> void {
+    write_str("domain: ");
+}
+
+fn write_core_pending_label() -> void {
+    write_str("pending services: ");
+}
+
+fn core_write_domain_name(domain: i64) -> void {
+    if domain == scheduler_domain_shell() {
+        write_line("shell");
+        return;
+    }
+    if domain == scheduler_domain_service() {
+        write_line("service");
+        return;
+    }
+    write_line("idle");
+}
+
+pub fn kernel_core_init() -> void {
+    services_init();
+    shell_init();
+}
+
+pub fn kernel_core_on_timer_irq(irq_id: i64, vector_kind: i64) -> void {
+    timer_on_irq();
+    services_on_timer_tick();
+    scheduler_on_timer_irq(irq_id, vector_kind);
+}
+
+pub fn kernel_core_on_external_irq(irq_id: i64, vector_kind: i64) -> void {
+    scheduler_record_irq(irq_id, vector_kind);
+}
+
+pub fn kernel_core_shell() -> void {
+    write_line("core");
+    write_core_domain_label();
+    core_write_domain_name(scheduler_current_domain());
+    write_core_pending_label();
+    write_hex64(services_pending_ticks());
+    write_crlf();
+}
+
+pub fn kernel_core_run() -> void {
+    while true {
+        scheduler_apply_pending();
+
+        if scheduler_current_domain() == scheduler_domain_service() {
+            services_step();
+            continue;
+        }
+
+        shell_poll();
+        relax();
+    }
+}

@@ -1,0 +1,46 @@
+use boot::cpu::halt_forever;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+
+fn trap_write_kind_label(kind: i64) -> void {
+    if kind == 0 { write_line("exception: sync current el sp0"); return; }
+    if kind == 1 { write_line("exception: irq current el sp0"); return; }
+    if kind == 2 { write_line("exception: fiq current el sp0"); return; }
+    if kind == 3 { write_line("exception: serr current el sp0"); return; }
+    if kind == 4 { write_line("exception: sync current el spx"); return; }
+    if kind == 5 { write_line("exception: irq current el spx"); return; }
+    if kind == 6 { write_line("exception: fiq current el spx"); return; }
+    if kind == 7 { write_line("exception: serr current el spx"); return; }
+    if kind == 8 { write_line("exception: sync lower a64"); return; }
+    if kind == 9 { write_line("exception: irq lower a64"); return; }
+    if kind == 10 { write_line("exception: fiq lower a64"); return; }
+    if kind == 11 { write_line("exception: serr lower a64"); return; }
+    if kind == 12 { write_line("exception: sync lower a32"); return; }
+    if kind == 13 { write_line("exception: irq lower a32"); return; }
+    if kind == 14 { write_line("exception: fiq lower a32"); return; }
+    if kind == 15 { write_line("exception: serr lower a32"); return; }
+    write_line("exception: unknown");
+}
+
+pub fn trap_handle(kind: i64, esr: i64, elr: i64, far: i64) -> void {
+    write_crlf();
+    write_line("mlnix trap");
+    trap_write_kind_label(kind);
+
+    write_str("esr: ");
+    write_hex64(esr);
+    write_crlf();
+
+    write_str("elr: ");
+    write_hex64(elr);
+    write_crlf();
+
+    write_str("far: ");
+    write_hex64(far);
+    write_crlf();
+
+    write_line("system halted after trap");
+    halt_forever();
+}

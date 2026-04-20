@@ -5,26 +5,29 @@ mod boot::gic;
 mod boot::mmio;
 mod boot::uart;
 mod boot::vectors;
+mod kernel::core;
 mod kernel::interrupts;
 mod kernel::memory;
 mod kernel::main;
 mod kernel::scheduler;
+mod kernel::services;
 mod kernel::shell;
 mod kernel::state;
 mod kernel::timer;
+mod kernel::traps;
 
-use boot::cpu::halt_forever;
 use boot::uart::uart0_init;
 use boot::vectors::vectors_init;
+use kernel::core::kernel_core_init;
+use kernel::core::kernel_core_run;
 use kernel::interrupts::interrupts_init;
 use kernel::main::kernel_main;
-use kernel::shell::shell_run;
 
 fn boot_entry() -> void {
     uart0_init();
     vectors_init();
     interrupts_init();
     kernel_main();
-    shell_run();
-    halt_forever();
+    kernel_core_init();
+    kernel_core_run();
 }

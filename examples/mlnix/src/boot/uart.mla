@@ -53,6 +53,17 @@ pub fn read_byte() -> i64 {
     }
 }
 
+pub fn try_read_byte() -> i64 {
+    let flags: i32 = read32(uart0_base() + uart_fr_offset());
+    if (flags & 0x10) != 0 {
+        return -1;
+    }
+    let value: i32 = read32(uart0_base() + uart_dr_offset());
+    let masked: i32 = value & 0xFF;
+    let result: i64 = masked;
+    return result;
+}
+
 pub fn write_crlf() -> void {
     write_byte(13);
     write_byte(10);
