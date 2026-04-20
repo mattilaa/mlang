@@ -1,0 +1,11 @@
+pub fn title() -> str8 {
+    return "mlnix/aarch64";
+}
+
+pub fn subtitle() -> str8 {
+    return "bootloader stage online";
+}
+
+pub fn next_step() -> str8 {
+    return "next: exception vectors, timer, memory map, shell";
+}

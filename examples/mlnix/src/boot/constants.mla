@@ -1,0 +1,19 @@
+pub fn uart0_base() -> i64 {
+    return 0x09000000;
+}
+
+pub fn uart_dr_offset() -> i64 {
+    return 0x000;
+}
+
+pub fn uart_fr_offset() -> i64 {
+    return 0x018;
+}
+
+pub fn uart_fr_txff() -> i64 {
+    return 1 << 5;
+}
+
+pub fn qemu_virt_load_addr() -> i64 {
+    return 0x40080000;
+}

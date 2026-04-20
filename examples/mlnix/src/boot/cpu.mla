@@ -1,0 +1,17 @@
+pub fn relax() -> void {
+    asm volatile aarch64(void, "yield");
+}
+
+pub fn halt_forever() -> void {
+    while true {
+        asm volatile aarch64(void, "wfe");
+    }
+}
+
+pub fn current_el() -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "mov $0, xzr\nmrs x9, CurrentEL\nlsr x9, x9, #2\nmov $0, x9",
+        0
+    );
+}

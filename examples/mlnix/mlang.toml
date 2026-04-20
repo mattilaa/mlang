@@ -1,0 +1,126 @@
+[package]
+name = "mlnix"
+version = "0.2.11"
+entry = "src/main.mla"
+
+[dependencies]
+
+[c-dependencies]
+
+[tool.mlang]
+min_mlang_version = "0.2.11"
+target_arch = "aarch64"
+log_dir = "/tmp/mlang-mlnix"
+stdout_log = "pkg.stdout.log"
+stderr_log = "pkg.stderr.log"
+warn_log = "pkg.warn.log"
+path_entries = [
+  "/opt/homebrew/opt/llvm/bin",
+  "/usr/local/opt/llvm/bin",
+  "/opt/homebrew/bin",
+  "/usr/local/bin"
+]
+
+[[task]]
+name = "toolchain-check"
+print = "[mlnix] Checking compiler, linker, objcopy, and QEMU"
+workdir = "{{root}}"
+commands = [
+  [
+    "sh",
+    "-c",
+    "if [ ! -x ../../build/mlang ]; then echo Missing ../../build/mlang. Build the compiler from the repository root first.; exit 1; fi"
+  ],
+  [
+    "sh",
+    "-c",
+    "for tool in aarch64-none-elf-gcc llvm-objcopy qemu-system-aarch64; do if ! command -v $tool >/dev/null 2>&1; then echo Missing required tool in PATH: $tool; exit 1; fi; done"
+  ]
+]
+
+[[task]]
+name = "build-boot-object"
+print = "[mlnix] Compiling the AArch64 boot object"
+depends_on = ["toolchain-check"]
+language = "mlang"
+source = "src/main.mla"
+output = "{{build_dir}}/obj/mlnix_boot.o"
+compile_only = true
+target_arch = "aarch64"
+compiler_flags = ["--freestanding"]
+
+[[task]]
+name = "build-entry-shim"
+print = "[mlnix] Assembling the raw AArch64 entry shim"
+depends_on = ["toolchain-check"]
+workdir = "{{root}}"
+commands = [
+  [
+    "aarch64-none-elf-gcc",
+    "-c",
+    "src/boot/entry.S",
+    "-o",
+    "{{build_dir}}/obj/entry.o"
+  ]
+]
+
+[[task]]
+name = "link-elf"
+print = "[mlnix] Linking a freestanding ELF image"
+depends_on = ["build-boot-object", "build-entry-shim"]
+workdir = "{{root}}"
+commands = [
+  [
+    "mkdir",
+    "-p",
+    "{{build_dir}}/obj"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-nostdlib",
+    "-T",
+    "linker.ld",
+    "-Wl,-Map,{{build_dir}}/mlnix.map",
+    "{{build_dir}}/obj/entry.o",
+    "{{build_dir}}/obj/mlnix_boot.o",
+    "-o",
+    "{{build_dir}}/mlnix.elf"
+  ]
+]
+
+[[task]]
+name = "build-image"
+print = "[mlnix] Extracting a flat boot image"
+depends_on = ["link-elf"]
+workdir = "{{root}}"
+commands = [
+  [
+    "llvm-objcopy",
+    "-O",
+    "binary",
+    "{{build_dir}}/mlnix.elf",
+    "{{build_dir}}/mlnix.bin"
+  ]
+]
+
+[[task]]
+name = "qemu-run"
+print = "[mlnix] Booting the mlnix image in QEMU"
+join_on = ["build-image"]
+workdir = "{{root}}"
+command = [
+  "qemu-system-aarch64",
+  "-machine",
+  "virt",
+  "-cpu",
+  "cortex-a57",
+  "-m",
+  "256",
+  "-nographic",
+  "-serial",
+  "mon:stdio",
+  "-monitor",
+  "none",
+  "-kernel",
+  "{{build_dir}}/mlnix.bin"
+]

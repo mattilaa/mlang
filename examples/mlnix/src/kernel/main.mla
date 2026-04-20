@@ -1,0 +1,47 @@
+use boot::banner::next_step;
+use boot::banner::subtitle;
+use boot::banner::title;
+use boot::constants::qemu_virt_load_addr;
+use boot::constants::uart0_base;
+use boot::cpu::current_el;
+use boot::uart::write_byte;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+
+fn write_uart_label() -> void {
+    write_byte(117);
+    write_byte(97);
+    write_byte(114);
+    write_byte(116);
+    write_byte(58);
+    write_byte(32);
+}
+
+fn write_el_label() -> void {
+    write_byte(101);
+    write_byte(108);
+    write_byte(58);
+    write_byte(32);
+}
+
+pub fn kernel_main() -> void {
+    write_crlf();
+    write_line(title());
+    write_line(subtitle());
+
+    write_str("load: ");
+    write_hex64(qemu_virt_load_addr());
+    write_crlf();
+
+    write_uart_label();
+    write_hex64(uart0_base());
+    write_crlf();
+
+    write_el_label();
+    write_hex64(current_el());
+    write_crlf();
+
+    write_line(next_step());
+}

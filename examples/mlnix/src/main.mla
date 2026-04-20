@@ -1,0 +1,16 @@
+mod boot::banner;
+mod boot::constants;
+mod boot::cpu;
+mod boot::mmio;
+mod boot::uart;
+mod kernel::main;
+
+use boot::cpu::halt_forever;
+use boot::uart::uart0_init;
+use kernel::main::kernel_main;
+
+fn boot_entry() -> void {
+    uart0_init();
+    kernel_main();
+    halt_forever();
+}
