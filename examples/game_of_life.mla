@@ -1,0 +1,717 @@
+/// \file game_of_life.mla
+/// @ingroup examples
+/// \brief Full-screen Conway's Game of Life rendered as boxed braille-dot glyphs.
+///
+mod std::ascii;
+mod std::bitset;
+mod std::esc;
+mod std::io;
+mod std::rand;
+mod std::strbuf;
+mod std::term;
+mod std::time;
+
+use std::ascii::AsciiKey;
+use std::bitset::BitSet;
+use std::esc::bg_rgb;
+use std::esc::bold_on;
+use std::esc::cmd_clear_screen;
+use std::esc::cmd_hide;
+use std::esc::cmd_home;
+use std::esc::cmd_restore;
+use std::esc::cmd_save;
+use std::esc::cmd_show;
+use std::esc::cursor;
+use std::esc::fg_rgb;
+use std::esc::reset;
+use std::io::Stdin;
+use std::io::flush;
+use std::io::read_keycode_nonblocking;
+use std::io::stdin;
+use std::io::stdout;
+use std::io::write;
+use std::rand::range_i64;
+use std::rand::seed_auto;
+use std::strbuf::StringBuilder;
+use std::strbuf::builder_append;
+use std::strbuf::builder_append_char;
+use std::strbuf::builder_free;
+use std::strbuf::builder_new;
+use std::strbuf::builder_take_string;
+use std::strbuf::free;
+use std::term::TermSize;
+use std::term::stdin_enable_raw;
+use std::term::stdin_is_tty;
+use std::term::stdin_restore;
+use std::term::stdout_size;
+use std::time::sleep_ms;
+
+fn min_i64(a: i64, b: i64) -> i64 {
+    return a < b ? a: b;
+}
+
+fn max_i64(a: i64, b: i64) -> i64 {
+    return a > b ? a: b;
+}
+
+fn clamp_i64(v: i64, lo: i64, hi: i64) -> i64 {
+    if v < lo {
+        return lo;
+    }
+    if v > hi {
+        return hi;
+    }
+    return v;
+}
+
+fn esc_prefixed(suffix: str8) -> str8 {
+    let b: StringBuilder = builder_new(len(suffix) + 4);
+    let _ = builder_append_char(b, 27);
+    let _ = builder_append(b, suffix);
+    let out: str8 = builder_take_string(b);
+    builder_free(b);
+    return out;
+}
+
+fn alt_screen_on_real() -> str8 {
+    return esc_prefixed("[?1049h");
+}
+
+fn alt_screen_off_real() -> str8 {
+    return esc_prefixed("[?1049l");
+}
+
+fn board_index(width: i64, x: i64, y: i64) -> i64 {
+    return y * width + x;
+}
+
+fn cell_at(board: BitSet, width: i64, height: i64, x: i64, y: i64) -> i32 {
+    var nx: i64 = x;
+    var ny: i64 = y;
+    if nx < 0 {
+        nx = nx + width;
+    } else if nx >= width {
+        nx = nx - width;
+    }
+    if ny < 0 {
+        ny = ny + height;
+    } else if ny >= height {
+        ny = ny - height;
+    }
+    let bit_r: Result<bool, str8> = board.get(board_index(width, nx, ny));
+    if bit_r.is_err() {
+        return 0;
+    }
+    return bit_r.unwrap() ? 1: 0;
+}
+
+fn set_cell(board: BitSet, width: i64, height: i64, x: i64, y: i64, value: i32) -> void {
+    if x < 0 || y < 0 || x >= width || y >= height {
+        return;
+    }
+    let _ = board.set(board_index(width, x, y), value != 0);
+}
+
+fn clear_board(board: BitSet, size: i64) -> void {
+    let _ = board.resize(size, false);
+}
+
+fn ensure_board(board: BitSet, size: i64) -> void {
+    let _ = board.resize(size, false);
+}
+
+fn stamp_glider(board: BitSet, width: i64, height: i64, left: i64, top: i64) -> void {
+    set_cell(board, width, height, left + 1, top + 0, 1);
+    set_cell(board, width, height, left + 2, top + 1, 1);
+    set_cell(board, width, height, left + 0, top + 2, 1);
+    set_cell(board, width, height, left + 1, top + 2, 1);
+    set_cell(board, width, height, left + 2, top + 2, 1);
+}
+
+fn stamp_blinker(board: BitSet, width: i64, height: i64, left: i64, top: i64) -> void {
+    set_cell(board, width, height, left + 0, top + 0, 1);
+    set_cell(board, width, height, left + 1, top + 0, 1);
+    set_cell(board, width, height, left + 2, top + 0, 1);
+}
+
+fn stamp_beacon(board: BitSet, width: i64, height: i64, left: i64, top: i64) -> void {
+    set_cell(board, width, height, left + 0, top + 0, 1);
+    set_cell(board, width, height, left + 1, top + 0, 1);
+    set_cell(board, width, height, left + 0, top + 1, 1);
+    set_cell(board, width, height, left + 1, top + 1, 1);
+    set_cell(board, width, height, left + 2, top + 2, 1);
+    set_cell(board, width, height, left + 3, top + 2, 1);
+    set_cell(board, width, height, left + 2, top + 3, 1);
+    set_cell(board, width, height, left + 3, top + 3, 1);
+}
+
+fn stamp_toad(board: BitSet, width: i64, height: i64, left: i64, top: i64) -> void {
+    set_cell(board, width, height, left + 1, top + 0, 1);
+    set_cell(board, width, height, left + 2, top + 0, 1);
+    set_cell(board, width, height, left + 3, top + 0, 1);
+    set_cell(board, width, height, left + 0, top + 1, 1);
+    set_cell(board, width, height, left + 1, top + 1, 1);
+    set_cell(board, width, height, left + 2, top + 1, 1);
+}
+
+fn stamp_lwss(board: BitSet, width: i64, height: i64, left: i64, top: i64) -> void {
+    set_cell(board, width, height, left + 1, top + 0, 1);
+    set_cell(board, width, height, left + 2, top + 0, 1);
+    set_cell(board, width, height, left + 3, top + 0, 1);
+    set_cell(board, width, height, left + 4, top + 0, 1);
+    set_cell(board, width, height, left + 0, top + 1, 1);
+    set_cell(board, width, height, left + 4, top + 1, 1);
+    set_cell(board, width, height, left + 4, top + 2, 1);
+    set_cell(board, width, height, left + 0, top + 3, 1);
+    set_cell(board, width, height, left + 3, top + 3, 1);
+}
+
+fn randomize_board(board: BitSet, width: i64, height: i64, density_percent: i64) -> void {
+    let density: i64 = clamp_i64(density_percent, 0, 100);
+    for y in 0..height {
+        for x in 0..width {
+            let on: i32 = range_i64(0, 99) < density ? 1: 0;
+            set_cell(board, width, height, x, y, on);
+        }
+    }
+}
+
+fn seed_showcase(board: BitSet, width: i64, height: i64) -> void {
+    clear_board(board, width * height);
+
+    stamp_glider(board, width, height, 2, 1);
+    stamp_blinker(board, width, height, max_i64(2, width / 2 - 3), 2);
+    stamp_beacon(board, width, height, max_i64(2, width - 10), 1);
+
+    stamp_beacon(board, width, height, 3, max_i64(4, height / 3));
+    stamp_toad(board, width, height, max_i64(4, width / 2 - 4), max_i64(6, height / 2 - 2));
+    stamp_lwss(board, width, height, max_i64(4, width - 12), max_i64(5, height / 2 - 2));
+
+    stamp_blinker(board, width, height, 2, max_i64(3, height - 5));
+    stamp_glider(board, width, height, max_i64(5, width / 3), max_i64(4, height - 7));
+    stamp_toad(board, width, height, max_i64(6, width - 11), max_i64(4, height - 6));
+}
+
+fn step_board(current: BitSet, next: BitSet, width: i64, height: i64) -> i64 {
+    var alive_after: i64 = 0;
+    for y in 0..height {
+        for x in 0..width {
+            let neighbors: i32 = cell_at(current, width, height, x - 1, y - 1) +
+            cell_at(current, width, height, x + 0, y - 1) +
+            cell_at(current, width, height, x + 1, y - 1) +
+            cell_at(current, width, height, x - 1, y + 0) +
+            cell_at(current, width, height, x + 1, y + 0) +
+            cell_at(current, width, height, x - 1, y + 1) +
+            cell_at(current, width, height, x + 0, y + 1) +
+            cell_at(current, width, height, x + 1, y + 1);
+
+            let now_alive: i32 = cell_at(current, width, height, x, y);
+            var next_alive: i32 = 0;
+            if now_alive == 1 {
+                next_alive = neighbors == 2 || neighbors == 3 ? 1: 0;
+            } else if neighbors == 3 {
+                next_alive = 1;
+            }
+            let _ = next.set(board_index(width, x, y), next_alive == 1);
+            alive_after = alive_after + next_alive;
+        }
+    }
+    return alive_after;
+}
+
+fn braille_mask(current: BitSet, width: i64, height: i64, gx: i64, gy: i64) -> i64 {
+    let x0: i64 = gx * 2;
+    let y0: i64 = gy * 4;
+    var mask: i64 = 0;
+
+    if cell_at(current, width, height, x0 + 0, y0 + 0) == 1 { mask = mask + 1; }
+    if cell_at(current, width, height, x0 + 0, y0 + 1) == 1 { mask = mask + 2; }
+    if cell_at(current, width, height, x0 + 0, y0 + 2) == 1 { mask = mask + 4; }
+    if cell_at(current, width, height, x0 + 1, y0 + 0) == 1 { mask = mask + 8; }
+    if cell_at(current, width, height, x0 + 1, y0 + 1) == 1 { mask = mask + 16; }
+    if cell_at(current, width, height, x0 + 1, y0 + 2) == 1 { mask = mask + 32; }
+    if cell_at(current, width, height, x0 + 0, y0 + 3) == 1 { mask = mask + 64; }
+    if cell_at(current, width, height, x0 + 1, y0 + 3) == 1 { mask = mask + 128; }
+
+    return mask;
+}
+
+fn braille_glyph(mask: i64) -> str8 {
+    if mask == 0 { return "⠀"; }
+    if mask == 1 { return "⠁"; }
+    if mask == 2 { return "⠂"; }
+    if mask == 3 { return "⠃"; }
+    if mask == 4 { return "⠄"; }
+    if mask == 5 { return "⠅"; }
+    if mask == 6 { return "⠆"; }
+    if mask == 7 { return "⠇"; }
+    if mask == 8 { return "⠈"; }
+    if mask == 9 { return "⠉"; }
+    if mask == 10 { return "⠊"; }
+    if mask == 11 { return "⠋"; }
+    if mask == 12 { return "⠌"; }
+    if mask == 13 { return "⠍"; }
+    if mask == 14 { return "⠎"; }
+    if mask == 15 { return "⠏"; }
+    if mask == 16 { return "⠐"; }
+    if mask == 17 { return "⠑"; }
+    if mask == 18 { return "⠒"; }
+    if mask == 19 { return "⠓"; }
+    if mask == 20 { return "⠔"; }
+    if mask == 21 { return "⠕"; }
+    if mask == 22 { return "⠖"; }
+    if mask == 23 { return "⠗"; }
+    if mask == 24 { return "⠘"; }
+    if mask == 25 { return "⠙"; }
+    if mask == 26 { return "⠚"; }
+    if mask == 27 { return "⠛"; }
+    if mask == 28 { return "⠜"; }
+    if mask == 29 { return "⠝"; }
+    if mask == 30 { return "⠞"; }
+    if mask == 31 { return "⠟"; }
+    if mask == 32 { return "⠠"; }
+    if mask == 33 { return "⠡"; }
+    if mask == 34 { return "⠢"; }
+    if mask == 35 { return "⠣"; }
+    if mask == 36 { return "⠤"; }
+    if mask == 37 { return "⠥"; }
+    if mask == 38 { return "⠦"; }
+    if mask == 39 { return "⠧"; }
+    if mask == 40 { return "⠨"; }
+    if mask == 41 { return "⠩"; }
+    if mask == 42 { return "⠪"; }
+    if mask == 43 { return "⠫"; }
+    if mask == 44 { return "⠬"; }
+    if mask == 45 { return "⠭"; }
+    if mask == 46 { return "⠮"; }
+    if mask == 47 { return "⠯"; }
+    if mask == 48 { return "⠰"; }
+    if mask == 49 { return "⠱"; }
+    if mask == 50 { return "⠲"; }
+    if mask == 51 { return "⠳"; }
+    if mask == 52 { return "⠴"; }
+    if mask == 53 { return "⠵"; }
+    if mask == 54 { return "⠶"; }
+    if mask == 55 { return "⠷"; }
+    if mask == 56 { return "⠸"; }
+    if mask == 57 { return "⠹"; }
+    if mask == 58 { return "⠺"; }
+    if mask == 59 { return "⠻"; }
+    if mask == 60 { return "⠼"; }
+    if mask == 61 { return "⠽"; }
+    if mask == 62 { return "⠾"; }
+    if mask == 63 { return "⠿"; }
+    if mask == 64 { return "⡀"; }
+    if mask == 65 { return "⡁"; }
+    if mask == 66 { return "⡂"; }
+    if mask == 67 { return "⡃"; }
+    if mask == 68 { return "⡄"; }
+    if mask == 69 { return "⡅"; }
+    if mask == 70 { return "⡆"; }
+    if mask == 71 { return "⡇"; }
+    if mask == 72 { return "⡈"; }
+    if mask == 73 { return "⡉"; }
+    if mask == 74 { return "⡊"; }
+    if mask == 75 { return "⡋"; }
+    if mask == 76 { return "⡌"; }
+    if mask == 77 { return "⡍"; }
+    if mask == 78 { return "⡎"; }
+    if mask == 79 { return "⡏"; }
+    if mask == 80 { return "⡐"; }
+    if mask == 81 { return "⡑"; }
+    if mask == 82 { return "⡒"; }
+    if mask == 83 { return "⡓"; }
+    if mask == 84 { return "⡔"; }
+    if mask == 85 { return "⡕"; }
+    if mask == 86 { return "⡖"; }
+    if mask == 87 { return "⡗"; }
+    if mask == 88 { return "⡘"; }
+    if mask == 89 { return "⡙"; }
+    if mask == 90 { return "⡚"; }
+    if mask == 91 { return "⡛"; }
+    if mask == 92 { return "⡜"; }
+    if mask == 93 { return "⡝"; }
+    if mask == 94 { return "⡞"; }
+    if mask == 95 { return "⡟"; }
+    if mask == 96 { return "⡠"; }
+    if mask == 97 { return "⡡"; }
+    if mask == 98 { return "⡢"; }
+    if mask == 99 { return "⡣"; }
+    if mask == 100 { return "⡤"; }
+    if mask == 101 { return "⡥"; }
+    if mask == 102 { return "⡦"; }
+    if mask == 103 { return "⡧"; }
+    if mask == 104 { return "⡨"; }
+    if mask == 105 { return "⡩"; }
+    if mask == 106 { return "⡪"; }
+    if mask == 107 { return "⡫"; }
+    if mask == 108 { return "⡬"; }
+    if mask == 109 { return "⡭"; }
+    if mask == 110 { return "⡮"; }
+    if mask == 111 { return "⡯"; }
+    if mask == 112 { return "⡰"; }
+    if mask == 113 { return "⡱"; }
+    if mask == 114 { return "⡲"; }
+    if mask == 115 { return "⡳"; }
+    if mask == 116 { return "⡴"; }
+    if mask == 117 { return "⡵"; }
+    if mask == 118 { return "⡶"; }
+    if mask == 119 { return "⡷"; }
+    if mask == 120 { return "⡸"; }
+    if mask == 121 { return "⡹"; }
+    if mask == 122 { return "⡺"; }
+    if mask == 123 { return "⡻"; }
+    if mask == 124 { return "⡼"; }
+    if mask == 125 { return "⡽"; }
+    if mask == 126 { return "⡾"; }
+    if mask == 127 { return "⡿"; }
+    if mask == 128 { return "⢀"; }
+    if mask == 129 { return "⢁"; }
+    if mask == 130 { return "⢂"; }
+    if mask == 131 { return "⢃"; }
+    if mask == 132 { return "⢄"; }
+    if mask == 133 { return "⢅"; }
+    if mask == 134 { return "⢆"; }
+    if mask == 135 { return "⢇"; }
+    if mask == 136 { return "⢈"; }
+    if mask == 137 { return "⢉"; }
+    if mask == 138 { return "⢊"; }
+    if mask == 139 { return "⢋"; }
+    if mask == 140 { return "⢌"; }
+    if mask == 141 { return "⢍"; }
+    if mask == 142 { return "⢎"; }
+    if mask == 143 { return "⢏"; }
+    if mask == 144 { return "⢐"; }
+    if mask == 145 { return "⢑"; }
+    if mask == 146 { return "⢒"; }
+    if mask == 147 { return "⢓"; }
+    if mask == 148 { return "⢔"; }
+    if mask == 149 { return "⢕"; }
+    if mask == 150 { return "⢖"; }
+    if mask == 151 { return "⢗"; }
+    if mask == 152 { return "⢘"; }
+    if mask == 153 { return "⢙"; }
+    if mask == 154 { return "⢚"; }
+    if mask == 155 { return "⢛"; }
+    if mask == 156 { return "⢜"; }
+    if mask == 157 { return "⢝"; }
+    if mask == 158 { return "⢞"; }
+    if mask == 159 { return "⢟"; }
+    if mask == 160 { return "⢠"; }
+    if mask == 161 { return "⢡"; }
+    if mask == 162 { return "⢢"; }
+    if mask == 163 { return "⢣"; }
+    if mask == 164 { return "⢤"; }
+    if mask == 165 { return "⢥"; }
+    if mask == 166 { return "⢦"; }
+    if mask == 167 { return "⢧"; }
+    if mask == 168 { return "⢨"; }
+    if mask == 169 { return "⢩"; }
+    if mask == 170 { return "⢪"; }
+    if mask == 171 { return "⢫"; }
+    if mask == 172 { return "⢬"; }
+    if mask == 173 { return "⢭"; }
+    if mask == 174 { return "⢮"; }
+    if mask == 175 { return "⢯"; }
+    if mask == 176 { return "⢰"; }
+    if mask == 177 { return "⢱"; }
+    if mask == 178 { return "⢲"; }
+    if mask == 179 { return "⢳"; }
+    if mask == 180 { return "⢴"; }
+    if mask == 181 { return "⢵"; }
+    if mask == 182 { return "⢶"; }
+    if mask == 183 { return "⢷"; }
+    if mask == 184 { return "⢸"; }
+    if mask == 185 { return "⢹"; }
+    if mask == 186 { return "⢺"; }
+    if mask == 187 { return "⢻"; }
+    if mask == 188 { return "⢼"; }
+    if mask == 189 { return "⢽"; }
+    if mask == 190 { return "⢾"; }
+    if mask == 191 { return "⢿"; }
+    if mask == 192 { return "⣀"; }
+    if mask == 193 { return "⣁"; }
+    if mask == 194 { return "⣂"; }
+    if mask == 195 { return "⣃"; }
+    if mask == 196 { return "⣄"; }
+    if mask == 197 { return "⣅"; }
+    if mask == 198 { return "⣆"; }
+    if mask == 199 { return "⣇"; }
+    if mask == 200 { return "⣈"; }
+    if mask == 201 { return "⣉"; }
+    if mask == 202 { return "⣊"; }
+    if mask == 203 { return "⣋"; }
+    if mask == 204 { return "⣌"; }
+    if mask == 205 { return "⣍"; }
+    if mask == 206 { return "⣎"; }
+    if mask == 207 { return "⣏"; }
+    if mask == 208 { return "⣐"; }
+    if mask == 209 { return "⣑"; }
+    if mask == 210 { return "⣒"; }
+    if mask == 211 { return "⣓"; }
+    if mask == 212 { return "⣔"; }
+    if mask == 213 { return "⣕"; }
+    if mask == 214 { return "⣖"; }
+    if mask == 215 { return "⣗"; }
+    if mask == 216 { return "⣘"; }
+    if mask == 217 { return "⣙"; }
+    if mask == 218 { return "⣚"; }
+    if mask == 219 { return "⣛"; }
+    if mask == 220 { return "⣜"; }
+    if mask == 221 { return "⣝"; }
+    if mask == 222 { return "⣞"; }
+    if mask == 223 { return "⣟"; }
+    if mask == 224 { return "⣠"; }
+    if mask == 225 { return "⣡"; }
+    if mask == 226 { return "⣢"; }
+    if mask == 227 { return "⣣"; }
+    if mask == 228 { return "⣤"; }
+    if mask == 229 { return "⣥"; }
+    if mask == 230 { return "⣦"; }
+    if mask == 231 { return "⣧"; }
+    if mask == 232 { return "⣨"; }
+    if mask == 233 { return "⣩"; }
+    if mask == 234 { return "⣪"; }
+    if mask == 235 { return "⣫"; }
+    if mask == 236 { return "⣬"; }
+    if mask == 237 { return "⣭"; }
+    if mask == 238 { return "⣮"; }
+    if mask == 239 { return "⣯"; }
+    if mask == 240 { return "⣰"; }
+    if mask == 241 { return "⣱"; }
+    if mask == 242 { return "⣲"; }
+    if mask == 243 { return "⣳"; }
+    if mask == 244 { return "⣴"; }
+    if mask == 245 { return "⣵"; }
+    if mask == 246 { return "⣶"; }
+    if mask == 247 { return "⣷"; }
+    if mask == 248 { return "⣸"; }
+    if mask == 249 { return "⣹"; }
+    if mask == 250 { return "⣺"; }
+    if mask == 251 { return "⣻"; }
+    if mask == 252 { return "⣼"; }
+    if mask == 253 { return "⣽"; }
+    if mask == 254 { return "⣾"; }
+    return "⣿";
+}
+
+fn glyph_cols(term: TermSize) -> i64 {
+    return clamp_i64(term.cols - 6, 12, 140);
+}
+
+fn glyph_rows(term: TermSize) -> i64 {
+    return clamp_i64(term.rows - 7, 6, 60);
+}
+
+fn board_width(term: TermSize) -> i64 {
+    return glyph_cols(term) * 2;
+}
+
+fn board_height(term: TermSize) -> i64 {
+    return glyph_rows(term) * 4;
+}
+
+fn sync_view(current: BitSet, next: BitSet, width: i64, height: i64,
+term: TermSize, show_pattern: i32) -> list<i64> {
+    let want_width: i64 = board_width(term);
+    let want_height: i64 = board_height(term);
+    var out: list<i64> = [];
+    out.push(want_width);
+    out.push(want_height);
+    if want_width == width && want_height == height &&
+    current.len() > 0 && next.len() > 0 {
+        out.push(0);
+        return out;
+    }
+
+    let size: i64 = want_width * want_height;
+    ensure_board(current, size);
+    ensure_board(next, size);
+
+    if show_pattern == 1 {
+        seed_showcase(current, want_width, want_height);
+    } else {
+        randomize_board(current, want_width, want_height, 23);
+    }
+    out.push(1);
+    return out;
+}
+
+fn render_frame(board: BitSet, width: i64, height: i64, generation: i64, alive: i64,
+paused: i32, tick_ms: i64, clear_before_draw: i32) -> str8 {
+    let gcols: i64 = width / 2;
+    let grows: i64 = height / 4;
+    let inner_width: i64 = gcols + 2;
+    let builder: StringBuilder = builder_new(16384);
+
+    let _ = builder_append(builder, cursor(cmd_home()));
+    if clear_before_draw == 1 {
+        let _ = builder_append(builder, cursor(cmd_clear_screen()));
+    }
+    let _ = builder_append(builder, bg_rgb(20, 40, 60));
+    let _ = builder_append(builder, fg_rgb(226, 234, 248));
+    let _ = builder_append(builder, bold_on());
+    let _ = builder_append(builder, "  Conway's Game of Life");
+    let _ = builder_append(builder, reset());
+    let _ = builder_append(builder, bg_rgb(20, 40, 60));
+    let _ = builder_append(builder, fg_rgb(150, 170, 196));
+    let _ = builder_append(builder, paused == 1 ? "  [paused]\r\n\r\n": "  [running]\r\n\r\n");
+
+    let _ = builder_append(builder, "  ┌");
+    for _i in 0..inner_width {
+        let _ = builder_append(builder, "─");
+    }
+    let _ = builder_append(builder, "┐\r\n");
+
+    for gy in 0..grows {
+        let _ = builder_append(builder, "  │ ");
+        let _ = builder_append(builder, bg_rgb(18, 34, 52));
+        let _ = builder_append(builder, fg_rgb(214, 142, 255));
+        for gx in 0..gcols {
+            let mask: i64 = braille_mask(board, width, height, gx, gy);
+            let _ = builder_append(builder, braille_glyph(mask));
+        }
+        let _ = builder_append(builder, reset());
+        let _ = builder_append(builder, bg_rgb(20, 40, 60));
+        let _ = builder_append(builder, fg_rgb(150, 170, 196));
+        let _ = builder_append(builder, " │\r\n");
+    }
+
+    let _ = builder_append(builder, "  └");
+    for _i in 0..inner_width {
+        let _ = builder_append(builder, "─");
+    }
+    let _ = builder_append(builder, "┘\r\n");
+
+    let _ = builder_append(builder, fg_rgb(226, 234, 248));
+    let _ = builder_append(builder, format!("  generation {}   alive {}   grid {}x{} cells\r\n",
+    generation, alive, width, height));
+    let _ = builder_append(builder, fg_rgb(150, 170, 196));
+    let _ = builder_append(builder, format!(
+    "  controls: q quit   space pause/run   n step   r randomize   s showcase   c clear   tick {} ms",
+    tick_ms
+    ));
+    let _ = builder_append(builder, reset());
+
+    let out: str8 = builder_take_string(builder);
+    builder_free(builder);
+    return out;
+}
+
+fn count_alive(board: BitSet) -> i64 {
+    return board.count_ones();
+}
+
+fn main() -> i32 {
+    if stdin_is_tty() == 0 {
+        println!("game_of_life requires a TTY");
+        return 1;
+    }
+
+    let _seed: i64 = seed_auto();
+    let input: Stdin = stdin();
+    let _ = stdin_enable_raw();
+    let _ = write(stdout(), cursor(cmd_save()));
+    let on: str8 = alt_screen_on_real();
+    let _ = write(stdout(), on);
+    free(on);
+    let _ = write(stdout(), cursor(cmd_hide()));
+
+    var width: i64 = 0;
+    var height: i64 = 0;
+    let current_r: Result<BitSet, str8> = BitSet::new(0);
+    let next_r: Result<BitSet, str8> = BitSet::new(0);
+    if current_r.is_err() || next_r.is_err() {
+        println!("BitSet init failed");
+        let _ = write(stdout(), reset());
+        let _ = write(stdout(), cursor(cmd_show()));
+        let off: str8 = alt_screen_off_real();
+        let _ = write(stdout(), off);
+        free(off);
+        let _ = write(stdout(), cursor(cmd_restore()));
+        let _ = stdin_restore();
+        return 1;
+    }
+    var current: BitSet = current_r.unwrap();
+    var next: BitSet = next_r.unwrap();
+    var generation: i64 = 0;
+    var alive: i64 = 0;
+    var paused: i32 = 0;
+    var running: i32 = 1;
+    var needs_clear: i32 = 1;
+    let tick_ms: i64 = 90;
+
+    let init_view: list<i64> = sync_view(current, next, width, height, stdout_size(), 1);
+    width = init_view[0];
+    height = init_view[1];
+    alive = count_alive(current);
+
+    while running == 1 {
+        let term: TermSize = stdout_size();
+        let view: list<i64> = sync_view(current, next, width, height, term, 1);
+        width = view[0];
+        height = view[1];
+        if view[2] == 1 {
+            generation = 0;
+            needs_clear = 1;
+        }
+        alive = count_alive(current);
+
+        let frame: str8 = render_frame(current, width, height, generation, alive, paused, tick_ms,
+        needs_clear);
+        let _ = write(stdout(), frame);
+        let _ = flush(stdout());
+        free(frame);
+        needs_clear = 0;
+
+        let key: i32 = read_keycode_nonblocking(input);
+        if key >= 0 {
+            if key == AsciiKey::Etx || key == AsciiKey::LowerQ || key == AsciiKey::UpperQ {
+                running = 0;
+            } else if key == AsciiKey::Space {
+                paused = paused == 1 ? 0: 1;
+            } else if key == AsciiKey::LowerN || key == AsciiKey::UpperN {
+                alive = step_board(current, next, width, height);
+                let swap_tmp: BitSet = current;
+                current = next;
+                next = swap_tmp;
+                generation = generation + 1;
+                paused = 1;
+            } else if key == AsciiKey::LowerR || key == AsciiKey::UpperR {
+                randomize_board(current, width, height, 23);
+                clear_board(next, width * height);
+                generation = 0;
+            } else if key == AsciiKey::LowerS || key == AsciiKey::UpperS {
+                seed_showcase(current, width, height);
+                clear_board(next, width * height);
+                generation = 0;
+            } else if key == AsciiKey::LowerC || key == AsciiKey::UpperC {
+                clear_board(current, width * height);
+                clear_board(next, width * height);
+                generation = 0;
+            }
+        }
+
+        if running == 1 && paused == 0 {
+            alive = step_board(current, next, width, height);
+            let swap_tmp2: BitSet = current;
+            current = next;
+            next = swap_tmp2;
+            generation = generation + 1;
+        }
+
+        sleep_ms(tick_ms);
+    }
+
+    let _ = write(stdout(), reset());
+    let _ = write(stdout(), cursor(cmd_show()));
+    let off2: str8 = alt_screen_off_real();
+    let _ = write(stdout(), off2);
+    free(off2);
+    let _ = write(stdout(), cursor(cmd_restore()));
+    let _ = write(stdout(), "\n");
+    let _ = stdin_restore();
+    current.close();
+    next.close();
+    return 0;
+}
