@@ -11,6 +11,9 @@ mod std::strbuf;
 mod std::term;
 mod std::time;
 
+extern fn __mlang_std_bitset_life_step_toroidal(current_handle: i64, next_handle: i64,
+                                                width: i64, height: i64) -> i64;
+
 use std::ascii::AsciiKey;
 use std::ascii::unicode_braille_mask;
 use std::bitset::BitSet;
@@ -37,12 +40,13 @@ use std::rand::range_i64;
 use std::rand::seed_auto;
 use std::strbuf::StringBuilder;
 use std::strbuf::builder_append;
+use std::strbuf::builder_append_len;
+use std::strbuf::builder_borrow_string;
 use std::strbuf::builder_append_char;
 use std::strbuf::builder_clear;
 use std::strbuf::builder_free;
 use std::strbuf::builder_len;
 use std::strbuf::builder_new;
-use std::strbuf::builder_take_string;
 use std::strbuf::free;
 use std::term::TermSize;
 use std::term::stdin_enable_raw;
@@ -103,18 +107,18 @@ fn cell_at(board: BitSet, width: i64, height: i64, x: i64, y: i64) -> i32 {
     } else if ny >= height {
         ny = ny - height;
     }
-    let bit_r: Result<bool, str8> = board.get(board_index(width, nx, ny));
-    if bit_r.is_err() {
+    let cell: i32 = board.get_fast(board_index(width, nx, ny));
+    if cell < 0 {
         return 0;
     }
-    return bit_r.unwrap() ? 1: 0;
+    return cell;
 }
 
 fn set_cell(board: BitSet, width: i64, height: i64, x: i64, y: i64, value: i32) -> void {
     if x < 0 || y < 0 || x >= width || y >= height {
         return;
     }
-    let _ = board.set(board_index(width, x, y), value != 0);
+    let _ = board.set_fast(board_index(width, x, y), value != 0);
 }
 
 fn clear_board(board: BitSet, size: i64) -> void {
@@ -197,33 +201,6 @@ fn seed_showcase(board: BitSet, width: i64, height: i64) -> void {
     stamp_toad(board, width, height, max_i64(6, width - 11), max_i64(4, height - 6));
 }
 
-fn step_board(current: BitSet, next: BitSet, width: i64, height: i64) -> i64 {
-    var alive_after: i64 = 0;
-    for y in 0..height {
-        for x in 0..width {
-            let neighbors: i32 = cell_at(current, width, height, x - 1, y - 1) +
-            cell_at(current, width, height, x + 0, y - 1) +
-            cell_at(current, width, height, x + 1, y - 1) +
-            cell_at(current, width, height, x - 1, y + 0) +
-            cell_at(current, width, height, x + 1, y + 0) +
-            cell_at(current, width, height, x - 1, y + 1) +
-            cell_at(current, width, height, x + 0, y + 1) +
-            cell_at(current, width, height, x + 1, y + 1);
-
-            let now_alive: i32 = cell_at(current, width, height, x, y);
-            var next_alive: i32 = 0;
-            if now_alive == 1 {
-                next_alive = neighbors == 2 || neighbors == 3 ? 1: 0;
-            } else if neighbors == 3 {
-                next_alive = 1;
-            }
-            let _ = next.set(board_index(width, x, y), next_alive == 1);
-            alive_after = alive_after + next_alive;
-        }
-    }
-    return alive_after;
-}
-
 fn braille_mask(current: BitSet, width: i64, height: i64, gx: i64, gy: i64) -> i64 {
     let x0: i64 = gx * 2;
     let y0: i64 = gy * 4;
@@ -255,6 +232,11 @@ fn board_width(term: TermSize) -> i64 {
 
 fn board_height(term: TermSize) -> i64 {
     return glyph_rows(term) * 4;
+}
+
+fn step_board(current: BitSet, next: BitSet, width: i64, height: i64) -> i64 {
+    return __mlang_std_bitset_life_step_toroidal(current.raw_handle(), next.raw_handle(),
+                                                 width, height);
 }
 
 fn sync_view(current: BitSet, next: BitSet, width: i64, height: i64,
@@ -316,7 +298,7 @@ fn render_frame_into(builder: StringBuilder, board: BitSet, width: i64, height: 
         let _ = builder_append(builder, fg_rgb(214, 142, 255));
         for gx in 0..gcols {
             let mask: i64 = braille_mask(board, width, height, gx, gy);
-            let _ = builder_append(builder, unicode_braille_mask(i32(mask)));
+            let _ = builder_append_len(builder, unicode_braille_mask(i32(mask)), 3);
         }
         let _ = builder_append(builder, reset());
         let _ = builder_append(builder, bg_rgb(20, 40, 60));
@@ -406,10 +388,9 @@ fn main() -> i32 {
         render_frame_into(frame_builder, current, width, height, generation, alive, paused,
                           tick_ms, needs_clear);
         let frame_len: i64 = builder_len(frame_builder);
-        let frame: str8 = builder_take_string(frame_builder);
+        let frame: str8 = builder_borrow_string(frame_builder);
         let _ = write_unflushed_len(stdout(), frame, frame_len);
         let _ = flush(stdout());
-        free(frame);
         needs_clear = 0;
 
         let key: i32 = read_keycode_nonblocking(input);

@@ -818,6 +818,22 @@ int64_t __mlang_std_strbuf_builder_rt_append(int64_t handle, const char* s)
     return (int64_t)n;
 }
 
+int64_t __mlang_std_strbuf_builder_rt_append_len(int64_t handle, const char* s, int64_t n)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf || !s || n < 0)
+        return -1;
+
+    size_t count = (size_t)n;
+    if(!sb_ensure_capacity(sb, count))
+        return -1;
+    if(count > 0u)
+        memcpy(sb->buf + sb->len, s, count);
+    sb->len += count;
+    sb->buf[sb->len] = '\0';
+    return n;
+}
+
 int64_t __mlang_std_strbuf_builder_rt_append_char(int64_t handle, int32_t ch)
 {
     mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
@@ -830,6 +846,14 @@ int64_t __mlang_std_strbuf_builder_rt_append_char(int64_t handle, int32_t ch)
     sb->len += 1u;
     sb->buf[sb->len] = '\0';
     return 1;
+}
+
+char* __mlang_std_strbuf_builder_rt_data(int64_t handle)
+{
+    mlang_strbuilder_t* sb = (mlang_strbuilder_t*)(intptr_t)handle;
+    if(!sb || !sb->buf)
+        return NULL;
+    return sb->buf;
 }
 
 char* __mlang_std_strbuf_builder_rt_to_string(int64_t handle)
