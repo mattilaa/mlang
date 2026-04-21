@@ -4,6 +4,7 @@ extern fn runtime_write_dec_i32(value: i32) -> void;
 extern fn runtime_write_dec_i64(value: i64) -> void;
 extern fn runtime_uart_getc() -> i32;
 extern fn runtime_uart_putc(ch: i32) -> void;
+extern fn runtime_init_interrupts() -> void;
 
 struct LineBuffer {
     var b00: u8; var b01: u8; var b02: u8; var b03: u8; var b04: u8; var b05: u8; var b06: u8; var b07: u8;
@@ -557,7 +558,7 @@ fn print_boot_banner() {
     puts("Hello to MUnix!\r\n");
     puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
     puts("init: unpacking built-in initramfs to / ... done\r\n");
-    puts("init: bringing up serial shell ... done\r\n");
+    puts("init: bringing up irq-driven serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
     runtime_write_hex64(read_mpidr());
     puts(" current_el_raw=0x");
@@ -684,7 +685,7 @@ fn print_dev_console() {
 fn print_dmesg(state: ptr<ShellState>) {
     puts("[    0.000000] mlnix: boot cpu online, mpidr=0x");
     runtime_write_hex64(read_mpidr());
-    puts("\r\n[    0.000001] mlnix: uart console on ttyAMA0\r\n");
+    puts("\r\n[    0.000001] mlnix: uart irq console on ttyAMA0\r\n");
     puts("[    0.000002] mlnix: procfs and initramfs mounted\r\n");
     puts("[    0.000003] mlnix: shell commands handled=");
     unsafe {
@@ -826,6 +827,7 @@ fn kernel_main() {
         command_count: 0
     };
 
+    runtime_init_interrupts();
     print_boot_banner();
 
     while true {
