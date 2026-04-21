@@ -7,6 +7,8 @@
 ///
 ///   if keycode == AsciiKey::Esc { ... }
 
+extern pub fn __mlang_std_ascii_braille_mask(mask: i32) -> str8;
+
 /// @brief ASCII keycode enum values 0..127 for use in keyboard handlers.
 pub enum AsciiKey : i32 {
     Nul = 0,
@@ -243,6 +245,14 @@ pub fn unicode_box_glyph(g: UnicodeBoxGlyph) -> str8 {
     if g == UnicodeBoxGlyph::CheckMark: { return "✓"; }
     if g == UnicodeBoxGlyph::CrossMark: { return "✗"; }
     return "?";
+}
+
+/// \brief Return a Unicode braille glyph for a packed 8-dot mask (0..255).
+///
+/// Dot bits follow the standard braille cell layout used by Unicode:
+/// 1,2,3,7 on the left column and 4,5,6,8 on the right column.
+pub fn unicode_braille_mask(mask: i32) -> str8 {
+    return __mlang_std_ascii_braille_mask(mask);
 }
 
 /// \brief ASCII-safe fallback glyph map (single-byte) for terminals without Unicode.
