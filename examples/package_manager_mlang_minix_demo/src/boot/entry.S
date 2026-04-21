@@ -5,6 +5,10 @@
 _start:
     ldr x0, =__stack_top
     mov sp, x0
+    mrs x1, cpacr_el1
+    orr x1, x1, #(3 << 20)
+    msr cpacr_el1, x1
+    isb
     bl kernel_main__void
 
 1:

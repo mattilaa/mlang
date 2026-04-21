@@ -18,6 +18,19 @@ static void uart_putc(uint8_t ch)
     uart_putc_raw(ch);
 }
 
+int32_t runtime_uart_getc(void)
+{
+    while((*UART_FR & (1u << 4)) != 0u) {
+        __asm__ __volatile__("wfe");
+    }
+    return (int32_t)(*UART_DR & 0xffu);
+}
+
+void runtime_uart_putc(int32_t ch)
+{
+    uart_putc((uint8_t)ch);
+}
+
 void runtime_write_str(const char* text)
 {
     if(!text) {

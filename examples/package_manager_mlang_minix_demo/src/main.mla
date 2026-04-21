@@ -2,6 +2,8 @@ extern fn runtime_write_str(text: str8) -> void;
 extern fn runtime_write_hex64(value: i64) -> void;
 extern fn runtime_write_dec_i32(value: i32) -> void;
 extern fn runtime_write_dec_i64(value: i64) -> void;
+extern fn runtime_uart_getc() -> i32;
+extern fn runtime_uart_putc(ch: i32) -> void;
 
 struct LineBuffer {
     var b00: u8; var b01: u8; var b02: u8; var b03: u8; var b04: u8; var b05: u8; var b06: u8; var b07: u8;
@@ -33,38 +35,11 @@ fn zero_line_buffer() -> LineBuffer {
     };
 }
 
-fn uart_base() -> i64 { return 0x09000000; }
-fn uart_dr() -> i64 { return uart_base(); }
-fn uart_fr() -> i64 { return uart_base() + 0x18; }
-fn uart_fr_rxfe() -> i32 { return 1 << 4; }
-fn uart_fr_txff() -> i32 { return 1 << 5; }
 fn ascii_cr() -> u8 { return 13; }
 fn ascii_lf() -> u8 { return 10; }
 fn ascii_bs() -> u8 { return 8; }
 fn ascii_del() -> u8 { return 127; }
 fn ascii_space() -> u8 { return 32; }
-
-fn mmio_read32(addr: i64) -> i32 {
-    let seed: i32 = 0;
-    return asm volatile aarch64(i32, "ldr w0, [$1]", seed, addr);
-}
-
-fn mmio_read8(addr: i64) -> u8 {
-    let seed: u8 = 0;
-    return asm volatile aarch64(u8, "ldrb w0, [$1]", seed, addr);
-}
-
-fn mmio_write32(addr: i64, value: i32) {
-    asm volatile aarch64(void, "str w1, [$0]", addr, value);
-}
-
-fn cpu_relax() {
-    asm volatile aarch64(void, "yield");
-}
-
-fn cpu_wait() {
-    asm volatile aarch64(void, "wfe");
-}
 
 fn read_current_el() -> i64 {
     let seed: i64 = 0;
@@ -91,10 +66,7 @@ fn line_load(base: ptr<u8>, index: i64) -> u8 {
 }
 
 fn uart_putc(ch: u8) {
-    while (mmio_read32(uart_fr()) & uart_fr_txff()) != 0 {
-        cpu_relax();
-    }
-    mmio_write32(uart_dr(), i32(ch));
+    runtime_uart_putc(i32(ch));
 }
 
 fn uart_newline() {
@@ -103,10 +75,7 @@ fn uart_newline() {
 }
 
 fn uart_getc() -> u8 {
-    while (mmio_read32(uart_fr()) & uart_fr_rxfe()) != 0 {
-        cpu_wait();
-    }
-    return mmio_read8(uart_dr());
+    return u8(runtime_uart_getc());
 }
 
 fn puts(text: str8) {
@@ -353,7 +322,8 @@ fn cmd_is_cat_meminfo(state: ptr<ShellState>) -> bool {
 }
 
 fn print_boot_banner() {
-    puts("\r\nMLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
+    puts("Hello to MUnix!\r\n");
+    puts("MLNIX 0.3.0 kernel booting on QEMU virt (AArch64)\r\n");
     puts("init: mounting /, /proc, /etc, /dev ... done\r\n");
     puts("init: bringing up serial shell ... done\r\n");
     puts("cpu: mpidr=0x");
