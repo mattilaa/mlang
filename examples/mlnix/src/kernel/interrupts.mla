@@ -1,9 +1,11 @@
 mod boot::cpu;
 mod boot::gic;
+mod boot::uart;
 mod kernel::core;
 mod kernel::scheduler;
 mod kernel::timer;
 
+use boot::constants::qemu_uart_irq_id;
 use boot::cpu::irq_disable;
 use boot::cpu::irq_enable;
 use boot::gic::gic_acknowledge;
@@ -12,6 +14,7 @@ use boot::gic::gic_init;
 use boot::gic::gic_irq_id;
 use boot::gic::gic_spurious_irq_id;
 use boot::gic::gic_timer_irq_id;
+use boot::uart::uart_irq_drain;
 use kernel::core::kernel_core_on_external_irq;
 use kernel::core::kernel_core_on_timer_irq;
 use kernel::scheduler::scheduler_init;
@@ -43,6 +46,13 @@ pub fn irq_handle(kind: i64) -> void {
 
     if irq_id == gic_timer_irq_id() {
         kernel_core_on_timer_irq(irq_id, kind);
+        gic_complete(iar);
+        return;
+    }
+
+    if irq_id == qemu_uart_irq_id() {
+        uart_irq_drain();
+        kernel_core_on_external_irq(irq_id, kind);
         gic_complete(iar);
         return;
     }

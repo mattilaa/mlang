@@ -1,0 +1,40 @@
+extern fn mlnix_rx_byte_get(index: i64) -> i64;
+extern fn mlnix_rx_byte_set(index: i64, value: i64) -> void;
+extern fn mlnix_rx_head_get() -> i64;
+extern fn mlnix_rx_head_set(value: i64) -> void;
+extern fn mlnix_rx_tail_get() -> i64;
+extern fn mlnix_rx_tail_set(value: i64) -> void;
+
+pub fn rx_capacity() -> i64 {
+    return 256;
+}
+
+pub fn rx_init() -> void {
+    mlnix_rx_head_set(0);
+    mlnix_rx_tail_set(0);
+}
+
+pub fn rx_is_empty() -> i64 {
+    return mlnix_rx_head_get() == mlnix_rx_tail_get() ? 1 : 0;
+}
+
+pub fn rx_push(byte: i64) -> i64 {
+    let head: i64 = mlnix_rx_head_get();
+    let next: i64 = (head + 1) & 0xFF;
+    if next == mlnix_rx_tail_get() {
+        return 0;
+    }
+    mlnix_rx_byte_set(head, byte & 0xFF);
+    mlnix_rx_head_set(next);
+    return 1;
+}
+
+pub fn rx_pop() -> i64 {
+    let tail: i64 = mlnix_rx_tail_get();
+    if tail == mlnix_rx_head_get() {
+        return -1;
+    }
+    let byte: i64 = mlnix_rx_byte_get(tail);
+    mlnix_rx_tail_set((tail + 1) & 0xFF);
+    return byte;
+}

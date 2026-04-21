@@ -6,10 +6,11 @@ mod kernel::dev::discover;
 mod kernel::scheduler;
 mod kernel::services;
 mod kernel::shell;
+mod kernel::shell::rx;
 mod kernel::sync::waitqueue;
 mod kernel::timer;
 
-use boot::cpu::relax;
+use boot::cpu::wait_for_interrupt;
 use boot::uart::write_crlf;
 use boot::uart::write_hex64;
 use boot::uart::write_line;
@@ -29,6 +30,7 @@ use kernel::services::services_pending_ticks;
 use kernel::services::services_step;
 use kernel::shell::shell_init;
 use kernel::shell::shell_poll;
+use kernel::shell::rx::rx_is_empty;
 use kernel::sync::waitqueue::waitqueue_init;
 use kernel::timer::timer_on_irq;
 
@@ -90,6 +92,15 @@ pub fn kernel_core_run() -> void {
         }
 
         shell_poll();
-        relax();
+        if scheduler_current_domain() == scheduler_domain_service() {
+            continue;
+        }
+        if services_pending_ticks() > 0 {
+            continue;
+        }
+        if rx_is_empty() == 0 {
+            continue;
+        }
+        wait_for_interrupt();
     }
 }

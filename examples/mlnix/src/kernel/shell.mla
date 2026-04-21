@@ -1,9 +1,9 @@
 mod kernel::console;
 mod kernel::shell::line;
+mod kernel::shell::rx;
 mod kernel::state;
 
 use boot::uart::echo_byte;
-use boot::uart::try_read_byte;
 use boot::uart::write_byte;
 use kernel::console::console_submit_line;
 use kernel::console::print_help;
@@ -11,6 +11,8 @@ use kernel::shell::line::line_backspace;
 use kernel::shell::line::line_length;
 use kernel::shell::line::line_push;
 use kernel::shell::line::line_reset;
+use kernel::shell::rx::rx_init;
+use kernel::shell::rx::rx_pop;
 use kernel::state::state_shell_prompt_needed_get;
 use kernel::state::state_shell_prompt_needed_set;
 
@@ -25,6 +27,7 @@ fn print_prompt() -> void {
 }
 
 pub fn shell_init() -> void {
+    rx_init();
     line_reset();
     state_shell_prompt_needed_set(1);
     print_help();
@@ -36,7 +39,7 @@ pub fn shell_poll() -> void {
         state_shell_prompt_needed_set(0);
     }
 
-    let byte: i64 = try_read_byte();
+    let byte: i64 = rx_pop();
     if byte < 0 {
         return;
     }

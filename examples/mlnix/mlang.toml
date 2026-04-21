@@ -110,6 +110,13 @@ commands = [
     "src/kernel/shell/line.S",
     "-o",
     "{{build_dir}}/obj/shell_line.o"
+  ],
+  [
+    "aarch64-none-elf-gcc",
+    "-c",
+    "src/kernel/shell/rx.S",
+    "-o",
+    "{{build_dir}}/obj/shell_rx.o"
   ]
 ]
 
@@ -138,6 +145,7 @@ commands = [
     "{{build_dir}}/obj/ramdisk.o",
     "{{build_dir}}/obj/block_request.o",
     "{{build_dir}}/obj/shell_line.o",
+    "{{build_dir}}/obj/shell_rx.o",
     "{{build_dir}}/obj/mlnix_boot.o",
     "-o",
     "{{build_dir}}/mlnix.elf"
@@ -166,10 +174,12 @@ join_on = ["build-image"]
 workdir = "{{root}}"
 command = [
   "qemu-system-aarch64",
+  "-accel",
+  "hvf",
   "-machine",
   "virt",
   "-cpu",
-  "cortex-a57",
+  "host",
   "-m",
   "256",
   "-nographic",

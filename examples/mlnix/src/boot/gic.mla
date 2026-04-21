@@ -3,6 +3,7 @@ mod boot::mmio;
 
 use boot::constants::qemu_gic_cpu_base;
 use boot::constants::qemu_gic_dist_base;
+use boot::constants::qemu_uart_irq_id;
 use boot::mmio::read32;
 use boot::mmio::write32;
 
@@ -12,6 +13,14 @@ fn gicd_ctlr_offset() -> i64 {
 
 fn gicd_isenabler0_offset() -> i64 {
     return 0x100;
+}
+
+fn gicd_isenabler1_offset() -> i64 {
+    return 0x104;
+}
+
+fn gicd_itargetsr_offset() -> i64 {
+    return 0x800;
 }
 
 fn gicc_ctlr_offset() -> i64 {
@@ -31,7 +40,7 @@ fn gicc_eoir_offset() -> i64 {
 }
 
 pub fn gic_timer_irq_id() -> i64 {
-    return 30;
+    return 27;
 }
 
 pub fn gic_spurious_irq_id() -> i64 {
@@ -46,6 +55,11 @@ pub fn gic_init() -> void {
         qemu_gic_dist_base() + gicd_isenabler0_offset(),
         i32(1 << gic_timer_irq_id())
     );
+    write32(
+        qemu_gic_dist_base() + gicd_isenabler1_offset(),
+        i32(1 << (qemu_uart_irq_id() - 32))
+    );
+    write32(qemu_gic_dist_base() + gicd_itargetsr_offset() + 32, 0x01010101);
     write32(qemu_gic_dist_base() + gicd_ctlr_offset(), 1);
     write32(qemu_gic_cpu_base() + gicc_ctlr_offset(), 1);
 }

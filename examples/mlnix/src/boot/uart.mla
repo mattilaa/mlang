@@ -1,11 +1,20 @@
+mod kernel::shell::rx;
+
 use boot::constants::uart0_base;
 use boot::constants::uart_dr_offset;
 use boot::constants::uart_fr_offset;
 use boot::constants::uart_fr_rxfe;
 use boot::constants::uart_fr_txff;
+use boot::constants::uart_icr_offset;
+use boot::constants::uart_ifls_offset;
+use boot::constants::uart_imsc_offset;
+use boot::constants::uart_irq_rt_mask;
+use boot::constants::uart_irq_rx_mask;
+use boot::constants::uart_mis_offset;
 use boot::cpu::relax;
 use boot::mmio::read32;
 use boot::mmio::write32;
+use kernel::shell::rx::rx_push;
 
 fn tx_ready() -> bool {
     let flags: i32 = read32(uart0_base() + uart_fr_offset());
@@ -30,6 +39,12 @@ fn str_byte_at(text: str8, offset: i64) -> i64 {
 }
 
 pub fn uart0_init() -> void {
+    write32(uart0_base() + uart_icr_offset(), 0x07ff);
+    write32(uart0_base() + uart_ifls_offset(), 0);
+    write32(
+        uart0_base() + uart_imsc_offset(),
+        i32(uart_irq_rx_mask() | uart_irq_rt_mask())
+    );
     return;
 }
 
@@ -62,6 +77,30 @@ pub fn try_read_byte() -> i64 {
     let masked: i32 = value & 0xFF;
     let result: i64 = masked;
     return result;
+}
+
+pub fn uart_irq_pending() -> i64 {
+    let masked: i32 = read32(uart0_base() + uart_mis_offset());
+    let result: i64 = masked & i32(uart_irq_rx_mask() | uart_irq_rt_mask());
+    return result;
+}
+
+pub fn uart_irq_acknowledge() -> void {
+    write32(
+        uart0_base() + uart_icr_offset(),
+        i32(uart_irq_rx_mask() | uart_irq_rt_mask())
+    );
+}
+
+pub fn uart_irq_drain() -> void {
+    while true {
+        let byte: i64 = try_read_byte();
+        if byte < 0 {
+            break;
+        }
+        rx_push(byte);
+    }
+    uart_irq_acknowledge();
 }
 
 pub fn write_crlf() -> void {

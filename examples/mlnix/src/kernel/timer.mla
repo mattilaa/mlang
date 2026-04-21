@@ -52,11 +52,11 @@ fn write_irq_count_label() -> void {
 }
 
 fn timer_write_tval(value: i64) -> void {
-    asm volatile aarch64(void, "mov x9, $0\nmsr CNTP_TVAL_EL0, x9\nisb", value);
+    asm volatile aarch64(void, "mov x9, $0\nmsr CNTV_TVAL_EL0, x9\nisb", value);
 }
 
 fn timer_write_ctl(value: i64) -> void {
-    asm volatile aarch64(void, "mov x9, $0\nmsr CNTP_CTL_EL0, x9\nisb", value);
+    asm volatile aarch64(void, "mov x9, $0\nmsr CNTV_CTL_EL0, x9\nisb", value);
 }
 
 pub fn counter_frequency() -> i64 {
@@ -70,7 +70,7 @@ pub fn counter_frequency() -> i64 {
 pub fn counter_ticks() -> i64 {
     return asm volatile aarch64(
         i64,
-        "mov $0, xzr\nmrs x9, CNTPCT_EL0\nmov $0, x9",
+        "mov $0, xzr\nmrs x9, CNTVCT_EL0\nmov $0, x9",
         0
     );
 }

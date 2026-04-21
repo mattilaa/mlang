@@ -26,6 +26,7 @@ mod kernel::shell::commands::rdsec;
 mod kernel::shell::dispatch;
 mod kernel::shell::line;
 mod kernel::shell::parser;
+mod kernel::shell::rx;
 mod kernel::state;
 mod kernel::sync::waitqueue;
 mod kernel::timer;

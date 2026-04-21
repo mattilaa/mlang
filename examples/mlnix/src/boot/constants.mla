@@ -18,6 +18,34 @@ pub fn uart_fr_rxfe() -> i64 {
     return 1 << 4;
 }
 
+pub fn uart_ifls_offset() -> i64 {
+    return 0x034;
+}
+
+pub fn uart_imsc_offset() -> i64 {
+    return 0x038;
+}
+
+pub fn uart_mis_offset() -> i64 {
+    return 0x040;
+}
+
+pub fn uart_icr_offset() -> i64 {
+    return 0x044;
+}
+
+pub fn uart_irq_rx_mask() -> i64 {
+    return 1 << 4;
+}
+
+pub fn uart_irq_rt_mask() -> i64 {
+    return 1 << 6;
+}
+
+pub fn qemu_uart_irq_id() -> i64 {
+    return 33;
+}
+
 pub fn qemu_virt_load_addr() -> i64 {
     return 0x40080000;
 }
