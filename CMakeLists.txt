@@ -245,6 +245,7 @@ add_library(mlang_std STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_process.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ssl.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_ascii.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_esc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_chat.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/src/std_term.c

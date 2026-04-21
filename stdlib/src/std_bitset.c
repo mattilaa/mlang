@@ -92,6 +92,26 @@ static void bitset_mask_tail(mlang_bitset_t* b)
     b->words[last] &= mask;
 }
 
+static int bitset_get_bit_wrapped(const mlang_bitset_t* b, size_t width, size_t height, int64_t x, int64_t y)
+{
+    if(!b || width == 0u || height == 0u)
+        return 0;
+
+    int64_t nx = x;
+    int64_t ny = y;
+    if(nx < 0)
+        nx += (int64_t)width;
+    else if((size_t)nx >= width)
+        nx -= (int64_t)width;
+    if(ny < 0)
+        ny += (int64_t)height;
+    else if((size_t)ny >= height)
+        ny -= (int64_t)height;
+
+    size_t idx = (size_t)ny * width + (size_t)nx;
+    return bitset_get_bit(b, idx);
+}
+
 const char* __mlang_std_bitset_last_error(void)
 {
     return g_bitset_last_error;
@@ -214,6 +234,22 @@ int32_t __mlang_std_bitset_get(int64_t handle, int64_t index)
     return v;
 }
 
+int32_t __mlang_std_bitset_set_fast(int64_t handle, int64_t index, int32_t value)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || index < 0 || (value != 0 && value != 1))
+        return -1;
+    return bitset_set_bit(b, (size_t)index, value);
+}
+
+int32_t __mlang_std_bitset_get_fast(int64_t handle, int64_t index)
+{
+    mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
+    if(!b || index < 0)
+        return -1;
+    return bitset_get_bit(b, (size_t)index);
+}
+
 int32_t __mlang_std_bitset_toggle(int64_t handle, int64_t index)
 {
     mlang_bitset_t* b = (mlang_bitset_t*)(intptr_t)handle;
@@ -268,6 +304,64 @@ int64_t __mlang_std_bitset_count_ones(int64_t handle)
     for(size_t i = 0u; i < words; ++i)
         total += (uint64_t)__builtin_popcountll((unsigned long long)b->words[i]);
     return (int64_t)total;
+}
+
+int64_t __mlang_std_bitset_life_step_toroidal(int64_t current_handle, int64_t next_handle,
+                                              int64_t width, int64_t height)
+{
+    mlang_bitset_t* current = (mlang_bitset_t*)(intptr_t)current_handle;
+    mlang_bitset_t* next = (mlang_bitset_t*)(intptr_t)next_handle;
+    if(!current || !next || width <= 0 || height <= 0)
+    {
+        bitset_set_error("invalid life step arguments");
+        return -1;
+    }
+
+    size_t w = (size_t)width;
+    size_t h = (size_t)height;
+    size_t size = w * h;
+    if(size != current->len_bits || size != next->len_bits)
+    {
+        bitset_set_error("bitset lengths must match width * height");
+        return -1;
+    }
+
+    size_t words = words_for_bits(size);
+    if(words > 0u)
+        memset(next->words, 0, words * sizeof(uint64_t));
+
+    int64_t alive_after = 0;
+    for(size_t y = 0u; y < h; ++y)
+    {
+        for(size_t x = 0u; x < w; ++x)
+        {
+            int neighbors =
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x - 1, (int64_t)y - 1) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x + 0, (int64_t)y - 1) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x + 1, (int64_t)y - 1) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x - 1, (int64_t)y + 0) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x + 1, (int64_t)y + 0) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x - 1, (int64_t)y + 1) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x + 0, (int64_t)y + 1) +
+                bitset_get_bit_wrapped(current, w, h, (int64_t)x + 1, (int64_t)y + 1);
+
+            size_t idx = y * w + x;
+            int now_alive = bitset_get_bit(current, idx);
+            int next_alive = 0;
+            if(now_alive == 1)
+                next_alive = (neighbors == 2 || neighbors == 3) ? 1 : 0;
+            else if(neighbors == 3)
+                next_alive = 1;
+
+            if(next_alive)
+            {
+                bitset_set_bit(next, idx, 1);
+                alive_after += 1;
+            }
+        }
+    }
+
+    return alive_after;
 }
 
 int32_t __mlang_std_bitset_and_eq(int64_t lhs_handle, int64_t rhs_handle)

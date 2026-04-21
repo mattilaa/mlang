@@ -203,9 +203,35 @@ pub fn write(out: Stdout, s: str8) -> i64 {
     return __mlang_std_io_stdout_write(s);
 }
 
+/// @brief Write text to stdout without forcing an immediate flush.
+///
+/// Prefer this for high-frequency frame rendering loops that call `flush()`
+/// explicitly after batching a full frame.
+pub fn write_unflushed(out: Stdout, s: str8) -> i64 {
+    return __mlang_std_io_stdout_write_unflushed(s);
+}
+
+/// @brief Write `n` bytes to stdout without forcing an immediate flush.
+///
+/// This avoids the internal `strlen()` scan when the caller already knows the
+/// byte length, for example after building a frame in a `StringBuilder`.
+pub fn write_unflushed_len(out: Stdout, s: str8, n: i64) -> i64 {
+    return __mlang_std_io_stdout_write_unflushed_len(s, n);
+}
+
 /// @brief Write text to stderr.
 pub fn write(err: Stderr, s: str8) -> i64 {
     return __mlang_std_io_stderr_write(s);
+}
+
+/// @brief Write text to stderr without forcing an immediate flush.
+pub fn write_unflushed(err: Stderr, s: str8) -> i64 {
+    return __mlang_std_io_stderr_write_unflushed(s);
+}
+
+/// @brief Write `n` bytes to stderr without forcing an immediate flush.
+pub fn write_unflushed_len(err: Stderr, s: str8, n: i64) -> i64 {
+    return __mlang_std_io_stderr_write_unflushed_len(s, n);
 }
 
 /// @brief Adapt Stdin to trait-like Read.
@@ -265,6 +291,16 @@ pub fn write_locked(lockToken: &StdoutLock, s: str8) -> i64 {
     return __mlang_std_io_stdout_write(s);
 }
 
+/// @brief Write text while holding stdout lock, without forcing flush.
+pub fn write_locked_unflushed(lockToken: &StdoutLock, s: str8) -> i64 {
+    return __mlang_std_io_stdout_write_unflushed(s);
+}
+
+/// @brief Write `n` bytes while holding stdout lock, without forcing flush.
+pub fn write_locked_unflushed_len(lockToken: &StdoutLock, s: str8, n: i64) -> i64 {
+    return __mlang_std_io_stdout_write_unflushed_len(s, n);
+}
+
 /// @brief Write text + newline while holding stdout lock.
 /// @param lockToken stdout lock token.
 pub fn writeln_locked(lockToken: &StdoutLock, s: str8) -> i64 {
@@ -286,6 +322,18 @@ pub fn try_lock(out: Stdout) -> i32 {
 pub fn write_sync(out: Stdout, s: str8) -> i64 {
     let lk: StdoutLock = lock(out);
     return write_locked(lk, s);
+}
+
+/// @brief Write text with implicit lock/unlock and no forced flush.
+pub fn write_sync_unflushed(out: Stdout, s: str8) -> i64 {
+    let lk: StdoutLock = lock(out);
+    return write_locked_unflushed(lk, s);
+}
+
+/// @brief Write `n` bytes with implicit lock/unlock and no forced flush.
+pub fn write_sync_unflushed_len(out: Stdout, s: str8, n: i64) -> i64 {
+    let lk: StdoutLock = lock(out);
+    return write_locked_unflushed_len(lk, s, n);
 }
 
 /// @brief Write text+newline with implicit lock/unlock around the write.
@@ -310,6 +358,28 @@ pub fn write(writer: Write, s: str8) -> i64 {
     }
     if writer.kind == 2 {
         return __mlang_std_io_stderr_write(s);
+    }
+    return __mlang_std_io_cursor_write(writer.cursor.handle, s);
+}
+
+/// @brief Trait-like write without forcing stdout/stderr flush.
+pub fn write_unflushed(writer: Write, s: str8) -> i64 {
+    if writer.kind == 1 {
+        return __mlang_std_io_stdout_write_unflushed(s);
+    }
+    if writer.kind == 2 {
+        return __mlang_std_io_stderr_write_unflushed(s);
+    }
+    return __mlang_std_io_cursor_write(writer.cursor.handle, s);
+}
+
+/// @brief Trait-like write without forcing stdout/stderr flush or `strlen()`.
+pub fn write_unflushed_len(writer: Write, s: str8, n: i64) -> i64 {
+    if writer.kind == 1 {
+        return __mlang_std_io_stdout_write_unflushed_len(s, n);
+    }
+    if writer.kind == 2 {
+        return __mlang_std_io_stderr_write_unflushed_len(s, n);
     }
     return __mlang_std_io_cursor_write(writer.cursor.handle, s);
 }

@@ -49,6 +49,23 @@ int64_t __mlang_std_io_stdout_write(const char* s)
     return (int64_t)w;
 }
 
+int64_t __mlang_std_io_stdout_write_unflushed(const char* s)
+{
+    if(!s)
+        return -1;
+    size_t n = strlen(s);
+    size_t w = fwrite(s, 1, n, stdout);
+    return (int64_t)w;
+}
+
+int64_t __mlang_std_io_stdout_write_unflushed_len(const char* s, int64_t n)
+{
+    if(!s || n < 0)
+        return -1;
+    size_t w = fwrite(s, 1, (size_t)n, stdout);
+    return (int64_t)w;
+}
+
 int64_t __mlang_std_io_stdout_writeln(const char* s)
 {
     if(!s)
@@ -67,6 +84,23 @@ int64_t __mlang_std_io_stderr_write(const char* s)
     size_t n = strlen(s);
     size_t w = fwrite(s, 1, n, stderr);
     fflush(stderr);
+    return (int64_t)w;
+}
+
+int64_t __mlang_std_io_stderr_write_unflushed(const char* s)
+{
+    if(!s)
+        return -1;
+    size_t n = strlen(s);
+    size_t w = fwrite(s, 1, n, stderr);
+    return (int64_t)w;
+}
+
+int64_t __mlang_std_io_stderr_write_unflushed_len(const char* s, int64_t n)
+{
+    if(!s || n < 0)
+        return -1;
+    size_t w = fwrite(s, 1, (size_t)n, stderr);
     return (int64_t)w;
 }
 

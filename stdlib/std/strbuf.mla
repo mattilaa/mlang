@@ -85,10 +85,24 @@ pub fn builder_append(builder: StringBuilder, s: str8) -> i64 {
     return __mlang_std_strbuf_builder_rt_append(builder, s);
 }
 
+/// @brief Append `n` bytes from `s`; grows automatically.
+/// @return Number of appended bytes, or -1 on failure.
+pub fn builder_append_len(builder: StringBuilder, s: str8, n: i64) -> i64 {
+    return __mlang_std_strbuf_builder_rt_append_len(builder, s, n);
+}
+
 /// @brief Append one byte value (0..255) as a character.
 /// @return 1 on success, -1 on invalid byte/builder/failure.
 pub fn builder_append_char(builder: StringBuilder, ch: i32) -> i64 {
     return __mlang_std_strbuf_builder_rt_append_char(builder, ch);
+}
+
+/// @brief Borrow the builder's current NUL-terminated buffer.
+///
+/// The returned pointer is invalidated by future builder mutations and must not
+/// be freed by the caller.
+pub fn builder_borrow_string(builder: StringBuilder) -> str8 {
+    return __mlang_std_strbuf_builder_rt_data(builder);
 }
 
 /// @brief Clone current contents into a new string.
