@@ -1,0 +1,141 @@
+mod kernel::shell::line;
+
+use kernel::shell::line::line_byte;
+use kernel::shell::line::line_length;
+
+fn is_ws(b: i64) -> bool {
+    return b == 32 || b == 9;
+}
+
+fn is_digit(b: i64) -> bool {
+    return b >= 48 && b <= 57;
+}
+
+fn is_hex_digit(b: i64) -> i64 {
+    if b >= 48 && b <= 57 {
+        return b - 48;
+    }
+    if b >= 97 && b <= 102 {
+        return b - 87;
+    }
+    if b >= 65 && b <= 70 {
+        return b - 55;
+    }
+    return -1;
+}
+
+fn str_byte(text: str8, offset: i64) -> i64 {
+    return asm volatile aarch64(
+        i64,
+        "add $0, $2, $3\nldrb ${0:w}, [$0]",
+        0,
+        text,
+        offset
+    );
+}
+
+pub fn parser_skip_ws(pos: i64) -> i64 {
+    var i: i64 = pos;
+    let len: i64 = line_length();
+    while i < len {
+        if !is_ws(line_byte(i)) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return i;
+}
+
+pub fn parser_match_literal(pos: i64, text: str8) -> i64 {
+    var i: i64 = pos;
+    var j: i64 = 0;
+    let len: i64 = line_length();
+    while true {
+        let tb: i64 = str_byte(text, j);
+        if tb == 0 {
+            if i == len {
+                return i;
+            }
+            let lb: i64 = line_byte(i);
+            if is_ws(lb) {
+                return i;
+            }
+            return -1;
+        }
+        if i >= len {
+            return -1;
+        }
+        let lb: i64 = line_byte(i);
+        if lb != tb {
+            return -1;
+        }
+        i = i + 1;
+        j = j + 1;
+    }
+    return -1;
+}
+
+fn parse_decimal(pos: i64) -> i64 {
+    var i: i64 = pos;
+    let len: i64 = line_length();
+    var value: i64 = 0;
+    var any: i64 = 0;
+    while i < len {
+        let b: i64 = line_byte(i);
+        if !is_digit(b) {
+            break;
+        }
+        value = value * 10 + (b - 48);
+        any = any + 1;
+        i = i + 1;
+    }
+    if any == 0 {
+        return -1;
+    }
+    return value;
+}
+
+fn parse_hex(pos: i64) -> i64 {
+    var i: i64 = pos;
+    let len: i64 = line_length();
+    var value: i64 = 0;
+    var any: i64 = 0;
+    while i < len {
+        let b: i64 = line_byte(i);
+        let v: i64 = is_hex_digit(b);
+        if v < 0 {
+            break;
+        }
+        value = (value << 4) | v;
+        any = any + 1;
+        i = i + 1;
+    }
+    if any == 0 {
+        return -1;
+    }
+    return value;
+}
+
+pub fn parser_parse_u64(pos: i64) -> i64 {
+    let start: i64 = parser_skip_ws(pos);
+    let len: i64 = line_length();
+    if start >= len {
+        return -1;
+    }
+    if start + 1 < len {
+        let a: i64 = line_byte(start);
+        let b: i64 = line_byte(start + 1);
+        if a == 48 && (b == 120 || b == 88) {
+            return parse_hex(start + 2);
+        }
+    }
+    return parse_decimal(start);
+}
+
+pub fn parser_is_empty() -> i64 {
+    let pos: i64 = parser_skip_ws(0);
+    if pos >= line_length() {
+        return 1;
+    }
+    return 0;
+}

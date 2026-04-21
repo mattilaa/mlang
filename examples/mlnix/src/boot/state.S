@@ -1,7 +1,7 @@
     .section .bss
     .align 3
 state_slots:
-    .zero 256
+    .zero 512
 
     .text
     .global mlnix_state_get

@@ -1,0 +1,73 @@
+mod kernel::block::bdev;
+mod kernel::block::request;
+mod kernel::sync::waitqueue;
+
+use kernel::block::bdev::bdev_dispatch;
+use kernel::block::bdev::block_wq_id;
+use kernel::block::request::op_read;
+use kernel::block::request::op_write;
+use kernel::block::request::request_alloc;
+use kernel::block::request::request_fill_buffer;
+use kernel::block::request::request_init;
+use kernel::block::request::request_set_wq_slot;
+use kernel::block::request::request_status;
+use kernel::block::request::request_wq_slot;
+use kernel::block::request::status_done;
+use kernel::block::request::status_pending;
+use kernel::sync::waitqueue::waitqueue_clear;
+use kernel::sync::waitqueue::waitqueue_is_awake;
+use kernel::sync::waitqueue::waitqueue_park;
+
+pub fn block_io_init() -> void {
+    request_init();
+}
+
+fn submit_and_wait(dev_id: i64, op: i64, lba: i64) -> i64 {
+    let slot: i64 = request_alloc(dev_id, op, lba);
+    if slot < 0 {
+        return -1;
+    }
+    let wq_slot: i64 = waitqueue_park(block_wq_id(), slot);
+    request_set_wq_slot(slot, wq_slot);
+    bdev_dispatch(slot);
+    while waitqueue_is_awake(block_wq_id(), request_wq_slot(slot)) == 0 {
+        if request_status(slot) != status_pending() {
+            break;
+        }
+    }
+    waitqueue_clear(block_wq_id(), request_wq_slot(slot));
+    return slot;
+}
+
+pub fn block_read(dev_id: i64, lba: i64) -> i64 {
+    return submit_and_wait(dev_id, op_read(), lba);
+}
+
+pub fn block_write(dev_id: i64, lba: i64) -> i64 {
+    return submit_and_wait(dev_id, op_write(), lba);
+}
+
+pub fn block_write_fill(dev_id: i64, lba: i64, fill: i64) -> i64 {
+    let slot: i64 = request_alloc(dev_id, op_write(), lba);
+    if slot < 0 {
+        return -1;
+    }
+    request_fill_buffer(slot, fill);
+    let wq_slot: i64 = waitqueue_park(block_wq_id(), slot);
+    request_set_wq_slot(slot, wq_slot);
+    bdev_dispatch(slot);
+    while waitqueue_is_awake(block_wq_id(), request_wq_slot(slot)) == 0 {
+        if request_status(slot) != status_pending() {
+            break;
+        }
+    }
+    waitqueue_clear(block_wq_id(), request_wq_slot(slot));
+    return slot;
+}
+
+pub fn block_completed(slot: i64) -> i64 {
+    if request_status(slot) == status_done() {
+        return 1;
+    }
+    return 0;
+}

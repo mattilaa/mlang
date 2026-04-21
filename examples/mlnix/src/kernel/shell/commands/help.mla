@@ -1,0 +1,17 @@
+use boot::uart::write_line;
+
+pub fn cmd_help() -> void {
+    write_line("commands");
+    write_line("  help               show this help (h)");
+    write_line("  map                memory map (m)");
+    write_line("  timer              timer status (t)");
+    write_line("  sched              scheduler status (s)");
+    write_line("  svc                services status (v)");
+    write_line("  core               core status (k)");
+    write_line("  el                 current EL (e)");
+    write_line("  banner             print banner (b)");
+    write_line("  exc                trigger brk (x)");
+    write_line("  lsdev              list devices");
+    write_line("  rdsec <lba>        read ramdisk sector");
+    write_line("  wrsec <lba> <b>    fill ramdisk sector with byte");
+}

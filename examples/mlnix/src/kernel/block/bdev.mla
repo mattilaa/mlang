@@ -1,0 +1,59 @@
+mod kernel::block::request;
+mod kernel::dev::registry;
+mod kernel::dev::types;
+mod kernel::sync::waitqueue;
+
+use kernel::block::request::request_dev_id;
+use kernel::block::request::request_buffer_addr;
+use kernel::block::request::request_lba;
+use kernel::block::request::request_op;
+use kernel::block::request::request_set_status;
+use kernel::block::request::status_done;
+use kernel::block::request::status_error;
+use kernel::block::request::op_read;
+use kernel::block::request::op_write;
+use kernel::dev::registry::registry_capacity_of;
+use kernel::dev::registry::registry_kind;
+use kernel::dev::types::dev_kind_ramdisk;
+use kernel::dev::types::dev_sector_size;
+use kernel::sync::waitqueue::waitqueue_wake_id;
+
+extern fn mlnix_ramdisk_copy_out(offset: i64, dst: i64, nbytes: i64) -> void;
+extern fn mlnix_ramdisk_copy_in(offset: i64, src: i64, nbytes: i64) -> void;
+
+pub fn block_wq_id() -> i64 {
+    return 0;
+}
+
+fn dispatch_ramdisk(slot: i64) -> i64 {
+    let dev: i64 = request_dev_id(slot);
+    let capacity: i64 = registry_capacity_of(dev);
+    let lba: i64 = request_lba(slot);
+    let byte_offset: i64 = lba * dev_sector_size();
+    if byte_offset < 0 || byte_offset + dev_sector_size() > capacity {
+        return status_error();
+    }
+    let buf: i64 = request_buffer_addr(slot);
+    if request_op(slot) == op_read() {
+        mlnix_ramdisk_copy_out(byte_offset, buf, dev_sector_size());
+        return status_done();
+    }
+    if request_op(slot) == op_write() {
+        mlnix_ramdisk_copy_in(byte_offset, buf, dev_sector_size());
+        return status_done();
+    }
+    return status_error();
+}
+
+pub fn bdev_dispatch(slot: i64) -> void {
+    let dev: i64 = request_dev_id(slot);
+    let kind: i64 = registry_kind(dev);
+    if kind == dev_kind_ramdisk() {
+        let status: i64 = dispatch_ramdisk(slot);
+        request_set_status(slot, status);
+        waitqueue_wake_id(block_wq_id(), slot);
+        return;
+    }
+    request_set_status(slot, status_error());
+    waitqueue_wake_id(block_wq_id(), slot);
+}

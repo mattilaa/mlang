@@ -1,23 +1,19 @@
 mod kernel::console;
-mod kernel::memory;
-mod kernel::scheduler;
-mod kernel::services;
+mod kernel::shell::line;
 mod kernel::state;
-mod kernel::timer;
 
-use kernel::console::console_submit;
-use kernel::console::print_help;
 use boot::uart::echo_byte;
 use boot::uart::try_read_byte;
 use boot::uart::write_byte;
-use kernel::state::state_shell_command_get;
-use kernel::state::state_shell_command_set;
-use kernel::state::state_shell_command_valid_get;
-use kernel::state::state_shell_command_valid_set;
-use kernel::state::state_shell_discard_input_get;
-use kernel::state::state_shell_discard_input_set;
+use kernel::console::console_submit_line;
+use kernel::console::print_help;
+use kernel::shell::line::line_backspace;
+use kernel::shell::line::line_length;
+use kernel::shell::line::line_push;
+use kernel::shell::line::line_reset;
 use kernel::state::state_shell_prompt_needed_get;
 use kernel::state::state_shell_prompt_needed_set;
+
 fn print_prompt() -> void {
     write_byte(109);
     write_byte(108);
@@ -29,9 +25,8 @@ fn print_prompt() -> void {
 }
 
 pub fn shell_init() -> void {
+    line_reset();
     state_shell_prompt_needed_set(1);
-    state_shell_discard_input_set(0);
-    state_shell_command_valid_set(0);
     print_help();
 }
 
@@ -41,29 +36,34 @@ pub fn shell_poll() -> void {
         state_shell_prompt_needed_set(0);
     }
 
-    let command: i64 = try_read_byte();
-    if command < 0 {
+    let byte: i64 = try_read_byte();
+    if byte < 0 {
         return;
     }
 
-    echo_byte(command);
-
-    if command == 13 || command == 10 {
-        if state_shell_command_valid_get() != 0 {
-            console_submit(state_shell_command_get());
+    if byte == 13 || byte == 10 {
+        echo_byte(byte);
+        if line_length() > 0 {
+            console_submit_line();
         }
-        state_shell_command_valid_set(0);
-        state_shell_discard_input_set(0);
         state_shell_prompt_needed_set(1);
         return;
     }
 
-    if state_shell_discard_input_get() != 0 {
+    if byte == 127 || byte == 8 {
+        if line_backspace() != 0 {
+            write_byte(8);
+            write_byte(32);
+            write_byte(8);
+        }
         return;
     }
 
-    let lower: i64 = command >= 65 && command <= 90 ? command + 32 : command;
-    state_shell_command_set(lower);
-    state_shell_command_valid_set(1);
-    state_shell_discard_input_set(1);
+    if byte < 32 {
+        return;
+    }
+
+    if line_push(byte) != 0 {
+        echo_byte(byte);
+    }
 }

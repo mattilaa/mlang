@@ -22,7 +22,7 @@ fn hex_digit(value: i64) -> i64 {
 fn str_byte_at(text: str8, offset: i64) -> i64 {
     return asm volatile aarch64(
         i64,
-        "mov $0, xzr\nadd x9, $2, $3\nldrb w9, [x9]\nmov $0, x9",
+        "add $0, $2, $3\nldrb ${0:w}, [$0]",
         0,
         text,
         offset

@@ -1,0 +1,67 @@
+mod kernel::dev::types;
+
+use kernel::dev::types::dev_sector_size;
+
+extern fn mlnix_ramdisk_base() -> i64;
+extern fn mlnix_ramdisk_read_byte(offset: i64) -> i64;
+extern fn mlnix_ramdisk_write_byte(offset: i64, value: i64) -> void;
+
+pub fn ramdisk_sector_count() -> i64 {
+    return 128;
+}
+
+pub fn ramdisk_capacity_bytes() -> i64 {
+    return ramdisk_sector_count() * dev_sector_size();
+}
+
+pub fn ramdisk_base_addr() -> i64 {
+    return mlnix_ramdisk_base();
+}
+
+pub fn ramdisk_read_byte(lba: i64, offset_in_sector: i64) -> i64 {
+    if lba < 0 || lba >= ramdisk_sector_count() {
+        return 0;
+    }
+    if offset_in_sector < 0 || offset_in_sector >= dev_sector_size() {
+        return 0;
+    }
+    let flat: i64 = lba * dev_sector_size() + offset_in_sector;
+    return mlnix_ramdisk_read_byte(flat);
+}
+
+pub fn ramdisk_write_byte(lba: i64, offset_in_sector: i64, value: i64) -> void {
+    if lba < 0 || lba >= ramdisk_sector_count() {
+        return;
+    }
+    if offset_in_sector < 0 || offset_in_sector >= dev_sector_size() {
+        return;
+    }
+    let flat: i64 = lba * dev_sector_size() + offset_in_sector;
+    mlnix_ramdisk_write_byte(flat, value & 0xFF);
+}
+
+fn seed_signature() -> void {
+    mlnix_ramdisk_write_byte(0, 77);
+    mlnix_ramdisk_write_byte(1, 76);
+    mlnix_ramdisk_write_byte(2, 78);
+    mlnix_ramdisk_write_byte(3, 88);
+    mlnix_ramdisk_write_byte(4, 49);
+    mlnix_ramdisk_write_byte(5, 10);
+}
+
+fn seed_sector(lba: i64, tag: i64) -> void {
+    let base: i64 = lba * dev_sector_size();
+    mlnix_ramdisk_write_byte(base, 82);
+    mlnix_ramdisk_write_byte(base + 1, 68);
+    mlnix_ramdisk_write_byte(base + 2, 83);
+    mlnix_ramdisk_write_byte(base + 3, 58);
+    mlnix_ramdisk_write_byte(base + 4, 48 + tag);
+    mlnix_ramdisk_write_byte(base + 5, 10);
+}
+
+pub fn ramdisk_init() -> void {
+    seed_signature();
+    seed_sector(1, 1);
+    seed_sector(2, 2);
+    seed_sector(3, 3);
+}

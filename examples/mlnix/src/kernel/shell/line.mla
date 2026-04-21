@@ -1,0 +1,62 @@
+extern fn mlnix_line_byte_get(index: i64) -> i64;
+extern fn mlnix_line_byte_set(index: i64, value: i64) -> void;
+extern fn mlnix_line_length_get() -> i64;
+extern fn mlnix_line_length_set(value: i64) -> void;
+extern fn mlnix_line_pending_get() -> i64;
+extern fn mlnix_line_pending_set(value: i64) -> void;
+
+pub fn line_capacity() -> i64 {
+    return 63;
+}
+
+pub fn line_reset() -> void {
+    mlnix_line_length_set(0);
+    mlnix_line_pending_set(0);
+    mlnix_line_byte_set(0, 0);
+}
+
+pub fn line_length() -> i64 {
+    return mlnix_line_length_get();
+}
+
+pub fn line_byte(index: i64) -> i64 {
+    if index < 0 || index >= line_length() {
+        return 0;
+    }
+    return mlnix_line_byte_get(index);
+}
+
+pub fn line_push(byte: i64) -> i64 {
+    let len: i64 = mlnix_line_length_get();
+    if len >= line_capacity() {
+        return 0;
+    }
+    mlnix_line_byte_set(len, byte & 0xFF);
+    mlnix_line_length_set(len + 1);
+    mlnix_line_byte_set(len + 1, 0);
+    return 1;
+}
+
+pub fn line_backspace() -> i64 {
+    let len: i64 = mlnix_line_length_get();
+    if len <= 0 {
+        return 0;
+    }
+    mlnix_line_length_set(len - 1);
+    mlnix_line_byte_set(len - 1, 0);
+    return 1;
+}
+
+pub fn line_mark_pending() -> void {
+    mlnix_line_pending_set(1);
+}
+
+pub fn line_clear_pending() -> void {
+    mlnix_line_pending_set(0);
+    mlnix_line_length_set(0);
+    mlnix_line_byte_set(0, 0);
+}
+
+pub fn line_is_pending() -> i64 {
+    return mlnix_line_pending_get();
+}

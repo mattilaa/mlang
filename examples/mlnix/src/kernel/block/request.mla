@@ -1,0 +1,118 @@
+extern fn mlnix_request_dev_id_get(slot: i64) -> i64;
+extern fn mlnix_request_dev_id_set(slot: i64, value: i64) -> void;
+extern fn mlnix_request_op_get(slot: i64) -> i64;
+extern fn mlnix_request_op_set(slot: i64, value: i64) -> void;
+extern fn mlnix_request_lba_get(slot: i64) -> i64;
+extern fn mlnix_request_lba_set(slot: i64, value: i64) -> void;
+extern fn mlnix_request_status_get(slot: i64) -> i64;
+extern fn mlnix_request_status_set(slot: i64, value: i64) -> void;
+extern fn mlnix_request_wq_slot_get(slot: i64) -> i64;
+extern fn mlnix_request_wq_slot_set(slot: i64, value: i64) -> void;
+extern fn mlnix_request_buf_base(slot: i64) -> i64;
+extern fn mlnix_request_buf_byte(slot: i64, offset: i64) -> i64;
+extern fn mlnix_request_buf_fill(slot: i64, value: i64) -> void;
+
+pub fn request_capacity() -> i64 {
+    return 4;
+}
+
+pub fn status_free() -> i64 {
+    return 0;
+}
+
+pub fn status_pending() -> i64 {
+    return 1;
+}
+
+pub fn status_done() -> i64 {
+    return 2;
+}
+
+pub fn status_error() -> i64 {
+    return 3;
+}
+
+pub fn op_read() -> i64 {
+    return 0;
+}
+
+pub fn op_write() -> i64 {
+    return 1;
+}
+
+pub fn request_init() -> void {
+    var i: i64 = 0;
+    while i < request_capacity() {
+        mlnix_request_status_set(i, status_free());
+        mlnix_request_dev_id_set(i, -1);
+        mlnix_request_op_set(i, 0);
+        mlnix_request_lba_set(i, 0);
+        mlnix_request_wq_slot_set(i, -1);
+        i = i + 1;
+    }
+}
+
+pub fn request_alloc(dev_id: i64, op: i64, lba: i64) -> i64 {
+    var slot: i64 = 0;
+    while slot < request_capacity() {
+        if mlnix_request_status_get(slot) == status_free() {
+            mlnix_request_status_set(slot, status_pending());
+            mlnix_request_dev_id_set(slot, dev_id);
+            mlnix_request_op_set(slot, op);
+            mlnix_request_lba_set(slot, lba);
+            mlnix_request_wq_slot_set(slot, -1);
+            return slot;
+        }
+        slot = slot + 1;
+    }
+    return -1;
+}
+
+pub fn request_release(slot: i64) -> void {
+    if slot < 0 || slot >= request_capacity() {
+        return;
+    }
+    mlnix_request_status_set(slot, status_free());
+    mlnix_request_dev_id_set(slot, -1);
+    mlnix_request_wq_slot_set(slot, -1);
+}
+
+pub fn request_dev_id(slot: i64) -> i64 {
+    return mlnix_request_dev_id_get(slot);
+}
+
+pub fn request_op(slot: i64) -> i64 {
+    return mlnix_request_op_get(slot);
+}
+
+pub fn request_lba(slot: i64) -> i64 {
+    return mlnix_request_lba_get(slot);
+}
+
+pub fn request_status(slot: i64) -> i64 {
+    return mlnix_request_status_get(slot);
+}
+
+pub fn request_set_status(slot: i64, status: i64) -> void {
+    mlnix_request_status_set(slot, status);
+}
+
+pub fn request_buffer_addr(slot: i64) -> i64 {
+    return mlnix_request_buf_base(slot);
+}
+
+pub fn request_byte(slot: i64, offset: i64) -> i64 {
+    return mlnix_request_buf_byte(slot, offset);
+}
+
+pub fn request_fill_buffer(slot: i64, byte: i64) -> void {
+    mlnix_request_buf_fill(slot, byte & 0xFF);
+}
+
+pub fn request_wq_slot(slot: i64) -> i64 {
+    return mlnix_request_wq_slot_get(slot);
+}
+
+pub fn request_set_wq_slot(slot: i64, wq_slot: i64) -> void {
+    mlnix_request_wq_slot_set(slot, wq_slot);
+}

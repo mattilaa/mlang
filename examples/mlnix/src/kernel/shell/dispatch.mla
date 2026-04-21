@@ -1,0 +1,181 @@
+mod boot::banner;
+mod kernel::memory;
+mod kernel::scheduler;
+mod kernel::services;
+mod kernel::shell::commands::help;
+mod kernel::shell::commands::lsdev;
+mod kernel::shell::commands::rdsec;
+mod kernel::shell::line;
+mod kernel::shell::parser;
+mod kernel::timer;
+
+use boot::banner::subtitle;
+use boot::cpu::current_el;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::memory::memory_map_shell;
+use kernel::scheduler::scheduler_current_domain;
+use kernel::scheduler::scheduler_domain_service;
+use kernel::scheduler::scheduler_domain_shell;
+use kernel::scheduler::scheduler_shell;
+use kernel::services::services_pending_ticks;
+use kernel::services::services_shell;
+use kernel::shell::commands::help::cmd_help;
+use kernel::shell::commands::lsdev::cmd_lsdev;
+use kernel::shell::commands::rdsec::cmd_rdsec;
+use kernel::shell::commands::rdsec::cmd_wrsec;
+use kernel::shell::line::line_byte;
+use kernel::shell::line::line_length;
+use kernel::shell::parser::parser_is_empty;
+use kernel::shell::parser::parser_match_literal;
+use kernel::shell::parser::parser_parse_u64;
+use kernel::shell::parser::parser_skip_ws;
+use kernel::timer::timer_shell;
+
+fn cmd_banner() -> void {
+    write_line("mlnix shell ready");
+    write_line(subtitle());
+}
+
+fn cmd_core() -> void {
+    write_line("core");
+    write_str("domain: ");
+    let domain: i64 = scheduler_current_domain();
+    if domain == scheduler_domain_shell() {
+        write_line("shell");
+    } else {
+        if domain == scheduler_domain_service() {
+            write_line("service");
+        } else {
+            write_line("idle");
+        }
+    }
+    write_str("pending services: ");
+    write_hex64(services_pending_ticks());
+    write_crlf();
+}
+
+fn cmd_el() -> void {
+    write_str("el: ");
+    write_hex64(current_el());
+    write_crlf();
+}
+
+fn cmd_exc() -> void {
+    write_line("triggering brk");
+    asm volatile aarch64(void, "brk #0");
+}
+
+fn try_exact(start: i64, text: str8) -> i64 {
+    return parser_match_literal(start, text);
+}
+
+pub fn dispatch_line() -> void {
+    if parser_is_empty() != 0 {
+        return;
+    }
+
+    let start: i64 = parser_skip_ws(0);
+
+    if try_exact(start, "help") >= 0 {
+        cmd_help();
+        return;
+    }
+    if try_exact(start, "h") >= 0 {
+        cmd_help();
+        return;
+    }
+    if try_exact(start, "lsdev") >= 0 {
+        cmd_lsdev();
+        return;
+    }
+    if try_exact(start, "rdsec") >= 0 {
+        let after: i64 = start + 5;
+        let lba: i64 = parser_parse_u64(after);
+        cmd_rdsec(lba);
+        return;
+    }
+    if try_exact(start, "wrsec") >= 0 {
+        let after: i64 = start + 5;
+        let lba: i64 = parser_parse_u64(after);
+        var after_lba: i64 = parser_skip_ws(after);
+        while after_lba < line_length() {
+            let b: i64 = line_byte(after_lba);
+            if b == 32 || b == 9 || b == 0 {
+                break;
+            }
+            after_lba = after_lba + 1;
+        }
+        let fill: i64 = parser_parse_u64(after_lba);
+        cmd_wrsec(lba, fill);
+        return;
+    }
+    if try_exact(start, "map") >= 0 {
+        memory_map_shell();
+        return;
+    }
+    if try_exact(start, "m") >= 0 {
+        memory_map_shell();
+        return;
+    }
+    if try_exact(start, "timer") >= 0 {
+        timer_shell();
+        return;
+    }
+    if try_exact(start, "t") >= 0 {
+        timer_shell();
+        return;
+    }
+    if try_exact(start, "sched") >= 0 {
+        scheduler_shell();
+        return;
+    }
+    if try_exact(start, "s") >= 0 {
+        scheduler_shell();
+        return;
+    }
+    if try_exact(start, "svc") >= 0 {
+        services_shell();
+        return;
+    }
+    if try_exact(start, "v") >= 0 {
+        services_shell();
+        return;
+    }
+    if try_exact(start, "core") >= 0 {
+        cmd_core();
+        return;
+    }
+    if try_exact(start, "k") >= 0 {
+        cmd_core();
+        return;
+    }
+    if try_exact(start, "el") >= 0 {
+        cmd_el();
+        return;
+    }
+    if try_exact(start, "e") >= 0 {
+        cmd_el();
+        return;
+    }
+    if try_exact(start, "banner") >= 0 {
+        cmd_banner();
+        return;
+    }
+    if try_exact(start, "b") >= 0 {
+        cmd_banner();
+        return;
+    }
+    if try_exact(start, "exc") >= 0 {
+        cmd_exc();
+        return;
+    }
+    if try_exact(start, "x") >= 0 {
+        cmd_exc();
+        return;
+    }
+
+    write_line("unknown command (type 'help')");
+}

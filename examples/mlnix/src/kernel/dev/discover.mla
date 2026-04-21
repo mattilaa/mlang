@@ -1,0 +1,34 @@
+mod kernel::dev::ramdisk;
+mod kernel::dev::registry;
+mod kernel::dev::types;
+
+use boot::constants::uart0_base;
+use kernel::dev::ramdisk::ramdisk_base_addr;
+use kernel::dev::ramdisk::ramdisk_capacity_bytes;
+use kernel::dev::ramdisk::ramdisk_init;
+use kernel::dev::registry::registry_init;
+use kernel::dev::registry::registry_register;
+use kernel::dev::types::dev_flag_block;
+use kernel::dev::types::dev_flag_readable;
+use kernel::dev::types::dev_flag_writable;
+use kernel::dev::types::dev_kind_console;
+use kernel::dev::types::dev_kind_ramdisk;
+
+pub fn discover_devices() -> void {
+    registry_init();
+    registry_register(
+        dev_kind_console(),
+        uart0_base(),
+        33,
+        dev_flag_readable() | dev_flag_writable(),
+        0
+    );
+    ramdisk_init();
+    registry_register(
+        dev_kind_ramdisk(),
+        ramdisk_base_addr(),
+        -1,
+        dev_flag_readable() | dev_flag_writable() | dev_flag_block(),
+        ramdisk_capacity_bytes()
+    );
+}

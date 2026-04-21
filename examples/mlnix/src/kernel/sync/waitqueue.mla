@@ -1,0 +1,113 @@
+extern fn mlnix_wq_waiter_id_get(flat_index: i64) -> i64;
+extern fn mlnix_wq_waiter_id_set(flat_index: i64, value: i64) -> void;
+extern fn mlnix_wq_awake_get(flat_index: i64) -> i64;
+extern fn mlnix_wq_awake_set(flat_index: i64, value: i64) -> void;
+
+pub fn waitqueue_count() -> i64 {
+    return 8;
+}
+
+pub fn waitqueue_slots() -> i64 {
+    return 4;
+}
+
+fn flat(wq_id: i64, slot: i64) -> i64 {
+    return wq_id * waitqueue_slots() + slot;
+}
+
+pub fn waitqueue_init() -> void {
+    var i: i64 = 0;
+    while i < waitqueue_count() * waitqueue_slots() {
+        mlnix_wq_waiter_id_set(i, -1);
+        mlnix_wq_awake_set(i, 0);
+        i = i + 1;
+    }
+}
+
+pub fn waitqueue_park(wq_id: i64, waiter_id: i64) -> i64 {
+    if wq_id < 0 || wq_id >= waitqueue_count() {
+        return -1;
+    }
+    var slot: i64 = 0;
+    while slot < waitqueue_slots() {
+        let idx: i64 = flat(wq_id, slot);
+        if mlnix_wq_waiter_id_get(idx) < 0 {
+            mlnix_wq_waiter_id_set(idx, waiter_id);
+            mlnix_wq_awake_set(idx, 0);
+            return slot;
+        }
+        slot = slot + 1;
+    }
+    return -1;
+}
+
+pub fn waitqueue_is_awake(wq_id: i64, slot: i64) -> i64 {
+    if wq_id < 0 || wq_id >= waitqueue_count() {
+        return 0;
+    }
+    if slot < 0 || slot >= waitqueue_slots() {
+        return 0;
+    }
+    return mlnix_wq_awake_get(flat(wq_id, slot));
+}
+
+pub fn waitqueue_clear(wq_id: i64, slot: i64) -> void {
+    if wq_id < 0 || wq_id >= waitqueue_count() {
+        return;
+    }
+    if slot < 0 || slot >= waitqueue_slots() {
+        return;
+    }
+    let idx: i64 = flat(wq_id, slot);
+    mlnix_wq_waiter_id_set(idx, -1);
+    mlnix_wq_awake_set(idx, 0);
+}
+
+pub fn waitqueue_wake_id(wq_id: i64, waiter_id: i64) -> i64 {
+    if wq_id < 0 || wq_id >= waitqueue_count() {
+        return 0;
+    }
+    var slot: i64 = 0;
+    var woken: i64 = 0;
+    while slot < waitqueue_slots() {
+        let idx: i64 = flat(wq_id, slot);
+        if mlnix_wq_waiter_id_get(idx) == waiter_id {
+            mlnix_wq_awake_set(idx, 1);
+            woken = woken + 1;
+        }
+        slot = slot + 1;
+    }
+    return woken;
+}
+
+pub fn waitqueue_wake_all(wq_id: i64) -> i64 {
+    if wq_id < 0 || wq_id >= waitqueue_count() {
+        return 0;
+    }
+    var slot: i64 = 0;
+    var woken: i64 = 0;
+    while slot < waitqueue_slots() {
+        let idx: i64 = flat(wq_id, slot);
+        if mlnix_wq_waiter_id_get(idx) >= 0 {
+            mlnix_wq_awake_set(idx, 1);
+            woken = woken + 1;
+        }
+        slot = slot + 1;
+    }
+    return woken;
+}
+
+pub fn waitqueue_occupancy(wq_id: i64) -> i64 {
+    if wq_id < 0 || wq_id >= waitqueue_count() {
+        return 0;
+    }
+    var slot: i64 = 0;
+    var count: i64 = 0;
+    while slot < waitqueue_slots() {
+        if mlnix_wq_waiter_id_get(flat(wq_id, slot)) >= 0 {
+            count = count + 1;
+        }
+        slot = slot + 1;
+    }
+    return count;
+}

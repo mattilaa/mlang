@@ -1,0 +1,99 @@
+mod kernel::dev::types;
+
+use kernel::dev::types::dev_flag_present;
+use kernel::dev::types::dev_kind_none;
+
+extern fn mlnix_dev_kind_get(index: i64) -> i64;
+extern fn mlnix_dev_kind_set(index: i64, value: i64) -> void;
+extern fn mlnix_dev_base_get(index: i64) -> i64;
+extern fn mlnix_dev_base_set(index: i64, value: i64) -> void;
+extern fn mlnix_dev_irq_get(index: i64) -> i64;
+extern fn mlnix_dev_irq_set(index: i64, value: i64) -> void;
+extern fn mlnix_dev_flags_get(index: i64) -> i64;
+extern fn mlnix_dev_flags_set(index: i64, value: i64) -> void;
+extern fn mlnix_dev_capacity_get(index: i64) -> i64;
+extern fn mlnix_dev_capacity_set(index: i64, value: i64) -> void;
+extern fn mlnix_dev_count_get() -> i64;
+extern fn mlnix_dev_count_set(value: i64) -> void;
+
+pub fn registry_capacity() -> i64 {
+    return 8;
+}
+
+pub fn registry_init() -> void {
+    var i: i64 = 0;
+    while i < registry_capacity() {
+        mlnix_dev_kind_set(i, dev_kind_none());
+        mlnix_dev_base_set(i, 0);
+        mlnix_dev_irq_set(i, -1);
+        mlnix_dev_flags_set(i, 0);
+        mlnix_dev_capacity_set(i, 0);
+        i = i + 1;
+    }
+    mlnix_dev_count_set(0);
+}
+
+pub fn registry_register(kind: i64, base: i64, irq: i64, flags: i64, capacity: i64) -> i64 {
+    let count: i64 = mlnix_dev_count_get();
+    if count >= registry_capacity() {
+        return -1;
+    }
+    mlnix_dev_kind_set(count, kind);
+    mlnix_dev_base_set(count, base);
+    mlnix_dev_irq_set(count, irq);
+    mlnix_dev_flags_set(count, flags | dev_flag_present());
+    mlnix_dev_capacity_set(count, capacity);
+    mlnix_dev_count_set(count + 1);
+    return count;
+}
+
+pub fn registry_count() -> i64 {
+    return mlnix_dev_count_get();
+}
+
+pub fn registry_kind(index: i64) -> i64 {
+    if index < 0 || index >= registry_count() {
+        return dev_kind_none();
+    }
+    return mlnix_dev_kind_get(index);
+}
+
+pub fn registry_base(index: i64) -> i64 {
+    if index < 0 || index >= registry_count() {
+        return 0;
+    }
+    return mlnix_dev_base_get(index);
+}
+
+pub fn registry_irq(index: i64) -> i64 {
+    if index < 0 || index >= registry_count() {
+        return -1;
+    }
+    return mlnix_dev_irq_get(index);
+}
+
+pub fn registry_flags(index: i64) -> i64 {
+    if index < 0 || index >= registry_count() {
+        return 0;
+    }
+    return mlnix_dev_flags_get(index);
+}
+
+pub fn registry_capacity_of(index: i64) -> i64 {
+    if index < 0 || index >= registry_count() {
+        return 0;
+    }
+    return mlnix_dev_capacity_get(index);
+}
+
+pub fn registry_find_first_of_kind(kind: i64) -> i64 {
+    var i: i64 = 0;
+    let count: i64 = registry_count();
+    while i < count {
+        if mlnix_dev_kind_get(i) == kind {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}

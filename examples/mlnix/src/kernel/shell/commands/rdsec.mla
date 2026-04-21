@@ -1,0 +1,132 @@
+mod kernel::block::io;
+mod kernel::block::request;
+mod kernel::dev::registry;
+mod kernel::dev::types;
+
+use boot::uart::write_byte;
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::block::io::block_read;
+use kernel::block::io::block_write_fill;
+use kernel::block::request::request_byte;
+use kernel::block::request::request_release;
+use kernel::block::request::request_status;
+use kernel::block::request::status_done;
+use kernel::dev::registry::registry_find_first_of_kind;
+use kernel::dev::types::dev_kind_ramdisk;
+use kernel::dev::types::dev_sector_size;
+
+fn hex_nibble(value: i64) -> i64 {
+    if value < 10 {
+        return 48 + value;
+    }
+    return 87 + value;
+}
+
+fn print_hex_byte(value: i64) -> void {
+    write_byte(hex_nibble((value >> 4) & 0xF));
+    write_byte(hex_nibble(value & 0xF));
+}
+
+fn print_ascii_byte(value: i64) -> void {
+    if value >= 32 && value < 127 {
+        write_byte(value);
+        return;
+    }
+    write_byte(46);
+}
+
+fn dump_row(slot: i64, row: i64) -> void {
+    let base: i64 = row * 16;
+    write_hex64(base);
+    write_byte(32);
+    write_byte(32);
+    var col: i64 = 0;
+    while col < 16 {
+        print_hex_byte(request_byte(slot, base + col));
+        write_byte(32);
+        col = col + 1;
+    }
+    write_byte(32);
+    col = 0;
+    while col < 16 {
+        print_ascii_byte(request_byte(slot, base + col));
+        col = col + 1;
+    }
+    write_crlf();
+}
+
+fn dump_first_rows(slot: i64, rows: i64) -> void {
+    var r: i64 = 0;
+    while r < rows {
+        dump_row(slot, r);
+        r = r + 1;
+    }
+}
+
+pub fn cmd_rdsec(lba: i64) -> void {
+    if lba < 0 {
+        write_line("rdsec: missing or invalid lba");
+        return;
+    }
+    let dev: i64 = registry_find_first_of_kind(dev_kind_ramdisk());
+    if dev < 0 {
+        write_line("rdsec: no ramdisk");
+        return;
+    }
+    let slot: i64 = block_read(dev, lba);
+    if slot < 0 {
+        write_line("rdsec: no free request slot");
+        return;
+    }
+    if request_status(slot) != status_done() {
+        write_str("rdsec: request failed status=");
+        write_hex64(request_status(slot));
+        write_crlf();
+        request_release(slot);
+        return;
+    }
+    write_str("sector ");
+    write_hex64(lba);
+    write_str(" (");
+    write_hex64(dev_sector_size());
+    write_line(" bytes)");
+    dump_first_rows(slot, 4);
+    request_release(slot);
+}
+
+pub fn cmd_wrsec(lba: i64, fill: i64) -> void {
+    if lba < 0 {
+        write_line("wrsec: missing or invalid lba");
+        return;
+    }
+    if fill < 0 {
+        write_line("wrsec: missing fill byte");
+        return;
+    }
+    let dev: i64 = registry_find_first_of_kind(dev_kind_ramdisk());
+    if dev < 0 {
+        write_line("wrsec: no ramdisk");
+        return;
+    }
+    let slot: i64 = block_write_fill(dev, lba, fill);
+    if slot < 0 {
+        write_line("wrsec: no free request slot");
+        return;
+    }
+    if request_status(slot) != status_done() {
+        write_str("wrsec: request failed status=");
+        write_hex64(request_status(slot));
+        write_crlf();
+        request_release(slot);
+        return;
+    }
+    write_str("wrsec: filled lba=");
+    write_hex64(lba);
+    write_str(" byte=");
+    write_hex64(fill & 0xFF);
+    write_crlf();
+    request_release(slot);
+}

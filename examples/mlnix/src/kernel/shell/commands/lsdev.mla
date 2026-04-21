@@ -1,0 +1,58 @@
+mod kernel::dev::registry;
+mod kernel::dev::types;
+
+use boot::uart::write_crlf;
+use boot::uart::write_hex64;
+use boot::uart::write_line;
+use boot::uart::write_str;
+use kernel::dev::registry::registry_base;
+use kernel::dev::registry::registry_capacity_of;
+use kernel::dev::registry::registry_count;
+use kernel::dev::registry::registry_flags;
+use kernel::dev::registry::registry_irq;
+use kernel::dev::registry::registry_kind;
+use kernel::dev::types::dev_kind_console;
+use kernel::dev::types::dev_kind_ramdisk;
+use kernel::dev::types::dev_kind_virtio_blk;
+
+fn write_kind_name(kind: i64) -> void {
+    if kind == dev_kind_console() {
+        write_str("console   ");
+        return;
+    }
+    if kind == dev_kind_ramdisk() {
+        write_str("ramdisk   ");
+        return;
+    }
+    if kind == dev_kind_virtio_blk() {
+        write_str("virtio-blk");
+        return;
+    }
+    write_str("unknown   ");
+}
+
+pub fn cmd_lsdev() -> void {
+    write_line("devices");
+    let count: i64 = registry_count();
+    write_str("count=");
+    write_hex64(count);
+    write_crlf();
+    var i: i64 = 0;
+    while i < count {
+        write_str("  id=");
+        write_hex64(i);
+        write_str(" kind=");
+        write_kind_name(registry_kind(i));
+        write_str(" base=");
+        write_hex64(registry_base(i));
+        write_str(" irq=");
+        write_hex64(registry_irq(i));
+        write_str(" flags=");
+        write_hex64(registry_flags(i));
+        write_str(" cap=");
+        write_hex64(registry_capacity_of(i));
+        write_crlf();
+        i = i + 1;
+    }
+    write_line("lsdev done");
+}
